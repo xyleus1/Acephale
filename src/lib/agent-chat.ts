@@ -117,6 +117,7 @@ async function buildScopedJobContext(jobId: string, officeId: string): Promise<s
       company: { select: { name: true } },
       inquiry: { include: { emailThreads: { select: { id: true } } } },
       milestones: { select: { type: true, plannedAt: true, actualAt: true } },
+      documents: { select: { name: true, docType: true, status: true, aiSummary: true } },
     },
   });
   if (!job) return "";
@@ -124,6 +125,16 @@ async function buildScopedJobContext(jobId: string, officeId: string): Promise<s
   const typeBlock = job.type === "SOURCING"
     ? `**THIS IS A PROCUREMENT (SOURCING) JOB.** Pricing = SUPPLIER OFFERS, not carrier quotes. For any "rate / price / offer / cheapest" question, call summarize_supplier_offers. To attach related supplier emails, call link_threads_to_job. To pick a winner, call award_supplier. NEVER call summarize_carrier_rates here. NEVER say "no carrier quotes" — the operator is asking about SUPPLIER prices.`
     : `**THIS IS A FORWARDING JOB.** Pricing = CARRIER QUOTES. For any "rate / price" question, call summarize_carrier_rates.`;
+
+  // Inline document inventory — when the operator asks "how many documents"
+  // or "what docs do we have", the answer is right here in the system prompt.
+  // No tool call needed.
+  const approved = job.documents.filter((d) => d.status === "APPROVED").length;
+  const uploaded = job.documents.filter((d) => d.status === "UPLOADED").length;
+  const pending = job.documents.filter((d) => d.status === "PENDING").length;
+  const docLines = job.documents.length === 0
+    ? "  (none)"
+    : job.documents.map((d) => `  - ${d.name} · ${d.docType} · ${d.status.toLowerCase()}${d.aiSummary ? ` · AI: ${d.aiSummary.slice(0, 120)}` : ""}`).join("\n");
 
   return `
 
@@ -133,7 +144,12 @@ Commodity: ${job.commodity ?? "—"} | Weight: ${job.weight ?? "—"}kg | Volume
 Revenue: ${job.revenue ?? "—"} | Cost: ${job.cost ?? "—"} | ETD: ${job.etd?.toISOString().split("T")[0] ?? "—"} | ETA: ${job.eta?.toISOString().split("T")[0] ?? "—"}
 Inquiry id: ${job.inquiryId ?? "—"} | Linked email threads: ${threadCount}
 
-${typeBlock}`;
+Documents on this load (${job.documents.length} total · ${approved} approved · ${uploaded} uploaded · ${pending} pending):
+${docLines}
+
+${typeBlock}
+
+**"this load" / "this job" / "this deal" / "the deal" ALWAYS means the focused job above.** Don't ask the operator which job they mean. Answer directly from the data above; only call tools (get_job, summarize_supplier_offers, etc) when you need data NOT already in the prompt.`;
 }
 
 export async function chatWithAgent(history: ChatMsg[], userMessage: string, scopeJobId?: string): Promise<ChatResult> {
