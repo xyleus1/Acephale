@@ -115,13 +115,61 @@ async function buildScopedJobContext(jobId: string, officeId: string): Promise<s
     where: { id: jobId, officeId },
     include: {
       company: { select: { name: true } },
-      inquiry: { include: { emailThreads: { select: { id: true } } } },
+      inquiry: {
+        include: {
+          emailThreads: {
+            select: {
+              id: true,
+              subject: true,
+              messages: {
+                select: { fromEmail: true, fromName: true, sentAt: true, attachments: true },
+                where: { attachments: { not: null } },
+                orderBy: { sentAt: "desc" },
+              },
+            },
+          },
+        },
+      },
       milestones: { select: { type: true, plannedAt: true, actualAt: true } },
       documents: { select: { name: true, docType: true, status: true, aiSummary: true } },
+      emailThreads: {
+        select: {
+          id: true,
+          subject: true,
+          messages: {
+            select: { fromEmail: true, fromName: true, sentAt: true, attachments: true },
+            where: { attachments: { not: null } },
+            orderBy: { sentAt: "desc" },
+          },
+        },
+      },
     },
   });
   if (!job) return "";
   const threadCount = job.inquiry?.emailThreads.length ?? 0;
+
+  // Collect every attachment across all linked threads (job-direct + via inquiry).
+  type EmailAtt = { filename: string; size: number; sender: string; subject: string; sentAt: string };
+  const allAtts: EmailAtt[] = [];
+  const seenThreads = new Set<string>();
+  for (const t of [...job.emailThreads, ...(job.inquiry?.emailThreads ?? [])]) {
+    if (seenThreads.has(t.id)) continue;
+    seenThreads.add(t.id);
+    for (const m of t.messages) {
+      if (!m.attachments) continue;
+      let parsed: { filename: string; size: number }[] = [];
+      try { parsed = JSON.parse(m.attachments); } catch {}
+      for (const a of parsed) {
+        allAtts.push({
+          filename: a.filename,
+          size: a.size,
+          sender: m.fromName ?? m.fromEmail,
+          subject: t.subject,
+          sentAt: new Date(m.sentAt).toISOString().split("T")[0],
+        });
+      }
+    }
+  }
   const typeBlock = job.type === "SOURCING"
     ? `**THIS IS A PROCUREMENT (SOURCING) JOB.** Pricing = SUPPLIER OFFERS, not carrier quotes. For any "rate / price / offer / cheapest" question, call summarize_supplier_offers. To attach related supplier emails, call link_threads_to_job. To pick a winner, call award_supplier. NEVER call summarize_carrier_rates here. NEVER say "no carrier quotes" — the operator is asking about SUPPLIER prices.`
     : `**THIS IS A FORWARDING JOB.** Pricing = CARRIER QUOTES. For any "rate / price" question, call summarize_carrier_rates.`;
@@ -146,6 +194,9 @@ Inquiry id: ${job.inquiryId ?? "—"} | Linked email threads: ${threadCount}
 
 Documents on this load (${job.documents.length} total · ${approved} approved · ${uploaded} uploaded · ${pending} pending):
 ${docLines}
+
+Email attachments on linked threads (${allAtts.length} total):
+${allAtts.length === 0 ? "  (none)" : allAtts.slice(0, 30).map((a) => `  - ${a.filename}${a.size ? ` · ${Math.round(a.size / 1024)}KB` : ""} · from ${a.sender} · "${a.subject}" · ${a.sentAt}`).join("\n")}${allAtts.length > 30 ? `\n  …and ${allAtts.length - 30} more` : ""}
 
 ${typeBlock}
 
@@ -259,10 +310,15 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   // - System prompt + tools wrapped with cache_control: ephemeral.
   // - In-memory ctx caches (20s TTL).
   // - Tools dispatch in parallel.
+  // If no explicit scope, pick the most recently active job as the implicit
+  // focus. So "this load" / "the deal" works on every surface — floating
+  // pill, workbench, anywhere — without forcing the operator to remember
+  // a JOB-ref.
+  const effectiveScopeJobId = scopeJobId ?? await getImplicitFocusJobId(session.officeId);
   const [ctx, scopedCtx, priceContext] = await Promise.all([
     cachedOpsContext(session.officeId),
-    scopeJobId ? cachedScopedJobContext(scopeJobId, session.officeId) : Promise.resolve(""),
-    isPriceQuery(userMessage) ? buildPriceContext(session.officeId, scopeJobId) : Promise.resolve(""),
+    effectiveScopeJobId ? cachedScopedJobContext(effectiveScopeJobId, session.officeId) : Promise.resolve(""),
+    isPriceQuery(userMessage) ? buildPriceContext(session.officeId, effectiveScopeJobId ?? undefined) : Promise.resolve(""),
   ]);
 
   const client = new Anthropic({ apiKey });
@@ -314,7 +370,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       const toolResults = await Promise.all(toolUseBlocks.map(async (tu) => {
         const r = await dispatchTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, {
           officeId: session.officeId,
-          scopeJobId,
+          scopeJobId: effectiveScopeJobId ?? undefined,
         });
         return {
           type: "tool_result",
@@ -342,6 +398,19 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     console.error("[agent-chat] tool-use loop failed:", msg, e);
     return { reply: `Agent error — ${msg.slice(0, 400)}` };
   }
+}
+
+// Picks the implicit focus job for an office — the most recently updated
+// active job. Used when the caller didn't explicitly pass scopeJobId (e.g.
+// the floating agent pill on non-workbench routes). So "this load" / "the
+// deal" / "what docs do we have" still resolves to something useful.
+async function getImplicitFocusJobId(officeId: string): Promise<string | null> {
+  const j = await prisma.job.findFirst({
+    where: { officeId, status: { notIn: ["DELIVERED", "CANCELLED", "PROPOSED"] } },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true },
+  });
+  return j?.id ?? null;
 }
 
 // Detects "shortlist of prices we received" / "cheapest" / "what offers do we
