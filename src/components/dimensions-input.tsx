@@ -1,42 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-export type DimRow = { qty: string; length: string; width: string; height: string };
-
-export function parseDimensions(raw: string | null | undefined): DimRow[] {
-  if (!raw) return [];
-  try {
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr.map((r) => ({
-      qty: String(r.qty ?? ""),
-      length: String(r.length ?? ""),
-      width: String(r.width ?? ""),
-      height: String(r.height ?? ""),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export function dimensionsSummary(raw: string | null | undefined): string {
-  const rows = parseDimensions(raw).filter((r) => r.qty || r.length || r.width || r.height);
-  if (rows.length === 0) return "";
-  return rows.map((r) => `${r.qty || 1}×${r.length || "?"}×${r.width || "?"}×${r.height || "?"}cm`).join(", ");
-}
-
-function rowCbm(r: DimRow): number {
-  const qty = Number(r.qty) || 0;
-  const l = Number(r.length) || 0;
-  const w = Number(r.width) || 0;
-  const h = Number(r.height) || 0;
-  return (qty * l * w * h) / 1_000_000;
-}
-
-export function totalCbm(rows: DimRow[]): number {
-  return Math.round(rows.reduce((s, r) => s + rowCbm(r), 0) * 1000) / 1000;
-}
+import { type DimRow, parseDimensions, rowCbm, totalCbm } from "@/lib/cargo";
 
 // Structured package dimensions (Qty × L × W × H in cm) with live CBM total.
 // Serializes to two hidden inputs: `dimensions` (JSON) and `volume` (total CBM).

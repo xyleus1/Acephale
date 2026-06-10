@@ -2,19 +2,7 @@
 
 import { useState } from "react";
 import { DimensionsInput } from "./dimensions-input";
-
-export const CONTAINER_TYPES = ["20DC", "40DC", "40HC", "45HC", "20RF", "40RF", "40OT", "40FR"] as const;
-export const CONTAINER_TYPE_LABEL: Record<string, string> = {
-  "20DC": "20' Dry", "40DC": "40' Dry", "40HC": "40' High Cube", "45HC": "45' High Cube",
-  "20RF": "20' Reefer", "40RF": "40' Reefer", "40OT": "40' Open Top", "40FR": "40' Flat Rack",
-};
-
-export function equipmentSummary(job: { mode: string | null; containerCount: number | null; containerType: string | null }): string {
-  if (job.mode === "SEA-FCL" && job.containerCount) {
-    return `${job.containerCount} × ${job.containerType ?? "cntr"}`;
-  }
-  return "";
-}
+import { CONTAINER_TYPES, CONTAINER_TYPE_LABEL } from "@/lib/cargo";
 
 // Mode selector + the fields that depend on it:
 //   FCL  → container count + container type

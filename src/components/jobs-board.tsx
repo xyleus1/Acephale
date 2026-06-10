@@ -8,6 +8,7 @@ import { JobConfirmActions } from "@/components/job-confirm-button";
 export type BoardJob = {
   id: string;
   reference: string;
+  title: string | null;
   status: string;
   type: string;
   companyName: string | null;
@@ -125,6 +126,11 @@ export function JobsBoard({
                         }}>DRAFT</span>
                       )}
                     </div>
+                    {job.title && (
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {job.title}
+                      </div>
+                    )}
                     <div className="job-card-company">{job.companyName ?? "—"}</div>
                     <div className="job-card-route">
                       {job.origin && job.destination ? (

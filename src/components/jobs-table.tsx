@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { dimensionsSummary } from "./dimensions-input";
-import { CONTAINER_TYPE_LABEL } from "./cargo-fields";
+import { dimensionsSummary, CONTAINER_TYPE_LABEL } from "@/lib/cargo";
 
 export type TableJob = {
   id: string;
   reference: string;
+  title: string | null;
+  cadence: string | null;
+  quantity: number | null;
+  quantityUnit: string | null;
   status: string;
   type: string;
   companyName: string | null;
@@ -54,6 +57,8 @@ type Col = {
 
 const COLUMNS: Col[] = [
   { key: "reference",   label: "Reference",   default: true,  value: (j) => j.reference },
+  { key: "title",       label: "Deal",        default: true,  value: (j) => j.title,
+    render: (j) => j.title ? <span style={{ fontWeight: 600 }}>{j.title}</span> : "—" },
   { key: "status",      label: "Stage",       default: true,  value: (j) => j.status,
     render: (j) => <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 3, background: j.status === "CANCELLED" ? "var(--surface-3)" : "var(--brand-light)", color: j.status === "CANCELLED" ? "var(--text-3)" : "var(--brand)", border: "1px solid var(--brand-border)", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{STATUS_LABEL[j.status] ?? j.status}</span> },
   { key: "customer",    label: "Customer",    default: true,  value: (j) => j.companyName },
@@ -63,7 +68,12 @@ const COLUMNS: Col[] = [
   { key: "equipment",   label: "Equipment",   default: true,  value: (j) =>
       j.mode === "SEA-FCL" && j.containerCount
         ? `${j.containerCount} × ${j.containerType ? (CONTAINER_TYPE_LABEL[j.containerType] ?? j.containerType) : "cntr"}`
-        : dimensionsSummary(j.dimensions) || null },
+        : dimensionsSummary(j.dimensions)
+          || (j.quantity != null ? `${j.quantity.toLocaleString()} ${j.quantityUnit ?? ""}`.trim() : null) },
+  { key: "quantity",    label: "Quantity",    default: false, value: (j) => j.quantity, numeric: true,
+    render: (j) => j.quantity != null ? `${j.quantity.toLocaleString()} ${j.quantityUnit ?? ""}`.trim() : "—" },
+  { key: "cadence",     label: "Frequency",   default: false, value: (j) => j.cadence,
+    render: (j) => j.cadence === "MONTHLY" ? "Monthly" : j.cadence === "ONE_OFF" ? "One-off" : "—" },
   { key: "commodity",   label: "Commodity",   default: false, value: (j) => j.commodity },
   { key: "incoterms",   label: "Incoterms",   default: false, value: (j) => j.incoterms },
   { key: "weight",      label: "Weight (kg)", default: false, value: (j) => j.weight, numeric: true,
@@ -75,6 +85,9 @@ const COLUMNS: Col[] = [
   { key: "eta",         label: "ETA",         default: true,  value: (j) => j.eta, render: (j) => fmtDate(j.eta) },
   { key: "revenue",     label: "Revenue",     default: false, value: (j) => j.revenue, numeric: true, render: (j) => fmtMoney(j.revenue) },
   { key: "cost",        label: "Cost",        default: false, value: (j) => j.cost, numeric: true, render: (j) => fmtMoney(j.cost) },
+  { key: "profit",      label: "Profit",      default: true,  numeric: true,
+    value: (j) => (j.revenue != null && j.cost != null ? j.revenue - j.cost : null),
+    render: (j) => (j.revenue != null && j.cost != null ? fmtMoney(j.revenue - j.cost) : "—") },
   { key: "margin",      label: "Margin",      default: false, numeric: true,
     value: (j) => (j.revenue && j.cost ? (j.revenue - j.cost) / j.revenue : null),
     render: (j) => (j.revenue && j.cost ? `${(((j.revenue - j.cost) / j.revenue) * 100).toFixed(1)}%` : "—") },

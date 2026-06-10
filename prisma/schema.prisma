@@ -497,6 +497,8 @@ model Job {
   inquiryId        String?   @unique  // set when converted from an Inquiry
 
   reference        String    // e.g. JOB-2025-001
+  title            String?   // human deal name, e.g. "China Spare Parts" — how the user recalls the load
+  cadence          String?   // ONE_OFF | MONTHLY — recurring business vs one-shot
   status           JobStatus @default(INQUIRY)
   type             String    @default("FORWARDING")  // FORWARDING | SOURCING
   mode             String?   // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
@@ -510,6 +512,8 @@ model Job {
   dimensions       String?   // JSON [{qty, length, width, height}] in cm — LCL/AIR/ROAD cargo
   containerCount   Int?      // FCL: number of containers
   containerType    String?   // FCL: 20DC / 40DC / 40HC / 20RF / 40RF / OT-FR
+  quantity         Float?    // generic deal quantity, e.g. 350 (TONS), 3 (TRUCKS)
+  quantityUnit     String?   // TONS / TRUCKS / PALLETS / UNITS / KG / CBM — free text
   quoteLines       String?   // pipe-delimited quote line items (desc|amount|currency per line)
 
   etd              DateTime?

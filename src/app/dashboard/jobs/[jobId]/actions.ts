@@ -74,6 +74,10 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
     data: {
       ...(status ? { status: status as never } : {}),
       companyId,
+      ...(formData.has("title") ? { title: get("title").trim() || null } : {}),
+      ...(formData.has("cadence") ? { cadence: get("cadence") || null } : {}),
+      ...(formData.has("quantity") ? { quantity: num("quantity") } : {}),
+      ...(formData.has("quantityUnit") ? { quantityUnit: get("quantityUnit").trim().toUpperCase() || null } : {}),
       origin: get("origin") || null,
       destination: get("destination") || null,
       mode,

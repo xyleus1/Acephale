@@ -9,6 +9,10 @@ import { cleanNotes } from "@/lib/quote-lines";
 type JobShape = {
   id: string;
   reference: string;
+  title: string | null;
+  cadence: string | null;
+  quantity: number | null;
+  quantityUnit: string | null;
   status: string;
   companyId: string | null;
   mode: string | null;
@@ -122,6 +126,24 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
 
             <form ref={formRef} action={submit} className="edit-panel-form">
               <div className="edit-panel-section">
+                <div className="edit-panel-section-title">Deal</div>
+                <div className="form-grid-2">
+                  <label className="field">
+                    <span>Deal name</span>
+                    <input name="title" defaultValue={job.title ?? ""} placeholder="e.g. China Spare Parts" />
+                  </label>
+                  <label className="field">
+                    <span>Frequency</span>
+                    <select name="cadence" defaultValue={job.cadence ?? ""}>
+                      <option value="">—</option>
+                      <option value="ONE_OFF">One-off</option>
+                      <option value="MONTHLY">Monthly</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="edit-panel-section">
                 <div className="edit-panel-section-title">Customer</div>
                 <input
                   name="companyName"
@@ -177,6 +199,19 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   <span>Commodity</span>
                   <input name="commodity" defaultValue={job.commodity ?? ""} placeholder="e.g. Machine parts" />
                 </label>
+                <div className="form-grid-2" style={{ marginBottom: 10 }}>
+                  <label className="field"><span>Quantity</span>
+                    <input name="quantity" type="number" step="any" defaultValue={job.quantity ?? ""} placeholder="e.g. 350" />
+                  </label>
+                  <label className="field"><span>Unit</span>
+                    <input name="quantityUnit" list="edit-quantity-units" defaultValue={job.quantityUnit ?? ""} placeholder="e.g. TONS" autoComplete="off" />
+                    <datalist id="edit-quantity-units">
+                      {["TONS", "KG", "TRUCKS", "PALLETS", "UNITS", "CBM", "LITERS"].map((u) => (
+                        <option key={u} value={u} />
+                      ))}
+                    </datalist>
+                  </label>
+                </div>
                 <CargoFields
                   initialMode={job.mode}
                   initialContainerCount={job.containerCount}

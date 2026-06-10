@@ -337,6 +337,8 @@ async function _DashboardPageImpl(stageOverride: string | null) {
             <JobEditPanel
               job={{
                 id: job.id, reference: job.reference, status: job.status,
+                title: job.title, cadence: job.cadence,
+                quantity: job.quantity, quantityUnit: job.quantityUnit,
                 companyId: job.companyId,
                 mode: job.mode, origin: job.origin, destination: job.destination,
                 commodity: job.commodity, incoterms: job.incoterms,

@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "derya-preview",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=postgresql://mert@localhost:5432/derya_preview",
+        "DATABASE_URL_UNPOOLED=postgresql://mert@localhost:5432/derya_preview",
+        "npx", "next", "dev", "-p", "3789"
+      ],
+      "port": 3789
+    }
+  ]
+}

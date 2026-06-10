@@ -16,8 +16,7 @@ import { DocumentViewer } from "@/components/document-viewer";
 import { SubmitButton } from "@/components/submit-button";
 import { JobNote } from "@/components/job-note";
 import { parseQuoteLines, cleanNotes } from "@/lib/quote-lines";
-import { CONTAINER_TYPE_LABEL } from "@/components/cargo-fields";
-import { dimensionsSummary } from "@/components/dimensions-input";
+import { CONTAINER_TYPE_LABEL, dimensionsSummary } from "@/lib/cargo";
 
 const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"] as const;
 const STATUS_SELECT = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED", "CANCELLED"] as const;
@@ -241,11 +240,14 @@ export default async function JobDetailPage({
               )}
             </div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>
-              {job.company?.name ?? "Unknown Customer"}
+              {job.title ?? job.company?.name ?? "Unknown Customer"}
             </h1>
             <p style={{ fontSize: 14, color: "var(--text-2)" }}>
+              {job.title && job.company?.name ? `${job.company.name} · ` : ""}
               {job.origin && job.destination ? `${job.origin} → ${job.destination}` : job.origin ?? job.destination ?? "Route not set"}
               {job.commodity ? ` · ${job.commodity}` : ""}
+              {job.quantity != null ? ` · ${job.quantity.toLocaleString()} ${job.quantityUnit ?? ""}`.trimEnd() : ""}
+              {job.cadence ? ` · ${job.cadence === "MONTHLY" ? "Monthly" : "One-off"}` : ""}
             </p>
           </div>
 

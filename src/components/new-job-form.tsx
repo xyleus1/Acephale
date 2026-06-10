@@ -19,14 +19,18 @@ export function NewJobForm({
     <form action={action}>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-body">
-          <div className="section-title" style={{ marginBottom: 16 }}>Customer & Stage</div>
-          <div className="form-grid-2">
+          <div className="section-title" style={{ marginBottom: 16 }}>Deal</div>
+          <label className="field" style={{ marginBottom: 12 }}>
+            <span>Deal name</span>
+            <input name="title" placeholder="e.g. China Spare Parts, Soybean Meal" />
+          </label>
+          <div className="form-grid-3">
             <label className="field">
               <span>Customer</span>
               <input
                 name="companyName"
                 list="company-suggestions"
-                placeholder="Type a customer name (optional)"
+                placeholder="Type a name (optional)"
                 autoComplete="off"
               />
               <datalist id="company-suggestions">
@@ -41,6 +45,14 @@ export function NewJobForm({
                 {STATUS_OPTIONS.map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Frequency</span>
+              <select name="cadence" defaultValue="">
+                <option value="">— Select —</option>
+                <option value="ONE_OFF">One-off</option>
+                <option value="MONTHLY">Monthly</option>
               </select>
             </label>
           </div>
@@ -72,6 +84,19 @@ export function NewJobForm({
             </label>
             <label className="field"><span>Commodity</span>
               <input name="commodity" placeholder="e.g. Electronics" />
+            </label>
+          </div>
+          <div className="form-grid-2" style={{ marginBottom: 12 }}>
+            <label className="field"><span>Quantity</span>
+              <input name="quantity" type="number" step="any" placeholder="e.g. 350" />
+            </label>
+            <label className="field"><span>Unit</span>
+              <input name="quantityUnit" list="quantity-units" placeholder="e.g. TONS" autoComplete="off" />
+              <datalist id="quantity-units">
+                {["TONS", "KG", "TRUCKS", "PALLETS", "UNITS", "CBM", "LITERS"].map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
             </label>
           </div>
           <CargoFields />
