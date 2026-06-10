@@ -341,8 +341,10 @@ async function _DashboardPageImpl(stageOverride: string | null) {
                 mode: job.mode, origin: job.origin, destination: job.destination,
                 commodity: job.commodity, incoterms: job.incoterms,
                 weight: job.weight, volume: job.volume, packages: job.packages,
+                dimensions: job.dimensions, containerCount: job.containerCount, containerType: job.containerType,
                 etd: job.etd, eta: job.eta,
                 revenue: job.revenue, cost: job.cost, currency: job.currency,
+                notes: job.notes,
               }}
               companies={companies}
             />

@@ -2,39 +2,49 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { createJobWithReference } from "@/lib/job-actions";
+import { resolveCompanyIdByName } from "@/lib/company-resolve";
+import { NewJobForm } from "@/components/new-job-form";
+
+const VALID_STATUSES = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"];
 
 async function createJob(formData: FormData) {
   "use server";
   const session = await requireSession();
 
-  const { nextJobReference } = await import("@/lib/job-actions");
-  const reference = await nextJobReference(session.officeId);
-
-  const companyId = String(formData.get("companyId") || "");
+  const companyId = await resolveCompanyIdByName(session.officeId, String(formData.get("companyName") || ""));
   const etd = formData.get("etd") ? new Date(String(formData.get("etd"))) : null;
   const eta = formData.get("eta") ? new Date(String(formData.get("eta"))) : null;
+  const statusRaw = String(formData.get("status") || "INQUIRY");
+  const status = VALID_STATUSES.includes(statusRaw) ? statusRaw : "INQUIRY";
+  const mode = String(formData.get("mode") || "");
+  const isFcl = mode === "SEA-FCL";
 
-  const job = await prisma.job.create({
+  const job = await createJobWithReference(session.officeId, (reference) => prisma.job.create({
     data: {
       officeId:    session.officeId,
-      companyId:   companyId || null,
+      companyId,
       reference,
-      status:      "INQUIRY",
-      mode:        String(formData.get("mode") || ""),
+      status:      status as never,
+      mode,
       origin:      String(formData.get("origin") || ""),
       destination: String(formData.get("destination") || ""),
       commodity:   String(formData.get("commodity") || ""),
       incoterms:   String(formData.get("incoterms") || ""),
       weight:      formData.get("weight") ? Number(formData.get("weight")) : null,
-      volume:      formData.get("volume") ? Number(formData.get("volume")) : null,
+      volume:      !isFcl && formData.get("volume") ? Number(formData.get("volume")) : null,
+      dimensions:  !isFcl && formData.get("dimensions") ? String(formData.get("dimensions")) : null,
+      containerCount: isFcl && formData.get("containerCount") ? Number(formData.get("containerCount")) : null,
+      containerType:  isFcl ? String(formData.get("containerType") || "") || null : null,
       revenue:     formData.get("revenue") ? Number(formData.get("revenue")) : null,
       cost:        formData.get("cost") ? Number(formData.get("cost")) : null,
+      notes:       String(formData.get("notes") || "").trim() || null,
       currency:    "USD",
       etd,
       eta,
       assignedToUserId: session.userId,
     },
-  });
+  }));
 
   revalidatePath("/dashboard/jobs");
   redirect(`/dashboard/jobs/${job.id}`);
@@ -65,100 +75,7 @@ export default async function NewJobPage() {
         </div>
       </div>
 
-      <form action={createJob}>
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-body">
-            <div className="section-title" style={{ marginBottom: 16 }}>Customer</div>
-            <label className="field">
-              <span>Customer</span>
-              <select name="companyId">
-                <option value="">— Select customer (optional) —</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-body">
-            <div className="section-title" style={{ marginBottom: 16 }}>Route & Cargo</div>
-            <div className="form-grid-2" style={{ marginBottom: 12 }}>
-              <label className="field"><span>Origin <span style={{ color: "var(--danger)" }}>*</span></span>
-                <input name="origin" required placeholder="e.g. Shanghai, CN" />
-              </label>
-              <label className="field"><span>Destination <span style={{ color: "var(--danger)" }}>*</span></span>
-                <input name="destination" required placeholder="e.g. Hamburg, DE" />
-              </label>
-            </div>
-            <div className="form-grid-3" style={{ marginBottom: 12 }}>
-              <label className="field"><span>Mode</span>
-                <select name="mode">
-                  <option value="">— Select —</option>
-                  <option value="SEA-FCL">Sea FCL</option>
-                  <option value="SEA-LCL">Sea LCL</option>
-                  <option value="AIR">Air</option>
-                  <option value="ROAD">Road</option>
-                  <option value="COURIER">Courier</option>
-                </select>
-              </label>
-              <label className="field"><span>Incoterms</span>
-                <select name="incoterms">
-                  <option value="">— Select —</option>
-                  {["EXW","FCA","FAS","FOB","CFR","CIF","CPT","CIP","DAP","DPU","DDP"].map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field"><span>Commodity</span>
-                <input name="commodity" placeholder="e.g. Electronics" />
-              </label>
-            </div>
-            <div className="form-grid-2" style={{ marginBottom: 0 }}>
-              <label className="field"><span>Weight (kg)</span>
-                <input name="weight" type="number" placeholder="0" />
-              </label>
-              <label className="field"><span>Volume (cbm)</span>
-                <input name="volume" type="number" placeholder="0" />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-body">
-            <div className="section-title" style={{ marginBottom: 16 }}>Dates</div>
-            <div className="form-grid-2">
-              <label className="field"><span>ETD (Est. Departure)</span>
-                <input name="etd" type="date" />
-              </label>
-              <label className="field"><span>ETA (Est. Arrival)</span>
-                <input name="eta" type="date" />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 24 }}>
-          <div className="card-body">
-            <div className="section-title" style={{ marginBottom: 16 }}>Financials (optional)</div>
-            <div className="form-grid-2">
-              <label className="field"><span>Revenue (USD)</span>
-                <input name="revenue" type="number" placeholder="0" />
-              </label>
-              <label className="field"><span>Cost (USD)</span>
-                <input name="cost" type="number" placeholder="0" />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn" type="submit">Create Job</button>
-          <a href="/dashboard/jobs" className="btn btn-secondary" style={{ textDecoration: "none" }}>Cancel</a>
-        </div>
-      </form>
+      <NewJobForm companies={companies} action={createJob} />
     </div>
   );
 }

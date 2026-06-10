@@ -13,11 +13,17 @@ import { PopulateJobButton } from "@/components/populate-job-button";
 import { SourcingOffersTable } from "@/components/sourcing-offers-table";
 import { PortalLinkButton } from "@/components/portal-link-button";
 import { DocumentViewer } from "@/components/document-viewer";
+import { SubmitButton } from "@/components/submit-button";
+import { JobNote } from "@/components/job-note";
+import { parseQuoteLines, cleanNotes } from "@/lib/quote-lines";
+import { CONTAINER_TYPE_LABEL } from "@/components/cargo-fields";
+import { dimensionsSummary } from "@/components/dimensions-input";
 
 const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"] as const;
+const STATUS_SELECT = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED", "CANCELLED"] as const;
 const STATUS_LABEL: Record<string, string> = {
-  INQUIRY: "Inquiry", QUOTED: "Quoted", BOOKED: "Booked",
-  IN_TRANSIT: "In Transit", CUSTOMS: "Customs", DELIVERED: "Delivered",
+  PROPOSED: "Proposed", INQUIRY: "Inquiry", QUOTED: "Quoted", BOOKED: "Booked",
+  IN_TRANSIT: "In Transit", CUSTOMS: "Customs", DELIVERED: "Delivered", CANCELLED: "Cancelled",
 };
 const MILESTONE_LABEL: Record<string, string> = {
   BOOKING: "Booking", CARGO_READY: "Cargo Ready", ETD: "ETD",
@@ -183,10 +189,12 @@ export default async function JobDetailPage({
     DELIVERED: "Job complete",
   };
 
-  // Quote lines stored pipe-delimited in notes
-  const quoteLines = (job.notes ?? "")
-    .split("\n").filter((l) => l.includes("|"))
-    .map((l) => { const [desc, amt, cur] = l.split("|"); return { desc, amount: Number(amt), cur }; });
+  const quoteLines = parseQuoteLines(job);
+
+  const equipment =
+    job.mode === "SEA-FCL" && job.containerCount
+      ? `${job.containerCount} × ${job.containerType ? (CONTAINER_TYPE_LABEL[job.containerType] ?? job.containerType) : "container"}`
+      : dimensionsSummary(job.dimensions);
 
   const carrierQuotes = job.inquiry?.carrierQuotes ?? [];
   const receivedQuotes = carrierQuotes.filter((q) => q.status === "RECEIVED");
@@ -219,6 +227,18 @@ export default async function JobDetailPage({
                   <span style={{ fontSize: 12, color: "var(--text-3)" }}>{job.incoterms}</span>
                 </>
               )}
+              {equipment && (
+                <>
+                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>·</span>
+                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>{equipment}</span>
+                </>
+              )}
+              {job.volume != null && job.mode !== "SEA-FCL" && (
+                <>
+                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>·</span>
+                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>{job.volume.toLocaleString()} cbm</span>
+                </>
+              )}
             </div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>
               {job.company?.name ?? "Unknown Customer"}
@@ -245,11 +265,11 @@ export default async function JobDetailPage({
               await updateJobStatus(jobId, String(fd.get("status")));
             }} style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <select name="status" defaultValue={job.status} style={{ fontSize: 13, fontWeight: 600, padding: "6px 10px" }}>
-                {STATUS_ORDER.map((s) => (
+                {STATUS_SELECT.map((s) => (
                   <option key={s} value={s}>{STATUS_LABEL[s]}</option>
                 ))}
               </select>
-              <button className="btn btn-secondary btn-sm" type="submit">Update</button>
+              <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="Updating…">Update</SubmitButton>
             </form>
           </div>
         </div>
@@ -359,6 +379,12 @@ export default async function JobDetailPage({
             </div>
           )}
 
+          {/* Personal note */}
+          <div className="card">
+            <div className="worktable-section-header">Note</div>
+            <JobNote jobId={jobId} initial={cleanNotes(job.notes)} />
+          </div>
+
           {/* Customer */}
           <div className="card">
             <div className="worktable-section-header">Customer</div>
@@ -439,7 +465,7 @@ export default async function JobDetailPage({
                           )}
                           {!isSelected && q.status === "RECEIVED" && (
                             <form action={selectCarrierQuote.bind(null, jobId, q.id)}>
-                              <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>Select</button>
+                              <SubmitButton className="btn btn-secondary btn-sm" style={{ fontSize: 11 }} pendingLabel="…">Select</SubmitButton>
                             </form>
                           )}
                         </div>
@@ -466,9 +492,9 @@ export default async function JobDetailPage({
                   <input name="service" placeholder="Service" />
                   <input name="total40HC" type="number" placeholder="Total 40HC ($)" />
                   <input name="transitDays" type="number" placeholder="Transit days" />
-                  <button className="btn btn-secondary btn-sm" type="submit" style={{ gridColumn: "1 / -1", fontSize: 12 }}>
+                  <SubmitButton className="btn btn-secondary btn-sm" style={{ gridColumn: "1 / -1", fontSize: 12 }} pendingLabel="Adding…">
                     Add rate
-                  </button>
+                  </SubmitButton>
                 </form>
               </details>
             )}
@@ -509,10 +535,10 @@ export default async function JobDetailPage({
                           if (date) await updateMilestonePlanned(m.id, date);
                         }} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <input type="date" name="plannedAt" defaultValue={fmtInput(m.plannedAt)} style={{ fontSize: 11, padding: "3px 5px", width: 130 }} />
-                          <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: "3px 7px" }}>Set</button>
+                          <SubmitButton className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: "3px 7px" }} pendingLabel="…">Set</SubmitButton>
                         </form>
                         <form action={markMilestoneActual.bind(null, m.id)}>
-                          <button type="submit" className="btn btn-sm" style={{ fontSize: 11, padding: "3px 7px" }}>Mark done</button>
+                          <SubmitButton className="btn btn-sm" style={{ fontSize: 11, padding: "3px 7px" }} pendingLabel="…">Mark done</SubmitButton>
                         </form>
                       </div>
                     )}
@@ -563,12 +589,12 @@ export default async function JobDetailPage({
                       )}
                       {d.status === "PENDING" && (
                         <form action={updateDocStatus.bind(null, d.id, "UPLOADED")}>
-                          <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>Mark uploaded</button>
+                          <SubmitButton className="btn btn-secondary btn-sm" style={{ fontSize: 11 }} pendingLabel="…">Mark uploaded</SubmitButton>
                         </form>
                       )}
                       {d.status === "UPLOADED" && (
                         <form action={updateDocStatus.bind(null, d.id, "APPROVED")}>
-                          <button type="submit" className="btn btn-sm" style={{ fontSize: 11 }}>Approve</button>
+                          <SubmitButton className="btn btn-sm" style={{ fontSize: 11 }} pendingLabel="…">Approve</SubmitButton>
                         </form>
                       )}
                     </div>
@@ -660,7 +686,7 @@ export default async function JobDetailPage({
                 <input name="description" placeholder="Description" required />
                 <input name="amount" type="number" placeholder="Amount" required />
                 <select name="currency" defaultValue="USD"><option>USD</option><option>EUR</option><option>TRY</option><option>GBP</option></select>
-                <button type="submit" className="btn btn-secondary btn-sm" style={{ gridColumn: "1 / -1", fontSize: 12 }}>Add line</button>
+                <SubmitButton className="btn btn-secondary btn-sm" style={{ gridColumn: "1 / -1", fontSize: 12 }} pendingLabel="Adding…">Add line</SubmitButton>
               </form>
             </details>
           </div>

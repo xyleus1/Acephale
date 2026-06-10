@@ -100,9 +100,13 @@ export default async function InboxPage({
       where.AND.push({ OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] });
     }
   }
-  if (accountFilter) {
-    where.messages = { some: { accountId: accountFilter } };
-  }
+  // Only show threads from active (non-paused) accounts.
+  where.messages = {
+    some: {
+      account: { isActive: true },
+      ...(accountFilter ? { accountId: accountFilter } : {}),
+    },
+  };
   // Load-based filter: scope to a specific job (and its linked inquiry threads)
   // or a specific inquiry directly. Overrides the linked/unlinked filter
   // because if you're filtering to a load, you implicitly want all of its threads.
@@ -190,20 +194,21 @@ export default async function InboxPage({
     }).slice(0, 80);
   }
 
-  // Counts for the filter chips
-  const activeFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }] };
+  // Counts for the filter chips (scoped to active accounts, like the thread list)
+  const fromActiveAccount = { messages: { some: { account: { isActive: true } } } };
+  const activeFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...fromActiveAccount };
   const [totalActive, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter, jobId: null, inquiryId: null } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, { OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] }] } }),
-    prisma.emailThread.count({ where: { officeId: session.officeId, snoozedUntil: { gt: now } } }),
-    prisma.emailThread.count({ where: { officeId: session.officeId, hiddenAt: { not: null } } }),
-    prisma.emailThread.count({ where: { officeId: session.officeId } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, snoozedUntil: { gt: now }, ...fromActiveAccount } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, hiddenAt: { not: null }, ...fromActiveAccount } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, ...fromActiveAccount } }),
   ]);
   // "Awaiting reply" count is approximate: pull last messages directly via raw count of latest-inbound.
   // Cheap heuristic: same query as fetched threads.
   const totalNeedsReply = (await prisma.emailThread.findMany({
-    where: { officeId: session.officeId, hiddenAt: null },
+    where: { officeId: session.officeId, hiddenAt: null, ...fromActiveAccount },
     include: { messages: { orderBy: { sentAt: "desc" }, take: 1 } },
     take: 500,
   })).filter((t) => t.messages[0]?.direction === "INBOUND").length;

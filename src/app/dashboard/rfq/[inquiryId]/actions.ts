@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { createJobWithReference } from "@/lib/job-actions";
 import Anthropic from "@anthropic-ai/sdk";
 
 export async function convertToJob(inquiryId: string, formData: FormData) {
@@ -14,14 +15,9 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
   });
   if (!inquiry) throw new Error("Inquiry not found");
 
-  // Generate reference (max-existing+1, not count+1 — gaps from deletions
-  // would collide).
-  const { nextJobReference } = await import("@/lib/job-actions");
-  const reference = await nextJobReference(session.officeId);
-
   const companyId = formData.get("companyId") ? String(formData.get("companyId")) : inquiry.companyId ?? undefined;
 
-  const job = await prisma.job.create({
+  const job = await createJobWithReference(session.officeId, (reference) => prisma.job.create({
     data: {
       officeId:   session.officeId,
       companyId:  companyId ?? null,
@@ -38,7 +34,7 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
       currency:   "USD",
       assignedToUserId: session.userId,
     },
-  });
+  }));
 
   await prisma.inquiry.update({
     where: { id: inquiryId },

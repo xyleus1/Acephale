@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateJobAllFields, updateJobStatus } from "@/app/dashboard/jobs/[jobId]/actions";
+import { CargoFields } from "./cargo-fields";
+import { cleanNotes } from "@/lib/quote-lines";
 
 type JobShape = {
   id: string;
@@ -17,17 +19,21 @@ type JobShape = {
   weight: number | null;
   volume: number | null;
   packages: number | null;
+  dimensions: string | null;
+  containerCount: number | null;
+  containerType: string | null;
   etd: Date | null;
   eta: Date | null;
   revenue: number | null;
   cost: number | null;
   currency: string | null;
+  notes: string | null;
 };
 
 type CompanyOption = { id: string; name: string };
 
 const STATUS_OPTIONS = [
-  ["INQUIRY", "Inquiry"], ["QUOTED", "Quoted"], ["BOOKED", "Booked"],
+  ["PROPOSED", "Proposed"], ["INQUIRY", "Inquiry"], ["QUOTED", "Quoted"], ["BOOKED", "Booked"],
   ["IN_TRANSIT", "In Transit"], ["CUSTOMS", "Customs"], ["DELIVERED", "Delivered"], ["CANCELLED", "Cancelled"],
 ];
 
@@ -40,6 +46,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
   const [open, setOpen] = useState(false);
   const [busy, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement | null>(null);
+  const currentCompanyName = companies.find((c) => c.id === job.companyId)?.name ?? "";
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -116,12 +123,21 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
             <form ref={formRef} action={submit} className="edit-panel-form">
               <div className="edit-panel-section">
                 <div className="edit-panel-section-title">Customer</div>
-                <select name="companyId" defaultValue={job.companyId ?? ""}>
-                  <option value="">— No customer —</option>
+                <input
+                  name="companyName"
+                  list="edit-company-suggestions"
+                  defaultValue={currentCompanyName}
+                  placeholder="Type a customer name"
+                  autoComplete="off"
+                />
+                <datalist id="edit-company-suggestions">
                   {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.name} />
                   ))}
-                </select>
+                </datalist>
+                <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
+                  New names are saved as customers automatically. Leave empty for no customer.
+                </p>
               </div>
 
               <div className="edit-panel-section">
@@ -140,18 +156,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
 
               <div className="edit-panel-section">
                 <div className="edit-panel-section-title">Cargo</div>
-                <div className="form-grid-3">
-                  <label className="field">
-                    <span>Mode</span>
-                    <select name="mode" defaultValue={job.mode ?? ""}>
-                      <option value="">—</option>
-                      <option value="SEA-FCL">Sea FCL</option>
-                      <option value="SEA-LCL">Sea LCL</option>
-                      <option value="AIR">Air</option>
-                      <option value="ROAD">Road</option>
-                      <option value="COURIER">Courier</option>
-                    </select>
-                  </label>
+                <div className="form-grid-2" style={{ marginBottom: 10 }}>
                   <label className="field">
                     <span>Incoterms</span>
                     <select name="incoterms" defaultValue={job.incoterms ?? ""}>
@@ -168,21 +173,21 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                     </select>
                   </label>
                 </div>
-                <label className="field" style={{ marginTop: 10 }}>
+                <label className="field" style={{ marginBottom: 10 }}>
                   <span>Commodity</span>
                   <input name="commodity" defaultValue={job.commodity ?? ""} placeholder="e.g. Machine parts" />
                 </label>
-                <div className="form-grid-3" style={{ marginTop: 10 }}>
-                  <label className="field"><span>Weight (kg)</span>
-                    <input name="weight" type="number" defaultValue={job.weight ?? ""} />
-                  </label>
-                  <label className="field"><span>Volume (cbm)</span>
-                    <input name="volume" type="number" defaultValue={job.volume ?? ""} />
-                  </label>
-                  <label className="field"><span>Packages</span>
-                    <input name="packages" type="number" defaultValue={job.packages ?? ""} />
-                  </label>
-                </div>
+                <CargoFields
+                  initialMode={job.mode}
+                  initialContainerCount={job.containerCount}
+                  initialContainerType={job.containerType}
+                  initialDimensions={job.dimensions}
+                  initialWeight={job.weight}
+                />
+                <label className="field" style={{ marginTop: 10 }}>
+                  <span>Packages</span>
+                  <input name="packages" type="number" defaultValue={job.packages ?? ""} />
+                </label>
               </div>
 
               <div className="edit-panel-section">
@@ -203,12 +208,23 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                 <div className="edit-panel-section-title">Financials</div>
                 <div className="form-grid-2">
                   <label className="field"><span>Revenue</span>
-                    <input name="revenue" type="number" defaultValue={job.revenue ?? ""} />
+                    <input name="revenue" type="number" step="any" defaultValue={job.revenue ?? ""} />
                   </label>
                   <label className="field"><span>Cost</span>
-                    <input name="cost" type="number" defaultValue={job.cost ?? ""} />
+                    <input name="cost" type="number" step="any" defaultValue={job.cost ?? ""} />
                   </label>
                 </div>
+              </div>
+
+              <div className="edit-panel-section">
+                <div className="edit-panel-section-title">Note</div>
+                <textarea
+                  name="notes"
+                  rows={3}
+                  defaultValue={cleanNotes(job.notes)}
+                  placeholder="Short note — only you see this"
+                  style={{ width: "100%", resize: "vertical", fontSize: 13, padding: "8px 10px" }}
+                />
               </div>
 
               {/* Hidden status field so updateJobAllFields gets it */}

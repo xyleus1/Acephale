@@ -505,8 +505,12 @@ model Job {
   commodity        String?
   incoterms        String?
   weight           Float?    // kg
-  volume           Float?    // cbm
+  volume           Float?    // cbm — auto-computed from dimensions for non-FCL
   packages         Int?
+  dimensions       String?   // JSON [{qty, length, width, height}] in cm — LCL/AIR/ROAD cargo
+  containerCount   Int?      // FCL: number of containers
+  containerType    String?   // FCL: 20DC / 40DC / 40HC / 20RF / 40RF / OT-FR
+  quoteLines       String?   // pipe-delimited quote line items (desc|amount|currency per line)
 
   etd              DateTime?
   eta              DateTime?

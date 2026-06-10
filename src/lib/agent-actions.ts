@@ -3,6 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
+import { parsePipeLines } from "./quote-lines";
 
 // AI extracts a structured action from a free-form user message when scoped
 // to a job. Returns one of:
@@ -304,13 +305,16 @@ export async function applySetMoney(jobId: string, officeId: string, kind: "reve
 }
 
 export async function applyAddQuoteLine(jobId: string, officeId: string, args: { description: string; amount: number; currency?: string }): Promise<{ ok: true } | { error: string }> {
-  const job = await prisma.job.findFirst({ where: { id: jobId, officeId }, select: { id: true, notes: true, currency: true } });
+  const job = await prisma.job.findFirst({ where: { id: jobId, officeId }, select: { id: true, notes: true, quoteLines: true, currency: true } });
   if (!job) return { error: "Job not found" };
   const cur = args.currency ?? job.currency ?? "USD";
-  // Quote lines are stored pipe-delimited inside Job.notes per project context.
+  // Quote lines are stored pipe-delimited in Job.quoteLines (fold in legacy lines from notes).
+  const legacy = job.quoteLines == null
+    ? parsePipeLines(job.notes).map((l) => `${l.desc}|${l.amount}|${l.cur}`)
+    : [];
+  const existing = [job.quoteLines ?? "", ...legacy].filter(Boolean).join("\n");
   const line = `${args.description}|${args.amount}|${cur}`;
-  const newNotes = job.notes ? `${job.notes}\n${line}` : line;
-  await prisma.job.update({ where: { id: jobId }, data: { notes: newNotes } });
+  await prisma.job.update({ where: { id: jobId }, data: { quoteLines: existing ? `${existing}\n${line}` : line } });
   revalidatePath(`/dashboard/jobs/${jobId}`);
   return { ok: true };
 }

@@ -23,6 +23,26 @@ export async function nextJobReference(officeId: string): Promise<string> {
   return `${prefix}${String(max + 1).padStart(3, "0")}`;
 }
 
+// Run a job create that retries with a fresh reference if two creates race
+// into the same number (unique constraint violation).
+export async function createJobWithReference<T>(
+  officeId: string,
+  create: (reference: string) => Promise<T>
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const reference = await nextJobReference(officeId);
+    try {
+      return await create(reference);
+    } catch (e) {
+      lastErr = e;
+      const code = (e as { code?: string })?.code;
+      if (code !== "P2002") throw e; // only retry unique-constraint collisions
+    }
+  }
+  throw lastErr;
+}
+
 // Create a PROPOSED-stage Job for an Inquiry that doesn't have one yet.
 // Used by the auto-link flow so every freight-related thread shows up on the
 // jobs board as a draft until the operator confirms it.
@@ -35,8 +55,7 @@ export async function createProposedJobForInquiry(inquiryId: string): Promise<st
   if (!inquiry) return null;
   if (inquiry.job) return inquiry.job.id;
 
-  const reference = await nextJobReference(inquiry.officeId);
-  const job = await prisma.job.create({
+  const job = await createJobWithReference(inquiry.officeId, (reference) => prisma.job.create({
     data: {
       officeId: inquiry.officeId,
       companyId: inquiry.companyId ?? null,
@@ -53,7 +72,7 @@ export async function createProposedJobForInquiry(inquiryId: string): Promise<st
       volume: inquiry.volume ?? null,
       currency: "USD",
     },
-  });
+  }));
   return job.id;
 }
 

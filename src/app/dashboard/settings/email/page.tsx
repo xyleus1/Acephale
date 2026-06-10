@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Icon } from "@/components/icon";
 import { SyncAccountButton } from "@/components/sync-account-button";
 import { DisconnectAccountButton } from "@/components/disconnect-account-button";
+import { ResumeAccountButton } from "@/components/resume-account-button";
 
 function timeAgo(d: Date | null | undefined) {
   if (!d) return "Never";
@@ -36,6 +37,7 @@ export default async function EmailSettingsPage({
   const countByAccount = Object.fromEntries(messageCounts.map((c) => [c.accountId, c._count]));
 
   const active = accounts.filter((a) => a.isActive);
+  const paused = accounts.filter((a) => !a.isActive);
   const oauthConfigured = !!process.env.GOOGLE_CLIENT_ID;
   // Accounts connected before the gmail.send scope was added need to be
   // reconnected before AI replies can actually deliver. We can't tell from
@@ -189,6 +191,41 @@ export default async function EmailSettingsPage({
           <p style={{ fontSize: 13, color: "var(--text-3)" }}>
             Click <em>Connect a Gmail inbox</em> above to authorize. After that, click <em>Sync now</em> to pull the last 7 days of emails.
           </p>
+        </div>
+      )}
+
+      {/* Paused accounts */}
+      {paused.length > 0 && (
+        <div className="card-flush" style={{ marginBottom: 20 }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
+            <div className="section-title">Paused ({paused.length})</div>
+            <p style={{ fontSize: 11.5, color: "var(--text-3)", margin: "4px 0 0" }}>
+              Sync is stopped and these inboxes&apos; emails are hidden from the Inbox. Nothing was deleted — resume any time.
+            </p>
+          </div>
+          {paused.map((account) => (
+            <div key={account.id} style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", opacity: 0.75 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    background: "var(--surface-3)", border: "1px solid var(--border)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: 700, color: "var(--text-2)",
+                  }}>
+                    {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{account.email}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {account.provider} · {countByAccount[account.id] ?? 0} message{(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} kept · last sync {timeAgo(account.lastSyncAt)}
+                    </div>
+                  </div>
+                </div>
+                <ResumeAccountButton accountId={account.id} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

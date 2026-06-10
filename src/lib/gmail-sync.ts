@@ -356,6 +356,18 @@ export async function disconnectEmailAccount(accountId: string): Promise<void> {
     data: { isActive: false },
   });
   revalidatePath("/dashboard/settings/email");
+  revalidatePath("/dashboard/inbox");
+}
+
+// Re-enable a paused account: sync resumes and its threads reappear in the inbox.
+export async function resumeEmailAccount(accountId: string): Promise<void> {
+  const session = await requireSession();
+  await prisma.emailAccount.update({
+    where: { id: accountId, officeId: session.officeId },
+    data: { isActive: true },
+  });
+  revalidatePath("/dashboard/settings/email");
+  revalidatePath("/dashboard/inbox");
 }
 
 // Re-run classification over already-synced messages.

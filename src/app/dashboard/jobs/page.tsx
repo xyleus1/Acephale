@@ -3,8 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { getFocusedJobId } from "@/lib/job-focus";
 import { Icon } from "@/components/icon";
-import { JobConfirmActions } from "@/components/job-confirm-button";
 import { SeedDemoButton } from "@/components/seed-demo-button";
+import { JobsBoard } from "@/components/jobs-board";
+import { JobsTable } from "@/components/jobs-table";
+import { cleanNotes } from "@/lib/quote-lines";
 
 const STATUSES = [
   { key: "PROPOSED",   label: "Proposed"   },
@@ -32,11 +34,12 @@ type StatusKey = typeof STATUSES[number]["key"];
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; view?: string }>;
 }) {
   const session = await requireSession();
-  const { mode } = await searchParams;
+  const { mode, view } = await searchParams;
   const focusedId = await getFocusedJobId();
+  const isTable = view === "table";
 
   const typeFilter =
     mode === "procurement" ? "SOURCING" :
@@ -54,17 +57,52 @@ export default async function JobsPage({
   });
 
   const isProcurement = mode === "procurement";
+  const labels: Record<string, string> = {};
+  for (const s of STATUSES) labels[s.key] = isProcurement ? (PROCUREMENT_LABELS[s.key] ?? s.label) : s.label;
 
-  const byStatus: Record<StatusKey, typeof jobs> = {
-    PROPOSED: [], INQUIRY: [], QUOTED: [], BOOKED: [], IN_TRANSIT: [], CUSTOMS: [], DELIVERED: [],
+  const byStatus: Record<StatusKey, number> = {
+    PROPOSED: 0, INQUIRY: 0, QUOTED: 0, BOOKED: 0, IN_TRANSIT: 0, CUSTOMS: 0, DELIVERED: 0,
   };
   for (const j of jobs) {
-    if (j.status in byStatus) byStatus[j.status as StatusKey].push(j);
+    if (j.status in byStatus) byStatus[j.status as StatusKey]++;
   }
 
   const activeCount = jobs.filter(
     (j) => !["DELIVERED", "CANCELLED"].includes(j.status)
   ).length;
+
+  const serialized = jobs.map((j) => ({
+    id: j.id,
+    reference: j.reference,
+    status: j.status,
+    type: j.type,
+    companyName: j.company?.name ?? null,
+    origin: j.origin,
+    destination: j.destination,
+    mode: j.mode,
+    commodity: j.commodity,
+    incoterms: j.incoterms,
+    weight: j.weight,
+    volume: j.volume,
+    packages: j.packages,
+    dimensions: j.dimensions,
+    containerCount: j.containerCount,
+    containerType: j.containerType,
+    etd: j.etd ? j.etd.toISOString() : null,
+    eta: j.eta ? j.eta.toISOString() : null,
+    revenue: j.revenue,
+    cost: j.cost,
+    currency: j.currency,
+    notes: cleanNotes(j.notes) || null,
+    createdAt: j.createdAt.toISOString(),
+  }));
+
+  const qs = (v?: string) => {
+    const parts: string[] = [];
+    if (mode) parts.push(`mode=${mode}`);
+    if (v) parts.push(`view=${v}`);
+    return parts.length ? `?${parts.join("&")}` : "";
+  };
 
   return (
     <div>
@@ -78,14 +116,24 @@ export default async function JobsPage({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div className="mode-tabs">
-            <Link href="/dashboard/jobs" className={`mode-tab${!mode ? " active" : ""}`}>All</Link>
-            <Link href={"/dashboard/jobs?mode=procurement" as "/dashboard/jobs"} className={`mode-tab${mode === "procurement" ? " active" : ""}`}>
+            <Link href={`/dashboard/jobs${qs(view)}` as "/dashboard/jobs"} className={`mode-tab${!mode ? " active" : ""}`}>All</Link>
+            <Link href={`/dashboard/jobs?mode=procurement${isTable ? "&view=table" : ""}` as "/dashboard/jobs"} className={`mode-tab${mode === "procurement" ? " active" : ""}`}>
               <Icon name="box" size={13} />
               Procurement
             </Link>
-            <Link href={"/dashboard/jobs?mode=operations" as "/dashboard/jobs"} className={`mode-tab${mode === "operations" ? " active" : ""}`}>
+            <Link href={`/dashboard/jobs?mode=operations${isTable ? "&view=table" : ""}` as "/dashboard/jobs"} className={`mode-tab${mode === "operations" ? " active" : ""}`}>
               <Icon name="truck" size={13} />
               Operations
+            </Link>
+          </div>
+          <div className="mode-tabs">
+            <Link href={`/dashboard/jobs${qs()}` as "/dashboard/jobs"} className={`mode-tab${!isTable ? " active" : ""}`}>
+              <Icon name="box" size={13} />
+              Board
+            </Link>
+            <Link href={`/dashboard/jobs${qs("table")}` as "/dashboard/jobs"} className={`mode-tab${isTable ? " active" : ""}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+              Table
             </Link>
           </div>
           <SeedDemoButton />
@@ -102,67 +150,17 @@ export default async function JobsPage({
       <div className="metric-strip" style={{ marginBottom: 16 }}>
         {STATUSES.filter((s) => s.key !== "DELIVERED").map((s) => (
           <div key={s.key} className="metric-item">
-            <div className="metric-label">{isProcurement ? (PROCUREMENT_LABELS[s.key] ?? s.label) : s.label}</div>
-            <div className="metric-value">{byStatus[s.key].length}</div>
+            <div className="metric-label">{labels[s.key]}</div>
+            <div className="metric-value">{byStatus[s.key]}</div>
           </div>
         ))}
       </div>
 
-      {/* Kanban board */}
-      <div className="job-board">
-        {STATUSES.map((status) => {
-          const colJobs = byStatus[status.key];
-          return (
-            <div key={status.key} className="job-col">
-              <div className="job-col-header">
-                <div className="job-col-title">{isProcurement ? (PROCUREMENT_LABELS[status.key] ?? status.label) : status.label}</div>
-                <span className="job-col-count">{colJobs.length}</span>
-              </div>
-              <div className="job-col-body">
-                {colJobs.length === 0 ? (
-                  <div className="job-col-empty">—</div>
-                ) : (
-                  colJobs.map((job) => (
-                    <a
-                      key={job.id}
-                      href={`/dashboard/jobs/${job.id}`}
-                      className={`job-card${focusedId === job.id ? " focus-match" : ""}`}
-                      style={job.status === "PROPOSED" ? { borderStyle: "dashed", borderColor: "var(--brand)", background: "var(--surface)" } : undefined}
-                    >
-                      <div className="job-card-ref" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        {job.reference}
-                        {job.status === "PROPOSED" && (
-                          <span style={{
-                            fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3,
-                            background: "var(--brand-light)", color: "var(--brand)",
-                            border: "1px solid var(--brand-border)",
-                            textTransform: "uppercase", letterSpacing: "0.06em",
-                          }}>DRAFT</span>
-                        )}
-                      </div>
-                      <div className="job-card-company">{job.company?.name ?? "—"}</div>
-                      <div className="job-card-route">
-                        {job.origin && job.destination ? (
-                          <>{job.origin} → {job.destination}</>
-                        ) : "Route TBD"}
-                      </div>
-                      <div className="job-card-footer">
-                        {job.mode && <span className="job-mode-chip">{job.mode}</span>}
-                        {job.eta && (
-                          <span className="job-eta">
-                            ETA {new Date(job.eta).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                          </span>
-                        )}
-                      </div>
-                      {job.status === "PROPOSED" && <JobConfirmActions jobId={job.id} />}
-                    </a>
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {isTable ? (
+        <JobsTable jobs={serialized} />
+      ) : (
+        <JobsBoard jobs={serialized} labels={labels} focusedId={focusedId} />
+      )}
 
       {jobs.length === 0 && (
         <div className="card" style={{ textAlign: "center", padding: "60px 24px", marginTop: 8 }}>

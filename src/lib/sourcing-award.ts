@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
+import { createJobWithReference } from "./job-actions";
 
 // Award a supplier as the winner of a SOURCING inquiry. Marks that thread,
 // un-awards any other thread on the same inquiry, advances the linked Job to
@@ -86,12 +87,9 @@ export async function awardSupplier(threadId: string): Promise<
       if (existingChild) {
         childForwardingJobId = existingChild.id;
       } else {
-        // Generate a sibling JOB-ref.
-        const { nextJobReference } = await import("./job-actions");
-        const reference = await nextJobReference(procurement.officeId);
         const supplierOrigin = typeof offer.origin === "string" ? offer.origin : null;
         const supplierIncoterms = typeof offer.incoterms === "string" ? offer.incoterms : null;
-        const created = await prisma.job.create({
+        const created = await createJobWithReference(procurement.officeId, (reference) => prisma.job.create({
           data: {
             officeId: procurement.officeId,
             companyId: procurement.companyId ?? null,
@@ -109,7 +107,7 @@ export async function awardSupplier(threadId: string): Promise<
             currency: "USD",
             notes: `Auto-created from procurement job ${jobId} on ${new Date().toISOString().split("T")[0]} (supplier: ${offer.supplierName ?? "?"}). Confirm details and request carrier rates.`,
           },
-        });
+        }));
         childForwardingJobId = created.id;
       }
     }

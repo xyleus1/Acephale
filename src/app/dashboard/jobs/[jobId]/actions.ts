@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { maybeNotifyCustomerOnStatusChange, maybeNotifyCustomerOnMilestone } from "@/lib/customer-notify";
+import { parsePipeLines } from "@/lib/quote-lines";
+import { resolveCompanyIdByName } from "@/lib/company-resolve";
 
 // ── Job status ────────────────────────────────────────────────────────────────
 
@@ -43,30 +45,79 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
   };
 
   const status = get("status");
-  const companyId = get("companyId") || null;
+  const companyName = get("companyName").trim();
+  const companyId = companyName
+    ? await resolveCompanyIdByName(session.officeId, companyName)
+    : (get("companyId") || null);
+  const mode = get("mode") || null;
+  const isFcl = mode === "SEA-FCL";
+
+  // Notes: only touch when the form includes the field. Fold any legacy
+  // pipe-delimited quote lines out of notes into quoteLines before overwriting.
+  let notesData: { notes?: string | null; quoteLines?: string | null } = {};
+  if (formData.has("notes")) {
+    const existing = await prisma.job.findFirst({
+      where: { id: jobId, officeId: session.officeId },
+      select: { notes: true, quoteLines: true },
+    });
+    const legacyLines = parsePipeLines(existing?.notes);
+    notesData = {
+      notes: get("notes").trim() || null,
+      ...(existing?.quoteLines == null && legacyLines.length > 0
+        ? { quoteLines: legacyLines.map((l) => `${l.desc}|${l.amount}|${l.cur}`).join("\n") }
+        : {}),
+    };
+  }
 
   await prisma.job.update({
     where: { id: jobId, officeId: session.officeId },
     data: {
       ...(status ? { status: status as never } : {}),
-      companyId: companyId || null,
+      companyId,
       origin: get("origin") || null,
       destination: get("destination") || null,
-      mode: get("mode") || null,
+      mode,
       incoterms: get("incoterms") || null,
       commodity: get("commodity") || null,
       weight: num("weight"),
-      volume: num("volume"),
+      volume: isFcl ? null : num("volume"),
+      dimensions: isFcl ? null : (get("dimensions") || null),
+      containerCount: isFcl ? num("containerCount") : null,
+      containerType: isFcl ? (get("containerType") || null) : null,
       packages: num("packages") as number | null,
       etd: dt("etd"),
       eta: dt("eta"),
       revenue: num("revenue"),
       cost: num("cost"),
       currency: get("currency") || "USD",
+      ...notesData,
     },
   });
   revalidatePath("/dashboard");
   revalidatePath(`/dashboard/jobs/${jobId}`);
+  revalidatePath("/dashboard/jobs");
+}
+
+// Update just the personal note. Migrates any legacy pipe-delimited quote
+// lines out of notes into quoteLines first so they aren't lost on overwrite.
+export async function updateJobNote(jobId: string, note: string) {
+  const session = await requireSession();
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, officeId: session.officeId },
+    select: { notes: true, quoteLines: true },
+  });
+  if (!job) return;
+  const legacyLines = parsePipeLines(job.notes);
+  const quoteLines = job.quoteLines ?? (legacyLines.length > 0
+    ? legacyLines.map((l) => `${l.desc}|${l.amount}|${l.cur}`).join("\n")
+    : null);
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { notes: note.trim() || null, quoteLines },
+  });
+  revalidatePath(`/dashboard/jobs/${jobId}`);
+  revalidatePath("/dashboard/jobs");
+  revalidatePath("/dashboard");
 }
 
 export async function updateJobField(jobId: string, data: {
@@ -249,10 +300,14 @@ export async function addQuoteLine(jobId: string, formData: FormData) {
   const job = await prisma.job.findFirst({ where: { id: jobId, officeId: session.officeId } });
   if (!job) return;
 
-  const existing = (job.notes ?? "");
+  // Quote lines live in quoteLines; fold in any legacy lines still sitting in notes.
+  const legacy = job.quoteLines == null
+    ? parsePipeLines(job.notes).map((l) => `${l.desc}|${l.amount}|${l.cur}`)
+    : [];
+  const existing = [job.quoteLines ?? "", ...legacy].filter(Boolean).join("\n");
   const line = `${formData.get("description")}|${formData.get("amount")}|${formData.get("currency") ?? "USD"}`;
   const lines = existing ? existing + "\n" + line : line;
 
-  await prisma.job.update({ where: { id: jobId }, data: { notes: lines } });
+  await prisma.job.update({ where: { id: jobId }, data: { quoteLines: lines } });
   revalidatePath(`/dashboard/jobs/${jobId}`);
 }

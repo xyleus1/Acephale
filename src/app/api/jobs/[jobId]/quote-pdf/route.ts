@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { parseQuoteLines } from "@/lib/quote-lines";
 
 export async function GET(
   request: NextRequest,
@@ -16,13 +17,7 @@ export async function GET(
 
   if (!job) return new NextResponse("Not found", { status: 404 });
 
-  const lines = (job.notes ?? "")
-    .split("\n")
-    .filter((l) => l.includes("|"))
-    .map((l) => {
-      const [desc, amount, cur] = l.split("|");
-      return { desc, amount: Number(amount), cur };
-    });
+  const lines = parseQuoteLines(job);
 
   const total = lines.reduce((s, l) => s + l.amount, 0);
   const currency = lines[0]?.cur ?? job.currency ?? "USD";

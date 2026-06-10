@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { createJobWithReference } from "@/lib/job-actions";
 import Anthropic from "@anthropic-ai/sdk";
 
 // Decision: parse an inbound RFQ with Claude
@@ -115,10 +116,7 @@ export async function approveConvertWithBestRate(inquiryId: string): Promise<voi
   const best = ranked[0]?.q;
   const cost = best ? (best.total40HC ?? best.total40 ?? best.total20) : null;
 
-  const { nextJobReference } = await import("@/lib/job-actions");
-  const reference = await nextJobReference(session.officeId);
-
-  const job = await prisma.job.create({
+  const job = await createJobWithReference(session.officeId, (reference) => prisma.job.create({
     data: {
       officeId: session.officeId,
       companyId: inquiry.companyId ?? null,
@@ -136,9 +134,9 @@ export async function approveConvertWithBestRate(inquiryId: string): Promise<voi
       revenue: cost ? Math.round(cost * 1.18) : null, // suggested 18% margin
       currency: "USD",
       assignedToUserId: session.userId,
-      notes: best ? `Ocean Freight (${best.carrier})|${cost}|USD` : null,
+      quoteLines: best ? `Ocean Freight (${best.carrier})|${cost}|USD` : null,
     },
-  });
+  }));
 
   await prisma.inquiry.update({
     where: { id: inquiryId },
