@@ -2,21 +2,24 @@
   "name": "derya-crm",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma db push --accept-data-loss --skip-generate && next build",
+    "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",
+    "test:strategy": "tsx scripts/commercial-strategy.test.ts",
+    "audit:tenant-scope": "tsx scripts/audit-tenant-scope.ts",
+    "audit:tenant-scope:strict": "STRICT_TENANT_SCOPE=1 tsx scripts/audit-tenant-scope.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
+    "db:push": "tsx scripts/guard-db-push.ts && prisma db push",
     "db:seed": "prisma db seed"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "@prisma/client": "^6.7.0",
+    "dotenv": "16.6.1",
     "next": "^15.2.4",
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
@@ -34,8 +37,5 @@
     "prisma": "^6.7.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   }
 }
