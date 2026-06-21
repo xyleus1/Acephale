@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { parsePipeLines } from "./quote-lines";
+import { recordTargetPriceHistory, targetPriceChanged } from "./target-price-history";
 
 // AI extracts a structured action from a free-form user message when scoped
 // to a job. Returns one of:
@@ -30,7 +31,7 @@ type ExtractedAction =
   | { action: "none" };
 
 const VALID_STATUSES = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED", "CANCELLED"] as const;
-const VALID_MILESTONES = ["BOOKING", "CARGO_READY", "ETD", "ETA", "CUSTOMS_ENTRY", "CUSTOMS_RELEASE", "DELIVERY"] as const;
+const VALID_MILESTONES = ["BOOKING", "CARGO_READY", "DELIVERY"] as const;
 
 export async function extractActionFromMessage(args: {
   userMessage: string;
@@ -50,13 +51,13 @@ export async function extractActionFromMessage(args: {
 Action options:
 
 1. Update Job fields:
-   { "action": "edit-job", "fields": { "origin"?: string, "destination"?: string, "mode"?: "SEA-FCL"|"SEA-LCL"|"AIR"|"ROAD"|"COURIER", "incoterms"?: string, "commodity"?: string, "weight"?: number, "volume"?: number, "packages"?: number, "etd"?: "YYYY-MM-DD", "eta"?: "YYYY-MM-DD", "currency"?: "USD"|"EUR"|"GBP"|"TRY", "notes"?: string } }
+   { "action": "edit-job", "fields": { "origin"?: string, "destination"?: string, "mode"?: "SEA-FCL"|"SEA-LCL"|"AIR"|"ROAD"|"COURIER", "incoterms"?: string, "commodity"?: string, "weight"?: number, "volume"?: number, "packages"?: number, "currency"?: "USD"|"EUR"|"GBP"|"TRY", "notes"?: string } }
 
 2. Move job to a new stage:
-   { "action": "move-stage", "status": "PROPOSED" | "INQUIRY" | "QUOTED" | "BOOKED" | "IN_TRANSIT" | "CUSTOMS" | "DELIVERED" | "CANCELLED" }
+   { "action": "move-stage", "status": "PROPOSED" | "INQUIRY" | "QUOTED" | "BOOKED" | "IN_TRANSIT" | "DELIVERED" | "CANCELLED" }
 
 3. Add or update a milestone:
-   { "action": "add-milestone", "type": "BOOKING"|"CARGO_READY"|"ETD"|"ETA"|"CUSTOMS_ENTRY"|"CUSTOMS_RELEASE"|"DELIVERY", "plannedAt"?: "YYYY-MM-DD", "actualAt"?: "YYYY-MM-DD", "note"?: string }
+   { "action": "add-milestone", "type": "BOOKING"|"CARGO_READY"|"DELIVERY", "plannedAt"?: "YYYY-MM-DD", "actualAt"?: "YYYY-MM-DD", "note"?: string }
 
 4. Set or change the CUSTOMER linked to this job. Triggers: "the customer is X", "set customer to X", "link to X", "this is for X", "add customer X". If the company doesn't exist yet, set createIfMissing true.
    { "action": "set-customer", "companyName": string, "createIfMissing": true }
@@ -149,7 +150,14 @@ Job context:
 export async function applyEditJob(jobId: string, officeId: string, fields: Record<string, unknown>): Promise<{ ok: true; applied: string[] }> {
   const job = await prisma.job.findFirst({
     where: { id: jobId, officeId },
-    select: { id: true, inquiryId: true },
+    select: {
+      id: true,
+      inquiryId: true,
+      targetPrice: true,
+      targetCurrency: true,
+      targetPriceStatus: true,
+      targetPriceSource: true,
+    },
   });
   if (!job) return { ok: true, applied: [] };
 
@@ -173,8 +181,18 @@ export async function applyEditJob(jobId: string, officeId: string, fields: Reco
   passKey("mode", "string");
   passKey("incoterms", "string");
   passKey("commodity", "string");
+  passKey("containerType", "string");
+  passKey("stackable", "string");
+  passKey("topLoad", "string");
+  passKey("dangerousGoods", "string");
+  passKey("customsBy", "string");
   passKey("weight", "number");
   passKey("volume", "number");
+  passKey("containerCount", "number");
+  passKey("targetPrice", "number");
+  passKey("targetCurrency", "string");
+  passKey("targetPriceStatus", "string");
+  passKey("targetPriceSource", "string");
   passKey("packages", "number");
   passKey("revenue", "number");
   passKey("cost", "number");
@@ -185,15 +203,47 @@ export async function applyEditJob(jobId: string, officeId: string, fields: Reco
 
   if (Object.keys(update).length > 0) {
     await prisma.job.update({ where: { id: jobId }, data: update });
+    if (targetPriceChanged(job, { ...job, ...update })) {
+      await recordTargetPriceHistory({
+        officeId,
+        jobId,
+        inquiryId: job.inquiryId,
+        amount: typeof update.targetPrice === "number" ? update.targetPrice : job.targetPrice,
+        currency: typeof update.targetCurrency === "string" ? update.targetCurrency : job.targetCurrency,
+        status: typeof update.targetPriceStatus === "string" ? update.targetPriceStatus : job.targetPriceStatus,
+        source: typeof update.targetPriceSource === "string" ? update.targetPriceSource : job.targetPriceSource,
+        note: "Agent edit job action.",
+      });
+    }
   }
   // Mirror onto inquiry too
   if (job.inquiryId) {
+    const inquiryBefore = await prisma.inquiry.findUnique({
+      where: { id: job.inquiryId },
+      select: { targetPrice: true, targetCurrency: true, targetPriceStatus: true, targetPriceSource: true },
+    });
     const inqUpdate: Record<string, unknown> = {};
-    for (const k of ["origin", "destination", "mode", "incoterms", "commodity", "weight", "volume"]) {
+    for (const k of [
+      "origin", "destination", "mode", "incoterms", "commodity", "weight", "volume",
+      "containerCount", "containerType", "stackable", "topLoad", "dangerousGoods", "customsBy",
+      "targetPrice", "targetCurrency", "targetPriceStatus", "targetPriceSource",
+    ]) {
       if (k in update) inqUpdate[k] = update[k];
     }
     if (Object.keys(inqUpdate).length > 0) {
       await prisma.inquiry.update({ where: { id: job.inquiryId }, data: inqUpdate });
+      if (inquiryBefore && targetPriceChanged(inquiryBefore, { ...inquiryBefore, ...inqUpdate })) {
+        await recordTargetPriceHistory({
+          officeId,
+          inquiryId: job.inquiryId,
+          jobId,
+          amount: typeof inqUpdate.targetPrice === "number" ? inqUpdate.targetPrice : inquiryBefore.targetPrice,
+          currency: typeof inqUpdate.targetCurrency === "string" ? inqUpdate.targetCurrency : inquiryBefore.targetCurrency,
+          status: typeof inqUpdate.targetPriceStatus === "string" ? inqUpdate.targetPriceStatus : inquiryBefore.targetPriceStatus,
+          source: typeof inqUpdate.targetPriceSource === "string" ? inqUpdate.targetPriceSource : inquiryBefore.targetPriceSource,
+          note: "Agent edit job mirrored to inquiry.",
+        });
+      }
     }
   }
   revalidatePath(`/dashboard/jobs/${jobId}`);
@@ -267,7 +317,15 @@ export async function applyRenameCompany(jobId: string, officeId: string, newNam
 }
 
 export async function applyEditInquiry(jobId: string, officeId: string, fields: Record<string, unknown>): Promise<{ ok: true; applied: string[] } | { error: string }> {
-  const job = await prisma.job.findFirst({ where: { id: jobId, officeId }, select: { inquiryId: true } });
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, officeId },
+    select: {
+      inquiryId: true,
+      inquiry: {
+        select: { targetPrice: true, targetCurrency: true, targetPriceStatus: true, targetPriceSource: true },
+      },
+    },
+  });
   if (!job?.inquiryId) return { error: "Job has no linked inquiry" };
   const update: Record<string, unknown> = {};
   const applied: string[] = [];
@@ -281,13 +339,35 @@ export async function applyEditInquiry(jobId: string, officeId: string, fields: 
   set("mode", fields.mode, "string");
   set("incoterms", fields.incoterms, "string");
   set("commodity", fields.commodity, "string");
+  set("containerType", fields.containerType, "string");
+  set("stackable", fields.stackable, "string");
+  set("topLoad", fields.topLoad, "string");
+  set("dangerousGoods", fields.dangerousGoods, "string");
+  set("customsBy", fields.customsBy, "string");
   set("subject", fields.subject, "string");
   set("fromEmail", fields.fromEmail, "string");
   set("fromCompany", fields.fromCompany, "string");
   set("weight", fields.weight, "number");
   set("volume", fields.volume, "number");
+  set("containerCount", fields.containerCount, "number");
+  set("targetPrice", fields.targetPrice, "number");
+  set("targetCurrency", fields.targetCurrency, "string");
+  set("targetPriceStatus", fields.targetPriceStatus, "string");
+  set("targetPriceSource", fields.targetPriceSource, "string");
   if (Object.keys(update).length === 0) return { error: "No recognized fields to update" };
   await prisma.inquiry.update({ where: { id: job.inquiryId }, data: update });
+  if (job.inquiry && targetPriceChanged(job.inquiry, { ...job.inquiry, ...update })) {
+    await recordTargetPriceHistory({
+      officeId,
+      inquiryId: job.inquiryId,
+      jobId,
+      amount: typeof update.targetPrice === "number" ? update.targetPrice : job.inquiry.targetPrice,
+      currency: typeof update.targetCurrency === "string" ? update.targetCurrency : job.inquiry.targetCurrency,
+      status: typeof update.targetPriceStatus === "string" ? update.targetPriceStatus : job.inquiry.targetPriceStatus,
+      source: typeof update.targetPriceSource === "string" ? update.targetPriceSource : job.inquiry.targetPriceSource,
+      note: "Agent edit inquiry action.",
+    });
+  }
   revalidatePath(`/dashboard/rfq/${job.inquiryId}`);
   revalidatePath(`/dashboard/jobs/${jobId}`);
   return { ok: true, applied };
@@ -332,7 +412,9 @@ export async function applyAddMilestone(jobId: string, officeId: string, args: {
   if (!job) return { error: "Job not found" };
 
   // Upsert by (jobId, type)
-  const existing = await prisma.jobMilestone.findFirst({ where: { jobId, type: args.type } });
+  const existing = await prisma.jobMilestone.findFirst({
+    where: { jobId, type: args.type, job: { officeId } },
+  });
   const data: Record<string, unknown> = { jobId, type: args.type };
   if (args.plannedAt) {
     const d = new Date(args.plannedAt);
@@ -345,7 +427,10 @@ export async function applyAddMilestone(jobId: string, officeId: string, args: {
   if (args.note) data.note = args.note;
 
   if (existing) {
-    await prisma.jobMilestone.update({ where: { id: existing.id }, data });
+    await prisma.jobMilestone.updateMany({
+      where: { id: existing.id, job: { officeId } },
+      data,
+    });
   } else {
     await prisma.jobMilestone.create({ data: data as never });
   }

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "./auth";
 import { prisma } from "./prisma";
 import { createProposedJobForInquiry } from "./job-actions";
+import { createPendingBulkHideThreadsProposal } from "./agent-proposals";
 
 export async function createInquiryFromThread(threadId: string): Promise<{ ok: true; inquiryId: string } | { error: string }> {
   const session = await requireSession();
@@ -45,11 +46,20 @@ Output ONLY a JSON object, no markdown:
   "origin": string | null,                // city + country if known (e.g. "Ashgabat, TM")
   "destination": string | null,
   "mode": "SEA-FCL" | "SEA-LCL" | "AIR" | "ROAD" | "COURIER" | null,
+  "containerCount": number | null,
   "containerType": "20GP" | "40GP" | "40HC" | "LCL" | null,
+  "stackable": "YES" | "NO" | "UNKNOWN" | null,
+  "topLoad": "YES" | "NO" | "UNKNOWN" | null,
+  "dangerousGoods": "YES" | "NO" | "UNKNOWN" | null,
+  "customsBy": "US" | "CUSTOMER" | "FORWARDER" | "UNKNOWN" | null,
   "incoterms": string | null,             // e.g. "FOB", "CIF"
   "commodity": string | null,             // e.g. "Soybean meal 46-47% protein"
   "weight": number | null,                // kg
   "volume": number | null,                // cbm
+  "targetPrice": number | null,
+  "targetCurrency": "USD" | "EUR" | "TRY" | "GBP" | null,
+  "targetPriceStatus": "PROVIDED" | "NO_TARGET" | "UNKNOWN" | null,
+  "targetPriceSource": string | null,
   "cargoReadyDate": string | null         // ISO date
 }
 
@@ -84,11 +94,20 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
       origin: parsed.origin ?? null,
       destination: parsed.destination ?? null,
       mode: parsed.mode ?? null,
+      containerCount: parsed.containerCount != null ? Number(parsed.containerCount) : null,
       containerType: parsed.containerType ?? null,
+      stackable: parsed.stackable ?? null,
+      topLoad: parsed.topLoad ?? null,
+      dangerousGoods: parsed.dangerousGoods ?? null,
+      customsBy: parsed.customsBy ?? null,
       incoterms: parsed.incoterms ?? null,
       commodity: parsed.commodity ?? null,
       weight: parsed.weight != null ? Number(parsed.weight) : null,
       volume: parsed.volume != null ? Number(parsed.volume) : null,
+      targetPrice: parsed.targetPrice != null ? Number(parsed.targetPrice) : null,
+      targetCurrency: parsed.targetCurrency ?? null,
+      targetPriceStatus: parsed.targetPriceStatus ?? null,
+      targetPriceSource: parsed.targetPriceSource ?? null,
       cargoReadyDate: parsed.cargoReadyDate ? new Date(parsed.cargoReadyDate) : null,
       notes: parsed.summary ?? null,
       receivedAt: thread.messages[0].sentAt,
@@ -96,14 +115,19 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
   });
 
   // Link the thread (and all its messages by extension) to the new inquiry
-  await prisma.emailThread.update({
-    where: { id: threadId },
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: session.officeId },
     data: { inquiryId: inquiry.id },
   });
 
   // Re-classify all unclassified / other / related-note inbound messages on this thread
   await prisma.emailMessage.updateMany({
-    where: { threadId, direction: "INBOUND", OR: [{ classification: null }, { classification: "OTHER" }, { classification: "RELATED_NOTE" }] },
+    where: {
+      threadId,
+      thread: { officeId: session.officeId },
+      direction: "INBOUND",
+      OR: [{ classification: null }, { classification: "OTHER" }, { classification: "RELATED_NOTE" }],
+    },
     data: { classification: "RELATED_NOTE", classificationReason: "Attached when thread was promoted to Inquiry", classificationAt: new Date() },
   });
 
@@ -138,7 +162,10 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
   });
   if (!thread) return { error: "Thread not found" };
   if (thread.jobId || thread.inquiryId) {
-    await prisma.emailThread.update({ where: { id: threadId }, data: { autoLinkedAt: new Date() } });
+    await prisma.emailThread.updateMany({
+      where: { id: threadId, officeId: thread.officeId },
+      data: { autoLinkedAt: new Date() },
+    });
     return { ok: true, created: false, reason: "already linked" };
   }
   if (thread.messages.length === 0) return { error: "No messages in thread" };
@@ -192,7 +219,7 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
   { "action": "link", "linkInquiryId": "<id>" | null, "linkJobId": "<id>" | null, "reason": "<short sentence>" }
 
 (c) CREATE — thread is freight-related and is genuinely a NEW commodity/route/buyer not represented in the lists. Only choose this when no candidate is plausible.
-    { "action": "create", "type": "SOURCING" | "FORWARDING", "subject": string, "fromEmail": string|null, "fromCompany": string|null, "summary": string, "origin": string|null, "destination": string|null, "mode": "SEA-FCL"|"SEA-LCL"|"AIR"|"ROAD"|"COURIER"|null, "containerType": "20GP"|"40GP"|"40HC"|"LCL"|null, "incoterms": string|null, "commodity": string|null, "weight": number|null, "volume": number|null, "cargoReadyDate": string|null }
+    { "action": "create", "type": "SOURCING" | "FORWARDING", "subject": string, "fromEmail": string|null, "fromCompany": string|null, "summary": string, "origin": string|null, "destination": string|null, "mode": "SEA-FCL"|"SEA-LCL"|"AIR"|"ROAD"|"COURIER"|null, "containerCount": number|null, "containerType": "20GP"|"40GP"|"40HC"|"LCL"|null, "stackable": "YES"|"NO"|"UNKNOWN"|null, "topLoad": "YES"|"NO"|"UNKNOWN"|null, "dangerousGoods": "YES"|"NO"|"UNKNOWN"|null, "customsBy": "US"|"CUSTOMER"|"FORWARDER"|"UNKNOWN"|null, "incoterms": string|null, "commodity": string|null, "weight": number|null, "volume": number|null, "targetPrice": number|null, "targetCurrency": "USD"|"EUR"|"TRY"|"GBP"|null, "targetPriceStatus": "PROVIDED"|"NO_TARGET"|"UNKNOWN"|null, "targetPriceSource": string|null, "cargoReadyDate": string|null }
 
 SOURCING = office helps customer FIND/BUY a commodity (price-per-ton talk, contracts, samples). For SOURCING, ONE inquiry usually has MANY supplier-conversation threads — link, don't duplicate.
 FORWARDING = office moves cargo customer already owns (carriers, BL, customs, ETA).
@@ -223,12 +250,18 @@ ${jobHints || "(none)"}`,
   const text = result.content[0].type === "text" ? result.content[0].text : "";
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) {
-    await prisma.emailThread.update({ where: { id: threadId }, data: { autoLinkedAt: new Date(), autoLinkSkipReason: "AI returned no JSON" } });
+    await prisma.emailThread.updateMany({
+      where: { id: threadId, officeId: thread.officeId },
+      data: { autoLinkedAt: new Date(), autoLinkSkipReason: "AI returned no JSON" },
+    });
     return { ok: true, created: false, reason: "AI returned no JSON" };
   }
   let parsed: any;
   try { parsed = JSON.parse(m[0]); } catch {
-    await prisma.emailThread.update({ where: { id: threadId }, data: { autoLinkedAt: new Date(), autoLinkSkipReason: "AI JSON parse failed" } });
+    await prisma.emailThread.updateMany({
+      where: { id: threadId, officeId: thread.officeId },
+      data: { autoLinkedAt: new Date(), autoLinkSkipReason: "AI JSON parse failed" },
+    });
     return { ok: true, created: false, reason: "JSON parse failed" };
   }
 
@@ -237,8 +270,8 @@ ${jobHints || "(none)"}`,
 
   if (action === "skip") {
     const reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 240) : "not freight related";
-    await prisma.emailThread.update({
-      where: { id: threadId },
+    await prisma.emailThread.updateMany({
+      where: { id: threadId, officeId: thread.officeId },
       data: { autoLinkedAt: new Date(), autoLinkSkipReason: reason },
     });
     return { ok: true, created: false, reason };
@@ -252,12 +285,17 @@ ${jobHints || "(none)"}`,
     if (linkInquiryId) {
       const inq = await prisma.inquiry.findFirst({ where: { id: linkInquiryId, officeId: thread.officeId }, select: { id: true } });
       if (inq) {
-        await prisma.emailThread.update({
-          where: { id: threadId },
+        await prisma.emailThread.updateMany({
+          where: { id: threadId, officeId: thread.officeId },
           data: { inquiryId: inq.id, autoLinkedAt: new Date() },
         });
         await prisma.emailMessage.updateMany({
-          where: { threadId, direction: "INBOUND", OR: [{ classification: null }, { classification: "OTHER" }] },
+          where: {
+            threadId,
+            thread: { officeId: thread.officeId },
+            direction: "INBOUND",
+            OR: [{ classification: null }, { classification: "OTHER" }],
+          },
           data: { classification: "RELATED_NOTE", classificationReason: "Auto-linked to existing inquiry", classificationAt: new Date() },
         });
         // Make sure the inquiry has a draft Job on the board.
@@ -268,20 +306,25 @@ ${jobHints || "(none)"}`,
     if (linkJobId) {
       const job = await prisma.job.findFirst({ where: { id: linkJobId, officeId: thread.officeId }, select: { id: true } });
       if (job) {
-        await prisma.emailThread.update({
-          where: { id: threadId },
+        await prisma.emailThread.updateMany({
+          where: { id: threadId, officeId: thread.officeId },
           data: { jobId: job.id, autoLinkedAt: new Date() },
         });
         await prisma.emailMessage.updateMany({
-          where: { threadId, direction: "INBOUND", OR: [{ classification: null }, { classification: "OTHER" }] },
+          where: {
+            threadId,
+            thread: { officeId: thread.officeId },
+            direction: "INBOUND",
+            OR: [{ classification: null }, { classification: "OTHER" }],
+          },
           data: { classification: "RELATED_NOTE", classificationReason: "Auto-linked to existing job", classificationAt: new Date() },
         });
         return { ok: true, created: false, linkedJobId: job.id };
       }
     }
     // AI said link but didn't give a valid id — fall through to skip.
-    await prisma.emailThread.update({
-      where: { id: threadId },
+    await prisma.emailThread.updateMany({
+      where: { id: threadId, officeId: thread.officeId },
       data: { autoLinkedAt: new Date(), autoLinkSkipReason: "AI proposed link but id not found" },
     });
     return { ok: true, created: false, reason: "AI proposed link but id not found" };
@@ -305,24 +348,38 @@ ${jobHints || "(none)"}`,
       origin: parsed.origin ?? null,
       destination: parsed.destination ?? null,
       mode: parsed.mode ?? null,
+      containerCount: parsed.containerCount != null ? Number(parsed.containerCount) : null,
       containerType: parsed.containerType ?? null,
+      stackable: parsed.stackable ?? null,
+      topLoad: parsed.topLoad ?? null,
+      dangerousGoods: parsed.dangerousGoods ?? null,
+      customsBy: parsed.customsBy ?? null,
       incoterms: parsed.incoterms ?? null,
       commodity: parsed.commodity ?? null,
       weight: parsed.weight != null ? Number(parsed.weight) : null,
       volume: parsed.volume != null ? Number(parsed.volume) : null,
+      targetPrice: parsed.targetPrice != null ? Number(parsed.targetPrice) : null,
+      targetCurrency: parsed.targetCurrency ?? null,
+      targetPriceStatus: parsed.targetPriceStatus ?? null,
+      targetPriceSource: parsed.targetPriceSource ?? null,
       cargoReadyDate: parsed.cargoReadyDate ? new Date(parsed.cargoReadyDate) : null,
       notes: parsed.summary ?? null,
       receivedAt: thread.messages[0].sentAt,
     },
   });
 
-  await prisma.emailThread.update({
-    where: { id: threadId },
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: thread.officeId },
     data: { inquiryId: inquiry.id, autoLinkedAt: new Date() },
   });
 
   await prisma.emailMessage.updateMany({
-    where: { threadId, direction: "INBOUND", OR: [{ classification: null }, { classification: "OTHER" }] },
+    where: {
+      threadId,
+      thread: { officeId: thread.officeId },
+      direction: "INBOUND",
+      OR: [{ classification: null }, { classification: "OTHER" }],
+    },
     data: { classification: "RELATED_NOTE", classificationReason: "Attached when thread was auto-promoted to Inquiry", classificationAt: new Date() },
   });
 
@@ -340,8 +397,8 @@ export async function attachThreadToJob(threadId: string, jobId: string): Promis
     prisma.job.findFirst({ where: { id: jobId, officeId: session.officeId }, select: { id: true } }),
   ]);
   if (!thread || !job) return;
-  await prisma.emailThread.update({
-    where: { id: threadId },
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: session.officeId },
     data: { jobId, inquiryId: null },
   });
   revalidatePath("/dashboard/inbox");
@@ -353,12 +410,12 @@ export async function markThreadUnrelated(threadId: string): Promise<void> {
   const session = await requireSession();
   const found = await prisma.emailThread.findFirst({ where: { id: threadId, officeId: session.officeId } });
   if (!found) return;
-  await prisma.emailThread.update({
-    where: { id: threadId },
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: session.officeId },
     data: { jobId: null, inquiryId: null, hiddenAt: new Date() },
   });
   await prisma.emailMessage.updateMany({
-    where: { threadId },
+    where: { threadId, thread: { officeId: session.officeId } },
     data: { classification: "OTHER", classificationReason: "Manually marked unrelated" },
   });
   revalidatePath("/dashboard/inbox");
@@ -368,8 +425,8 @@ export async function hideThread(threadId: string): Promise<void> {
   const session = await requireSession();
   const found = await prisma.emailThread.findFirst({ where: { id: threadId, officeId: session.officeId } });
   if (!found) return;
-  await prisma.emailThread.update({
-    where: { id: threadId },
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: session.officeId },
     data: { hiddenAt: new Date() },
   });
   revalidatePath("/dashboard/inbox");
@@ -379,8 +436,8 @@ export async function unhideThread(threadId: string): Promise<void> {
   const session = await requireSession();
   const found = await prisma.emailThread.findFirst({ where: { id: threadId, officeId: session.officeId } });
   if (!found) return;
-  await prisma.emailThread.update({
-    where: { id: threadId },
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: session.officeId },
     data: { hiddenAt: null },
   });
   revalidatePath("/dashboard/inbox");
@@ -404,7 +461,10 @@ export async function snoozeThread(threadId: string, until: "4h" | "tomorrow" | 
     const parsed = new Date(until);
     dt = isNaN(parsed.getTime()) ? new Date(now.getTime() + 24 * 3600 * 1000) : parsed;
   }
-  await prisma.emailThread.update({ where: { id: threadId }, data: { snoozedUntil: dt } });
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: session.officeId },
+    data: { snoozedUntil: dt },
+  });
   revalidatePath("/dashboard/inbox");
 }
 
@@ -417,6 +477,23 @@ export async function bulkHideThreads(threadIds: string[]): Promise<{ hidden: nu
   });
   revalidatePath("/dashboard/inbox");
   return { hidden: r.count };
+}
+
+export async function proposeBulkHideThreads(threadIds: string[]): Promise<
+  | { ok: true; proposalId: string; message: string }
+  | { error: string }
+> {
+  const session = await requireSession();
+  const result = await createPendingBulkHideThreadsProposal({
+    officeId: session.officeId,
+    userId: session.userId,
+    threadIds,
+    kind: "BULK_HIDE_THREADS",
+    sourceType: "INBOX_BULK_ACTION",
+  });
+  return result.ok
+    ? { ok: true, proposalId: result.proposalId, message: result.message }
+    : { error: result.error };
 }
 
 export async function bulkSnoozeThreads(threadIds: string[], until: "4h" | "tomorrow" | "monday"): Promise<{ snoozed: number }> {
@@ -457,6 +534,9 @@ export async function unsnoozeThread(threadId: string): Promise<void> {
   const session = await requireSession();
   const found = await prisma.emailThread.findFirst({ where: { id: threadId, officeId: session.officeId } });
   if (!found) return;
-  await prisma.emailThread.update({ where: { id: threadId }, data: { snoozedUntil: null } });
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId: session.officeId },
+    data: { snoozedUntil: null },
+  });
   revalidatePath("/dashboard/inbox");
 }

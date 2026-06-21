@@ -2,17 +2,70 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { chatWithAgent, type ChatMsg } from "@/lib/agent-chat";
+import { chatWithAgent, type AgentToolTrace, type ChatMsg } from "@/lib/agent-chat";
+import { AgentPagePresenceLayer, type AgentPageAction } from "@/components/agent-page-presence";
+import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
+import { cuesForToolTrace, inferPageCues, type AgentPageCue } from "@/lib/agent-page-cues";
+import { Icon } from "@/components/icon";
+
+type ChatItem = ChatMsg & {
+  toolTrace?: AgentToolTrace[];
+};
+
+const AGENT_TOOLS = [
+  {
+    label: "Brain read",
+    icon: "shield",
+    prompt: "Inspect the commercial brain for this job. Start with the decision contract, weakest proof gap, next safe move, and stop condition.",
+  },
+  {
+    label: "Run desk",
+    icon: "grid",
+    prompt: "List the decision queue and tell me the highest-priority commercial actions.",
+  },
+  {
+    label: "Pricing queue",
+    icon: "shield",
+    prompt: "List the pricing brain queue. Start with the operator playbook: exact ask or first move, safety rule, stop condition, and review link for the top RFQ.",
+  },
+  {
+    label: "Qualify RFQ",
+    icon: "list",
+    prompt: "Run a readiness audit and list what is missing before this RFQ can go to forwarders.",
+  },
+  {
+    label: "Pricing check",
+    icon: "check",
+    prompt: "Check target price, received pricing, margin, and next pricing action.",
+  },
+  {
+    label: "What-if",
+    icon: "dollar",
+    prompt: "Simulate pricing: what if the customer target is USD 2300 and the buy cost is USD 2000?",
+  },
+  {
+    label: "Follow-ups",
+    icon: "mail-out",
+    prompt: "Find stale customer or forwarder follow-ups that need attention.",
+  },
+  {
+    label: "Customer reply",
+    icon: "mail",
+    prompt: "Draft a concise customer reply from the current RFQ/pricing status.",
+  },
+] as const;
 
 export function AgentChatWidget() {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [messages, setMessages] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pageAction, setPageAction] = useState<AgentPageAction | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const pageCueTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -24,21 +77,50 @@ export function AgentChatWidget() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
+  useEffect(() => {
+    return () => {
+      if (pageCueTimerRef.current) window.clearTimeout(pageCueTimerRef.current);
+    };
+  }, []);
+
+  function showPageCues(cues: readonly AgentPageCue[], durationMs = Math.min(14000, cues.length * 2500 + 2200)) {
+    if (cues.length === 0) return;
+    if (pageCueTimerRef.current) {
+      window.clearTimeout(pageCueTimerRef.current);
+    }
+    setPageAction({
+      id: Date.now(),
+      cues: [...cues],
+    });
+    pageCueTimerRef.current = window.setTimeout(() => {
+      setPageAction(null);
+      pageCueTimerRef.current = null;
+    }, durationMs);
+  }
+
   // The dashboard root has a permanent agent panel embedded in the page,
   // so suppress the floating pill there. Must come AFTER all hooks (Rules of Hooks).
   if (pathname === "/dashboard") return null;
 
-  async function send() {
-    const text = input.trim();
+  async function send(textOverride?: string) {
+    const text = (textOverride ?? input).trim();
     if (!text || busy) return;
     setInput("");
-    const next: ChatMsg[] = [...messages, { role: "user", content: text }];
+    if (inputRef.current) inputRef.current.style.height = "auto";
+    showPageCues(inferPageCues(text), 9000);
+
+    const history: ChatMsg[] = messages.map(({ role, content }) => ({ role, content }));
+    const next: ChatItem[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setBusy(true);
     try {
-      const res = await chatWithAgent(messages, text);
-      setMessages([...next, { role: "assistant", content: res.reply }]);
-      if (res.ingestedInquiryId) {
+      const res = await chatWithAgent(history, text);
+      setMessages([...next, { role: "assistant", content: res.reply, toolTrace: res.toolTrace }]);
+      const actualCues = cuesForToolTrace(res.toolTrace);
+      if (actualCues.length > 0) {
+        showPageCues(actualCues);
+      }
+      if (res.ingestedInquiryId || res.refresh) {
         router.refresh();
       }
     } catch (err) {
@@ -68,103 +150,120 @@ export function AgentChatWidget() {
 
   if (!open) {
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="agent-fab"
-        aria-label="Open agent"
-        title="Open agent (Cmd+J)"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span>Agent</span>
-        <span className="agent-fab-dot" aria-hidden />
-      </button>
+      <>
+        <AgentPagePresenceLayer action={pageAction} listenForExternalCues />
+        <button
+          onClick={() => setOpen(true)}
+          className="agent-fab"
+          aria-label="Open agent"
+          title="Open agent (Cmd+J)"
+        >
+          <Icon name="sparkles" size={14} strokeWidth={2.25} />
+          <span>Desk Assistant</span>
+          <span className="agent-fab-dot" aria-hidden />
+        </button>
+      </>
     );
   }
 
   return (
-    <div className="agent-panel" role="dialog" aria-label="Agent chat">
-      <header className="agent-panel-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="agent-avatar">A</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Agent</div>
-            <div style={{ fontSize: 10.5, color: "var(--text-3)" }}>Connected to your ops</div>
+    <>
+      <AgentPagePresenceLayer action={pageAction} listenForExternalCues />
+      <div className="agent-panel" role="dialog" aria-label="Desk assistant">
+        <header className="agent-panel-header">
+          <div className="agent-title-lockup">
+            <span className="agent-avatar">A</span>
+            <div>
+              <div className="agent-panel-title">Desk Assistant</div>
+              <div className="agent-panel-subtitle">RFQs, target price, forwarder replies</div>
+            </div>
           </div>
+          <button onClick={() => setOpen(false)} className="agent-panel-close" aria-label="Close">
+            <Icon name="x" size={14} strokeWidth={2.5} />
+          </button>
+        </header>
+
+        <div ref={scrollRef} className="agent-panel-body">
+          {messages.length === 0 && (
+            <div className="agent-empty">
+              <div className="agent-empty-title">Start with the commercial gap.</div>
+              <p className="agent-empty-copy">
+                Paste an RFQ, ask what is missing, check target price, or draft the next customer/forwarder reply.
+              </p>
+              <div className="agent-capability-grid compact" aria-label="Desk assistant tools">
+                {AGENT_TOOLS.map((tool) => (
+                  <button
+                    key={tool.label}
+                    className="agent-tool-button"
+                    onClick={() => send(tool.prompt)}
+                    disabled={busy}
+                    title={tool.prompt}
+                  >
+                    <Icon name={tool.icon} size={13} strokeWidth={2} />
+                    <span>{tool.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="agent-suggestion-list">
+                {[
+                  "List the decision queue.",
+                  "List the pricing brain queue.",
+                  "What is missing before this RFQ can go out?",
+                  "What if target is USD 2300 and buy cost is USD 2000?",
+                  "Find stale forwarder replies.",
+                ].map((q) => (
+                  <button
+                    key={q}
+                    className="agent-suggestion"
+                    onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 0); }}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((m, i) => (
+            <div key={i} className={`agent-msg agent-msg-${m.role}`}>
+              {m.role === "assistant" && <span className="agent-msg-avatar">A</span>}
+              <div className="agent-msg-stack">
+                <div className="agent-msg-body">{m.content}</div>
+                {m.role === "assistant" && <AgentToolTraceList trace={m.toolTrace} />}
+              </div>
+            </div>
+          ))}
+
+          {busy && (
+            <div className="agent-msg agent-msg-assistant">
+              <span className="agent-msg-avatar">A</span>
+              <div className="agent-msg-body agent-msg-thinking">
+                <span /><span /><span />
+              </div>
+            </div>
+          )}
         </div>
-        <button onClick={() => setOpen(false)} className="agent-panel-close" aria-label="Close">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </header>
 
-      <div ref={scrollRef} className="agent-panel-body">
-        {messages.length === 0 && (
-          <div className="agent-empty">
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
-              Hi. I oversee your pipeline.
-            </div>
-            <p style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.5, marginBottom: 12 }}>
-              Ask about active jobs, RFQ status, margins, or what to do next. Paste an inbound RFQ email and I will capture and parse it.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {[
-                "What needs my attention right now?",
-                "Which jobs are past ETA?",
-                "Show me jobs without carrier rates.",
-              ].map((q) => (
-                <button
-                  key={q}
-                  className="agent-suggestion"
-                  onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 0); }}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((m, i) => (
-          <div key={i} className={`agent-msg agent-msg-${m.role}`}>
-            {m.role === "assistant" && <span className="agent-msg-avatar">A</span>}
-            <div className="agent-msg-body">{m.content}</div>
-          </div>
-        ))}
-
-        {busy && (
-          <div className="agent-msg agent-msg-assistant">
-            <span className="agent-msg-avatar">A</span>
-            <div className="agent-msg-body agent-msg-thinking">
-              <span /><span /><span />
-            </div>
-          </div>
-        )}
+        <footer className="agent-panel-footer">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={onInputChange}
+            onKeyDown={onKeyDown}
+            placeholder="Paste mail, ask what's missing, or check pricing..."
+            rows={1}
+            disabled={busy}
+          />
+          <button
+            onClick={() => send()}
+            disabled={busy || !input.trim()}
+            className="agent-send-btn"
+            aria-label="Send"
+          >
+            <Icon name="arrow-right" size={14} strokeWidth={2.5} />
+          </button>
+        </footer>
       </div>
-
-      <footer className="agent-panel-footer">
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={onInputChange}
-          onKeyDown={onKeyDown}
-          placeholder="Ask anything or paste an RFQ email…"
-          rows={1}
-          disabled={busy}
-        />
-        <button
-          onClick={send}
-          disabled={busy || !input.trim()}
-          className="agent-send-btn"
-          aria-label="Send"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-          </svg>
-        </button>
-      </footer>
-    </div>
+    </>
   );
 }
