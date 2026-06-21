@@ -59,7 +59,7 @@ export async function GET(
 <div class="header">
   <div>
     <div class="brand">Derya</div>
-    <div class="brand-sub">Freight OS</div>
+    <div class="brand-sub">Freight Desk</div>
   </div>
   <div class="ref">
     <strong>${job.reference}</strong>
@@ -131,7 +131,7 @@ export async function GET(
 
 <div class="footer">
   This quotation is valid for 7 days from the date of issue. Rates are subject to availability and space confirmation.
-  Derya Freight OS · Generated ${today}
+  Derya Deal Desk · Generated ${today}
 </div>
 
 <script>window.print();</script>

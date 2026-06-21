@@ -126,8 +126,8 @@ Be conservative with flags — false alarms erode trust.`,
   const flags = Array.isArray(parsed.flags) ? parsed.flags.filter((x) => typeof x === "string").slice(0, 8) : [];
   const keyFields = parsed.key_fields && typeof parsed.key_fields === "object" ? parsed.key_fields : {};
 
-  await prisma.jobDocument.update({
-    where: { id: doc.id },
+  await prisma.jobDocument.updateMany({
+    where: { id: doc.id, officeId: doc.officeId },
     data: {
       aiSummary: summary,
       aiFlags: JSON.stringify(flags),

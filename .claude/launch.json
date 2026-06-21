@@ -10,6 +10,14 @@
         "npx", "next", "dev", "-p", "3789"
       ],
       "port": 3789
+    },
+    {
+      "name": "derya-forwarding",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c", "cd '/Users/mert/derya forwarding' && exec python3 -m http.server 4317"
+      ],
+      "port": 4317
     }
   ]
 }

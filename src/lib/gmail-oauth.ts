@@ -153,8 +153,8 @@ export async function getValidAccessToken(accountId: string): Promise<string> {
 
   // Always refresh — simpler and avoids tracking token expiry.
   const tokens = await refreshAccessToken(account.refreshToken);
-  await prisma.emailAccount.update({
-    where: { id: accountId },
+  await prisma.emailAccount.updateMany({
+    where: { id: accountId, officeId: account.officeId },
     data: { accessToken: tokens.access_token },
   });
   return tokens.access_token;

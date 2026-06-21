@@ -8,7 +8,7 @@ import { classifyInboundEmail } from "./email-classifier";
 import { autoCreateInquiryFromThread } from "./thread-actions";
 import { ensureProposedJobsForOpenInquiries } from "./job-actions";
 import { classifyEmailAttachments } from "./doc-classify";
-import { prewarmAllOpenInquiries } from "./prewarm-summary";
+import { enqueueBackgroundJob } from "./background-jobs";
 
 // Sync envelope: how many threads max we'll touch in one run, and how far back
 // to look. Each thread is one Gmail API call regardless of how many messages
@@ -178,11 +178,13 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
       if (existing) {
         // If we don't have a local thread yet, adopt from existing message.
         if (!localThread) {
-          localThread = await prisma.emailThread.findUnique({ where: { id: existing.threadId } });
+          localThread = await prisma.emailThread.findFirst({
+            where: { id: existing.threadId, officeId: account.officeId },
+          });
           // Backfill externalThreadId so future syncs map directly.
           if (localThread && !localThread.externalThreadId) {
-            await prisma.emailThread.update({
-              where: { id: localThread.id },
+            await prisma.emailThread.updateMany({
+              where: { id: localThread.id, officeId: account.officeId },
               data: { externalThreadId: tid },
             });
             localThread.externalThreadId = tid;
@@ -233,8 +235,8 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
         });
       } else if (!localThread.jobId && !localThread.inquiryId && (classifiedMatchJobId || classifiedMatchInquiryId)) {
         // Adopt link from this message if the thread isn't yet linked.
-        await prisma.emailThread.update({
-          where: { id: localThread.id },
+        await prisma.emailThread.updateMany({
+          where: { id: localThread.id, officeId: account.officeId },
           data: { jobId: classifiedMatchJobId, inquiryId: classifiedMatchInquiryId },
         });
         localThread.jobId = classifiedMatchJobId;
@@ -260,8 +262,8 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
           classificationAt: classificationLabel ? new Date() : null,
         },
       });
-      await prisma.emailThread.update({
-        where: { id: localThread.id },
+      await prisma.emailThread.updateMany({
+        where: { id: localThread.id, officeId: account.officeId },
         data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
       });
       created++;
@@ -306,10 +308,14 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
   // Backfill PROPOSED jobs for any open inquiry that doesn't have one yet.
   await ensureProposedJobsForOpenInquiries(account.officeId);
 
-  // Pre-warm supplier-offer summaries for every open SOURCING inquiry, fire-
-  // and-forget. The cron and the manual sync both kick this off so the
-  // agent's first query gets a hot cache.
-  prewarmAllOpenInquiries(account.officeId).catch(() => {});
+  // Pre-warm supplier-offer summaries out-of-band. This is AI-heavy work; it
+  // should not live inside the Gmail sync request.
+  await enqueueBackgroundJob({
+    officeId: account.officeId,
+    type: "PREWARM_OPEN_SOURCING",
+    payload: { officeId: account.officeId },
+    dedupeKey: `prewarm-open-sourcing:${account.officeId}`,
+  }).catch(() => null);
 
   // Auto-classify any new email attachments into JobDocuments on linked jobs.
   // Limited to active (non-DELIVERED) jobs that received new messages this run.
@@ -329,8 +335,8 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
     try { await classifyEmailAttachments({ jobId: j.id, officeId: account.officeId }); } catch {}
   }
 
-  await prisma.emailAccount.update({
-    where: { id: accountId },
+  await prisma.emailAccount.updateMany({
+    where: { id: accountId, officeId: account.officeId },
     data: { lastSyncAt: new Date() },
   });
 
@@ -402,8 +408,8 @@ export async function reclassifyMessages(args: { onlyUnclassified?: boolean; lim
       });
       processed++;
 
-      await prisma.emailMessage.update({
-        where: { id: m.id },
+      await prisma.emailMessage.updateMany({
+        where: { id: m.id, thread: { officeId: session.officeId } },
         data: {
           classification: cls.kind,
           classificationReason: cls.reason,
@@ -413,14 +419,14 @@ export async function reclassifyMessages(args: { onlyUnclassified?: boolean; lim
 
       if (m.thread && !m.thread.jobId && !m.thread.inquiryId) {
         if (cls.matchJobId) {
-          await prisma.emailThread.update({
-            where: { id: m.thread.id },
+          await prisma.emailThread.updateMany({
+            where: { id: m.thread.id, officeId: session.officeId },
             data: { jobId: cls.matchJobId },
           });
           relinked++;
         } else if (cls.matchInquiryId) {
-          await prisma.emailThread.update({
-            where: { id: m.thread.id },
+          await prisma.emailThread.updateMany({
+            where: { id: m.thread.id, officeId: session.officeId },
             data: { inquiryId: cls.matchInquiryId },
           });
           relinked++;
