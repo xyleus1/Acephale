@@ -3,49 +3,90 @@ import { requireSession } from "@/lib/auth";
 import Link from "next/link";
 
 type SearchParams = Promise<{ period?: string }>;
+type Tone = "brand" | "info" | "success" | "warning" | "danger" | "muted";
 
 const PERIOD_OPTIONS = [
-  { value: "7",  label: "7 days" },
+  { value: "7", label: "7 days" },
   { value: "30", label: "30 days" },
   { value: "90", label: "90 days" },
 ];
 
 const JOB_STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"] as const;
-const JOB_STATUS_META: Record<string, { label: string; color: string }> = {
-  INQUIRY:    { label: "Inquiry",    color: "#1e3a8a" },
-  QUOTED:     { label: "Quoted",     color: "#f59e0b" },
-  BOOKED:     { label: "Booked",     color: "#3b82f6" },
-  IN_TRANSIT: { label: "In Transit", color: "#8b5cf6" },
-  CUSTOMS:    { label: "Customs",    color: "#f97316" },
-  DELIVERED:  { label: "Delivered",  color: "#10b981" },
+const JOB_STATUS_META: Record<string, { label: string; tone: Tone }> = {
+  INQUIRY: { label: "RFQ", tone: "brand" },
+  QUOTED: { label: "Pricing", tone: "warning" },
+  BOOKED: { label: "Booked", tone: "info" },
+  IN_TRANSIT: { label: "En Route", tone: "brand" },
+  CUSTOMS: { label: "Customs", tone: "warning" },
+  DELIVERED: { label: "Delivered", tone: "success" },
 };
 
 const MODE_LABEL: Record<string, string> = {
-  "SEA-FCL": "Sea FCL", "SEA-LCL": "Sea LCL", AIR: "Air", ROAD: "Road", COURIER: "Courier",
-};
-const MODE_COLOR: Record<string, string> = {
-  "SEA-FCL": "#3b82f6", "SEA-LCL": "#06b6d4", AIR: "#8b5cf6", ROAD: "#f59e0b", COURIER: "#ec4899",
+  "SEA-FCL": "Sea FCL",
+  "SEA-LCL": "Sea LCL",
+  AIR: "Air",
+  ROAD: "Road",
+  COURIER: "Courier",
 };
 
-function Kpi({ label, value, sub, color = "var(--text)" }: { label: string; value: string | number; sub?: string; color?: string }) {
+const MODE_TONE: Record<string, Tone> = {
+  "SEA-FCL": "brand",
+  "SEA-LCL": "info",
+  AIR: "muted",
+  ROAD: "warning",
+  COURIER: "danger",
+};
+
+function toneClass(tone?: Tone) {
+  return tone ? `tone-${tone}` : "";
+}
+
+function marginTone(value: number): Tone {
+  if (value >= 20) return "success";
+  if (value >= 10) return "warning";
+  return "danger";
+}
+
+function Kpi({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  tone?: Tone;
+}) {
   return (
-    <div className="card" style={{ padding: "16px 18px" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.03em", color, lineHeight: 1.1 }}>
-        {value}
-      </div>
-      {sub && <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>{sub}</div>}
+    <div className="card report-kpi">
+      <div className="report-kpi-label">{label}</div>
+      <div className={["report-kpi-value", toneClass(tone)].filter(Boolean).join(" ")}>{value}</div>
+      {sub && <div className="report-kpi-sub">{sub}</div>}
     </div>
   );
 }
 
-function Bar({ value, total, color }: { value: number; total: number; color: string }) {
-  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+function Measure({
+  label,
+  value,
+  total,
+  meta,
+  tone = "brand",
+}: {
+  label: string;
+  value: number;
+  total: number;
+  meta: React.ReactNode;
+  tone?: Tone;
+}) {
   return (
-    <div style={{ height: 6, background: "var(--surface-3)", borderRadius: 3, overflow: "hidden" }}>
-      <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 3 }} />
+    <div className="report-measure">
+      <div className="report-measure-head">
+        <span className="report-measure-label">{label}</span>
+        <span className="report-measure-value">{meta}</span>
+      </div>
+      <progress className={["report-progress", toneClass(tone)].join(" ")} value={value} max={Math.max(total, 1)} />
     </div>
   );
 }
@@ -55,15 +96,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   const { period = "30" } = await searchParams;
   const days = parseInt(period, 10) || 30;
   const since = new Date(Date.now() - days * 86_400_000);
-  const today = new Date(); today.setHours(0, 0, 0, 0);
 
-  const [
-    jobsAll,
-    jobsRecent,
-    inquiriesRecent,
-    deliveredJobs,
-    carrierQuotes,
-  ] = await Promise.all([
+  const [jobsAll, jobsRecent, inquiriesRecent, deliveredJobs, carrierQuotes] = await Promise.all([
     prisma.job.findMany({
       where: { officeId: session.officeId },
       include: { company: { select: { id: true, name: true } } },
@@ -85,40 +119,37 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     }),
   ]);
 
-  // ── Pipeline (all-time, by status) ──────────────────────────────────────
   const pipeByStatus = JOB_STATUS_ORDER.map((s) => {
     const list = jobsAll.filter((j) => j.status === s);
     const value = list.reduce((sum, j) => sum + (j.revenue ?? 0), 0);
     return { status: s, count: list.length, value };
   });
   const pipeTotal = pipeByStatus.reduce((s, x) => s + x.count, 0);
+  const pipelineValue = pipeByStatus.reduce((s, p) => s + p.value, 0);
 
-  // ── Active jobs (in-flight value) ───────────────────────────────────────
   const activeJobs = jobsAll.filter((j) => !["DELIVERED", "CANCELLED"].includes(j.status));
   const inTransitValue = jobsAll
     .filter((j) => ["BOOKED", "IN_TRANSIT", "CUSTOMS"].includes(j.status))
     .reduce((s, j) => s + (j.revenue ?? 0), 0);
 
-  // ── RFQ Funnel (period) ─────────────────────────────────────────────────
   const rfqByStatus = {
-    received:  inquiriesRecent.length,
-    parsed:    inquiriesRecent.filter((i) => ["PARSED", "PRICED", "QUOTED", "WON", "LOST"].includes(i.status)).length,
-    priced:    inquiriesRecent.filter((i) => ["PRICED", "QUOTED", "WON", "LOST"].includes(i.status)).length,
-    quoted:    inquiriesRecent.filter((i) => ["QUOTED", "WON", "LOST"].includes(i.status)).length,
-    won:       inquiriesRecent.filter((i) => i.status === "WON").length,
+    received: inquiriesRecent.length,
+    parsed: inquiriesRecent.filter((i) => ["PARSED", "PRICED", "QUOTED", "WON", "LOST"].includes(i.status)).length,
+    priced: inquiriesRecent.filter((i) => ["PRICED", "QUOTED", "WON", "LOST"].includes(i.status)).length,
+    quoted: inquiriesRecent.filter((i) => ["QUOTED", "WON", "LOST"].includes(i.status)).length,
+    won: inquiriesRecent.filter((i) => i.status === "WON").length,
   };
-  const rfqWinRate = (rfqByStatus.won + rfqByStatus.quoted) > 0
+  const rfqWinRate = rfqByStatus.won + rfqByStatus.quoted > 0
     ? Math.round((rfqByStatus.won / Math.max(rfqByStatus.won + rfqByStatus.quoted, 1)) * 100)
     : 0;
 
-  // ── Revenue / Margin (period) ───────────────────────────────────────────
   const closedRev = jobsRecent.filter((j) => j.revenue).reduce((s, j) => s + (j.revenue ?? 0), 0);
   const closedCost = jobsRecent.filter((j) => j.cost).reduce((s, j) => s + (j.cost ?? 0), 0);
   const grossMargin = closedRev - closedCost;
   const marginPct = closedRev > 0 ? (grossMargin / closedRev) * 100 : 0;
 
-  // ── On-time delivery (period, delivered jobs) ───────────────────────────
-  let onTime = 0, late = 0;
+  let onTime = 0;
+  let late = 0;
   for (const j of deliveredJobs) {
     const eta = j.milestones[0]?.plannedAt;
     const actual = j.milestones[0]?.actualAt ?? j.updatedAt;
@@ -127,7 +158,6 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   }
   const otdPct = onTime + late > 0 ? Math.round((onTime / (onTime + late)) * 100) : null;
 
-  // ── Mode breakdown ──────────────────────────────────────────────────────
   const modeAgg: Record<string, { count: number; revenue: number }> = {};
   for (const j of jobsAll) {
     const m = j.mode ?? "OTHER";
@@ -138,11 +168,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   const modeRows = Object.entries(modeAgg).sort((a, b) => b[1].revenue - a[1].revenue);
   const modeTotalRev = modeRows.reduce((s, [, v]) => s + v.revenue, 0);
 
-  // ── Top customers by revenue ────────────────────────────────────────────
   const customerAgg = new Map<string, { name: string; jobs: number; revenue: number }>();
   for (const j of jobsAll) {
     if (!j.companyId) continue;
-    const cur = customerAgg.get(j.companyId) ?? { name: j.company?.name ?? "—", jobs: 0, revenue: 0 };
+    const cur = customerAgg.get(j.companyId) ?? { name: j.company?.name ?? "-", jobs: 0, revenue: 0 };
     cur.jobs++;
     cur.revenue += j.revenue ?? 0;
     customerAgg.set(j.companyId, cur);
@@ -152,11 +181,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     .slice(0, 6);
   const topCustomerMax = topCustomers[0]?.[1].revenue ?? 1;
 
-  // ── Lane performance ────────────────────────────────────────────────────
   const laneAgg = new Map<string, { jobs: number; revenue: number; cost: number }>();
   for (const j of jobsAll) {
     if (!j.origin || !j.destination) continue;
-    const key = `${j.origin} → ${j.destination}`;
+    const key = `${j.origin} to ${j.destination}`;
     const cur = laneAgg.get(key) ?? { jobs: 0, revenue: 0, cost: 0 };
     cur.jobs++;
     cur.revenue += j.revenue ?? 0;
@@ -168,7 +196,6 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     .sort((a, b) => b[1].revenue - a[1].revenue)
     .slice(0, 5);
 
-  // ── Carrier performance ─────────────────────────────────────────────────
   const carrierAgg = new Map<string, { quotes: number; avgTransit: number; transitN: number }>();
   for (const cq of carrierQuotes) {
     const cur = carrierAgg.get(cq.carrier) ?? { quotes: 0, avgTransit: 0, transitN: 0 };
@@ -181,30 +208,27 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   }
   const topCarriers = [...carrierAgg.entries()].sort((a, b) => b[1].quotes - a[1].quotes).slice(0, 5);
 
+  const funnelRows = [
+    { label: "Received", count: rfqByStatus.received, tone: "brand" as Tone },
+    { label: "Parsed", count: rfqByStatus.parsed, tone: "info" as Tone },
+    { label: "Priced", count: rfqByStatus.priced, tone: "warning" as Tone },
+    { label: "Quoted", count: rfqByStatus.quoted, tone: "brand" as Tone },
+    { label: "Won", count: rfqByStatus.won, tone: "success" as Tone },
+  ];
+
   return (
-    <div>
-      {/* Header */}
-      <div className="page-header" style={{ marginBottom: 20 }}>
+    <div className="report-page">
+      <div className="page-header report-page-header">
         <div>
-          <h1 className="page-title">Forwarding & Procurement Reports</h1>
-          <p className="page-subtitle">Operations metrics, RFQ funnel, margin, and supplier performance</p>
+          <h1 className="page-title">Forwarding Reports</h1>
+          <p className="page-subtitle">Operations metrics, RFQ funnel, margin, lane health, and supplier response quality.</p>
         </div>
-        <div style={{ display: "flex", gap: 2, background: "var(--surface-3)", borderRadius: 8, padding: 3 }}>
+        <div className="report-period-control" aria-label="Report period">
           {PERIOD_OPTIONS.map((opt) => (
             <Link
               key={opt.value}
               href={`?period=${opt.value}`}
-              style={{
-                display: "inline-block",
-                padding: "5px 14px",
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 600,
-                background: period === opt.value ? "var(--surface)" : "transparent",
-                color: period === opt.value ? "var(--text)" : "var(--text-3)",
-                boxShadow: period === opt.value ? "var(--shadow-xs)" : "none",
-                textDecoration: "none",
-              }}
+              className={["report-period-link", period === opt.value ? "active" : ""].filter(Boolean).join(" ")}
             >
               {opt.label}
             </Link>
@@ -212,136 +236,139 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 20 }}>
+      <div className="report-kpi-grid">
         <Kpi label="Active Jobs" value={activeJobs.length} sub={`of ${jobsAll.length} total`} />
-        <Kpi label="In-Flight Value" value={`$${(inTransitValue / 1000).toFixed(1)}k`} color="#8b5cf6" sub="Booked → Customs" />
-        <Kpi label="RFQs Received" value={rfqByStatus.received} sub={`last ${days}d`} color="#1e3a8a" />
-        <Kpi label="Win Rate" value={`${rfqWinRate}%`} sub={`${rfqByStatus.won} won`} color={rfqWinRate >= 50 ? "#10b981" : rfqWinRate >= 30 ? "#f59e0b" : "#ef4444"} />
-        <Kpi label="Gross Margin" value={`${marginPct.toFixed(1)}%`} sub={`$${grossMargin.toLocaleString()}`} color={marginPct >= 20 ? "#10b981" : marginPct >= 10 ? "#f59e0b" : "#ef4444"} />
-        <Kpi label="On-Time Delivery" value={otdPct != null ? `${otdPct}%` : "—"} sub={`${onTime}/${onTime + late} delivered`} color={otdPct != null && otdPct >= 90 ? "#10b981" : "#f59e0b"} />
+        <Kpi label="In-Flight Value" value={`$${(inTransitValue / 1000).toFixed(1)}k`} tone="brand" sub="Booked to customs" />
+        <Kpi label="RFQs Received" value={rfqByStatus.received} sub={`last ${days}d`} tone="brand" />
+        <Kpi label="Win Rate" value={`${rfqWinRate}%`} sub={`${rfqByStatus.won} won`} tone={rfqWinRate >= 50 ? "success" : rfqWinRate >= 30 ? "warning" : "danger"} />
+        <Kpi label="Gross Margin" value={`${marginPct.toFixed(1)}%`} sub={`$${grossMargin.toLocaleString()}`} tone={marginTone(marginPct)} />
+        <Kpi label="On-Time Delivery" value={otdPct != null ? `${otdPct}%` : "-"} sub={`${onTime}/${onTime + late} delivered`} tone={otdPct != null && otdPct >= 90 ? "success" : "warning"} />
       </div>
 
-      {/* Pipeline + RFQ Funnel */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div className="card">
-          <header style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span className="section-title">Job Pipeline</span>
-            <span style={{ fontSize: 12, color: "var(--text-3)" }}>{pipeTotal} total · ${(pipeByStatus.reduce((s, p) => s + p.value, 0) / 1000).toFixed(1)}k value</span>
+      <div className="report-grid pipeline">
+        <section className="card report-card">
+          <header className="report-card-header">
+            <h2 className="report-card-title">Job Pipeline</h2>
+            <span className="report-card-note">{pipeTotal} total · ${(pipelineValue / 1000).toFixed(1)}k value</span>
           </header>
-          <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="report-card-body">
             {pipeByStatus.map((p) => {
               const meta = JOB_STATUS_META[p.status];
               return (
-                <div key={p.status}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600 }}>{meta.label}</span>
-                    <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                      <strong style={{ color: "var(--text)" }}>{p.count}</strong>
-                      {p.value > 0 && <span style={{ marginLeft: 8 }}>${(p.value / 1000).toFixed(1)}k</span>}
-                    </span>
-                  </div>
-                  <Bar value={p.count} total={pipeTotal} color={meta.color} />
-                </div>
+                <Measure
+                  key={p.status}
+                  label={meta.label}
+                  value={p.count}
+                  total={pipeTotal}
+                  tone={meta.tone}
+                  meta={(
+                    <>
+                      <strong>{p.count}</strong>
+                      {p.value > 0 && <span className="report-measure-extra">${(p.value / 1000).toFixed(1)}k</span>}
+                    </>
+                  )}
+                />
               );
             })}
           </div>
-        </div>
+        </section>
 
-        <div className="card">
-          <header style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-            <span className="section-title">RFQ Funnel ({days}d)</span>
+        <section className="card report-card">
+          <header className="report-card-header">
+            <h2 className="report-card-title">RFQ Funnel ({days}d)</h2>
           </header>
-          <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-            {[
-              { label: "Received", count: rfqByStatus.received, color: "#1e3a8a" },
-              { label: "Parsed",   count: rfqByStatus.parsed,   color: "#8b5cf6" },
-              { label: "Priced",   count: rfqByStatus.priced,   color: "#f59e0b" },
-              { label: "Quoted",   count: rfqByStatus.quoted,   color: "#3b82f6" },
-              { label: "Won",      count: rfqByStatus.won,      color: "#10b981" },
-            ].map((step, i, all) => {
+          <div className="report-card-body">
+            {funnelRows.map((step, i, all) => {
               const drop = i === 0 ? 0 : Math.max(all[i - 1].count - step.count, 0);
               return (
-                <div key={step.label}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600 }}>{step.label}</span>
-                    <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                      <strong style={{ color: "var(--text)" }}>{step.count}</strong>
-                      {drop > 0 && <span style={{ marginLeft: 8, color: "#ef4444" }}>−{drop}</span>}
-                    </span>
-                  </div>
-                  <Bar value={step.count} total={rfqByStatus.received || 1} color={step.color} />
-                </div>
+                <Measure
+                  key={step.label}
+                  label={step.label}
+                  value={step.count}
+                  total={rfqByStatus.received || 1}
+                  tone={step.tone}
+                  meta={(
+                    <>
+                      <strong>{step.count}</strong>
+                      {drop > 0 && <span className="report-measure-extra danger">-{drop}</span>}
+                    </>
+                  )}
+                />
               );
             })}
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* Mode + Top Customers */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: 16, marginBottom: 16 }}>
-        <div className="card">
-          <header style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-            <span className="section-title">Mode Mix</span>
+      <div className="report-grid revenue">
+        <section className="card report-card">
+          <header className="report-card-header">
+            <h2 className="report-card-title">Mode Mix</h2>
           </header>
-          <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="report-card-body">
             {modeRows.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--text-3)" }}>No jobs yet.</div>
+              <div className="report-empty compact">No jobs yet.</div>
             ) : modeRows.map(([m, v]) => (
-              <div key={m}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600 }}>{MODE_LABEL[m] ?? m}</span>
-                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                    <strong style={{ color: "var(--text)" }}>{v.count}</strong>
-                    <span style={{ marginLeft: 8 }}>${(v.revenue / 1000).toFixed(1)}k</span>
-                  </span>
-                </div>
-                <Bar value={v.revenue} total={modeTotalRev || 1} color={MODE_COLOR[m] ?? "#6b7280"} />
-              </div>
+              <Measure
+                key={m}
+                label={MODE_LABEL[m] ?? m}
+                value={v.revenue}
+                total={modeTotalRev || 1}
+                tone={MODE_TONE[m] ?? "muted"}
+                meta={(
+                  <>
+                    <strong>{v.count}</strong>
+                    <span className="report-measure-extra">${(v.revenue / 1000).toFixed(1)}k</span>
+                  </>
+                )}
+              />
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="card">
-          <header style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-            <span className="section-title">Top Customers (revenue)</span>
+        <section className="card report-card">
+          <header className="report-card-header">
+            <h2 className="report-card-title">Top Customers (revenue)</h2>
           </header>
-          <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="report-card-body">
             {topCustomers.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--text-3)" }}>No revenue yet.</div>
+              <div className="report-empty compact">No revenue yet.</div>
             ) : topCustomers.map(([id, v]) => (
-              <Link key={id} href={`/dashboard/customers/${id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600 }}>{v.name}</span>
-                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                    <strong style={{ color: "var(--text)" }}>${(v.revenue / 1000).toFixed(1)}k</strong>
-                    <span style={{ marginLeft: 8 }}>{v.jobs} jobs</span>
-                  </span>
-                </div>
-                <Bar value={v.revenue} total={topCustomerMax} color="#1e3a8a" />
+              <Link key={id} href={`/dashboard/customers/${id}`} className="report-link-measure">
+                <Measure
+                  label={v.name}
+                  value={v.revenue}
+                  total={topCustomerMax}
+                  tone="brand"
+                  meta={(
+                    <>
+                      <strong>${(v.revenue / 1000).toFixed(1)}k</strong>
+                      <span className="report-measure-extra">{v.jobs} jobs</span>
+                    </>
+                  )}
+                />
               </Link>
             ))}
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* Top Lanes + Carrier Performance */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="card">
-          <header style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-            <span className="section-title">Top Lanes (margin)</span>
+      <div className="report-grid tables">
+        <section className="card report-card">
+          <header className="report-card-header">
+            <h2 className="report-card-title">Top Lanes (margin)</h2>
           </header>
-          <div>
-            {topLanes.length === 0 ? (
-              <div style={{ padding: 20, fontSize: 13, color: "var(--text-3)" }}>No lane data yet.</div>
-            ) : (
-              <table>
+          {topLanes.length === 0 ? (
+            <div className="report-empty">No lane data yet.</div>
+          ) : (
+            <div className="report-table-wrap">
+              <table className="report-table">
                 <thead>
                   <tr>
                     <th>Lane</th>
-                    <th style={{ textAlign: "right" }}>Jobs</th>
-                    <th style={{ textAlign: "right" }}>Revenue</th>
-                    <th style={{ textAlign: "right" }}>Margin</th>
+                    <th className="right">Jobs</th>
+                    <th className="right">Revenue</th>
+                    <th className="right">Margin</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -349,52 +376,48 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
                     const m = v.revenue > 0 ? ((v.revenue - v.cost) / v.revenue) * 100 : 0;
                     return (
                       <tr key={lane}>
-                        <td style={{ fontWeight: 600 }}>{lane}</td>
-                        <td style={{ textAlign: "right" }}>{v.jobs}</td>
-                        <td style={{ textAlign: "right", fontWeight: 600 }}>${(v.revenue / 1000).toFixed(1)}k</td>
-                        <td style={{ textAlign: "right", fontWeight: 700, color: m >= 20 ? "#10b981" : m >= 10 ? "#f59e0b" : "#ef4444" }}>
-                          {m.toFixed(1)}%
-                        </td>
+                        <td className="lane-cell">{lane}</td>
+                        <td className="right">{v.jobs}</td>
+                        <td className="right strong">${(v.revenue / 1000).toFixed(1)}k</td>
+                        <td className={["right", "strong", toneClass(marginTone(m))].join(" ")}>{m.toFixed(1)}%</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </section>
 
-        <div className="card">
-          <header style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-            <span className="section-title">Carrier Performance ({days}d)</span>
+        <section className="card report-card">
+          <header className="report-card-header">
+            <h2 className="report-card-title">Carrier Performance ({days}d)</h2>
           </header>
-          <div>
-            {topCarriers.length === 0 ? (
-              <div style={{ padding: 20, fontSize: 13, color: "var(--text-3)" }}>No carrier quotes yet.</div>
-            ) : (
-              <table>
+          {topCarriers.length === 0 ? (
+            <div className="report-empty">No carrier quotes yet.</div>
+          ) : (
+            <div className="report-table-wrap">
+              <table className="report-table">
                 <thead>
                   <tr>
                     <th>Carrier</th>
-                    <th style={{ textAlign: "right" }}>Quotes</th>
-                    <th style={{ textAlign: "right" }}>Avg Transit</th>
+                    <th className="right">Quotes</th>
+                    <th className="right">Avg Transit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {topCarriers.map(([carrier, v]) => (
                     <tr key={carrier}>
-                      <td style={{ fontWeight: 600 }}>{carrier}</td>
-                      <td style={{ textAlign: "right" }}>{v.quotes}</td>
-                      <td style={{ textAlign: "right", color: "var(--text-3)" }}>
-                        {v.transitN > 0 ? `${v.avgTransit.toFixed(0)}d` : "—"}
-                      </td>
+                      <td className="strong">{carrier}</td>
+                      <td className="right">{v.quotes}</td>
+                      <td className="right muted">{v.transitN > 0 ? `${v.avgTransit.toFixed(0)}d` : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

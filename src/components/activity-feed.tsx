@@ -1,7 +1,9 @@
 "use client";
+
 import { useState } from "react";
 import Link from "next/link";
 import { completeTaskAction, resolveQuoteAction } from "@/app/dashboard/activity/actions";
+import { Icon } from "@/components/icon";
 
 type TaskCard = {
   id: string;
@@ -28,23 +30,19 @@ type StaleCard = {
   daysSince: number | null;
 };
 
-function SectionLabel({ children, count, tone }: { children: React.ReactNode; count?: number; tone?: "danger" | "warning" | "default" }) {
-  const color = tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-3)";
+function SectionLabel({
+  children,
+  count,
+  tone = "default",
+}: {
+  children: React.ReactNode;
+  count?: number;
+  tone?: "danger" | "warning" | "default";
+}) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color }}>
-        {children}
-      </span>
-      {count !== undefined && (
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 10,
-          background: tone === "danger" ? "var(--danger-bg)" : tone === "warning" ? "var(--warning-bg)" : "var(--surface-3)",
-          color: tone === "danger" ? "var(--danger)" : tone === "warning" ? "var(--warning)" : "var(--text-3)",
-          border: `1px solid ${tone === "danger" ? "var(--danger-border)" : tone === "warning" ? "var(--warning-border)" : "var(--border)"}`,
-        }}>
-          {count}
-        </span>
-      )}
+    <div className={["activity-feed-label", tone].join(" ")}>
+      <span className="activity-feed-label-text">{children}</span>
+      {count !== undefined && <span className="activity-feed-count">{count}</span>}
     </div>
   );
 }
@@ -74,7 +72,11 @@ export function ActivityFeed({
     setBusy(id);
     await completeTaskAction(id);
     setTaskList((prev) => prev.filter((t) => t.id !== id));
-    setDoneIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+    setDoneIds((prev) => {
+      const s = new Set(prev);
+      s.delete(id);
+      return s;
+    });
     setBusy(null);
   }
 
@@ -94,42 +96,26 @@ export function ActivityFeed({
   const visibleQuotes = showAllQuotes ? quoteList : quoteList.slice(0, QUOTES_PREVIEW);
 
   return (
-    <div style={{ maxWidth: 680 }}>
-
-      {/* Greeting */}
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text)" }}>
-          {greeting}, {userName.split(" ")[0]}.
-        </h2>
-        {!allEmpty && (
-          <p style={{ marginTop: 3, fontSize: 13, color: "var(--text-3)" }}>
-            Here&apos;s what needs your attention.
-          </p>
-        )}
+    <div className="activity-feed">
+      <div className="activity-feed-header">
+        <h2 className="activity-feed-title">{greeting}, {userName.split(" ")[0]}.</h2>
+        {!allEmpty && <p className="activity-feed-subtitle">Here&apos;s what needs your attention.</p>}
       </div>
 
       {allEmpty && (
-        <div style={{
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          padding: "40px 24px",
-          textAlign: "center",
-          color: "var(--text-3)",
-          fontSize: 14,
-        }}>
-          <div style={{ fontSize: 32, marginBottom: 10 }}>✓</div>
+        <div className="activity-feed-empty">
+          <span className="activity-feed-empty-icon">
+            <Icon name="check" size={28} />
+          </span>
           No open tasks, no pending quotes, no stale accounts.
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-
-        {/* Overdue tasks */}
+      <div className="activity-feed-stack">
         {overdueTasks.length > 0 && (
           <section>
             <SectionLabel count={overdueTasks.length} tone="danger">Overdue</SectionLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <div className="activity-feed-list">
               {visibleOverdue.map((task) => (
                 <TaskRow key={task.id} task={task} onDone={doneTask} isDone={doneIds.has(task.id)} busy={busy === task.id} />
               ))}
@@ -138,7 +124,7 @@ export function ActivityFeed({
               <button
                 type="button"
                 onClick={() => setShowAllOverdue((v) => !v)}
-                style={{ marginTop: 6, fontSize: 12, color: "var(--danger)", background: "none", border: "none", cursor: "pointer", padding: "2px 0", fontWeight: 600 }}
+                className="activity-feed-more danger"
               >
                 {showAllOverdue ? "Show less" : `+ ${overdueTasks.length - OVERDUE_PREVIEW} more overdue`}
               </button>
@@ -146,11 +132,10 @@ export function ActivityFeed({
           </section>
         )}
 
-        {/* Due today tasks */}
         {dueTodayTasks.length > 0 && (
           <section>
             <SectionLabel count={dueTodayTasks.length} tone="warning">Due today</SectionLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <div className="activity-feed-list">
               {dueTodayTasks.map((task) => (
                 <TaskRow key={task.id} task={task} onDone={doneTask} isDone={doneIds.has(task.id)} busy={busy === task.id} />
               ))}
@@ -158,11 +143,10 @@ export function ActivityFeed({
           </section>
         )}
 
-        {/* Pending quotes */}
         {quoteList.length > 0 && (
           <section>
             <SectionLabel count={quoteList.length} tone="warning">Awaiting response</SectionLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <div className="activity-feed-list">
               {visibleQuotes.map((q) => (
                 <QuoteRow key={q.id} quote={q} onResolve={resolveQuote} busy={busy === q.id} />
               ))}
@@ -171,7 +155,7 @@ export function ActivityFeed({
               <button
                 type="button"
                 onClick={() => setShowAllQuotes((v) => !v)}
-                style={{ marginTop: 6, fontSize: 12, color: "var(--warning)", background: "none", border: "none", cursor: "pointer", padding: "2px 0", fontWeight: 600 }}
+                className="activity-feed-more warning"
               >
                 {showAllQuotes ? "Show less" : `+ ${quoteList.length - QUOTES_PREVIEW} more quotes`}
               </button>
@@ -179,28 +163,16 @@ export function ActivityFeed({
           </section>
         )}
 
-        {/* Stale */}
         {stale.length > 0 && (
           <section>
             <SectionLabel count={stale.length}>No recent contact</SectionLabel>
-            <div style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              overflow: "hidden",
-            }}>
-              {stale.map((c, i) => (
-                <div key={c.id} style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "11px 16px",
-                  borderTop: i > 0 ? "1px solid var(--border)" : "none",
-                }}>
-                  <Link href={`/dashboard/customers/${c.id}`} style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+            <div className="activity-stale-list">
+              {stale.map((c) => (
+                <div key={c.id} className="activity-stale-row">
+                  <Link href={`/dashboard/customers/${c.id}`} className="activity-stale-link">
                     {c.name}
                   </Link>
-                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>
+                  <span className="activity-stale-date">
                     {c.daysSince !== null ? `${c.daysSince} days ago` : "Never"}
                   </span>
                 </div>
@@ -213,58 +185,35 @@ export function ActivityFeed({
   );
 }
 
-function TaskRow({ task, onDone, isDone, busy }: {
+function TaskRow({
+  task,
+  onDone,
+  isDone,
+  busy,
+}: {
   task: TaskCard;
   onDone: (id: string) => void;
   isDone: boolean;
   busy: boolean;
 }) {
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      padding: "11px 14px",
-      background: "var(--surface)",
-      borderRadius: 8,
-      opacity: isDone ? 0.4 : 1,
-      transition: "opacity 0.2s",
-      marginBottom: 2,
-    }}>
+    <div className={["activity-feed-row", isDone ? "is-done" : ""].filter(Boolean).join(" ")}>
       <button
         type="button"
         onClick={() => onDone(task.id)}
         disabled={busy || isDone}
-        style={{
-          width: 22,
-          height: 22,
-          borderRadius: "50%",
-          border: `2px solid ${task.isOverdue ? "var(--danger)" : "var(--border-strong)"}`,
-          background: "transparent",
-          cursor: "pointer",
-          flexShrink: 0,
-          padding: 0,
-          transition: "all 0.15s",
-          position: "relative",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget.style.background) = task.isOverdue ? "var(--danger-bg)" : "var(--surface-3)";
-          (e.currentTarget.style.borderColor) = task.isOverdue ? "var(--danger)" : "var(--brand)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget.style.background) = "transparent";
-          (e.currentTarget.style.borderColor) = task.isOverdue ? "var(--danger)" : "var(--border-strong)";
-        }}
+        className={["activity-task-check", task.isOverdue ? "overdue" : ""].filter(Boolean).join(" ")}
+        aria-label={`Complete ${task.title}`}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{task.title}</span>
-        <span style={{ fontSize: 12, color: "var(--text-3)", marginLeft: 8 }}>·</span>
-        <Link href={`/dashboard/customers/${task.company.id}`} style={{ fontSize: 12, color: "var(--brand)", marginLeft: 8 }}>
+      <div className="activity-feed-main">
+        <span className="activity-feed-row-title">{task.title}</span>
+        <span className="activity-feed-sep">·</span>
+        <Link href={`/dashboard/customers/${task.company.id}`} className="activity-feed-link">
           {task.company.name}
         </Link>
       </div>
       {task.dueAt && (
-        <span style={{ fontSize: 11, fontWeight: 600, color: task.isOverdue ? "var(--danger)" : "var(--warning)", flexShrink: 0 }}>
+        <span className={["activity-feed-date", task.isOverdue ? "overdue" : ""].filter(Boolean).join(" ")}>
           {new Date(task.dueAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
         </span>
       )}
@@ -272,60 +221,59 @@ function TaskRow({ task, onDone, isDone, busy }: {
   );
 }
 
-function QuoteRow({ quote, onResolve, busy }: {
+function QuoteRow({
+  quote,
+  onResolve,
+  busy,
+}: {
   quote: QuoteCard;
   onResolve: (id: string, result: "WON" | "LOST") => void;
   busy: boolean;
 }) {
   const urgent = quote.daysOld >= 5;
   const aging = quote.daysOld >= 2;
+  const ageTone = urgent ? "urgent" : aging ? "aging" : "";
+
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      padding: "11px 14px",
-      background: "var(--surface)",
-      borderRadius: 8,
-      marginBottom: 2,
-      borderLeft: `3px solid ${urgent ? "var(--danger)" : aging ? "var(--warning)" : "var(--border)"}`,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <Link href={`/dashboard/customers/${quote.company.id}`} style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+    <div className={["activity-feed-row", "quote", ageTone].filter(Boolean).join(" ")}>
+      <div className="activity-feed-main">
+        <Link href={`/dashboard/customers/${quote.company.id}`} className="activity-feed-row-title">
           {quote.company.name}
         </Link>
-        <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 1, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          {quote.origin && quote.destination
-            ? <span>{quote.origin} → {quote.destination}</span>
-            : <span>Quote pending</span>}
-          {quote.mode && <span style={{ background: "var(--surface-3)", border: "1px solid var(--border)", borderRadius: 4, padding: "0 5px", fontSize: 10 }}>{quote.mode}</span>}
-          {quote.value && <span style={{ fontWeight: 600, color: "var(--text-2)" }}>{quote.value.toLocaleString()} {quote.currency ?? ""}</span>}
+        <div className="activity-feed-meta">
+          {quote.origin && quote.destination ? (
+            <span>{quote.origin} → {quote.destination}</span>
+          ) : (
+            <span>Quote pending</span>
+          )}
+          {quote.mode && <span className="activity-feed-mode">{quote.mode}</span>}
+          {quote.value && (
+            <span className="activity-feed-value">
+              {quote.value.toLocaleString()} {quote.currency ?? ""}
+            </span>
+          )}
         </div>
       </div>
-      <span style={{ fontSize: 11, color: urgent ? "var(--danger)" : aging ? "var(--warning)" : "var(--text-3)", fontWeight: aging ? 600 : 400, flexShrink: 0 }}>
+      <span className={["activity-feed-age", ageTone].filter(Boolean).join(" ")}>
         {quote.daysOld === 0 ? "Today" : `${quote.daysOld}d`}
       </span>
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+      <div className="activity-feed-actions">
         <button
           type="button"
           disabled={busy}
           onClick={() => onResolve(quote.id, "WON")}
-          style={{
-            padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
-            background: "var(--success-bg)", color: "var(--success)",
-            border: "1px solid var(--success-border)", cursor: "pointer",
-          }}
-        >Won</button>
+          className="activity-resolution-btn won"
+        >
+          Won
+        </button>
         <button
           type="button"
           disabled={busy}
           onClick={() => onResolve(quote.id, "LOST")}
-          style={{
-            padding: "4px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
-            background: "var(--danger-bg)", color: "var(--danger)",
-            border: "1px solid var(--danger-border)", cursor: "pointer",
-          }}
-        >Lost</button>
+          className="activity-resolution-btn lost"
+        >
+          Lost
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -27,7 +28,16 @@ type Props = {
   createQuoteAction: (fd: FormData) => Promise<void>;
 };
 
-export function PricingCalculator({ origins, destinations, modes, marginProfiles, companies, calcResult, searchParams, createQuoteAction }: Props) {
+export function PricingCalculator({
+  origins,
+  destinations,
+  modes,
+  marginProfiles,
+  companies,
+  calcResult,
+  searchParams,
+  createQuoteAction,
+}: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [savePending, setSavePending] = useState(false);
@@ -43,6 +53,7 @@ export function PricingCalculator({ origins, destinations, modes, marginProfiles
   function calculate() {
     if (!origin || !destination || !mode) return;
     const params = new URLSearchParams();
+    params.set("tab", "calculator");
     if (origin) params.set("origin", origin);
     if (destination) params.set("destination", destination);
     if (mode) params.set("mode", mode);
@@ -65,191 +76,160 @@ export function PricingCalculator({ origins, destinations, modes, marginProfiles
 
   const hasResult = calcResult !== null;
   const noLane = hasResult && !calcResult!.matchedLane;
+  const hasPricedLane = !!calcResult?.baseAmount;
 
   return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-      {/* Calculator header */}
-      <div style={{ background: "var(--surface-3)", borderBottom: "1px solid var(--border)", padding: "16px 20px" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-2)", marginBottom: 2 }}>Rate calculator</div>
-        <div style={{ fontSize: 12, color: "var(--text-3)" }}>Enter a route to get a recommended quote based on your lane rates and margin profiles</div>
-      </div>
+    <section className="card pricing-calculator">
+      <header className="pricing-calculator-header">
+        <h2 className="pricing-calculator-title">Rate calculator</h2>
+        <p className="pricing-calculator-subtitle">Enter a route to price against lane rates and margin profiles.</p>
+      </header>
 
-      <div style={{ padding: 20 }}>
-        {/* Input grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr auto", gap: 10, alignItems: "end", marginBottom: 16 }}>
-          <div>
-            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Origin</label>
+      <div className="pricing-calculator-body">
+        <div className="pricing-calculator-grid">
+          <label className="field">
+            <span>Origin</span>
             <input
               list="origin-list"
               value={origin}
               onChange={(e) => setOrigin(e.target.value)}
               placeholder="e.g. Istanbul"
-              style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid var(--border)", fontSize: 13, background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }}
             />
             <datalist id="origin-list">{origins.map((o) => <option key={o} value={o} />)}</datalist>
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Destination</label>
+          </label>
+          <label className="field">
+            <span>Destination</span>
             <input
               list="dest-list"
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
               placeholder="e.g. Hamburg"
-              style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid var(--border)", fontSize: 13, background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }}
             />
             <datalist id="dest-list">{destinations.map((d) => <option key={d} value={d} />)}</datalist>
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Mode</label>
-            <select value={mode} onChange={(e) => setMode(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid var(--border)", fontSize: 13, background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }}>
+          </label>
+          <label className="field">
+            <span>Mode</span>
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
               <option value="">Select mode</option>
-              {["SEA-FCL", "SEA-LCL", "AIR", "ROAD", "COURIER"].map((m) => <option key={m} value={m}>{m}</option>)}
+              {modes.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Client tier</label>
-            <select value={tier} onChange={(e) => setTier(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid var(--border)", fontSize: 13, background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }}>
+          </label>
+          <label className="field">
+            <span>Client tier</span>
+            <select value={tier} onChange={(e) => setTier(e.target.value)}>
               <option value="">Any</option>
               <option value="new">New</option>
               <option value="existing">Existing</option>
               <option value="vip">VIP</option>
             </select>
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Urgency</label>
-            <select value={urgency} onChange={(e) => setUrgency(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid var(--border)", fontSize: 13, background: "var(--surface)", color: "var(--text)", boxSizing: "border-box" }}>
+          </label>
+          <label className="field">
+            <span>Urgency</span>
+            <select value={urgency} onChange={(e) => setUrgency(e.target.value)}>
               <option value="">Any</option>
               <option value="flexible">Flexible</option>
               <option value="normal">Normal</option>
               <option value="asap">ASAP</option>
             </select>
-          </div>
+          </label>
           <button
             type="button"
             onClick={calculate}
             disabled={!origin || !destination || !mode || isPending}
-            style={{
-              padding: "8px 20px",
-              borderRadius: 7,
-              background: "var(--brand)",
-              color: "#fff",
-              border: "none",
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: origin && destination && mode ? "pointer" : "not-allowed",
-              opacity: origin && destination && mode ? 1 : 0.5,
-              whiteSpace: "nowrap",
-            }}
           >
-            {isPending ? "…" : "Calculate"}
+            {isPending ? "..." : "Calculate"}
           </button>
         </div>
 
-        {/* Result */}
         {hasResult && (
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 20, marginTop: 4 }}>
-
-            {/* Warnings */}
+          <div className="pricing-calc-result">
             {calcResult!.warnings.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                {calcResult!.warnings.map((w, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 7, marginBottom: 4, fontSize: 12, color: "#92400e" }}>
-                    <span>⚠</span><span>{w}</span>
+              <div className="pricing-alert-stack">
+                {calcResult!.warnings.map((w) => (
+                  <div key={w} className="pricing-alert">
+                    <span aria-hidden>!</span>
+                    <span>{w}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 12, alignItems: "start" }}>
-              {/* Breakdown */}
-              <div style={{ background: "var(--surface-3)", borderRadius: 10, padding: "14px 16px" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Breakdown</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                    <span style={{ color: "var(--text-3)" }}>Base rate</span>
-                    <span style={{ fontWeight: 600 }}>{noLane ? "—" : `${calcResult!.baseAmount.toLocaleString()} ${calcResult!.currency}`}</span>
+            <div className="pricing-result-grid">
+              <div className="pricing-result-panel">
+                <div className="pricing-result-label">Breakdown</div>
+                <div className="pricing-breakdown">
+                  <div className="pricing-breakdown-row">
+                    <span>Base rate</span>
+                    <strong>{noLane ? "-" : `${calcResult!.baseAmount.toLocaleString()} ${calcResult!.currency}`}</strong>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                    <span style={{ color: "var(--text-3)" }}>Margin ({calcResult!.marginPercent}%)</span>
-                    <span style={{ fontWeight: 600 }}>{noLane ? "—" : `+${calcResult!.marginAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${calcResult!.currency}`}</span>
+                  <div className="pricing-breakdown-row">
+                    <span>Margin ({calcResult!.marginPercent}%)</span>
+                    <strong>{noLane ? "-" : `+${calcResult!.marginAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${calcResult!.currency}`}</strong>
                   </div>
-                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                    <span style={{ color: "var(--text-3)" }}>Floor (min)</span>
-                    <span style={{ fontWeight: 600 }}>{noLane ? "—" : `${calcResult!.floorAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${calcResult!.currency}`}</span>
+                  <div className="pricing-breakdown-row total">
+                    <span>Floor (min)</span>
+                    <strong>{noLane ? "-" : `${calcResult!.floorAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${calcResult!.currency}`}</strong>
                   </div>
                 </div>
               </div>
 
-              {/* Lane matched */}
-              <div style={{ background: "var(--surface-3)", borderRadius: 10, padding: "14px 16px" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Lane matched</div>
+              <div className="pricing-result-panel">
+                <div className="pricing-result-label">Lane matched</div>
                 {calcResult!.matchedLane ? (
                   <>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-                      {calcResult!.matchedLane.origin} → {calcResult!.matchedLane.destination}
+                    <div className="pricing-match-title">
+                      {calcResult!.matchedLane.origin} to {calcResult!.matchedLane.destination}
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--text-3)" }}>{calcResult!.matchedLane.mode}</div>
+                    <div className="pricing-match-meta">{calcResult!.matchedLane.mode}</div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 13, color: "var(--danger)" }}>No match found</div>
+                  <div className="pricing-match-missing">No match found</div>
                 )}
                 {calcResult!.matchedMarginLabel && (
-                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-3)" }}>
-                    Margin: <strong style={{ color: "var(--text-2)" }}>{calcResult!.matchedMarginLabel}</strong>
-                  </div>
+                  <div className="pricing-match-meta">Margin: {calcResult!.matchedMarginLabel}</div>
                 )}
               </div>
 
-              {/* Recommended price */}
-              <div style={{ background: calcResult!.baseAmount > 0 ? "#011f3d" : "var(--surface-3)", borderRadius: 10, padding: "14px 16px", color: calcResult!.baseAmount > 0 ? "#fff" : "var(--text)" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: calcResult!.baseAmount > 0 ? "#93c5fd" : "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Recommended quote</div>
-                {calcResult!.baseAmount > 0 ? (
+              <div className={["pricing-result-panel", hasPricedLane ? "dark" : ""].filter(Boolean).join(" ")}>
+                <div className="pricing-result-label">Recommended quote</div>
+                {hasPricedLane ? (
                   <>
-                    <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em" }}>
+                    <div className="pricing-recommended-amount">
                       {calcResult!.recommendedAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
-                    <div style={{ fontSize: 14, color: "#93c5fd", marginTop: 2 }}>{calcResult!.currency}</div>
+                    <div className="pricing-recommended-currency">{calcResult!.currency}</div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 13, color: "var(--text-3)" }}>Add a lane rate first</div>
+                  <div className="pricing-save-muted">Add a lane rate first.</div>
                 )}
               </div>
 
-              {/* Save as quote */}
-              {calcResult!.baseAmount > 0 && (
+              {hasPricedLane && (
                 <div>
                   {savedToCompany ? (
-                    <div style={{ padding: "10px 14px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 13, color: "#16a34a", fontWeight: 600 }}>
-                      ✓ Saved to {savedToCompany}
-                    </div>
+                    <div className="pricing-save-success">Saved to {savedToCompany}</div>
                   ) : showSaveForm ? (
-                    <form onSubmit={handleSaveQuote} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <form onSubmit={handleSaveQuote} className="pricing-save-form">
                       <input type="hidden" name="origin" value={calcResult!.matchedLane?.origin ?? origin} />
                       <input type="hidden" name="destination" value={calcResult!.matchedLane?.destination ?? destination} />
                       <input type="hidden" name="mode" value={mode} />
                       <input type="hidden" name="value" value={calcResult!.recommendedAmount.toFixed(0)} />
                       <input type="hidden" name="currency" value={calcResult!.currency} />
-                      <select name="companyId" required style={{ padding: "8px 10px", borderRadius: 7, border: "1px solid var(--border)", fontSize: 13, background: "var(--surface)", color: "var(--text)" }}>
-                        <option value="">Select company…</option>
+                      <select name="companyId" required>
+                        <option value="">Select company...</option>
                         {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
-                      <input name="notes" placeholder="Notes (optional)" style={{ padding: "8px 10px", borderRadius: 7, border: "1px solid var(--border)", fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button type="submit" disabled={savePending} style={{ flex: 1, padding: "8px", borderRadius: 7, background: "var(--brand)", color: "#fff", border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                          {savePending ? "Saving…" : "Save quote"}
-                        </button>
-                        <button type="button" onClick={() => setShowSaveForm(false)} style={{ padding: "8px 12px", borderRadius: 7, background: "var(--surface-3)", color: "var(--text-3)", border: "1px solid var(--border)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                      <input name="notes" placeholder="Notes (optional)" />
+                      <div className="pricing-save-actions">
+                        <button type="submit" disabled={savePending}>{savePending ? "Saving..." : "Save quote"}</button>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowSaveForm(false)}>
                           Cancel
                         </button>
                       </div>
                     </form>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowSaveForm(true)}
-                      style={{ width: "100%", padding: "10px 16px", borderRadius: 8, border: "1px solid var(--brand)", background: "transparent", color: "var(--brand)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                    >
-                      Save as quote →
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowSaveForm(true)}>
+                      Save as quote
                     </button>
                   )}
                 </div>
@@ -258,6 +238,6 @@ export function PricingCalculator({ origins, destinations, modes, marginProfiles
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

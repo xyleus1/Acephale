@@ -23,9 +23,9 @@ export function ActivityForm({
   const today = new Date().toISOString().split("T")[0];
 
   return (
-    <form action={action} className="field">
+    <form action={action} className="field activity-form">
       <input type="hidden" name="companyId" value={companyId} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <div className="activity-form-row">
         <select name="type" defaultValue="VISIT">
           {activityTypes.map((type) => (
             <option key={type} value={type}>
@@ -40,10 +40,10 @@ export function ActivityForm({
         name="body"
         placeholder="Notes"
         rows={3}
-        style={{ resize: "vertical" }}
+        className="activity-textarea"
       />
-      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 2 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+      <div className="activity-audio-block">
+        <div className="activity-audio-label">
           Audio → Transcript
         </div>
         <AudioUploader onTranscript={setTranscript} />
@@ -54,7 +54,7 @@ export function ActivityForm({
             onChange={(e) => setTranscript(e.target.value)}
             rows={4}
             placeholder="Transcript (editable before saving)"
-            style={{ marginTop: 6, resize: "vertical", fontSize: 12 }}
+            className="activity-transcript"
           />
         )}
       </div>

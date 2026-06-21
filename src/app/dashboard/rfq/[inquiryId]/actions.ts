@@ -5,7 +5,43 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { createJobWithReference } from "@/lib/job-actions";
+import { qualifyRfq } from "@/lib/rfq-qualification";
+import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
+import { buildMissingInfoDraft } from "@/lib/missing-info-draft";
+import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
 import Anthropic from "@anthropic-ai/sdk";
+
+function emptyToNull(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
+}
+
+function numberOrNull(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+function qualificationFor(input: {
+  origin: string | null;
+  destination: string | null;
+  mode: string | null;
+  commodity: string | null;
+  containerCount: number | null;
+  containerType: string | null;
+  dimensions: string | null;
+  stackable: string | null;
+  topLoad: string | null;
+  dangerousGoods: string | null;
+  customsBy: string | null;
+  weight: number | null;
+  volume: number | null;
+  targetPrice: number | null;
+  targetPriceStatus: string | null;
+}) {
+  return qualifyRfq(input);
+}
 
 export async function convertToJob(inquiryId: string, formData: FormData) {
   const session = await requireSession();
@@ -16,6 +52,37 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
   if (!inquiry) throw new Error("Inquiry not found");
 
   const companyId = formData.get("companyId") ? String(formData.get("companyId")) : inquiry.companyId ?? undefined;
+  const next = {
+    origin: emptyToNull(formData.get("origin")) ?? inquiry.origin,
+    destination: emptyToNull(formData.get("destination")) ?? inquiry.destination,
+    mode: emptyToNull(formData.get("mode")) ?? inquiry.mode,
+    commodity: emptyToNull(formData.get("commodity")) ?? inquiry.commodity,
+    containerCount: inquiry.containerCount,
+    containerType: inquiry.containerType,
+    dimensions: inquiry.dimensions,
+    stackable: inquiry.stackable,
+    topLoad: inquiry.topLoad,
+    dangerousGoods: inquiry.dangerousGoods,
+    customsBy: inquiry.customsBy,
+    weight: numberOrNull(formData.get("weight")) ?? inquiry.weight,
+    volume: numberOrNull(formData.get("volume")) ?? inquiry.volume,
+    targetPrice: inquiry.targetPrice,
+    targetPriceStatus: inquiry.targetPriceStatus,
+  };
+  const qualification = qualificationFor(next);
+
+  if (!qualification.isMature) {
+    const blockedNote = `Blocked job conversion: missing ${qualification.followUpQuestions.join(" ")}`;
+    await prisma.inquiry.update({
+      where: { id: inquiryId, officeId: session.officeId },
+      data: {
+        notes: [inquiry.notes, blockedNote].filter(Boolean).join("\n"),
+        status: ["WON", "LOST", "QUOTED"].includes(inquiry.status) ? inquiry.status : "INGESTED",
+      },
+    });
+    revalidatePath(`/dashboard/rfq/${inquiryId}`);
+    return;
+  }
 
   const job = await createJobWithReference(session.officeId, (reference) => prisma.job.create({
     data: {
@@ -24,13 +91,24 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
       inquiryId,
       reference,
       status:     "QUOTED",
-      mode:       String(formData.get("mode") || inquiry.mode || ""),
-      origin:     String(formData.get("origin") || inquiry.origin || ""),
-      destination:String(formData.get("destination") || inquiry.destination || ""),
-      commodity:  String(formData.get("commodity") || inquiry.commodity || ""),
+      mode:       next.mode || "",
+      origin:     next.origin || "",
+      destination:next.destination || "",
+      commodity:  next.commodity || "",
       incoterms:  String(formData.get("incoterms") || inquiry.incoterms || ""),
-      weight:     formData.get("weight") ? Number(formData.get("weight")) : inquiry.weight,
-      volume:     formData.get("volume") ? Number(formData.get("volume")) : inquiry.volume,
+      weight:     next.weight,
+      volume:     next.volume,
+      dimensions:  inquiry.dimensions,
+      stackable:   inquiry.stackable,
+      topLoad:     inquiry.topLoad,
+      dangerousGoods: inquiry.dangerousGoods,
+      customsBy:   inquiry.customsBy,
+      containerCount: inquiry.containerCount,
+      containerType: inquiry.containerType,
+      targetPrice: inquiry.targetPrice,
+      targetCurrency: inquiry.targetCurrency,
+      targetPriceStatus: inquiry.targetPriceStatus,
+      targetPriceSource: inquiry.targetPriceSource,
       currency:   "USD",
       assignedToUserId: session.userId,
     },
@@ -41,6 +119,20 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
     data: { status: "QUOTED" },
   });
 
+  if (inquiry.targetPrice != null || inquiry.targetPriceStatus === "NO_TARGET") {
+    await recordTargetPriceHistory({
+      officeId: session.officeId,
+      inquiryId,
+      jobId: job.id,
+      createdByUserId: session.userId,
+      amount: inquiry.targetPrice,
+      currency: inquiry.targetCurrency,
+      status: inquiry.targetPriceStatus,
+      source: inquiry.targetPriceSource,
+      note: "Carried from mature RFQ conversion.",
+    });
+  }
+
   revalidatePath("/dashboard/rfq");
   revalidatePath("/dashboard/jobs");
   redirect(`/dashboard/jobs/${job.id}`);
@@ -48,20 +140,57 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
 
 export async function updateInquiryField(inquiryId: string, formData: FormData) {
   const session = await requireSession();
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: inquiryId, officeId: session.officeId },
+  });
+  if (!inquiry) throw new Error("Inquiry not found");
+
+  const data = {
+    origin: emptyToNull(formData.get("origin")),
+    destination: emptyToNull(formData.get("destination")),
+    mode: emptyToNull(formData.get("mode")),
+    commodity: emptyToNull(formData.get("commodity")),
+    incoterms: emptyToNull(formData.get("incoterms")),
+    containerType: emptyToNull(formData.get("containerType")),
+    containerCount: numberOrNull(formData.get("containerCount")),
+    dimensions: emptyToNull(formData.get("dimensions")),
+    stackable: String(formData.get("stackable") || "UNKNOWN"),
+    topLoad: String(formData.get("topLoad") || "UNKNOWN"),
+    dangerousGoods: String(formData.get("dangerousGoods") || "UNKNOWN"),
+    customsBy: String(formData.get("customsBy") || "UNKNOWN"),
+    weight: numberOrNull(formData.get("weight")),
+    volume: numberOrNull(formData.get("volume")),
+    targetPrice: numberOrNull(formData.get("targetPrice")),
+    targetCurrency: String(formData.get("targetCurrency") || "USD"),
+    targetPriceStatus: numberOrNull(formData.get("targetPrice")) != null
+      ? "PROVIDED"
+      : String(formData.get("targetPriceStatus") || "UNKNOWN"),
+    targetPriceSource: emptyToNull(formData.get("targetPriceSource")),
+    notes: String(formData.get("notes") || ""),
+  };
+  const qualification = qualificationFor(data);
+  const nextStatus = ["QUOTED", "WON", "LOST"].includes(inquiry.status)
+    ? inquiry.status
+    : qualification.isMature ? "PARSED" : "INGESTED";
+
   await prisma.inquiry.update({
     where: { id: inquiryId, officeId: session.officeId },
-    data: {
-      origin:      String(formData.get("origin") || ""),
-      destination: String(formData.get("destination") || ""),
-      mode:        String(formData.get("mode") || ""),
-      commodity:   String(formData.get("commodity") || ""),
-      incoterms:   String(formData.get("incoterms") || ""),
-      containerType: String(formData.get("containerType") || ""),
-      weight: formData.get("weight") ? Number(formData.get("weight")) : null,
-      volume: formData.get("volume") ? Number(formData.get("volume")) : null,
-      notes:  String(formData.get("notes") || ""),
-    },
+    data: { ...data, status: nextStatus },
   });
+
+  if (targetPriceChanged(inquiry, data)) {
+    await recordTargetPriceHistory({
+      officeId: session.officeId,
+      inquiryId,
+      createdByUserId: session.userId,
+      amount: data.targetPrice,
+      currency: data.targetCurrency,
+      status: data.targetPriceStatus,
+      source: data.targetPriceSource,
+      note: "Manual RFQ field update.",
+    });
+  }
+
   revalidatePath(`/dashboard/rfq/${inquiryId}`);
 }
 
@@ -99,11 +228,20 @@ Fields to extract (use null if not found):
 - origin: string (city, country code)
 - destination: string (city, country code)
 - mode: one of SEA-FCL, SEA-LCL, AIR, ROAD, COURIER, or null
+- containerCount: number or null
 - containerType: one of 20GP, 40GP, 40HC, LCL, or null
+- stackable: YES, NO, UNKNOWN, or null
+- topLoad: YES, NO, UNKNOWN, or null
+- dangerousGoods: YES, NO, UNKNOWN, or null
+- customsBy: US, CUSTOMER, FORWARDER, UNKNOWN, or null
 - incoterms: standard incoterms code or null
 - commodity: string or null
 - weight: number in kg or null
 - volume: number in cbm or null
+- targetPrice: number or null
+- targetCurrency: USD, EUR, TRY, GBP, or null
+- targetPriceStatus: PROVIDED, NO_TARGET, UNKNOWN, or null
+- targetPriceSource: short text or null
 - cargoReadyDate: ISO date string or null
 
 Email:
@@ -122,23 +260,100 @@ ${inquiry.rawEmailBody.slice(0, 2000)}`,
     return;
   }
 
+  const data = {
+    origin:        parsed.origin as string ?? inquiry.origin,
+    destination:   parsed.destination as string ?? inquiry.destination,
+    mode:          parsed.mode as string ?? inquiry.mode,
+    containerCount: parsed.containerCount != null ? Number(parsed.containerCount) : inquiry.containerCount,
+    containerType: parsed.containerType as string ?? inquiry.containerType,
+    dimensions:    parsed.dimensions as string ?? inquiry.dimensions,
+    stackable:     parsed.stackable as string ?? inquiry.stackable,
+    topLoad:       parsed.topLoad as string ?? inquiry.topLoad,
+    dangerousGoods: parsed.dangerousGoods as string ?? inquiry.dangerousGoods,
+    customsBy:     parsed.customsBy as string ?? inquiry.customsBy,
+    incoterms:     parsed.incoterms as string ?? inquiry.incoterms,
+    commodity:     parsed.commodity as string ?? inquiry.commodity,
+    weight:        parsed.weight != null ? Number(parsed.weight) : inquiry.weight,
+    volume:        parsed.volume != null ? Number(parsed.volume) : inquiry.volume,
+    targetPrice:   parsed.targetPrice != null ? Number(parsed.targetPrice) : inquiry.targetPrice,
+    targetCurrency: parsed.targetCurrency as string ?? inquiry.targetCurrency,
+    targetPriceStatus: parsed.targetPriceStatus as string ?? inquiry.targetPriceStatus,
+    targetPriceSource: parsed.targetPriceSource as string ?? inquiry.targetPriceSource,
+    cargoReadyDate: parsed.cargoReadyDate ? new Date(parsed.cargoReadyDate as string) : inquiry.cargoReadyDate,
+  };
+  const qualification = qualificationFor(data);
+
   await prisma.inquiry.update({
     where: { id: inquiryId },
     data: {
-      origin:        parsed.origin as string ?? inquiry.origin,
-      destination:   parsed.destination as string ?? inquiry.destination,
-      mode:          parsed.mode as string ?? inquiry.mode,
-      containerType: parsed.containerType as string ?? inquiry.containerType,
-      incoterms:     parsed.incoterms as string ?? inquiry.incoterms,
-      commodity:     parsed.commodity as string ?? inquiry.commodity,
-      weight:        parsed.weight != null ? Number(parsed.weight) : inquiry.weight,
-      volume:        parsed.volume != null ? Number(parsed.volume) : inquiry.volume,
-      cargoReadyDate: parsed.cargoReadyDate ? new Date(parsed.cargoReadyDate as string) : inquiry.cargoReadyDate,
-      status: "PARSED",
-      parsedData: JSON.stringify(parsed),
+      ...data,
+      status: qualification.isMature ? "PARSED" : "INGESTED",
+      parsedData: JSON.stringify({ ...parsed, qualification }),
     },
   });
 
+  if (targetPriceChanged(inquiry, data)) {
+    await recordTargetPriceHistory({
+      officeId: session.officeId,
+      inquiryId,
+      createdByUserId: session.userId,
+      amount: data.targetPrice,
+      currency: data.targetCurrency,
+      status: data.targetPriceStatus,
+      source: data.targetPriceSource,
+      note: "AI RFQ parse.",
+    });
+  }
+
   revalidatePath(`/dashboard/rfq/${inquiryId}`);
   revalidatePath("/dashboard/rfq");
+}
+
+export async function draftMissingInfoEmail(inquiryId: string) {
+  const session = await requireSession();
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: inquiryId, officeId: session.officeId },
+    select: {
+      id: true,
+      subject: true,
+      fromEmail: true,
+      origin: true,
+      destination: true,
+      mode: true,
+      commodity: true,
+      containerCount: true,
+      containerType: true,
+      dimensions: true,
+      stackable: true,
+      topLoad: true,
+      dangerousGoods: true,
+      customsBy: true,
+      incoterms: true,
+      weight: true,
+      volume: true,
+      targetPrice: true,
+      targetPriceStatus: true,
+      parsedData: true,
+    },
+  });
+  if (!inquiry) return { ok: false, error: "Inquiry not found." };
+
+  const qualification = qualificationFor(inquiry);
+  if (qualification.isMature) {
+    return { ok: false, error: "This RFQ is already mature. No missing-info email is needed." };
+  }
+
+  const strategyRun = await assessInquiryStrategy(session.officeId, inquiryId).catch(() => null);
+  const draft = buildMissingInfoDraft({
+    ...inquiry,
+    qualification,
+    blockerResolutionPlan: strategyRun?.strategy.blockerResolutionPlan,
+  });
+
+  return {
+    ok: true,
+    to: draft.to,
+    subject: draft.subject,
+    body: draft.body,
+  };
 }

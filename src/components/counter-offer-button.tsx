@@ -80,12 +80,11 @@ export function CounterOfferButton({
   }
 
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+    <div ref={ref} className="counter-offer-wrap">
       <button
         type="button"
         onClick={() => { setOpen((o) => !o); if (!open && !subject) draft(); }}
-        className="btn btn-secondary btn-sm"
-        style={{ fontSize: 10.5, padding: "2px 6px" }}
+        className="btn btn-secondary btn-sm counter-offer-trigger"
         title={`Draft a counter-offer email to ${carrierName}`}
       >
         Counter
@@ -95,17 +94,17 @@ export function CounterOfferButton({
         <div className="counter-pop">
           <div className="counter-pop-header">
             <div>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-3)" }}>
+              <div className="counter-pop-kicker">
                 Counter-offer to
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>{carrierName}</div>
+              <div className="counter-pop-title">{carrierName}</div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "var(--text-3)" }}>Target reduction</span>
+            <div className="counter-pop-controls">
+              <span>Target reduction</span>
               <select
                 value={reduction}
                 onChange={(e) => setReduction(Number(e.target.value))}
-                style={{ fontSize: 11, padding: "2px 4px" }}
+                className="counter-pop-select"
               >
                 <option value={3}>3%</option>
                 <option value={5}>5%</option>
@@ -116,55 +115,49 @@ export function CounterOfferButton({
                 type="button"
                 onClick={draft}
                 disabled={drafting}
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: 10.5, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                className="btn btn-secondary btn-sm counter-redraft"
               >
-                <Icon name="sparkles" size={11} /> {drafting ? "…" : "Re-draft"}
+                <Icon name="sparkles" size={11} /> {drafting ? "..." : "Re-draft"}
               </button>
             </div>
           </div>
 
           {error && (
-            <div style={{ padding: "8px 12px", fontSize: 11.5, color: "var(--danger)" }}>{error}</div>
+            <div className="counter-pop-error">{error}</div>
           )}
 
-          <div style={{ padding: "8px 12px", display: "flex", gap: 8, borderBottom: "1px solid var(--border)" }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.05em", textTransform: "uppercase", paddingTop: 5 }}>To</span>
+          <div className="counter-address-row">
+            <span>To</span>
             <input
               value={toEmail}
               onChange={(e) => setToEmail(e.target.value)}
               placeholder={`${carrierName.toLowerCase().replace(/\s/g, "")}@example.com`}
-              style={{ flex: 1, fontSize: 12, border: "none", outline: "none", padding: "4px 0", background: "none" }}
+              className="counter-address-input"
             />
           </div>
 
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder={drafting ? "Drafting…" : "Subject…"}
-            style={{ width: "100%", padding: "8px 12px", fontSize: 12.5, border: "none", outline: "none", borderBottom: "1px solid var(--border)", fontWeight: 600 }}
+            placeholder={drafting ? "Drafting..." : "Subject..."}
+            className="counter-subject-input"
           />
 
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder={drafting ? "Drafting…" : "Body…"}
+            placeholder={drafting ? "Drafting..." : "Body..."}
             rows={9}
-            style={{
-              width: "100%", border: "none", outline: "none",
-              padding: "10px 12px", fontSize: 12.5, fontFamily: "inherit",
-              resize: "vertical", minHeight: 160,
-            }}
+            className="counter-body-textarea"
           />
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "8px 12px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
-            <button onClick={() => setOpen(false)} className="btn btn-secondary btn-sm" style={{ fontSize: 11.5 }}>Cancel</button>
+          <div className="counter-pop-footer">
+            <button onClick={() => setOpen(false)} className="btn btn-secondary btn-sm counter-footer-btn">Cancel</button>
             <button
-              onClick={send}
+              onClick={() => send()}
               disabled={sending || !subject.trim() || !body.trim()}
-              className="btn btn-sm"
-              style={{ fontSize: 11.5 }}
-            >{sending ? "Logging…" : "Send & log"}</button>
+              className="btn btn-sm counter-footer-btn"
+            >{sending ? "Logging..." : "Send & log"}</button>
           </div>
         </div>
       )}

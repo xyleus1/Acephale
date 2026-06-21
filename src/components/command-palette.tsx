@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchJobs, focusJobAction, type JobSearchResult } from "@/lib/job-search";
+import { Icon } from "@/components/icon";
 
 const STATUS_LABEL: Record<string, string> = {
-  INQUIRY: "Inquiry", QUOTED: "Quoted", BOOKED: "Booked",
-  IN_TRANSIT: "In Transit", CUSTOMS: "Customs", DELIVERED: "Delivered", CANCELLED: "Cancelled",
+  INQUIRY: "RFQ", QUOTED: "Pricing", BOOKED: "Booked / Waiting Cargo",
+  IN_TRANSIT: "En Route", CUSTOMS: "En Route", DELIVERED: "Delivered", CANCELLED: "Cancelled",
 };
 
 export function CommandPalette() {
@@ -83,9 +84,7 @@ export function CommandPalette() {
       title="Open command palette (⌘K)"
       aria-label="Open command palette"
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
+      <Icon name="search" size={12} strokeWidth={2} />
       <span>Find job</span>
       <kbd>⌘K</kbd>
     </button>
@@ -95,9 +94,7 @@ export function CommandPalette() {
     <div className="cmdk-backdrop" onClick={() => setOpen(false)}>
       <div className="cmdk-panel" onClick={(e) => e.stopPropagation()}>
         <div className="cmdk-input-row">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-3)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
+          <Icon name="search" size={14} strokeWidth={2} style={{ color: "var(--text-3)" }} />
           <input
             ref={inputRef}
             value={query}

@@ -127,7 +127,7 @@ export function NotificationBell({ overdueTasks, staleCompanies, t }: Props) {
           )}
 
           <div className="notif-footer">
-            <Link href="/dashboard/activity" onClick={() => setOpen(false)}>
+            <Link href="/dashboard/inbox" onClick={() => setOpen(false)}>
               {t.viewActivity}
             </Link>
           </div>

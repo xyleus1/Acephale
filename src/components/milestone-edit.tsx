@@ -51,36 +51,33 @@ export function MilestoneEdit({
   }
 
   return (
-    <div ref={ref} style={{ position: "relative", marginTop: 6 }}>
+    <div ref={ref} className="ms-edit">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="btn btn-secondary btn-sm"
-        style={{ fontSize: 10, padding: "2px 6px" }}
+        className="btn btn-secondary btn-sm ms-edit-trigger"
       >
         {open ? "Close" : "Edit"}
       </button>
       {open && (
         <div className="ms-edit-pop">
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <div className="ms-edit-row">
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={{ fontSize: 10.5, padding: "2px 4px", width: 120 }}
+              className="ms-edit-input"
             />
             <button
               onClick={setPlanned}
               disabled={busy || !date}
               className="btn btn-secondary btn-sm"
-              style={{ fontSize: 10, padding: "2px 5px" }}
             >Set</button>
           </div>
           <button
             onClick={markDone}
             disabled={busy}
-            className="btn btn-sm"
-            style={{ fontSize: 10, padding: "2px 6px", width: "100%", marginTop: 6 }}
+            className="btn btn-sm ms-edit-done"
           >Mark done now</button>
         </div>
       )}

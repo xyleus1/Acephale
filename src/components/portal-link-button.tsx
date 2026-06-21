@@ -45,61 +45,53 @@ export function PortalLinkButton({ jobId, hasToken, notifyCustomer }: { jobId: s
       <button
         type="button"
         onClick={show}
-        className="btn btn-secondary btn-sm"
-        style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+        className="btn btn-secondary btn-sm portal-link-trigger"
         title="Get a public read-only link to share with the customer"
       >
         <Icon name="external" size={11} />
         Customer portal
       </button>
       {open && (
-        <div onClick={() => setOpen(false)} style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <div onClick={(e) => e.stopPropagation()} style={{
-            background: "var(--surface)", borderRadius: 8, width: "min(580px, 92vw)",
-            padding: 0, boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
-          }}>
-            <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Customer portal</div>
-              <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)" }}>
+        <div onClick={() => setOpen(false)} className="product-modal-overlay">
+          <div onClick={(e) => e.stopPropagation()} className="product-modal portal-link-modal">
+            <div className="product-modal-header">
+              <div>
+                <div className="product-modal-kicker">External visibility</div>
+                <div className="product-modal-title">Customer portal</div>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} className="product-modal-close" aria-label="Close customer portal modal">
                 <Icon name="x" size={14} />
               </button>
             </div>
-            <div style={{ padding: 18 }}>
-              <p style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 14 }}>
-                A read-only public page showing pipeline, milestones, ETD/ETA. Anyone with the link can view; rotate it any time to revoke.
+            <div className="product-modal-body">
+              <p className="portal-link-copy">
+                A read-only public page showing the customer-facing pipeline and high-level workflow steps. Anyone with the link can view; rotate it any time to revoke.
               </p>
               {link ? (
-                <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                <div className="portal-link-row">
                   <input
                     readOnly
                     value={link}
                     onFocus={(e) => e.currentTarget.select()}
-                    style={{
-                      flex: 1, padding: "8px 10px", border: "1px solid var(--border)",
-                      borderRadius: 4, fontSize: 12, fontFamily: "ui-monospace, Menlo, monospace",
-                      background: "var(--surface-2)",
-                    }}
+                    className="portal-link-input"
                   />
-                  <button onClick={copy} className="btn btn-sm" style={{ fontSize: 12 }}>
+                  <button onClick={copy} className="btn btn-sm modal-action-btn">
                     {copied ? "Copied" : "Copy"}
                   </button>
-                  <a href={link} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                  <a href={link} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm modal-action-btn portal-open-link">
                     Open <Icon name="external" size={11} />
                   </a>
                 </div>
               ) : (
-                <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 14 }}>{busy ? "Generating link…" : "Loading…"}</div>
+                <div className="portal-link-loading">{busy ? "Generating link..." : "Loading..."}</div>
               )}
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
+              <label className="portal-notify-row">
                 <input type="checkbox" checked={notify} onChange={toggleNotify} disabled={busy} />
-                Auto-email customer on key status changes (Booked / In transit / Customs / Delivered) and on confirmed ETD/ETA/Delivery milestones.
+                Auto-email customer on key status changes (Booked / En route / Delivered) and confirmed delivery updates.
               </label>
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
-                <button onClick={rotate} className="btn btn-secondary btn-sm" style={{ fontSize: 11.5 }} disabled={busy || !hasToken}>
+              <div className="product-modal-footer">
+                <button onClick={rotate} className="btn btn-secondary btn-sm modal-action-btn" disabled={busy || !hasToken}>
                   Rotate link
                 </button>
               </div>

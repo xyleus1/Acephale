@@ -26,19 +26,14 @@ export function InboxQuickReply({ threadId, threadSubject }: { threadId: string;
 
   return (
     <>
-      <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+      <div className="inbox-action-group" onClick={(e) => e.stopPropagation()}>
         {!showIntent ? (
           <>
             <button
               type="button"
               onClick={() => go(false)}
               disabled={busy}
-              style={{
-                fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4,
-                background: "var(--surface)", color: "var(--brand)",
-                border: "1px solid var(--brand-border)", cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: 4,
-              }}
+              className="inbox-action-btn soft-brand"
               title="AI drafts a reply based on the latest message"
             >
               <Icon name="sparkles" size={11} />
@@ -48,18 +43,14 @@ export function InboxQuickReply({ threadId, threadSubject }: { threadId: string;
               type="button"
               onClick={() => setShowIntent(true)}
               disabled={busy}
-              style={{
-                fontSize: 11, padding: "4px 7px", borderRadius: 4,
-                background: "transparent", color: "var(--text-3)",
-                border: "1px solid var(--border)", cursor: "pointer",
-              }}
+              className="inbox-action-btn intent"
               title="Tell the AI what stance to take"
             >
               + intent
             </button>
           </>
         ) : (
-          <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <div className="inbox-action-group">
             <input
               type="text"
               value={intent}
@@ -70,31 +61,20 @@ export function InboxQuickReply({ threadId, threadSubject }: { threadId: string;
                 if (e.key === "Escape") { setShowIntent(false); setIntent(""); }
               }}
               placeholder="counter at $480/MT, ask for sample…"
-              style={{
-                fontSize: 11.5, padding: "4px 8px", borderRadius: 4,
-                border: "1px solid var(--brand)", outline: "none",
-                width: 260, background: "var(--surface)",
-              }}
+              className="inbox-intent-input"
             />
             <button
               type="button"
               onClick={() => go(true)}
               disabled={busy || !intent.trim()}
-              style={{
-                fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4,
-                background: "var(--brand)", color: "#fff", border: "none", cursor: "pointer",
-              }}
+              className="inbox-action-btn primary"
             >
               {busy ? "…" : "Draft"}
             </button>
             <button
               type="button"
               onClick={() => { setShowIntent(false); setIntent(""); }}
-              style={{
-                fontSize: 11, padding: "4px 7px", borderRadius: 4,
-                background: "transparent", color: "var(--text-3)",
-                border: "1px solid var(--border)", cursor: "pointer",
-              }}
+              className="inbox-action-btn"
             >
               Cancel
             </button>

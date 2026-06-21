@@ -25,13 +25,12 @@ export function ReclassifyButton({ onlyUnclassified = false }: { onlyUnclassifie
   }
 
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-      {msg && <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>{msg}</span>}
+    <div className="inbox-action-group has-error">
+      {msg && <span className="inbox-action-status">{msg}</span>}
       <button
         onClick={run}
         disabled={busy}
         className="btn btn-secondary btn-sm"
-        style={{ fontSize: 12 }}
       >
         {busy ? "Re-classifying…" : (onlyUnclassified ? "Classify missing" : "Re-classify all")}
       </button>

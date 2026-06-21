@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession, loginWithCredentials } from "@/lib/auth";
+import { LogoMark } from "@/components/logo-mark";
 
 type Params = {
   searchParams: Promise<{ error?: string; demo?: string }>;
@@ -32,8 +33,8 @@ export default async function LoginPage({ searchParams }: Params) {
     <main className="login-shell">
       <div className="login-card">
         <div className="login-header">
-          <div className="login-logo">D</div>
-          <h1 className="login-title">Derya Freight OS</h1>
+          <LogoMark className="login-logo" />
+          <h1 className="login-title">Derya Deal Desk</h1>
           <p className="login-subtitle">Sign in to your office</p>
         </div>
 
@@ -77,7 +78,7 @@ export default async function LoginPage({ searchParams }: Params) {
               Don&apos;t have an account? <a href="/signup" style={{ color: "var(--brand)", fontWeight: 600 }}>Create your office</a>
             </p>
             <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0 }}>
-              Or <a href="/login?demo=1" style={{ color: "var(--text-2)", fontWeight: 500 }}>try the demo</a>
+              Or <a href="/login?demo=1" style={{ color: "var(--text-2)", fontWeight: 500 }}>use sample access</a>
               {" "}— prefills <code style={{ fontSize: 10, background: "var(--surface-3)", padding: "1px 4px", borderRadius: 3 }}>admin@demo.local / admin1234</code>
             </p>
           </div>

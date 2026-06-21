@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { dimensionsSummary, CONTAINER_TYPE_LABEL } from "@/lib/cargo";
+import { calculateOpportunity, type OpportunityCarrierQuote } from "@/lib/opportunity-score";
+import { OpportunityScorePill } from "./opportunity-score-card";
+import { Icon } from "./icon";
 
 export type TableJob = {
   id: string;
@@ -24,6 +27,17 @@ export type TableJob = {
   dimensions: string | null;
   containerCount: number | null;
   containerType: string | null;
+  stackable: string | null;
+  topLoad: string | null;
+  dangerousGoods: string | null;
+  customsBy: string | null;
+  targetPrice: number | null;
+  targetCurrency: string | null;
+  targetPriceStatus: string | null;
+  targetPriceSource: string | null;
+  fromEmail: string | null;
+  fromCompany: string | null;
+  carrierQuotes: OpportunityCarrierQuote[];
   etd: string | null;
   eta: string | null;
   revenue: number | null;
@@ -34,8 +48,8 @@ export type TableJob = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  PROPOSED: "Proposed", INQUIRY: "Inquiry", QUOTED: "Quoted", BOOKED: "Booked",
-  IN_TRANSIT: "In Transit", CUSTOMS: "Customs", DELIVERED: "Delivered", CANCELLED: "Cancelled",
+  PROPOSED: "Proposed", INQUIRY: "RFQ", QUOTED: "Pricing", BOOKED: "Booked",
+  IN_TRANSIT: "En Route", CUSTOMS: "En Route", DELIVERED: "Delivered", CANCELLED: "Cancelled",
 };
 
 function fmtDate(iso: string | null): string {
@@ -58,9 +72,11 @@ type Col = {
 const COLUMNS: Col[] = [
   { key: "reference",   label: "Reference",   default: true,  value: (j) => j.reference },
   { key: "title",       label: "Deal",        default: true,  value: (j) => j.title,
-    render: (j) => j.title ? <span style={{ fontWeight: 600 }}>{j.title}</span> : "—" },
+    render: (j) => j.title ? <span className="data-cell-strong">{j.title}</span> : "—" },
   { key: "status",      label: "Stage",       default: true,  value: (j) => j.status,
-    render: (j) => <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 3, background: j.status === "CANCELLED" ? "var(--surface-3)" : "var(--brand-light)", color: j.status === "CANCELLED" ? "var(--text-3)" : "var(--brand)", border: "1px solid var(--brand-border)", letterSpacing: "0.04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{STATUS_LABEL[j.status] ?? j.status}</span> },
+    render: (j) => <span className={`data-status-badge${j.status === "CANCELLED" ? " cancelled" : ""}`}>{STATUS_LABEL[j.status] ?? j.status}</span> },
+  { key: "opportunity", label: "Opportunity", default: true,  value: (j) => calculateOpportunity(j).score, numeric: true,
+    render: (j) => <OpportunityScorePill score={calculateOpportunity(j)} /> },
   { key: "customer",    label: "Customer",    default: true,  value: (j) => j.companyName },
   { key: "route",       label: "Route",       default: true,  value: (j) => `${j.origin ?? ""} ${j.destination ?? ""}`.trim() || null,
     render: (j) => j.origin || j.destination ? <>{j.origin ?? "?"} → {j.destination ?? "?"}</> : "—" },
@@ -80,9 +96,17 @@ const COLUMNS: Col[] = [
     render: (j) => j.weight != null ? j.weight.toLocaleString() : "—" },
   { key: "volume",      label: "CBM",         default: false, value: (j) => j.volume, numeric: true,
     render: (j) => j.volume != null ? j.volume.toLocaleString() : "—" },
+  { key: "stackable",   label: "Stackable",   default: false, value: (j) => j.stackable,
+    render: (j) => j.stackable === "YES" ? "Yes" : j.stackable === "NO" ? `No${j.topLoad === "YES" ? " · top load" : ""}` : "Unknown" },
+  { key: "dg",          label: "DG",          default: false, value: (j) => j.dangerousGoods,
+    render: (j) => j.dangerousGoods === "YES" ? "Yes" : j.dangerousGoods === "NO" ? "No" : "Unknown" },
+  { key: "customs",     label: "Customs By",  default: false, value: (j) => j.customsBy,
+    render: (j) => j.customsBy === "US" ? "Us" : j.customsBy === "CUSTOMER" ? "Customer" : j.customsBy === "FORWARDER" ? "Forwarder" : "Unknown" },
   { key: "packages",    label: "Packages",    default: false, value: (j) => j.packages, numeric: true },
-  { key: "etd",         label: "ETD",         default: true,  value: (j) => j.etd, render: (j) => fmtDate(j.etd) },
-  { key: "eta",         label: "ETA",         default: true,  value: (j) => j.eta, render: (j) => fmtDate(j.eta) },
+  { key: "target",      label: "Target Price",default: true,  value: (j) => j.targetPrice, numeric: true,
+    render: (j) => j.targetPrice != null
+      ? `${j.targetCurrency ?? "USD"} ${j.targetPrice.toLocaleString()}`
+      : j.targetPriceStatus === "NO_TARGET" ? "No target" : "Ask" },
   { key: "revenue",     label: "Revenue",     default: false, value: (j) => j.revenue, numeric: true, render: (j) => fmtMoney(j.revenue) },
   { key: "cost",        label: "Cost",        default: false, value: (j) => j.cost, numeric: true, render: (j) => fmtMoney(j.cost) },
   { key: "profit",      label: "Profit",      default: true,  numeric: true,
@@ -92,7 +116,7 @@ const COLUMNS: Col[] = [
     value: (j) => (j.revenue && j.cost ? (j.revenue - j.cost) / j.revenue : null),
     render: (j) => (j.revenue && j.cost ? `${(((j.revenue - j.cost) / j.revenue) * 100).toFixed(1)}%` : "—") },
   { key: "note",        label: "Note",        default: true,  value: (j) => j.notes,
-    render: (j) => j.notes ? <span title={j.notes} style={{ display: "inline-block", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom", color: "var(--text-2)" }}>{j.notes}</span> : "—" },
+    render: (j) => j.notes ? <span title={j.notes} className="data-note">{j.notes}</span> : "—" },
   { key: "created",     label: "Created",     default: false, value: (j) => j.createdAt, render: (j) => fmtDate(j.createdAt) },
 ];
 
@@ -154,21 +178,16 @@ export function JobsTable({ jobs }: { jobs: TableJob[] }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <div ref={pickerRef} style={{ position: "relative" }}>
-          <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setPickerOpen((o) => !o)}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+      <div className="table-toolbar">
+        <div ref={pickerRef} className="table-picker">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickerOpen((o) => !o)}>
+            <Icon name="grid" size={12} />
             Columns ({cols.length})
           </button>
           {pickerOpen && (
-            <div style={{
-              position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 30,
-              background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: "8px 0", minWidth: 200,
-              maxHeight: 360, overflowY: "auto",
-            }}>
+            <div className="table-picker-menu">
               {COLUMNS.map((c) => (
-                <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 14px", fontSize: 12.5, cursor: "pointer", color: "var(--text)" }}>
+                <label key={c.key} className="table-picker-option">
                   <input
                     type="checkbox"
                     checked={visible.includes(c.key)}
@@ -182,21 +201,15 @@ export function JobsTable({ jobs }: { jobs: TableJob[] }) {
         </div>
       </div>
 
-      <div className="card" style={{ overflow: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+      <div className="card table-shell">
+        <table className="data-table">
           <thead>
             <tr>
               {cols.map((c) => (
                 <th
                   key={c.key}
                   onClick={() => toggleSort(c.key)}
-                  style={{
-                    padding: "9px 12px", textAlign: c.numeric ? "right" : "left", whiteSpace: "nowrap",
-                    fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-                    color: sortKey === c.key ? "var(--text)" : "var(--text-3)",
-                    borderBottom: "1px solid var(--border)", background: "var(--surface-2)",
-                    cursor: "pointer", userSelect: "none", position: "sticky", top: 0,
-                  }}
+                  className={`${c.numeric ? "numeric" : ""}${sortKey === c.key ? " active" : ""}`}
                 >
                   {c.label}{sortKey === c.key ? (sortDir === 1 ? " ↑" : " ↓") : ""}
                 </th>
@@ -205,24 +218,15 @@ export function JobsTable({ jobs }: { jobs: TableJob[] }) {
           </thead>
           <tbody>
             {sorted.length === 0 ? (
-              <tr><td colSpan={cols.length} style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>No jobs match.</td></tr>
+              <tr><td colSpan={cols.length} className="table-empty-cell">No jobs match.</td></tr>
             ) : sorted.map((j) => (
               <tr
                 key={j.id}
                 onClick={() => { window.location.href = `/dashboard/jobs/${j.id}`; }}
-                style={{ cursor: "pointer" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-2)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ""; }}
+                className="data-row"
               >
                 {cols.map((c) => (
-                  <td key={c.key} style={{
-                    padding: "9px 12px", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap",
-                    textAlign: c.numeric ? "right" : "left",
-                    fontVariantNumeric: c.numeric ? "tabular-nums" : undefined,
-                    fontFamily: c.key === "reference" ? "ui-monospace, Menlo, monospace" : undefined,
-                    fontWeight: c.key === "reference" ? 600 : 400,
-                    color: "var(--text)",
-                  }}>
+                  <td key={c.key} className={`${c.numeric ? "numeric" : ""}${c.key === "reference" ? " data-cell-mono" : ""}`}>
                     {c.render ? c.render(j) : (c.value(j) ?? "—") || "—"}
                   </td>
                 ))}

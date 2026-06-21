@@ -68,22 +68,18 @@ export function LoadFilterPicker({
   }
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", display: "inline-block" }}>
+    <div ref={wrapRef} className="load-filter-wrap">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="btn btn-secondary"
-        style={{
-          fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6,
-          ...(activeLabel ? { background: "var(--brand-light)", color: "var(--brand)", borderColor: "var(--brand-border)" } : {}),
-        }}
+        className={`btn btn-secondary load-filter-button${activeLabel ? " active" : ""}`}
       >
         <Icon name="layers" size={12} />
-        {activeLabel ? <span style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeLabel}</span> : "Filter by load"}
+        {activeLabel ? <span className="load-filter-label">{activeLabel}</span> : "Filter by load"}
         {activeLabel ? (
           <span
             onClick={(e) => { e.stopPropagation(); clear(); }}
-            style={{ marginLeft: 4, padding: 2, borderRadius: 3, display: "inline-flex" }}
+            className="load-filter-clear"
             title="Clear filter"
           >
             <Icon name="x" size={11} />
@@ -93,28 +89,19 @@ export function LoadFilterPicker({
         )}
       </button>
       {open && (
-        <div style={{
-          position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50,
-          width: 380, maxHeight: 480, overflow: "hidden", display: "flex", flexDirection: "column",
-          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6,
-          boxShadow: "0 8px 28px rgba(0,0,0,0.18)",
-        }}>
-          <div style={{ padding: 10, borderBottom: "1px solid var(--border)" }}>
+        <div className="inbox-popover load-filter">
+          <div className="inbox-popover-search">
             <input
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search by ref, customer, or subject…"
-              style={{
-                width: "100%", padding: "7px 10px",
-                border: "1px solid var(--border)", borderRadius: 4,
-                fontSize: 12.5, outline: "none", background: "var(--surface-2)",
-              }}
+              className="inbox-popover-input"
             />
           </div>
-          <div style={{ overflowY: "auto", flex: 1 }}>
+          <div className="inbox-popover-list">
             {filtered.jobs.length === 0 && filtered.inquiries.length === 0 && (
-              <div style={{ padding: 20, fontSize: 12.5, color: "var(--text-3)", textAlign: "center" }}>
+              <div className="inbox-popover-empty">
                 No matches.
               </div>
             )}
@@ -155,11 +142,7 @@ export function LoadFilterPicker({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      padding: "8px 12px 4px",
-      fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-      color: "var(--text-3)",
-    }}>{children}</div>
+    <div className="inbox-popover-section-label">{children}</div>
   );
 }
 
@@ -168,16 +151,12 @@ function Row({ onClick, primary, secondary, active }: { onClick: () => void; pri
     <button
       type="button"
       onClick={onClick}
-      style={{
-        display: "block", width: "100%", textAlign: "left",
-        padding: "8px 12px", background: active ? "var(--brand-light)" : "transparent",
-        border: "none", cursor: "pointer", borderTop: "1px solid var(--border)",
-      }}
+      className={`inbox-popover-option${active ? " active" : ""}`}
     >
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: active ? "var(--brand)" : "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <div className="inbox-popover-option-title">
         {primary}
       </div>
-      <div style={{ fontSize: 10.5, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>
+      <div className="inbox-popover-option-meta">
         {secondary}
       </div>
     </button>

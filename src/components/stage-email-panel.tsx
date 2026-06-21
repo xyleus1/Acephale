@@ -47,13 +47,27 @@ export function StageEmailPanel({
   const [toLabel, setToLabel] = useState(defaultRecipient?.label ?? "");
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [sending, startSending] = useTransition();
-  const [sentMsg, setSentMsg] = useState<string | null>(null);
+  const [saving, startSaving] = useTransition();
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const openFromHash = () => {
+      if (window.location.hash !== "#job-email") return;
+      if (hints.length === 0) return;
+      const preferred = hints.find((h) => h.includes("CUSTOMER")) ?? hints[0];
+      setActiveHint((current) => current ?? preferred);
+      setOpen(true);
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, [hints]);
 
   function pickHint(h: StageHint) {
     setActiveHint(h);
     setOpen(true);
-    setSentMsg(null);
+    setSavedMsg(null);
     setDraftError(null);
   }
 
@@ -76,19 +90,19 @@ export function StageEmailPanel({
     }
   }
 
-  function send() {
+  function saveDraft() {
     if (!subject.trim() || !body.trim()) return;
     const fd = new FormData();
     fd.set("subject", subject);
     fd.set("body", body);
     fd.set("toEmail", toEmail);
     fd.set("toLabel", toLabel);
-    startSending(async () => {
+    startSaving(async () => {
       const res = await logOutboundEmail(jobId, fd);
       if ("error" in res) {
         setDraftError(res.error);
       } else {
-        setSentMsg(`Logged email · ${subject}`);
+        setSavedMsg(`Draft saved · ${subject}`);
         setSubject("");
         setBody("");
         setOpen(false);
@@ -98,16 +112,16 @@ export function StageEmailPanel({
   }
 
   return (
-    <div className="card stage-email">
-      <div className="worktable-section-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div id="job-email" className="card stage-email" data-agent-target="email">
+      <div className="worktable-section-header split">
         <span>Email · {threads.length} {threads.length === 1 ? "thread" : "threads"} on this job</span>
-        <a href="/dashboard/settings/email" style={{ fontSize: 11, color: "var(--brand)", fontWeight: 500, textDecoration: "none" }}>
-          Connect inbox →
+        <a href="/dashboard/settings/email" className="workbench-link-action">
+          Connect inbox
         </a>
       </div>
 
-      {/* Send-action quick picks (templates for current stage) */}
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {/* Draft-action quick picks (templates for current stage) */}
+      <div className="stage-email-template-row">
         {hints.map((h) => (
           <button
             key={h}
@@ -115,11 +129,11 @@ export function StageEmailPanel({
             type="button"
             className={`stage-email-template${activeHint === h ? " active" : ""}`}
           >
-            {STAGE_TEMPLATES[h].label} →
+            {STAGE_TEMPLATES[h].label}
           </button>
         ))}
         {hints.length === 0 && (
-          <span style={{ fontSize: 12, color: "var(--text-3)" }}>No email actions for this stage.</span>
+          <span className="stage-email-empty">No email actions for this stage.</span>
         )}
       </div>
 
@@ -143,7 +157,7 @@ export function StageEmailPanel({
               placeholder="Subject…"
             />
           </div>
-          <div style={{ position: "relative" }}>
+          <div className="stage-email-textarea-wrap">
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -153,40 +167,39 @@ export function StageEmailPanel({
           </div>
 
           {draftError && (
-            <div style={{ padding: "8px 12px", color: "var(--danger)", fontSize: 12 }}>{draftError}</div>
+            <div className="stage-email-error">{draftError}</div>
           )}
 
           <div className="stage-email-actions">
             <button
               type="button"
               onClick={aiDraft}
-              disabled={drafting || sending}
-              className="btn btn-secondary btn-sm"
-              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+              disabled={drafting || saving}
+              className="btn btn-secondary btn-sm btn-inline-icon"
             >
               <Icon name="sparkles" size={12} />
-              {drafting ? "Drafting…" : "AI Draft"}
+              {drafting ? "Drafting..." : "AI Draft"}
             </button>
-            <span style={{ flex: 1 }} />
+            <span className="stage-email-action-spacer" />
             <button
               type="button"
               onClick={() => { setOpen(false); setActiveHint(null); }}
               className="btn btn-secondary btn-sm"
-              disabled={sending}
+              disabled={saving}
             >Cancel</button>
             <button
               type="button"
-              onClick={send}
-              disabled={sending || !subject.trim() || !body.trim()}
+              onClick={saveDraft}
+              disabled={saving || !subject.trim() || !body.trim()}
               className="btn btn-sm"
-            >{sending ? "Logging…" : "Send & log"}</button>
+            >{saving ? "Saving..." : "Save draft"}</button>
           </div>
         </div>
       )}
 
-      {sentMsg && (
-        <div style={{ padding: "8px 16px", fontSize: 12, color: "var(--text-3)", borderTop: "1px solid var(--border)" }}>
-          {sentMsg}
+      {savedMsg && (
+        <div className="stage-email-saved">
+          {savedMsg}
         </div>
       )}
 
@@ -212,11 +225,11 @@ function ThreadAccordion({ thread }: { thread: ThreadView }) {
         onClick={() => setOpen((o) => !o)}
         className="stage-email-thread-header"
       >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div className="stage-email-thread-copy">
+          <div className="stage-email-thread-title">
             {thread.subject}
           </div>
-          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>
+          <div className="stage-email-thread-meta">
             {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"}
             {last ? ` · last from ${last.fromName ?? last.fromEmail}` : ""}
           </div>
@@ -228,8 +241,8 @@ function ThreadAccordion({ thread }: { thread: ThreadView }) {
           {thread.messages.map((m) => (
             <div key={m.id} className={`stage-email-msg ${m.direction === "INBOUND" ? "in" : "out"}`}>
               <div className="stage-email-msg-header">
-                <span style={{ fontWeight: 700 }}>{m.fromName ?? m.fromEmail}</span>
-                <span style={{ color: "var(--text-3)", fontSize: 11 }}>
+                <span className="stage-email-msg-from">{m.fromName ?? m.fromEmail}</span>
+                <span className="stage-email-msg-time">
                   {m.direction} · {new Date(m.sentAt).toLocaleString()}
                 </span>
               </div>

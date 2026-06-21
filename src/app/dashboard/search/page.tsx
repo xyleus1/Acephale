@@ -61,17 +61,17 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
 
   const [companies, contacts, activities] = await Promise.all([
     prisma.company.findMany({
-      where: companyWhere,
+      where: { ...companyWhere, officeId: session.officeId },
       include: { owners: { include: { user: { select: { fullName: true } } } } },
       take: 20,
     }),
     prisma.contact.findMany({
-      where: contactWhere,
+      where: { ...contactWhere, company: { ...companyScope, officeId: session.officeId } },
       include: { company: { select: { id: true, name: true } } },
       take: 20,
     }),
     prisma.activity.findMany({
-      where: activityWhere,
+      where: { ...activityWhere, officeId: session.officeId },
       include: { company: { select: { id: true, name: true } } },
       orderBy: { occurredAt: "desc" },
       take: 20,

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession, signupWithCredentials } from "@/lib/auth";
+import { LogoMark } from "@/components/logo-mark";
 
 type Params = {
   searchParams: Promise<{ error?: string }>;
@@ -30,9 +31,9 @@ export default async function SignupPage({ searchParams }: Params) {
     <main className="login-shell">
       <div className="login-card" style={{ maxWidth: 460 }}>
         <div className="login-header">
-          <div className="login-logo">D</div>
+          <LogoMark className="login-logo" />
           <h1 className="login-title">Create your office</h1>
-          <p className="login-subtitle">Spin up a fresh Derya Freight OS workspace</p>
+          <p className="login-subtitle">Create a focused RFQ and pricing workspace</p>
         </div>
 
         <div className="login-body">

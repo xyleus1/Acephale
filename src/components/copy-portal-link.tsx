@@ -18,8 +18,7 @@ export function CopyPortalLink({ jobId }: { jobId: string }) {
     <button
       type="button"
       onClick={copy}
-      className="btn btn-secondary btn-sm"
-      style={{ fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 5 }}
+      className="btn btn-secondary btn-sm btn-inline-icon"
       title="Copy a customer-shareable read-only link"
     >
       <Icon name={copied ? "check" : "external"} size={11} strokeWidth={2.5} />

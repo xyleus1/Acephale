@@ -12,18 +12,31 @@ import { templatesForStatus } from "@/lib/job-email-types";
 import { CopyPortalLink } from "@/components/copy-portal-link";
 import { CounterOfferButton } from "@/components/counter-offer-button";
 import { DocumentViewer } from "@/components/document-viewer";
-import React from "react";
+import { DocumentReadinessBoard } from "@/components/document-readiness-board";
+import { OpportunityScoreCard, OpportunityScorePill } from "@/components/opportunity-score-card";
+import { CustomerQuoteDraftButton } from "@/components/customer-quote-draft-button";
+import { ForwarderDraftsButton } from "@/components/forwarder-drafts-button";
+import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
+import { NegotiationPlanDraftButton } from "@/components/negotiation-plan-draft-button";
+import type { OpportunityScore } from "@/lib/opportunity-score";
+import { assessJobStrategy } from "@/lib/commercial-strategy-persistence";
+import { buildReferenceDealOperatorPlaybook, getReferenceDealDecisions, getReferenceDealSummary, type ReferenceDealDecision, type ReferenceDealOperatorPlaybook, type ReferenceDealSummary } from "@/lib/reference-deals";
+import { listDecisionQueueItems, type DecisionQueueItem } from "@/lib/decision-queue";
+import { buildDecisionQueueBrief, type DecisionQueueBrief } from "@/lib/decision-queue-brief";
+import { operatorToolLabel } from "@/lib/operator-action-labels";
+import { createRfqFromReferenceDeal } from "./reference-deal-actions";
+import { Fragment } from "react";
 import {
   initJobDocuments, initJobMilestones, updateDocStatus,
   markMilestoneActual, updateMilestonePlanned,
   addCarrierQuote, selectCarrierQuote, updateJobStatus,
-  addQuoteLine,
+  addQuoteLine, uploadJobDocument,
 } from "./jobs/[jobId]/actions";
 
-const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"] as const;
+const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"] as const;
 const STATUS_LABEL: Record<string, string> = {
-  INQUIRY: "Inquiry", QUOTED: "Quoted", BOOKED: "Booked",
-  IN_TRANSIT: "In Transit", CUSTOMS: "Customs", DELIVERED: "Delivered",
+  INQUIRY: "RFQ", QUOTED: "Pricing", BOOKED: "Booked / Waiting Cargo",
+  IN_TRANSIT: "En Route", CUSTOMS: "En Route", DELIVERED: "Delivered",
 };
 const MILESTONE_LABEL: Record<string, string> = {
   BOOKING: "Booking", CARGO_READY: "Cargo Ready", ETD: "ETD",
@@ -45,13 +58,465 @@ function fmtInput(d: Date | null | undefined) {
   return d ? new Date(d).toISOString().split("T")[0] : "";
 }
 
+type TargetPriceTrailEntry = {
+  id: string;
+  amount: number | null;
+  currency: string | null;
+  status: string;
+  source: string | null;
+  note: string | null;
+  createdAt: Date;
+  jobId?: string | null;
+  inquiryId?: string | null;
+};
+
+function targetHistoryValue(entry: TargetPriceTrailEntry) {
+  if (entry.amount != null) return `${entry.currency ?? "USD"} ${entry.amount.toLocaleString()}`;
+  if (entry.status === "NO_TARGET") return "No target";
+  return entry.status.toLowerCase().replace("_", " ");
+}
+
+function TargetPriceTrail({
+  entries,
+  currentLabel,
+  currentSource,
+  currentStatus,
+}: {
+  entries: TargetPriceTrailEntry[];
+  currentLabel: string;
+  currentSource: string | null;
+  currentStatus: string | null;
+}) {
+  const latest = entries[0] ?? null;
+  const statusLabel = currentStatus === "NO_TARGET"
+    ? "No target confirmed"
+    : currentStatus === "PROVIDED" || latest?.amount != null
+      ? "Target captured"
+      : "Needs customer answer";
+
+  return (
+    <section className="target-trail" data-agent-target="target-price" aria-label="Target price history">
+      <div className="target-trail-head">
+        <div>
+          <div className="target-trail-kicker">Target price memory</div>
+          <h2>{statusLabel}</h2>
+        </div>
+        <div className="target-trail-current">
+          <span>Current</span>
+          <strong>{currentLabel}</strong>
+        </div>
+      </div>
+      <div className="target-trail-body">
+        <div className="target-trail-context">
+          <span>Source context</span>
+          <strong>{currentSource || latest?.source || latest?.note || "No source recorded"}</strong>
+          <em>
+            {entries.length > 0
+              ? `${entries.length} historical signal${entries.length === 1 ? "" : "s"} preserved for pricing decisions.`
+              : "No target-price history yet. Ask explicitly or mark no target before forwarding."}
+          </em>
+        </div>
+        <div className="target-trail-list">
+          {entries.length > 0 ? entries.slice(0, 4).map((entry) => (
+            <div key={entry.id} className="target-trail-row">
+              <div>
+                <strong>{targetHistoryValue(entry)}</strong>
+                <span>{[entry.source, entry.note].filter(Boolean).join(" · ") || "Internal update"}</span>
+              </div>
+              <em>{fmt(entry.createdAt)}</em>
+            </div>
+          )) : (
+            <div className="target-trail-empty">
+              Target price is still an unanswered commercial fact.
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function firstCommandLedgerStop(brief: DecisionQueueBrief) {
+  return brief.execution_brief?.command_ledger.find((row) => row.tone === "blocked" || row.tone === "review")
+    ?? brief.execution_brief?.command_ledger[0]
+    ?? null;
+}
+
+type DeskExecutionBrief = NonNullable<DecisionQueueBrief["execution_brief"]>;
+
+function DeskSafeAction({ brief }: { brief: DeskExecutionBrief }) {
+  const toolHint = brief.decision_move?.toolHint ?? "none";
+  const jobId = brief.entity_type === "job" ? brief.entity_id : null;
+  const inquiryId = brief.entity_type === "inquiry" ? brief.entity_id : null;
+  const leadId = brief.entity_type === "lead" ? brief.entity_id : null;
+  const hasInlineAction = Boolean(
+    (toolHint === "draft_missing_info_request" && (jobId || inquiryId)) ||
+    (toolHint === "create_forwarder_drafts" && jobId) ||
+    (toolHint === "draft_customer_quote" && jobId) ||
+    (toolHint === "draft_negotiation_plan" && jobId) ||
+    (toolHint === "prepare_control_sheet_rfq" && leadId)
+  );
+  const contractState = brief.decision_contract?.state ?? "review";
+
+  return (
+    <div className={`attention-brief-action ${contractState}`} data-agent-target="agent-action" aria-label="Safe desk action">
+      <div>
+        <span>Safe reviewed action</span>
+        <strong>{operatorToolLabel(toolHint)}</strong>
+        <em>{brief.decision_contract?.allowedAgentMoves[0] ?? brief.next_step}</em>
+      </div>
+      <div className="attention-brief-action-controls">
+        {toolHint === "draft_missing_info_request" && (jobId || inquiryId) && (
+          <MissingInfoDraftButton inquiryId={inquiryId} jobId={jobId} />
+        )}
+        {toolHint === "create_forwarder_drafts" && jobId && (
+          <ForwarderDraftsButton jobId={jobId} />
+        )}
+        {toolHint === "draft_customer_quote" && jobId && (
+          <CustomerQuoteDraftButton jobId={jobId} quoteReady={brief.decision_contract?.state === "ready"} />
+        )}
+        {toolHint === "draft_negotiation_plan" && jobId && (
+          <NegotiationPlanDraftButton jobId={jobId} />
+        )}
+        {toolHint === "prepare_control_sheet_rfq" && leadId && (
+          <form action={createRfqFromReferenceDeal} className="attention-brief-inline-form">
+            <input type="hidden" name="dealId" value={leadId} />
+            <button type="submit" className="btn btn-secondary record-wide-action">
+              <Icon name="plus" size={13} />
+              Create RFQ from lead
+            </button>
+          </form>
+        )}
+        <a href={brief.href} className={hasInlineAction ? "attention-brief-open-link" : "btn btn-secondary record-wide-action"}>
+          {!hasInlineAction && <Icon name="external" size={13} />}
+          {hasInlineAction ? "Open record" : "Open scoped record"}
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; brief: DecisionQueueBrief }) {
+  if (items.length === 0) return null;
+  const ledgerStop = firstCommandLedgerStop(brief);
+  return (
+    <section className="attention-queue" data-agent-target="decision-queue" aria-label="Decision queue">
+      <div className="attention-queue-header">
+        <span className="live-dot" aria-hidden />
+        <strong>Decision queue</strong>
+        <span>{items.length} item{items.length === 1 ? "" : "s"}</span>
+      </div>
+      {brief.focus && (
+        <div className={`attention-brief ${brief.focus.tone}`}>
+          <div className="attention-brief-main">
+            <span>Desk focus</span>
+            <strong>{brief.focus.label}</strong>
+            <em>{brief.focus.operator_mode}</em>
+          </div>
+          {brief.execution_brief && (
+            <div className="attention-brief-execution">
+              <span>First move</span>
+              <strong>{brief.execution_brief.safe_action_label}</strong>
+              <em>{brief.execution_brief.next_step}</em>
+              {brief.execution_brief.decision_move && (
+                <div className="attention-brief-move" aria-label="First move decision">
+                  <span>{brief.execution_brief.decision_move.owner}</span>
+                  <strong>{brief.execution_brief.decision_move.label}</strong>
+                </div>
+              )}
+              {brief.execution_brief.visual_target && (
+                <div className="attention-brief-target" aria-label="Agent page target">
+                  <span>Agent is looking at</span>
+                  <strong>{brief.execution_brief.visual_target_label ?? "Scoped area"}</strong>
+                </div>
+              )}
+              {brief.execution_brief.decision_contract && (
+                <div
+                  className={`attention-brief-contract ${brief.execution_brief.decision_contract.state}`}
+                  data-agent-target="decision-contract"
+                  aria-label="Desk decision contract"
+                >
+                  <span>Decision contract</span>
+                  <strong>{brief.execution_brief.decision_contract.title}</strong>
+                  <em>{brief.execution_brief.decision_contract.summary}</em>
+                  <div>
+                    <span>Agent may</span>
+                    <strong>{brief.execution_brief.decision_contract.allowedAgentMoves[0]}</strong>
+                  </div>
+                  <div>
+                    <span>Forbidden</span>
+                    <strong>{brief.execution_brief.decision_contract.forbidden[0] ?? "No external send without approval."}</strong>
+                  </div>
+                </div>
+              )}
+              {brief.execution_brief.proof_gaps.length > 0 && (
+                <div className="attention-brief-proof-gaps" aria-label="First move proof gaps">
+                  <span>Proof gaps</span>
+                  {brief.execution_brief.proof_gaps.slice(0, 3).map((gap, index) => (
+                    <a
+                      key={`${gap.key}-${gap.target}-${index}`}
+                      href={brief.execution_brief?.href ?? "/dashboard"}
+                      className={`attention-proof-gap ${gap.tone}`}
+                      data-agent-target={gap.target}
+                    >
+                      <strong>{gap.owner} · {gap.label}</strong>
+                      <em>{gap.action}</em>
+                      <small>{gap.metric}{gap.detail ? ` · ${gap.detail}` : ""}</small>
+                    </a>
+                  ))}
+                </div>
+              )}
+              {brief.execution_brief.gate_checks.length > 0 && (
+                <div className="attention-brief-gates" aria-label="First move gates">
+                  {brief.execution_brief.gate_checks.slice(0, 3).map((gate) => (
+                    <span
+                      key={`${gate.label}-${gate.metric}`}
+                      className={gate.status}
+                      data-agent-target={gate.label === "Decision quality" ? "decision-quality" : undefined}
+                      aria-label={`${gate.label}: ${gate.metric}`}
+                    >
+                      {gate.label}
+                      <strong>{gate.metric}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {brief.execution_brief.rank_reasons.length > 0 && (
+                <div className="attention-brief-rank" aria-label="Why this is first">
+                  <span>Why first</span>
+                  <strong>
+                    {brief.execution_brief.rank_reasons[0].label}: {brief.execution_brief.rank_reasons[0].summary}
+                  </strong>
+                </div>
+              )}
+              {ledgerStop && (
+                <div className={`attention-brief-ledger ${ledgerStop.tone}`} aria-label="Command ledger stop rule">
+                  <span>{ledgerStop.label}</span>
+                  <strong>{ledgerStop.command}</strong>
+                  <em>{ledgerStop.stopRule}</em>
+                </div>
+              )}
+              {brief.execution_brief.evidence.length > 0 && (
+                <div className="attention-brief-evidence" aria-label="First move evidence">
+                  {brief.execution_brief.evidence.map((factor) => (
+                    <span
+                      key={`execution-${factor.label}`}
+                      className={factor.tone}
+                      data-agent-target={factor.label === "Decision quality" ? "decision-quality" : undefined}
+                    >
+                      {factor.label}
+                      <strong>{factor.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {brief.execution_brief.blockers.length > 0 && (
+                <div className="attention-brief-blockers" aria-label="First move blockers">
+                  <span>Clear first</span>
+                  {brief.execution_brief.blockers.slice(0, 2).map((blocker) => (
+                    <strong key={`${blocker.label}-${blocker.ask}`}>
+                      {blocker.label}: {blocker.ask}
+                    </strong>
+                  ))}
+                </div>
+              )}
+              <DeskSafeAction brief={brief.execution_brief} />
+              <small>{brief.execution_brief.safety}</small>
+            </div>
+          )}
+          <div className="attention-brief-side">
+            {brief.categoryBreakdown.slice(0, 4).map((bucket) => (
+              <span key={bucket.category}>
+                {bucket.label}
+                <strong>{bucket.count}</strong>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="attention-queue-list">
+        {items.map((item) => {
+          const safeAction = operatorToolLabel(item.decisionMove?.toolHint);
+          const rowAction = safeAction === "Open scoped record" ? item.actionLabel : safeAction;
+          return (
+          <div key={item.key} className={`attention-item ${item.tone}`}>
+            <span className="attention-item-dot" />
+            <a href={item.href} className="attention-item-copy">
+              <strong>{item.title}</strong>
+              <em>{item.meta}</em>
+              <small>{item.reason}</small>
+              {item.decisionMove && (
+                <div className="attention-item-move" aria-label="Commercial move">
+                  <span>{item.decisionMove.owner}</span>
+                  <strong>{item.decisionMove.label}</strong>
+                  <em>{item.decisionMove.command}</em>
+                </div>
+              )}
+              {item.gateChecks && item.gateChecks.length > 0 && (
+                <div className="attention-item-gates" aria-label="Decision gates">
+                  {item.gateChecks.slice(0, 3).map((gate) => (
+                    <span
+                      key={`${item.key}-${gate.label}-${gate.metric}`}
+                      className={gate.status}
+                      data-agent-target={gate.label === "Decision quality" ? "decision-quality" : undefined}
+                      aria-label={`${gate.label}: ${gate.metric}`}
+                    >
+                      <em>{gate.label}</em>
+                      <strong>{gate.metric}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {item.proofGaps && item.proofGaps.length > 0 && (
+                <div className="attention-item-proof-gaps" aria-label="Decision proof gaps">
+                  {item.proofGaps.slice(0, 2).map((gap, index) => (
+                    <span
+                      key={`${item.key}-${gap.key}-${gap.target}-${index}`}
+                      className={`attention-item-proof-gap ${gap.tone}`}
+                      data-agent-target={gap.target}
+                    >
+                      <em>{gap.owner} · {gap.label}</em>
+                      <strong>{gap.action}</strong>
+                      <small>{gap.metric}</small>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {item.rankReasons && item.rankReasons.length > 0 && (
+                <div className="attention-item-rank" aria-label="Why ranked here">
+                  <span>Why ranked</span>
+                  {item.rankReasons.slice(0, 2).map((reason) => (
+                    <strong key={`${item.key}-${reason.label}-${reason.summary}`} className={reason.tone}>
+                      {reason.label}: {reason.summary}
+                    </strong>
+                  ))}
+                </div>
+              )}
+              {item.priorityFactors && item.priorityFactors.length > 0 && (
+                <div className="attention-item-factors" aria-label="Priority factors">
+                  {item.priorityFactors.slice(0, 5).map((factor) => (
+                    <span
+                      key={`${item.key}-${factor.label}`}
+                      className={factor.tone}
+                      data-agent-target={factor.label === "Decision quality" ? "decision-quality" : undefined}
+                    >
+                      {factor.label}
+                      <strong>{factor.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </a>
+            <div className="attention-item-actions">
+              <span className="attention-item-action">
+                {item.category} · {item.tone === "critical" ? "critical" : item.tone === "high" ? "high priority" : "normal"}
+              </span>
+              {item.entityType === "lead" && item.entityId ? (
+                <form action={createRfqFromReferenceDeal} className="attention-item-form">
+                  <input type="hidden" name="dealId" value={item.entityId} />
+                  <button type="submit">{rowAction}</button>
+                </form>
+              ) : (
+                <a href={item.href} className="attention-item-open">
+                  {rowAction}
+                  <Icon name="arrow-right" size={12} />
+                </a>
+              )}
+            </div>
+          </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function DecisionFlowPanel({
+  summary,
+  opportunity,
+  approvedDocs,
+  totalDocs,
+  targetPriceLabel,
+}: {
+  summary: ReferenceDealSummary;
+  opportunity?: OpportunityScore | null;
+  approvedDocs: number;
+  totalDocs: number;
+  targetPriceLabel: string;
+}) {
+  const topLead = summary.topDeals[0];
+  const missingCount = opportunity?.missing.length ?? 0;
+  const maturityBlocked = missingCount > 0;
+  const quoteCoverage = opportunity?.evidence.quoteCoverage ?? "no quote coverage";
+  const guardrail = opportunity?.price.guardrailStatus ?? "NEEDS_COST";
+  const docsReady = totalDocs > 0 && approvedDocs === totalDocs;
+  const steps = [
+    {
+      key: "lead",
+      label: "Lead intake",
+      status: summary.activeRows > 0 ? "live" : "empty",
+      title: topLead ? topLead.contract : "No sheet rows",
+      meta: topLead
+        ? `${topLead.contact} · ${topLead.profit != null ? "profit known" : topLead.contractValue != null ? "value known" : "needs economics"}`
+        : "No lead source loaded",
+    },
+    {
+      key: "maturity",
+      label: "RFQ maturity",
+      status: maturityBlocked ? "blocked" : "ready",
+      title: maturityBlocked ? `${missingCount} blocker${missingCount === 1 ? "" : "s"}` : "Mature enough",
+      meta: maturityBlocked ? (opportunity?.missing.slice(0, 2).join(", ") ?? "Missing facts") : "Can move toward pricing",
+    },
+    {
+      key: "price",
+      label: "Pricing brain",
+      status: guardrail === "PASS" ? "ready" : guardrail === "BLOCKED" ? "blocked" : "review",
+      title: guardrail.toLowerCase().replace("_", " "),
+      meta: `${targetPriceLabel} · ${quoteCoverage}`,
+    },
+    {
+      key: "proof",
+      label: "Document proof",
+      status: docsReady ? "ready" : approvedDocs > 0 ? "review" : "blocked",
+      title: `${approvedDocs}/${totalDocs} approved`,
+      meta: docsReady ? "Proof pack ready" : "Upload, analyze, approve",
+    },
+  ];
+
+  return (
+    <section className="decision-flow-panel" data-agent-target="decision-flow">
+      <div className="decision-flow-head">
+        <div>
+          <div className="decision-flow-kicker">Commercial brain</div>
+          <h2>Lead to quote flow</h2>
+        </div>
+        <div className="decision-flow-note">
+          One path: pick lead, mature RFQ, protect price, prove with documents.
+        </div>
+      </div>
+      <div className="decision-flow-steps">
+        {steps.map((step, index) => (
+          <div key={step.key} className={`decision-flow-step ${step.status}`}>
+            <div className="decision-flow-index">{index + 1}</div>
+            <div className="decision-flow-copy">
+              <span>{step.label}</span>
+              <strong>{step.title}</strong>
+              <em>{step.meta}</em>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
   searchParams?: Promise<{ stage?: string }>;
 }) {
   const sp = searchParams ? await searchParams : {};
-  const stageOverride = sp.stage && ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"].includes(sp.stage)
+  const stageOverride = sp.stage && ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"].includes(sp.stage)
     ? sp.stage
     : null;
   return _DashboardPageImpl(stageOverride);
@@ -60,6 +525,8 @@ export default async function DashboardPage({
 async function _DashboardPageImpl(stageOverride: string | null) {
   const session = await requireSession();
   const focusedId = await getFocusedJobId();
+  const attentionItems = await listDecisionQueueItems(session.officeId, 8);
+  const decisionBrief = buildDecisionQueueBrief(attentionItems);
 
   // Pick a job: focused if any, else most recently updated active job, else latest job
   let jobId: string | null = focusedId;
@@ -83,16 +550,17 @@ async function _DashboardPageImpl(stageOverride: string | null) {
   // Empty state
   if (!jobId) {
     return (
-      <div className="card" style={{ padding: 40, textAlign: "center", maxWidth: 560, margin: "60px auto" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
-          No jobs yet
-        </div>
-        <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 auto 20px", maxWidth: 360 }}>
-          Add a manual job or RFQ to start. Once you have one, this page becomes your agent conversation focused on that load.
-        </p>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-          <a href="/dashboard/rfq/new" className="btn btn-secondary" style={{ fontSize: 13, textDecoration: "none" }}>Manual RFQ</a>
-          <a href="/dashboard/jobs/new" className="btn" style={{ fontSize: 13, textDecoration: "none" }}>New Job</a>
+      <div className="workbench-grid">
+        <DecisionQueueSection items={attentionItems} brief={decisionBrief} />
+        <div className="card workbench-empty-card">
+          <div className="workbench-empty-title">No focused deal yet</div>
+          <p className="workbench-empty-copy">
+            Start from the decision queue, add a manual RFQ, or create a job. Once a deal exists, this page becomes the focused commercial desk.
+          </p>
+          <div className="workbench-empty-actions">
+            <a href="/dashboard/rfq/new" className="btn btn-secondary">Manual RFQ</a>
+            <a href="/dashboard/jobs/new" className="btn">New Job</a>
+          </div>
         </div>
       </div>
     );
@@ -105,11 +573,13 @@ async function _DashboardPageImpl(stageOverride: string | null) {
       inquiry: {
         include: {
           carrierQuotes: { orderBy: { createdAt: "asc" } },
+          targetPriceHistory: { orderBy: { createdAt: "desc" }, take: 6 },
           // Inquiry-linked threads — these are the supplier replies attached
           // when the inquiry was the only attachment point.
           emailThreads: { include: { messages: { orderBy: { sentAt: "asc" } } } },
         },
       },
+      targetPriceHistory: { orderBy: { createdAt: "desc" }, take: 6 },
       documents: { orderBy: { createdAt: "asc" } },
       milestones: { orderBy: { createdAt: "asc" } },
       emailThreads: { include: { messages: { orderBy: { sentAt: "asc" } } } },
@@ -117,7 +587,7 @@ async function _DashboardPageImpl(stageOverride: string | null) {
   });
 
   if (!job) {
-    return <div style={{ padding: 24 }}>Job not found.</div>;
+    return <div className="workbench-not-found">Job not found.</div>;
   }
 
   // Combine Job-linked + Inquiry-linked threads, dedup by id, sort by lastMessageAt desc.
@@ -139,14 +609,15 @@ async function _DashboardPageImpl(stageOverride: string | null) {
 
   const docs = job.documents.length > 0
     ? job.documents
-    : await prisma.jobDocument.findMany({ where: { jobId }, orderBy: { createdAt: "asc" } });
+    : await prisma.jobDocument.findMany({ where: { jobId, officeId: session.officeId }, orderBy: { createdAt: "asc" } });
   const milestones = job.milestones.length > 0
     ? job.milestones
-    : await prisma.jobMilestone.findMany({ where: { jobId }, orderBy: { createdAt: "asc" } });
+    : await prisma.jobMilestone.findMany({ where: { jobId, job: { officeId: session.officeId } }, orderBy: { createdAt: "asc" } });
 
-  const currentIdx = (STATUS_ORDER as readonly string[]).indexOf(job.status);
+  const visibleStatus = job.status === "CUSTOMS" ? "IN_TRANSIT" : job.status;
+  const currentIdx = (STATUS_ORDER as readonly string[]).indexOf(visibleStatus);
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const isOverdue = job.eta && new Date(job.eta) < today && job.status !== "DELIVERED";
+  const timelineMilestones = milestones.filter((m) => !["ETD", "ETA", "CUSTOMS_ENTRY", "CUSTOMS_RELEASE"].includes(m.type));
 
   // Build chronological feed
   const feed: FeedItem[] = [];
@@ -236,12 +707,12 @@ async function _DashboardPageImpl(stageOverride: string | null) {
   feed.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
   const NEXT_AUTO: Record<string, string> = {
-    INQUIRY: "Awaiting carrier rates",
-    QUOTED: "Awaiting customer reply",
-    BOOKED: "Tracking carrier milestones",
-    IN_TRANSIT: "Watching for ETA / customs handoff",
-    CUSTOMS: "Watching for customs release",
-    DELIVERED: "Job complete",
+    INQUIRY: "Qualify missing RFQ facts before forwarder handoff",
+    QUOTED: "Prepare customer price and protect margin",
+    BOOKED: "Booked / waiting cargo confirmation",
+    IN_TRANSIT: "Track customer-visible updates by email",
+    CUSTOMS: "Track customer-visible updates by email",
+    DELIVERED: "Closed for margin review",
   };
 
   // Quote lines
@@ -251,6 +722,7 @@ async function _DashboardPageImpl(stageOverride: string | null) {
 
   const carrierQuotes = job.inquiry?.carrierQuotes ?? [];
   const receivedQuotes = carrierQuotes.filter((q) => q.status === "RECEIVED");
+  const opportunity = (await assessJobStrategy(session.officeId, job.id))?.strategy;
 
   // Build thread view for the StageEmailPanel
   const threadsView: ThreadView[] = job.emailThreads.map((t) => ({
@@ -278,61 +750,130 @@ async function _DashboardPageImpl(stageOverride: string | null) {
     orderBy: { name: "asc" },
   });
 
-  // Matching lane rates for the workbench (only relevant for INQUIRY/QUOTED stages)
-  const laneRates = (job.origin && job.destination)
-    ? await prisma.laneRate.findMany({
-        where: {
-          officeId: session.officeId,
-          origin: { contains: job.origin.split(",")[0].trim() },
-          destination: { contains: job.destination.split(",")[0].trim() },
-        },
-        orderBy: { validFrom: "desc" },
-        take: 6,
-      })
-    : [];
+  const laneRates: {
+    id: string; origin: string; destination: string; mode: string;
+    baseAmount: number; currency: string; validFrom: Date; validTo: Date | null; notes: string | null;
+  }[] = [];
+
+  const referenceDealSummary = getReferenceDealSummary();
+  const referenceDealDecisions = getReferenceDealDecisions(undefined, 6);
+  const referenceDealPlaybook = buildReferenceDealOperatorPlaybook(referenceDealDecisions, referenceDealSummary);
 
   const suggestions = [
-    "What's blocking this job right now?",
-    "What's the margin and how does it compare?",
-    "What should I do next?",
+    "Rank the control sheet leads.",
+    "What is missing before this RFQ can go to forwarders?",
+    "Check target price and margin.",
+    "Draft the missing-info email to the customer.",
   ];
+  const routeLabel = job.origin && job.destination
+    ? `${job.origin} → ${job.destination}`
+    : "Route TBD";
+  const modeLabel = job.mode ? (MODE_LABEL[job.mode] ?? job.mode) : "Mode TBD";
+  const approvedDocs = docs.filter((d) => d.status === "APPROVED").length;
+  const costLabel = job.cost ? `$${job.cost.toLocaleString()}` : "—";
+  const marginLabel = job.revenue && job.cost
+    ? `${(((job.revenue - job.cost) / job.revenue) * 100).toFixed(1)}%`
+    : "—";
+  const targetPriceLabel = job.targetPrice
+    ? `${job.targetCurrency ?? job.currency ?? "USD"} ${job.targetPrice.toLocaleString()}`
+    : job.targetPriceStatus === "NO_TARGET" ? "No target" : "Ask";
+  const targetPriceTrail = [...job.targetPriceHistory, ...(job.inquiry?.targetPriceHistory ?? [])]
+    .filter((entry, index, all) => all.findIndex((candidate) => candidate.id === entry.id) === index)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const nextMilestone = timelineMilestones.find((m) => !m.actualAt);
+  const nextMilestoneLabel = nextMilestone
+    ? `${MILESTONE_LABEL[nextMilestone.type] ?? nextMilestone.type}${nextMilestone.plannedAt ? ` · ${fmt(nextMilestone.plannedAt)}` : ""}`
+    : "All clear";
 
   return (
     <div className="workbench-grid">
       {/* LEFT: main workspace stack */}
       <div className="workbench-main">
+        <section className="ops-brief" aria-label="Lead-to-quote desk brief" data-agent-target="job-brief">
+          <div className="ops-brief-copy">
+            <div className="ops-eyebrow">
+              <span className="ops-status-light" aria-hidden />
+              RFQ desk
+            </div>
+            <div className="ops-brief-title">
+              <span>{job.reference}</span>
+              <strong>{job.company?.name ?? "Unassigned customer"}</strong>
+            </div>
+            <div className="ops-brief-meta">
+              <span>{modeLabel}</span>
+              <span>{routeLabel}</span>
+              <span>{STATUS_LABEL[visibleStatus] ?? visibleStatus}</span>
+            </div>
+          </div>
 
-      {/* Compact header */}
-      <div className="card" style={{ marginBottom: 12, padding: "12px 18px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "var(--text-2)", fontFamily: "ui-monospace, Menlo, monospace" }}>
-              {job.reference}
+          <div className="ops-route-visual" aria-hidden="true">
+            <span className="ops-route-label">{job.origin ?? "Origin TBD"}</span>
+            <span className="ops-route-line">
+              <span className="ops-route-port start" />
+              <span className="ops-route-vessel" />
+              <span className="ops-route-port end" />
             </span>
-            <span style={{ fontSize: 12, color: "var(--text-3)" }}>·</span>
+            <span className="ops-route-label right">{job.destination ?? "Destination TBD"}</span>
+          </div>
+
+          <div className="ops-brief-stats">
+            <div className="ops-brief-stat">
+              <span>Target</span>
+              <strong>{targetPriceLabel}</strong>
+            </div>
+            <div className="ops-brief-stat">
+              <span>Forwarders</span>
+              <strong>{receivedQuotes.length}/{carrierQuotes.length}</strong>
+            </div>
+            <div className="ops-brief-stat">
+              <span>Margin</span>
+              <strong>{marginLabel}</strong>
+            </div>
+          </div>
+        </section>
+
+        <DecisionFlowPanel
+          summary={referenceDealSummary}
+          opportunity={opportunity}
+          approvedDocs={approvedDocs}
+          totalDocs={docs.length}
+          targetPriceLabel={targetPriceLabel}
+        />
+
+        <TargetPriceTrail
+          entries={targetPriceTrail}
+          currentLabel={targetPriceLabel}
+          currentSource={job.targetPriceSource}
+          currentStatus={job.targetPriceStatus}
+        />
+
+        <DecisionQueueSection items={attentionItems} brief={decisionBrief} />
+
+      <ReferenceDealSnapshot summary={referenceDealSummary} decisions={referenceDealDecisions} playbook={referenceDealPlaybook} />
+
+      <section className="job-command-panel" aria-label="Focused job" data-agent-target="job-summary">
+        <div className="job-command-main">
+          <div className="job-command-eyebrow">
+            <span className="job-reference">{job.reference}</span>
+            <span className="job-stage-pill">{STATUS_LABEL[visibleStatus] ?? visibleStatus}</span>
+            {opportunity && <OpportunityScorePill score={opportunity} />}
+          </div>
+          <div className="job-command-title-row">
             {job.company ? (
               <CustomerPopover companyId={job.company.id} name={job.company.name} />
             ) : (
-              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Unknown Customer</span>
+              <span className="job-command-customer">Unknown Customer</span>
             )}
-            <span style={{ fontSize: 12, color: "var(--text-3)" }}>·</span>
-            <span style={{ fontSize: 13, color: "var(--text-2)" }}>
-              {job.origin && job.destination ? `${job.origin} → ${job.destination}` : "Route TBD"}
-            </span>
-            {job.mode && (
-              <>
-                <span style={{ fontSize: 12, color: "var(--text-3)" }}>·</span>
-                <span style={{ fontSize: 12, color: "var(--text-3)" }}>{MODE_LABEL[job.mode] ?? job.mode}</span>
-              </>
-            )}
-            {isOverdue && (
-              <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--danger)", border: "1px solid var(--danger-border)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.06em" }}>
-                ETA OVERDUE
-              </span>
-            )}
+            <span className="job-command-route">{routeLabel}</span>
           </div>
+          <div className="job-command-meta">
+            <span>{modeLabel}</span>
+            <span>Target {targetPriceLabel}</span>
+            <span>{carrierQuotes.length} forwarder requests</span>
+          </div>
+        </div>
 
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div className="job-command-actions">
             <CopyPortalLink jobId={job.id} />
             <JobEditPanel
               job={{
@@ -343,21 +884,46 @@ async function _DashboardPageImpl(stageOverride: string | null) {
                 mode: job.mode, origin: job.origin, destination: job.destination,
                 commodity: job.commodity, incoterms: job.incoterms,
                 weight: job.weight, volume: job.volume, packages: job.packages,
-                dimensions: job.dimensions, containerCount: job.containerCount, containerType: job.containerType,
+                dimensions: job.dimensions, stackable: job.stackable, topLoad: job.topLoad,
+                dangerousGoods: job.dangerousGoods, customsBy: job.customsBy,
+                containerCount: job.containerCount, containerType: job.containerType,
                 etd: job.etd, eta: job.eta,
                 revenue: job.revenue, cost: job.cost, currency: job.currency,
+                targetPrice: job.targetPrice, targetCurrency: job.targetCurrency,
+                targetPriceStatus: job.targetPriceStatus, targetPriceSource: job.targetPriceSource,
                 notes: job.notes,
               }}
               companies={companies}
             />
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-              <kbd style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 10, fontWeight: 700, background: "var(--surface-3)", border: "1px solid var(--border)", borderRadius: 3, padding: "1px 5px", color: "var(--text-2)" }}>⌘K</kbd>
-              {" "}switch
+            <span className="job-command-shortcut">
+              <kbd>⌘K</kbd> switch
             </span>
+        </div>
+
+        <div className="job-command-metrics" aria-label="Job summary">
+          <div className="job-command-metric">
+            <span>Target price</span>
+            <strong>{targetPriceLabel}</strong>
+          </div>
+          <div className="job-command-metric">
+            <span>Cost</span>
+            <strong>{costLabel}</strong>
+          </div>
+          <div className="job-command-metric">
+            <span>Margin</span>
+            <strong>{marginLabel}</strong>
+          </div>
+          <div className="job-command-metric">
+            <span>Documents</span>
+            <strong>{approvedDocs}/{docs.length}</strong>
+          </div>
+          <div className="job-command-metric">
+            <span>Next milestone</span>
+            <strong>{nextMilestoneLabel}</strong>
           </div>
         </div>
 
-        <div className="status-pipeline" style={{ marginTop: 12 }}>
+        <div className="status-pipeline job-command-pipeline">
           {STATUS_ORDER.map((s, i) => (
             <div key={s} className={`status-step ${i < currentIdx ? "done" : i === currentIdx ? "current" : ""}`}>
               <span className="status-step-label">{STATUS_LABEL[s]}</span>
@@ -366,25 +932,28 @@ async function _DashboardPageImpl(stageOverride: string | null) {
           ))}
         </div>
 
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--border)", display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+        <div className="job-command-automation">
           <span className="live-dot" aria-hidden />
-          <span style={{ fontWeight: 600, color: "var(--text-2)" }}>Pipeline:</span>
-          <span style={{ color: "var(--text-3)" }}>{NEXT_AUTO[job.status]}</span>
+          <span>Desk status</span>
+          <strong>{NEXT_AUTO[job.status]}</strong>
         </div>
-      </div>
+      </section>
 
-      {/* Horizontal milestone timeline (full width, freight-tracker style) */}
-      <div className="card" style={{ padding: "16px 20px", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-2)" }}>
-            Shipment Timeline
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-            {milestones.filter((m) => m.actualAt).length} of {milestones.length} confirmed
+      {opportunity && (
+        <div data-agent-target="strategy">
+          <OpportunityScoreCard score={opportunity} />
+        </div>
+      )}
+
+      <div className="card workbench-card" data-agent-target="timeline">
+        <div className="workbench-card-header">
+          <div className="workbench-kicker">Deal Timeline</div>
+          <div className="workbench-note small">
+            {timelineMilestones.filter((m) => m.actualAt).length} of {timelineMilestones.length} confirmed
           </div>
         </div>
         <div className="ms-track">
-          {milestones.map((m, i) => {
+          {timelineMilestones.map((m, i) => {
             const isDone = !!m.actualAt;
             const isLate = m.plannedAt && !isDone && new Date(m.plannedAt) < today;
             const dateLabel = isDone ? fmt(m.actualAt) : (m.plannedAt ? fmt(m.plannedAt) : "—");
@@ -418,7 +987,7 @@ async function _DashboardPageImpl(stageOverride: string | null) {
       />
 
       {/* Stage-specific email panel */}
-      <div style={{ marginBottom: 12 }}>
+      <div className="workbench-section">
         <StageEmailPanel
           jobId={job.id}
           status={job.status}
@@ -428,50 +997,47 @@ async function _DashboardPageImpl(stageOverride: string | null) {
         />
       </div>
 
-      {/* Worktable cards — STAGNANT context, collapsible, below the stage area */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="workbench-stack">
           {/* Carrier */}
           <CollapsibleCard
-            title="Carrier"
+            title="Forwarder pricing"
             defaultOpen={false}
+            agentTarget="forwarder-pricing"
             meta={receivedQuotes.length > 0
               ? <span>· {receivedQuotes.length} of {carrierQuotes.length} replied</span>
               : null
             }
           >
-            <div style={{ padding: "10px 16px" }}>
+            <div className="workbench-card-body">
               {!job.inquiry ? (
-                <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>No source RFQ — rates tracked manually.</div>
+                <div className="workbench-empty-line">No source RFQ - pricing tracked manually.</div>
               ) : carrierQuotes.length === 0 ? (
-                <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>No rate requests sent yet.</div>
+                <div className="workbench-empty-line">No forwarder pricing requests sent yet.</div>
               ) : (
-                <div>
+                <div className="workbench-row-list">
                   {carrierQuotes.map((q) => {
                     const total = q.total40HC ?? q.total40 ?? q.total20;
                     const isSelected = job.cost && total === job.cost;
                     return (
-                      <div key={q.id} style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "7px 0", borderBottom: "1px solid var(--border)",
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600 }}>{q.carrier}</div>
-                          <div style={{ fontSize: 10.5, color: "var(--text-3)" }}>
-                            {q.status === "PENDING" ? "Awaiting reply" : `${q.transitDays ? `${q.transitDays}d transit` : "—"}${q.service ? ` · ${q.service}` : ""}`}
+                      <div key={q.id} className="workbench-row">
+                        <div className="workbench-row-main">
+                          <div className="workbench-row-title">{q.carrier}</div>
+                          <div className="workbench-row-sub">
+                            {q.status === "PENDING" ? "Awaiting reply" : `${q.transitDays ? `${q.transitDays}d transit` : "-"}${q.service ? ` - ${q.service}` : ""}`}
                           </div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div className="workbench-row-side">
                           {q.status === "RECEIVED" && total ? (
-                            <span style={{ fontSize: 12.5, fontWeight: 700 }}>${total.toLocaleString()}</span>
+                            <span className="workbench-money">${total.toLocaleString()}</span>
                           ) : (
-                            <span style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic" }}>pending</span>
+                            <span className="workbench-pending">pending</span>
                           )}
                           {isSelected && (
-                            <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "var(--brand)", color: "#fff", letterSpacing: "0.06em" }}>SELECTED</span>
+                            <span className="workbench-selected-badge">SELECTED</span>
                           )}
                           {!isSelected && q.status === "RECEIVED" && (
                             <form action={selectCarrierQuote.bind(null, job.id, q.id)}>
-                              <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 10.5 }}>Select</button>
+                              <button type="submit" className="btn btn-secondary btn-sm">Select</button>
                             </form>
                           )}
                         </div>
@@ -486,36 +1052,38 @@ async function _DashboardPageImpl(stageOverride: string | null) {
           {/* Documents */}
           <CollapsibleCard
             title="Documents"
-            defaultOpen={false}
+            defaultOpen
+            agentTarget="documents"
             meta={<span>· {docs.filter((d) => d.status === "APPROVED").length}/{docs.length} approved</span>}
           >
-            <div style={{ padding: "8px 16px 12px" }}>
+            <div className="workbench-card-body tight">
+              <DocumentReadinessBoard docs={docs} title={`${job.reference} document control`} />
               {docs.map((d) => (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: 4, flexShrink: 0,
-                    background: d.status === "APPROVED" ? "var(--brand)" : "var(--surface-3)",
-                    border: `1px solid ${d.status === "APPROVED" ? "var(--brand)" : "var(--border)"}`,
-                    color: d.status === "APPROVED" ? "#fff" : "var(--text-3)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
+                <div key={d.id} className="workbench-row">
+                  <div className={`workbench-doc-icon${d.status === "APPROVED" ? " approved" : ""}`}>
                     {d.status === "APPROVED" ? <Icon name="check" size={11} strokeWidth={2.5} />
                       : d.status === "UPLOADED" ? <Icon name="chevron-up" size={11} strokeWidth={2.5} />
                       : <Icon name="circle" size={9} strokeWidth={1.5} />}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{d.name}</div>
-                    <div style={{ fontSize: 10.5, color: "var(--text-3)" }}>{DOC_TYPE_LABEL[d.docType] ?? d.docType} · {d.status.toLowerCase()}</div>
+                  <div className="workbench-row-main">
+                    <div className="workbench-row-title">{d.name}</div>
+                    <div className="workbench-row-sub">{DOC_TYPE_LABEL[d.docType] ?? d.docType} - {d.status.toLowerCase()}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 4 }}>
+                  <div className="workbench-actions-inline">
                     {d.status === "PENDING" && (
-                      <form action={updateDocStatus.bind(null, d.id, "UPLOADED")}>
-                        <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 10.5 }}>Mark uploaded</button>
+                      <form action={uploadJobDocument.bind(null, d.id)} className="record-upload-form compact">
+                        <input
+                          type="file"
+                          name="file"
+                          required
+                          accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx,application/pdf,image/*"
+                        />
+                        <button type="submit" className="btn btn-secondary btn-sm">Upload</button>
                       </form>
                     )}
                     {d.status === "UPLOADED" && (
                       <form action={updateDocStatus.bind(null, d.id, "APPROVED")}>
-                        <button type="submit" className="btn btn-sm" style={{ fontSize: 10.5 }}>Approve</button>
+                        <button type="submit" className="btn btn-sm">Approve</button>
                       </form>
                     )}
                   </div>
@@ -528,25 +1096,26 @@ async function _DashboardPageImpl(stageOverride: string | null) {
           <CollapsibleCard
             title="Financials"
             defaultOpen={false}
+            agentTarget="financials"
             meta={
-              <a href={`/api/jobs/${job.id}/quote-pdf`} target="_blank" style={{ fontSize: 10.5, color: "var(--brand)", fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
+              <a href={`/api/jobs/${job.id}/quote-pdf`} target="_blank" className="workbench-link-action">
                 <Icon name="external" size={10} /> Quote PDF
               </a>
             }
           >
-            <div style={{ padding: "12px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div className="workbench-financial-grid">
               <div>
-                <div style={{ fontSize: 9.5, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Revenue</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>{job.revenue ? `$${job.revenue.toLocaleString()}` : "—"}</div>
+                <div className="workbench-stat-label">Revenue</div>
+                <div className="workbench-stat-value">{job.revenue ? `$${job.revenue.toLocaleString()}` : "-"}</div>
               </div>
               <div>
-                <div style={{ fontSize: 9.5, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Cost</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>{job.cost ? `$${job.cost.toLocaleString()}` : "—"}</div>
+                <div className="workbench-stat-label">Cost</div>
+                <div className="workbench-stat-value">{job.cost ? `$${job.cost.toLocaleString()}` : "-"}</div>
               </div>
               <div>
-                <div style={{ fontSize: 9.5, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Margin</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-                  {job.revenue && job.cost ? `${(((job.revenue - job.cost) / job.revenue) * 100).toFixed(1)}%` : "—"}
+                <div className="workbench-stat-label">Margin</div>
+                <div className="workbench-stat-value">
+                  {job.revenue && job.cost ? `${(((job.revenue - job.cost) / job.revenue) * 100).toFixed(1)}%` : "-"}
                 </div>
               </div>
             </div>
@@ -570,6 +1139,159 @@ async function _DashboardPageImpl(stageOverride: string | null) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Stage-specific deep work surface (the "open the relevant page underneath")
 // ─────────────────────────────────────────────────────────────────────────────
+
+function formatUsd(value: number) {
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function referenceDecisionClass(stage: string) {
+  return stage.toLowerCase().replace(/_/g, "-");
+}
+
+function ReferenceDealSnapshot({
+  summary,
+  decisions,
+  playbook,
+}: {
+  summary: ReferenceDealSummary;
+  decisions: ReferenceDealDecision[];
+  playbook: ReferenceDealOperatorPlaybook;
+}) {
+  const statusLabels = {
+    BOOKED: "Booked",
+    PRICING: "Pricing",
+    SPECULATION: "Speculation",
+    MISSED: "Missed",
+  };
+  const statusTotal = Math.max(1, Object.values(summary.byStatus).reduce((sum, count) => sum + count, 0));
+
+  return (
+    <section className="sheet-snapshot" data-agent-target="reference-deals">
+      <div className="sheet-snapshot-header">
+        <div>
+          <div className="sheet-kicker">Control sheet decision board</div>
+          <h2>Where the next RFQ money is</h2>
+        </div>
+        <div className="sheet-total">
+          <strong>{summary.activeRows}</strong>
+          <span>active rows</span>
+        </div>
+      </div>
+
+      <div className="sheet-metrics">
+        <div>
+          <span>Known contract</span>
+          <strong>{formatUsd(summary.knownContractUsd)}</strong>
+        </div>
+        <div>
+          <span>Known profit</span>
+          <strong>{formatUsd(summary.knownProfitUsd)}</strong>
+        </div>
+        <div>
+          <span>Monthly rows</span>
+          <strong>{summary.monthlyRows}</strong>
+        </div>
+        <div>
+          <span>Bad freight rows</span>
+          <strong>{summary.hygiene.incompleteFreightRows}</strong>
+        </div>
+      </div>
+
+      <div className="sheet-playbook" data-agent-target="reference-deal-playbook">
+        <div className="sheet-playbook-main">
+          <div className="sheet-section-label">Operator playbook</div>
+          <strong>{playbook.headline}</strong>
+          <span>{playbook.firstMove}</span>
+          <em>{playbook.safetyRule}</em>
+        </div>
+        <div className="sheet-playbook-counts" aria-label="Control sheet decision counts">
+          <div>
+            <span>RFQ candidates</span>
+            <strong>{playbook.decisionCounts.rfqCandidates}</strong>
+          </div>
+          <div>
+            <span>Need facts</span>
+            <strong>{playbook.decisionCounts.blockedForFacts}</strong>
+          </div>
+          <div>
+            <span>Non-RFQ</span>
+            <strong>{playbook.decisionCounts.nonRfqContext}</strong>
+          </div>
+          <div>
+            <span>Proof / loss</span>
+            <strong>{playbook.decisionCounts.bookedProof + playbook.decisionCounts.lossEvidence}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div className="sheet-status-map">
+        {Object.entries(summary.byStatus).map(([status, count]) => (
+          <div key={status} className={`sheet-status-row ${status.toLowerCase()}`}>
+            <span>{statusLabels[status as keyof typeof statusLabels]}</span>
+            <div>
+              <i style={{ width: `${Math.max(6, Math.round((count / statusTotal) * 100))}%` }} />
+            </div>
+            <strong>{count}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="sheet-body-grid">
+        <div className="sheet-top-list">
+          <div className="sheet-section-label">Highest-value decision rows</div>
+          {decisions.slice(0, 5).map((deal, index) => {
+            const decisionClass = referenceDecisionClass(deal.decision.stage);
+            return (
+            <div
+              key={deal.dealId}
+              className={`sheet-deal-row ${decisionClass}`}
+              data-agent-target={`reference-deal-row reference-deal-${decisionClass}${index === 0 ? " reference-deal-top" : ""}`}
+            >
+              <div className="sheet-deal-score">
+                {deal.tone === "critical" ? "Critical" : deal.tone === "high" ? "High" : "Normal"}
+              </div>
+              <div className="sheet-deal-main">
+                <strong>{deal.title}</strong>
+                <span>{deal.meta}</span>
+                <em>{deal.decision.command}</em>
+              </div>
+              <div className="sheet-deal-side">
+                <strong>{deal.decision.stageLabel}</strong>
+                <span>{deal.decision.evidenceGaps.length ? deal.decision.evidenceGaps.slice(0, 3).join(", ") : "proof clear"}</span>
+                <em>{deal.decision.stopRule}</em>
+              </div>
+              {deal.decision.canCreateRfq ? (
+                <form action={createRfqFromReferenceDeal} className="sheet-deal-action">
+                  <input type="hidden" name="dealId" value={deal.dealId} />
+                  <button type="submit">{operatorToolLabel("prepare_control_sheet_rfq")}</button>
+                </form>
+              ) : (
+                <div className="sheet-deal-action sheet-deal-action-disabled">
+                  <span>{operatorToolLabel("inspect_control_sheet")}</span>
+                </div>
+              )}
+            </div>
+            );
+          })}
+        </div>
+
+        <div className="sheet-contact-list">
+          <div className="sheet-section-label">Where the money is clustered</div>
+          {summary.byContact.slice(0, 3).map((contact) => (
+            <div key={contact.contact} className="sheet-contact-row">
+              <strong>{contact.contact}</strong>
+              <span>{contact.count} rows</span>
+              <em>{formatUsd(contact.knownProfitUsd)}</em>
+            </div>
+          ))}
+          <div className="sheet-hygiene-note">
+            {summary.hygiene.missingProfitRows} rows have unknown profit; {summary.hygiene.missingOriginDestinationRows} freight rows lack a full lane.
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 type AnyJob = Awaited<ReturnType<typeof prisma.job.findFirst>>;
 type AnyCarrierQuote = NonNullable<NonNullable<AnyJob>>;
@@ -597,38 +1319,37 @@ function StageWorkbench({
   // Use the URL-overridden stage if set; otherwise the job's actual status.
   // This lets the operator preview any stage's workbench (carrier rates,
   // documents, etc) without changing the job's lifecycle.
-  const actualStatus = job.status;
-  const status = stageOverride ?? job.status;
+  const actualStatus = job.status === "CUSTOMS" ? "IN_TRANSIT" : job.status;
+  const status = stageOverride ?? actualStatus;
   const isPreview = !!stageOverride && stageOverride !== actualStatus;
 
   // Header strip + stage-specific content
   const STAGE_TITLES: Record<string, { title: string; sub: string }> = {
     INQUIRY:    { title: "Source RFQ & rate procurement",   sub: "What an inquiry needs: parsed fields, then carrier rate sourcing." },
     QUOTED:     { title: "Sellside quote builder",           sub: "Build the customer-facing quote. Send when ready." },
-    BOOKED:     { title: "Booking & document checklist",     sub: "Confirm with carrier, prepare shipping documents." },
-    IN_TRANSIT: { title: "In-transit tracking",              sub: "Watch milestones, address exceptions." },
-    CUSTOMS:    { title: "Customs clearance",                sub: "Customs declaration, BL, COO. Release the cargo." },
+    BOOKED:     { title: "Booked / waiting cargo",           sub: "Confirm booking details and wait for cargo readiness." },
+    IN_TRANSIT: { title: "En route",                         sub: "Use email updates as the source of truth until delivery." },
     DELIVERED:  { title: "Settlement",                       sub: "Final invoice, margin reconciliation." },
   };
   const stage = STAGE_TITLES[status] ?? { title: "Workbench", sub: "" };
 
-  const STAGE_KEYS = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"] as const;
+  const STAGE_KEYS = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"] as const;
   return (
-    <div style={{ marginTop: 14 }}>
-      <div className="workbench-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 4 }}>
-            Stage workbench · {STATUS_LABEL[status]}
+    <div className="stage-shell" data-agent-target="stage-workbench">
+      <div className="stage-header">
+        <div className="stage-heading">
+          <div className="stage-eyebrow">
+            Stage workbench · {STATUS_LABEL[status] ?? status}
             {isPreview && (
-              <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 3, background: "var(--brand-light)", color: "var(--brand)", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em" }}>
-                PREVIEW · job is {STATUS_LABEL[actualStatus]}
+              <span className="stage-preview-pill">
+                Preview · job is {STATUS_LABEL[actualStatus] ?? actualStatus}
               </span>
             )}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{stage.title}</div>
-          <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{stage.sub}</div>
+          <div className="stage-title">{stage.title}</div>
+          <div className="stage-subtitle">{stage.sub}</div>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: 3, borderRadius: 4, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+        <div className="stage-switcher" role="tablist" aria-label="Workbench stage">
           {STAGE_KEYS.map((s) => {
             const isActive = s === status;
             const isReal = s === actualStatus;
@@ -638,17 +1359,12 @@ function StageWorkbench({
                 key={s}
                 href={href}
                 title={isReal ? "Job is at this stage" : `Preview ${STATUS_LABEL[s]} workbench (doesn't change status)`}
-                style={{
-                  fontSize: 10.5, fontWeight: 600, padding: "5px 9px", borderRadius: 3,
-                  background: isActive ? "var(--surface)" : "transparent",
-                  color: isActive ? "var(--text)" : "var(--text-3)",
-                  border: isActive ? "1px solid var(--border)" : "1px solid transparent",
-                  textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase",
-                  display: "inline-flex", alignItems: "center", gap: 4,
-                }}
+                className={`stage-tab${isActive ? " active" : ""}${isReal ? " current" : ""}`}
+                role="tab"
+                aria-selected={isActive}
               >
                 {isReal && (
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)", display: "inline-block" }} aria-hidden />
+                  <span className="stage-real-dot" aria-hidden />
                 )}
                 {STATUS_LABEL[s]}
               </a>
@@ -664,7 +1380,7 @@ function StageWorkbench({
       {status === "QUOTED" && (
         <QuotedStage job={job} quoteLines={quoteLines} laneRates={laneRates} carrierQuotes={carrierQuotes} />
       )}
-      {(status === "BOOKED" || status === "CUSTOMS") && (
+        {status === "BOOKED" && (
         <DocumentsStage job={job} docs={docs} />
       )}
       {status === "IN_TRANSIT" && (
@@ -679,68 +1395,78 @@ function StageWorkbench({
 
 function InquiryStage({ job, carrierQuotes, receivedQuotes, laneRates }: { job: any; carrierQuotes: any[]; receivedQuotes: any[]; laneRates: any[] }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="workbench-stack">
       {laneRates.length > 0 && <LaneRatesPanel laneRates={laneRates} />}
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    <div className="workbench-grid-2">
       {/* Source RFQ */}
-      <div className="card">
-        <div className="worktable-section-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="card" data-agent-target="source-rfq">
+        <div className="worktable-section-header split">
           <span>Source RFQ</span>
           {job.inquiry && (
-            <a href={`/dashboard/rfq/${job.inquiry.id}`} style={{ fontSize: 11, color: "var(--brand)", fontWeight: 500, textDecoration: "none" }}>
-              Open RFQ →
+            <a href={`/dashboard/rfq/${job.inquiry.id}`} className="workbench-link-action">
+              Open RFQ
             </a>
           )}
         </div>
-        <div style={{ padding: 16 }}>
+        <div className="workbench-card-body">
           {job.inquiry ? (
             <>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{job.inquiry.subject}</div>
-              <div style={{ fontSize: 11.5, color: "var(--text-3)", marginBottom: 12 }}>
-                From {job.inquiry.fromEmail ?? job.inquiry.fromCompany ?? "Unknown"} · {new Date(job.inquiry.receivedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              <div className="stage-source-title">{job.inquiry.subject}</div>
+              <div className="stage-source-meta">
+                From {job.inquiry.fromEmail ?? job.inquiry.fromCompany ?? "Unknown"} - {new Date(job.inquiry.receivedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
               </div>
               {job.inquiry.rawEmailBody && (
-                <div style={{
-                  fontSize: 12, lineHeight: 1.55, color: "var(--text-2)",
-                  background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6,
-                  padding: 12, maxHeight: 200, overflowY: "auto", whiteSpace: "pre-wrap",
-                  fontFamily: "ui-monospace, Menlo, monospace",
-                }}>
+                <div className="stage-email-raw">
                   {job.inquiry.rawEmailBody}
                 </div>
               )}
             </>
           ) : (
-            <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>No source RFQ — this job was created manually.</div>
+            <div className="workbench-empty-line">No source RFQ - this job was created manually.</div>
           )}
         </div>
       </div>
 
       {/* Carrier rate procurement */}
-      <div className="card">
-        <div className="worktable-section-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="card" data-agent-target="carrier-rates">
+        <div className="worktable-section-header split">
           <span>Carrier Rates ({receivedQuotes.length}/{carrierQuotes.length})</span>
           {receivedQuotes.length > 0 && (
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+            <span className="workbench-note small">
               Best: ${Math.min(...receivedQuotes.map((q: any) => q.total40HC ?? q.total40 ?? q.total20 ?? Infinity)).toLocaleString()}
             </span>
           )}
         </div>
-        <div style={{ padding: 4 }}>
-          {carrierQuotes.length === 0 ? (
-            <div style={{ padding: 16, fontSize: 12.5, color: "var(--text-3)" }}>
-              No rate requests sent yet. Use the agent to send rate requests to carriers.
+        <div className="workbench-card-body flush">
+          {!job.inquiry ? (
+            <div className="workbench-card-body">
+              No source RFQ is linked to this job yet.
+            </div>
+          ) : carrierQuotes.length === 0 ? (
+            <div className="workbench-card-body">
+              <div className="workbench-empty-line quote-empty">
+                No carrier replies yet. Add the first received rate here; rate-request drafting lives in the email panel below.
+              </div>
+              <form action={addCarrierQuote.bind(null, job.inquiry.id)} className="stage-rate-form">
+                <input name="carrier" required placeholder="Carrier" />
+                <input name="service" placeholder="Service" />
+                <input name="total40HC" type="number" placeholder="40HC rate" />
+                <input name="transit" type="number" placeholder="Transit days" />
+                <input name="validity" placeholder="Validity" />
+                <button type="submit" className="btn btn-secondary btn-sm">Add rate</button>
+              </form>
             </div>
           ) : (
-            <table style={{ marginBottom: 0 }}>
+            <div className="stage-table-wrap">
+            <table className="stage-table">
               <thead>
                 <tr>
                   <th>Carrier</th>
-                  <th style={{ textAlign: "right" }}>20'</th>
-                  <th style={{ textAlign: "right" }}>40'</th>
-                  <th style={{ textAlign: "right" }}>40HC</th>
-                  <th style={{ textAlign: "right" }}>Transit</th>
-                  <th style={{ textAlign: "right" }}>Status</th>
+                  <th className="right">20'</th>
+                  <th className="right">40'</th>
+                  <th className="right">40HC</th>
+                  <th className="right">Transit</th>
+                  <th className="right">Status</th>
                   <th></th>
                 </tr>
               </thead>
@@ -755,29 +1481,25 @@ function InquiryStage({ job, carrierQuotes, receivedQuotes, laneRates }: { job: 
                   return carrierQuotes.map((q: any) => {
                     const isCheapest = cheapestId === q.id;
                     return (
-                      <tr key={q.id} style={isCheapest ? { background: "var(--brand-light)" } : undefined}>
-                        <td style={{ fontWeight: 600 }}>
+                      <tr key={q.id} className={isCheapest ? "recommended" : undefined}>
+                        <td className="strong">
                           {q.carrier}
                           {isCheapest && (
-                            <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "var(--brand)", color: "#fff", letterSpacing: "0.06em" }}>
+                            <span className="workbench-selected-badge inline">
                               BEST
                             </span>
                           )}
                         </td>
-                        <td style={{ textAlign: "right" }}>{q.total20 ? `$${q.total20.toLocaleString()}` : "—"}</td>
-                        <td style={{ textAlign: "right" }}>{q.total40 ? `$${q.total40.toLocaleString()}` : "—"}</td>
-                        <td style={{ textAlign: "right", fontWeight: 700 }}>{q.total40HC ? `$${q.total40HC.toLocaleString()}` : "—"}</td>
-                        <td style={{ textAlign: "right", color: "var(--text-3)" }}>{q.transitDays ? `${q.transitDays}d` : "—"}</td>
-                        <td style={{ textAlign: "right" }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 3,
-                            background: q.status === "RECEIVED" ? "var(--brand-light)" : "var(--surface-3)",
-                            color: q.status === "RECEIVED" ? "var(--brand)" : "var(--text-3)",
-                            border: "1px solid",
-                            borderColor: q.status === "RECEIVED" ? "var(--brand-border)" : "var(--border)",
-                          }}>{q.status === "RECEIVED" ? "REPLIED" : "PENDING"}</span>
+                        <td className="right money">{q.total20 ? `$${q.total20.toLocaleString()}` : "-"}</td>
+                        <td className="right money">{q.total40 ? `$${q.total40.toLocaleString()}` : "-"}</td>
+                        <td className="right money strong">{q.total40HC ? `$${q.total40HC.toLocaleString()}` : "-"}</td>
+                        <td className="right muted">{q.transitDays ? `${q.transitDays}d` : "-"}</td>
+                        <td className="right">
+                          <span className={`workbench-status-badge${q.status === "RECEIVED" ? " received" : ""}`}>
+                            {q.status === "RECEIVED" ? "REPLIED" : "PENDING"}
+                          </span>
                         </td>
-                        <td style={{ textAlign: "right" }}>
+                        <td className="right">
                           {q.status === "RECEIVED" && (
                             <CounterOfferButton jobId={job.id} carrierQuoteId={q.id} carrierName={q.carrier} />
                           )}
@@ -788,6 +1510,7 @@ function InquiryStage({ job, carrierQuotes, receivedQuotes, laneRates }: { job: 
                 })()}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
@@ -819,38 +1542,38 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="workbench-stack">
       {/* Carrier rate aggregation table (same shape as the Lane Prices page) */}
-      <div className="card" style={{ overflow: "hidden" }}>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="card stage-panel" data-agent-target="carrier-rates">
+        <div className="worktable-section-header split">
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Carrier rates received</div>
-            <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
+            <div className="stage-panel-title">Carrier rates received</div>
+            <div className="stage-panel-subtitle">
               Aggregated quotes for this load. Cheapest 40HC flagged. Click Use this rate to seed the customer-facing quote.
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 12, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-3)" }}>Pending: {pending.length}</span>
-            <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 9px", borderRadius: 12, background: "var(--brand-light)", color: "var(--brand)", border: "1px solid var(--brand-border)" }}>Received: {received.length}</span>
+          <div className="workbench-count-row">
+            <span className="workbench-count-pill">Pending: {pending.length}</span>
+            <span className="workbench-count-pill received">Received: {received.length}</span>
           </div>
         </div>
         {received.length === 0 ? (
-          <div style={{ padding: 24, fontSize: 12.5, color: "var(--text-3)", textAlign: "center" }}>
+          <div className="workbench-card-body center">
             No carrier rate replies on this load yet.
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+          <div className="stage-table-wrap">
+            <table className="stage-table">
               <thead>
-                <tr style={{ background: "var(--surface-2)", color: "var(--text-3)", textAlign: "left" }}>
-                  <th style={qThStyle}>Carrier</th>
-                  <th style={qThStyle}>Service</th>
-                  <th style={{ ...qThStyle, textAlign: "right" }}>20DRY</th>
-                  <th style={{ ...qThStyle, textAlign: "right" }}>40DRY</th>
-                  <th style={{ ...qThStyle, textAlign: "right" }}>40HC</th>
-                  <th style={{ ...qThStyle, textAlign: "center" }}>Transit</th>
-                  <th style={qThStyle}>Validity</th>
-                  <th style={qThStyle}> </th>
+                <tr>
+                  <th>Carrier</th>
+                  <th>Service</th>
+                  <th className="right">20DRY</th>
+                  <th className="right">40DRY</th>
+                  <th className="right">40HC</th>
+                  <th className="center">Transit</th>
+                  <th>Validity</th>
+                  <th> </th>
                 </tr>
               </thead>
               <tbody>
@@ -859,34 +1582,30 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
                   const seedDescription = `Ocean Freight — ${q.carrier}${q.service ? ` (${q.service})` : ""}`;
                   const seedAmount = q.total40HC ?? q.total40 ?? q.total20 ?? 0;
                   return (
-                    <tr key={q.id} style={{
-                      borderTop: "1px solid var(--border)",
-                      background: isRec ? "var(--brand-light)" : "transparent",
-                      borderLeft: isRec ? "3px solid var(--brand)" : "3px solid transparent",
-                    }}>
-                      <td style={qTdStyle}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--surface-3)", color: "var(--text-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>
+                    <tr key={q.id} className={isRec ? "recommended" : undefined}>
+                      <td>
+                        <div className="stage-carrier-lockup">
+                          <div className="stage-carrier-avatar">
                             {initials(q.carrier)}
                           </div>
                           <div>
-                            <div style={{ fontWeight: 600 }}>{q.carrier}</div>
-                            {isRec && <div style={{ fontSize: 10, color: "var(--brand)", fontWeight: 700, marginTop: 1 }}>● BEST 40HC</div>}
+                            <div className="stage-carrier-name">{q.carrier}</div>
+                            {isRec && <div className="stage-best-note">Best 40HC</div>}
                           </div>
                         </div>
                       </td>
-                      <td style={{ ...qTdStyle, color: "var(--text-3)" }}>{q.service ?? "—"}</td>
-                      <td style={{ ...qTdStyle, textAlign: "right", fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600 }}>{q.total20 ? `$${q.total20.toLocaleString()}` : "—"}</td>
-                      <td style={{ ...qTdStyle, textAlign: "right", fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600 }}>{q.total40 ? `$${q.total40.toLocaleString()}` : "—"}</td>
-                      <td style={{ ...qTdStyle, textAlign: "right", fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 700, color: isRec ? "var(--brand)" : "var(--text)" }}>{q.total40HC ? `$${q.total40HC.toLocaleString()}` : "—"}</td>
-                      <td style={{ ...qTdStyle, textAlign: "center", color: "var(--text-3)" }}>{q.transitDays ? `${q.transitDays}d` : "—"}</td>
-                      <td style={{ ...qTdStyle, color: "var(--text-3)" }}>{q.validity ?? "—"}</td>
-                      <td style={qTdStyle}>
+                      <td className="muted">{q.service ?? "-"}</td>
+                      <td className="right money">{q.total20 ? `$${q.total20.toLocaleString()}` : "-"}</td>
+                      <td className="right money">{q.total40 ? `$${q.total40.toLocaleString()}` : "-"}</td>
+                      <td className={`right money strong${isRec ? " brand" : ""}`}>{q.total40HC ? `$${q.total40HC.toLocaleString()}` : "-"}</td>
+                      <td className="center muted">{q.transitDays ? `${q.transitDays}d` : "-"}</td>
+                      <td className="muted">{q.validity ?? "-"}</td>
+                      <td>
                         <form action={addQuoteLine.bind(null, job.id)}>
                           <input type="hidden" name="description" value={seedDescription} />
                           <input type="hidden" name="amount" value={seedAmount} />
                           <input type="hidden" name="currency" value="USD" />
-                          <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 10.5, whiteSpace: "nowrap" }}>
+                          <button type="submit" className="btn btn-secondary btn-sm stage-nowrap">
                             Use this rate
                           </button>
                         </form>
@@ -903,51 +1622,53 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
       {laneRates.length > 0 && <LaneRatesPanel laneRates={laneRates} />}
 
       {/* Customer-facing quote builder */}
-      <div className="card">
-        <div className="worktable-section-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span>Customer quote — {job.reference}</span>
-          <div style={{ display: "flex", gap: 6 }}>
-            <a href={`/api/jobs/${job.id}/quote-pdf`} target="_blank" className="btn btn-secondary btn-sm" style={{ fontSize: 11.5, textDecoration: "none" }}>
+      <div className="card" data-agent-target="customer-quote">
+        <div className="worktable-section-header split">
+          <span>Customer quote - {job.reference}</span>
+          <div className="workbench-actions-inline">
+            <a href={`/api/jobs/${job.id}/quote-pdf`} target="_blank" className="btn btn-secondary btn-sm">
               Preview PDF
             </a>
-            <button className="btn btn-sm" type="button" disabled style={{ fontSize: 11.5 }} title="Coming soon">Send to customer</button>
+            <a href="#job-email" className="btn btn-sm">
+              Compose customer email
+            </a>
           </div>
         </div>
-        <div style={{ padding: 16 }}>
+        <div className="workbench-card-body">
           {quoteLines.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 14 }}>
+            <div className="workbench-empty-line quote-empty">
               No line items yet. Click <strong>Use this rate</strong> on a carrier above, or add a line manually below.
             </div>
           ) : (
-            <table style={{ marginBottom: 14, width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table className="stage-table quote-lines">
               <thead>
-                <tr style={{ background: "var(--surface-2)", color: "var(--text-3)", textAlign: "left" }}>
-                  <th style={qThStyle}>Description</th>
-                  <th style={{ ...qThStyle, textAlign: "right" }}>Amount</th>
-                  <th style={qThStyle}>Cur</th>
+                <tr>
+                  <th>Description</th>
+                  <th className="right">Amount</th>
+                  <th>Cur</th>
                 </tr>
               </thead>
               <tbody>
                 {quoteLines.map((l, i) => (
-                  <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
-                    <td style={qTdStyle}>{l.desc}</td>
-                    <td style={{ ...qTdStyle, textAlign: "right", fontWeight: 600 }}>{l.amount.toLocaleString()}</td>
-                    <td style={{ ...qTdStyle, color: "var(--text-3)" }}>{l.cur}</td>
+                  <tr key={i}>
+                    <td>{l.desc}</td>
+                    <td className="right strong">{l.amount.toLocaleString()}</td>
+                    <td className="muted">{l.cur}</td>
                   </tr>
                 ))}
-                <tr style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border-strong)" }}>
-                  <td style={{ ...qTdStyle, fontWeight: 700 }}>Total</td>
-                  <td style={{ ...qTdStyle, textAlign: "right", fontWeight: 800 }}>{total.toLocaleString()}</td>
-                  <td style={{ ...qTdStyle, color: "var(--text-3)" }}>{quoteLines[0]?.cur ?? "USD"}</td>
+                <tr className="total">
+                  <td className="strong">Total</td>
+                  <td className="right strong">{total.toLocaleString()}</td>
+                  <td className="muted">{quoteLines[0]?.cur ?? "USD"}</td>
                 </tr>
               </tbody>
             </table>
           )}
-          <form action={addQuoteLine.bind(null, job.id)} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8 }}>
+          <form action={addQuoteLine.bind(null, job.id)} className="stage-quote-form">
             <input name="description" placeholder="Description (e.g. Documentation, customs clearance)" required />
             <input name="amount" type="number" placeholder="Amount" required />
             <select name="currency" defaultValue="USD"><option>USD</option><option>EUR</option><option>TRY</option><option>GBP</option></select>
-            <button className="btn btn-secondary btn-sm" type="submit" style={{ fontSize: 12 }}>Add line</button>
+            <button className="btn btn-secondary btn-sm" type="submit">Add line</button>
           </form>
         </div>
       </div>
@@ -955,42 +1676,41 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
   );
 }
 
-const qThStyle: React.CSSProperties = { padding: "10px 14px", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" };
-const qTdStyle: React.CSSProperties = { padding: "12px 14px", verticalAlign: "middle" };
-
 function LaneRatesPanel({ laneRates }: { laneRates: any[] }) {
   return (
-    <div className="card">
-      <div className="worktable-section-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span>Standard Lane Rates · {laneRates.length} match{laneRates.length === 1 ? "" : "es"} for this lane</span>
-        <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 500 }}>From your rate library</span>
+    <div className="card" data-agent-target="lane-rates">
+      <div className="worktable-section-header split">
+        <span>Standard Lane Rates - {laneRates.length} match{laneRates.length === 1 ? "" : "es"} for this lane</span>
+        <span className="workbench-note small">From your rate library</span>
       </div>
-      <div style={{ padding: 4 }}>
-        <table style={{ marginBottom: 0 }}>
+      <div className="workbench-card-body flush">
+        <div className="stage-table-wrap">
+        <table className="stage-table">
           <thead>
             <tr>
               <th>Lane</th>
               <th>Mode</th>
-              <th style={{ textAlign: "right" }}>Base rate</th>
-              <th style={{ textAlign: "right" }}>Valid</th>
+              <th className="right">Base rate</th>
+              <th className="right">Valid</th>
               <th>Notes</th>
             </tr>
           </thead>
           <tbody>
             {laneRates.map((r) => (
               <tr key={r.id}>
-                <td style={{ fontWeight: 600 }}>{r.origin} → {r.destination}</td>
-                <td style={{ color: "var(--text-3)" }}>{r.mode}</td>
-                <td style={{ textAlign: "right", fontWeight: 700 }}>{r.currency} {r.baseAmount.toLocaleString()}</td>
-                <td style={{ textAlign: "right", color: "var(--text-3)", fontSize: 11 }}>
+                <td className="strong">{r.origin} to {r.destination}</td>
+                <td className="muted">{r.mode}</td>
+                <td className="right strong">{r.currency} {r.baseAmount.toLocaleString()}</td>
+                <td className="right muted">
                   {new Date(r.validFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}
-                  {r.validTo ? ` – ${new Date(r.validTo).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}` : ""}
+                  {r.validTo ? ` - ${new Date(r.validTo).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}` : ""}
                 </td>
-                <td style={{ color: "var(--text-3)", fontSize: 11 }}>{r.notes ?? "—"}</td>
+                <td className="muted">{r.notes ?? "-"}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -999,10 +1719,11 @@ function LaneRatesPanel({ laneRates }: { laneRates: any[] }) {
 function DocumentsStage({ job, docs }: { job: any; docs: any[] }) {
   const approved = docs.filter((d) => d.status === "APPROVED").length;
   return (
-    <div className="card">
+    <div className="card" data-agent-target="documents">
       <div className="worktable-section-header">
         Documents · {approved}/{docs.length} approved
       </div>
+      <DocumentReadinessBoard docs={docs} title={`${job.reference} document control`} />
       <div>
         {docs.map((d) => {
           let flags: string[] = [];
@@ -1010,72 +1731,72 @@ function DocumentsStage({ job, docs }: { job: any; docs: any[] }) {
           if (d.aiFlags) { try { const x = JSON.parse(d.aiFlags); if (Array.isArray(x)) flags = x.filter((y: unknown) => typeof y === "string") as string[]; } catch {} }
           if (d.aiKeyFields) { try { const x = JSON.parse(d.aiKeyFields); if (x && typeof x === "object") keyFields = x; } catch {} }
           return (
-          <div key={d.id} style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 4, flexShrink: 0,
-                  background: d.status === "APPROVED" ? "var(--brand)" : "var(--surface-3)",
-                  border: `1px solid ${d.status === "APPROVED" ? "var(--brand)" : "var(--border)"}`,
-                  color: d.status === "APPROVED" ? "#fff" : "var(--text-3)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
+          <div key={d.id} className="document-stage-row">
+            <div className="document-stage-top">
+              <div className="document-stage-main">
+                <div className={`workbench-doc-icon${d.status === "APPROVED" ? " approved" : ""}`}>
                   {d.status === "APPROVED" ? <Icon name="check" size={14} strokeWidth={2.5} />
                     : d.status === "UPLOADED" ? <Icon name="chevron-up" size={13} strokeWidth={2.5} />
                     : <Icon name="circle" size={11} strokeWidth={1.5} />}
                 </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{d.name}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                    {DOC_TYPE_LABEL[d.docType] ?? d.docType} · {d.status.toLowerCase()}
-                    {d.aiAnalyzedAt && <span style={{ marginLeft: 6, color: "var(--brand)" }}>· AI commented</span>}
+                <div className="document-stage-copy">
+                  <div className="document-stage-title">{d.name}</div>
+                  <div className="document-stage-meta">
+                    {DOC_TYPE_LABEL[d.docType] ?? d.docType} - {d.status.toLowerCase()}
+                    {d.aiAnalyzedAt && <span>AI commented</span>}
                   </div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <div className="workbench-actions-inline">
                 {d.url && d.status !== "PENDING" && (
                   <DocumentViewer documentId={d.id} name={d.name} status={d.status} />
                 )}
                 {d.status === "PENDING" && (
-                  <form action={updateDocStatus.bind(null, d.id, "UPLOADED")}>
-                    <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11.5 }}>Mark uploaded</button>
+                  <form action={uploadJobDocument.bind(null, d.id)} className="record-upload-form compact">
+                    <input
+                      type="file"
+                      name="file"
+                      required
+                      accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx,application/pdf,image/*"
+                    />
+                    <button type="submit" className="btn btn-secondary btn-sm">Upload</button>
                   </form>
                 )}
                 {d.status === "UPLOADED" && (
                   <form action={updateDocStatus.bind(null, d.id, "APPROVED")}>
-                    <button type="submit" className="btn btn-sm" style={{ fontSize: 11.5 }}>Approve</button>
+                    <button type="submit" className="btn btn-sm">Approve</button>
                   </form>
                 )}
               </div>
             </div>
             {(d.aiSummary || flags.length > 0) && (
-              <div style={{ marginTop: 8, marginLeft: 40, padding: "8px 10px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 4 }}>
+              <div className="document-ai-block">
                 {d.aiSummary && (
-                  <div style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-                    <span style={{ fontWeight: 700, color: "var(--brand)", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 9.5, marginRight: 6 }}>AI</span>
+                  <div className="document-ai-summary">
+                    <span>AI</span>
                     {d.aiSummary}
                   </div>
                 )}
                 {flags.length > 0 && (
-                  <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                  <div className="document-flag-list">
                     {flags.map((f: string, i: number) => (
-                      <div key={i} style={{ fontSize: 11, color: "var(--danger)", display: "flex", gap: 6 }}>
+                      <div key={i} className="document-flag-row">
                         <Icon name="alert" size={11} /><span>{f}</span>
                       </div>
                     ))}
                   </div>
                 )}
                 {Object.keys(keyFields).length > 0 && (
-                  <details style={{ marginTop: 6 }}>
-                    <summary style={{ fontSize: 10.5, color: "var(--text-3)", cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  <details className="document-fields">
+                    <summary>
                       Extracted fields ({Object.keys(keyFields).length})
                     </summary>
-                    <div style={{ marginTop: 4, display: "grid", gridTemplateColumns: "max-content 1fr", gap: "2px 10px", fontSize: 11 }}>
+                    <div className="document-field-grid">
                       {Object.entries(keyFields).map(([k, v]) => (
-                        <React.Fragment key={k}>
-                          <span style={{ color: "var(--text-3)" }}>{k}</span>
-                          <span style={{ color: "var(--text)" }}>{Array.isArray(v) ? v.join(", ") : String(v)}</span>
-                        </React.Fragment>
+                        <Fragment key={k}>
+                          <span>{k}</span>
+                          <strong>{Array.isArray(v) ? v.join(", ") : String(v)}</strong>
+                        </Fragment>
                       ))}
                     </div>
                   </details>
@@ -1094,43 +1815,41 @@ function InTransitStage({ job, docs, carrierQuotes }: { job: any; docs: any[]; c
   const selected = carrierQuotes.find((q: any) => q.status === "RECEIVED" && (q.total40HC === job.cost || q.total40 === job.cost || q.total20 === job.cost)) ?? carrierQuotes.find((q: any) => q.status === "RECEIVED");
   const received = carrierQuotes.filter((q: any) => q.status === "RECEIVED");
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div className="card">
-          <div className="worktable-section-header">Transit details</div>
-          <div style={{ padding: 16, display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 8, columnGap: 16, fontSize: 12.5 }}>
-            <span style={{ color: "var(--text-3)" }}>ETD</span>
-            <span style={{ fontWeight: 600 }}>{job.etd ? new Date(job.etd).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
-            <span style={{ color: "var(--text-3)" }}>ETA</span>
-            <span style={{ fontWeight: 600 }}>{job.eta ? new Date(job.eta).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
-            <span style={{ color: "var(--text-3)" }}>Carrier</span>
-            <span style={{ fontWeight: 600 }}>{selected?.carrier ?? "—"}</span>
-            <span style={{ color: "var(--text-3)" }}>Service</span>
-            <span style={{ fontWeight: 600 }}>{selected?.service ?? "—"}</span>
-            <span style={{ color: "var(--text-3)" }}>Transit</span>
-            <span style={{ fontWeight: 600 }}>{selected?.transitDays ? `${selected.transitDays} days` : "—"}</span>
+    <div className="workbench-stack">
+      <div className="workbench-grid-2">
+        <div className="card" data-agent-target="movement">
+          <div className="worktable-section-header">Email-tracked movement</div>
+          <div className="stage-detail-grid">
+            <span>Carrier</span>
+            <span>{selected?.carrier ?? "-"}</span>
+            <span>Service</span>
+            <span>{selected?.service ?? "-"}</span>
+            <span>Transit</span>
+            <span>{selected?.transitDays ? `${selected.transitDays} days` : "-"}</span>
+            <span>Updates</span>
+            <span>Tracked from email threads</span>
           </div>
         </div>
-        <div className="card">
-          <div className="worktable-section-header">Carrier rates received <span style={{ marginLeft: 8, fontSize: 11, color: "var(--text-3)", fontWeight: 500 }}>· {received.length} of {carrierQuotes.length}</span></div>
-          <div style={{ padding: "10px 16px 14px" }}>
+        <div className="card" data-agent-target="carrier-rates">
+          <div className="worktable-section-header">Carrier rates received <span className="worktable-header-meta">- {received.length} of {carrierQuotes.length}</span></div>
+          <div className="workbench-card-body">
             {received.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>No carrier replies on this load yet.</div>
+              <div className="workbench-empty-line">No carrier replies on this load yet.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div className="workbench-row-list">
                 {received.map((q: any) => {
                   const total = q.total40HC ?? q.total40 ?? q.total20;
                   const isSelected = total === job.cost;
                   return (
-                    <div key={q.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
-                      <div>
-                        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{q.carrier}</div>
-                        <div style={{ fontSize: 10.5, color: "var(--text-3)" }}>{q.service ?? "—"}{q.transitDays ? ` · ${q.transitDays}d` : ""}</div>
+                    <div key={q.id} className="workbench-row">
+                      <div className="workbench-row-main">
+                        <div className="workbench-row-title">{q.carrier}</div>
+                        <div className="workbench-row-sub">{q.service ?? "-"}{q.transitDays ? ` - ${q.transitDays}d` : ""}</div>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>{total ? `$${total.toLocaleString()}` : "—"}</span>
+                      <div className="workbench-row-side">
+                        <span className="workbench-money">{total ? `$${total.toLocaleString()}` : "-"}</span>
                         {isSelected && (
-                          <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "var(--brand)", color: "#fff", letterSpacing: "0.06em" }}>SELECTED</span>
+                          <span className="workbench-selected-badge">SELECTED</span>
                         )}
                       </div>
                     </div>
@@ -1151,24 +1870,24 @@ function DeliveredStage({ job, quoteLines }: { job: any; quoteLines: { desc: str
   const margin = job.revenue && job.cost ? job.revenue - job.cost : null;
   const marginPct = job.revenue && job.cost ? ((job.revenue - job.cost) / job.revenue) * 100 : null;
   return (
-    <div className="card">
+    <div className="card" data-agent-target="settlement">
       <div className="worktable-section-header">Final settlement</div>
-      <div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+      <div className="workbench-settlement-grid">
         <div>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Revenue billed</div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>${totalRev.toLocaleString()}</div>
+          <div className="workbench-stat-label">Revenue billed</div>
+          <div className="workbench-stat-value">${totalRev.toLocaleString()}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Carrier cost</div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>${(job.cost ?? 0).toLocaleString()}</div>
+          <div className="workbench-stat-label">Carrier cost</div>
+          <div className="workbench-stat-value">${(job.cost ?? 0).toLocaleString()}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Gross margin</div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>{margin != null ? `$${margin.toLocaleString()}` : "—"}</div>
+          <div className="workbench-stat-label">Gross margin</div>
+          <div className="workbench-stat-value">{margin != null ? `$${margin.toLocaleString()}` : "-"}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Margin %</div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>{marginPct != null ? `${marginPct.toFixed(1)}%` : "—"}</div>
+          <div className="workbench-stat-label">Margin %</div>
+          <div className="workbench-stat-value">{marginPct != null ? `${marginPct.toFixed(1)}%` : "-"}</div>
         </div>
       </div>
     </div>

@@ -42,12 +42,7 @@ export function SnoozeThreadButton({ threadId, snoozedUntil }: { threadId: strin
         onClick={unsnooze}
         disabled={busy}
         title={`Snoozed until ${wake.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
-        style={{
-          fontSize: 11, padding: "4px 7px", borderRadius: 4,
-          background: "var(--brand-light)", color: "var(--brand)",
-          border: "1px solid var(--brand-border)", cursor: "pointer",
-          display: "inline-flex", alignItems: "center", gap: 4,
-        }}
+        className="inbox-action-btn soft-brand"
       >
         <Icon name="clock" size={11} />
         {busy ? "…" : `Wakes ${wake.toLocaleString("en-GB", { day: "numeric", month: "short" })}`}
@@ -56,39 +51,25 @@ export function SnoozeThreadButton({ threadId, snoozedUntil }: { threadId: strin
   }
 
   return (
-    <div style={{ position: "relative", display: "inline-block" }} onClick={(e) => e.stopPropagation()}>
+    <div className="inbox-action-popover-wrap" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={(e) => { e.preventDefault(); setOpen((o) => !o); }}
         disabled={busy}
         title="Snooze thread until later"
-        style={{
-          fontSize: 11, padding: "4px 7px", borderRadius: 4,
-          background: "transparent", color: "var(--text-3)",
-          border: "1px solid var(--border)", cursor: "pointer",
-          display: "inline-flex", alignItems: "center", gap: 4,
-        }}
+        className="inbox-action-btn"
       >
         <Icon name="clock" size={11} />
         Snooze
       </button>
       {open && (
-        <div style={{
-          position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50,
-          background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: 4, boxShadow: "0 6px 20px rgba(0,0,0,0.12)",
-          minWidth: 160,
-        }}>
+        <div className="inbox-popover snooze">
           {PRESETS.map((p) => (
             <button
               key={p.key}
               type="button"
               onClick={() => pick(p.key)}
-              style={{
-                display: "block", width: "100%", textAlign: "left",
-                padding: "8px 12px", background: "transparent", border: "none",
-                fontSize: 12, color: "var(--text)", cursor: "pointer",
-              }}
+              className="inbox-popover-option"
             >{p.label}</button>
           ))}
         </div>

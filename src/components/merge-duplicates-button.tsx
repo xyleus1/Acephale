@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { consolidateDuplicateInquiries } from "@/lib/merge-actions";
+import { proposeDuplicateInquiryConsolidation } from "@/lib/merge-actions";
 import { Icon } from "@/components/icon";
 
 export function MergeDuplicatesButton() {
@@ -13,14 +13,11 @@ export function MergeDuplicatesButton() {
   function run() {
     start(async () => {
       setMsg(null);
-      const r = await consolidateDuplicateInquiries();
+      const r = await proposeDuplicateInquiryConsolidation();
       if ("error" in r) {
         setMsg(r.error);
-      } else if (r.merged === 0) {
-        setMsg("No duplicates found");
-        setTimeout(() => setMsg(null), 4000);
       } else {
-        setMsg(`Merged ${r.merged} duplicate${r.merged === 1 ? "" : "s"} into ${r.clusters} deal${r.clusters === 1 ? "" : "s"}`);
+        setMsg(`Review proposal created: ${r.duplicates} duplicate${r.duplicates === 1 ? "" : "s"} across ${r.clusters} cluster${r.clusters === 1 ? "" : "s"}`);
         router.refresh();
         setTimeout(() => setMsg(null), 6000);
       }
@@ -28,17 +25,16 @@ export function MergeDuplicatesButton() {
   }
 
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      {msg && <span style={{ fontSize: 11, color: "var(--text-3)" }}>{msg}</span>}
+    <div className="inbox-action-group has-error">
+      {msg && <span className="inbox-action-status">{msg}</span>}
       <button
         type="button"
         onClick={run}
         disabled={busy}
         className="btn btn-secondary btn-sm"
-        style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
       >
         <Icon name="layers" size={11} />
-        {busy ? "Merging…" : "Merge duplicates"}
+        {busy ? "Scanning…" : "Propose duplicate merge"}
       </button>
     </div>
   );

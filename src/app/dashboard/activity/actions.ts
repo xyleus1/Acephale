@@ -9,7 +9,10 @@ export async function completeTaskAction(taskId: string) {
     where: { id: taskId, officeId: s.officeId },
   });
   if (!task) return;
-  await prisma.task.update({ where: { id: taskId }, data: { status: "DONE" } });
+  await prisma.task.updateMany({
+    where: { id: taskId, officeId: s.officeId },
+    data: { status: "DONE" },
+  });
   revalidatePath("/dashboard/activity");
 }
 
@@ -19,7 +22,10 @@ export async function resolveQuoteAction(quoteId: string, result: "WON" | "LOST"
     where: { id: quoteId, officeId: s.officeId },
   });
   if (!quote) return;
-  await prisma.quote.update({ where: { id: quoteId }, data: { result } });
+  await prisma.quote.updateMany({
+    where: { id: quoteId, officeId: s.officeId },
+    data: { result },
+  });
   await prisma.event.create({
     data: {
       officeId: s.officeId,
@@ -39,8 +45,8 @@ export async function updateCompanyStatusAction(companyId: string, status: strin
     where: { id: companyId, officeId: s.officeId },
   });
   if (!company) return;
-  await prisma.company.update({
-    where: { id: companyId },
+  await prisma.company.updateMany({
+    where: { id: companyId, officeId: s.officeId },
     data: { status: status as never },
   });
   revalidatePath("/dashboard/customers");
