@@ -26,7 +26,10 @@ export async function confirmRfqAsJob(inquiryId: string): Promise<{ ok: true; jo
   }
   const r = await confirmProposedJob(jobId);
   if ("error" in r) return { error: r.error };
-  await prisma.inquiry.update({ where: { id: inquiryId }, data: { status: "PARSED" } });
+  await prisma.inquiry.updateMany({
+    where: { id: inquiryId, officeId: session.officeId },
+    data: { status: "PARSED" },
+  });
   revalidatePath("/dashboard/jobs");
   revalidatePath("/dashboard/inbox");
   revalidatePath(`/dashboard/jobs/${jobId}`);
@@ -56,17 +59,17 @@ export async function mergeRfqIntoExistingJob(args: { sourceInquiryId: string; t
 
   // Move email threads onto the target inquiry.
   const moved = await prisma.emailThread.updateMany({
-    where: { inquiryId: src.id },
+    where: { inquiryId: src.id, officeId: session.officeId },
     data: { inquiryId: target.inquiryId, autoLinkedAt: new Date() },
   });
 
   // Delete the source's PROPOSED-only job (real jobs not touched).
   if (src.job?.id && src.job.status === "PROPOSED") {
-    await prisma.job.delete({ where: { id: src.job.id } }).catch(() => {});
+    await prisma.job.deleteMany({ where: { id: src.job.id, officeId: session.officeId } }).catch(() => {});
   }
   // Drop the source inquiry's carrier quotes (would have been duplicates) and inquiry itself.
-  await prisma.carrierQuote.deleteMany({ where: { inquiryId: src.id } }).catch(() => {});
-  await prisma.inquiry.delete({ where: { id: src.id } }).catch(() => {});
+  await prisma.carrierQuote.deleteMany({ where: { inquiryId: src.id, inquiry: { officeId: session.officeId } } }).catch(() => {});
+  await prisma.inquiry.deleteMany({ where: { id: src.id, officeId: session.officeId } }).catch(() => {});
 
   revalidatePath("/dashboard/inbox");
   revalidatePath("/dashboard/jobs");

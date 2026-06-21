@@ -20,7 +20,7 @@ async function buildJobContext(jobId: string, officeId: string) {
   const quotes = job.inquiry?.carrierQuotes.map((q) => `${q.carrier}: $${(q.total40HC ?? q.total40 ?? q.total20 ?? 0).toLocaleString()} (${q.transitDays ?? "?"}d)`).join("; ") ?? "";
   return {
     job,
-    summary: `Reference: ${job.reference}\nCustomer: ${job.company?.name ?? "—"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMode: ${job.mode ?? "—"}\nIncoterms: ${job.incoterms ?? "—"}\nCommodity: ${job.commodity ?? "—"}\nWeight: ${job.weight ?? "?"}kg, Volume: ${job.volume ?? "?"}cbm\nETD: ${job.etd?.toISOString().split("T")[0] ?? "—"}, ETA: ${job.eta?.toISOString().split("T")[0] ?? "—"}\nStatus: ${job.status}\nRevenue: ${job.revenue ? `$${job.revenue.toLocaleString()}` : "—"}, Cost: ${job.cost ? `$${job.cost.toLocaleString()}` : "—"}, Margin: ${margin}\nCarrier rates received: ${quotes || "(none)"}`,
+    summary: `Reference: ${job.reference}\nCustomer: ${job.company?.name ?? "—"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMode: ${job.mode ?? "—"}\nIncoterms: ${job.incoterms ?? "—"}\nCommodity: ${job.commodity ?? "—"}\nWeight: ${job.weight ?? "?"}kg, Volume: ${job.volume ?? "?"}cbm\nStatus: ${job.status}\nTarget price: ${job.targetPrice != null ? `${job.targetCurrency ?? "USD"} ${job.targetPrice.toLocaleString()}` : job.targetPriceStatus === "NO_TARGET" ? "No target" : "Ask customer"}\nRevenue: ${job.revenue ? `$${job.revenue.toLocaleString()}` : "—"}, Cost: ${job.cost ? `$${job.cost.toLocaleString()}` : "—"}, Margin: ${margin}\nCarrier rates received: ${quotes || "(none)"}`,
   };
 }
 
@@ -36,8 +36,8 @@ export async function draftStageEmail(jobId: string, stageHint: StageHint): Prom
     "INQUIRY-CUSTOMER-CLARIFY":    `Draft an email to the customer asking for missing shipment details. Identify what's missing from the brief above (e.g., commodity, weight, ready date, incoterms). Be polite but direct.`,
     "QUOTED-CUSTOMER-QUOTE":       `Draft an email to the customer presenting our freight quote. State revenue/total, key terms (transit, validity), and a clear next step ("confirm to proceed with booking").`,
     "QUOTED-CUSTOMER-FOLLOWUP":    `Draft a polite follow-up email to the customer asking if they have a decision on the quote. Reference the quote details and offer to discuss.`,
-    "BOOKED-CARRIER-CONFIRM":      `Draft a booking confirmation email to the carrier locking in the rate they offered. Include reference, route, container/cargo, requested ETD, and next steps for booking documents.`,
-    "BOOKED-CUSTOMER-CONFIRM":     `Draft a booking confirmation email to the customer. State that we've booked with the chosen carrier and outline next steps (cargo ready date confirmation, document submission, ETD/ETA reminder).`,
+    "BOOKED-CARRIER-CONFIRM":      `Draft a booking confirmation email to the carrier locking in the rate they offered. Include reference, route, container/cargo, cargo-ready coordination, and next steps for booking documents.`,
+    "BOOKED-CUSTOMER-CONFIRM":     `Draft a booking confirmation email to the customer. State that we've booked with the chosen carrier and outline next steps for cargo readiness and document submission.`,
     "IN_TRANSIT-CUSTOMER-UPDATE":  `Draft a status update email to the customer. State current status, last milestone confirmed, next expected milestone with date, and any alerts.`,
     "CUSTOMS-BROKER-DOCS":         `Draft an email to the customs broker requesting clearance. Attach reference numbers, expected docs (BL, invoice, packing list, COO), and target release date.`,
     "DELIVERED-CUSTOMER-POD":      `Draft a delivery confirmation email to the customer with proof-of-delivery details, final billing summary, and a thank-you closer.`,
@@ -154,8 +154,8 @@ export async function logOutboundEmail(
       sentAt: new Date(),
     },
   });
-  await prisma.emailThread.update({
-    where: { id: thread.id },
+  await prisma.emailThread.updateMany({
+    where: { id: thread.id, officeId: session.officeId },
     data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
   });
 

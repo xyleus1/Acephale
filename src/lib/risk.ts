@@ -1,4 +1,48 @@
 import { prisma } from "@/lib/prisma";
+import { assessJobStrategy } from "@/lib/commercial-strategy-persistence";
+
+export async function listDealRiskAssessments(officeId: string, limit = 20) {
+  const jobs = await prisma.job.findMany({
+    where: { officeId, status: { notIn: ["DELIVERED", "CANCELLED"] } },
+    select: {
+      id: true,
+      reference: true,
+      company: { select: { name: true } },
+      origin: true,
+      destination: true,
+      mode: true,
+    },
+    orderBy: { updatedAt: "desc" },
+    take: Math.max(1, Math.min(50, limit * 2)),
+  });
+
+  const assessed = await Promise.all(
+    jobs.map(async (job) => {
+      const run = await assessJobStrategy(officeId, job.id).catch(() => null);
+      const topRisk = run?.strategy.riskAssessments[0] ?? null;
+      if (!run || !topRisk || !["HIGH", "CRITICAL"].includes(topRisk.level)) return null;
+      return {
+        jobId: job.id,
+        reference: job.reference,
+        customer: job.company?.name ?? null,
+        route: job.origin || job.destination ? `${job.origin ?? "?"} → ${job.destination ?? "?"}` : null,
+        mode: job.mode,
+        recommendation: run.strategy.recommendationLabel,
+        strategyGrade: {
+          band: run.strategy.band,
+          confidence: run.strategy.confidence,
+        },
+        risk: topRisk,
+        mitigation: topRisk.mitigation,
+      };
+    })
+  );
+
+  return assessed
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => b.risk.score - a.risk.score)
+    .slice(0, Math.max(1, Math.min(50, limit)));
+}
 
 export async function refreshRiskAlerts(officeId: string) {
   const staleDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
