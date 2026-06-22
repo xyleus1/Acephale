@@ -1251,3 +1251,49 @@ Recommended next step:
 - Configure/verify Preview env vars with safe market-intelligence defaults.
 - Run staging migrations only against a confirmed staging database.
 - Then run D3 staging smoke tests.
+
+## D3A-FIX Vercel Hobby Cron Compatibility
+
+Status:
+
+- Completed on 2026-06-22.
+- Goal: unblock Vercel Preview deployment on a Hobby account after Vercel
+  rejected a sub-daily cron expression before build.
+- Production deploy was not run.
+- Production database commands were not run.
+- Live Firecrawl ingestion was not run.
+- Market intelligence cron was not enabled.
+
+Problem:
+
+- Vercel rejected the project because Hobby accounts only allow cron schedules
+  that run at most once per day.
+- The invalid schedule was `/api/cron/background-jobs` with
+  `*/10 * * * *`, which runs every ten minutes.
+
+Change:
+
+- Updated `vercel.json` so every configured cron runs no more than once per
+  day.
+- Kept existing cron auth behavior intact; routes still require `CRON_SECRET`
+  checks in code.
+- Market intelligence scheduled ingestion remains disabled by env and is not
+  configured in `vercel.json`.
+
+Cron schedules after the fix:
+
+- `/api/cron/risk-scan`: `0 6 * * *`
+- `/api/cron/gmail-sync`: `0 7 * * *`
+- `/api/cron/background-jobs`: `0 9 * * *`
+
+Operational note:
+
+- Frequent background processing should move to Vercel Pro, an external
+  scheduler, or a manual/operator-triggered sync path later. Do not sneak
+  sub-daily schedules back into `vercel.json` while deploying on Hobby.
+
+Verification:
+
+- `npx tsc --noEmit`: passed.
+- `npm run build`: passed.
+- `npm run ai:handoff`: passed.

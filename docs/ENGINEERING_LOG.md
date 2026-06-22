@@ -473,3 +473,24 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: check the Vercel dashboard for the Preview deployment, configure
   Preview env vars, keep market cron disabled, run staging migrations only
   against a confirmed staging DB, then run D3 staging smoke tests.
+
+### 2026-06-22 - D3A-FIX Vercel Hobby cron compatibility
+
+- Branch: codex/lead-to-quote-batch
+- Commit: pending
+- Task: Fix a Vercel Preview deployment blocker on Hobby where
+  `/api/cron/background-jobs` used `*/10 * * * *`, which runs more than once per
+  day and is rejected before build.
+- Files changed: `vercel.json`, `docs/AI_HANDOFF.md`,
+  `docs/ENGINEERING_LOG.md`.
+- Change: kept daily `risk-scan` and `gmail-sync` schedules, changed
+  `/api/cron/background-jobs` to `0 9 * * *`, and documented that frequent sync
+  needs Vercel Pro, an external scheduler, or manual/operator-triggered sync
+  later.
+- Verification: `npx tsc --noEmit`, `npm run build`, and
+  `npm run ai:handoff` passed.
+- Failed/skipped checks: no production deploy, no production DB command, no live
+  Firecrawl ingestion, and no market cron enablement.
+- Caveats: Vercel Hobby cron timing has hourly precision, not minute-level
+  precision. This fix unblocks deployment; it is not a substitute for a real
+  sub-daily job runner.

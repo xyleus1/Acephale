@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/background-jobs",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
