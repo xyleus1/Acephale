@@ -1,0 +1,57 @@
+# Database command rules. These are intentionally conservative.
+
+prefix_rule(
+    pattern = ["prisma", "db", "push"],
+    decision = "prompt",
+    justification = "Prisma db push can mutate the database schema without a migration.",
+    match = ["prisma db push", "prisma db push --accept-data-loss"],
+)
+
+prefix_rule(
+    pattern = ["npx", "prisma", "db", "push"],
+    decision = "prompt",
+    justification = "Prisma db push can mutate the database schema without a migration.",
+    match = ["npx prisma db push", "npx prisma db push --accept-data-loss"],
+)
+
+prefix_rule(
+    pattern = ["npm", "run", "db:push"],
+    decision = "prompt",
+    justification = "The db:push script mutates the database schema.",
+    match = ["npm run db:push"],
+)
+
+prefix_rule(
+    pattern = ["prisma", "migrate", "deploy"],
+    decision = "prompt",
+    justification = "Migration deploys can mutate production-like databases.",
+    match = ["prisma migrate deploy"],
+)
+
+prefix_rule(
+    pattern = ["npx", "prisma", "migrate", "deploy"],
+    decision = "prompt",
+    justification = "Migration deploys can mutate production-like databases.",
+    match = ["npx prisma migrate deploy"],
+)
+
+prefix_rule(
+    pattern = ["prisma", "migrate", "reset"],
+    decision = "prompt",
+    justification = "Migration reset can destroy database data.",
+    match = ["prisma migrate reset", "prisma migrate reset --force"],
+)
+
+prefix_rule(
+    pattern = ["npx", "prisma", "migrate", "reset"],
+    decision = "prompt",
+    justification = "Migration reset can destroy database data.",
+    match = ["npx prisma migrate reset", "npx prisma migrate reset --force"],
+)
+
+prefix_rule(
+    pattern = ["npm", "run", "db:migrate"],
+    decision = "prompt",
+    justification = "Migration commands can mutate database schema and data.",
+    match = ["npm run db:migrate"],
+)
