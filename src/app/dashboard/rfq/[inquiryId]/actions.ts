@@ -9,6 +9,7 @@ import { qualifyRfq } from "@/lib/rfq-qualification";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { buildMissingInfoDraft } from "@/lib/missing-info-draft";
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
+import { recordMemoryEvent } from "@/lib/memory/record-event";
 import Anthropic from "@anthropic-ai/sdk";
 
 function emptyToNull(value: FormDataEntryValue | null) {
@@ -73,13 +74,36 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
 
   if (!qualification.isMature) {
     const blockedNote = `Blocked job conversion: missing ${qualification.followUpQuestions.join(" ")}`;
-    await prisma.inquiry.update({
+    const blocked = await prisma.inquiry.update({
       where: { id: inquiryId, officeId: session.officeId },
       data: {
         notes: [inquiry.notes, blockedNote].filter(Boolean).join("\n"),
         status: ["WON", "LOST", "QUOTED"].includes(inquiry.status) ? inquiry.status : "INGESTED",
       },
     });
+    await recordMemoryEvent({
+      officeId: session.officeId,
+      sourceType: "INQUIRY",
+      sourceExternalId: `inquiry:${inquiryId}`,
+      eventType: "inquiry.conversion_blocked",
+      entityType: "inquiry",
+      entityId: inquiryId,
+      actorType: "user",
+      actorId: session.userId,
+      occurredAt: blocked.updatedAt,
+      payloadVersion: 1,
+      payload: { inquiryId, missing: qualification.followUpQuestions, status: blocked.status },
+      provenance: {
+        source: "inquiry",
+        operation: "convert_to_job_blocked",
+        path: "src/app/dashboard/rfq/[inquiryId]/actions.ts",
+        function: "convertToJob",
+        sourceRecordId: inquiryId,
+        actorType: "user",
+        actorId: session.userId,
+      },
+      idempotencyKey: `inquiry:${inquiryId}:conversion_blocked:${blocked.updatedAt.toISOString()}`,
+    }).catch(() => null);
     revalidatePath(`/dashboard/rfq/${inquiryId}`);
     return;
   }
@@ -114,10 +138,33 @@ export async function convertToJob(inquiryId: string, formData: FormData) {
     },
   }));
 
-  await prisma.inquiry.update({
+  const quoted = await prisma.inquiry.update({
     where: { id: inquiryId },
     data: { status: "QUOTED" },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "INQUIRY",
+    sourceExternalId: `inquiry:${inquiryId}`,
+    eventType: "inquiry.converted_to_job",
+    entityType: "inquiry",
+    entityId: inquiryId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: quoted.updatedAt,
+    payloadVersion: 1,
+    payload: { inquiryId, jobId: job.id, status: quoted.status },
+    provenance: {
+      source: "inquiry",
+      operation: "convert_to_job",
+      path: "src/app/dashboard/rfq/[inquiryId]/actions.ts",
+      function: "convertToJob",
+      sourceRecordId: inquiryId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `inquiry:${inquiryId}:converted_to_job:${job.id}`,
+  }).catch(() => null);
 
   if (inquiry.targetPrice != null || inquiry.targetPriceStatus === "NO_TARGET") {
     await recordTargetPriceHistory({
@@ -173,10 +220,38 @@ export async function updateInquiryField(inquiryId: string, formData: FormData) 
     ? inquiry.status
     : qualification.isMature ? "PARSED" : "INGESTED";
 
-  await prisma.inquiry.update({
+  const updated = await prisma.inquiry.update({
     where: { id: inquiryId, officeId: session.officeId },
     data: { ...data, status: nextStatus },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "INQUIRY",
+    sourceExternalId: `inquiry:${inquiryId}`,
+    eventType: "inquiry.updated",
+    entityType: "inquiry",
+    entityId: inquiryId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: updated.updatedAt,
+    payloadVersion: 1,
+    payload: {
+      inquiryId,
+      changedFields: Object.keys(data),
+      status: updated.status,
+      qualification,
+    },
+    provenance: {
+      source: "inquiry",
+      operation: "manual_update",
+      path: "src/app/dashboard/rfq/[inquiryId]/actions.ts",
+      function: "updateInquiryField",
+      sourceRecordId: inquiryId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `inquiry:${inquiryId}:updated:${updated.updatedAt.toISOString()}`,
+  }).catch(() => null);
 
   if (targetPriceChanged(inquiry, data)) {
     await recordTargetPriceHistory({
@@ -196,10 +271,33 @@ export async function updateInquiryField(inquiryId: string, formData: FormData) 
 
 export async function updateInquiryStatus(inquiryId: string, status: string) {
   const session = await requireSession();
-  await prisma.inquiry.update({
+  const updated = await prisma.inquiry.update({
     where: { id: inquiryId, officeId: session.officeId },
     data: { status },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "INQUIRY",
+    sourceExternalId: `inquiry:${inquiryId}`,
+    eventType: "inquiry.status_updated",
+    entityType: "inquiry",
+    entityId: inquiryId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: updated.updatedAt,
+    payloadVersion: 1,
+    payload: { inquiryId, status },
+    provenance: {
+      source: "inquiry",
+      operation: "status_update",
+      path: "src/app/dashboard/rfq/[inquiryId]/actions.ts",
+      function: "updateInquiryStatus",
+      sourceRecordId: inquiryId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `inquiry:${inquiryId}:status:${status}:${updated.updatedAt.toISOString()}`,
+  }).catch(() => null);
   revalidatePath(`/dashboard/rfq/${inquiryId}`);
   revalidatePath("/dashboard/rfq");
 }
@@ -283,7 +381,7 @@ ${inquiry.rawEmailBody.slice(0, 2000)}`,
   };
   const qualification = qualificationFor(data);
 
-  await prisma.inquiry.update({
+  const updated = await prisma.inquiry.update({
     where: { id: inquiryId },
     data: {
       ...data,
@@ -291,6 +389,29 @@ ${inquiry.rawEmailBody.slice(0, 2000)}`,
       parsedData: JSON.stringify({ ...parsed, qualification }),
     },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "INQUIRY",
+    sourceExternalId: `inquiry:${inquiryId}`,
+    eventType: "inquiry.ai_parsed",
+    entityType: "inquiry",
+    entityId: inquiryId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: updated.updatedAt,
+    payloadVersion: 1,
+    payload: { inquiryId, parsed, qualification, status: updated.status },
+    provenance: {
+      source: "inquiry",
+      operation: "ai_parse",
+      path: "src/app/dashboard/rfq/[inquiryId]/actions.ts",
+      function: "parseRFQWithAI",
+      sourceRecordId: inquiryId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `inquiry:${inquiryId}:ai_parsed:${updated.updatedAt.toISOString()}`,
+  }).catch(() => null);
 
   if (targetPriceChanged(inquiry, data)) {
     await recordTargetPriceHistory({

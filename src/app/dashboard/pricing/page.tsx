@@ -19,6 +19,7 @@ import { buildStrategyDecisionBrief, buildStrategyExecutionPacket, buildStrategy
 import { commercialChecklistItemsWithActions } from "@/lib/commercial-checklist-actions";
 import { buildPricingCommandFactors, type PricingCommandFactor } from "@/lib/pricing-command-factors";
 import { operatorMaturityLabel, operatorMetricLabel, operatorPhaseLabel, operatorToolLabel } from "@/lib/operator-action-labels";
+import { recordMemoryEvent } from "@/lib/memory/record-event";
 
 type SearchParams = Promise<{ inquiry?: string }>;
 
@@ -1052,6 +1053,29 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
         status: "INGESTED",
       },
     });
+    await recordMemoryEvent({
+      officeId: s.officeId,
+      sourceType: "INQUIRY",
+      sourceExternalId: `pricing_desk:${inquiry.id}`,
+      eventType: "inquiry.created",
+      entityType: "inquiry",
+      entityId: inquiry.id,
+      actorType: "user",
+      actorId: s.userId,
+      occurredAt: inquiry.createdAt,
+      payloadVersion: 1,
+      payload: { inquiryId: inquiry.id, subject, fromEmail, fromCompany, targetPrice, targetCurrency, targetPriceStatus, source: "pricing_desk" },
+      provenance: {
+        source: "pricing_desk",
+        operation: "create_inquiry",
+        path: "src/app/dashboard/pricing/page.tsx",
+        function: "addInquiryAction",
+        sourceRecordId: inquiry.id,
+        actorType: "user",
+        actorId: s.userId,
+      },
+      idempotencyKey: `inquiry:${inquiry.id}:pricing_created`,
+    }).catch(() => null);
     if (targetPrice != null || targetPriceStatus === "NO_TARGET") {
       await recordTargetPriceHistory({
         officeId: s.officeId,
@@ -1081,7 +1105,30 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
     const id = String(formData.get("id") ?? "");
     const status = String(formData.get("status") ?? "");
     if (!id || !status) return;
-    await prisma.inquiry.update({ where: { id, officeId: s.officeId }, data: { status } });
+    const updated = await prisma.inquiry.update({ where: { id, officeId: s.officeId }, data: { status } });
+    await recordMemoryEvent({
+      officeId: s.officeId,
+      sourceType: "INQUIRY",
+      sourceExternalId: `pricing_desk:${id}`,
+      eventType: "inquiry.status_updated",
+      entityType: "inquiry",
+      entityId: id,
+      actorType: "user",
+      actorId: s.userId,
+      occurredAt: updated.updatedAt,
+      payloadVersion: 1,
+      payload: { inquiryId: id, status, source: "pricing_desk" },
+      provenance: {
+        source: "pricing_desk",
+        operation: "update_inquiry_status",
+        path: "src/app/dashboard/pricing/page.tsx",
+        function: "updateInquiryStatusAction",
+        sourceRecordId: id,
+        actorType: "user",
+        actorId: s.userId,
+      },
+      idempotencyKey: `inquiry:${id}:pricing_status:${status}:${updated.updatedAt.toISOString()}`,
+    }).catch(() => null);
     revalidatePath("/dashboard/pricing");
     revalidatePath(`/dashboard/rfq/${id}`);
   }
@@ -1103,10 +1150,33 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
       targetPriceStatus: targetPrice != null ? "PROVIDED" : String(formData.get("targetPriceStatus") || "UNKNOWN"),
       targetPriceSource: String(formData.get("targetPriceSource") || "").trim() || null,
     };
-    await prisma.inquiry.update({
+    const updated = await prisma.inquiry.update({
       where: { id, officeId: s.officeId },
       data,
     });
+    await recordMemoryEvent({
+      officeId: s.officeId,
+      sourceType: "INQUIRY",
+      sourceExternalId: `pricing_desk:${id}`,
+      eventType: "inquiry.target_price_updated",
+      entityType: "inquiry",
+      entityId: id,
+      actorType: "user",
+      actorId: s.userId,
+      occurredAt: updated.updatedAt,
+      payloadVersion: 1,
+      payload: { inquiryId: id, ...data, previous: before, source: "pricing_desk" },
+      provenance: {
+        source: "pricing_desk",
+        operation: "update_target_price",
+        path: "src/app/dashboard/pricing/page.tsx",
+        function: "updateTargetPriceAction",
+        sourceRecordId: id,
+        actorType: "user",
+        actorId: s.userId,
+      },
+      idempotencyKey: `inquiry:${id}:target_price:${updated.updatedAt.toISOString()}`,
+    }).catch(() => null);
     if (targetPriceChanged(before, data)) {
       await recordTargetPriceHistory({
         officeId: s.officeId,
@@ -1318,6 +1388,44 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
         },
       });
     }
+
+    await recordMemoryEvent({
+      officeId: s.officeId,
+      sourceType: "GMAIL",
+      sourceExternalId: `gmail:forwarder_draft:${draft.id}:${sent.messageId}`,
+      sourceLabel: "Forwarder RFQ email",
+      eventType: "forwarder_draft.sent",
+      entityType: "forwarder_draft",
+      entityId: draft.id,
+      actorType: "user",
+      actorId: s.userId,
+      occurredAt: new Date(),
+      payloadVersion: 1,
+      payload: {
+        draftId: draft.id,
+        inquiryId: draft.inquiryId,
+        jobId: draft.inquiry.job?.id ?? null,
+        toEmail: draft.toEmail,
+        forwarderName: draft.forwarderName,
+        subject: draft.subject,
+        senderAccountId: account.id,
+        sentByEmail: account.email,
+        gmailMessageId: sent.messageId,
+        gmailThreadId: sent.threadId,
+        carrierQuoteCreated: !existingPending,
+      },
+      provenance: {
+        source: "pricing_dashboard",
+        operation: "send_forwarder_draft",
+        path: "src/app/dashboard/pricing/page.tsx",
+        function: "sendForwarderDraftAction",
+        sourceRecordId: draft.id,
+        sourceExternalId: sent.messageId,
+        actorType: "user",
+        actorId: s.userId,
+      },
+      idempotencyKey: `forwarder_draft:${draft.id}:sent:${sent.messageId}`,
+    }).catch(() => null);
 
     revalidatePath("/dashboard/pricing");
     revalidatePath("/dashboard/inbox");
@@ -1831,32 +1939,6 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
             <strong>{topCommandRow?.summary.commandLabel ?? "No assessed RFQs yet"}</strong>
             <em>{topCommandRow?.inquiry.subject ?? "Create or assess an RFQ to start the pricing queue."}</em>
             {topCommandRow?.summary.commandReason && <p>{topCommandRow.summary.commandReason}</p>}
-            {topCommandRow?.summary.decisionContract && (
-              <div
-                className={`pricing-command-contract ${topCommandRow.summary.decisionContract.state}`}
-                data-agent-target="decision-contract"
-                aria-label="Top command decision contract"
-              >
-                <span>Decision contract</span>
-                <strong>{topCommandRow.summary.decisionContract.title}</strong>
-                <em>{topCommandRow.summary.decisionContract.summary}</em>
-                <div>
-                  <span>Agent may</span>
-                  <strong>{topCommandRow.summary.decisionContract.allowedAgentMoves[0]}</strong>
-                </div>
-                <div>
-                  <span>Forbidden</span>
-                  <strong>{topCommandRow.summary.decisionContract.forbidden[0] ?? "No external send without approval."}</strong>
-                </div>
-              </div>
-            )}
-            {topCommandRow?.summary.decisionQuality && (
-              <div className={`pricing-command-quality ${topCommandRow.summary.decisionQuality.tone}`} data-agent-target="decision-quality" aria-label="Top command decision quality">
-                <span>Decision quality</span>
-                <strong>{topCommandRow.summary.decisionQuality.metric}</strong>
-                <em>{topCommandRow.summary.decisionQuality.detail}</em>
-              </div>
-            )}
             {topCommandRow?.summary.commercialPriority && (
               <div className={`pricing-command-priority ${topCommandRow.summary.commercialPriority.tone}`} data-agent-target="commercial-priority" aria-label="Top command commercial priority">
                 <div>
@@ -1889,44 +1971,6 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                   <div key={`${gap.key}-${index}`} className={`pricing-command-proof-gap ${gap.tone}`} data-agent-target={gap.target}>
                     <strong>{gap.label} · {gap.owner.toLowerCase()}</strong>
                     <em>{gap.action}</em>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {topCommandRow?.summary && (
-              <div className="pricing-command-playbook" aria-label="Operator playbook">
-                <div>
-                  <span>First move</span>
-                  <strong>{topCommandRow.summary.playbookExactAsk ?? topCommandRow.summary.playbookFirstMove}</strong>
-                </div>
-                <div>
-                  <span>Safety</span>
-                  <strong>{topCommandRow.summary.playbookSafetyRule}</strong>
-                </div>
-                <div>
-                  <span>Stop when</span>
-                  <strong>{topCommandRow.summary.playbookStopCondition}</strong>
-                </div>
-              </div>
-            )}
-            {topCommandRow?.summary.routeLabel && (
-              <div className={`pricing-command-route ${topCommandRow.summary.routeCanQuoteCustomer ? "ready" : "review"}`} data-agent-target="movement">
-                <span>Route evidence</span>
-                <strong>{topCommandRow.summary.routeLabel}</strong>
-                <em>
-                  {[topCommandRow.summary.routeCostLabel, topCommandRow.summary.routeFreshnessLabel]
-                    .filter(Boolean)
-                    .join(" · ") || "decision context"}
-                </em>
-                {topCommandRow.summary.routeSummary && <p>{topCommandRow.summary.routeSummary}</p>}
-              </div>
-            )}
-            {topCommandRow?.summary.priorityFactors.length ? (
-              <div className="pricing-command-factors" data-agent-target="decision-reasons" aria-label="Pricing priority factors">
-                {topCommandRow.summary.priorityFactors.slice(0, 6).map((factor) => (
-                  <div key={`${factor.label}-${factor.value}`} className={`pricing-command-factor ${factor.tone}`}>
-                    <span>{factor.label}</span>
-                    <strong>{factor.value}</strong>
                   </div>
                 ))}
               </div>
@@ -1983,6 +2027,78 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                   )}
                 </div>
               </div>
+            )}
+            {topCommandRow?.summary && (
+              <details className="pricing-command-details">
+                <summary>
+                  <span>Decision audit</span>
+                  <strong>Contract, route, quality, and factors</strong>
+                </summary>
+                <div className="pricing-command-details-body">
+                  {topCommandRow.summary.decisionContract && (
+                    <div
+                      className={`pricing-command-contract ${topCommandRow.summary.decisionContract.state}`}
+                      data-agent-target="decision-contract"
+                      aria-label="Top command decision contract"
+                    >
+                      <span>Decision contract</span>
+                      <strong>{topCommandRow.summary.decisionContract.title}</strong>
+                      <em>{topCommandRow.summary.decisionContract.summary}</em>
+                      <div>
+                        <span>Agent may</span>
+                        <strong>{topCommandRow.summary.decisionContract.allowedAgentMoves[0]}</strong>
+                      </div>
+                      <div>
+                        <span>Forbidden</span>
+                        <strong>{topCommandRow.summary.decisionContract.forbidden[0] ?? "No external send without approval."}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {topCommandRow.summary.decisionQuality && (
+                    <div className={`pricing-command-quality ${topCommandRow.summary.decisionQuality.tone}`} data-agent-target="decision-quality" aria-label="Top command decision quality">
+                      <span>Decision quality</span>
+                      <strong>{topCommandRow.summary.decisionQuality.metric}</strong>
+                      <em>{topCommandRow.summary.decisionQuality.detail}</em>
+                    </div>
+                  )}
+                  <div className="pricing-command-playbook" aria-label="Operator playbook">
+                    <div>
+                      <span>First move</span>
+                      <strong>{topCommandRow.summary.playbookExactAsk ?? topCommandRow.summary.playbookFirstMove}</strong>
+                    </div>
+                    <div>
+                      <span>Safety</span>
+                      <strong>{topCommandRow.summary.playbookSafetyRule}</strong>
+                    </div>
+                    <div>
+                      <span>Stop when</span>
+                      <strong>{topCommandRow.summary.playbookStopCondition}</strong>
+                    </div>
+                  </div>
+                  {topCommandRow.summary.routeLabel && (
+                    <div className={`pricing-command-route ${topCommandRow.summary.routeCanQuoteCustomer ? "ready" : "review"}`} data-agent-target="movement">
+                      <span>Route evidence</span>
+                      <strong>{topCommandRow.summary.routeLabel}</strong>
+                      <em>
+                        {[topCommandRow.summary.routeCostLabel, topCommandRow.summary.routeFreshnessLabel]
+                          .filter(Boolean)
+                          .join(" · ") || "decision context"}
+                      </em>
+                      {topCommandRow.summary.routeSummary && <p>{topCommandRow.summary.routeSummary}</p>}
+                    </div>
+                  )}
+                  {topCommandRow.summary.priorityFactors.length ? (
+                    <div className="pricing-command-factors" data-agent-target="decision-reasons" aria-label="Pricing priority factors">
+                      {topCommandRow.summary.priorityFactors.slice(0, 6).map((factor) => (
+                        <div key={`${factor.label}-${factor.value}`} className={`pricing-command-factor ${factor.tone}`}>
+                          <span>{factor.label}</span>
+                          <strong>{factor.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </details>
             )}
           </div>
           <div className="pricing-command-phase-grid">
@@ -2232,7 +2348,15 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                 </div>
               )}
 
-              {opportunity && <div id="pricing-strategy-card"><OpportunityScoreCard score={opportunity} /></div>}
+              {opportunity && (
+                <details id="pricing-strategy-card" className="strategy-audit-details">
+                  <summary>
+                    <span>Strategy audit details</span>
+                    <strong>Score, ladder, evidence, and risks</strong>
+                  </summary>
+                  <OpportunityScoreCard score={opportunity} />
+                </details>
+              )}
 
               <section className="pricing-carrier-card">
                 <header className="pricing-carrier-header">

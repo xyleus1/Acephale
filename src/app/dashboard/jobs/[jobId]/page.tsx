@@ -703,7 +703,7 @@ export default async function JobDetailPage({
   ].filter(Boolean);
 
   return (
-    <div>
+    <div className="record-page">
       <AgentPagePresenceLayer listenForExternalCues />
       {/* Back */}
       <div className="record-back-row">
@@ -781,6 +781,32 @@ export default async function JobDetailPage({
         </div>
       </div>
 
+      {strategy && (
+        <>
+          <CommercialDecisionCockpit
+            strategy={strategy}
+            docs={docs}
+            jobReference={job.reference}
+            jobId={job.id}
+            inquiryId={job.inquiryId}
+            recentDraft={recentDraft}
+            auditDraftHealth={auditDraftStates.length > 0 ? {
+              total: auditDraftStates.length,
+              current: auditDraftCounts.fresh,
+              stale: auditDraftCounts.stale,
+              legacy: auditDraftCounts.legacy,
+            } : null}
+          />
+          <details className="strategy-audit-details">
+            <summary>
+              <span>Strategy audit details</span>
+              <strong>Score, ladder, evidence, and risks</strong>
+            </summary>
+            <OpportunityScoreCard score={strategy} />
+          </details>
+        </>
+      )}
+
       {/* Two-pane: load trail | worktable */}
       <div className="record-two-pane">
         {/* ── LEFT: Load trail ───────────────────────────────────────────── */}
@@ -850,24 +876,6 @@ export default async function JobDetailPage({
             <div className="worktable-section-header">Note</div>
             <JobNote jobId={jobId} initial={cleanNotes(job.notes)} />
           </div>
-
-          {strategy && (
-            <CommercialDecisionCockpit
-              strategy={strategy}
-              docs={docs}
-              jobReference={job.reference}
-              jobId={job.id}
-              inquiryId={job.inquiryId}
-              recentDraft={recentDraft}
-              auditDraftHealth={auditDraftStates.length > 0 ? {
-                total: auditDraftStates.length,
-                current: auditDraftCounts.fresh,
-                stale: auditDraftCounts.stale,
-                legacy: auditDraftCounts.legacy,
-              } : null}
-            />
-          )}
-          {strategy && <OpportunityScoreCard score={strategy} />}
 
           {job.agentProposals.length > 0 && (
             <div className="card agent-proposal-card">

@@ -940,9 +940,13 @@ async function _DashboardPageImpl(stageOverride: string | null) {
       </section>
 
       {opportunity && (
-        <div data-agent-target="strategy">
+        <details className="strategy-audit-details" data-agent-target="strategy">
+          <summary>
+            <span>Strategy audit details</span>
+            <strong>Score, ladder, evidence, and risks</strong>
+          </summary>
           <OpportunityScoreCard score={opportunity} />
-        </div>
+        </details>
       )}
 
       <div className="card workbench-card" data-agent-target="timeline">

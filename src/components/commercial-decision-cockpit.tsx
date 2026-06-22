@@ -311,7 +311,7 @@ export function CommercialDecisionCockpit({
     <section className={`commercial-cockpit ${gateTone}`} data-agent-target="strategy">
       <div className="commercial-cockpit-head">
         <div>
-          <div className="commercial-cockpit-kicker">Decision cockpit</div>
+          <div className="commercial-cockpit-kicker">Commercial brain</div>
           <h2>{strategy.operatorDecision.title}</h2>
           <p>{strategy.operatorDecision.command}</p>
         </div>
@@ -321,225 +321,139 @@ export function CommercialDecisionCockpit({
         </div>
       </div>
 
-      <div className="commercial-cockpit-brief" aria-label="Commercial decision brief">
-        <div className="commercial-cockpit-brief-main">
-          <span>Operator mode</span>
-          <strong>{operatorPhaseLabel(decisionBrief.phase)}</strong>
-          <em>{decisionBrief.nextCommand}</em>
-        </div>
-        <div>
-          <span>Weakest input</span>
-          <strong>{decisionBrief.weakestEvidence?.label ?? "Inputs covered"}</strong>
-          <em>{decisionBrief.weakestEvidence?.detail ?? "No blocked evidence is holding the next action."}</em>
-        </div>
-        <div data-agent-target="decision-quality">
-          <span>Decision quality</span>
-          <strong>{evidenceStateLabel(decisionQuality?.tone)}</strong>
-          <em>{decisionQuality?.detail ?? "Confidence score exists, but no decision-quality audit was produced."}</em>
-        </div>
-        <div>
-          <span>Handoff</span>
-          <strong>{decisionBrief.nextAction.label}</strong>
-          <em>
-            {decisionBrief.nextAction.canRunNow
-              ? decisionBrief.nextAction.requiresApproval ? "Prepare, then wait for approval." : "Safe to prepare review output."
-              : `${decisionBrief.blockerCount} blocker${decisionBrief.blockerCount === 1 ? "" : "s"} before this can run.`}
-          </em>
-        </div>
-        <div className="commercial-cockpit-brief-playbook">
-          <span>Operator playbook</span>
-          <strong>{decisionBrief.operatorPlaybook.exactAsk ?? decisionBrief.operatorPlaybook.firstMove}</strong>
-          <em>{decisionBrief.operatorPlaybook.safetyRule}</em>
-        </div>
-      </div>
-
-      <div className={`commercial-cockpit-priority ${commercialPriority.tone}`} data-agent-target="commercial-priority" aria-label="Commercial priority brief">
-        <div className="commercial-cockpit-priority-head">
-          <div>
-            <span>Commercial priority</span>
-            <strong>{commercialPriority.label}</strong>
-            <em>{commercialPriority.whyNow}</em>
-          </div>
-          <div>
-            <span>Economic unlock</span>
-            <strong>{commercialPriority.economicUnlock}</strong>
-            <em>{commercialPriority.riskTradeoff}</em>
-          </div>
-        </div>
-        <div className="commercial-cockpit-priority-grid">
-          {commercialPriority.rows.map((row) => (
-            <div key={row.key} className={`commercial-cockpit-priority-row ${row.tone}`} data-agent-target={priorityRowTarget(row.key)}>
-              <span>{row.label}</span>
-              <strong>{row.value}</strong>
-              <em>{row.detail}</em>
+      <div className="commercial-cockpit-system" aria-label="Commercial decision system">
+        <div className="commercial-cockpit-spine">
+          {flow.map((item, index) => (
+            <div key={item.key} className={`commercial-cockpit-spine-step ${item.tone}`} data-agent-target={item.target}>
+              <span className="commercial-cockpit-spine-index">{index + 1}</span>
+              <div className="commercial-cockpit-spine-icon"><Icon name={item.icon} size={14} /></div>
+              <div>
+                <span>{item.label}</span>
+                <strong>{item.value}{item.suffix ?? ""}</strong>
+                <em>{item.detail}</em>
+              </div>
             </div>
           ))}
         </div>
-        <div className="commercial-cockpit-priority-checklist" data-agent-target="agent-action" aria-label="Commercial operator checklist">
-          <div className="commercial-cockpit-priority-checklist-head">
-            <span>Operator checklist</span>
-            <strong>Next safe moves</strong>
-          </div>
-          {checklistItems.map(({ item, actionKind }, index) => (
-            <CommercialChecklistRow
-              key={`${item.key}-${item.target}-${index}`}
-              item={item}
-              index={index}
-              className="commercial-cockpit-priority-check"
-              actionSlot={actionKind && (
-                <CommercialChecklistAction
-                  kind={actionKind}
-                  inquiryId={inquiryId}
-                  jobId={jobId}
-                  quoteReady={strategy.quoteGate.canQuoteCustomer}
-                  className="commercial-cockpit-priority-check-action"
-                  noteClassName="commercial-cockpit-action-note"
-                />
+
+        <div className="commercial-cockpit-right-rail">
+          <div className={`commercial-cockpit-command-panel ${agentTone}`} data-agent-target="agent-action">
+            <div>
+              <span>Current command</span>
+              <strong>{strategy.operatorDecision.ctaLabel}</strong>
+              <em>{strategy.operatorDecision.rationale}</em>
+            </div>
+            <div className="commercial-cockpit-command-price">
+              <div>
+                <span>Recommended quote</span>
+                <strong>{money(strategy.price.recommendedPrice, strategy.price.currency)}</strong>
+                <em>Floor {money(strategy.price.floorPrice, strategy.price.currency)}</em>
+              </div>
+              <div>
+                <span>Target posture</span>
+                <strong>{strategy.evidence.targetPosture.label}</strong>
+                <em>{strategy.evidence.targetPosture.target == null ? "No customer target captured" : money(strategy.evidence.targetPosture.target, strategy.evidence.targetPosture.currency)}</em>
+              </div>
+            </div>
+            {firstBlockerAsk && (
+              <div className="commercial-cockpit-next-ask" data-agent-target="blocker-resolution">
+                <span>Clear first</span>
+                <strong>{firstBlockerAsk.ask}</strong>
+                <em>{firstBlockerAsk.why}</em>
+              </div>
+            )}
+            <div className="commercial-cockpit-action-buttons">
+              {toolHint === "draft_missing_info_request" && inquiryId && (
+                <MissingInfoDraftButton inquiryId={inquiryId} jobId={jobId} />
               )}
-            />
-          ))}
-        </div>
-        <p>{commercialPriority.nextProof}</p>
-      </div>
-
-      <div className="commercial-cockpit-dossier" data-agent-target="decision-dossier" aria-label="Decision dossier">
-        <div className="commercial-cockpit-dossier-head">
-          <span>Decision dossier</span>
-          <strong>{decisionBrief.nextAction.label}</strong>
-          <em>{executionPacket.safety.rule}</em>
-        </div>
-        <div className="commercial-cockpit-dossier-grid">
-          {dossierRows.map((row) => (
-            <div key={row.key} className={`commercial-cockpit-dossier-row ${row.tone}`}>
-              <span>{row.label}</span>
-              <strong>{row.value}</strong>
-              <em>{row.detail}</em>
+              {toolHint === "draft_missing_info_request" && !inquiryId && (
+                <MissingInfoDraftButton jobId={jobId} />
+              )}
+              {toolHint === "create_forwarder_drafts" && (
+                <ForwarderDraftsButton jobId={jobId} />
+              )}
+              {toolHint === "draft_customer_quote" && (
+                <CustomerQuoteDraftButton jobId={jobId} quoteReady={strategy.quoteGate.canQuoteCustomer} />
+              )}
+              {toolHint === "draft_negotiation_plan" && (
+                <NegotiationPlanDraftButton jobId={jobId} />
+              )}
+              {["recommend_price", "assess_strategy", "none"].includes(toolHint) && (
+                <span className="commercial-cockpit-action-note">No direct action is safe yet. Fix the visible proof gap first.</span>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      <div className={`commercial-cockpit-contract ${contractTone}`} data-agent-target="decision-contract" aria-label="Decision contract">
-        <div className="commercial-cockpit-contract-head">
-          <div>
-            <span>Decision contract</span>
-            <strong>{decisionContract.title}</strong>
-            <em>{decisionContract.summary}</em>
-          </div>
-          <b>{decisionContract.state}</b>
-        </div>
-        <div className="commercial-cockpit-contract-grid">
-          <div>
-            <span>Proven now</span>
-            {contractProven.map((item) => (
-              <p key={`proven-${item.key}`}>
-                <strong>{item.label}: {item.value}</strong>
-                <em>{item.detail}</em>
-              </p>
-            ))}
-            {decisionContract.proven.length > contractProven.length && (
-              <small>{decisionContract.proven.length - contractProven.length} more proof item{decisionContract.proven.length - contractProven.length === 1 ? "" : "s"}.</small>
-            )}
-          </div>
-          <div>
-            <span>Assumptions to watch</span>
-            {contractAssumptions.map((item) => (
-              <p key={`assumption-${item.key}`} className={item.tone}>
-                <strong>{item.label}: {item.value}</strong>
-                <em>{item.detail}</em>
-              </p>
-            ))}
-            {decisionContract.assumptions.length > contractAssumptions.length && (
-              <small>{decisionContract.assumptions.length - contractAssumptions.length} more watch item{decisionContract.assumptions.length - contractAssumptions.length === 1 ? "" : "s"}.</small>
-            )}
-          </div>
-          <div>
-            <span>Agent may</span>
-            {decisionContract.allowedAgentMoves.map((move) => (
-              <p key={move}>
-                <strong>{move}</strong>
-              </p>
-            ))}
-            {decisionContract.nextHumanQuestion && (
-              <p className="review">
-                <strong>Next human question</strong>
-                <em>{decisionContract.nextHumanQuestion}</em>
-              </p>
-            )}
-          </div>
-          <div>
-            <span>Forbidden</span>
-            {decisionContract.forbidden.length > 0 ? contractForbidden.map((rule) => (
-              <p key={rule} className="blocked">
-                <strong>{rule}</strong>
-              </p>
-            )) : (
-              <p>
-                <strong>No extra hard stop beyond review-only sending policy.</strong>
-              </p>
-            )}
-            {decisionContract.forbidden.length > contractForbidden.length && (
-              <small>{decisionContract.forbidden.length - contractForbidden.length} more stop rule{decisionContract.forbidden.length - contractForbidden.length === 1 ? "" : "s"}.</small>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="commercial-cockpit-runway" aria-label="Evidence to decision to agent flow">
-        {runway.map((item) => (
-          <div key={item.key} className={`commercial-cockpit-runway-step ${item.tone}`}>
-            <span>{item.label}</span>
-            <strong>{item.title}</strong>
-            <em>{item.detail}</em>
-          </div>
-        ))}
-      </div>
-
-      <div className="commercial-cockpit-command-ledger" aria-label="Strategy command ledger">
-        <div className="commercial-cockpit-command-ledger-head">
-          <span>Command ledger</span>
-          <strong>Decision chain the agent must obey</strong>
-          <em>Current operating constraints by owner, evidence, and stop rule.</em>
-        </div>
-        <div className="commercial-cockpit-command-list">
-          {commandLedger.map((item, index) => (
-            <div key={item.key} className={`commercial-cockpit-command-row ${item.tone}`}>
-              <span className="commercial-cockpit-command-index">{index + 1}</span>
-              <div className="commercial-cockpit-command-main">
-                <span>{item.label} · {item.owner.toLowerCase()} · {item.priority}</span>
-                <strong>{item.command}</strong>
-                <em>{item.evidence}</em>
+          <div className="commercial-cockpit-proof-gaps" data-agent-target="strategy-evidence" aria-label="Commercial proof gap queue">
+            <div className="commercial-cockpit-proof-gaps-head">
+              <span>Proof queue</span>
+              <strong>{proofGaps.length > 0 ? `${proofGaps.length} input${proofGaps.length === 1 ? "" : "s"} to clear` : "Clear"}</strong>
+              <em>{proofGaps[0]?.detail ?? "No blocked or review evidence is holding this commercial move."}</em>
+            </div>
+            {proofGaps.length > 0 && (
+              <div className="commercial-cockpit-proof-gaps-list">
+                {proofGaps.slice(0, 3).map((gap, index) => (
+                  <div key={`${gap.key}-${index}`} className={`commercial-cockpit-proof-gap ${gap.tone}`} data-agent-target={gap.target}>
+                    <span>{index + 1}</span>
+                    <div>
+                      <strong>{gap.label} · {gap.owner.toLowerCase()}</strong>
+                      <em>{gap.action}</em>
+                      <small>{gap.metric} · {gap.detail}</small>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="commercial-cockpit-command-stop">
-                <span>{item.toolHint ? operatorToolLabel(item.toolHint) : item.tone}</span>
-                <strong>{item.stopRule}</strong>
+            )}
+          </div>
+
+          <div className={`commercial-cockpit-contract ${contractTone}`} data-agent-target="decision-contract" aria-label="Decision contract">
+            <div className="commercial-cockpit-contract-head">
+              <div>
+                <span>Decision contract</span>
+                <strong>{decisionContract.title}</strong>
+                <em>{decisionContract.summary}</em>
+              </div>
+              <b>{decisionContract.state}</b>
+            </div>
+            <div className="commercial-cockpit-contract-compact">
+              <div>
+                <span>Agent may</span>
+                <strong>{decisionContract.allowedAgentMoves[0] ?? "Review only."}</strong>
+              </div>
+              <div>
+                <span>Forbidden</span>
+                <strong>{decisionContract.forbidden[0] ?? "No external send without approval."}</strong>
               </div>
             </div>
-          ))}
+          </div>
         </div>
       </div>
 
-      <div className="commercial-cockpit-grid">
-        <div className="commercial-cockpit-primary">
-          <span>Next command</span>
-          <strong>{strategy.operatorDecision.ctaLabel}</strong>
-          <em>{strategy.operatorDecision.rationale}</em>
+      <div className="commercial-cockpit-proof-board">
+        <div className={`commercial-cockpit-priority ${commercialPriority.tone}`} data-agent-target="commercial-priority" aria-label="Commercial priority brief">
+          <div className="commercial-cockpit-priority-head">
+            <div>
+              <span>Priority</span>
+              <strong>{commercialPriority.label}</strong>
+              <em>{commercialPriority.whyNow}</em>
+            </div>
+            <div>
+              <span>Economic unlock</span>
+              <strong>{commercialPriority.economicUnlock}</strong>
+              <em>{commercialPriority.riskTradeoff}</em>
+            </div>
+          </div>
+          <div className="commercial-cockpit-priority-grid">
+            {commercialPriority.rows.slice(0, 4).map((row) => (
+              <div key={row.key} className={`commercial-cockpit-priority-row ${row.tone}`} data-agent-target={priorityRowTarget(row.key)}>
+                <span>{row.label}</span>
+                <strong>{row.value}</strong>
+                <em>{row.detail}</em>
+              </div>
+            ))}
+          </div>
         </div>
-        <div>
-          <span>Recommended quote</span>
-          <strong>{money(strategy.price.recommendedPrice, strategy.price.currency)}</strong>
-          <em>Floor {money(strategy.price.floorPrice, strategy.price.currency)}</em>
-        </div>
-        <div>
-          <span>Target posture</span>
-          <strong>{strategy.evidence.targetPosture.label}</strong>
-          <em>{strategy.evidence.targetPosture.target == null ? "No customer target captured" : money(strategy.evidence.targetPosture.target, strategy.evidence.targetPosture.currency)}</em>
-        </div>
-        <div>
-          <span>Route pick</span>
-          <strong>{route?.label ?? "No priced route yet"}</strong>
-          <em>{route?.tradeoff ?? "Get live rates before pretending this route is priced."}</em>
-        </div>
+
       </div>
 
       {routeDecisionRows.length > 0 && (
@@ -567,141 +481,6 @@ export function CommercialDecisionCockpit({
           <p>{routeDecision.selectionRule}</p>
         </div>
       )}
-
-      <PricingScenarioSandbox
-        jobId={jobId}
-        defaultTargetPrice={strategy.evidence.targetPosture.target}
-        defaultBuyCost={strategy.price.buyCost}
-        currency={strategy.price.currency}
-      />
-
-      {maturityChecks.length > 0 && (
-        <div className={`commercial-cockpit-maturity-ledger ${missingMaturityChecks.length > 0 ? "blocked" : "ready"}`} aria-label="RFQ maturity checklist">
-          <div className="commercial-cockpit-maturity-head">
-            <span>Maturity ledger</span>
-            <strong>{readyMaturityChecks.length}/{maturityChecks.length} ready</strong>
-            <em>
-              {missingMaturityChecks.length > 0
-                ? `${missingMaturityChecks.length} blocker${missingMaturityChecks.length === 1 ? "" : "s"} before forwarders.`
-                : "RFQ facts are ready for the next commercial action."}
-            </em>
-          </div>
-          <div className="commercial-cockpit-maturity-list">
-            {orderedMaturityChecks.map((check) => (
-              <div key={check.key} className={`commercial-cockpit-maturity-check ${check.status}`}>
-                <span>{check.label}</span>
-                <strong>{check.status === "ready" ? "Ready" : "Missing"}</strong>
-                <em>{check.detail}</em>
-              </div>
-            ))}
-          </div>
-          {blockerQueue.length > 0 && (
-            <div className="commercial-cockpit-blocker-queue" data-agent-target="blocker-resolution">
-              <div className="commercial-cockpit-blocker-head">
-                <span>Clear next</span>
-                <strong>{blockerQueue[0]?.label}</strong>
-              </div>
-              {blockerQueue.slice(0, 3).map((item, index) => (
-                <div key={item.key} className={`commercial-cockpit-blocker-item ${item.priority}`}>
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{item.ask}</strong>
-                    <em>{item.why}</em>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {decisionReasons.length > 0 && (
-        <div className="commercial-cockpit-reasons" data-agent-target="decision-reasons" aria-label="Decision rationale stack">
-          <div className="commercial-cockpit-reasons-head">
-            <span>Reason stack</span>
-            <strong>Why this action now</strong>
-          </div>
-          {decisionReasons.slice(0, 4).map((reason, index) => (
-            <div key={`${reason.key}-${reason.summary}`} className={`commercial-cockpit-reason ${reason.tone}`}>
-              <span>#{index + 1} {reason.label}</span>
-              <strong>{reason.summary}</strong>
-              <em>{reason.detail}</em>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="commercial-cockpit-evidence-map" data-agent-target="strategy-evidence" aria-label="Decision evidence map">
-        <div className="commercial-cockpit-evidence-map-head">
-          <span>Evidence map</span>
-          <strong>{weakestEvidence ? `Weakest input: ${weakestEvidence.label}` : "Primary inputs covered"}</strong>
-          <em>The agent can only act from these facts. Weak inputs stay visible instead of being hidden inside the score.</em>
-        </div>
-        <div className="commercial-cockpit-proof-gaps" data-agent-target="strategy-evidence" aria-label="Commercial proof gap queue">
-          <div className="commercial-cockpit-proof-gaps-head">
-            <span>Proof gap queue</span>
-            <strong>{proofGaps.length > 0 ? `${proofGaps.length} input${proofGaps.length === 1 ? "" : "s"} to clear` : "Proof queue clear"}</strong>
-            <em>{proofGaps[0]?.detail ?? "No blocked or review evidence is holding this commercial move."}</em>
-          </div>
-          {proofGaps.length > 0 && (
-            <div className="commercial-cockpit-proof-gaps-list">
-              {proofGaps.slice(0, 4).map((gap, index) => (
-                <div key={`${gap.key}-${index}`} className={`commercial-cockpit-proof-gap ${gap.tone}`} data-agent-target={gap.target}>
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{gap.label} · {gap.owner.toLowerCase()}</strong>
-                    <em>{gap.action}</em>
-                    <small>{gap.metric} · {gap.detail}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="commercial-cockpit-evidence-list">
-          {evidenceChecks.map((check) => (
-            <div
-              key={check.key}
-              className={`commercial-cockpit-evidence-check ${check.tone}`}
-              data-agent-target={check.key === "decision_quality" ? "decision-quality" : undefined}
-            >
-              <div className="commercial-cockpit-evidence-icon">
-                <Icon name={evidenceIcon(check.key)} size={14} />
-              </div>
-              <div>
-                <span>{check.label}</span>
-                <strong title={evidenceMetricLabel(check.metric, check.tone)}>{evidenceMetricLabel(check.metric, check.tone)}</strong>
-                <em>{check.detail}</em>
-              </div>
-              <b>{check.tone}</b>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="commercial-cockpit-flow" aria-label="Commercial decision flow">
-        {flow.map((item) => (
-          <div key={item.key} className={`commercial-cockpit-step ${item.tone}`} data-agent-target={item.target}>
-            <Icon name={item.icon} size={15} />
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <em>{item.detail}</em>
-          </div>
-        ))}
-      </div>
-
-      <div className="commercial-cockpit-lower">
-        <div className="commercial-cockpit-evidence">
-          <span>Evidence ledger</span>
-          <strong>{analyzedDocs}/{totalDocs} docs analyzed - {coverage.primaryEvidence.toLowerCase().replace("_", " ")}</strong>
-          <em>{uploadedDocs} uploaded docs waiting, {strategy.evidence.pendingQuotes} pending forwarder replies.</em>
-        </div>
-        <div className={`commercial-cockpit-agent ${agentTone}`}>
-          <span>Agent route</span>
-          <strong>{operatorSurfaceLabel(strategy.operatorDecision.surfaceHint)}</strong>
-          <em>{strategy.operatorDecision.requiresApproval ? "Approval required before execution" : "Safe to prepare draft output"}</em>
-        </div>
-      </div>
 
       {recentDraft && (
         <div className={`commercial-cockpit-recent ${recentDraft.isStale ? "stale" : recentDraft.tone}`}>
@@ -733,55 +512,196 @@ export function CommercialDecisionCockpit({
         </div>
       )}
 
-      <div className="commercial-cockpit-actions" data-agent-target="agent-action">
-        <div>
-          <span>Run from here</span>
-          <strong>{strategy.operatorDecision.ctaLabel}</strong>
-          <em>
-            {auditDraftHealth?.stale
-              ? "Some agent outputs were created before the current job facts. Rerun stale rows before using them."
-              : recentDraft?.isStale
-              ? "The previous draft is stale. Rerun before using it."
-              : recentDraft
-              ? "A recent review-only draft exists. Rerun only if the RFQ facts changed."
-              : "These controls create reviewable drafts or blockers only. They do not send customer or forwarder messages."}
-          </em>
-          <div className="commercial-cockpit-safety">
-            <span>Safety</span>
-            <strong>{executionPacket.safety.rule}</strong>
-            {executionPacket.safety.forbidden.length > 0 && (
-              <em>{executionPacket.safety.forbidden.slice(0, 2).join(" ")}</em>
-            )}
+      <details className="commercial-cockpit-details">
+        <summary>
+          <span>Proof ledger</span>
+          <strong>{weakestEvidence ? `Weakest: ${weakestEvidence.label}` : "Primary inputs covered"}</strong>
+        </summary>
+        <div className="commercial-cockpit-detail-grid">
+          <div className="commercial-cockpit-dossier" data-agent-target="decision-dossier" aria-label="Decision dossier">
+            <div className="commercial-cockpit-dossier-head">
+              <span>Decision dossier</span>
+              <strong>{decisionBrief.nextAction.label}</strong>
+              <em>{executionPacket.safety.rule}</em>
+            </div>
+            <div className="commercial-cockpit-dossier-grid">
+              {dossierRows.map((row) => (
+                <div key={row.key} className={`commercial-cockpit-dossier-row ${row.tone}`}>
+                  <span>{row.label}</span>
+                  <strong>{row.value}</strong>
+                  <em>{row.detail}</em>
+                </div>
+              ))}
+            </div>
           </div>
-          {toolHint === "draft_missing_info_request" && firstBlockerAsk && (
-            <div className="commercial-cockpit-next-ask">
-              <span>First customer ask</span>
-              <strong>{firstBlockerAsk.ask}</strong>
-              <em>{firstBlockerAsk.why}</em>
+
+          {maturityChecks.length > 0 && (
+            <div className={`commercial-cockpit-maturity-ledger ${missingMaturityChecks.length > 0 ? "blocked" : "ready"}`} aria-label="RFQ maturity checklist">
+              <div className="commercial-cockpit-maturity-head">
+                <span>Maturity ledger</span>
+                <strong>{readyMaturityChecks.length}/{maturityChecks.length} ready</strong>
+                <em>
+                  {missingMaturityChecks.length > 0
+                    ? `${missingMaturityChecks.length} blocker${missingMaturityChecks.length === 1 ? "" : "s"} before forwarders.`
+                    : "RFQ facts are ready for the next commercial action."}
+                </em>
+              </div>
+              <div className="commercial-cockpit-maturity-list">
+                {orderedMaturityChecks.map((check) => (
+                  <div key={check.key} className={`commercial-cockpit-maturity-check ${check.status}`}>
+                    <span>{check.label}</span>
+                    <strong>{check.status === "ready" ? "Ready" : "Missing"}</strong>
+                    <em>{check.detail}</em>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
+          {decisionReasons.length > 0 && (
+            <div className="commercial-cockpit-reasons" data-agent-target="decision-reasons" aria-label="Decision rationale stack">
+              <div className="commercial-cockpit-reasons-head">
+                <span>Reason stack</span>
+                <strong>Why this action now</strong>
+              </div>
+              {decisionReasons.slice(0, 4).map((reason, index) => (
+                <div key={`${reason.key}-${reason.summary}`} className={`commercial-cockpit-reason ${reason.tone}`}>
+                  <span>#{index + 1} {reason.label}</span>
+                  <strong>{reason.summary}</strong>
+                  <em>{reason.detail}</em>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="commercial-cockpit-evidence-map" data-agent-target="strategy-evidence" aria-label="Decision evidence map">
+            <div className="commercial-cockpit-evidence-map-head">
+              <span>Evidence map</span>
+              <strong>{weakestEvidence ? `Weakest input: ${weakestEvidence.label}` : "Primary inputs covered"}</strong>
+              <em>The agent can only act from these facts. Weak inputs stay visible instead of being hidden inside the score.</em>
+            </div>
+            <div className="commercial-cockpit-evidence-list">
+              {evidenceChecks.map((check) => (
+                <div
+                  key={check.key}
+                  className={`commercial-cockpit-evidence-check ${check.tone}`}
+                  data-agent-target={check.key === "decision_quality" ? "decision-quality" : undefined}
+                >
+                  <div className="commercial-cockpit-evidence-icon">
+                    <Icon name={evidenceIcon(check.key)} size={14} />
+                  </div>
+                  <div>
+                    <span>{check.label}</span>
+                    <strong title={evidenceMetricLabel(check.metric, check.tone)}>{evidenceMetricLabel(check.metric, check.tone)}</strong>
+                    <em>{check.detail}</em>
+                  </div>
+                  <b>{check.tone}</b>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="commercial-cockpit-action-buttons">
-          {toolHint === "draft_missing_info_request" && inquiryId && (
-            <MissingInfoDraftButton inquiryId={inquiryId} jobId={jobId} />
-          )}
-          {toolHint === "draft_missing_info_request" && !inquiryId && (
-            <MissingInfoDraftButton jobId={jobId} />
-          )}
-          {toolHint === "create_forwarder_drafts" && (
-            <ForwarderDraftsButton jobId={jobId} />
-          )}
-          {toolHint === "draft_customer_quote" && (
-            <CustomerQuoteDraftButton jobId={jobId} quoteReady={strategy.quoteGate.canQuoteCustomer} />
-          )}
-          {toolHint === "draft_negotiation_plan" && (
-            <NegotiationPlanDraftButton jobId={jobId} />
-          )}
-          {["recommend_price", "assess_strategy", "none"].includes(toolHint) && (
-            <span className="commercial-cockpit-action-note">No direct action is safe yet; inspect the strategy audit below.</span>
-          )}
+      </details>
+
+      <details className="commercial-cockpit-details">
+        <summary>
+          <span>Agent rules and what-if tools</span>
+          <strong>{operatorToolLabel(strategy.operatorDecision.toolHint)}</strong>
+        </summary>
+        <div className="commercial-cockpit-detail-grid">
+          <div className="commercial-cockpit-command-ledger" aria-label="Strategy command ledger">
+            <div className="commercial-cockpit-command-ledger-head">
+              <span>Command ledger</span>
+              <strong>Decision chain the agent must obey</strong>
+              <em>Current operating constraints by owner, evidence, and stop rule.</em>
+            </div>
+            <div className="commercial-cockpit-command-list">
+              {commandLedger.map((item, index) => (
+                <div key={item.key} className={`commercial-cockpit-command-row ${item.tone}`}>
+                  <span className="commercial-cockpit-command-index">{index + 1}</span>
+                  <div className="commercial-cockpit-command-main">
+                    <span>{item.label} · {item.owner.toLowerCase()} · {item.priority}</span>
+                    <strong>{item.command}</strong>
+                    <em>{item.evidence}</em>
+                  </div>
+                  <div className="commercial-cockpit-command-stop">
+                    <span>{item.toolHint ? operatorToolLabel(item.toolHint) : item.tone}</span>
+                    <strong>{item.stopRule}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className={`commercial-cockpit-contract ${contractTone}`} data-agent-target="decision-contract" aria-label="Decision contract details">
+            <div className="commercial-cockpit-contract-head">
+              <div>
+                <span>Full contract</span>
+                <strong>{decisionContract.title}</strong>
+                <em>{decisionContract.summary}</em>
+              </div>
+              <b>{decisionContract.state}</b>
+            </div>
+            <div className="commercial-cockpit-contract-grid">
+              <div>
+                <span>Proven now</span>
+                {contractProven.map((item) => (
+                  <p key={`proven-${item.key}`}>
+                    <strong>{item.label}: {item.value}</strong>
+                    <em>{item.detail}</em>
+                  </p>
+                ))}
+              </div>
+              <div>
+                <span>Assumptions to watch</span>
+                {contractAssumptions.map((item) => (
+                  <p key={`assumption-${item.key}`} className={item.tone}>
+                    <strong>{item.label}: {item.value}</strong>
+                    <em>{item.detail}</em>
+                  </p>
+                ))}
+              </div>
+              <div>
+                <span>Agent may</span>
+                {decisionContract.allowedAgentMoves.map((move) => (
+                  <p key={move}><strong>{move}</strong></p>
+                ))}
+                {decisionContract.nextHumanQuestion && (
+                  <p className="review">
+                    <strong>Next human question</strong>
+                    <em>{decisionContract.nextHumanQuestion}</em>
+                  </p>
+                )}
+              </div>
+              <div>
+                <span>Forbidden</span>
+                {decisionContract.forbidden.length > 0 ? contractForbidden.map((rule) => (
+                  <p key={rule} className="blocked"><strong>{rule}</strong></p>
+                )) : (
+                  <p><strong>No extra hard stop beyond review-only sending policy.</strong></p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="commercial-cockpit-runway" aria-label="Evidence to decision to agent flow">
+            {runway.map((item) => (
+              <div key={item.key} className={`commercial-cockpit-runway-step ${item.tone}`}>
+                <span>{item.label}</span>
+                <strong>{item.title}</strong>
+                <em>{item.detail}</em>
+              </div>
+            ))}
+          </div>
+
+          <PricingScenarioSandbox
+            jobId={jobId}
+            defaultTargetPrice={strategy.evidence.targetPosture.target}
+            defaultBuyCost={strategy.price.buyCost}
+            currency={strategy.price.currency}
+          />
         </div>
-      </div>
+      </details>
     </section>
   );
 }

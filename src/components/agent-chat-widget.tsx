@@ -58,6 +58,10 @@ const AGENT_TOOLS = [
 export function AgentChatWidget() {
   const router = useRouter();
   const pathname = usePathname();
+  const routeJobIdRaw = pathname.match(/^\/dashboard\/jobs\/([^/]+)/)?.[1];
+  const routeCompanyIdRaw = pathname.match(/^\/dashboard\/customers\/([^/]+)/)?.[1];
+  const routeJobId = routeJobIdRaw && routeJobIdRaw !== "new" ? routeJobIdRaw : undefined;
+  const routeCompanyId = routeCompanyIdRaw && routeCompanyIdRaw !== "new" ? routeCompanyIdRaw : undefined;
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
@@ -114,7 +118,7 @@ export function AgentChatWidget() {
     setMessages(next);
     setBusy(true);
     try {
-      const res = await chatWithAgent(history, text);
+      const res = await chatWithAgent(history, text, routeJobId, routeCompanyId);
       setMessages([...next, { role: "assistant", content: res.reply, toolTrace: res.toolTrace }]);
       const actualCues = cuesForToolTrace(res.toolTrace);
       if (actualCues.length > 0) {

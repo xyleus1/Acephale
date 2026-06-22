@@ -436,7 +436,15 @@ export default async function RFQDetailPage({
 
           {referenceSource && <ReferenceDealSourcePanel source={referenceSource} />}
 
-          {opportunity && <OpportunityScoreCard score={opportunity} />}
+          {opportunity && (
+            <details className="strategy-audit-details">
+              <summary>
+                <span>Strategy audit details</span>
+                <strong>Score, ladder, evidence, and risks</strong>
+              </summary>
+              <OpportunityScoreCard score={opportunity} />
+            </details>
+          )}
 
           <div className={`record-panel record-status-panel ${maturity.isMature ? "ready" : ""}`}>
             <div className="card-body">

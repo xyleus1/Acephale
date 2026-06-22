@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { Icon } from "@/components/icon";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { recordTargetPriceHistory } from "@/lib/target-price-history";
+import { recordMemoryEvent } from "@/lib/memory/record-event";
 
 async function createRFQ(formData: FormData) {
   "use server";
@@ -56,6 +57,35 @@ async function createRFQ(formData: FormData) {
       parsedData: JSON.stringify({ qualification }),
     },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "INQUIRY",
+    sourceExternalId: `manual_rfq:${inquiry.id}`,
+    eventType: "inquiry.created",
+    entityType: "inquiry",
+    entityId: inquiry.id,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: inquiry.createdAt,
+    payloadVersion: 1,
+    payload: {
+      inquiryId: inquiry.id,
+      subject: inquiry.subject,
+      status: inquiry.status,
+      qualification,
+      source: "manual_form",
+    },
+    provenance: {
+      source: "inquiry",
+      operation: "manual_create",
+      path: "src/app/dashboard/rfq/new/page.tsx",
+      function: "createRFQ",
+      sourceRecordId: inquiry.id,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `inquiry:${inquiry.id}:created`,
+  }).catch(() => null);
   if (targetPrice != null || data.targetPriceStatus === "NO_TARGET") {
     await recordTargetPriceHistory({
       officeId: session.officeId,

@@ -5,17 +5,16 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { Badge } from "@/components/ui";
+import { CommercialBrainEngineSchematic } from "@/components/commercial-brain-engine-schematic";
 import { reviewedFieldTokenLabel } from "@/lib/agent-proposal-review";
 import {
   assessCommercialStrategy,
   buildStrategyExecutionPacket,
   buildStrategyRouteDecision,
-  type CommercialStrategy,
-  type StrategyEvidenceCheck,
 } from "@/lib/commercial-strategy";
 import { loadJobStrategyInput } from "@/lib/commercial-strategy-persistence";
 import { simulatePricingScenario, type PricingScenarioResult } from "@/lib/pricing-scenario";
-import { operatorMetricLabel, operatorPhaseLabel, operatorToolLabel } from "@/lib/operator-action-labels";
+import { operatorPhaseLabel } from "@/lib/operator-action-labels";
 
 type AdminSearchParams = {
   tab?: string;
@@ -83,11 +82,6 @@ function parseMaybeNumber(value: string | undefined) {
   return Number.isFinite(n) ? n : null;
 }
 
-function money(value: number | null | undefined, currency = "USD") {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${currency} ${Math.round(value).toLocaleString()}`;
-}
-
 function pct(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—";
   return `${Math.round(value * 10) / 10}%`;
@@ -99,33 +93,9 @@ function signed(value: number | null | undefined, suffix = "") {
   return `${rounded > 0 ? "+" : ""}${rounded}${suffix}`;
 }
 
-function toneFromEvidence(tone: StrategyEvidenceCheck["tone"] | "rates" | string | null | undefined) {
-  if (tone === "ready" || tone === "review" || tone === "blocked" || tone === "rates" || tone === "info") return tone;
-  return "info";
-}
-
-function guardrailTone(status: CommercialStrategy["price"]["guardrailStatus"]) {
-  if (status === "PASS") return "ready";
-  if (status === "BLOCKED") return "blocked";
-  return "review";
-}
-
-function gateTone(status: CommercialStrategy["quoteGate"]["status"]) {
-  if (status === "READY_TO_QUOTE") return "ready";
-  if (status === "REVIEW_REQUIRED") return "review";
-  if (status === "NEEDS_RATES") return "rates";
-  return "blocked";
-}
-
 function scoreTone(score: number) {
   if (score >= 78) return "ready";
   if (score >= 58) return "review";
-  return "blocked";
-}
-
-function confidenceTone(confidence: CommercialStrategy["confidence"]) {
-  if (confidence === "high") return "ready";
-  if (confidence === "medium") return "review";
   return "blocked";
 }
 
@@ -275,6 +245,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const selectedBrainJobId = brainJobs.some((job) => job.id === sp.brainJobId)
     ? sp.brainJobId
     : brainJobs[0]?.id ?? null;
+  const selectedBrainJob = brainJobs.find((job) => job.id === selectedBrainJobId) ?? null;
   const brainInput = selectedBrainJobId ? await loadJobStrategyInput(session.officeId, selectedBrainJobId) : null;
   const brainStrategy = brainInput ? assessCommercialStrategy(brainInput) : null;
   const brainPacket = brainStrategy ? buildStrategyExecutionPacket(brainStrategy) : null;
@@ -659,25 +630,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {/* ── COMMERCIAL BRAIN TAB ─────────────────────────────────── */}
       {tab === "brain" && canSeeAgentAudit && (
         <div className="admin-brain" data-agent-target="admin-brain">
-          <section className="admin-brain-hero">
-            <div>
-              <span>Live decision model</span>
-              <strong>{brainStrategy ? brainStrategy.recommendationLabel : "No strategy loaded"}</strong>
-              <em>
-                {brainStrategy
-                  ? brainStrategy.strategyMemo
-                  : "Pick a job with enough commercial facts to inspect the pricing/risk/route brain."}
-              </em>
-            </div>
-            {brainStrategy && (
-              <div className={`admin-brain-score ${scoreTone(brainStrategy.score)}`}>
-                <span>{brainStrategy.band}</span>
-                <strong>{brainStrategy.score}</strong>
-                <em>{brainStrategy.confidence} confidence</em>
-              </div>
-            )}
-          </section>
-
           <form action="/dashboard/admin" method="get" className="admin-brain-selector">
             <input type="hidden" name="tab" value="brain" />
             <label>
@@ -700,222 +652,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
           {brainStrategy && brainPacket && brainRouteDecision ? (
             <>
-              <section className="admin-brain-strip" aria-label="Commercial brain gates">
-                <div className={gateTone(brainStrategy.quoteGate.status)}>
-                  <span>Quote gate</span>
-                  <strong>{brainStrategy.quoteGate.label}</strong>
-                  <em>{brainStrategy.quoteGate.decision}</em>
-                </div>
-                <div className={guardrailTone(brainStrategy.price.guardrailStatus)}>
-                  <span>Economics</span>
-                  <strong>{brainStrategy.price.guardrailStatus.toLowerCase().replace("_", " ")}</strong>
-                  <em>{money(brainStrategy.price.recommendedPrice, brainStrategy.price.currency)} recommended</em>
-                </div>
-                <div className={toneFromEvidence(brainPacket.evidence.weakest?.tone ?? "ready")}>
-                  <span>Weakest proof</span>
-                  <strong>{brainPacket.evidence.weakest?.label ?? "No hard gap"}</strong>
-                  <em>{brainPacket.evidence.weakest?.detail ?? "The model has enough proof for the current gate."}</em>
-                </div>
-                <div className={confidenceTone(brainStrategy.confidence)}>
-                  <span>Agent move</span>
-                  <strong>{operatorToolLabel(brainStrategy.operatorDecision.toolHint)}</strong>
-                  <em>{brainPacket.safety.stopCondition}</em>
-                </div>
-              </section>
-
-              <section className="admin-brain-grid">
-                <div className="admin-brain-card admin-brain-wide" data-agent-target="decision-quality">
-                  <div className="admin-brain-card-head">
-                    <span>Score anatomy</span>
-                    <strong>{brainStrategy.label}</strong>
-                  </div>
-                  <div className="admin-brain-meter-list">
-                    {Object.entries(brainStrategy.components).map(([key, value]) => (
-                      <div key={key} className="admin-brain-meter">
-                        <span>{key.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
-                        <strong>{value}/100</strong>
-                        <div>
-                          <i style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="admin-brain-card" data-agent-target="decision-contract">
-                  <div className="admin-brain-card-head">
-                    <span>Decision contract</span>
-                    <strong>{brainPacket.contract.title}</strong>
-                  </div>
-                  <p>{brainPacket.contract.summary}</p>
-                  <div className="admin-brain-mini-ledger">
-                    {brainPacket.contract.proven.slice(0, 2).map((item) => (
-                      <span key={`proven-${item.key}`} className={toneFromEvidence(item.tone)}>
-                        <strong>{item.label}</strong>
-                        <em>{item.value}</em>
-                      </span>
-                    ))}
-                    {brainPacket.contract.assumptions.slice(0, 2).map((item) => (
-                      <span key={`assumption-${item.key}`} className={toneFromEvidence(item.tone)}>
-                        <strong>{item.label}</strong>
-                        <em>{item.detail}</em>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="admin-brain-forbidden">
-                    {brainPacket.contract.forbidden.slice(0, 3).map((rule) => <span key={rule}>{rule}</span>)}
-                  </div>
-                </div>
-
-                <div className="admin-brain-card" data-agent-target="financials">
-                  <div className="admin-brain-card-head">
-                    <span>Price guardrails</span>
-                    <strong>{brainStrategy.price.currency}</strong>
-                  </div>
-                  <div className="admin-brain-price-grid">
-                    <span>Buy cost <strong>{money(brainStrategy.price.buyCost, brainStrategy.price.currency)}</strong></span>
-                    <span>Floor <strong>{money(brainStrategy.price.floorPrice, brainStrategy.price.currency)}</strong></span>
-                    <span>Recommended <strong>{money(brainStrategy.price.recommendedPrice, brainStrategy.price.currency)}</strong></span>
-                    <span>Stretch <strong>{money(brainStrategy.price.stretchPrice, brainStrategy.price.currency)}</strong></span>
-                    <span>Walk-away <strong>{money(brainStrategy.price.walkAwayPrice, brainStrategy.price.currency)}</strong></span>
-                    <span>Expected GP <strong>{money(brainStrategy.price.expectedGrossProfit, brainStrategy.price.currency)}</strong></span>
-                  </div>
-                  <p>Win probability {brainStrategy.price.winProbability}% · expected margin {pct(brainStrategy.price.expectedMarginPct)}</p>
-                </div>
-              </section>
-
-              <section className="admin-brain-grid">
-                <div className="admin-brain-card admin-brain-wide" data-agent-target="strategy-evidence">
-                  <div className="admin-brain-card-head">
-                    <span>Evidence matrix</span>
-                    <strong>{brainPacket.evidence.checks.length} checks</strong>
-                  </div>
-                  <div className="admin-brain-evidence-grid">
-                    {brainPacket.evidence.checks.map((check) => (
-                      <div key={check.key} className={`admin-brain-evidence ${toneFromEvidence(check.tone)}`} data-agent-target={check.key === "decision_quality" ? "decision-quality" : undefined}>
-                        <span>{check.label}</span>
-                        <strong>{operatorMetricLabel(check.metric, check.tone)}</strong>
-                        <em>{check.detail}</em>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="admin-brain-card" data-agent-target="blocker-resolution">
-                  <div className="admin-brain-card-head">
-                    <span>Proof gaps</span>
-                    <strong>{brainPacket.evidence.gaps.length || "Clear"}</strong>
-                  </div>
-                  <div className="admin-brain-proof-list">
-                    {(brainPacket.evidence.gaps.length ? brainPacket.evidence.gaps : [{
-                      key: "clear",
-                      label: "No blocking gap",
-                      tone: "ready" as const,
-                      metric: "ready",
-                      detail: "No proof gap blocks the current decision gate.",
-                      action: "Proceed only within the decision contract.",
-                      owner: "INTERNAL" as const,
-                      target: "strategy-evidence" as const,
-                    }]).slice(0, 8).map((gap) => (
-                      <div key={`${gap.key}-${gap.target}`} className={`admin-brain-proof ${toneFromEvidence(gap.tone)}`} data-agent-target={gap.target}>
-                        <span>{gap.owner} · {gap.label}</span>
-                        <strong>{gap.action}</strong>
-                        <em>{operatorMetricLabel(gap.metric, gap.tone)} · {gap.detail}</em>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              <section className="admin-brain-grid">
-                <div className="admin-brain-card admin-brain-wide" data-agent-target="movement">
-                  <div className="admin-brain-card-head">
-                    <span>Route decision</span>
-                    <strong>{brainRouteDecision.summary}</strong>
-                  </div>
-                  <div className="admin-brain-route-table">
-                    <div className="admin-brain-route-head">
-                      <span>Rank</span><span>Route</span><span>Cost</span><span>Proof</span><span>Tradeoff</span>
-                    </div>
-                    {[brainRouteDecision.selected, ...brainRouteDecision.alternatives].filter(Boolean).slice(0, 5).map((row) => row && (
-                      <div key={`${row.rank}-${row.label}-${row.source}`} className="admin-brain-route-row">
-                        <span>#{row.rank}</span>
-                        <strong>{row.label}</strong>
-                        <em>{row.costLabel}</em>
-                        <em>{row.source.toLowerCase().replace("_", " ")} · {row.confidence}</em>
-                        <small>{row.tradeoff}</small>
-                      </div>
-                    ))}
-                  </div>
-                  <p>{brainRouteDecision.selectionRule}</p>
-                </div>
-
-                <div className="admin-brain-card" data-agent-target="agent-action">
-                  <div className="admin-brain-card-head">
-                    <span>Command ledger</span>
-                    <strong>{brainPacket.primary.command}</strong>
-                  </div>
-                  <div className="admin-brain-command-list">
-                    {brainPacket.commandLedger.map((item) => (
-                      <div key={item.key} className={`admin-brain-command ${toneFromEvidence(item.tone)}`}>
-                        <span>{item.owner} · {item.label}</span>
-                        <strong>{item.command}</strong>
-                        <em>{item.stopRule}</em>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              <section className="admin-brain-grid">
-                <div className="admin-brain-card" data-agent-target="decision-reasons">
-                  <div className="admin-brain-card-head">
-                    <span>Decision reasons</span>
-                    <strong>{brainStrategy.decisionReasons.length}</strong>
-                  </div>
-                  <div className="admin-brain-proof-list">
-                    {brainStrategy.decisionReasons.map((reason) => (
-                      <div key={reason.key} className={`admin-brain-proof ${reason.tone === "blocker" ? "blocked" : reason.tone === "support" ? "ready" : reason.tone}`}>
-                        <span>{reason.label}</span>
-                        <strong>{reason.summary}</strong>
-                        <em>{reason.detail}</em>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="admin-brain-card" data-agent-target="risk">
-                  <div className="admin-brain-card-head">
-                    <span>Risk register</span>
-                    <strong>{brainStrategy.riskAssessments[0]?.level ?? "LOW"}</strong>
-                  </div>
-                  <div className="admin-brain-proof-list">
-                    {brainStrategy.riskAssessments.slice(0, 5).map((risk) => (
-                      <div key={`${risk.category}-${risk.reason}`} className={`admin-brain-proof ${risk.level === "CRITICAL" || risk.level === "HIGH" ? "blocked" : risk.level === "MEDIUM" ? "review" : "ready"}`}>
-                        <span>{risk.category} · {risk.level} · {risk.score}/100</span>
-                        <strong>{risk.reason}</strong>
-                        <em>{risk.mitigation}</em>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="admin-brain-card">
-                  <div className="admin-brain-card-head">
-                    <span>Proposed actions</span>
-                    <strong>{brainStrategy.actions.length}</strong>
-                  </div>
-                  <div className="admin-brain-proof-list">
-                    {brainStrategy.actions.map((action) => (
-                      <div key={`${action.actionType}-${action.title}`} className={`admin-brain-proof ${action.priority === "critical" ? "blocked" : action.priority === "high" ? "review" : "info"}`}>
-                        <span>{action.priority} · {action.actionType.toLowerCase().replace("_", " ")}</span>
-                        <strong>{action.title}</strong>
-                        <em>{action.rationale}</em>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
+              <CommercialBrainEngineSchematic
+                strategy={brainStrategy}
+                packet={brainPacket}
+                routeDecision={brainRouteDecision}
+                jobReference={selectedBrainJob
+                  ? `${selectedBrainJob.reference} / ${selectedBrainJob.title ?? selectedBrainJob.company?.name ?? "Untitled"}`
+                  : "Selected job"}
+              />
 
               <section className="admin-brain-grid">
                 <form action="/dashboard/admin" method="get" className="admin-brain-card admin-brain-scenario" data-agent-target="pricing-scenario">

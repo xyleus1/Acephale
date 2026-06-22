@@ -17,6 +17,7 @@ import { buildNegotiationPlanDraft } from "@/lib/negotiation-plan-draft";
 import { simulatePricingScenario } from "@/lib/pricing-scenario";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { draftFreshnessKey } from "@/lib/draft-freshness";
+import { recordMemoryEvent } from "@/lib/memory/record-event";
 
 async function recordJobDraftEvent(args: {
   officeId: string;
@@ -26,7 +27,7 @@ async function recordJobDraftEvent(args: {
   type: "missing_info_draft.created" | "missing_info_draft.blocked" | "forwarder_drafts.created" | "forwarder_drafts.blocked" | "customer_quote_draft.created" | "customer_quote_draft.blocked" | "negotiation_plan_draft.created" | "negotiation_plan_draft.blocked";
   payload: Record<string, unknown>;
 }) {
-  return prisma.event.create({
+  const event = await prisma.event.create({
     data: {
       officeId: args.officeId,
       type: args.type,
@@ -42,6 +43,36 @@ async function recordJobDraftEvent(args: {
     },
     select: { id: true },
   }).catch(() => null);
+  await recordMemoryEvent({
+    officeId: args.officeId,
+    sourceType: "JOB",
+    sourceExternalId: `job:${args.jobId}`,
+    eventType: args.type,
+    entityType: "job",
+    entityId: args.jobId,
+    actorType: args.userId ? "user" : "system",
+    actorId: args.userId ?? null,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload: {
+      eventId: event?.id ?? null,
+      userId: args.userId ?? null,
+      jobId: args.jobId,
+      inquiryId: args.inquiryId ?? null,
+      ...args.payload,
+    },
+    provenance: {
+      source: "job",
+      operation: args.type,
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "recordJobDraftEvent",
+      sourceRecordId: args.jobId,
+      actorType: args.userId ? "user" : "system",
+      actorId: args.userId ?? null,
+    },
+    idempotencyKey: `job:${args.jobId}:${args.type}:${event?.id ?? Date.now()}`,
+  }).catch(() => null);
+  return event;
 }
 
 // ── Job status ────────────────────────────────────────────────────────────────
@@ -52,10 +83,33 @@ export async function updateJobStatus(jobId: string, status: string) {
     where: { id: jobId, officeId: session.officeId },
     select: { status: true },
   });
-  await prisma.job.update({
+  const updated = await prisma.job.update({
     where: { id: jobId, officeId: session.officeId },
     data: { status: status as never },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "JOB",
+    sourceExternalId: `job:${jobId}`,
+    eventType: "job.status_updated",
+    entityType: "job",
+    entityId: jobId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: updated.updatedAt,
+    payloadVersion: 1,
+    payload: { jobId, fromStatus: before?.status ?? null, toStatus: status },
+    provenance: {
+      source: "job",
+      operation: "status_update",
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "updateJobStatus",
+      sourceRecordId: jobId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `job:${jobId}:status:${before?.status ?? "unknown"}:${status}:${updated.updatedAt.toISOString()}`,
+  }).catch(() => null);
   if (before && before.status !== status) {
     await enqueueBackgroundJob({
       officeId: session.officeId,
@@ -253,6 +307,29 @@ export async function updateDocStatus(docId: string, status: string) {
     where: { id: docId, officeId: session.officeId },
     data: { status, url: status === "UPLOADED" ? (doc.url ?? "#placeholder") : doc.url },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "DOCUMENT",
+    sourceExternalId: `job_document:${docId}`,
+    eventType: "job_document.status_updated",
+    entityType: "job_document",
+    entityId: docId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload: { documentId: docId, jobId: doc.jobId, status, previousStatus: doc.status, docType: doc.docType, name: doc.name },
+    provenance: {
+      source: "document",
+      operation: "status_update",
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "updateDocStatus",
+      sourceRecordId: docId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `job_document:${docId}:status:${status}:${Date.now()}`,
+  }).catch(() => null);
   // On approve, run AI analysis (best-effort; don't block UI on failure).
   if (status === "APPROVED" && doc.url && !doc.url.includes("placeholder")) {
     await enqueueBackgroundJob({
@@ -298,6 +375,36 @@ export async function uploadJobDocument(docId: string, formData: FormData) {
       aiAnalyzedAt: null,
     },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "DOCUMENT",
+    sourceExternalId: `job_document:${doc.id}`,
+    eventType: "job_document.uploaded",
+    entityType: "job_document",
+    entityId: doc.id,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload: {
+      documentId: doc.id,
+      jobId: doc.jobId,
+      fileName: file.name,
+      contentType: file.type || null,
+      size: file.size,
+      storageUrl: stored.url,
+    },
+    provenance: {
+      source: "document",
+      operation: "upload",
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "uploadJobDocument",
+      sourceRecordId: doc.id,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `job_document:${doc.id}:uploaded:${Date.now()}`,
+  }).catch(() => null);
 
   revalidatePath(`/dashboard/jobs/${doc.jobId}`);
   revalidatePath("/dashboard");
@@ -307,7 +414,7 @@ export async function addDocument(jobId: string, formData: FormData) {
   const session = await requireSession();
   const job = await prisma.job.findFirst({ where: { id: jobId, officeId: session.officeId } });
   if (!job) return;
-  await prisma.jobDocument.create({
+  const created = await prisma.jobDocument.create({
     data: {
       jobId,
       officeId: session.officeId,
@@ -317,6 +424,29 @@ export async function addDocument(jobId: string, formData: FormData) {
       uploadedByUserId: session.userId,
     },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "DOCUMENT",
+    sourceExternalId: `job_document:${created.id}`,
+    eventType: "job_document.created",
+    entityType: "job_document",
+    entityId: created.id,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: created.createdAt,
+    payloadVersion: 1,
+    payload: { documentId: created.id, jobId, name: created.name, docType: created.docType, status: created.status },
+    provenance: {
+      source: "document",
+      operation: "create",
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "addDocument",
+      sourceRecordId: created.id,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `job_document:${created.id}:created`,
+  }).catch(() => null);
   revalidatePath(`/dashboard/jobs/${jobId}`);
 }
 
@@ -341,10 +471,33 @@ export async function updateMilestonePlanned(milestoneId: string, plannedAt: str
     include: { job: { select: { officeId: true } } },
   });
   if (!ms || ms.job.officeId !== session.officeId) return;
-  await prisma.jobMilestone.update({
+  const updated = await prisma.jobMilestone.update({
     where: { id: milestoneId },
     data: { plannedAt: plannedAt ? new Date(plannedAt) : null },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "JOB",
+    sourceExternalId: `job:${ms.jobId}`,
+    eventType: "job_milestone.planned_updated",
+    entityType: "job",
+    entityId: ms.jobId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: updated.updatedAt,
+    payloadVersion: 1,
+    payload: { milestoneId, jobId: ms.jobId, type: ms.type, plannedAt: updated.plannedAt },
+    provenance: {
+      source: "job",
+      operation: "milestone_planned_update",
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "updateMilestonePlanned",
+      sourceRecordId: milestoneId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `job:${ms.jobId}:milestone:${milestoneId}:planned:${updated.updatedAt.toISOString()}`,
+  }).catch(() => null);
   revalidatePath(`/dashboard/jobs/${ms.jobId}`);
 }
 
@@ -355,10 +508,33 @@ export async function markMilestoneActual(milestoneId: string) {
     include: { job: { select: { officeId: true } } },
   });
   if (!ms || ms.job.officeId !== session.officeId) return;
-  await prisma.jobMilestone.update({
+  const updated = await prisma.jobMilestone.update({
     where: { id: milestoneId },
     data: { actualAt: new Date() },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "JOB",
+    sourceExternalId: `job:${ms.jobId}`,
+    eventType: "job_milestone.actual_marked",
+    entityType: "job",
+    entityId: ms.jobId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: updated.updatedAt,
+    payloadVersion: 1,
+    payload: { milestoneId, jobId: ms.jobId, type: ms.type, actualAt: updated.actualAt },
+    provenance: {
+      source: "job",
+      operation: "milestone_actual_mark",
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "markMilestoneActual",
+      sourceRecordId: milestoneId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `job:${ms.jobId}:milestone:${milestoneId}:actual:${updated.updatedAt.toISOString()}`,
+  }).catch(() => null);
   await enqueueBackgroundJob({
     officeId: session.officeId,
     type: "CUSTOMER_MILESTONE_NOTIFY",

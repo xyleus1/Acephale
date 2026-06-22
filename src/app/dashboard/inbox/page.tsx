@@ -26,6 +26,20 @@ const FILTERS = [
   { key: "_ALL",              label: "All"             },
 ] as const;
 
+const MAIL_PROVIDERS = ["GMAIL", "OUTLOOK", "IMAP"] as const;
+
+const CHANNELS = [
+  { key: "", label: "All channels" },
+  { key: "mail", label: "Mail" },
+  { key: "whatsapp", label: "WhatsApp" },
+] as const;
+
+type ChannelFilter = typeof CHANNELS[number]["key"];
+
+function normalizeChannel(value: string | undefined): ChannelFilter {
+  return value === "mail" || value === "whatsapp" ? value : "";
+}
+
 function timeAgo(d: Date) {
   const diff = Date.now() - new Date(d).getTime();
   const m = Math.floor(diff / 60000);
@@ -62,6 +76,25 @@ function dominantKind(messages: { direction: string; classification: string | nu
   return "OTHER";
 }
 
+function channelBadge(account: { provider: string; email: string } | null | undefined) {
+  if (!account) return { label: "Unknown", cls: "unknown" };
+  if (account.provider === "WHATSAPP") return { label: "WhatsApp", cls: "whatsapp" };
+  if (account.provider === "GMAIL") return { label: "Gmail", cls: "mail" };
+  if (account.provider === "OUTLOOK") return { label: "Outlook", cls: "mail" };
+  if (account.provider === "IMAP") return { label: "IMAP", cls: "mail" };
+  return { label: account.provider, cls: "unknown" };
+}
+
+function threadSourceMeta(messages: { account?: { provider: string; email: string } | null; fromEmail: string; fromName: string | null }[]) {
+  const last = messages[messages.length - 1];
+  const account = last?.account ?? messages.find((m) => m.account)?.account ?? null;
+  const badge = channelBadge(account);
+  return {
+    ...badge,
+    accountLabel: account?.email ?? "unknown source",
+  };
+}
+
 function threadCriticality(thread: {
   hiddenAt?: Date | null;
   snoozedUntil?: Date | null;
@@ -96,12 +129,13 @@ function threadCriticality(thread: {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; account?: string; view?: string; q?: string; job?: string; inquiry?: string }>;
+  searchParams: Promise<{ filter?: string; account?: string; channel?: string; view?: string; q?: string; job?: string; inquiry?: string }>;
 }) {
   const session = await requireSession();
   const sp = await searchParams;
   const filter = sp.filter ?? "";
   const accountFilter = sp.account ?? "";
+  const channel = normalizeChannel(sp.channel);
   const view = sp.view === "loads" ? "loads" : sp.view === "rfqs" ? "rfqs" : "threads";
   const searchQuery = (sp.q ?? "").trim();
   const jobFilter = sp.job?.trim() || "";
@@ -128,6 +162,32 @@ export default async function InboxPage({
   const approvedContactEmails = [...new Set(approvedContacts
     .map((c) => c.email?.trim().toLowerCase())
     .filter((email): email is string => !!email))];
+
+  function messageScope(args: { channel?: ChannelFilter; accountId?: string } = {}) {
+    const scopedChannel = args.channel ?? channel;
+    const scopedAccountId = args.accountId ?? accountFilter;
+    const account: any = { isActive: true };
+    if (scopedAccountId) account.id = scopedAccountId;
+    if (scopedChannel === "mail") account.provider = { in: [...MAIL_PROVIDERS] };
+    if (scopedChannel === "whatsapp") account.provider = "WHATSAPP";
+    return { messages: { some: { account } } };
+  }
+
+  function inboxHref(overrides: Partial<Record<"filter" | "account" | "channel" | "view" | "q", string | null>>) {
+    const next = {
+      filter: overrides.filter === undefined ? filter : overrides.filter,
+      account: overrides.account === undefined ? accountFilter : overrides.account,
+      channel: overrides.channel === undefined ? channel : overrides.channel,
+      view: overrides.view === undefined ? (view === "threads" ? "" : view) : overrides.view,
+      q: overrides.q === undefined ? searchQuery : overrides.q,
+    };
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(next)) {
+      if (value) params.set(key, value);
+    }
+    const qs = params.toString();
+    return `/dashboard/inbox${qs ? `?${qs}` : ""}`;
+  }
 
   // Threads with messages, plus their linked job/inquiry
   const where: any = { officeId: session.officeId };
@@ -161,12 +221,7 @@ export default async function InboxPage({
     }
   }
   // Only show threads from active (non-paused) accounts.
-  where.messages = {
-    some: {
-      account: { isActive: true },
-      ...(accountFilter ? { accountId: accountFilter } : {}),
-    },
-  };
+  where.messages = messageScope().messages;
   // Load-based filter: scope to a specific job (and its linked inquiry threads)
   // or a specific inquiry directly. Overrides the linked/unlinked filter
   // because if you're filtering to a load, you implicitly want all of its threads.
@@ -238,7 +293,10 @@ export default async function InboxPage({
   let threads = await prisma.emailThread.findMany({
     where,
     include: {
-      messages: { orderBy: { sentAt: "asc" } },
+      messages: {
+        orderBy: { sentAt: "asc" },
+        include: { account: { select: { id: true, email: true, provider: true } } },
+      },
       job: { select: { id: true, reference: true, type: true, company: { select: { name: true } } } },
       inquiry: { select: { id: true, subject: true, type: true } },
     },
@@ -258,9 +316,13 @@ export default async function InboxPage({
     return diff || b.lastMessageAt.getTime() - a.lastMessageAt.getTime();
   });
 
-  // Counts for the filter chips (scoped to active accounts, like the thread list)
-  const fromActiveAccount = { messages: { some: { account: { isActive: true } } } };
+  // Counts for the filter chips (scoped to active accounts/channel, like the thread list)
+  const fromActiveAccount = messageScope();
+  const allChannelsAccountScope = messageScope({ channel: "" });
   const activeFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...fromActiveAccount };
+  const activeAllChannelsFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...allChannelsAccountScope };
+  const activeMailFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...messageScope({ channel: "mail" }) };
+  const activeWhatsAppFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...messageScope({ channel: "whatsapp" }) };
   const approvedContactFilter: any = {
     messages: {
       some: {
@@ -269,8 +331,11 @@ export default async function InboxPage({
       },
     },
   };
-  const [totalActive, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
+  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, ...activeAllChannelsFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, ...activeMailFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, ...activeWhatsAppFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, approvedContactFilter] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter, jobId: null, inquiryId: null } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, { OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] }] } }),
@@ -281,7 +346,7 @@ export default async function InboxPage({
   // "Awaiting reply" count is approximate: pull last messages directly via raw count of latest-inbound.
   // Cheap heuristic: same query as fetched threads.
   const totalNeedsReply = (await prisma.emailThread.findMany({
-    where: { officeId: session.officeId, hiddenAt: null, ...fromActiveAccount },
+    where: { officeId: session.officeId, hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...fromActiveAccount },
     include: { messages: { orderBy: { sentAt: "desc" }, take: 1 } },
     take: 500,
   })).filter((t) => t.messages[0]?.direction === "INBOUND").length;
@@ -296,6 +361,12 @@ export default async function InboxPage({
     if (key === "_HIDDEN") return totalHidden;
     if (key === "_ALL") return totalAll;
     return 0;
+  }
+
+  function channelCountFor(key: ChannelFilter): number {
+    if (key === "mail") return totalMail;
+    if (key === "whatsapp") return totalWhatsApp;
+    return totalAllChannelsActive;
   }
 
   // RFQs view: structured inquiry list (replaces the standalone /dashboard/rfq page).
@@ -437,19 +508,41 @@ export default async function InboxPage({
         </div>
       </div>
 
-      {accounts.length > 1 && (
-        <div className="chip-row">
-          <a href="/dashboard/inbox" className={`filter-chip${!accountFilter ? " active" : ""}`}>All inboxes</a>
-          {accounts.map((a) => (
-            <a key={a.id} href={`/dashboard/inbox?account=${a.id}${filter ? `&filter=${filter}` : ""}`} className={`filter-chip${accountFilter === a.id ? " active" : ""}`}>{a.email}</a>
+      {accounts.length > 0 && (
+        <div className="chip-row channel-chip-row">
+          {CHANNELS.map((c) => (
+            <a
+              key={c.key || "all"}
+              href={inboxHref({ channel: c.key, account: null })}
+              className={`filter-chip${!accountFilter && channel === c.key ? " active" : ""}`}
+            >
+              {c.label}
+              <span className="filter-chip-count">{channelCountFor(c.key)}</span>
+            </a>
           ))}
+          <span className="chip-row-divider" />
+          <a href={inboxHref({ account: null })} className={`filter-chip${!accountFilter ? " active" : ""}`}>All inboxes</a>
+          {accounts.map((a) => {
+            const badge = channelBadge(a);
+            return (
+              <a
+                key={a.id}
+                href={inboxHref({ account: a.id, channel: null })}
+                className={`filter-chip source-chip ${badge.cls}${accountFilter === a.id ? " active" : ""}`}
+              >
+                <span className={`inbox-channel-dot ${badge.cls}`} />
+                {a.email}
+              </a>
+            );
+          })}
         </div>
       )}
 
       <form method="get" action="/dashboard/inbox" className="inbox-search-form">
         {filter && <input type="hidden" name="filter" value={filter} />}
         {accountFilter && <input type="hidden" name="account" value={accountFilter} />}
-        {view === "loads" && <input type="hidden" name="view" value="loads" />}
+        {channel && <input type="hidden" name="channel" value={channel} />}
+        {view !== "threads" && <input type="hidden" name="view" value={view} />}
         <div className="inbox-search-wrap">
           <input
             type="search"
@@ -463,7 +556,7 @@ export default async function InboxPage({
           </span>
         </div>
         {searchQuery && (
-          <a href={`/dashboard/inbox${filter ? `?filter=${filter}` : ""}`} className="inbox-clear-link">Clear</a>
+          <a href={inboxHref({ q: null })} className="inbox-clear-link">Clear</a>
         )}
       </form>
       {searchQuery && (
@@ -474,13 +567,11 @@ export default async function InboxPage({
 
       <div className="chip-row">
         {FILTERS.map((f) => {
-          const accountQs = accountFilter ? `&account=${accountFilter}` : "";
-          const viewQs = view === "loads" ? "&view=loads" : "";
           const isActive = filter === f.key;
           return (
             <a
               key={f.key}
-              href={`/dashboard/inbox?${f.key ? `filter=${f.key}` : ""}${accountQs}${viewQs}`.replace(/^\?&/, "?").replace(/\?$/, "")}
+              href={inboxHref({ filter: f.key })}
               className={`filter-chip dark${isActive ? " active" : ""}`}
             >
               {f.label}
@@ -497,13 +588,10 @@ export default async function InboxPage({
             { key: "rfqs",    label: "RFQs" },
           ].map((v) => {
             const isActive = view === v.key;
-            const filterQs = filter ? `filter=${filter}` : "";
-            const accountQs = accountFilter ? `&account=${accountFilter}` : "";
-            const viewQs = v.key === "threads" ? "" : `&view=${v.key}`;
             return (
               <a
                 key={v.key}
-                href={`/dashboard/inbox?${filterQs}${accountQs}${viewQs}`.replace(/\?&/, "?").replace(/\?$/, "")}
+                href={inboxHref({ view: v.key === "threads" ? null : v.key })}
                 className={`view-switcher-tab${isActive ? " active" : ""}`}
               >{v.label}</a>
             );
@@ -551,10 +639,10 @@ export default async function InboxPage({
             <>
               <div className="empty-state-title">No inboxes connected</div>
               <p className="empty-state-copy">
-                Connect a Gmail inbox to start syncing emails.
+                Connect a Gmail inbox or configure WhatsApp to start syncing customer channels.
               </p>
               <a href="/dashboard/settings/email" className="btn empty-state-action">
-                Go to email settings
+                Go to channel settings
               </a>
             </>
           ) : searchQuery ? (
@@ -616,6 +704,7 @@ export default async function InboxPage({
                 {g.threads.map((t) => {
                   const last = t.messages[t.messages.length - 1];
                   const priority = threadCriticality(t);
+                  const source = threadSourceMeta(t.messages);
                   return (
                     <div key={t.id} className="inbox-thread-row">
                       <BulkCheckbox threadId={t.id} />
@@ -625,6 +714,7 @@ export default async function InboxPage({
                         </div>
                         <div className="inbox-thread-meta">
                           <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
+                          <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
                           {t.messages.length} msg · {timeAgo(t.lastMessageAt)}{last ? ` · last from ${last.fromName ?? last.fromEmail}` : ""}
                         </div>
                       </div>
@@ -648,6 +738,7 @@ export default async function InboxPage({
             const meta = KIND_META[kind] ?? KIND_META.OTHER;
             const last = t.messages[t.messages.length - 1];
             const priority = threadCriticality(t);
+            const source = threadSourceMeta(t.messages);
             const inboundCount = t.messages.filter((m) => m.direction === "INBOUND").length;
             const outboundCount = t.messages.length - inboundCount;
             const lastReason = [...t.messages].reverse().find((m) => m.classificationReason)?.classificationReason;
@@ -659,6 +750,7 @@ export default async function InboxPage({
                     <BulkCheckbox threadId={t.id} />
                     <span className={`inbox-kind-badge ${meta.cls}`}>{meta.label}</span>
                     <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
+                    <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
                     <span className="inbox-thread-subject">
                       {t.subject || "(no subject)"}
                     </span>
@@ -721,7 +813,7 @@ export default async function InboxPage({
                   {last && (
                     <div className="inbox-preview">
                       <div className="inbox-preview-meta">
-                        Latest: {last.fromName ?? last.fromEmail} · {timeAgo(last.sentAt)}
+                        Latest: {last.fromName ?? last.fromEmail} · {source.accountLabel} · {timeAgo(last.sentAt)}
                       </div>
                       {last.bodyText && (
                         <div className="inbox-preview-body">
