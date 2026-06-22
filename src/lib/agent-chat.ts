@@ -15,6 +15,9 @@ import { buildStrategyExecutionPacket } from "@/lib/commercial-strategy";
 import { buildDocumentReadiness } from "@/lib/document-readiness";
 import { buildAgentProposalDecisionImpact } from "@/lib/agent-proposal-impact";
 import { deriveToolPageCues, type AgentTracePageCue } from "@/lib/agent-trace-cues";
+import { recordMemoryEvent } from "@/lib/memory/record-event";
+import { buildCompactCustomerMemoryContext } from "@/lib/memory/customer-dossier";
+import { buildCompactJobMemoryContext } from "@/lib/memory/search-memory";
 import { dimensionsSummary } from "@/lib/cargo";
 import { operatorMetricLabel } from "@/lib/operator-action-labels";
 import {
@@ -148,6 +151,18 @@ You have a set of tools (see the tools list). USE THEM. Do not describe what you
 - "what should I work on" / "what is most urgent" / "what's on my plate" / "run the desk" → **list_decision_queue**.
 - "pricing desk" / "pricing brain queue" / "RFQs to price" / "quote gate queue" / "commercial pricing commands" → **list_pricing_commands**.
 - "morning briefing" → **morning_briefing**.
+- "what do we know about this customer" / "summarize this customer" / "customer history" / "relationship" / "account memory" → **get_customer_dossier** first. If a customer page is scoped, omit company_id and use the scoped customer.
+- "search customer memory" / "customer complaints" / "customer preferences" / "what did they say before" → **search_customer_memory** first.
+- "what happened here" / "what changed" / "summarize this job" / "job memory" → **search_job_memory** first when a job is in scope.
+- "why did we quote this" / "why this price" / "why this route" / "why this risk decision" → **explain_strategy_decision** first, then cite the strategy assessment and memory evidence naturally.
+- "market signal" / "market intelligence" / "freight news" / "rates this week" / "disruption" / "port congestion" / "customs advisory" → **search_market_intelligence** or **get_lane_intelligence** first.
+- "market research" / "research feed" / "source article" / "what did this update say" → **search_market_research** or **list_market_research_feed** first. Treat research as evidence, not operational truth.
+- "market sources" / "source registry" / "source quality" / "which sources are enabled" → **list_market_sources** or **get_market_source_quality** first.
+- "preview Firecrawl" / "preview market source" / "test source ingestion" → **preview_market_source** or **ingest_market_source_preview** only when explicitly asked. Preview does not persist memory or mutate operations.
+- "run this market source" / "ingest source X now" → **run_market_source_ingestion** only when the operator names one explicit source id. Never trigger broad source ingestion from chat.
+- "is this customer exposed" / "which customers are affected by market" → **get_customer_market_exposure** first.
+- "market impacts" / "market impact review" / "pending market actions" / "review market impact" → **list_market_impacts** first.
+- "acknowledge/dismiss/action this market impact" / "mark market impact handled" / "wrong market link" → use **acknowledge_market_impact**, **dismiss_market_impact**, **mark_market_impact_actioned**, or **record_market_signal_feedback**. These tools only update review/feedback state; they cannot change jobs, quotes, customers, or messages.
 - "control sheet" / "sheet leads" / "lead board" / "pasted sheet" / "where is the money" → **inspect_control_sheet**.
 - "create RFQ from sheet" / "turn sheet row into RFQ" / "can this sheet lead become an RFQ" → **prepare_control_sheet_rfq** first. It is a draft only; tell the operator to use the dashboard Create RFQ action for the actual record.
 - "what's blocking this job" / "is this ready" / "what's missing" → **inspect_job_readiness**.
@@ -177,6 +192,14 @@ Pick the most specific tool. ONE tool call answers most questions — don't chai
 - Then name agent_answer_contract.weakest_proof, agent_answer_contract.next_safe_move, and the stop_condition. If external_send_policy says draft/review only, say that plainly.
 - page_evidence_targets are internal highlight hooks. Use their labels conceptually, but do not dump raw target ids unless the operator asks.
 - If the packet says can_run_now=false, do not soften that into "maybe"; say the agent is blocked and name the exact missing proof.
+
+**Memory evidence rule:**
+- If COMPACT CUSTOMER MEMORY is present, use it as background only. For detailed customer/job memory answers, call get_customer_dossier, search_customer_memory, search_job_memory, or explain_strategy_decision before answering.
+- If COMPACT JOB MEMORY is present, use it as background for scoped job questions, but still call search_job_memory or explain_strategy_decision for detailed "what happened", "what changed", "why", draft-reply, risk, or summary answers.
+- For external logistics intelligence, never treat a market update as operational truth. Use it as risk/pricing context and cite the MarketSignal/source evidence. If a lane overlaps a market signal, recommend refreshing rates or strategy before sending external customer pricing.
+- Market source activation is controlled: list and preview freely, but run only one explicit source when the operator asks. Never crawl arbitrary URLs or broad web queries from chat.
+- Prefer evidence-backed answers. Mention sources naturally: "based on the latest RFQ email, the active strategy assessment, and the pending document row..." Do not dump raw ids unless the operator asks.
+- If a memory tool returns sources, treat KnowledgeObject ids, MemoryEvent ids, and entity ids as the internal citation trail.
 
 **Decision queue answer shape:**
 - For "what should I work on" / "run the desk", call list_decision_queue and start with summary.operator_summary.
@@ -387,6 +410,7 @@ async function logAgentRun(args: {
   officeId: string;
   userId: string;
   scopeJobId?: string | null;
+  scopeCompanyId?: string | null;
   prompt: string;
   status: "COMPLETED" | "ERROR" | "CAPPED";
   reply?: string;
@@ -397,6 +421,7 @@ async function logAgentRun(args: {
     userId: args.userId,
     prompt: args.prompt.slice(0, 4000),
     scopeJobId: args.scopeJobId ?? null,
+    scopeCompanyId: args.scopeCompanyId ?? null,
     status: args.status,
     reply: args.reply?.slice(0, 4000) ?? null,
     error: args.error?.slice(0, 1200) ?? null,
@@ -632,14 +657,14 @@ ${typeBlock}
 **"this load" / "this job" / "this deal" / "the deal" ALWAYS means the focused job above.** Don't ask the operator which job they mean. Answer directly from the data above; only call tools (get_job, summarize_supplier_offers, etc) when you need data NOT already in the prompt.`;
 }
 
-export async function chatWithAgent(history: ChatMsg[], userMessage: string, scopeJobId?: string): Promise<ChatResult> {
+export async function chatWithAgent(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string): Promise<ChatResult> {
   // No-op test: returns immediately without touching session, db, or AI.
   // If this fails, the error is in the framework / deploy / client bundle, not my code.
   if (userMessage.trim().toLowerCase() === "/ping") {
-    return { reply: `pong · history-len=${history.length} · scope=${scopeJobId ?? "none"} · build=${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"}` };
+    return { reply: `pong · history-len=${history.length} · job-scope=${scopeJobId ?? "none"} · customer-scope=${scopeCompanyId ?? "none"} · build=${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"}` };
   }
   try {
-    return await _chatWithAgentImpl(history, userMessage, scopeJobId);
+    return await _chatWithAgentImpl(history, userMessage, scopeJobId, scopeCompanyId);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : "";
@@ -648,7 +673,7 @@ export async function chatWithAgent(history: ChatMsg[], userMessage: string, sco
   }
 }
 
-async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string): Promise<ChatResult> {
+async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string): Promise<ChatResult> {
   const session = await requireSession();
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -660,6 +685,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       officeId: session.officeId,
       userId: session.userId,
       scopeJobId,
+      scopeCompanyId: scopeCompanyId ?? null,
       prompt: userMessage,
       status: "COMPLETED",
       reply: result.reply,
@@ -852,6 +878,44 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
               payload,
             },
           });
+          await recordMemoryEvent({
+            officeId: session.officeId,
+            sourceType: "AGENT",
+            sourceExternalId: `agent_proposal:${proposal.id}`,
+            sourceLabel: "Agent paste RFQ proposal",
+            eventType: "agent_proposal.created",
+            entityType: "agent_proposal",
+            entityId: proposal.id,
+            actorType: "user",
+            actorId: session.userId,
+            occurredAt: proposal.createdAt,
+            payloadVersion: 1,
+            payload: {
+              proposalId: proposal.id,
+              kind: proposal.kind,
+              status: proposal.status,
+              jobId: proposal.jobId,
+              inquiryId: proposal.inquiryId,
+              sourceType: proposal.sourceType,
+              sourcePreview: proposal.sourcePreview?.slice(0, 700) ?? null,
+              proposedJobFields: Object.keys(update),
+              proposedInquiryFields: Object.keys(inquiryUpdate),
+              skippedFields: [...new Set(skipped)],
+              conflictFields: conflicts.map((conflict) => conflict.field),
+              matureAfterApply: qualification.isMature,
+              missingAfterApply: qualification.followUpQuestions,
+            },
+            provenance: {
+              source: "agent_chat",
+              operation: "create_agent_paste_proposal",
+              path: "src/lib/agent-chat.ts",
+              function: "chatAgent",
+              sourceRecordId: proposal.id,
+              actorType: "user",
+              actorId: session.userId,
+            },
+            idempotencyKey: `agent_proposal:${proposal.id}:created`,
+          }).catch(() => null);
           proposalId = proposal.id;
         }
 
@@ -959,6 +1023,36 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
         receivedAt: new Date(),
       },
     });
+    await recordMemoryEvent({
+      officeId: session.officeId,
+      sourceType: "AGENT",
+      sourceExternalId: `agent_chat:inquiry:${inquiry.id}`,
+      sourceLabel: "Agent-created RFQ",
+      eventType: "inquiry.created",
+      entityType: "inquiry",
+      entityId: inquiry.id,
+      actorType: "user",
+      actorId: session.userId,
+      occurredAt: inquiry.createdAt,
+      payloadVersion: 1,
+      payload: {
+        inquiryId: inquiry.id,
+        subject: inquiry.subject,
+        fromEmail: inquiry.fromEmail,
+        status: inquiry.status,
+        source: "agent_chat_paste",
+      },
+      provenance: {
+        source: "agent_chat",
+        operation: "create_inquiry_from_paste",
+        path: "src/lib/agent-chat.ts",
+        function: "chatAgent",
+        sourceRecordId: inquiry.id,
+        actorType: "user",
+        actorId: session.userId,
+      },
+      idempotencyKey: `agent_chat:inquiry:${inquiry.id}:created`,
+    }).catch(() => null);
     try {
       if (parsed) {
         const parsedDimensions = parsedDimensionsJson(parsed);
@@ -1057,9 +1151,20 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   // pill, workbench, anywhere — without forcing the operator to remember
   // a JOB-ref.
   const effectiveScopeJobId = scopeJobId ?? await getImplicitFocusJobId(session.officeId);
-  const [ctx, scopedCtx, priceContext] = await Promise.all([
+  const [ctx, scopedCtx, customerMemoryContext, jobMemoryContext, priceContext] = await Promise.all([
     cachedOpsContext(session.officeId),
     effectiveScopeJobId ? cachedScopedJobContext(effectiveScopeJobId, session.officeId) : Promise.resolve(""),
+    buildCompactCustomerMemoryContext({
+      officeId: session.officeId,
+      jobId: effectiveScopeJobId,
+      companyId: scopeCompanyId ?? null,
+      limit: 8,
+    }).catch(() => ""),
+    buildCompactJobMemoryContext({
+      officeId: session.officeId,
+      jobId: effectiveScopeJobId,
+      limit: 8,
+    }).catch(() => ""),
     isPriceQuery(userMessage) ? buildPriceContext(session.officeId, effectiveScopeJobId ?? undefined) : Promise.resolve(""),
   ]);
 
@@ -1069,6 +1174,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     const brain = await dispatchTool("inspect_brain", { job_id: effectiveScopeJobId }, {
       officeId: session.officeId,
       scopeJobId: effectiveScopeJobId,
+      scopeCompanyId: scopeCompanyId ?? undefined,
     });
     toolTrace.push({
       name: "inspect_brain",
@@ -1091,7 +1197,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   // Use Anthropic prompt caching: the system prompt + tools array become a
   // cached prefix. Cache is reused for ~5 min from first miss.
   const systemBlocks: any[] = [
-    { type: "text", text: SYSTEM + "\n\n" + ctx + scopedCtx + brainPreflightContext + priceContext, cache_control: { type: "ephemeral" } },
+    { type: "text", text: SYSTEM + "\n\n" + ctx + scopedCtx + customerMemoryContext + jobMemoryContext + brainPreflightContext + priceContext, cache_control: { type: "ephemeral" } },
   ];
   const toolsWithCache = ([...TOOLS] as any[]).map((t, i, arr) =>
     i === arr.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t
@@ -1123,6 +1229,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
           officeId: session.officeId,
           userId: session.userId,
           scopeJobId: effectiveScopeJobId,
+          scopeCompanyId: scopeCompanyId ?? null,
           prompt: userMessage,
           status: "COMPLETED",
           reply,
@@ -1142,6 +1249,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
         const r = await dispatchTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, {
           officeId: session.officeId,
           scopeJobId: effectiveScopeJobId ?? undefined,
+          scopeCompanyId: scopeCompanyId ?? undefined,
         });
         toolTrace.push({
           name: tu.name,
@@ -1175,6 +1283,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       officeId: session.officeId,
       userId: session.userId,
       scopeJobId: effectiveScopeJobId,
+      scopeCompanyId: scopeCompanyId ?? null,
       prompt: userMessage,
       status: "CAPPED",
       reply,
@@ -1188,6 +1297,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       officeId: session.officeId,
       userId: session.userId,
       scopeJobId: effectiveScopeJobId,
+      scopeCompanyId: scopeCompanyId ?? null,
       prompt: userMessage,
       status: "ERROR",
       error: msg,
