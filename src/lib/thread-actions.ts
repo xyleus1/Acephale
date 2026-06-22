@@ -6,6 +6,7 @@ import { requireSession } from "./auth";
 import { prisma } from "./prisma";
 import { createProposedJobForInquiry } from "./job-actions";
 import { createPendingBulkHideThreadsProposal } from "./agent-proposals";
+import { recordMemoryEvent } from "./memory/record-event";
 
 export async function createInquiryFromThread(threadId: string): Promise<{ ok: true; inquiryId: string } | { error: string }> {
   const session = await requireSession();
@@ -113,6 +114,38 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
       receivedAt: thread.messages[0].sentAt,
     },
   });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: thread.externalThreadId?.startsWith("whatsapp:") ? "WHATSAPP" : "GMAIL",
+    sourceExternalId: thread.externalThreadId ?? `email_thread:${thread.id}`,
+    eventType: "inquiry.created_from_thread",
+    entityType: "inquiry",
+    entityId: inquiry.id,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: inquiry.createdAt,
+    payloadVersion: 1,
+    payload: {
+      inquiryId: inquiry.id,
+      threadId,
+      subject: inquiry.subject,
+      fromEmail: inquiry.fromEmail,
+      fromCompany: inquiry.fromCompany,
+      type: inquiry.type,
+      status: inquiry.status,
+      parsed,
+    },
+    provenance: {
+      source: thread.externalThreadId?.startsWith("whatsapp:") ? "whatsapp" : "gmail",
+      operation: "manual_thread_to_inquiry",
+      path: "src/lib/thread-actions.ts",
+      function: "createInquiryFromThread",
+      sourceRecordId: threadId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `inquiry:${inquiry.id}:created_from_thread`,
+  }).catch(() => null);
 
   // Link the thread (and all its messages by extension) to the new inquiry
   await prisma.emailThread.updateMany({
@@ -367,6 +400,34 @@ ${jobHints || "(none)"}`,
       receivedAt: thread.messages[0].sentAt,
     },
   });
+  await recordMemoryEvent({
+    officeId: thread.officeId,
+    sourceType: thread.externalThreadId?.startsWith("whatsapp:") ? "WHATSAPP" : "GMAIL",
+    sourceExternalId: thread.externalThreadId ?? `email_thread:${thread.id}`,
+    eventType: "inquiry.auto_created_from_thread",
+    entityType: "inquiry",
+    entityId: inquiry.id,
+    occurredAt: inquiry.createdAt,
+    payloadVersion: 1,
+    payload: {
+      inquiryId: inquiry.id,
+      threadId,
+      subject: inquiry.subject,
+      fromEmail: inquiry.fromEmail,
+      fromCompany: inquiry.fromCompany,
+      type: inquiry.type,
+      status: inquiry.status,
+      parsed,
+    },
+    provenance: {
+      source: thread.externalThreadId?.startsWith("whatsapp:") ? "whatsapp" : "gmail",
+      operation: "auto_thread_to_inquiry",
+      path: "src/lib/thread-actions.ts",
+      function: "autoCreateInquiryFromThread",
+      sourceRecordId: threadId,
+    },
+    idempotencyKey: `inquiry:${inquiry.id}:auto_created_from_thread`,
+  }).catch(() => null);
 
   await prisma.emailThread.updateMany({
     where: { id: threadId, officeId: thread.officeId },

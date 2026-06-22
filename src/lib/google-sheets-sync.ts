@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { ensureProposedJobsForOpenInquiries } from "./job-actions";
+import { ingestKnowledgeObject } from "./memory/ingest-object";
+import { recordMemoryEvent } from "./memory/record-event";
 
 const DEFAULT_SPREADSHEET_ID = "1CFmfSdFJKOCThss5xzglHb5GihPRlK3pRxLCmpuFUHg";
 const DEFAULT_REQUESTS_TAB = "06/2026 Talepler";
@@ -31,6 +33,10 @@ function sheetsConfig() {
     requestsGid: process.env.DERYA_GOOGLE_SHEET_REQUESTS_GID ?? DEFAULT_REQUESTS_GID,
     operationsGid: process.env.DERYA_GOOGLE_SHEET_OPERATIONS_GID ?? DEFAULT_OPERATIONS_GID,
   };
+}
+
+function memoryPayloadDigest(payload: Record<string, unknown>) {
+  return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 16);
 }
 
 function base64url(input: Buffer | string) {
@@ -313,11 +319,75 @@ async function syncRequestRows(officeId: string, rows: string[][]) {
       receivedAt,
     };
 
+    const eventType = existing ? "google_sheets.inquiry.updated" : "google_sheets.inquiry.created";
+    const saved = existing
+      ? await prisma.inquiry.update({ where: { id: existing.id }, data })
+      : await prisma.inquiry.create({ data: { officeId, ...data } });
+    const sourceExternalId = `google_sheets:request:${sourceKey}`;
+    const payload = {
+      inquiryId: saved.id,
+      sourceKey,
+      rowNumber,
+      tab: DEFAULT_REQUESTS_TAB,
+      spreadsheetId: sheetsConfig().spreadsheetId,
+      subject,
+      origin,
+      destination,
+      status,
+      targetPrice: target.amount,
+      targetCurrency: target.currency,
+      operation: existing ? "update" : "create",
+    };
+    const memoryObject = await ingestKnowledgeObject({
+      officeId,
+      sourceType: "GOOGLE_SHEETS",
+      sourceExternalId,
+      sourceLabel: DEFAULT_REQUESTS_TAB,
+      sourceMetadata: { spreadsheetId: sheetsConfig().spreadsheetId, tab: DEFAULT_REQUESTS_TAB },
+      canonicalType: "rfq",
+      title: subject,
+      text: [subject, origin, destination, cargoNotes, data.notes].filter(Boolean).join("\n"),
+      entityType: "inquiry",
+      entityId: saved.id,
+      inquiryId: saved.id,
+      occurredAt: saved.updatedAt,
+      payload,
+      provenance: {
+        source: "google_sheets",
+        operation: existing ? "sync_request_row_update" : "sync_request_row_create",
+        path: "src/lib/google-sheets-sync.ts",
+        function: "syncRequestRows",
+        sourceRecordId: saved.id,
+        sourceExternalId: sourceKey,
+      },
+    }).catch(() => null);
+    await recordMemoryEvent({
+      officeId,
+      sourceType: "GOOGLE_SHEETS",
+      sourceExternalId,
+      sourceLabel: DEFAULT_REQUESTS_TAB,
+      sourceMetadata: { spreadsheetId: sheetsConfig().spreadsheetId, tab: DEFAULT_REQUESTS_TAB },
+      objectId: memoryObject?.id ?? null,
+      eventType,
+      entityType: "inquiry",
+      entityId: saved.id,
+      occurredAt: saved.updatedAt,
+      payloadVersion: 1,
+      payload,
+      provenance: {
+        source: "google_sheets",
+        operation: existing ? "sync_request_row_update" : "sync_request_row_create",
+        path: "src/lib/google-sheets-sync.ts",
+        function: "syncRequestRows",
+        sourceRecordId: saved.id,
+        sourceExternalId: sourceKey,
+      },
+      idempotencyKey: `google_sheets:request:${sourceKey}:${saved.id}:${existing ? "updated" : "created"}:${memoryPayloadDigest(payload)}`,
+    }).catch(() => null);
+
     if (existing) {
-      await prisma.inquiry.update({ where: { id: existing.id }, data });
       updated++;
     } else {
-      await prisma.inquiry.create({ data: { officeId, ...data } });
       created++;
     }
   }
@@ -389,11 +459,77 @@ async function syncOperationRows(officeId: string, rows: string[][]) {
       ]),
     };
 
+    const eventType = existing ? "google_sheets.job.updated" : "google_sheets.job.created";
+    const saved = existing
+      ? await prisma.job.update({ where: { id: existing.id }, data })
+      : await prisma.job.create({ data: { officeId, ...data } });
+    const sourceExternalId = `google_sheets:operation:${reference}`;
+    const payload = {
+      jobId: saved.id,
+      reference,
+      rowNumber,
+      tab: DEFAULT_OPERATIONS_TAB,
+      spreadsheetId: sheetsConfig().spreadsheetId,
+      customerName,
+      operation,
+      status: saved.status,
+      revenue: saved.revenue,
+      cost: saved.cost,
+      currency: saved.currency,
+      syncOperation: existing ? "update" : "create",
+    };
+    const memoryObject = await ingestKnowledgeObject({
+      officeId,
+      sourceType: "GOOGLE_SHEETS",
+      sourceExternalId,
+      sourceLabel: DEFAULT_OPERATIONS_TAB,
+      sourceMetadata: { spreadsheetId: sheetsConfig().spreadsheetId, tab: DEFAULT_OPERATIONS_TAB },
+      canonicalType: "job",
+      title: saved.title ?? saved.reference,
+      text: [saved.reference, saved.title, customerName, saved.origin, saved.destination, saved.mode, saved.commodity, saved.notes].filter(Boolean).join("\n"),
+      entityType: "job",
+      entityId: saved.id,
+      companyId: saved.companyId,
+      inquiryId: saved.inquiryId,
+      jobId: saved.id,
+      occurredAt: saved.updatedAt,
+      payload,
+      provenance: {
+        source: "google_sheets",
+        operation: existing ? "sync_operation_row_update" : "sync_operation_row_create",
+        path: "src/lib/google-sheets-sync.ts",
+        function: "syncOperationRows",
+        sourceRecordId: saved.id,
+        sourceExternalId: reference,
+      },
+    }).catch(() => null);
+    await recordMemoryEvent({
+      officeId,
+      sourceType: "GOOGLE_SHEETS",
+      sourceExternalId,
+      sourceLabel: DEFAULT_OPERATIONS_TAB,
+      sourceMetadata: { spreadsheetId: sheetsConfig().spreadsheetId, tab: DEFAULT_OPERATIONS_TAB },
+      objectId: memoryObject?.id ?? null,
+      eventType,
+      entityType: "job",
+      entityId: saved.id,
+      occurredAt: saved.updatedAt,
+      payloadVersion: 1,
+      payload,
+      provenance: {
+        source: "google_sheets",
+        operation: existing ? "sync_operation_row_update" : "sync_operation_row_create",
+        path: "src/lib/google-sheets-sync.ts",
+        function: "syncOperationRows",
+        sourceRecordId: saved.id,
+        sourceExternalId: reference,
+      },
+      idempotencyKey: `google_sheets:operation:${reference}:${saved.id}:${existing ? "updated" : "created"}:${memoryPayloadDigest(payload)}`,
+    }).catch(() => null);
+
     if (existing) {
-      await prisma.job.update({ where: { id: existing.id }, data });
       updated++;
     } else {
-      await prisma.job.create({ data: { officeId, ...data } });
       created++;
     }
   }

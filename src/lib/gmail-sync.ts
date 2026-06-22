@@ -9,6 +9,8 @@ import { autoCreateInquiryFromThread } from "./thread-actions";
 import { ensureProposedJobsForOpenInquiries } from "./job-actions";
 import { classifyEmailAttachments } from "./doc-classify";
 import { enqueueBackgroundJob } from "./background-jobs";
+import { ingestKnowledgeObject } from "./memory/ingest-object";
+import { recordMemoryEvent } from "./memory/record-event";
 
 // Sync envelope: how many threads max we'll touch in one run, and how far back
 // to look. Each thread is one Gmail API call regardless of how many messages
@@ -243,7 +245,7 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
         localThread.inquiryId = classifiedMatchInquiryId;
       }
 
-      await prisma.emailMessage.create({
+      const createdMessage = await prisma.emailMessage.create({
         data: {
           threadId: localThread.id,
           accountId: account.id,
@@ -262,6 +264,71 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
           classificationAt: classificationLabel ? new Date() : null,
         },
       });
+      const sourceExternalId = `gmail:message:${createdMessage.id}`;
+      const messagePayload = {
+        messageId: createdMessage.id,
+        threadId: localThread.id,
+        gmailThreadId: tid,
+        gmailMessageId: msg.id,
+        externalId,
+        direction,
+        fromEmail,
+        fromName,
+        subject,
+        sentAt,
+        classification: classificationLabel,
+        classificationReason,
+        attachments,
+      };
+      const memoryObject = await ingestKnowledgeObject({
+        officeId: account.officeId,
+        sourceType: "GMAIL",
+        sourceExternalId,
+        sourceLabel: account.email,
+        sourceMetadata: { accountId: account.id, provider: "GMAIL" },
+        canonicalType: "email_message",
+        title: subject,
+        text: [subject, fromEmail, fromName, body.slice(0, 8000)].filter(Boolean).join("\n"),
+        entityType: "email_message",
+        entityId: createdMessage.id,
+        jobId: localThread.jobId,
+        inquiryId: localThread.inquiryId,
+        emailThreadId: localThread.id,
+        emailMessageId: createdMessage.id,
+        occurredAt: sentAt,
+        payload: messagePayload,
+        provenance: {
+          source: "gmail",
+          operation: "message_ingest",
+          path: "src/lib/gmail-sync.ts",
+          function: "syncEmailAccountInternal",
+          sourceRecordId: createdMessage.id,
+          sourceExternalId: externalId,
+        },
+      }).catch(() => null);
+      await recordMemoryEvent({
+        officeId: account.officeId,
+        sourceType: "GMAIL",
+        sourceExternalId,
+        sourceLabel: account.email,
+        sourceMetadata: { accountId: account.id, provider: "GMAIL" },
+        objectId: memoryObject?.id ?? null,
+        eventType: "gmail.message.ingested",
+        entityType: "email_message",
+        entityId: createdMessage.id,
+        occurredAt: sentAt,
+        payloadVersion: 1,
+        payload: messagePayload,
+        provenance: {
+          source: "gmail",
+          operation: "message_ingest",
+          path: "src/lib/gmail-sync.ts",
+          function: "syncEmailAccountInternal",
+          sourceRecordId: createdMessage.id,
+          sourceExternalId: externalId,
+        },
+        idempotencyKey: `gmail:message:${createdMessage.id}:ingested`,
+      }).catch(() => null);
       await prisma.emailThread.updateMany({
         where: { id: localThread.id, officeId: account.officeId },
         data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },

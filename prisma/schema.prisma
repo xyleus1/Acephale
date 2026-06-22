@@ -105,6 +105,17 @@ model Office {
   riskAssessments      RiskAssessment[]
   strategyActions      StrategyAction[]
   backgroundJobs       BackgroundJob[]
+  knowledgeSources     KnowledgeSource[]
+  knowledgeObjects     KnowledgeObject[]
+  knowledgeChunks      KnowledgeChunk[]
+  entityMentions       EntityMention[]
+  memoryEvents         MemoryEvent[]
+  agentMemories        AgentMemory[]
+  marketSignals        MarketSignal[]
+  marketSignalLinks    MarketSignalLink[]
+  marketImpactReviews  MarketImpactReview[]
+  marketSignalFeedback MarketSignalFeedback[]
+  marketIngestionRuns  MarketIngestionRun[]
 
   @@unique([name])
 }
@@ -340,6 +351,330 @@ model BackgroundJob {
   @@index([officeId, status, runAfter])
   @@index([officeId, type, status])
   @@index([dedupeKey, status])
+}
+
+// Canonical company-brain source registry. This is intentionally generic:
+// Gmail, WhatsApp, Sheets, CRM rows, documents, strategy snapshots, and agent
+// outputs can all become memory without rewriting the current product flows.
+model KnowledgeSource {
+  id          String   @id @default(cuid())
+  officeId    String
+  type        String
+  label       String?
+  externalId  String?
+  status      String   @default("ACTIVE")
+  trustLevel  String   @default("INTERNAL")
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  office        Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  objects       KnowledgeObject[]
+  events        MemoryEvent[]
+  agentMemories AgentMemory[]
+
+  @@unique([officeId, type, externalId])
+  @@index([officeId, type, status])
+}
+
+model KnowledgeObject {
+  id                   String   @id @default(cuid())
+  officeId             String
+  sourceId             String?
+  sourceType           String
+  sourceExternalId     String
+  canonicalType        String
+  title                String?
+  contentHash          String?
+  rawRef               String?
+  visibility           String   @default("INTERNAL")
+  retentionPolicy      String   @default("DEFAULT")
+  entityType           String?
+  entityId             String?
+  companyId            String?
+  contactId            String?
+  inquiryId            String?
+  jobId                String?
+  emailThreadId        String?
+  emailMessageId       String?
+  jobDocumentId        String?
+  strategyAssessmentId String?
+  agentProposalId      String?
+  occurredAt           DateTime
+  ingestedAt           DateTime @default(now())
+  payloadVersion       Int      @default(1)
+  payload              Json
+  provenance           Json
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  office        Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  source        KnowledgeSource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  chunks        KnowledgeChunk[]
+  mentions      EntityMention[]
+  events        MemoryEvent[]
+  agentMemories AgentMemory[]
+  marketSignals MarketSignal[]
+
+  @@unique([officeId, sourceType, sourceExternalId])
+  @@index([officeId, canonicalType, occurredAt])
+  @@index([officeId, entityType, entityId])
+  @@index([officeId, companyId, occurredAt])
+  @@index([officeId, jobId, occurredAt])
+  @@index([officeId, inquiryId, occurredAt])
+  @@index([officeId, emailThreadId])
+}
+
+model KnowledgeChunk {
+  id             String   @id @default(cuid())
+  officeId       String
+  objectId       String
+  ordinal        Int      @default(0)
+  kind           String   @default("TEXT")
+  text           String
+  tokenCount     Int?
+  sourceSpan     Json?
+  metadata       Json?
+  payloadVersion Int      @default(1)
+  provenance     Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  office   Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  object   KnowledgeObject   @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  mentions EntityMention[]
+
+  @@unique([objectId, ordinal])
+  @@index([officeId, objectId])
+}
+
+model EntityMention {
+  id             String   @id @default(cuid())
+  officeId       String
+  objectId       String?
+  chunkId        String?
+  entityType     String
+  entityId       String
+  label          String?
+  confidence     Float?
+  source         String   @default("SYSTEM")
+  metadata       Json?
+  payloadVersion Int      @default(1)
+  provenance     Json
+  createdAt      DateTime @default(now())
+
+  office Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  object KnowledgeObject? @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  chunk  KnowledgeChunk?  @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, entityType, entityId])
+  @@index([officeId, objectId])
+  @@index([officeId, chunkId])
+}
+
+model MemoryEvent {
+  id               String   @id @default(cuid())
+  officeId         String
+  sourceId         String?
+  objectId         String?
+  sourceType       String
+  sourceExternalId String?
+  eventType        String
+  entityType       String
+  entityId         String
+  actorType        String?
+  actorId          String?
+  occurredAt       DateTime
+  ingestedAt       DateTime @default(now())
+  idempotencyKey   String?
+  payloadVersion   Int      @default(1)
+  payload          Json
+  provenance       Json
+  createdAt        DateTime @default(now())
+
+  office        Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  source        KnowledgeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  object        KnowledgeObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
+  agentMemories AgentMemory[]
+
+  @@unique([officeId, idempotencyKey])
+  @@index([officeId, eventType, occurredAt])
+  @@index([officeId, entityType, entityId, occurredAt])
+  @@index([officeId, sourceType, sourceExternalId])
+}
+
+model AgentMemory {
+  id             String    @id @default(cuid())
+  officeId       String
+  sourceId       String?
+  objectId       String?
+  eventId        String?
+  agentName      String
+  memoryType     String
+  subjectType    String?
+  subjectId      String?
+  companyId      String?
+  jobId          String?
+  inquiryId      String?
+  content        String
+  status         String    @default("ACTIVE")
+  confidence     Float?
+  payloadVersion Int       @default(1)
+  payload        Json?
+  provenance     Json
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  office Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  source KnowledgeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  object KnowledgeObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
+  event  MemoryEvent?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, agentName, status])
+  @@index([officeId, memoryType, status])
+  @@index([officeId, subjectType, subjectId])
+  @@index([officeId, companyId])
+  @@index([officeId, jobId])
+  @@index([officeId, inquiryId])
+}
+
+model MarketSignal {
+  id                   String   @id @default(cuid())
+  officeId             String
+  sourceObjectId       String?
+  category             String
+  severity             String
+  confidence           Float
+  affectedModes        Json
+  affectedOrigins      Json
+  affectedDestinations Json
+  affectedPorts        Json
+  affectedLanes        Json
+  affectedCarriers     Json
+  effectiveFrom        DateTime?
+  effectiveTo          DateTime?
+  summary              String
+  operatorImplication  String?
+  pricingImplication   String?
+  customerImpact       String?
+  recommendedActions   Json
+  sourceRefs           Json
+  dedupeKey            String
+  payloadVersion       Int      @default(1)
+  provenance           Json
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  office       Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  sourceObject KnowledgeObject?    @relation(fields: [sourceObjectId], references: [id], onDelete: SetNull)
+  links        MarketSignalLink[]
+  impactReviews MarketImpactReview[]
+  feedback     MarketSignalFeedback[]
+
+  @@unique([officeId, dedupeKey])
+  @@index([officeId, category, severity, createdAt])
+  @@index([officeId, effectiveFrom, effectiveTo])
+  @@index([officeId, sourceObjectId])
+}
+
+model MarketSignalLink {
+  id         String   @id @default(cuid())
+  officeId   String
+  signalId   String
+  entityType String
+  entityId   String
+  matchType  String
+  confidence Float
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  office Office       @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  signal MarketSignal @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  impactReviews MarketImpactReview[]
+
+  @@unique([signalId, entityType, entityId])
+  @@index([officeId, entityType, entityId])
+  @@index([officeId, signalId])
+}
+
+model MarketImpactReview {
+  id                 String   @id @default(cuid())
+  officeId           String
+  marketSignalId     String
+  marketSignalLinkId String?
+  linkedEntityType   String
+  linkedEntityId     String
+  impactLevel        String
+  impactReason       String
+  recommendedAction  String?
+  status             String   @default("pending")
+  feedbackKind       String?
+  feedbackNote       String?
+  reviewedByUserId   String?
+  reviewedAt         DateTime?
+  actionedAt         DateTime?
+  sourceRefs         Json
+  payloadVersion     Int      @default(1)
+  provenance         Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  office           Office              @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  marketSignal     MarketSignal        @relation(fields: [marketSignalId], references: [id], onDelete: Cascade)
+  marketSignalLink MarketSignalLink?   @relation(fields: [marketSignalLinkId], references: [id], onDelete: SetNull)
+  feedback         MarketSignalFeedback[]
+
+  @@unique([officeId, marketSignalId, linkedEntityType, linkedEntityId])
+  @@index([officeId, status])
+  @@index([marketSignalId])
+  @@index([linkedEntityType, linkedEntityId])
+  @@index([createdAt])
+}
+
+model MarketSignalFeedback {
+  id                   String   @id @default(cuid())
+  officeId             String
+  marketSignalId       String
+  marketImpactReviewId String?
+  userId               String?
+  feedbackKind         String
+  note                 String?
+  createdAt            DateTime @default(now())
+
+  office             Office              @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  marketSignal       MarketSignal        @relation(fields: [marketSignalId], references: [id], onDelete: Cascade)
+  marketImpactReview MarketImpactReview? @relation(fields: [marketImpactReviewId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, feedbackKind, createdAt])
+  @@index([marketSignalId])
+  @@index([marketImpactReviewId])
+}
+
+model MarketIngestionRun {
+  id          String    @id @default(cuid())
+  officeId    String
+  provider    String
+  sourceId    String?
+  query       String?
+  status      String    @default("queued")
+  startedAt   DateTime?
+  completedAt DateTime?
+  resultCount Int       @default(0)
+  objectCount Int       @default(0)
+  signalCount Int       @default(0)
+  reviewCount Int       @default(0)
+  error       String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, provider, status])
+  @@index([officeId, sourceId, createdAt])
+  @@index([officeId, status, createdAt])
 }
 
 model Task {

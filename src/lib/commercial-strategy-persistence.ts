@@ -15,6 +15,9 @@ import {
   type StrategySourceEconomics,
 } from "./commercial-strategy";
 import { operatorMetricLabel } from "./operator-action-labels";
+import { ingestKnowledgeObject } from "./memory/ingest-object";
+import { recordMemoryEvent } from "./memory/record-event";
+import { getMarketSignalsForStrategyContext } from "./market-intelligence/link-market-signals";
 
 type PersistedStrategy = {
   strategy: CommercialStrategy;
@@ -240,7 +243,106 @@ function hashInput(input: CommercialStrategyInput) {
     laneRates: (input.laneRates ?? []).slice(0, 20).map((r) => [r.id, r.baseAmount, r.validTo]),
     customerStats: input.customerStats,
     marginPolicy: input.marginPolicy,
+    marketSignals: (input.marketSignals ?? []).map((signal) => ({
+      signalId: signal.signalId,
+      category: signal.category,
+      severity: signal.severity,
+      confidence: signal.confidence,
+      matchConfidence: signal.matchConfidence ?? null,
+      summary: signal.summary,
+      pricingImplication: signal.pricingImplication ?? null,
+      affectedLanes: signal.affectedLanes ?? [],
+      sourceRefs: signal.sourceRefs ?? [],
+    })),
   });
+}
+
+async function recordStrategyAssessmentMemory(args: {
+  officeId: string;
+  inquiryId?: string | null;
+  jobId?: string | null;
+  input: CommercialStrategyInput;
+  strategy: CommercialStrategy;
+  assessmentId: string;
+  decisionBrief: unknown;
+  created: boolean;
+}) {
+  const title = args.input.subject ?? (args.jobId ? `Job strategy ${args.jobId}` : `RFQ strategy ${args.inquiryId ?? args.assessmentId}`);
+  const sourceExternalId = `strategy:assessment:${args.assessmentId}`;
+  const payload = {
+    assessmentId: args.assessmentId,
+    entityType: args.input.entityType ?? (args.jobId ? "JOB" : "INQUIRY"),
+    inquiryId: args.inquiryId ?? null,
+    jobId: args.jobId ?? null,
+    companyId: args.input.companyId ?? null,
+    subject: args.input.subject ?? null,
+    recommendation: args.strategy.recommendation,
+    recommendationLabel: args.strategy.recommendationLabel,
+    score: args.strategy.score,
+    band: args.strategy.band,
+    confidence: args.strategy.confidence,
+    price: args.strategy.price,
+    quoteGate: args.strategy.quoteGate,
+    operatorDecision: args.strategy.operatorDecision,
+    recommendedRoute: args.strategy.recommendedRoute,
+    riskAssessments: args.strategy.riskAssessments.slice(0, 8),
+    actions: args.strategy.actions.slice(0, 8),
+    decisionBrief: args.decisionBrief,
+    createdSnapshot: args.created,
+  };
+  const provenance = {
+    source: "commercial_strategy",
+    operation: args.created ? "persist_strategy_assessment" : "reuse_strategy_assessment",
+    path: "src/lib/commercial-strategy-persistence.ts",
+    function: "persistStrategy",
+    sourceRecordId: args.assessmentId,
+  };
+  const object = await ingestKnowledgeObject({
+    officeId: args.officeId,
+    sourceType: "STRATEGY",
+    sourceExternalId,
+    sourceLabel: "Commercial strategy assessment",
+    canonicalType: "strategy_assessment",
+    title,
+    text: [
+      title,
+      args.strategy.recommendationLabel,
+      args.strategy.strategyMemo,
+      `Price: ${args.strategy.price.recommendedPrice ?? "unknown"} ${args.strategy.price.currency ?? ""}`,
+      `Guardrail: ${args.strategy.price.guardrailStatus}`,
+      `Quote gate: ${args.strategy.quoteGate.status}`,
+      `Route: ${args.strategy.recommendedRoute?.label ?? "unpriced"}`,
+      ...args.strategy.riskAssessments.slice(0, 3).map((risk) => `Risk ${risk.category}: ${risk.reason}`),
+    ].filter(Boolean).join("\n"),
+    entityType: "strategy_assessment",
+    entityId: args.assessmentId,
+    companyId: args.input.companyId ?? null,
+    inquiryId: args.inquiryId ?? null,
+    jobId: args.jobId ?? null,
+    strategyAssessmentId: args.assessmentId,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload,
+    provenance,
+  }).catch(() => null);
+
+  await recordMemoryEvent({
+    officeId: args.officeId,
+    sourceType: "STRATEGY",
+    sourceExternalId,
+    sourceLabel: "Commercial strategy assessment",
+    objectId: object?.id ?? null,
+    eventType: args.created ? "strategy.assessment.created" : "strategy.assessment.reused",
+    entityType: "strategy_assessment",
+    entityId: args.assessmentId,
+    actorType: "system",
+    actorId: null,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload,
+    provenance,
+    idempotencyKey: `strategy:assessment:${args.assessmentId}:${args.created ? "created" : "reused"}`,
+  }).catch(() => null);
 }
 
 async function persistStrategy(args: {
@@ -269,6 +371,12 @@ async function persistStrategy(args: {
         data: { decisionBrief: decisionBrief as Prisma.InputJsonValue },
       });
     }
+    await recordStrategyAssessmentMemory({
+      ...args,
+      assessmentId: latest.id,
+      decisionBrief,
+      created: false,
+    });
     return { strategy: args.strategy, assessmentId: latest.id, created: false };
   }
 
@@ -357,6 +465,13 @@ async function persistStrategy(args: {
     });
   });
 
+  await recordStrategyAssessmentMemory({
+    ...args,
+    assessmentId: created.id,
+    decisionBrief,
+    created: true,
+  });
+
   return { strategy: args.strategy, assessmentId: created.id, created: true };
 }
 
@@ -399,7 +514,16 @@ export async function loadInquiryStrategyInput(officeId: string, inquiryId: stri
     },
   });
   if (!inquiry) return null;
-  const shared = await loadSharedStrategyInputs(officeId, inquiry.companyId);
+  const [shared, marketSignals] = await Promise.all([
+    loadSharedStrategyInputs(officeId, inquiry.companyId),
+    getMarketSignalsForStrategyContext({
+      officeId,
+      inquiryId: inquiry.id,
+      jobId: inquiry.job?.id ?? null,
+      companyId: inquiry.companyId,
+      limit: 5,
+    }),
+  ]);
   const sourceEconomics = parseSourceEconomics(inquiry.parsedData);
   const input: CommercialStrategyInput = {
     id: inquiry.id,
@@ -440,6 +564,7 @@ export async function loadInquiryStrategyInput(officeId: string, inquiryId: stri
     documents: inquiry.job?.documents ?? [],
     targetHistory: [...inquiry.targetPriceHistory, ...(inquiry.job?.targetPriceHistory ?? [])],
     carrierQuotes: inquiry.carrierQuotes,
+    marketSignals,
     ...shared,
   };
   return input;
@@ -497,7 +622,16 @@ export async function loadJobStrategyInput(officeId: string, jobId: string): Pro
     },
   });
   if (!job) return null;
-  const shared = await loadSharedStrategyInputs(officeId, job.companyId);
+  const [shared, marketSignals] = await Promise.all([
+    loadSharedStrategyInputs(officeId, job.companyId),
+    getMarketSignalsForStrategyContext({
+      officeId,
+      jobId: job.id,
+      inquiryId: job.inquiryId,
+      companyId: job.companyId,
+      limit: 5,
+    }),
+  ]);
   const sourceEconomics = parseSourceEconomics(job.inquiry?.parsedData);
   const input: CommercialStrategyInput = {
     id: job.id,
@@ -538,6 +672,7 @@ export async function loadJobStrategyInput(officeId: string, jobId: string): Pro
     documents: job.documents,
     targetHistory: [...job.targetPriceHistory, ...(job.inquiry?.targetPriceHistory ?? [])],
     carrierQuotes: job.inquiry?.carrierQuotes ?? [],
+    marketSignals,
     ...shared,
   };
   return input;

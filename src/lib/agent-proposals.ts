@@ -9,6 +9,7 @@ import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price
 import { buildAgentProposalDecisionImpact } from "@/lib/agent-proposal-impact";
 import { filterScopedProposalFields } from "@/lib/agent-proposal-scope";
 import { buildReviewedFieldChanges, type ReviewedFieldChange } from "@/lib/agent-proposal-review";
+import { recordMemoryEvent } from "@/lib/memory/record-event";
 
 export type AgentProposalApplyResult = {
   ok: boolean;
@@ -78,6 +79,56 @@ function asStringRecord(value: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(record).filter((entry): entry is [string, string] => typeof entry[1] === "string")
   );
+}
+
+async function recordAgentProposalCreated(input: {
+  officeId: string;
+  userId?: string | null;
+  proposal: {
+    id: string;
+    jobId: string | null;
+    inquiryId: string | null;
+    kind: string;
+    status: string;
+    sourceType: string | null;
+    sourcePreview: string | null;
+    createdAt: Date;
+  };
+  payload: Record<string, unknown>;
+}) {
+  await recordMemoryEvent({
+    officeId: input.officeId,
+    sourceType: "AGENT",
+    sourceExternalId: `agent_proposal:${input.proposal.id}`,
+    sourceLabel: "Agent proposal",
+    eventType: "agent_proposal.created",
+    entityType: "agent_proposal",
+    entityId: input.proposal.id,
+    actorType: input.userId ? "user" : "agent",
+    actorId: input.userId ?? null,
+    occurredAt: input.proposal.createdAt,
+    payloadVersion: 1,
+    payload: {
+      proposalId: input.proposal.id,
+      kind: input.proposal.kind,
+      status: input.proposal.status,
+      jobId: input.proposal.jobId,
+      inquiryId: input.proposal.inquiryId,
+      sourceType: input.proposal.sourceType,
+      sourcePreview: input.proposal.sourcePreview?.slice(0, 700) ?? null,
+      ...input.payload,
+    },
+    provenance: {
+      source: "agent_proposals",
+      operation: "create_agent_proposal",
+      path: "src/lib/agent-proposals.ts",
+      function: "recordAgentProposalCreated",
+      sourceRecordId: input.proposal.id,
+      actorType: input.userId ? "user" : "agent",
+      actorId: input.userId ?? null,
+    },
+    idempotencyKey: `agent_proposal:${input.proposal.id}:created`,
+  }).catch(() => null);
 }
 
 function compactValue(value: unknown) {
@@ -161,6 +212,18 @@ export async function createPendingJobUpdateProposal(input: {
       }),
     },
   });
+  await recordAgentProposalCreated({
+    officeId: input.officeId,
+    userId: input.userId,
+    proposal,
+    payload: {
+      proposalType: "job_update",
+      proposedJobFields: Object.keys(update),
+      proposedInquiryFields: Object.keys(inquiryUpdate),
+      matureAfterApply: qualification.isMature,
+      missingAfterApply: qualification.followUpQuestions,
+    },
+  });
 
   revalidatePath(`/dashboard/jobs/${job.id}`);
   if (job.inquiryId) revalidatePath(`/dashboard/rfq/${job.inquiryId}`);
@@ -213,6 +276,18 @@ export async function createPendingJobActionProposal(input: {
         actionDetails: input.actionDetails ?? [],
         sourceText: input.sourcePreview?.slice(0, 4000) ?? null,
       }),
+    },
+  });
+  await recordAgentProposalCreated({
+    officeId: input.officeId,
+    userId: input.userId,
+    proposal,
+    payload: {
+      proposalType: "job_action",
+      action: input.action,
+      actionLabel: input.actionLabel,
+      actionDetails: input.actionDetails ?? [],
+      requiresHumanReview: true,
     },
   });
 
@@ -269,6 +344,19 @@ export async function createPendingBulkActionProposal(input: {
         reviewItems,
         sourceText: input.sourcePreview?.slice(0, 4000) ?? null,
       }),
+    },
+  });
+  await recordAgentProposalCreated({
+    officeId: input.officeId,
+    userId: input.userId,
+    proposal,
+    payload: {
+      proposalType: "bulk_action",
+      action: input.action,
+      actionLabel: input.actionLabel,
+      actionDetails: input.actionDetails ?? [],
+      reviewItemCount: reviewItems.length,
+      requiresHumanReview: true,
     },
   });
 
@@ -370,29 +458,59 @@ async function recordProposalReviewEvent(input: {
   reviewedFieldChanges?: ReviewedFieldChange[];
   decisionImpact?: unknown;
 }) {
-  await prisma.event.create({
+  const payload = {
+    userId: input.userId ?? null,
+    proposalId: input.proposal.id,
+    kind: input.proposal.kind,
+    status: input.status,
+    decision: input.decision,
+    note: input.note,
+    acceptedFields: input.acceptedFields ?? [],
+    changedJobFields: input.changedJobFields ?? [],
+    changedInquiryFields: input.changedInquiryFields ?? [],
+    reviewedFieldChanges: input.reviewedFieldChanges ?? [],
+    decisionImpact: input.decisionImpact ?? null,
+    sourceType: input.proposal.sourceType,
+    sourcePreview: input.proposal.sourcePreview?.slice(0, 700) ?? null,
+  };
+  const event = await prisma.event.create({
     data: {
       officeId: input.officeId,
       type: "agent.proposal_reviewed",
       entityType: input.proposal.jobId ? "job" : input.proposal.inquiryId ? "inquiry" : "agent_proposal",
       entityId: input.proposal.jobId ?? input.proposal.inquiryId ?? input.proposal.id,
-      payload: toJson({
-        userId: input.userId ?? null,
-        proposalId: input.proposal.id,
-        kind: input.proposal.kind,
-        status: input.status,
-        decision: input.decision,
-        note: input.note,
-        acceptedFields: input.acceptedFields ?? [],
-        changedJobFields: input.changedJobFields ?? [],
-        changedInquiryFields: input.changedInquiryFields ?? [],
-        reviewedFieldChanges: input.reviewedFieldChanges ?? [],
-        decisionImpact: input.decisionImpact ?? null,
-        sourceType: input.proposal.sourceType,
-        sourcePreview: input.proposal.sourcePreview?.slice(0, 700) ?? null,
-      }),
+      payload: toJson(payload),
     },
-  }).catch(() => {});
+  }).catch(() => null);
+  await recordMemoryEvent({
+    officeId: input.officeId,
+    sourceType: "AGENT",
+    sourceExternalId: `agent_proposal:${input.proposal.id}`,
+    sourceLabel: "Agent proposal review",
+    eventType: "agent_proposal.reviewed",
+    entityType: "agent_proposal",
+    entityId: input.proposal.id,
+    actorType: input.userId ? "user" : "system",
+    actorId: input.userId ?? null,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload: {
+      ...payload,
+      eventId: event?.id ?? null,
+      jobId: input.proposal.jobId,
+      inquiryId: input.proposal.inquiryId,
+    },
+    provenance: {
+      source: "agent_proposals",
+      operation: "review_agent_proposal",
+      path: "src/lib/agent-proposals.ts",
+      function: "recordProposalReviewEvent",
+      sourceRecordId: input.proposal.id,
+      actorType: input.userId ? "user" : "system",
+      actorId: input.userId ?? null,
+    },
+    idempotencyKey: `agent_proposal:${input.proposal.id}:reviewed:${input.status}`,
+  }).catch(() => null);
 }
 
 async function appendInquiryAuditNote(inquiryId: string, note: string) {

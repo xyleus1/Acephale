@@ -4,6 +4,8 @@ import { prisma } from "./prisma";
 import { classifyInboundEmail } from "./email-classifier";
 import { autoCreateInquiryFromThread } from "./thread-actions";
 import { ensureProposedJobsForOpenInquiries } from "./job-actions";
+import { ingestKnowledgeObject } from "./memory/ingest-object";
+import { recordMemoryEvent } from "./memory/record-event";
 
 type WhatsAppTextMessage = {
   id: string;
@@ -184,7 +186,7 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
           localThread.inquiryId = classifiedMatchInquiryId;
         }
 
-        await prisma.emailMessage.create({
+        const createdMessage = await prisma.emailMessage.create({
           data: {
             threadId: localThread.id,
             accountId: account.id,
@@ -201,6 +203,69 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
             classificationAt: classificationLabel ? new Date() : null,
           },
         });
+        const sourceExternalId = `whatsapp:message:${createdMessage.id}`;
+        const messagePayload = {
+          messageId: createdMessage.id,
+          threadId: localThread.id,
+          whatsappMessageId: message.id,
+          phoneNumberId,
+          direction: "INBOUND",
+          fromEmail: senderAddress,
+          fromName: contactName,
+          subject,
+          sentAt,
+          classification: classificationLabel,
+          classificationReason,
+        };
+        const memoryObject = await ingestKnowledgeObject({
+          officeId,
+          sourceType: "WHATSAPP",
+          sourceExternalId,
+          sourceLabel: account.email,
+          sourceMetadata: { accountId: account.id, provider: "WHATSAPP", phoneNumberId },
+          canonicalType: "email_message",
+          title: subject,
+          text: [subject, senderAddress, contactName, bodyText.slice(0, 8000)].filter(Boolean).join("\n"),
+          entityType: "email_message",
+          entityId: createdMessage.id,
+          jobId: localThread.jobId,
+          inquiryId: localThread.inquiryId,
+          emailThreadId: localThread.id,
+          emailMessageId: createdMessage.id,
+          occurredAt: sentAt,
+          payload: messagePayload,
+          provenance: {
+            source: "whatsapp",
+            operation: "message_ingest",
+            path: "src/lib/whatsapp.ts",
+            function: "ingestWhatsAppWebhook",
+            sourceRecordId: createdMessage.id,
+            sourceExternalId: message.id,
+          },
+        }).catch(() => null);
+        await recordMemoryEvent({
+          officeId,
+          sourceType: "WHATSAPP",
+          sourceExternalId,
+          sourceLabel: account.email,
+          sourceMetadata: { accountId: account.id, provider: "WHATSAPP", phoneNumberId },
+          objectId: memoryObject?.id ?? null,
+          eventType: "whatsapp.message.ingested",
+          entityType: "email_message",
+          entityId: createdMessage.id,
+          occurredAt: sentAt,
+          payloadVersion: 1,
+          payload: messagePayload,
+          provenance: {
+            source: "whatsapp",
+            operation: "message_ingest",
+            path: "src/lib/whatsapp.ts",
+            function: "ingestWhatsAppWebhook",
+            sourceRecordId: createdMessage.id,
+            sourceExternalId: message.id,
+          },
+          idempotencyKey: `whatsapp:message:${createdMessage.id}:ingested`,
+        }).catch(() => null);
 
         await prisma.emailThread.update({
           where: { id: localThread.id },

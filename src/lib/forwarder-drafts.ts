@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import { requiredRfqMissing, type StrategyBlockerResolution } from "./commercial-strategy";
 import { assessInquiryStrategy } from "./commercial-strategy-persistence";
 import { buildForwarderDraft, coversForwarderMode, forwarderModeCoverageLabel } from "./forwarder-draft-core";
+import { recordMemoryEvent } from "./memory/record-event";
 
 type ForwarderDraftBlockedReason = {
   key: string;
@@ -131,6 +132,38 @@ export async function createForwarderRequestDrafts(args: {
       },
       select: { id: true, forwarderName: true, toEmail: true, subject: true },
     });
+    await recordMemoryEvent({
+      officeId: args.officeId,
+      sourceType: "INQUIRY",
+      sourceExternalId: `forwarder_draft:${created.id}`,
+      sourceLabel: "Forwarder request draft",
+      eventType: "forwarder_draft.created",
+      entityType: "forwarder_draft",
+      entityId: created.id,
+      actorType: args.userId ? "user" : "system",
+      actorId: args.userId ?? null,
+      occurredAt: new Date(),
+      payloadVersion: 1,
+      payload: {
+        draftId: created.id,
+        inquiryId: inquiry.id,
+        forwarderId: forwarder.id,
+        forwarderName: created.forwarderName,
+        toEmail: created.toEmail,
+        subject: created.subject,
+        status: "DRAFT",
+      },
+      provenance: {
+        source: "forwarder_drafts",
+        operation: "create_forwarder_request_draft",
+        path: "src/lib/forwarder-drafts.ts",
+        function: "createForwarderRequestDrafts",
+        sourceRecordId: created.id,
+        actorType: args.userId ? "user" : "system",
+        actorId: args.userId ?? null,
+      },
+      idempotencyKey: `forwarder_draft:${created.id}:created`,
+    }).catch(() => null);
     createdDrafts.push(created);
   }
 

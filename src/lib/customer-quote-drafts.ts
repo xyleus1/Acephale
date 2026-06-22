@@ -4,6 +4,7 @@ import { prisma } from "./prisma";
 import { assessJobStrategy } from "./commercial-strategy-persistence";
 import { buildCustomerQuoteDraft, type CustomerQuoteDraftContext } from "./customer-quote-draft";
 import { draftFreshnessKey } from "./draft-freshness";
+import { recordMemoryEvent } from "./memory/record-event";
 import { parsePipeLines } from "./quote-lines";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -111,32 +112,63 @@ export async function applyCustomerQuoteDraftToJob(input: {
   });
 
   const freshnessScope = "customer_quote" as const;
-  await prisma.event.create({
+  const eventPayload = {
+    userId: input.userId ?? null,
+    jobId: job.id,
+    inquiryId: job.inquiryId,
+    assessmentId: loaded.assessmentId,
+    freshnessScope,
+    freshnessKey: draftFreshnessKey({
+      ...job,
+      subject: job.title ?? job.inquiry?.subject ?? job.reference,
+      carrierQuotes: job.inquiry?.carrierQuotes ?? [],
+      quoteLines,
+      revenue: job.revenue ?? (total || null),
+      currency: firstCurrency,
+    }, freshnessScope),
+    appliedLineItems: newLines,
+    notSent: true,
+    notRecordedAsOutcome: true,
+  };
+
+  const event = await prisma.event.create({
     data: {
       officeId: input.officeId,
       type: "customer_quote_draft.applied",
       entityType: "job",
       entityId: job.id,
-      payload: toJson({
-        userId: input.userId ?? null,
-        jobId: job.id,
-        inquiryId: job.inquiryId,
-        assessmentId: loaded.assessmentId,
-        freshnessScope,
-        freshnessKey: draftFreshnessKey({
-          ...job,
-          subject: job.title ?? job.inquiry?.subject ?? job.reference,
-          carrierQuotes: job.inquiry?.carrierQuotes ?? [],
-          quoteLines,
-          revenue: job.revenue ?? (total || null),
-          currency: firstCurrency,
-        }, freshnessScope),
-        appliedLineItems: newLines,
-        notSent: true,
-        notRecordedAsOutcome: true,
-      }),
+      payload: toJson(eventPayload),
     },
-  }).catch(() => {});
+  }).catch(() => null);
+  await recordMemoryEvent({
+    officeId: input.officeId,
+    sourceType: "JOB",
+    sourceExternalId: `customer_quote_draft:${job.id}:${loaded.assessmentId}`,
+    sourceLabel: "Customer quote draft",
+    eventType: "customer_quote_draft.applied",
+    entityType: "job",
+    entityId: job.id,
+    actorType: input.userId ? "user" : "system",
+    actorId: input.userId ?? null,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload: {
+      ...eventPayload,
+      eventId: event?.id ?? null,
+      quoteLinesAdded: newLines.length,
+      totalQuoteLines: existingLines.length + newLines.length,
+    },
+    provenance: {
+      source: "customer_quote_drafts",
+      operation: "apply_customer_quote_draft",
+      path: "src/lib/customer-quote-drafts.ts",
+      function: "applyCustomerQuoteDraftToJob",
+      sourceRecordId: job.id,
+      actorType: input.userId ? "user" : "system",
+      actorId: input.userId ?? null,
+    },
+    idempotencyKey: `customer_quote_draft:${job.id}:${loaded.assessmentId}:applied:${event?.id ?? "event"}`,
+  }).catch(() => null);
 
   return {
     ok: true as const,
