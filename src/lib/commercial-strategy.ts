@@ -79,6 +79,23 @@ export type StrategySourceEconomics = {
   profitCurrency?: string | null;
 };
 
+export type StrategyMarketSignal = {
+  signalId: string;
+  category: string;
+  severity: string;
+  confidence: number;
+  matchConfidence?: number | null;
+  matchType?: string | null;
+  summary: string;
+  pricingImplication?: string | null;
+  operatorImplication?: string | null;
+  customerImpact?: string | null;
+  affectedModes?: string[];
+  affectedLanes?: string[];
+  sourceRefs?: string[];
+  createdAt?: Date | string | null;
+};
+
 export type StrategyCargoMath = {
   physicalCbm: number | null;
   chargeableCbm: number | null;
@@ -233,10 +250,11 @@ export type CommercialStrategyInput = {
     minMarginPct?: number | null;
     stretchMarginPct?: number | null;
   };
+  marketSignals?: StrategyMarketSignal[];
 };
 
 export type StrategyRisk = {
-  category: "CARGO" | "ROUTE" | "COMMERCIAL" | "CUSTOMER" | "CONFIDENCE" | "TIMING";
+  category: "CARGO" | "ROUTE" | "COMMERCIAL" | "CUSTOMER" | "CONFIDENCE" | "TIMING" | "MARKET";
   level: RiskLevel;
   score: number;
   reason: string;
@@ -375,6 +393,7 @@ export type CommercialStrategy = {
     cargoMath: StrategyCargoMath | null;
     documentReadiness: DocumentReadiness | null;
     sourceEconomics?: StrategySourceEconomics | null;
+    marketSignals?: StrategyMarketSignal[];
   };
   details: {
     receivedQuotes: number;
@@ -2439,6 +2458,28 @@ function buildRisks(input: CommercialStrategyInput, args: {
   if (args.historicalLaneJobs === 0 && args.laneRateMatches === 0) {
     push("ROUTE", 44, "No internal lane history or lane rate matched this route.", "Treat this as an unknown lane and protect margin until real quotes arrive.");
   }
+  const topMarketSignal = [...(input.marketSignals ?? [])].sort((a, b) => {
+    const severityScore = (severity: string) => severity === "critical" ? 4 : severity === "high" ? 3 : severity === "medium" ? 2 : 1;
+    return severityScore(b.severity) - severityScore(a.severity) || (b.matchConfidence ?? b.confidence) - (a.matchConfidence ?? a.confidence);
+  })[0];
+  if (topMarketSignal && ["high", "critical"].includes(topMarketSignal.severity)) {
+    const score = topMarketSignal.severity === "critical" ? 78 : 62;
+    push(
+      topMarketSignal.category === "rate" || topMarketSignal.category === "capacity" ? "COMMERCIAL" : "MARKET",
+      score,
+      `Market signal overlaps this lane: ${topMarketSignal.summary}`,
+      topMarketSignal.pricingImplication ?? topMarketSignal.operatorImplication ?? "Refresh market-sensitive assumptions before sending customer pricing.",
+      {
+        signalId: topMarketSignal.signalId,
+        category: topMarketSignal.category,
+        severity: topMarketSignal.severity,
+        confidence: topMarketSignal.confidence,
+        matchConfidence: topMarketSignal.matchConfidence ?? null,
+        affectedLanes: topMarketSignal.affectedLanes ?? [],
+        sourceRefs: topMarketSignal.sourceRefs ?? [],
+      }
+    );
+  }
   if (args.target != null && args.buyCost != null && args.target <= args.buyCost) {
     push("COMMERCIAL", 92, "Customer target is at or below buy cost.", "Do not quote at target. Counter the forwarder or reset customer expectations.", { target: args.target, buyCost: args.buyCost });
   } else if (args.marginAtTarget != null && args.marginAtTarget < 8) {
@@ -3173,6 +3214,7 @@ export function assessCommercialStrategy(input: CommercialStrategyInput): Commer
     historicalLaneJobs,
   });
   const sourceEconomics = input.sourceEconomics ?? null;
+  const marketSignals = input.marketSignals ?? [];
   const documentReadiness = input.documents ? buildDocumentReadiness(input.documents) : null;
 
   const buyCost =
@@ -3233,6 +3275,8 @@ export function assessCommercialStrategy(input: CommercialStrategyInput): Commer
   if (targetTrail?.direction === "WITHDRAWN" || targetTrail?.direction === "STALE" || targetTrail?.direction === "MIXED_CURRENCY") winProbability -= 4;
   if (rateFreshness?.tone === "blocked") winProbability -= 10;
   if (rateFreshness?.tone === "review") winProbability -= 4;
+  if (marketSignals.some((signal) => signal.severity === "critical")) winProbability -= 6;
+  else if (marketSignals.some((signal) => signal.severity === "high")) winProbability -= 4;
   if (missing.length > 0) winProbability -= 14;
   winProbability = clamp(winProbability);
 
@@ -3263,6 +3307,7 @@ export function assessCommercialStrategy(input: CommercialStrategyInput): Commer
   }
   if (rateFreshness?.tone === "blocked") pricePower = clamp(pricePower - 14);
   if (rateFreshness?.tone === "review") pricePower = clamp(pricePower - 5);
+  if (marketSignals.some((signal) => signal.category === "rate" && ["high", "critical"].includes(signal.severity))) pricePower = clamp(pricePower - 6);
   const routeQuality = clamp(
     recommendedRoute
       ? recommendedRoute.reliabilityScore * 0.55 + (100 - recommendedRoute.riskScore) * 0.45
@@ -3351,6 +3396,9 @@ export function assessCommercialStrategy(input: CommercialStrategyInput): Commer
   }
   if (documentReadiness?.tone === "ready") {
     strengths.push(`Document proof approved: ${documentReadiness.metric}`);
+  }
+  if (marketSignals.length > 0) {
+    strengths.push(`${marketSignals.length} linked market signal${marketSignals.length === 1 ? "" : "s"} checked`);
   }
 
   const risks = riskAssessments.slice(0, 5).map((r) => r.reason);
@@ -3478,6 +3526,7 @@ export function assessCommercialStrategy(input: CommercialStrategyInput): Commer
     `Target posture: ${targetPosture.label}. ${targetPosture.stance}`,
     targetTrail ? `Target trail: ${targetTrail.label}. ${targetTrail.detail}` : null,
     documentReadiness ? `Document proof: ${documentReadiness.label}. ${documentReadiness.detail}` : null,
+    marketSignals[0] ? `Market intelligence: ${marketSignals[0].summary} ${marketSignals[0].pricingImplication ?? marketSignals[0].operatorImplication ?? ""}` : null,
     cargoMath?.chargeableCbm != null
       ? `Cargo math: ${cargoMath.chargeableCbm.toFixed(3)} chargeable CBM${cargoMath.physicalCbm != null ? ` vs ${cargoMath.physicalCbm.toFixed(3)} physical CBM` : ""}${cargoMath.stackable === "NO" ? " because cargo is non-stackable" : ""}.`
       : cargoMath?.dimensionsPartial
@@ -3553,6 +3602,7 @@ export function assessCommercialStrategy(input: CommercialStrategyInput): Commer
       cargoMath,
       documentReadiness,
       sourceEconomics,
+      marketSignals,
     },
     details: {
       receivedQuotes: received.length,

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { assessJobStrategy } from "@/lib/commercial-strategy-persistence";
+import { getMarketSignalsForStrategyContext } from "@/lib/market-intelligence/link-market-signals";
 
 export async function listDealRiskAssessments(officeId: string, limit = 20) {
   const jobs = await prisma.job.findMany({
@@ -7,6 +8,7 @@ export async function listDealRiskAssessments(officeId: string, limit = 20) {
     select: {
       id: true,
       reference: true,
+      companyId: true,
       company: { select: { name: true } },
       origin: true,
       destination: true,
@@ -18,7 +20,10 @@ export async function listDealRiskAssessments(officeId: string, limit = 20) {
 
   const assessed = await Promise.all(
     jobs.map(async (job) => {
-      const run = await assessJobStrategy(officeId, job.id).catch(() => null);
+      const [run, marketSignals] = await Promise.all([
+        assessJobStrategy(officeId, job.id).catch(() => null),
+        getMarketSignalsForStrategyContext({ officeId, jobId: job.id, companyId: job.companyId, limit: 3 }).catch(() => []),
+      ]);
       const topRisk = run?.strategy.riskAssessments[0] ?? null;
       if (!run || !topRisk || !["HIGH", "CRITICAL"].includes(topRisk.level)) return null;
       return {
@@ -34,6 +39,13 @@ export async function listDealRiskAssessments(officeId: string, limit = 20) {
         },
         risk: topRisk,
         mitigation: topRisk.mitigation,
+        marketSignals: marketSignals.map((signal) => ({
+          signalId: signal.signalId,
+          severity: signal.severity,
+          category: signal.category,
+          summary: signal.summary,
+          pricingImplication: signal.pricingImplication,
+        })),
       };
     })
   );
