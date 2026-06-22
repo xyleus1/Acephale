@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import crypto from "crypto";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
+import { decryptOAuthTokenFromStorage, encryptOAuthTokenForStorage, isEncryptedSecret } from "./security/crypto";
 
 export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -150,12 +151,19 @@ export async function getValidAccessToken(accountId: string): Promise<string> {
   const account = await prisma.emailAccount.findUnique({ where: { id: accountId } });
   if (!account) throw new Error("EmailAccount not found");
   if (!account.refreshToken) throw new Error("Account has no refresh token (re-connect needed)");
+  const refreshToken = decryptOAuthTokenFromStorage(account.refreshToken);
+  if (!refreshToken) throw new Error("Account has no usable refresh token (re-connect needed)");
 
   // Always refresh — simpler and avoids tracking token expiry.
-  const tokens = await refreshAccessToken(account.refreshToken);
+  const tokens = await refreshAccessToken(refreshToken);
   await prisma.emailAccount.updateMany({
     where: { id: accountId, officeId: account.officeId },
-    data: { accessToken: tokens.access_token },
+    data: {
+      accessToken: encryptOAuthTokenForStorage(tokens.access_token),
+      ...(isEncryptedSecret(account.refreshToken)
+        ? {}
+        : { refreshToken: encryptOAuthTokenForStorage(refreshToken) }),
+    },
   });
   return tokens.access_token;
 }

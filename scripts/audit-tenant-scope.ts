@@ -9,12 +9,16 @@ const IGNORE = new Set([
   "src/lib/setup-demo-actions.ts",
 ]);
 const STRICT = process.env.STRICT_TENANT_SCOPE === "1" || process.env.STRICT_TENANT_SCOPE === "true";
+const STRICT_ARG = process.argv.includes("--strict");
+const JSON_OUTPUT = process.argv.includes("--json");
 
 type Finding = {
   file: string;
   line: number;
   call: string;
+  severity: "high" | "medium";
   reason: string;
+  hint: string;
 };
 
 function walk(dir: string): string[] {
@@ -35,7 +39,17 @@ function hasTenantScope(snippet: string) {
     || /\boffice:\s*\{/.test(snippet)
     || /\bcompany:\s*\{[^}]*officeId/s.test(snippet)
     || /\bjob:\s*\{[^}]*officeId/s.test(snippet)
-    || /\binquiry:\s*\{[^}]*officeId/s.test(snippet);
+    || /\binquiry:\s*\{[^}]*officeId/s.test(snippet)
+    || /\bwhere\s*:\s*officeWhere\b/.test(snippet)
+    || /\bwhere\s*:\s*eventWhere\(/.test(snippet);
+}
+
+function ignored(snippet: string) {
+  return /tenant-scope:ignore/.test(snippet);
+}
+
+function severity(call: string): Finding["severity"] {
+  return /\.(update|updateMany|delete|deleteMany)$/.test(call) ? "high" : "medium";
 }
 
 const files = ROOTS.flatMap(walk)
@@ -50,14 +64,20 @@ for (const file of files) {
   for (const match of source.matchAll(prismaCall)) {
     const start = match.index ?? 0;
     const snippet = source.slice(start, start + 900);
+    if (ignored(source.slice(Math.max(0, start - 240), start + 240))) continue;
     if (!/\bwhere\s*:/.test(snippet)) continue;
     if (hasTenantScope(snippet)) continue;
     const call = `${match[1]}.${match[2]}`;
+    const level = severity(call);
     findings.push({
       file,
       line: lineNo(source, start),
       call,
+      severity: level,
       reason: "Prisma query has a where clause but no obvious officeId or tenant relation scope nearby.",
+      hint: level === "high"
+        ? "Mutation queries should normally include officeId directly or through a tenant-scoped relation."
+        : "Read queries should either include officeId/tenant relation scope or an explicit tenant-scope:ignore comment.",
     });
   }
 }
@@ -67,16 +87,25 @@ if (findings.length === 0) {
   process.exit(0);
 }
 
-console.log(`Tenant scope audit found ${findings.length} suspicious Prisma quer${findings.length === 1 ? "y" : "ies"}.`);
-for (const item of findings.slice(0, 80)) {
-  console.log(`${item.file}:${item.line} ${item.call} - ${item.reason}`);
-}
-if (findings.length > 80) {
-  console.log(`...and ${findings.length - 80} more.`);
+const high = findings.filter((finding) => finding.severity === "high").length;
+const medium = findings.length - high;
+if (JSON_OUTPUT) {
+  console.log(JSON.stringify({ ok: false, high, medium, findings }, null, 2));
+} else {
+  console.log(`Tenant scope audit found ${findings.length} suspicious Prisma quer${findings.length === 1 ? "y" : "ies"} (${high} high, ${medium} medium).`);
+  console.log("Fix by adding officeId/tenant relation scope, or add a tight tenant-scope:ignore comment only for intentionally global/public lookups.");
+  for (const item of findings.slice(0, 80)) {
+    console.log(`${item.file}:${item.line} [${item.severity}] ${item.call} - ${item.reason} ${item.hint}`);
+  }
+  if (findings.length > 80) {
+    console.log(`...and ${findings.length - 80} more.`);
+  }
 }
 
-if (STRICT) {
+if (STRICT || STRICT_ARG) {
   process.exit(1);
 }
 
-console.log("Non-strict mode: report only. Set STRICT_TENANT_SCOPE=1 to fail on findings.");
+if (!JSON_OUTPUT) {
+  console.log("Non-strict mode: report only. Set STRICT_TENANT_SCOPE=1 or pass --strict to fail on findings.");
+}

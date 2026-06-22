@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma";
 import { sendReplyToThread } from "./gmail-send";
 import { ensurePortalToken } from "./portal";
+import { createPortalToken } from "./portal-token";
 
 // Send a customer-facing status update email when a Job advances to a
 // meaningful status, or when an important milestone is logged. Skips if
@@ -67,8 +68,7 @@ async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; f
     // don't require requireSession in this server-internal path.
     let token = job.portalToken;
     if (!token) {
-      const crypto = await import("crypto");
-      token = crypto.randomBytes(16).toString("hex");
+      token = createPortalToken();
       await prisma.job.updateMany({
         where: { id: job.id, officeId: job.officeId },
         data: { portalToken: token },

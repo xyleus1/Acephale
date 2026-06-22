@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isPlausiblePortalToken } from "@/lib/portal-token";
 
 const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"] as const;
 
@@ -52,18 +53,12 @@ export default async function PortalPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+  if (!isPlausiblePortalToken(token)) notFound();
 
-  let job = await prisma.job.findUnique({
+  const job = await prisma.job.findUnique({
     where: { portalToken: token },
     include: jobPortalInclude,
   });
-
-  if (!job) {
-    job = await prisma.job.findUnique({
-      where: { id: token },
-      include: jobPortalInclude,
-    });
-  }
 
   if (!job) notFound();
 
