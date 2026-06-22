@@ -1106,3 +1106,148 @@ Verification after commits:
 - Run the full D1 suite: `npx prisma validate`, `npm run db:generate`,
   `npx tsc --noEmit`, all memory/market/security tests, doctors, tenant audit,
   `npm run build`, and `npm run ai:handoff`.
+
+## D2 Preview/Staging Deployment Prep
+
+Status:
+
+- Completed on 2026-06-22.
+- Branch pushed: yes.
+- Branch: `codex/lead-to-quote-batch`.
+- Pushed head: `e9aa328 docs: add ai collaboration handoff and deployment runbooks`.
+- Remote branch verified at `origin/codex/lead-to-quote-batch`.
+- No production deploy was run.
+- No production database command was run.
+- No live Firecrawl ingestion was run.
+- Market cron was not enabled.
+- Operational records were not mutated.
+
+Repository checks:
+
+- `git status --short`: clean before push.
+- `git branch --show-current`: `codex/lead-to-quote-batch`.
+- `git log --oneline -n 12`: release commit stack from
+  `a9c48d9` through `e9aa328` is present.
+- `npx tsc --noEmit`: passed before push.
+
+Remote and Vercel status:
+
+- Git remote: `origin` is the GitHub SSH remote for `mmturna/derya-crm`.
+- Push succeeded with a fast-forward branch update from `9727e55` to
+  `e9aa328`.
+- Vercel CLI is not installed in this shell.
+- No `.vercel/project.json` link file is present.
+- Vercel Git integration could not be detected locally. If the Vercel project
+  is connected to this GitHub repo, the branch push should create a Preview
+  deployment. Check the Vercel dashboard under the Derya project deployments
+  for branch `codex/lead-to-quote-batch`.
+- Preview URL: not available from local tooling during D2.
+
+Preview/staging environment status:
+
+Local env presence was checked without printing values. This is not proof that
+Vercel Preview env vars are configured, because Vercel CLI was unavailable.
+
+| Variable | Local presence | Vercel Preview status |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | unknown |
+| `DATABASE_URL_UNPOOLED` | yes | unknown |
+| `DIRECT_URL` | no | unknown |
+| `TOKEN_ENCRYPTION_KEY` | no | unknown |
+| `CRON_SECRET` | yes | unknown |
+| `ANTHROPIC_API_KEY` | yes | unknown |
+| `OPENAI_API_KEY` | yes | unknown |
+| `GOOGLE_CLIENT_ID` | no | unknown |
+| `GOOGLE_CLIENT_SECRET` | no | unknown |
+| `GOOGLE_REDIRECT_URI` | no | unknown |
+| `FIRECRAWL_API_KEY` | yes | unknown |
+| `MARKET_INTELLIGENCE_PROVIDER` | yes | unknown |
+| `MARKET_INTELLIGENCE_CRON_ENABLED` | yes, disabled | unknown |
+| `MARKET_INTELLIGENCE_MAX_RESULTS_PER_RUN` | yes | unknown |
+| `MARKET_INTELLIGENCE_MAX_PAGES_PER_RUN` | yes | unknown |
+| `MARKET_INTELLIGENCE_MAX_SOURCES_PER_RUN` | yes | unknown |
+| `MARKET_INTELLIGENCE_DAILY_CREDIT_BUDGET` | yes | unknown |
+| `DOCUMENT_STORAGE_DRIVER` | documented in `.env.example` | unknown |
+| `DOCUMENT_STORAGE_S3_BUCKET` | documented in `.env.example` | unknown |
+| `DOCUMENT_STORAGE_S3_REGION` | documented in `.env.example` | unknown |
+| `DOCUMENT_STORAGE_S3_ENDPOINT` | documented in `.env.example` | unknown |
+| `DOCUMENT_STORAGE_S3_ACCESS_KEY_ID` | documented in `.env.example` | unknown |
+| `DOCUMENT_STORAGE_S3_SECRET_ACCESS_KEY` | documented in `.env.example` | unknown |
+| `DOCUMENT_STORAGE_S3_SESSION_TOKEN` | documented in `.env.example` | unknown |
+
+Safe Preview market-intelligence values:
+
+- `MARKET_INTELLIGENCE_CRON_ENABLED=false`
+- `MARKET_INTELLIGENCE_MAX_RESULTS_PER_RUN=3`
+- `MARKET_INTELLIGENCE_MAX_PAGES_PER_RUN=3`
+- `MARKET_INTELLIGENCE_MAX_SOURCES_PER_RUN=1`
+- `MARKET_INTELLIGENCE_DAILY_CREDIT_BUDGET=25`
+
+Database status:
+
+- Local `DATABASE_URL` and `DATABASE_URL_UNPOOLED` point to a local Postgres
+  database named `derya_crm_app`.
+- No staging `DATABASE_URL` was explicitly available locally.
+- Staging migration was therefore skipped. That is intentional. Do not run
+  `migrate deploy` against an unknown database.
+- For a fresh staging database, run:
+
+```bash
+npx prisma migrate status
+npx prisma migrate deploy
+npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+```
+
+- For an existing staging database with the pre-brain schema but no migration
+  history, follow `docs/RUNBOOKS/PRISMA_BASELINE_DEPLOYMENT.md`. Do not stamp
+  the baseline unless a diff proves the database matches the pre-brain schema.
+- Do not use `db push`, `migrate dev`, or `migrate reset` for staging or
+  production.
+
+Build/deploy requirements:
+
+- `postinstall` runs `prisma generate`.
+- `build` runs `prisma generate && next build`.
+- No live Firecrawl ingestion runs during install or build.
+- No database migration runs during install or build.
+- `vercel.json` contains cron entries for risk scan, Gmail sync, and
+  background jobs. Market intelligence cron is not listed there and remains
+  gated in code by env flags.
+
+Preview smoke-test checklist once the Preview URL exists:
+
+- App loads.
+- Login works.
+- `/dashboard` loads.
+- `/dashboard/intelligence` loads.
+- Research Feed, Market Signals, and Impact Reviews render.
+- Customer and job pages load.
+- Morning Brief renders without recommending suppressed market signals.
+- Quote PDF route works.
+- A valid portal token works.
+- `job.id` as a portal token fails.
+- Gmail OAuth callback URI matches the Preview URL or Gmail is intentionally
+  production-only for this Preview.
+- Cron routes reject unauthenticated calls.
+- Market cron remains disabled.
+- `npm run memory:doctor` and `npm run market:doctor` pass against staging if
+  run from an environment configured for the staging database.
+
+Blockers:
+
+- Vercel Preview deployment status could not be verified locally because the
+  Vercel CLI is unavailable and the repo is not locally linked with
+  `.vercel/project.json`.
+- Vercel Preview env var presence could not be checked locally.
+- Staging migrations were not run because no explicit staging database URL was
+  available locally.
+- `TOKEN_ENCRYPTION_KEY`, Gmail OAuth vars, and Preview document-storage vars
+  must be confirmed in Vercel before realistic Preview testing.
+
+Recommended next step:
+
+- Confirm Vercel Git integration created a Preview for
+  `codex/lead-to-quote-batch`.
+- Configure/verify Preview env vars with safe market-intelligence defaults.
+- Run staging migrations only against a confirmed staging database.
+- Then run D3 staging smoke tests.

@@ -450,3 +450,26 @@ Use this file for chronological implementation notes that future agents should s
   `src/lib/memory/morning-brief.ts`, `scripts/market-doctor.ts`, and
   `src/app/globals.css`). Some intermediate commits may not build alone; the
   final release commit must pass.
+
+### 2026-06-22 - D2 push release branch and prepare Vercel Preview
+
+- Branch: codex/lead-to-quote-batch
+- Commit: e9aa328
+- Task: Push the clean D1 release branch and prepare safe Preview/Staging
+  deployment guidance without production deploys, production DB commands, live
+  Firecrawl ingestion, cron enablement, or operational data mutation.
+- Files changed: `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`.
+- Verification: pre-push `git status --short` was clean, branch was
+  `codex/lead-to-quote-batch`, release commit stack was present,
+  `npx tsc --noEmit` passed, and `git push origin
+  codex/lead-to-quote-batch` succeeded. Remote branch head verified at
+  `e9aa328`.
+- Failed/skipped checks: Vercel Preview status and Preview env vars could not
+  be checked because Vercel CLI is not installed and the repo has no
+  `.vercel/project.json` link. Staging migrations were skipped because no
+  explicit staging database URL was available locally.
+- Caveats: local env points to a local Postgres database, not staging. Do not
+  run `migrate deploy` until the staging database is explicitly confirmed.
+- Follow-up: check the Vercel dashboard for the Preview deployment, configure
+  Preview env vars, keep market cron disabled, run staging migrations only
+  against a confirmed staging DB, then run D3 staging smoke tests.
