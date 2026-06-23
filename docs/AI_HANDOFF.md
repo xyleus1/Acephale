@@ -1739,3 +1739,29 @@ Production use:
 - Keep `MARKET_INTELLIGENCE_CRON_ENABLED=false`.
 - First manual source should be `maersk-news-advisories`.
 - Review Research Feed, Market Signals, and Impact Reviews before acting.
+
+## Intelligence Page Visibility Fix
+
+Status:
+
+- Implemented on 2026-06-23 after production screenshot review.
+- Goal: make the live intelligence map and detail panels readable under the
+  beige Derya production theme.
+
+What changed:
+
+- Added solid dark fallback backgrounds to the map shell, hotspot panel, metric
+  cards, and source cards so global `background-image: none !important` theme
+  rules cannot leave white text on beige panels.
+- Increased foreground contrast for headings, summaries, recommended actions,
+  affected work pills, source metadata, and metric labels.
+- Added dark SVG text strokes behind map labels so hotspot text remains readable
+  over route arcs and glowing pins.
+- Brightened latitude/longitude labels and map grid contrast.
+
+Verification:
+
+- `npx tsc --noEmit`
+- `npm run test:intelligence-map`
+- `npm run test:intelligence-page-empty-state`
+- `npm run build`

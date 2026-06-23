@@ -75,8 +75,8 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
               <g>
                 <circle cx="500" cy="250" r="24" fill="#38bdf8" opacity=".18" />
                 <circle cx="500" cy="250" r="10" fill="#38bdf8" opacity=".72" />
-                <text x="528" y="247" fill="#e0f2fe" fontSize="16" fontWeight="800">No live market research yet</text>
-                <text x="528" y="267" fill="#93c5fd" fontSize="12">Use Pull Market Data Now to create source-backed hotspots.</text>
+                <text x="528" y="247" fill="#f8fafc" stroke="#020617" strokeWidth="4" paintOrder="stroke" fontSize="16" fontWeight="800">No live market research yet</text>
+                <text x="528" y="267" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12">Use Pull Market Data Now to create source-backed hotspots.</text>
               </g>
             )}
             <g>
@@ -119,7 +119,18 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                       <animate attributeName="r" values={`${radius + 5};${radius + 13};${radius + 5}`} dur="2.8s" repeatCount="indefinite" />
                       <animate attributeName="opacity" values={hotspot.suppressed ? ".18;.03;.18" : ".55;.08;.55"} dur="2.8s" repeatCount="indefinite" />
                     </circle>
-                    <text x={point.x + radius + 7} y={point.y + 4} fill={hotspot.suppressed ? "#94a3b8" : "#dbeafe"} fontSize="13" fontWeight={active ? 800 : 600}>{hotspot.label}</text>
+                    <text
+                      x={point.x + radius + 7}
+                      y={point.y + 4}
+                      fill={hotspot.suppressed ? "#cbd5e1" : "#f8fafc"}
+                      stroke="#020617"
+                      strokeWidth="3"
+                      paintOrder="stroke"
+                      fontSize="13"
+                      fontWeight={active ? 900 : 800}
+                    >
+                      {hotspot.label}
+                    </text>
                   </g>
                 );
               })}
@@ -170,25 +181,27 @@ function HotspotGlyph({
 function MapMetric({ label, value }: { label: string; value: string | number }) {
   return (
     <div style={metricStyle}>
-      <span style={{ color: "#93c5fd", fontSize: 11 }}>{label}</span>
-      <strong style={{ color: "#f8fafc", fontSize: 18 }}>{value}</strong>
+      <span style={{ color: "#bfdbfe", fontSize: 11, fontWeight: 700 }}>{label}</span>
+      <strong style={{ color: "#ffffff", fontSize: 18 }}>{value}</strong>
     </div>
   );
 }
 
 const shellStyle: React.CSSProperties = {
-  border: "1px solid rgba(15,23,42,.12)",
-  background: "linear-gradient(135deg, #061524 0%, #0b2036 52%, #07111f 100%)",
+  border: "1px solid rgba(14,116,144,.34)",
+  backgroundColor: "#08111f",
+  backgroundImage: "linear-gradient(135deg, #07111f 0%, #0b2036 52%, #08111f 100%)",
   borderRadius: 12,
   padding: 18,
-  boxShadow: "0 18px 60px rgba(2,8,23,.22)",
+  boxShadow: "0 18px 60px rgba(2,8,23,.28)",
+  color: "#f8fafc",
 };
 const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap" };
-const eyebrowStyle: React.CSSProperties = { color: "#67e8f9", fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 };
-const headingStyle: React.CSSProperties = { color: "#f8fafc", margin: "3px 0 0", fontSize: 24 };
+const eyebrowStyle: React.CSSProperties = { color: "#67e8f9", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 };
+const headingStyle: React.CSSProperties = { color: "#ffffff", margin: "3px 0 0", fontSize: 24, textShadow: "0 2px 14px rgba(0,0,0,.45)" };
 const metricsStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(90px, 1fr))", gap: 8 };
-const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid rgba(125,211,252,.18)", background: "rgba(15,23,42,.6)", borderRadius: 8, padding: "8px 10px" };
+const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid rgba(125,211,252,.34)", backgroundColor: "#13243a", backgroundImage: "linear-gradient(180deg, rgba(14,165,233,.18), rgba(15,23,42,.12))", borderRadius: 8, padding: "8px 10px", boxShadow: "0 10px 24px rgba(2,8,23,.18)" };
 const layoutStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, .8fr)", gap: 14 };
-const mapCardStyle: React.CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(125,211,252,.16)", borderRadius: 12, background: "#04111f", minHeight: 440 };
-const legendStyle: React.CSSProperties = { position: "absolute", left: 14, bottom: 12, display: "flex", gap: 12, flexWrap: "wrap", color: "#cbd5e1", fontSize: 12, background: "rgba(2,6,23,.55)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 999, padding: "6px 10px" };
+const mapCardStyle: React.CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(125,211,252,.32)", borderRadius: 12, backgroundColor: "#04111f", minHeight: 440, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.04)" };
+const legendStyle: React.CSSProperties = { position: "absolute", left: 14, bottom: 12, display: "flex", gap: 12, flexWrap: "wrap", color: "#e2e8f0", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(2,6,23,.82)", border: "1px solid rgba(148,163,184,.28)", borderRadius: 999, padding: "6px 10px" };
 const sourceStripStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginTop: 14 };

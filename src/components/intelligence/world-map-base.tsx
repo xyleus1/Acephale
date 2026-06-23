@@ -47,7 +47,7 @@ function LatitudeLongitudeGrid() {
   const lngLines = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
   return (
     <g>
-      <g opacity=".18" stroke="#93c5fd" strokeWidth="1">
+      <g opacity=".28" stroke="#93c5fd" strokeWidth="1">
         {latLines.map((lat) => {
           const y = ((90 - lat) / 180) * 500;
           return <path key={`lat-${lat}`} d={`M 25 ${y.toFixed(1)} H 975`} />;
@@ -57,7 +57,7 @@ function LatitudeLongitudeGrid() {
           return <path key={`lng-${lng}`} d={`M ${x.toFixed(1)} 25 V 475`} />;
         })}
       </g>
-      <g opacity=".52" fill="#93c5fd" fontSize="10">
+      <g opacity=".9" fill="#bfdbfe" fontSize="10" fontWeight="700">
         {latLines.map((lat) => {
           const y = ((90 - lat) / 180) * 500;
           return <text key={`lat-label-${lat}`} x="32" y={y - 4}>{lat > 0 ? `${lat}N` : lat < 0 ? `${Math.abs(lat)}S` : "EQ"}</text>;

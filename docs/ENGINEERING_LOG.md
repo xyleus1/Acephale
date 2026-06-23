@@ -640,3 +640,21 @@ Use this file for chronological implementation notes that future agents should s
   `npm run test:market-impact`.
 - Failed/skipped checks: no local live Firecrawl ingestion was run, no market
   cron was enabled, and no Prisma migration was required.
+
+### 2026-06-23 - Intelligence page contrast and visibility hardening
+
+- Branch: main dirty worktree
+- Task: fix production `/dashboard/intelligence` readability after screenshot
+  showed white/pale text on beige panels and weak right-panel contrast.
+- Files changed: `src/components/intelligence/world-intelligence-map.tsx`,
+  `src/components/intelligence/intelligence-hotspot-panel.tsx`,
+  `src/components/intelligence/intelligence-source-card.tsx`,
+  `src/components/intelligence/world-map-base.tsx`, `docs/AI_HANDOFF.md`, and
+  `docs/ENGINEERING_LOG.md`.
+- Behavior added: solid dark fallback surfaces for the map shell, hotspot
+  panel, metric cards, and source cards; higher-contrast text colors; map label
+  strokes for SVG readability; brighter grid labels.
+- Verification passed: `npx tsc --noEmit`, `npm run test:intelligence-map`,
+  `npm run test:intelligence-page-empty-state`, and `npm run build`.
+- Failed/skipped checks: no live Firecrawl ingestion, database migration, or
+  operational data mutation was run.
