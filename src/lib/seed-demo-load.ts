@@ -1,8 +1,8 @@
 "use server";
 
-import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
+import { createPortalToken } from "./portal-token";
 
 // Build a minimal one-page PDF with the given title and body lines, returned
 // as a data: URL. Used to seed demo documents that the inline viewer can
@@ -283,7 +283,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
   // Reference must be next-available (not count+1) — see nextJobReference.
   const { nextJobReference } = await import("./job-actions");
   const reference = await nextJobReference(args.officeId);
-  const portalToken = crypto.randomBytes(16).toString("hex");
+  const portalToken = createPortalToken();
   const etd = new Date(Date.now() + 6 * 86400000);
   const eta = new Date(Date.now() + 16 * 86400000);
 

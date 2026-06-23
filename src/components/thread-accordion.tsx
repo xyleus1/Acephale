@@ -40,57 +40,46 @@ export function ThreadAccordion({
   }
 
   return (
-    <div style={{ borderTop: "1px solid var(--border)" }}>
+    <div className="thread-accordion">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        style={{
-          width: "100%", padding: "8px 16px", textAlign: "left",
-          background: "var(--surface-2)", border: "none", cursor: "pointer",
-          fontSize: 11.5, color: "var(--text-2)", fontWeight: 500,
-          display: "flex", alignItems: "center", gap: 6,
-        }}
+        className="thread-accordion-toggle"
       >
         <Icon name={open ? "chevron-up" : "chevron-down"} size={11} />
         {open ? "Hide" : "Show"} full thread ({messageCount} {messageCount === 1 ? "message" : "messages"})
       </button>
       {open && (
-        <div style={{ padding: "10px 16px", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="thread-accordion-body">
           {messages.map((m) => {
             const expanded = expandedBodies.has(m.id);
             const longBody = (m.bodyText?.length ?? 0) > 1200;
             const shownBody = !longBody || expanded ? m.bodyText : (m.bodyText ?? "").slice(0, 1200);
             return (
-              <div key={m.id} style={{
-                padding: "10px 12px",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                borderLeft: m.direction === "OUTBOUND" ? "3px solid var(--brand)" : "3px solid var(--text-3)",
-                background: m.direction === "OUTBOUND" ? "var(--brand-light)" : "var(--surface)",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+              <div key={m.id} className={`thread-message${m.direction === "OUTBOUND" ? " outbound" : ""}`}>
+                <div className="thread-message-header">
+                  <span className="thread-message-sender">
                     {m.fromName ?? m.fromEmail}
-                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    <span className="thread-message-direction">
                       {m.direction}
                     </span>
                     {m.fromName && (
-                      <span style={{ marginLeft: 6, fontSize: 10.5, color: "var(--text-3)", fontWeight: 400 }}>
+                      <span className="thread-message-email">
                         &lt;{m.fromEmail}&gt;
                       </span>
                     )}
                   </span>
-                  <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                  <span className="thread-message-time">
                     {new Date(m.sentAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>
                 {m.subject && (
-                  <div style={{ fontSize: 11.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 500 }}>
+                  <div className="thread-message-subject">
                     {m.subject}
                   </div>
                 )}
                 {shownBody && (
-                  <div style={{ fontSize: 12.5, color: "var(--text)", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+                  <div className="thread-message-body">
                     {shownBody}
                     {longBody && !expanded && <>…</>}
                   </div>
@@ -99,16 +88,13 @@ export function ThreadAccordion({
                   <button
                     type="button"
                     onClick={() => toggleBody(m.id)}
-                    style={{
-                      marginTop: 6, fontSize: 11, color: "var(--brand)",
-                      background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 500,
-                    }}
+                    className="thread-message-more"
                   >
                     {expanded ? "Show less" : `Show full email (${m.bodyText?.length.toLocaleString()} chars)`}
                   </button>
                 )}
                 {m.attachments.length > 0 && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  <div className="record-attachment-row">
                     {m.attachments.map((a) => {
                       const dl = m.gmailMessageId
                         ? `/api/gmail/attachment?messageDbId=${m.id}&attachmentId=${encodeURIComponent(a.attachmentId)}&filename=${encodeURIComponent(a.filename)}`
@@ -118,25 +104,15 @@ export function ThreadAccordion({
                           key={a.attachmentId}
                           href={dl}
                           download={a.filename}
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            padding: "5px 10px", borderRadius: 4,
-                            background: "var(--surface-2)", border: "1px solid var(--border)",
-                            fontSize: 11.5, color: "var(--text)", textDecoration: "none",
-                          }}
+                          className="record-attachment"
                         >
                           <Icon name="paperclip" size={11} />
-                          <span style={{ fontWeight: 500 }}>{a.filename}</span>
-                          <span style={{ color: "var(--text-3)" }}>{formatBytes(a.size)}</span>
+                          <strong>{a.filename}</strong>
+                          <span className="record-attachment-meta">{formatBytes(a.size)}</span>
                           <Icon name="download" size={11} />
                         </a>
                       ) : (
-                        <span key={a.attachmentId} style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
-                          padding: "5px 10px", borderRadius: 4,
-                          background: "var(--surface-2)", border: "1px solid var(--border)",
-                          fontSize: 11.5, color: "var(--text-3)",
-                        }}>
+                        <span key={a.attachmentId} className="thread-attachment-muted">
                           <Icon name="paperclip" size={11} />
                           {a.filename} · {formatBytes(a.size)}
                         </span>

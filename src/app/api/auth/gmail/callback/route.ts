@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { exchangeCodeForTokens, getUserEmail, verifyOAuthState } from "@/lib/gmail-oauth";
+import { encryptOAuthTokenForStorage } from "@/lib/security/crypto";
 
 export async function GET(request: NextRequest) {
   const session = await requireSession();
@@ -43,18 +44,22 @@ export async function GET(request: NextRequest) {
   try {
     const tokens = await exchangeCodeForTokens(code);
     const email = await getUserEmail(tokens.access_token);
+    const encryptedAccessToken = encryptOAuthTokenForStorage(tokens.access_token);
 
     // Upsert by (officeId, email)
     const existing = await prisma.emailAccount.findFirst({
       where: { officeId: session.officeId, email },
     });
+    const encryptedRefreshToken = tokens.refresh_token
+      ? encryptOAuthTokenForStorage(tokens.refresh_token)
+      : existing?.refreshToken ?? null;
     if (existing) {
       await prisma.emailAccount.update({
         where: { id: existing.id },
         data: {
           provider: "GMAIL",
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token ?? existing.refreshToken,
+          accessToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken,
           isActive: true,
         },
       });
@@ -64,8 +69,8 @@ export async function GET(request: NextRequest) {
           officeId: session.officeId,
           email,
           provider: "GMAIL",
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token ?? null,
+          accessToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken,
           isActive: true,
         },
       });

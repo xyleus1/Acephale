@@ -4,6 +4,8 @@ import { Icon } from "@/components/icon";
 import { SyncAccountButton } from "@/components/sync-account-button";
 import { DisconnectAccountButton } from "@/components/disconnect-account-button";
 import { ResumeAccountButton } from "@/components/resume-account-button";
+import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
+import { AppearanceToggle } from "@/components/appearance-toggle";
 
 function timeAgo(d: Date | null | undefined) {
   if (!d) return "Never";
@@ -34,11 +36,65 @@ export default async function EmailSettingsPage({
     where: { account: { officeId: session.officeId } },
     _count: true,
   });
+  const activeForwarderCount = await prisma.forwarder.count({
+    where: { officeId: session.officeId, active: true },
+  });
   const countByAccount = Object.fromEntries(messageCounts.map((c) => [c.accountId, c._count]));
 
   const active = accounts.filter((a) => a.isActive);
   const paused = accounts.filter((a) => !a.isActive);
+  const allowedSenderEmails = ["mert@usederya.com", "oguzhan@usederya.com"];
+  const connectedAllowedSenderEmails = active
+    .filter((a) => a.provider === "GMAIL" && allowedSenderEmails.includes(a.email.toLowerCase()))
+    .map((a) => a.email.toLowerCase());
+  const missingAllowedSenderEmails = allowedSenderEmails.filter((email) => !connectedAllowedSenderEmails.includes(email));
   const oauthConfigured = !!process.env.GOOGLE_CLIENT_ID;
+  const whatsAppConfigured = !!(process.env.WHATSAPP_VERIFY_TOKEN && process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
+  const whatsAppWebhookConfigured = !!process.env.WHATSAPP_VERIFY_TOKEN;
+  const sheetId = process.env.DERYA_GOOGLE_SHEET_ID ?? "1CFmfSdFJKOCThss5xzglHb5GihPRlK3pRxLCmpuFUHg";
+  const sheetsAuthConfigured = !!process.env.GOOGLE_SHEETS_API_KEY || !!(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
+  const documentStorageDriver = (process.env.DOCUMENT_STORAGE_DRIVER ?? "local").toLowerCase();
+  const productionDocumentStorageConfigured = documentStorageDriver === "s3"
+    && !!process.env.DOCUMENT_STORAGE_S3_BUCKET
+    && !!process.env.DOCUMENT_STORAGE_S3_ACCESS_KEY_ID
+    && !!process.env.DOCUMENT_STORAGE_S3_SECRET_ACCESS_KEY;
+  const setupGates = [
+    {
+      label: "Gmail senders",
+      status: missingAllowedSenderEmails.length === 0 ? "ready" : oauthConfigured ? "setup required" : "blocked",
+      detail: missingAllowedSenderEmails.length === 0
+        ? `Allowed senders connected: ${connectedAllowedSenderEmails.join(", ")}.`
+        : `Connect/reconnect ${missingAllowedSenderEmails.join(", ")} with Gmail Send scope before forwarder email send is production-usable.`,
+    },
+    {
+      label: "Forwarder directory",
+      status: activeForwarderCount > 0 ? "ready" : "setup required",
+      detail: activeForwarderCount > 0
+        ? `${activeForwarderCount} active forwarder recipient${activeForwarderCount === 1 ? "" : "s"} configured.`
+        : "Seed DSV and the first 5-10 forwarder quote emails with mode coverage before relying on RFQ handoff.",
+    },
+    {
+      label: "Google Sheets",
+      status: sheetsAuthConfigured ? "ready" : "setup required",
+      detail: sheetsAuthConfigured
+        ? "Google API credentials are configured for production sync."
+        : "Manual/public fallback can work for testing; production sync needs API key or service account and sheet sharing.",
+    },
+    {
+      label: "WhatsApp",
+      status: whatsAppConfigured ? "ready" : whatsAppWebhookConfigured ? "setup required" : "blocked",
+      detail: whatsAppConfigured
+        ? "Webhook and outbound Cloud API credentials are configured."
+        : "Meta verify token, app secret, access token, phone number ID, and public callback URL are still required.",
+    },
+    {
+      label: "Document storage",
+      status: productionDocumentStorageConfigured ? "ready" : "setup required",
+      detail: productionDocumentStorageConfigured
+        ? "S3-compatible storage is configured for production documents."
+        : `Current driver is ${documentStorageDriver}. Production needs S3/R2-compatible storage or an explicit local-production exception.`,
+    },
+  ];
   // Accounts connected before the gmail.send scope was added need to be
   // reconnected before AI replies can actually deliver. We can't tell from
   // the DB alone, so show a soft prompt for any account whose lastSyncAt
@@ -56,10 +112,57 @@ export default async function EmailSettingsPage({
 
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">Email Accounts</h1>
+          <h1 className="page-title">Email & WhatsApp</h1>
           <p className="page-subtitle">
-            Connect inboxes. Inbound messages get classified and attached to the right job automatically.
+            Connect customer channels. Inbound messages get classified and attached to the right RFQ automatically.
           </p>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-body appearance-card-body">
+          <div>
+            <div className="section-title" style={{ marginBottom: 6 }}>Appearance</div>
+            <p style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+              Derya uses one warm notebook theme so the deal desk, agent, and pricing brain feel like the same product.
+            </p>
+          </div>
+          <AppearanceToggle />
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-body">
+          <div className="section-title" style={{ marginBottom: 6 }}>Production setup gates</div>
+          <p style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5, marginBottom: 12 }}>
+            These are explicit blockers, not hidden failures. The local batch works without them; production messaging and sync do not.
+          </p>
+          <div style={{ display: "grid", gap: 8 }}>
+            {setupGates.map((gate) => (
+              <div key={gate.label} style={{
+                display: "grid",
+                gap: 4,
+                padding: "10px 12px",
+                border: "1px solid var(--border)",
+                borderLeft: `3px solid ${gate.status === "ready" ? "var(--derya-olive)" : gate.status === "blocked" ? "var(--derya-clay)" : "#9a6b2f"}`,
+                borderRadius: "var(--radius)",
+                background: gate.status === "ready" ? "#eef0df" : gate.status === "blocked" ? "#f2ddcf" : "#f7e3c8",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                  <strong style={{ fontSize: 13, color: "var(--text)" }}>{gate.label}</strong>
+                  <span style={{
+                    color: gate.status === "ready" ? "var(--derya-olive)" : gate.status === "blocked" ? "var(--derya-clay)" : "#7a5521",
+                    fontSize: 10.5,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                  }}>
+                    {gate.status}
+                  </span>
+                </div>
+                <span style={{ color: "var(--text-2)", fontSize: 12, lineHeight: 1.45 }}>{gate.detail}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -106,9 +209,9 @@ export default async function EmailSettingsPage({
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
             {[
-              { step: "01", title: "Connect inbox", desc: "Authorize Gmail with read-only access. We never send without you." },
-              { step: "02", title: "AI classifies", desc: "Each new email is classified as RFQ, carrier reply, customer reply, or other." },
-              { step: "03", title: "Auto-attached", desc: "RFQs become Inquiries, carrier rates update CarrierQuote, replies append to threads." },
+              { step: "01", title: "Connect channel", desc: "Authorize Gmail or configure the WhatsApp Cloud API webhook." },
+              { step: "02", title: "AI classifies", desc: "Each inbound message is classified as RFQ, forwarder reply, customer reply, or other." },
+              { step: "03", title: "Auto-attached", desc: "RFQs become inquiries, forwarder prices update the pricing record, replies append to threads." },
             ].map(({ step, title, desc }) => (
               <div key={step} style={{ display: "flex", gap: 12 }}>
                 <div style={{
@@ -123,6 +226,78 @@ export default async function EmailSettingsPage({
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-body">
+          <div className="section-title" style={{ marginBottom: 12 }}>WhatsApp Cloud API</div>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{
+              padding: "12px 14px",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              background: "var(--surface-2)",
+              fontSize: 12.5,
+              color: "var(--text-2)",
+              lineHeight: 1.5,
+            }}>
+              <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+                Status: {whatsAppConfigured ? "ready for inbound and outbound messages" : whatsAppWebhookConfigured ? "webhook can verify; outbound credentials missing" : "not configured"}
+              </div>
+              <div>
+                Callback path: <code>/api/webhooks/whatsapp</code>. Meta will verify this path with <code>hub.challenge</code>, then POST inbound messages into the same inbox/RFQ workflow as email.
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 8 }}>
+              {[
+                ["WHATSAPP_VERIFY_TOKEN", !!process.env.WHATSAPP_VERIFY_TOKEN],
+                ["WHATSAPP_APP_SECRET", !!process.env.WHATSAPP_APP_SECRET],
+                ["WHATSAPP_ACCESS_TOKEN", !!process.env.WHATSAPP_ACCESS_TOKEN],
+                ["WHATSAPP_PHONE_NUMBER_ID", !!process.env.WHATSAPP_PHONE_NUMBER_ID],
+              ].map(([key, present]) => (
+                <div key={String(key)} style={{
+                  padding: "9px 10px",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  background: "var(--surface)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  fontSize: 11.5,
+                }}>
+                  <code>{key}</code>
+                  <span style={{ color: present ? "var(--brand)" : "var(--text-3)", fontWeight: 700 }}>
+                    {present ? "set" : "missing"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-body">
+          <div className="section-title" style={{ marginBottom: 12 }}>Google Sheet source</div>
+          <div style={{
+            padding: "12px 14px",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            background: "var(--surface-2)",
+            fontSize: 12.5,
+            color: "var(--text-2)",
+            lineHeight: 1.5,
+            marginBottom: 10,
+          }}>
+            <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+              Sheet: <code>{sheetId}</code>
+            </div>
+            <div>
+              Sync pulls <code>06/2026 Talepler</code> into RFQs and <code>Operasyonlar</code> into Jobs with cost, revenue, margin, customer, mode, and status. Auth is {sheetsAuthConfigured ? "configured through Google API credentials" : "using public CSV fallback until Google API credentials are set"}.
+            </div>
+          </div>
+          <SyncGoogleSheetButton />
         </div>
       </div>
 
@@ -168,7 +343,7 @@ export default async function EmailSettingsPage({
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 12, fontWeight: 700, color: "var(--text-2)",
                   }}>
-                    {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
+                    {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : account.provider === "WHATSAPP" ? "W" : "M"}
                   </div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{account.email}</div>
@@ -178,7 +353,7 @@ export default async function EmailSettingsPage({
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <SyncAccountButton accountId={account.id} />
+                  {account.provider === "GMAIL" && <SyncAccountButton accountId={account.id} />}
                   <DisconnectAccountButton accountId={account.id} />
                 </div>
               </div>
@@ -213,7 +388,7 @@ export default async function EmailSettingsPage({
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 12, fontWeight: 700, color: "var(--text-2)",
                   }}>
-                    {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
+                    {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : account.provider === "WHATSAPP" ? "W" : "M"}
                   </div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{account.email}</div>

@@ -5,8 +5,10 @@ import { revalidatePath } from "next/cache";
 import { createJobWithReference } from "@/lib/job-actions";
 import { resolveCompanyIdByName } from "@/lib/company-resolve";
 import { NewJobForm } from "@/components/new-job-form";
+import { Icon } from "@/components/icon";
+import { recordTargetPriceHistory } from "@/lib/target-price-history";
 
-const VALID_STATUSES = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "CUSTOMS", "DELIVERED"];
+const VALID_STATUSES = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"];
 
 async function createJob(formData: FormData) {
   "use server";
@@ -19,6 +21,12 @@ async function createJob(formData: FormData) {
   const status = VALID_STATUSES.includes(statusRaw) ? statusRaw : "INQUIRY";
   const mode = String(formData.get("mode") || "");
   const isFcl = mode === "SEA-FCL";
+  const targetPrice = formData.get("targetPrice") ? Number(formData.get("targetPrice")) : null;
+  const targetPriceStatus = targetPrice != null
+    ? "PROVIDED"
+    : String(formData.get("targetPriceStatus") || "UNKNOWN");
+  const targetCurrency = String(formData.get("targetCurrency") || "USD");
+  const targetPriceSource = String(formData.get("targetPriceSource") || "").trim() || null;
 
   const job = await createJobWithReference(session.officeId, (reference) => prisma.job.create({
     data: {
@@ -36,10 +44,18 @@ async function createJob(formData: FormData) {
       weight:      formData.get("weight") ? Number(formData.get("weight")) : null,
       volume:      !isFcl && formData.get("volume") ? Number(formData.get("volume")) : null,
       dimensions:  !isFcl && formData.get("dimensions") ? String(formData.get("dimensions")) : null,
+      stackable:   !isFcl ? String(formData.get("stackable") || "UNKNOWN") : null,
+      topLoad:     !isFcl ? String(formData.get("topLoad") || "") || null : null,
+      dangerousGoods: String(formData.get("dangerousGoods") || "UNKNOWN"),
+      customsBy:   String(formData.get("customsBy") || "UNKNOWN"),
       containerCount: isFcl && formData.get("containerCount") ? Number(formData.get("containerCount")) : null,
       containerType:  isFcl ? String(formData.get("containerType") || "") || null : null,
       quantity:    formData.get("quantity") ? Number(formData.get("quantity")) : null,
       quantityUnit: String(formData.get("quantityUnit") || "").trim().toUpperCase() || null,
+      targetPrice,
+      targetCurrency,
+      targetPriceStatus,
+      targetPriceSource,
       revenue:     formData.get("revenue") ? Number(formData.get("revenue")) : null,
       cost:        formData.get("cost") ? Number(formData.get("cost")) : null,
       notes:       String(formData.get("notes") || "").trim() || null,
@@ -49,6 +65,18 @@ async function createJob(formData: FormData) {
       assignedToUserId: session.userId,
     },
   }));
+  if (targetPrice != null || targetPriceStatus === "NO_TARGET") {
+    await recordTargetPriceHistory({
+      officeId: session.officeId,
+      jobId: job.id,
+      createdByUserId: session.userId,
+      amount: targetPrice,
+      currency: targetCurrency,
+      status: targetPriceStatus,
+      source: targetPriceSource,
+      note: "Manual job creation.",
+    });
+  }
 
   revalidatePath("/dashboard/jobs");
   redirect(`/dashboard/jobs/${job.id}`);
@@ -64,15 +92,15 @@ export default async function NewJobPage() {
   });
 
   return (
-    <div style={{ maxWidth: 680 }}>
-      <div style={{ marginBottom: 16 }}>
+    <div className="form-page">
+      <div className="form-back-row">
         <a href="/dashboard/jobs" className="back-link">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          <Icon name="chevron-left" size={14} />
           Jobs
         </a>
       </div>
 
-      <div className="page-header" style={{ marginBottom: 24 }}>
+      <div className="page-header form-page-header">
         <div>
           <h1 className="page-title">New Job</h1>
           <p className="page-subtitle">Create a manual job without an RFQ</p>

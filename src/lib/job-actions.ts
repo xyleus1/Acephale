@@ -70,6 +70,17 @@ export async function createProposedJobForInquiry(inquiryId: string): Promise<st
       incoterms: inquiry.incoterms ?? null,
       weight: inquiry.weight ?? null,
       volume: inquiry.volume ?? null,
+      dimensions: inquiry.dimensions ?? null,
+      stackable: inquiry.stackable ?? null,
+      topLoad: inquiry.topLoad ?? null,
+      dangerousGoods: inquiry.dangerousGoods ?? null,
+      customsBy: inquiry.customsBy ?? null,
+      containerCount: inquiry.containerCount ?? null,
+      containerType: inquiry.containerType ?? null,
+      targetPrice: inquiry.targetPrice ?? null,
+      targetCurrency: inquiry.targetCurrency ?? null,
+      targetPriceStatus: inquiry.targetPriceStatus ?? null,
+      targetPriceSource: inquiry.targetPriceSource ?? null,
       currency: "USD",
     },
   }));
@@ -133,13 +144,13 @@ export async function discardProposedJob(jobId: string): Promise<{ ok: true } | 
   // Detach the inquiry's threads from the inquiry, then delete the job and inquiry stub.
   if (job.inquiryId) {
     await prisma.emailThread.updateMany({
-      where: { inquiryId: job.inquiryId },
+      where: { inquiryId: job.inquiryId, officeId: session.officeId },
       data: { inquiryId: null, autoLinkedAt: null, autoLinkSkipReason: "Proposed job discarded" },
     });
   }
-  await prisma.job.delete({ where: { id: jobId } });
+  await prisma.job.deleteMany({ where: { id: jobId, officeId: session.officeId } });
   if (job.inquiryId) {
-    await prisma.inquiry.delete({ where: { id: job.inquiryId } }).catch(() => {});
+    await prisma.inquiry.deleteMany({ where: { id: job.inquiryId, officeId: session.officeId } }).catch(() => {});
   }
   revalidatePath("/dashboard/jobs");
   revalidatePath("/dashboard/inbox");

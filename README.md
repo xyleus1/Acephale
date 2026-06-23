@@ -49,11 +49,11 @@ npm run dev
 
 ## Key routes
 
-- `/dashboard` — overview (pipeline + RFQ feed)
-- `/dashboard/activity` — Operations Command (RFQs to process, overdue jobs, milestones, procurement queue)
-- `/dashboard/rfq` — RFQ inbox · `/dashboard/rfq/[id]` (with AI parse) · `/dashboard/rfq/new` (manual)
-- `/dashboard/jobs` — Kanban · `/dashboard/jobs/[id]` (6-tab detail) · `/dashboard/jobs/new` (manual)
-- `/dashboard/reports` — Forwarding KPIs (pipeline, RFQ funnel, mode mix, lanes, carriers, OTD, margin)
+- `/dashboard` — control workbench for the focused load/RFQ
+- `/dashboard/inbox` — email triage, load-linked threads, and RFQ intake
+- `/dashboard/jobs` — RFQ → pricing → booked/waiting cargo → en route → delivered pipeline
+- `/dashboard/pricing` — target price capture and forwarder quote comparison
+- `/dashboard/rfq/[id]` — RFQ qualification and maturity gate
 - `/dashboard/settings/email` — Gmail/Outlook/IMAP setup
-- `/dashboard/customers` — CRM sub-module
+- `/dashboard/customers` — CRM
 - `/api/jobs/[id]/quote-pdf` — printable customer quote

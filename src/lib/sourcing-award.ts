@@ -35,16 +35,16 @@ export async function awardSupplier(threadId: string): Promise<
 
   // Unaward all other threads on this inquiry, then award this one.
   await prisma.emailThread.updateMany({
-    where: { inquiryId: thread.inquiry.id, NOT: { id: thread.id } },
+    where: { inquiryId: thread.inquiry.id, officeId: session.officeId, NOT: { id: thread.id } },
     data: { awardedAt: null },
   });
-  await prisma.emailThread.update({
-    where: { id: thread.id },
+  await prisma.emailThread.updateMany({
+    where: { id: thread.id, officeId: session.officeId },
     data: { awardedAt: new Date() },
   });
   // Invalidate cached supplier-offers summary on this inquiry.
-  await prisma.inquiry.update({
-    where: { id: thread.inquiry.id },
+  await prisma.inquiry.updateMany({
+    where: { id: thread.inquiry.id, officeId: session.officeId },
     data: { summaryCache: null, summaryCacheAt: null },
   }).catch(() => {});
 

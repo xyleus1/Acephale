@@ -23,13 +23,12 @@ export function CreateInquiryButton({ threadId }: { threadId: string }) {
   }
 
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      {err && <span style={{ fontSize: 11, color: "var(--danger)" }}>{err}</span>}
+    <div className="inbox-action-group has-error">
+      {err && <span className="inbox-action-error">{err}</span>}
       <button
         onClick={go}
         disabled={busy}
-        className="btn btn-sm"
-        style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}
+        className="inbox-action-btn primary"
       >
         <Icon name="sparkles" size={11} />
         {busy ? "Creating…" : "Create Inquiry from this thread"}

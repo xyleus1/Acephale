@@ -301,16 +301,16 @@ export async function UnifiedCrmWorkspace({
             <p className="page-subtitle" style={{ margin: 0 }}>{companyCount} {t.customers.accounts}</p>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <span style={{ fontSize: 12, color: "var(--text-3)" }}>{contactCount} contacts</span>
-              <span style={{ fontSize: 12, color: "var(--text-3)" }}>{activityCount} activities</span>
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>{activityCount} touches</span>
               {openRiskAlertCount > 0 && (
-                <Link href="/dashboard/activity" style={{ fontSize: 12, fontWeight: 600, color: "var(--danger)" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--danger)" }}>
                   {openRiskAlertCount} alerts
-                </Link>
+                </span>
               )}
               {openTaskCount > 0 && (
-                <Link href="/dashboard/activity" style={{ fontSize: 12, fontWeight: 600, color: "var(--warning)" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--warning)" }}>
                   {openTaskCount} tasks
-                </Link>
+                </span>
               )}
             </div>
           </div>

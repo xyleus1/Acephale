@@ -7,10 +7,10 @@ import { PipelineBoard } from "@/components/pipeline-board";
 
 const STATUS_ORDER: CustomerStatus[] = ["UNTOUCHED", "IN_PROGRESS", "WORKED", "LOST"];
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  UNTOUCHED:   { bg: "#fefce8", border: "#fde047", text: "#854d0e" },
-  IN_PROGRESS: { bg: "#eff6ff", border: "#93c5fd", text: "#1d4ed8" },
-  WORKED:      { bg: "#f0fdf4", border: "#86efac", text: "#166534" },
-  LOST:        { bg: "#fef2f2", border: "#fca5a5", text: "#991b1b" },
+  UNTOUCHED:   { bg: "#eadfc4", border: "#c8a970", text: "#5b4b34" },
+  IN_PROGRESS: { bg: "#ded8bf", border: "#b8ae82", text: "#4f573b" },
+  WORKED:      { bg: "#dde0c9", border: "#adb789", text: "#4f623f" },
+  LOST:        { bg: "#e5cec3", border: "#bd8d78", text: "#6f3f31" },
 };
 
 export default async function PipelinePage() {
@@ -39,7 +39,7 @@ export default async function PipelinePage() {
   }
 
   const companies = await prisma.company.findMany({
-    where: companyScope,
+    where: { ...companyScope, officeId: session.officeId },
     include: {
       owners: { include: { user: { select: { fullName: true } } } },
       activities: { orderBy: { occurredAt: "desc" }, take: 1 },

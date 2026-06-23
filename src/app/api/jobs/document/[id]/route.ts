@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getValidAccessToken } from "@/lib/gmail-oauth";
+import { isManagedDocumentUrl, readStoredJobDocument } from "@/lib/document-storage";
 
 // Streams a JobDocument's bytes back to the browser so the operator can
 // view the PDF inline (browser native viewer in an <iframe>) without
@@ -18,6 +19,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     select: { name: true, url: true },
   });
   if (!doc?.url) return new NextResponse("Document not found", { status: 404 });
+
+  if (isManagedDocumentUrl(doc.url)) {
+    try {
+      const stored = await readStoredJobDocument(doc.url);
+      if (!stored) return new NextResponse("Managed document missing", { status: 404 });
+      return new NextResponse(new Uint8Array(stored.bytes), {
+        status: 200,
+        headers: {
+          "Content-Type": stored.contentType,
+          "Content-Disposition": `inline; filename="${doc.name.replace(/["\\]/g, "")}"`,
+          "Cache-Control": "private, max-age=300",
+        },
+      });
+    } catch {
+      return new NextResponse("Managed document unavailable", { status: 404 });
+    }
+  }
 
   // Gmail attachment URLs (we control them — re-fetch via stored OAuth token)
   if (doc.url.startsWith("/api/gmail/attachment")) {
@@ -46,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const j: { data?: string } = await res.json();
     if (!j.data) return new NextResponse("Empty", { status: 502 });
     const buf = Buffer.from(j.data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {
         "Content-Type": mimeType,
@@ -61,7 +79,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const m = doc.url.match(/^data:([^;]+);base64,(.+)$/);
     if (!m) return new NextResponse("Malformed data URL", { status: 400 });
     const buf = Buffer.from(m[2], "base64");
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {
         "Content-Type": m[1],
@@ -71,10 +89,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   // Public URL — proxy through to handle CORS for the iframe.
-  const res = await fetch(doc.url);
+  let upstreamUrl: URL;
+  try {
+    upstreamUrl = new URL(doc.url);
+  } catch {
+    return new NextResponse("Malformed document URL", { status: 400 });
+  }
+  if (upstreamUrl.protocol !== "https:" && upstreamUrl.protocol !== "http:") {
+    return new NextResponse("Unsupported document URL", { status: 400 });
+  }
+  const res = await fetch(upstreamUrl);
   if (!res.ok) return new NextResponse(`Upstream fetch failed (${res.status})`, { status: 502 });
   const buf = Buffer.from(await res.arrayBuffer());
-  return new NextResponse(buf, {
+  return new NextResponse(new Uint8Array(buf), {
     status: 200,
     headers: {
       "Content-Type": res.headers.get("content-type") ?? "application/pdf",

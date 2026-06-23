@@ -22,26 +22,22 @@ export function JobNote({ jobId, initial }: { jobId: string; initial: string }) 
   }
 
   return (
-    <div style={{ padding: "12px 18px" }}>
+    <div className="job-note-editor">
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={save}
         rows={3}
-        placeholder="Add a short note — only you see this. e.g. 'Waiting on packing list from supplier'"
-        style={{
-          width: "100%", resize: "vertical", fontSize: 13, lineHeight: 1.5,
-          padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 4,
-          background: "var(--surface)", color: "var(--text)", outline: "none",
-        }}
+        placeholder="Private operating note - internal only. Example: Waiting on packing list from supplier."
+        className="job-note-textarea"
       />
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 6, minHeight: 24 }}>
+      <div className="job-note-actions">
         {busy ? (
-          <span style={{ fontSize: 11, color: "var(--text-3)" }}>Saving…</span>
+          <span className="job-note-status">Saving...</span>
         ) : dirty ? (
-          <button type="button" onClick={save} className="btn btn-sm" style={{ fontSize: 11.5 }}>Save note</button>
+          <button type="button" onClick={save} className="btn btn-sm job-note-save">Save note</button>
         ) : savedValue ? (
-          <span style={{ fontSize: 11, color: "var(--text-3)" }}>Saved</span>
+          <span className="job-note-status">Saved</span>
         ) : null}
       </div>
     </div>

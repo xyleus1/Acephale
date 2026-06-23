@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { parseQuoteLines } from "@/lib/quote-lines";
+import { escapeHtml } from "@/lib/security/html";
+
+function formatAmount(value: number) {
+  return Number.isFinite(value) ? value.toLocaleString() : "0";
+}
 
 export async function GET(
   request: NextRequest,
@@ -19,17 +24,28 @@ export async function GET(
 
   const lines = parseQuoteLines(job);
 
-  const total = lines.reduce((s, l) => s + l.amount, 0);
+  const total = lines.reduce((s, l) => s + (Number.isFinite(l.amount) ? l.amount : 0), 0);
   const currency = lines[0]?.cur ?? job.currency ?? "USD";
 
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   const validUntil = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const safeReference = escapeHtml(job.reference);
+  const safeToday = escapeHtml(today);
+  const safeValidUntil = escapeHtml(validUntil);
+  const safeCustomer = escapeHtml(job.company?.name, "-");
+  const safeRoute = job.origin && job.destination
+    ? `${escapeHtml(job.origin)} &rarr; ${escapeHtml(job.destination)}`
+    : "-";
+  const safeMode = escapeHtml(job.mode, "-");
+  const safeCommodity = escapeHtml(job.commodity, "-");
+  const safeIncoterms = escapeHtml(job.incoterms, "-");
+  const safeCurrency = escapeHtml(currency);
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Quote ${job.reference}</title>
+<title>Quote ${safeReference}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #111; background: #fff; padding: 48px; font-size: 14px; }
@@ -59,11 +75,11 @@ export async function GET(
 <div class="header">
   <div>
     <div class="brand">Derya</div>
-    <div class="brand-sub">Freight OS</div>
+    <div class="brand-sub">Freight Desk</div>
   </div>
   <div class="ref">
-    <strong>${job.reference}</strong>
-    Quote Date: ${today}
+    <strong>${safeReference}</strong>
+    Quote Date: ${safeToday}
   </div>
 </div>
 
@@ -72,27 +88,27 @@ export async function GET(
   <div class="meta-grid">
     <div class="meta-item">
       <div class="label">Customer</div>
-      <div class="value">${job.company?.name ?? "—"}</div>
+      <div class="value">${safeCustomer}</div>
     </div>
     <div class="meta-item">
       <div class="label">Route</div>
-      <div class="value">${job.origin && job.destination ? `${job.origin} → ${job.destination}` : "—"}</div>
+      <div class="value">${safeRoute}</div>
     </div>
     <div class="meta-item">
       <div class="label">Mode</div>
-      <div class="value">${job.mode ?? "—"}</div>
+      <div class="value">${safeMode}</div>
     </div>
     <div class="meta-item">
       <div class="label">Commodity</div>
-      <div class="value">${job.commodity ?? "—"}</div>
+      <div class="value">${safeCommodity}</div>
     </div>
     <div class="meta-item">
       <div class="label">Incoterms</div>
-      <div class="value">${job.incoterms ?? "—"}</div>
+      <div class="value">${safeIncoterms}</div>
     </div>
     <div class="meta-item">
       <div class="label">Valid Until</div>
-      <div class="value">${validUntil}</div>
+      <div class="value">${safeValidUntil}</div>
     </div>
   </div>
 </div>
@@ -111,9 +127,9 @@ export async function GET(
       ${lines.length > 0
         ? lines.map((l) => `
         <tr>
-          <td>${l.desc}</td>
-          <td class="amount">${l.amount.toLocaleString()}</td>
-          <td style="color:#6b7280">${l.cur}</td>
+          <td>${escapeHtml(l.desc)}</td>
+          <td class="amount">${escapeHtml(formatAmount(l.amount))}</td>
+          <td style="color:#6b7280">${escapeHtml(l.cur)}</td>
         </tr>`).join("")
         : `<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:24px">No charges added</td></tr>`
       }
@@ -122,8 +138,8 @@ export async function GET(
     <tfoot>
       <tr class="total-row">
         <td>Total</td>
-        <td class="amount">${total.toLocaleString()}</td>
-        <td>${currency}</td>
+        <td class="amount">${escapeHtml(formatAmount(total))}</td>
+        <td>${safeCurrency}</td>
       </tr>
     </tfoot>` : ""}
   </table>
@@ -131,7 +147,7 @@ export async function GET(
 
 <div class="footer">
   This quotation is valid for 7 days from the date of issue. Rates are subject to availability and space confirmation.
-  Derya Freight OS · Generated ${today}
+  Derya Deal Desk &middot; Generated ${safeToday}
 </div>
 
 <script>window.print();</script>

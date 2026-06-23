@@ -12,9 +12,12 @@ import { BulkActionBar } from "@/components/bulk-action-bar";
 import { LoadFilterPicker } from "@/components/load-filter-picker";
 import { RfqRowActions } from "@/components/rfq-row-actions";
 import { SeedDemoButton } from "@/components/seed-demo-button";
+import { Icon } from "@/components/icon";
+import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
 
 const FILTERS = [
   { key: "",                  label: "Active"          },  // default — excludes hidden + snoozed
+  { key: "_APPROVED_CONTACTS", label: "Approved contacts" },
   { key: "_NEEDS_REPLY",      label: "Awaiting reply"  },
   { key: "_UNLINKED",         label: "Unlinked"        },
   { key: "_LINKED",           label: "Linked to a load"},
@@ -22,6 +25,20 @@ const FILTERS = [
   { key: "_HIDDEN",           label: "Hidden"          },
   { key: "_ALL",              label: "All"             },
 ] as const;
+
+const MAIL_PROVIDERS = ["GMAIL", "OUTLOOK", "IMAP"] as const;
+
+const CHANNELS = [
+  { key: "", label: "All channels" },
+  { key: "mail", label: "Mail" },
+  { key: "whatsapp", label: "WhatsApp" },
+] as const;
+
+type ChannelFilter = typeof CHANNELS[number]["key"];
+
+function normalizeChannel(value: string | undefined): ChannelFilter {
+  return value === "mail" || value === "whatsapp" ? value : "";
+}
 
 function timeAgo(d: Date) {
   const diff = Date.now() - new Date(d).getTime();
@@ -35,13 +52,13 @@ function timeAgo(d: Date) {
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-const KIND_META: Record<string, { fg: string; bg: string; bd: string; label: string }> = {
-  RFQ:             { fg: "var(--brand)",   bg: "var(--brand-light)",  bd: "var(--brand-border)",  label: "RFQ" },
-  CARRIER_REPLY:   { fg: "var(--brand)",   bg: "var(--brand-light)",  bd: "var(--brand-border)",  label: "Carrier reply" },
-  CUSTOMER_REPLY:  { fg: "var(--brand)",   bg: "var(--brand-light)",  bd: "var(--brand-border)",  label: "Customer reply" },
-  RELATED_NOTE:    { fg: "var(--text)",    bg: "var(--surface-3)",    bd: "var(--border-strong)", label: "Related" },
-  OTHER:           { fg: "var(--text-3)",  bg: "var(--surface-3)",    bd: "var(--border)",        label: "Other" },
-  UNCLASSIFIED:    { fg: "var(--danger)",  bg: "var(--danger-bg)",    bd: "var(--danger-border)", label: "Unclassified" },
+const KIND_META: Record<string, { label: string; cls: string }> = {
+  RFQ:             { label: "RFQ",            cls: "kind-rfq" },
+  CARRIER_REPLY:   { label: "Forwarder reply", cls: "kind-carrier" },
+  CUSTOMER_REPLY:  { label: "Customer reply", cls: "kind-customer" },
+  RELATED_NOTE:    { label: "Related",        cls: "kind-related" },
+  OTHER:           { label: "Other",          cls: "kind-other" },
+  UNCLASSIFIED:    { label: "Unclassified",   cls: "kind-unclassified" },
 };
 
 function dominantKind(messages: { direction: string; classification: string | null }[]): string {
@@ -59,24 +76,118 @@ function dominantKind(messages: { direction: string; classification: string | nu
   return "OTHER";
 }
 
+function channelBadge(account: { provider: string; email: string } | null | undefined) {
+  if (!account) return { label: "Unknown", cls: "unknown" };
+  if (account.provider === "WHATSAPP") return { label: "WhatsApp", cls: "whatsapp" };
+  if (account.provider === "GMAIL") return { label: "Gmail", cls: "mail" };
+  if (account.provider === "OUTLOOK") return { label: "Outlook", cls: "mail" };
+  if (account.provider === "IMAP") return { label: "IMAP", cls: "mail" };
+  return { label: account.provider, cls: "unknown" };
+}
+
+function threadSourceMeta(messages: { account?: { provider: string; email: string } | null; fromEmail: string; fromName: string | null }[]) {
+  const last = messages[messages.length - 1];
+  const account = last?.account ?? messages.find((m) => m.account)?.account ?? null;
+  const badge = channelBadge(account);
+  return {
+    ...badge,
+    accountLabel: account?.email ?? "unknown source",
+  };
+}
+
+function threadCriticality(thread: {
+  hiddenAt?: Date | null;
+  snoozedUntil?: Date | null;
+  jobId?: string | null;
+  inquiryId?: string | null;
+  lastMessageAt: Date;
+  messages: { direction: string; classification: string | null; sentAt: Date }[];
+}) {
+  const last = thread.messages[thread.messages.length - 1];
+  const kind = dominantKind(thread.messages);
+  let score = 20;
+
+  if (last?.direction === "INBOUND") score += 30;
+  if (kind === "RFQ") score += 28;
+  if (kind === "CUSTOMER_REPLY") score += 22;
+  if (kind === "CARRIER_REPLY") score += 18;
+  if (!thread.jobId && !thread.inquiryId) score += 10;
+  if (kind === "OTHER") score -= 35;
+  if (thread.hiddenAt) score -= 80;
+  if (thread.snoozedUntil && thread.snoozedUntil > new Date()) score -= 60;
+
+  const hoursOld = (Date.now() - thread.lastMessageAt.getTime()) / 3_600_000;
+  if (last?.direction === "INBOUND" && hoursOld >= 24) score += 12;
+  if (last?.direction === "INBOUND" && hoursOld >= 72) score += 10;
+
+  if (score >= 80) return { label: "Critical", cls: "critical", score };
+  if (score >= 58) return { label: "High", cls: "high", score };
+  if (score >= 28) return { label: "Normal", cls: "normal", score };
+  return { label: "Low", cls: "low", score };
+}
+
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; account?: string; view?: string; q?: string; job?: string; inquiry?: string }>;
+  searchParams: Promise<{ filter?: string; account?: string; channel?: string; view?: string; q?: string; job?: string; inquiry?: string }>;
 }) {
   const session = await requireSession();
   const sp = await searchParams;
   const filter = sp.filter ?? "";
   const accountFilter = sp.account ?? "";
+  const channel = normalizeChannel(sp.channel);
   const view = sp.view === "loads" ? "loads" : sp.view === "rfqs" ? "rfqs" : "threads";
   const searchQuery = (sp.q ?? "").trim();
   const jobFilter = sp.job?.trim() || "";
   const inquiryFilter = sp.inquiry?.trim() || "";
 
-  const accounts = await prisma.emailAccount.findMany({
-    where: { officeId: session.officeId, isActive: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const [accounts, approvedContacts] = await Promise.all([
+    prisma.emailAccount.findMany({
+      where: { officeId: session.officeId, isActive: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.contact.findMany({
+      where: {
+        email: { not: null },
+        company: { officeId: session.officeId },
+        OR: [
+          { isApprovedForInbox: true },
+          { company: { status: { in: ["IN_PROGRESS", "WORKED"] } } },
+        ],
+      },
+      select: { email: true },
+      take: 500,
+    }),
+  ]);
+  const approvedContactEmails = [...new Set(approvedContacts
+    .map((c) => c.email?.trim().toLowerCase())
+    .filter((email): email is string => !!email))];
+
+  function messageScope(args: { channel?: ChannelFilter; accountId?: string } = {}) {
+    const scopedChannel = args.channel ?? channel;
+    const scopedAccountId = args.accountId ?? accountFilter;
+    const account: any = { isActive: true };
+    if (scopedAccountId) account.id = scopedAccountId;
+    if (scopedChannel === "mail") account.provider = { in: [...MAIL_PROVIDERS] };
+    if (scopedChannel === "whatsapp") account.provider = "WHATSAPP";
+    return { messages: { some: { account } } };
+  }
+
+  function inboxHref(overrides: Partial<Record<"filter" | "account" | "channel" | "view" | "q", string | null>>) {
+    const next = {
+      filter: overrides.filter === undefined ? filter : overrides.filter,
+      account: overrides.account === undefined ? accountFilter : overrides.account,
+      channel: overrides.channel === undefined ? channel : overrides.channel,
+      view: overrides.view === undefined ? (view === "threads" ? "" : view) : overrides.view,
+      q: overrides.q === undefined ? searchQuery : overrides.q,
+    };
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(next)) {
+      if (value) params.set(key, value);
+    }
+    const qs = params.toString();
+    return `/dashboard/inbox${qs ? `?${qs}` : ""}`;
+  }
 
   // Threads with messages, plus their linked job/inquiry
   const where: any = { officeId: session.officeId };
@@ -98,15 +209,19 @@ export default async function InboxPage({
       where.inquiryId = null;
     } else if (filter === "_LINKED") {
       where.AND.push({ OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] });
+    } else if (filter === "_APPROVED_CONTACTS") {
+      where.AND.push({
+        messages: {
+          some: {
+            direction: "INBOUND",
+            fromEmail: { in: approvedContactEmails.length ? approvedContactEmails : ["__none__"] },
+          },
+        },
+      });
     }
   }
   // Only show threads from active (non-paused) accounts.
-  where.messages = {
-    some: {
-      account: { isActive: true },
-      ...(accountFilter ? { accountId: accountFilter } : {}),
-    },
-  };
+  where.messages = messageScope().messages;
   // Load-based filter: scope to a specific job (and its linked inquiry threads)
   // or a specific inquiry directly. Overrides the linked/unlinked filter
   // because if you're filtering to a load, you implicitly want all of its threads.
@@ -178,7 +293,10 @@ export default async function InboxPage({
   let threads = await prisma.emailThread.findMany({
     where,
     include: {
-      messages: { orderBy: { sentAt: "asc" } },
+      messages: {
+        orderBy: { sentAt: "asc" },
+        include: { account: { select: { id: true, email: true, provider: true } } },
+      },
       job: { select: { id: true, reference: true, type: true, company: { select: { name: true } } } },
       inquiry: { select: { id: true, subject: true, type: true } },
     },
@@ -193,12 +311,32 @@ export default async function InboxPage({
       return last && last.direction === "INBOUND";
     }).slice(0, 80);
   }
+  threads = [...threads].sort((a, b) => {
+    const diff = threadCriticality(b).score - threadCriticality(a).score;
+    return diff || b.lastMessageAt.getTime() - a.lastMessageAt.getTime();
+  });
 
-  // Counts for the filter chips (scoped to active accounts, like the thread list)
-  const fromActiveAccount = { messages: { some: { account: { isActive: true } } } };
+  // Counts for the filter chips (scoped to active accounts/channel, like the thread list)
+  const fromActiveAccount = messageScope();
+  const allChannelsAccountScope = messageScope({ channel: "" });
   const activeFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...fromActiveAccount };
-  const [totalActive, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
+  const activeAllChannelsFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...allChannelsAccountScope };
+  const activeMailFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...messageScope({ channel: "mail" }) };
+  const activeWhatsAppFilter = { hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...messageScope({ channel: "whatsapp" }) };
+  const approvedContactFilter: any = {
+    messages: {
+      some: {
+        direction: "INBOUND",
+        fromEmail: { in: approvedContactEmails.length ? approvedContactEmails : ["__none__"] },
+      },
+    },
+  };
+  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, ...activeAllChannelsFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, ...activeMailFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, ...activeWhatsAppFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, approvedContactFilter] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter, jobId: null, inquiryId: null } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, { OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] }] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, snoozedUntil: { gt: now }, ...fromActiveAccount } }),
@@ -208,13 +346,14 @@ export default async function InboxPage({
   // "Awaiting reply" count is approximate: pull last messages directly via raw count of latest-inbound.
   // Cheap heuristic: same query as fetched threads.
   const totalNeedsReply = (await prisma.emailThread.findMany({
-    where: { officeId: session.officeId, hiddenAt: null, ...fromActiveAccount },
+    where: { officeId: session.officeId, hiddenAt: null, OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }], ...fromActiveAccount },
     include: { messages: { orderBy: { sentAt: "desc" }, take: 1 } },
     take: 500,
   })).filter((t) => t.messages[0]?.direction === "INBOUND").length;
 
   function countFor(key: string): number {
     if (!key) return totalActive;
+    if (key === "_APPROVED_CONTACTS") return totalApprovedContacts;
     if (key === "_NEEDS_REPLY") return totalNeedsReply;
     if (key === "_UNLINKED") return totalUnlinked;
     if (key === "_LINKED") return totalLinked;
@@ -222,6 +361,12 @@ export default async function InboxPage({
     if (key === "_HIDDEN") return totalHidden;
     if (key === "_ALL") return totalAll;
     return 0;
+  }
+
+  function channelCountFor(key: ChannelFilter): number {
+    if (key === "mail") return totalMail;
+    if (key === "whatsapp") return totalWhatsApp;
+    return totalAllChannelsActive;
   }
 
   // RFQs view: structured inquiry list (replaces the standalone /dashboard/rfq page).
@@ -252,6 +397,26 @@ export default async function InboxPage({
     orderBy: { receivedAt: "desc" },
     take: 50,
   })).map((i) => ({ id: i.id, subject: i.subject, type: i.type }));
+
+  const bulkProposals = (await prisma.agentProposal.findMany({
+    where: {
+      officeId: session.officeId,
+      status: "PENDING",
+      jobId: null,
+      inquiryId: null,
+    },
+    select: {
+      id: true,
+      kind: true,
+      sourceType: true,
+      sourcePreview: true,
+      payload: true,
+      toolTrace: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  })).filter((proposal) => asRecord(proposal.payload).entity === "bulk");
 
   // For the "loads" view, group threads under their linked job/inquiry.
   type LoadGroup = {
@@ -309,14 +474,12 @@ export default async function InboxPage({
   }
 
   return (
-    <div>
-      <div className="page-header" style={{ marginBottom: 18 }}>
+    <div className="inbox-page">
+      <div className="page-header page-header-roomy">
         <div>
           <h1 className="page-title">Inbox</h1>
           <p className="page-subtitle">
-            Synced emails grouped by thread. AI links each thread to a load when it can.
-            For threads it didn&apos;t link, click <em>Create Inquiry from this thread</em> to spin up
-            a load using all the messages as context.
+            AI-linked thread triage for loads, RFQs, and customer follow-up.
           </p>
         </div>
         <LoadFilterPicker
@@ -335,95 +498,101 @@ export default async function InboxPage({
             take: 60,
           })}
         />
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="page-actions">
           <SeedDemoButton />
           <MergeDuplicatesButton />
           <ReclassifyButton onlyUnclassified={false} />
-          <a href="/dashboard/settings/email" className="btn btn-secondary" style={{ fontSize: 13, textDecoration: "none" }}>
+          <a href="/dashboard/settings/email" className="btn btn-secondary">
             Manage inboxes
           </a>
         </div>
       </div>
 
-      {accounts.length > 1 && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-          <a href="/dashboard/inbox" style={chipStyle(!accountFilter)}>All inboxes</a>
-          {accounts.map((a) => (
-            <a key={a.id} href={`/dashboard/inbox?account=${a.id}${filter ? `&filter=${filter}` : ""}`} style={chipStyle(accountFilter === a.id)}>{a.email}</a>
+      {accounts.length > 0 && (
+        <div className="chip-row channel-chip-row">
+          {CHANNELS.map((c) => (
+            <a
+              key={c.key || "all"}
+              href={inboxHref({ channel: c.key, account: null })}
+              className={`filter-chip${!accountFilter && channel === c.key ? " active" : ""}`}
+            >
+              {c.label}
+              <span className="filter-chip-count">{channelCountFor(c.key)}</span>
+            </a>
           ))}
+          <span className="chip-row-divider" />
+          <a href={inboxHref({ account: null })} className={`filter-chip${!accountFilter ? " active" : ""}`}>All inboxes</a>
+          {accounts.map((a) => {
+            const badge = channelBadge(a);
+            return (
+              <a
+                key={a.id}
+                href={inboxHref({ account: a.id, channel: null })}
+                className={`filter-chip source-chip ${badge.cls}${accountFilter === a.id ? " active" : ""}`}
+              >
+                <span className={`inbox-channel-dot ${badge.cls}`} />
+                {a.email}
+              </a>
+            );
+          })}
         </div>
       )}
 
-      <form method="get" action="/dashboard/inbox" style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
+      <form method="get" action="/dashboard/inbox" className="inbox-search-form">
         {filter && <input type="hidden" name="filter" value={filter} />}
         {accountFilter && <input type="hidden" name="account" value={accountFilter} />}
-        {view === "loads" && <input type="hidden" name="view" value="loads" />}
-        <div style={{ position: "relative", flex: 1, maxWidth: 480 }}>
+        {channel && <input type="hidden" name="channel" value={channel} />}
+        {view !== "threads" && <input type="hidden" name="view" value={view} />}
+        <div className="inbox-search-wrap">
           <input
             type="search"
             name="q"
             defaultValue={searchQuery}
             placeholder="Search subjects, bodies, senders…"
-            style={{
-              width: "100%", padding: "8px 12px 8px 32px",
-              border: "1px solid var(--border)", borderRadius: 4,
-              fontSize: 13, background: "var(--surface)",
-              outline: "none",
-            }}
+            className="inbox-search-input"
           />
-          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span className="inbox-search-icon">
+            <Icon name="search" size={14} />
           </span>
         </div>
         {searchQuery && (
-          <a href={`/dashboard/inbox${filter ? `?filter=${filter}` : ""}`} style={{ fontSize: 12, color: "var(--text-3)", textDecoration: "none" }}>Clear</a>
+          <a href={inboxHref({ q: null })} className="inbox-clear-link">Clear</a>
         )}
       </form>
       {searchQuery && (
-        <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 10 }}>
-          Searching for <strong style={{ color: "var(--text)" }}>{searchQuery}</strong> · {threads.length} match{threads.length === 1 ? "" : "es"}
+        <div className="inbox-result-note">
+          Searching for <strong>{searchQuery}</strong> · {threads.length} match{threads.length === 1 ? "" : "es"}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="chip-row">
         {FILTERS.map((f) => {
-          const accountQs = accountFilter ? `&account=${accountFilter}` : "";
-          const viewQs = view === "loads" ? "&view=loads" : "";
           const isActive = filter === f.key;
           return (
             <a
               key={f.key}
-              href={`/dashboard/inbox?${f.key ? `filter=${f.key}` : ""}${accountQs}${viewQs}`.replace(/^\?&/, "?").replace(/\?$/, "")}
-              style={chipStyle(isActive, "dark")}
+              href={inboxHref({ filter: f.key })}
+              className={`filter-chip dark${isActive ? " active" : ""}`}
             >
               {f.label}
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: isActive ? "rgba(255,255,255,0.2)" : "var(--surface-3)", color: isActive ? "#fff" : "var(--text-3)", marginLeft: 6 }}>
+              <span className="filter-chip-count">
                 {countFor(f.key)}
               </span>
             </a>
           );
         })}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center", padding: 2, borderRadius: 4, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+        <div className="view-switcher">
           {[
             { key: "threads", label: "Threads" },
             { key: "loads",   label: "By load" },
             { key: "rfqs",    label: "RFQs" },
           ].map((v) => {
             const isActive = view === v.key;
-            const filterQs = filter ? `filter=${filter}` : "";
-            const accountQs = accountFilter ? `&account=${accountFilter}` : "";
-            const viewQs = v.key === "threads" ? "" : `&view=${v.key}`;
             return (
               <a
                 key={v.key}
-                href={`/dashboard/inbox?${filterQs}${accountQs}${viewQs}`.replace(/\?&/, "?").replace(/\?$/, "")}
-                style={{
-                  fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 3,
-                  background: isActive ? "var(--surface)" : "transparent",
-                  color: isActive ? "var(--text)" : "var(--text-3)",
-                  textDecoration: "none",
-                  border: isActive ? "1px solid var(--border)" : "1px solid transparent",
-                }}
+                href={inboxHref({ view: v.key === "threads" ? null : v.key })}
+                className={`view-switcher-tab${isActive ? " active" : ""}`}
               >{v.label}</a>
             );
           })}
@@ -431,123 +600,125 @@ export default async function InboxPage({
       </div>
 
       {focusedLoad && (
-        <div style={{
-          padding: "10px 14px", marginBottom: 12, borderRadius: 6,
-          background: "var(--brand-light)", border: "1px solid var(--brand-border)",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-        }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--brand)" }}>
+        <div className="focus-banner">
+          <div className="focus-banner-main">
+            <div className="focus-banner-eyebrow">
               Filtered to load
             </div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div className="focus-banner-title">
               {focusedLoad.label}
-              <span style={{ marginLeft: 8, fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <span className="focus-banner-type">
                 {focusedLoad.sublabel}
               </span>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+            <div className="focus-banner-meta">
               {focusedLoad.threadIds.length} thread{focusedLoad.threadIds.length === 1 ? "" : "s"} attached · including hidden + snoozed
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <div className="focus-banner-actions">
             <a href={focusedLoad.kind === "job" ? `/dashboard/jobs/${focusedLoad.id}` : `/dashboard/rfq/${focusedLoad.id}`}
-               className="btn btn-secondary btn-sm" style={{ fontSize: 12, textDecoration: "none" }}>
+               className="btn btn-secondary btn-sm">
               Open {focusedLoad.kind === "job" ? "job" : "RFQ"}
             </a>
-            <a href="/dashboard/inbox" className="btn btn-secondary btn-sm" style={{ fontSize: 12, textDecoration: "none" }}>
+            <a href="/dashboard/inbox" className="btn btn-secondary btn-sm">
               Clear filter
             </a>
           </div>
         </div>
       )}
 
+      <InboxBulkProposalPanel proposals={bulkProposals} />
+
       <BulkActionBar inquiries={openInquiriesForBulk} />
 
       {view === "rfqs" ? (
         <RfqListView rfqs={rfqs} activeJobs={activeJobsForMerge} />
       ) : threads.length === 0 ? (
-        <div className="card" style={{ padding: "40px 24px", textAlign: "center" }}>
+        <div className="card empty-state-card">
           {accounts.length === 0 ? (
             <>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>No inboxes connected</div>
-              <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 16 }}>
-                Connect a Gmail inbox to start syncing emails.
+              <div className="empty-state-title">No inboxes connected</div>
+              <p className="empty-state-copy">
+                Connect a Gmail inbox or configure WhatsApp to start syncing customer channels.
               </p>
-              <a href="/dashboard/settings/email" className="btn" style={{ display: "inline-block", textDecoration: "none" }}>
-                Go to email settings
+              <a href="/dashboard/settings/email" className="btn empty-state-action">
+                Go to channel settings
               </a>
             </>
           ) : searchQuery ? (
             <>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>No matches for &quot;{searchQuery}&quot;</div>
-              <p style={{ fontSize: 13, color: "var(--text-3)" }}>
+              <div className="empty-state-title">No matches for &quot;{searchQuery}&quot;</div>
+              <p className="empty-state-copy">
                 Try a sender domain, a commodity name, or a port. Search covers subjects, bodies, and senders.
               </p>
             </>
           ) : filter === "_NEEDS_REPLY" ? (
             <>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>Inbox zero on replies</div>
-              <p style={{ fontSize: 13, color: "var(--text-3)" }}>
+              <div className="empty-state-title">Inbox zero on replies</div>
+              <p className="empty-state-copy">
                 Every active thread has an outbound reply after the last inbound message. Nice work.
               </p>
             </>
           ) : filter === "_HIDDEN" ? (
             <>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>No hidden threads</div>
-              <p style={{ fontSize: 13, color: "var(--text-3)" }}>
+              <div className="empty-state-title">No hidden threads</div>
+              <p className="empty-state-copy">
                 Hidden threads are ones you (or AI) marked as not freight-related. They still sync, they just stay out of the way.
               </p>
             </>
           ) : filter === "_SNOOZED" ? (
             <>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>No snoozed threads</div>
-              <p style={{ fontSize: 13, color: "var(--text-3)" }}>
+              <div className="empty-state-title">No snoozed threads</div>
+              <p className="empty-state-copy">
                 Snooze a thread from the row to make it disappear until later (4h / tomorrow / next Monday).
               </p>
             </>
           ) : (
             <>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>Inbox is calm</div>
-              <p style={{ fontSize: 13, color: "var(--text-3)" }}>
+              <div className="empty-state-title">Inbox is calm</div>
+              <p className="empty-state-copy">
                 {totalSnoozed > 0 ? `${totalSnoozed} thread${totalSnoozed === 1 ? "" : "s"} snoozed. ` : ""}
                 {totalHidden > 0 ? `${totalHidden} hidden as not freight-related. ` : ""}
-                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" style={{ color: "var(--brand)" }}>Email Settings</a> to pull fresh mail manually, or wait — the platform auto-syncs every 15 minutes.
+                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" className="data-link">Email Settings</a> to pull fresh mail manually, or wait — the platform auto-syncs every 15 minutes.
               </p>
             </>
           )}
         </div>
       ) : view === "loads" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="inbox-stack roomy">
           {loadGroups.map((g) => (
-            <div key={g.key} className="card" style={{ overflow: "hidden", borderLeft: g.type === "UNLINKED" ? "3px solid transparent" : "3px solid var(--brand)" }}>
-              <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+            <div key={g.key} className={`card inbox-group-card${g.type === "UNLINKED" ? "" : " linked"}`}>
+              <div className="inbox-group-header">
+                <div className="inbox-group-main">
+                  <div className="inbox-group-title">
                     {g.href ? (
-                      <a href={g.href} style={{ color: "var(--text)", textDecoration: "none" }}>{g.title} →</a>
+                      <a href={g.href} className="inbox-group-link">{g.title} →</a>
                     ) : g.title}
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                  <div className="inbox-group-meta">
                     {g.subtitle} · {g.threads.length} thread{g.threads.length === 1 ? "" : "s"}
                   </div>
                 </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column" }}>
+              <div className="inbox-row-list">
                 {g.threads.map((t) => {
                   const last = t.messages[t.messages.length - 1];
+                  const priority = threadCriticality(t);
+                  const source = threadSourceMeta(t.messages);
                   return (
-                    <div key={t.id} style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <div key={t.id} className="inbox-thread-row">
                       <BulkCheckbox threadId={t.id} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div className="inbox-thread-main">
+                        <div className="inbox-thread-title">
                           {t.subject}
                         </div>
-                        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                        <div className="inbox-thread-meta">
+                          <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
+                          <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
                           {t.messages.length} msg · {timeAgo(t.lastMessageAt)}{last ? ` · last from ${last.fromName ?? last.fromEmail}` : ""}
                         </div>
                       </div>
-                      <div style={{ display: "inline-flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                      <div className="inbox-row-actions">
                         <InboxQuickReply threadId={t.id} threadSubject={t.subject} />
                         <SnoozeThreadButton threadId={t.id} snoozedUntil={t.snoozedUntil ? t.snoozedUntil.toISOString() : null} />
                         <HideThreadButton threadId={t.id} hidden={!!t.hiddenAt} />
@@ -560,30 +731,30 @@ export default async function InboxPage({
           ))}
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="inbox-stack">
           {threads.map((t) => {
             const linked = t.job || t.inquiry;
             const kind = dominantKind(t.messages);
             const meta = KIND_META[kind] ?? KIND_META.OTHER;
             const last = t.messages[t.messages.length - 1];
+            const priority = threadCriticality(t);
+            const source = threadSourceMeta(t.messages);
             const inboundCount = t.messages.filter((m) => m.direction === "INBOUND").length;
             const outboundCount = t.messages.length - inboundCount;
             const lastReason = [...t.messages].reverse().find((m) => m.classificationReason)?.classificationReason;
 
             return (
-              <div key={t.id} className="card" style={{ overflow: "hidden", borderLeft: linked ? "3px solid var(--brand)" : "3px solid transparent" }}>
-                <div style={{ padding: "12px 16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+              <div key={t.id} className={`card inbox-thread-card${linked ? " linked" : ""}`}>
+                <div className="inbox-thread-inner">
+                  <div className="inbox-thread-top">
                     <BulkCheckbox threadId={t.id} />
-                    <span style={{
-                      display: "inline-flex", fontSize: 9.5, fontWeight: 700, padding: "2px 6px", borderRadius: 3,
-                      background: meta.bg, color: meta.fg, border: `1px solid ${meta.bd}`,
-                      textTransform: "uppercase", letterSpacing: "0.06em",
-                    }}>{meta.label}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span className={`inbox-kind-badge ${meta.cls}`}>{meta.label}</span>
+                    <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
+                    <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
+                    <span className="inbox-thread-subject">
                       {t.subject || "(no subject)"}
                     </span>
-                    <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                    <span className="inbox-thread-counts">
                       {t.messages.length} msg{t.messages.length === 1 ? "" : "s"}
                       {inboundCount > 0 && outboundCount > 0 ? ` · ${inboundCount} in / ${outboundCount} out` : ""}
                       {" · "}
@@ -592,43 +763,43 @@ export default async function InboxPage({
                   </div>
 
                   {/* Linked-to / not-linked row */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div className="inbox-linked-row">
+                    <div className="inbox-linked-targets">
                       {t.job ? (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <a href={`/dashboard/jobs/${t.job.id}`} style={{ fontSize: 12, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
+                        <span className="inbox-linked-target">
+                          <a href={`/dashboard/jobs/${t.job.id}`} className="inbox-load-link">
                             → {t.job.reference} {t.job.company?.name ? `· ${t.job.company.name}` : ""}
                             <TypeBadge type={t.job.type} />
                           </a>
                           <a
                             href={`/dashboard/inbox?job=${t.job.id}`}
                             title="Show only this load's emails"
-                            style={{ fontSize: 11, color: "var(--text-3)", textDecoration: "none", padding: "2px 5px", border: "1px solid var(--border)", borderRadius: 3 }}
+                            className="inbox-see-all"
                           >
                             See all
                           </a>
                         </span>
                       ) : t.inquiry ? (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <a href={`/dashboard/rfq/${t.inquiry.id}`} style={{ fontSize: 12, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
+                        <span className="inbox-linked-target">
+                          <a href={`/dashboard/rfq/${t.inquiry.id}`} className="inbox-load-link">
                             → {t.inquiry.subject}
                             <TypeBadge type={t.inquiry.type} />
                           </a>
                           <a
                             href={`/dashboard/inbox?inquiry=${t.inquiry.id}`}
                             title="Show only this inquiry's emails"
-                            style={{ fontSize: 11, color: "var(--text-3)", textDecoration: "none", padding: "2px 5px", border: "1px solid var(--border)", borderRadius: 3 }}
+                            className="inbox-see-all"
                           >
                             See all
                           </a>
                         </span>
                       ) : (
-                        <span style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic" }}>
+                        <span className="inbox-unlinked">
                           Not linked to any load
                         </span>
                       )}
                     </div>
-                    <div style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <div className="inbox-row-actions">
                       <InboxQuickReply threadId={t.id} threadSubject={t.subject} />
                       {!linked && (
                         <CreateInquiryButton threadId={t.id} />
@@ -640,17 +811,17 @@ export default async function InboxPage({
 
                   {/* Last message preview + AI reason */}
                   {last && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-                      <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>
-                        Latest: {last.fromName ?? last.fromEmail} · {timeAgo(last.sentAt)}
+                    <div className="inbox-preview">
+                      <div className="inbox-preview-meta">
+                        Latest: {last.fromName ?? last.fromEmail} · {source.accountLabel} · {timeAgo(last.sentAt)}
                       </div>
                       {last.bodyText && (
-                        <div style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        <div className="inbox-preview-body">
                           {last.bodyText.slice(0, 280).replace(/\s+/g, " ").trim()}
                         </div>
                       )}
                       {lastReason && (
-                        <div style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 6, fontStyle: "italic" }}>
+                        <div className="inbox-ai-note">
                           AI: {lastReason}
                         </div>
                       )}
@@ -689,14 +860,134 @@ export default async function InboxPage({
 function TypeBadge({ type }: { type: string }) {
   const isSourcing = type === "SOURCING";
   return (
-    <span style={{
-      marginLeft: 6, fontSize: 9, fontWeight: 700,
-      padding: "1px 5px", borderRadius: 3,
-      background: isSourcing ? "var(--surface-3)" : "var(--brand-light)",
-      color: isSourcing ? "var(--text-2)" : "var(--brand)",
-      border: `1px solid ${isSourcing ? "var(--border-strong)" : "var(--brand-border)"}`,
-      textTransform: "uppercase", letterSpacing: "0.06em",
-    }}>{isSourcing ? "SOURCING" : "FORWARDING"}</span>
+    <span className={`type-badge${isSourcing ? " sourcing" : ""}`}>{isSourcing ? "Sourcing" : "Forwarding"}</span>
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function textValue(value: unknown, fallback = "—") {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number") return value.toLocaleString();
+  return fallback;
+}
+
+type InboxBulkProposal = {
+  id: string;
+  kind: string;
+  sourceType: string | null;
+  sourcePreview: string | null;
+  payload: unknown;
+  toolTrace: unknown;
+  createdAt: Date;
+};
+
+function InboxBulkProposalPanel({ proposals }: { proposals: InboxBulkProposal[] }) {
+  if (proposals.length === 0) return null;
+
+  return (
+    <div className="card inbox-review-card">
+      <div className="inbox-review-head">
+        <div>
+          <div className="record-section-title">Pending bulk reviews</div>
+          <div className="record-section-note">
+            Apply these only after checking the exact records. The agent has not changed anything yet.
+          </div>
+        </div>
+        <span className="inbox-review-count">{proposals.length}</span>
+      </div>
+      <div className="inbox-review-list">
+        {proposals.map((proposal) => {
+          const payload = asRecord(proposal.payload);
+          const actionInput = asRecord(payload.actionInput);
+          const action = textValue(payload.action, "BULK_ACTION");
+          const actionLabel = textValue(payload.actionLabel, proposal.kind);
+          const actionDetails = asStringArray(payload.actionDetails);
+          const reviewItems = asRecordArray(payload.reviewItems);
+          const clusters = asRecordArray(actionInput.clusters);
+          return (
+            <div key={proposal.id} className="inbox-review-item">
+              <div className="inbox-review-title-row">
+                <div>
+                  <strong>{actionLabel}</strong>
+                  <div className="inbox-review-meta">
+                    {proposal.kind} · {proposal.sourceType ?? "SOURCE_UNKNOWN"} · {timeAgo(proposal.createdAt)} · {proposal.id.slice(0, 8)}
+                  </div>
+                </div>
+                <div className="inbox-review-actions">
+                  <form action={applyInboxAgentProposalAction.bind(null, proposal.id)}>
+                    <button className="btn btn-sm" type="submit">Apply</button>
+                  </form>
+                  <form action={discardInboxAgentProposalAction.bind(null, proposal.id)}>
+                    <button className="btn btn-secondary btn-sm" type="submit">Discard</button>
+                  </form>
+                </div>
+              </div>
+
+              {actionDetails.length > 0 && (
+                <ul className="inbox-review-detail-list">
+                  {actionDetails.map((detail) => <li key={detail}>{detail}</li>)}
+                </ul>
+              )}
+
+              {action === "DEDUP_INQUIRIES" && clusters.length > 0 ? (
+                <div className="inbox-review-clusters">
+                  {clusters.slice(0, 6).map((cluster, index) => {
+                    const keeper = asRecord(cluster.keeper);
+                    const losers = asRecordArray(cluster.losers);
+                    return (
+                      <div key={`${proposal.id}-cluster-${index}`} className="inbox-review-cluster">
+                        <div className="inbox-review-cluster-title">
+                          Keep: {textValue(keeper.title)}
+                        </div>
+                        <div className="inbox-review-cluster-meta">
+                          {textValue(cluster.reason, "Duplicate cluster")} · remove {losers.length}
+                        </div>
+                        {losers.map((loser) => (
+                          <div key={textValue(loser.id)} className="inbox-review-row compact">
+                            <span>{textValue(loser.title)}</span>
+                            <span>{textValue(loser.meta)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                  {clusters.length > 6 && <div className="inbox-review-more">+{clusters.length - 6} more cluster{clusters.length - 6 === 1 ? "" : "s"}</div>}
+                </div>
+              ) : (
+                <div className="inbox-review-rows">
+                  {reviewItems.slice(0, 10).map((item) => (
+                    <div key={textValue(item.id, `${proposal.id}-${textValue(item.title)}`)} className="inbox-review-row">
+                      <span>{textValue(item.title)}</span>
+                      <span>{textValue(item.meta)}</span>
+                      {textValue(item.detail, "") && <em>{textValue(item.detail, "")}</em>}
+                    </div>
+                  ))}
+                  {reviewItems.length > 10 && <div className="inbox-review-more">+{reviewItems.length - 10} more record{reviewItems.length - 10 === 1 ? "" : "s"}</div>}
+                </div>
+              )}
+
+              {proposal.sourcePreview && (
+                <details className="agent-proposal-source">
+                  <summary>Source</summary>
+                  <pre>{proposal.sourcePreview}</pre>
+                </details>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -717,9 +1008,9 @@ type RfqRow = {
 };
 
 const RFQ_STATUS_META: Record<string, { label: string; cls: string }> = {
-  INGESTED: { label: "New",    cls: "badge-info" },
-  PARSED:   { label: "Parsed", cls: "badge-neutral" },
-  PRICED:   { label: "Priced", cls: "badge-warn" },
+  INGESTED: { label: "RFQ",        cls: "badge-info" },
+  PARSED:   { label: "Mature RFQ", cls: "badge-neutral" },
+  PRICED:   { label: "Pricing",    cls: "badge-warn" },
   QUOTED:   { label: "Quoted", cls: "badge-good" },
   WON:      { label: "Won",    cls: "badge-good" },
   LOST:     { label: "Lost",   cls: "badge-danger" },
@@ -728,74 +1019,72 @@ const RFQ_STATUS_META: Record<string, { label: string; cls: string }> = {
 function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: string; reference: string; type: string; customer: string | null }[] }) {
   if (rfqs.length === 0) {
     return (
-      <div className="card" style={{ padding: "40px 24px", textAlign: "center" }}>
-        <div style={{ fontWeight: 600, marginBottom: 6 }}>No RFQs yet</div>
-        <p style={{ fontSize: 13, color: "var(--text-3)" }}>
+      <div className="card empty-state-card">
+        <div className="empty-state-title">No RFQs yet</div>
+        <p className="empty-state-copy">
           RFQs are created from email threads (manually or by the AI auto-link). Switch to Threads view to see incoming mail.
         </p>
       </div>
     );
   }
   return (
-    <div className="card" style={{ overflow: "hidden" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+    <div className="card table-shell">
+      <table className="data-table">
         <thead>
-          <tr style={{ background: "var(--surface-2)", color: "var(--text-3)", textAlign: "left" }}>
-            <th style={thStyle}>Subject</th>
-            <th style={thStyle}>Customer / sender</th>
-            <th style={thStyle}>Route</th>
-            <th style={thStyle}>Type</th>
-            <th style={thStyle}>Status</th>
-            <th style={thStyle}>Job</th>
-            <th style={thStyle}>Threads</th>
-            <th style={thStyle}>Received</th>
-            <th style={thStyle}>Actions</th>
+          <tr>
+            <th>Subject</th>
+            <th>Customer / sender</th>
+            <th>Route</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Job</th>
+            <th className="numeric">Threads</th>
+            <th>Received</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {rfqs.map((r) => {
             const sm = RFQ_STATUS_META[r.status] ?? { label: r.status, cls: "badge-neutral" };
             return (
-              <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
-                <td style={tdStyle}>
-                  <a href={`/dashboard/rfq/${r.id}`} style={{ color: "var(--text)", textDecoration: "none", fontWeight: 600 }}>
+              <tr key={r.id} className="data-row">
+                <td>
+                  <a href={`/dashboard/rfq/${r.id}`} className="data-cell-strong">
                     {r.subject}
                   </a>
                 </td>
-                <td style={tdStyle}>
-                  <div style={{ color: "var(--text)" }}>{r.company?.name ?? r.fromCompany ?? "—"}</div>
-                  {r.fromEmail && <div style={{ fontSize: 11, color: "var(--text-3)" }}>{r.fromEmail}</div>}
+                <td>
+                  <div>{r.company?.name ?? r.fromCompany ?? "—"}</div>
+                  {r.fromEmail && <div className="data-subline">{r.fromEmail}</div>}
                 </td>
-                <td style={tdStyle}>
+                <td>
                   {r.origin || r.destination ? (
-                    <span style={{ color: "var(--text-2)" }}>{r.origin ?? "?"} → {r.destination ?? "?"}</span>
-                  ) : <span style={{ color: "var(--text-3)" }}>—</span>}
-                  {r.mode && <div style={{ fontSize: 11, color: "var(--text-3)" }}>{r.mode}</div>}
+                    <span>{r.origin ?? "?"} → {r.destination ?? "?"}</span>
+                  ) : <span className="data-muted">—</span>}
+                  {r.mode && <div className="data-subline">{r.mode}</div>}
                 </td>
-                <td style={tdStyle}><TypeBadge type={r.type} /></td>
-                <td style={tdStyle}><span className={`badge ${sm.cls}`}>{sm.label}</span></td>
-                <td style={tdStyle}>
+                <td><TypeBadge type={r.type} /></td>
+                <td><span className={`badge ${sm.cls}`}>{sm.label}</span></td>
+                <td>
                   {r.job ? (
-                    <a href={`/dashboard/jobs/${r.job.id}`} style={{ color: "var(--brand)", textDecoration: "none", fontSize: 12, fontWeight: 600 }}>
+                    <a href={`/dashboard/jobs/${r.job.id}`} className="data-link">
                       {r.job.reference}
                     </a>
-                  ) : <span style={{ color: "var(--text-3)" }}>—</span>}
+                  ) : <span className="data-muted">—</span>}
                 </td>
-                <td style={tdStyle}>
+                <td className="numeric">
                   {r._count.emailThreads > 0 ? (
-                    <a href={`/dashboard/inbox?inquiry=${r.id}`} style={{ color: "var(--brand)", textDecoration: "none", fontSize: 12 }}>
+                    <a href={`/dashboard/inbox?inquiry=${r.id}`} className="data-link">
                       {r._count.emailThreads}
                     </a>
-                  ) : <span style={{ color: "var(--text-3)" }}>0</span>}
+                  ) : <span className="data-muted">0</span>}
                 </td>
-                <td style={{ ...tdStyle, fontSize: 11.5, color: "var(--text-3)" }}>
+                <td className="data-muted">
                   {new Date(r.receivedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                 </td>
-                <td style={tdStyle}>
+                <td>
                   {r.job && r.job.status !== "PROPOSED" ? (
-                    <span style={{ fontSize: 10.5, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      Already a job
-                    </span>
+                    <span className="data-action-note">Already a job</span>
                   ) : (
                     <RfqRowActions
                       inquiryId={r.id}
@@ -811,19 +1100,4 @@ function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: s
       </table>
     </div>
   );
-}
-
-const thStyle: React.CSSProperties = { padding: "10px 14px", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" };
-const tdStyle: React.CSSProperties = { padding: "12px 14px", verticalAlign: "top" };
-
-function chipStyle(active: boolean, variant: "default" | "dark" = "default"): React.CSSProperties {
-  const dark = variant === "dark";
-  return {
-    display: "inline-flex", alignItems: "center", gap: 6,
-    padding: "5px 12px", borderRadius: 4, fontSize: 12, fontWeight: 500,
-    background: active ? (dark ? "var(--text)" : "var(--brand)") : "var(--surface)",
-    color: active ? "#fff" : "var(--text-2)",
-    border: "1px solid", borderColor: active ? (dark ? "var(--text)" : "var(--brand)") : "var(--border)",
-    textDecoration: "none",
-  };
 }

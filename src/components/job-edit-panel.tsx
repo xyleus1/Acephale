@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateJobAllFields, updateJobStatus } from "@/app/dashboard/jobs/[jobId]/actions";
 import { CargoFields } from "./cargo-fields";
 import { cleanNotes } from "@/lib/quote-lines";
+import { Icon } from "@/components/icon";
 
 type JobShape = {
   id: string;
@@ -24,6 +25,10 @@ type JobShape = {
   volume: number | null;
   packages: number | null;
   dimensions: string | null;
+  stackable: string | null;
+  topLoad: string | null;
+  dangerousGoods: string | null;
+  customsBy: string | null;
   containerCount: number | null;
   containerType: string | null;
   etd: Date | null;
@@ -31,19 +36,19 @@ type JobShape = {
   revenue: number | null;
   cost: number | null;
   currency: string | null;
+  targetPrice: number | null;
+  targetCurrency: string | null;
+  targetPriceStatus: string | null;
+  targetPriceSource: string | null;
   notes: string | null;
 };
 
 type CompanyOption = { id: string; name: string };
 
 const STATUS_OPTIONS = [
-  ["PROPOSED", "Proposed"], ["INQUIRY", "Inquiry"], ["QUOTED", "Quoted"], ["BOOKED", "Booked"],
-  ["IN_TRANSIT", "In Transit"], ["CUSTOMS", "Customs"], ["DELIVERED", "Delivered"], ["CANCELLED", "Cancelled"],
+  ["PROPOSED", "Proposed"], ["INQUIRY", "RFQ"], ["QUOTED", "Pricing"], ["BOOKED", "Booked / Waiting Cargo"],
+  ["IN_TRANSIT", "En Route"], ["DELIVERED", "Delivered"], ["CANCELLED", "Cancelled"],
 ];
-
-function fmtDateInput(d: Date | null) {
-  return d ? new Date(d).toISOString().split("T")[0] : "";
-}
 
 export function JobEditPanel({ job, companies }: { job: JobShape; companies: CompanyOption[] }) {
   const router = useRouter();
@@ -80,14 +85,10 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="btn btn-secondary btn-sm"
-        style={{ fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 5 }}
+        className="btn btn-secondary btn-sm btn-inline-icon"
         title="Edit shipment details"
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
+        <Icon name="settings" size={11} />
         Edit
       </button>
 
@@ -96,15 +97,11 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
           <aside className="edit-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Edit shipment">
             <header className="edit-panel-header">
               <div>
-                <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-3)" }}>
-                  Edit shipment
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2, fontFamily: "ui-monospace, Menlo, monospace" }}>{job.reference}</div>
+                <div className="edit-panel-kicker">Edit shipment</div>
+                <div className="edit-panel-reference">{job.reference}</div>
               </div>
               <button onClick={() => setOpen(false)} className="edit-panel-close" aria-label="Close">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
+                <Icon name="x" size={14} strokeWidth={2.5} />
               </button>
             </header>
 
@@ -144,6 +141,34 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
               </div>
 
               <div className="edit-panel-section">
+                <div className="edit-panel-section-title">RFQ Qualification</div>
+                <div className="form-grid-3">
+                  <label className="field">
+                    <span>Target status</span>
+                    <select name="targetPriceStatus" defaultValue={job.targetPriceStatus ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Ask customer</option>
+                      <option value="PROVIDED">Target provided</option>
+                      <option value="NO_TARGET">No target given</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Target price</span>
+                    <input name="targetPrice" type="number" step="any" defaultValue={job.targetPrice ?? ""} />
+                  </label>
+                  <label className="field">
+                    <span>Target currency</span>
+                    <select name="targetCurrency" defaultValue={job.targetCurrency ?? job.currency ?? "USD"}>
+                      <option>USD</option><option>EUR</option><option>TRY</option><option>GBP</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="field form-row-gap">
+                  <span>Target note</span>
+                  <input name="targetPriceSource" defaultValue={job.targetPriceSource ?? ""} placeholder="Who gave it / context" />
+                </label>
+              </div>
+
+              <div className="edit-panel-section">
                 <div className="edit-panel-section-title">Customer</div>
                 <input
                   name="companyName"
@@ -157,7 +182,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                     <option key={c.id} value={c.name} />
                   ))}
                 </datalist>
-                <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
+                <p className="edit-panel-help">
                   New names are saved as customers automatically. Leave empty for no customer.
                 </p>
               </div>
@@ -178,7 +203,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
 
               <div className="edit-panel-section">
                 <div className="edit-panel-section-title">Cargo</div>
-                <div className="form-grid-2" style={{ marginBottom: 10 }}>
+                <div className="form-grid-2 form-row-gap">
                   <label className="field">
                     <span>Incoterms</span>
                     <select name="incoterms" defaultValue={job.incoterms ?? ""}>
@@ -195,11 +220,11 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                     </select>
                   </label>
                 </div>
-                <label className="field" style={{ marginBottom: 10 }}>
+                <label className="field form-row-gap">
                   <span>Commodity</span>
                   <input name="commodity" defaultValue={job.commodity ?? ""} placeholder="e.g. Machine parts" />
                 </label>
-                <div className="form-grid-2" style={{ marginBottom: 10 }}>
+                <div className="form-grid-2 form-row-gap">
                   <label className="field"><span>Quantity</span>
                     <input name="quantity" type="number" step="any" defaultValue={job.quantity ?? ""} placeholder="e.g. 350" />
                   </label>
@@ -218,25 +243,32 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   initialContainerType={job.containerType}
                   initialDimensions={job.dimensions}
                   initialWeight={job.weight}
+                  initialStackable={job.stackable}
+                  initialTopLoad={job.topLoad}
                 />
-                <label className="field" style={{ marginTop: 10 }}>
+                <div className="form-grid-2 form-row-gap">
+                  <label className="field">
+                    <span>Dangerous goods?</span>
+                    <select name="dangerousGoods" defaultValue={job.dangerousGoods ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Unknown</option>
+                      <option value="NO">No</option>
+                      <option value="YES">Yes</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Customs work by</span>
+                    <select name="customsBy" defaultValue={job.customsBy ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Unknown</option>
+                      <option value="US">Us</option>
+                      <option value="CUSTOMER">Customer</option>
+                      <option value="FORWARDER">Forwarder / agent</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="field form-row-gap">
                   <span>Packages</span>
                   <input name="packages" type="number" defaultValue={job.packages ?? ""} />
                 </label>
-              </div>
-
-              <div className="edit-panel-section">
-                <div className="edit-panel-section-title">Dates</div>
-                <div className="form-grid-2">
-                  <label className="field">
-                    <span>ETD (departure)</span>
-                    <input name="etd" type="date" defaultValue={fmtDateInput(job.etd)} />
-                  </label>
-                  <label className="field">
-                    <span>ETA (arrival)</span>
-                    <input name="eta" type="date" defaultValue={fmtDateInput(job.eta)} />
-                  </label>
-                </div>
               </div>
 
               <div className="edit-panel-section">
@@ -258,7 +290,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   rows={3}
                   defaultValue={cleanNotes(job.notes)}
                   placeholder="Short note — only you see this"
-                  style={{ width: "100%", resize: "vertical", fontSize: 13, padding: "8px 10px" }}
+                  className="edit-panel-note-textarea"
                 />
               </div>
 

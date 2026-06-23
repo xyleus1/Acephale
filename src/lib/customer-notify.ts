@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma";
 import { sendReplyToThread } from "./gmail-send";
 import { ensurePortalToken } from "./portal";
+import { createPortalToken } from "./portal-token";
 
 // Send a customer-facing status update email when a Job advances to a
 // meaningful status, or when an important milestone is logged. Skips if
@@ -28,8 +29,7 @@ export async function maybeNotifyCustomerOnStatusChange(jobId: string, fromStatu
 
 export async function maybeNotifyCustomerOnMilestone(jobId: string, milestoneType: string, isActual: boolean): Promise<void> {
   if (!isActual) return;
-  // Only ETD / ETA / DELIVERY confirmations get an email — others are internal.
-  if (!["ETD", "ETA", "DELIVERY", "CUSTOMS_RELEASE"].includes(milestoneType)) return;
+  if (milestoneType !== "DELIVERY") return;
   await sendStatusUpdate(jobId, { reason: "milestone", milestoneType });
 }
 
@@ -68,9 +68,11 @@ async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; f
     // don't require requireSession in this server-internal path.
     let token = job.portalToken;
     if (!token) {
-      const crypto = await import("crypto");
-      token = crypto.randomBytes(16).toString("hex");
-      await prisma.job.update({ where: { id: job.id }, data: { portalToken: token } });
+      token = createPortalToken();
+      await prisma.job.updateMany({
+        where: { id: job.id, officeId: job.officeId },
+        data: { portalToken: token },
+      });
     }
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL
       ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://derya-crm.vercel.app");
@@ -96,7 +98,7 @@ async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; f
     system: `You write a short customer-facing shipment-update email from a freight forwarding & procurement office to their CUSTOMER (not a supplier). Tone: professional, calm, factual. No emojis, no markdown. Under 110 words. Sign as "Your forwarder at Derya Maritime" (do not invent a name). Always include the portal link if provided so the customer can self-serve future updates.`,
     messages: [{
       role: "user",
-      content: `Job ${job.reference} for ${job.company?.name ?? "the customer"}.\nCommodity: ${job.inquiry?.commodity ?? "—"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMilestones: ${milestonesSummary}\nETD: ${job.etd?.toISOString().split("T")[0] ?? "—"} | ETA: ${job.eta?.toISOString().split("T")[0] ?? "—"}\nUpdate: ${ctxLine}\n${portalUrl ? `Live portal link to include: ${portalUrl}` : ""}\n\nDraft the email body.`,
+      content: `Job ${job.reference} for ${job.company?.name ?? "the customer"}.\nCommodity: ${job.inquiry?.commodity ?? "—"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMilestones: ${milestonesSummary}\nUpdate: ${ctxLine}\n${portalUrl ? `Live portal link to include: ${portalUrl}` : ""}\n\nDraft the email body.`,
     }],
   });
   const text = result.content[0].type === "text" ? result.content[0].text : "";

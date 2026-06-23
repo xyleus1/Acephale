@@ -20,7 +20,7 @@ export async function prewarmInquirySummary(inquiryId: string): Promise<void> {
     // Step 1: extraction (no-op for threads with a real price already cached).
     const inq = await prisma.inquiry.findUnique({
       where: { id: inquiryId },
-      select: { id: true, type: true, commodity: true, destination: true },
+      select: { id: true, officeId: true, type: true, commodity: true, destination: true },
     });
     if (!inq || inq.type !== "SOURCING") return;
 
@@ -28,7 +28,7 @@ export async function prewarmInquirySummary(inquiryId: string): Promise<void> {
 
     // Step 2: rebuild summary from updated thread data.
     const threads = await prisma.emailThread.findMany({
-      where: { inquiryId },
+      where: { inquiryId, officeId: inq.officeId },
       select: { id: true, subject: true, supplierOffer: true, awardedAt: true, messages: { orderBy: { sentAt: "desc" }, take: 1 } },
     });
     const offers = threads.map((t) => {
@@ -59,8 +59,8 @@ export async function prewarmInquirySummary(inquiryId: string): Promise<void> {
         cheapest: offers.find((o) => o.price != null) ?? null,
       },
     };
-    await prisma.inquiry.update({
-      where: { id: inquiryId },
+    await prisma.inquiry.updateMany({
+      where: { id: inquiryId, officeId: inq.officeId },
       data: { summaryCache: JSON.stringify(summary), summaryCacheAt: new Date() },
     }).catch(() => {});
   } catch { /* swallow */ }

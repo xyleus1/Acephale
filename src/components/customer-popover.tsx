@@ -46,35 +46,28 @@ export function CustomerPopover({ companyId, name }: { companyId: string; name: 
   }, [open]);
 
   return (
-    <span ref={ref} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+    <span ref={ref} className="customer-popover-anchor">
       <button
         onClick={() => setOpen((o) => !o)}
-        style={{
-          background: "none", border: "none", padding: 0, cursor: "pointer",
-          fontSize: 14, fontWeight: 700, color: "var(--text)",
-          textDecoration: "underline", textDecorationColor: "transparent",
-          textUnderlineOffset: 3, transition: "text-decoration-color 0.12s",
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.textDecorationColor = "var(--text-3)"}
-        onMouseLeave={(e) => e.currentTarget.style.textDecorationColor = "transparent"}
+        className="customer-popover-trigger"
       >
         {name}
       </button>
 
       {open && (
         <div className="customer-popover">
-          {loading && <div style={{ padding: 18, fontSize: 12.5, color: "var(--text-3)" }}>Loading…</div>}
+          {loading && <div className="customer-popover-loading">Loading...</div>}
           {data && (
             <>
               <div className="customer-popover-header">
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{data.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                    {data.jobsCount} {data.jobsCount === 1 ? "job" : "jobs"} · status {data.status.toLowerCase()}
+                  <div className="customer-popover-title">{data.name}</div>
+                  <div className="customer-popover-meta">
+                    {data.jobsCount} {data.jobsCount === 1 ? "job" : "jobs"} - status {data.status.toLowerCase()}
                   </div>
                 </div>
-                <a href={`/dashboard/customers/${data.id}`} className="btn btn-secondary btn-sm" style={{ fontSize: 11, textDecoration: "none" }}>
-                  Profile →
+                <a href={`/dashboard/customers/${data.id}`} className="btn btn-secondary btn-sm customer-popover-profile">
+                  Profile
                 </a>
               </div>
 
@@ -82,10 +75,10 @@ export function CustomerPopover({ companyId, name }: { companyId: string; name: 
                 <div className="customer-popover-section">
                   <div className="customer-popover-section-title">Contacts</div>
                   {data.contacts.slice(0, 3).map((c) => (
-                    <div key={c.id} style={{ fontSize: 12, padding: "4px 0" }}>
-                      <div style={{ fontWeight: 600 }}>{c.name ?? "(no name)"}</div>
-                      <div style={{ color: "var(--text-3)", fontSize: 11 }}>
-                        {[c.email, c.phone].filter(Boolean).join(" · ") || "—"}
+                    <div key={c.id} className="customer-popover-contact">
+                      <div className="customer-popover-contact-name">{c.name ?? "(no name)"}</div>
+                      <div className="customer-popover-contact-meta">
+                        {[c.email, c.phone].filter(Boolean).join(" - ") || "-"}
                       </div>
                     </div>
                   ))}
@@ -96,12 +89,9 @@ export function CustomerPopover({ companyId, name }: { companyId: string; name: 
                 <div className="customer-popover-section">
                   <div className="customer-popover-section-title">Recent jobs</div>
                   {data.recentJobs.map((j) => (
-                    <a key={j.id} href={`/dashboard/jobs/${j.id}`} style={{
-                      display: "flex", justifyContent: "space-between", padding: "5px 0",
-                      fontSize: 12, color: "inherit", textDecoration: "none",
-                    }}>
-                      <span style={{ fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace" }}>{j.reference}</span>
-                      <span style={{ color: "var(--text-3)" }}>{j.route ?? "—"}</span>
+                    <a key={j.id} href={`/dashboard/jobs/${j.id}`} className="customer-popover-job">
+                      <span className="customer-popover-job-ref">{j.reference}</span>
+                      <span className="customer-popover-job-route">{j.route ?? "-"}</span>
                     </a>
                   ))}
                 </div>

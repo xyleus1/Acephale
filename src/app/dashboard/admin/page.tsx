@@ -5,6 +5,27 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { Badge } from "@/components/ui";
+import { CommercialBrainEngineSchematic } from "@/components/commercial-brain-engine-schematic";
+import { reviewedFieldTokenLabel } from "@/lib/agent-proposal-review";
+import {
+  assessCommercialStrategy,
+  buildStrategyExecutionPacket,
+  buildStrategyRouteDecision,
+} from "@/lib/commercial-strategy";
+import { loadJobStrategyInput } from "@/lib/commercial-strategy-persistence";
+import { simulatePricingScenario, type PricingScenarioResult } from "@/lib/pricing-scenario";
+import { operatorPhaseLabel } from "@/lib/operator-action-labels";
+
+type AdminSearchParams = {
+  tab?: string;
+  brainJobId?: string;
+  brainTargetPrice?: string;
+  brainBuyCost?: string;
+  brainTargetCurrency?: string;
+  brainMinMarginPct?: string;
+  brainNoTarget?: string;
+  brainReplaceQuotes?: string;
+};
 
 const CATEGORY_TYPE_LABELS: Record<string, string> = {
   CLASS1: "Class 1",
@@ -13,19 +34,97 @@ const CATEGORY_TYPE_LABELS: Record<string, string> = {
   LANE: "Lane"
 };
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asRecordList(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map(asRecord).filter((item) => Object.keys(item).length > 0) : [];
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function auditValue(value: unknown) {
+  if (value == null || value === "") return "—";
+  if (value instanceof Date) return fmtDateTime(value);
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value).slice(0, 220);
+  } catch {
+    return String(value).slice(0, 220);
+  }
+}
+
+function auditInputPreview(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2).slice(0, 900);
+  } catch {
+    return String(value).slice(0, 900);
+  }
+}
+
+function fmtDateTime(d: Date) {
+  return new Date(d).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function parseMaybeNumber(value: string | undefined) {
+  const clean = String(value ?? "").replace(/,/g, "").trim();
+  if (!clean) return null;
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pct(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${Math.round(value * 10) / 10}%`;
+}
+
+function signed(value: number | null | undefined, suffix = "") {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded > 0 ? "+" : ""}${rounded}${suffix}`;
+}
+
+function scoreTone(score: number) {
+  if (score >= 78) return "ready";
+  if (score >= 58) return "review";
+  return "blocked";
+}
+
+function scenarioWasRequested(sp: AdminSearchParams) {
+  return Boolean(
+    sp.brainTargetPrice?.trim() ||
+    sp.brainBuyCost?.trim() ||
+    sp.brainMinMarginPct?.trim() ||
+    sp.brainNoTarget === "1" ||
+    sp.brainReplaceQuotes === "1"
+  );
+}
+
+export default async function AdminPage({ searchParams }: { searchParams: Promise<AdminSearchParams> }) {
   const session = await requireSession();
   if (session.role !== UserRole.ADMIN && session.role !== UserRole.MANAGER) {
     redirect("/dashboard");
   }
 
-  const { tab = "team" } = await searchParams;
+  const sp = await searchParams;
+  const { tab = "team" } = sp;
   const isAdmin = session.role === UserRole.ADMIN;
+  const canSeeAgentAudit = session.role === UserRole.ADMIN || session.role === UserRole.MANAGER;
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const staleBackgroundJobCutoff = new Date(Date.now() - 30 * 60 * 1000);
 
-  const [users, companyOwners, recentActivities, openTasks, pendingQuotes, categories] = await Promise.all([
+  const [users, companyOwners, recentActivities, openTasks, pendingQuotes, categories, agentRunEvents, backgroundJobs, backgroundJobCounts, staleRunningBackgroundJobs, brainJobs, activeBrainAssessments] = await Promise.all([
     prisma.user.findMany({
       where: { officeId: session.officeId, isActive: true },
       orderBy: { fullName: "asc" }
@@ -49,7 +148,66 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     prisma.categoryOption.findMany({
       where: { officeId: session.officeId },
       orderBy: [{ type: "asc" }, { value: "asc" }]
-    })
+    }),
+    prisma.event.findMany({
+      where: { officeId: session.officeId, type: { in: ["agent.run", "agent.proposal_reviewed"] } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+    prisma.backgroundJob.findMany({
+      where: {
+        officeId: session.officeId,
+        OR: [
+          { status: { in: ["QUEUED", "RUNNING", "FAILED"] } },
+          { completedAt: { gte: sevenDaysAgo } },
+        ],
+      },
+      orderBy: [{ status: "asc" }, { runAfter: "asc" }, { createdAt: "desc" }],
+      take: 80,
+    }),
+    prisma.backgroundJob.groupBy({
+      by: ["status"],
+      where: { officeId: session.officeId },
+      _count: { _all: true },
+    }),
+    prisma.backgroundJob.count({
+      where: {
+        officeId: session.officeId,
+        status: "RUNNING",
+        lockedAt: { lt: staleBackgroundJobCutoff },
+      },
+    }),
+    prisma.job.findMany({
+      where: { officeId: session.officeId, status: { not: "CANCELLED" } },
+      select: {
+        id: true,
+        reference: true,
+        title: true,
+        status: true,
+        mode: true,
+        origin: true,
+        destination: true,
+        revenue: true,
+        cost: true,
+        currency: true,
+        updatedAt: true,
+        company: { select: { name: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 30,
+    }),
+    prisma.strategyAssessment.findMany({
+      where: { officeId: session.officeId, status: "ACTIVE" },
+      include: {
+        job: { select: { id: true, reference: true, title: true, status: true } },
+        inquiry: { select: { id: true, subject: true, status: true } },
+        priceRecommendation: true,
+        riskAssessments: { orderBy: { score: "desc" }, take: 1 },
+        actions: { orderBy: { createdAt: "asc" }, take: 2 },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+    }),
   ]);
 
   // ── Unassigned companies ──────────────────────────────────────
@@ -83,6 +241,27 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       pendingQuoteCount: myPendingQuotes,
     };
   }).filter((u) => u.role !== "ADMIN" || u.id === session.userId);
+  const userById = new Map(users.map((user) => [user.id, user]));
+  const selectedBrainJobId = brainJobs.some((job) => job.id === sp.brainJobId)
+    ? sp.brainJobId
+    : brainJobs[0]?.id ?? null;
+  const selectedBrainJob = brainJobs.find((job) => job.id === selectedBrainJobId) ?? null;
+  const brainInput = selectedBrainJobId ? await loadJobStrategyInput(session.officeId, selectedBrainJobId) : null;
+  const brainStrategy = brainInput ? assessCommercialStrategy(brainInput) : null;
+  const brainPacket = brainStrategy ? buildStrategyExecutionPacket(brainStrategy) : null;
+  const brainRouteDecision = brainStrategy ? buildStrategyRouteDecision(brainStrategy) : null;
+  const brainScenarioRequested = scenarioWasRequested(sp);
+  const brainScenario = brainInput && brainScenarioRequested
+    ? simulatePricingScenario(brainInput, {
+      targetPrice: parseMaybeNumber(sp.brainTargetPrice),
+      targetCurrency: sp.brainTargetCurrency || brainInput.targetCurrency || brainInput.currency || "USD",
+      noTarget: sp.brainNoTarget === "1",
+      buyCost: parseMaybeNumber(sp.brainBuyCost),
+      assumeLiveBuyCost: parseMaybeNumber(sp.brainBuyCost) != null,
+      replaceExistingQuotes: sp.brainReplaceQuotes === "1",
+      minMarginPct: parseMaybeNumber(sp.brainMinMarginPct),
+    })
+    : null;
 
   // ── Server actions ────────────────────────────────────────────
 
@@ -93,6 +272,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     const companyId = String(formData.get("companyId") ?? "");
     const userId = String(formData.get("userId") ?? "");
     if (!companyId || !userId) return;
+    const [company, user] = await Promise.all([
+      prisma.company.findFirst({ where: { id: companyId, officeId: s.officeId }, select: { id: true } }),
+      prisma.user.findFirst({ where: { id: userId, officeId: s.officeId, isActive: true }, select: { id: true } }),
+    ]);
+    if (!company || !user) return;
     await prisma.companyOwner.upsert({
       where: { companyId_userId: { companyId, userId } },
       update: { isPrimary: true },
@@ -138,7 +322,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     if (s.role !== UserRole.ADMIN) return;
     const userId = String(formData.get("userId") ?? "");
     const nextValue = String(formData.get("canViewWholeOffice") ?? "") === "true";
-    await prisma.user.update({ where: { id: userId }, data: { canViewWholeOffice: nextValue } });
+    await prisma.user.updateMany({
+      where: { id: userId, officeId: s.officeId },
+      data: { canViewWholeOffice: nextValue },
+    });
     revalidatePath("/dashboard/admin");
   }
 
@@ -164,9 +351,70 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     if (s.role !== UserRole.ADMIN) return;
     const id = String(formData.get("id") ?? "");
     const isActive = String(formData.get("isActive") ?? "") === "true";
-    await prisma.categoryOption.update({ where: { id }, data: { isActive } });
+    await prisma.categoryOption.updateMany({
+      where: { id, officeId: s.officeId },
+      data: { isActive },
+    });
     revalidatePath("/dashboard/admin");
     revalidatePath("/dashboard/customers");
+  }
+
+  async function retryBackgroundJobAction(formData: FormData) {
+    "use server";
+    const s = await requireSession();
+    if (s.role !== UserRole.ADMIN && s.role !== UserRole.MANAGER) return;
+    const id = String(formData.get("id") ?? "");
+    if (!id) return;
+    await prisma.backgroundJob.updateMany({
+      where: { id, officeId: s.officeId, status: "FAILED" },
+      data: {
+        status: "QUEUED",
+        attempts: 0,
+        runAfter: new Date(),
+        lockedAt: null,
+        startedAt: null,
+        failedAt: null,
+        lastError: null,
+      },
+    });
+    revalidatePath("/dashboard/admin");
+  }
+
+  async function runBackgroundJobNowAction(formData: FormData) {
+    "use server";
+    const s = await requireSession();
+    if (s.role !== UserRole.ADMIN && s.role !== UserRole.MANAGER) return;
+    const id = String(formData.get("id") ?? "");
+    if (!id) return;
+    await prisma.backgroundJob.updateMany({
+      where: { id, officeId: s.officeId, status: "QUEUED" },
+      data: { runAfter: new Date() },
+    });
+    revalidatePath("/dashboard/admin");
+  }
+
+  async function releaseBackgroundJobLockAction(formData: FormData) {
+    "use server";
+    const s = await requireSession();
+    if (s.role !== UserRole.ADMIN && s.role !== UserRole.MANAGER) return;
+    const id = String(formData.get("id") ?? "");
+    if (!id) return;
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+    await prisma.backgroundJob.updateMany({
+      where: {
+        id,
+        officeId: s.officeId,
+        status: "RUNNING",
+        lockedAt: { lt: cutoff },
+      },
+      data: {
+        status: "QUEUED",
+        runAfter: new Date(),
+        lockedAt: null,
+        lastError: "Released stale RUNNING lock by admin.",
+      },
+    });
+    revalidatePath("/dashboard/admin");
   }
 
   const categoryGroups = Object.values(CategoryType).reduce<Record<string, typeof categories>>((acc, type) => {
@@ -175,22 +423,53 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   }, {} as Record<string, typeof categories>);
 
   const salesUsers = users.filter((u) => u.role === "SALES");
+  const backgroundCount = (status: string) => backgroundJobCounts.find((row) => row.status === status)?._count._all ?? 0;
+  const queuedJobs = backgroundCount("QUEUED");
+  const runningJobs = backgroundCount("RUNNING");
+  const failedJobs = backgroundCount("FAILED");
+  const pageTitle = tab === "brain" ? "Commercial Brain" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : "Team";
+  const pageSubtitle = tab === "agent"
+    ? `${agentRunEvents.length} recent agent events · runs, reviews, tools, and errors`
+    : tab === "brain"
+      ? brainStrategy
+        ? `${brainStrategy.band} band · ${brainStrategy.quoteGate.label} · ${operatorPhaseLabel(brainStrategy.operatorDecision.phase)}`
+        : "No job selected for live strategy inspection"
+    : tab === "jobs"
+      ? `${queuedJobs} queued · ${runningJobs} running · ${staleRunningBackgroundJobs} stale · ${failedJobs} failed`
+      : `${salesPeople.length} sales reps · ${companyOwners.filter((o) => o.isPrimary).length} accounts assigned`;
 
   return (
     <div>
       <div className="page-header" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">Team</h1>
-          <p className="page-subtitle">{salesPeople.length} sales reps · {companyOwners.filter((o) => o.isPrimary).length} accounts assigned</p>
+          <h1 className="page-title">{pageTitle}</h1>
+          <p className="page-subtitle">{pageSubtitle}</p>
         </div>
-        {isAdmin && (
+        {(isAdmin || canSeeAgentAudit) && (
           <div style={{ display: "flex", gap: 6 }}>
             <Link href="/dashboard/admin?tab=team">
               <button type="button" className={tab === "team" ? "btn-sm" : "secondary btn-sm"}>Team overview</button>
             </Link>
-            <Link href="/dashboard/admin?tab=settings">
-              <button type="button" className={tab === "settings" ? "btn-sm" : "secondary btn-sm"}>Settings</button>
-            </Link>
+            {canSeeAgentAudit && (
+              <Link href="/dashboard/admin?tab=brain">
+                <button type="button" className={tab === "brain" ? "btn-sm" : "secondary btn-sm"}>Brain lab</button>
+              </Link>
+            )}
+            {canSeeAgentAudit && (
+              <Link href="/dashboard/admin?tab=agent">
+                <button type="button" className={tab === "agent" ? "btn-sm" : "secondary btn-sm"}>Agent audit</button>
+              </Link>
+            )}
+            {canSeeAgentAudit && (
+              <Link href="/dashboard/admin?tab=jobs">
+                <button type="button" className={tab === "jobs" ? "btn-sm" : "secondary btn-sm"}>System jobs</button>
+              </Link>
+            )}
+            {isAdmin && (
+              <Link href="/dashboard/admin?tab=settings">
+                <button type="button" className={tab === "settings" ? "btn-sm" : "secondary btn-sm"}>Settings</button>
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -348,6 +627,346 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
+      {/* ── COMMERCIAL BRAIN TAB ─────────────────────────────────── */}
+      {tab === "brain" && canSeeAgentAudit && (
+        <div className="admin-brain" data-agent-target="admin-brain">
+          <form action="/dashboard/admin" method="get" className="admin-brain-selector">
+            <input type="hidden" name="tab" value="brain" />
+            <label>
+              <span>Inspect job</span>
+              <select name="brainJobId" defaultValue={selectedBrainJobId ?? ""}>
+                {brainJobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.reference} · {job.title ?? job.company?.name ?? "Untitled"} · {job.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className="btn-sm">Load brain</button>
+            {selectedBrainJobId && (
+              <Link href={`/dashboard/jobs/${selectedBrainJobId}`} className="admin-brain-open-link">
+                Open job
+              </Link>
+            )}
+          </form>
+
+          {brainStrategy && brainPacket && brainRouteDecision ? (
+            <>
+              <CommercialBrainEngineSchematic
+                strategy={brainStrategy}
+                packet={brainPacket}
+                routeDecision={brainRouteDecision}
+                jobReference={selectedBrainJob
+                  ? `${selectedBrainJob.reference} / ${selectedBrainJob.title ?? selectedBrainJob.company?.name ?? "Untitled"}`
+                  : "Selected job"}
+              />
+
+              <section className="admin-brain-grid">
+                <form action="/dashboard/admin" method="get" className="admin-brain-card admin-brain-scenario" data-agent-target="pricing-scenario">
+                  <input type="hidden" name="tab" value="brain" />
+                  <input type="hidden" name="brainJobId" value={selectedBrainJobId ?? ""} />
+                  <div className="admin-brain-card-head">
+                    <span>What-if sandbox</span>
+                    <strong>No writes, no fake history</strong>
+                  </div>
+                  <div className="admin-brain-scenario-fields">
+                    <label>
+                      <span>Customer target</span>
+                      <input name="brainTargetPrice" defaultValue={sp.brainTargetPrice ?? ""} inputMode="decimal" placeholder="2300" />
+                    </label>
+                    <label>
+                      <span>Buy cost</span>
+                      <input name="brainBuyCost" defaultValue={sp.brainBuyCost ?? ""} inputMode="decimal" placeholder="2000" />
+                    </label>
+                    <label>
+                      <span>Currency</span>
+                      <select name="brainTargetCurrency" defaultValue={sp.brainTargetCurrency || brainStrategy.price.currency}>
+                        {["USD", "EUR", "GBP", "TRY"].map((cur) => <option key={cur} value={cur}>{cur}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Min margin %</span>
+                      <input name="brainMinMarginPct" defaultValue={sp.brainMinMarginPct ?? ""} inputMode="decimal" placeholder="floor" />
+                    </label>
+                  </div>
+                  <div className="admin-brain-scenario-toggles">
+                    <label><input type="checkbox" name="brainNoTarget" value="1" defaultChecked={sp.brainNoTarget === "1"} /> No target confirmed</label>
+                    <label><input type="checkbox" name="brainReplaceQuotes" value="1" defaultChecked={sp.brainReplaceQuotes === "1"} /> Ignore existing quotes</label>
+                  </div>
+                  <button type="submit" className="btn-sm">Run scenario</button>
+                  <p>This uses the same commercial strategy engine as the job page. It does not write target history, quotes, costs, or assessments.</p>
+                </form>
+
+                <div className="admin-brain-card admin-brain-scenario-result">
+                  <div className="admin-brain-card-head">
+                    <span>Scenario result</span>
+                    <strong>{brainScenario ? brainScenario.verdict.quote_gate : "Waiting for inputs"}</strong>
+                  </div>
+                  {brainScenario ? (
+                    <BrainScenarioResult result={brainScenario} />
+                  ) : (
+                    <p>Enter a target, buy cost, or floor margin to see how the brain changes the gate, price, margin, route confidence, and operator action.</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="admin-brain-card admin-brain-wide">
+                <div className="admin-brain-card-head">
+                  <span>Active brain snapshots</span>
+                  <strong>{activeBrainAssessments.length}</strong>
+                </div>
+                <div className="admin-brain-snapshot-list">
+                  {activeBrainAssessments.map((assessment) => {
+                    const targetHref = assessment.jobId
+                      ? `/dashboard/jobs/${assessment.jobId}`
+                      : assessment.inquiryId ? `/dashboard/rfq/${assessment.inquiryId}` : "/dashboard/admin?tab=brain";
+                    const risk = assessment.riskAssessments[0];
+                    return (
+                      <a key={assessment.id} href={targetHref} className={`admin-brain-snapshot ${scoreTone(assessment.score)}`}>
+                        <span>{assessment.entityType} · {assessment.job?.reference ?? assessment.inquiry?.subject ?? assessment.subject ?? "Untitled"}</span>
+                        <strong>{assessment.recommendationLabel}</strong>
+                        <em>
+                          {assessment.band} · {assessment.confidence} · {assessment.priceRecommendation?.guardrailStatus ?? "no price"} · {risk ? `${risk.level} ${risk.category}` : "risk clear"}
+                        </em>
+                      </a>
+                    );
+                  })}
+                </div>
+              </section>
+            </>
+          ) : (
+            <div className="card">
+              <div className="card-body" style={{ color: "var(--text-3)", fontSize: 13 }}>
+                No job is available for the brain lab yet. Create or import a lead/RFQ/job first.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AGENT AUDIT TAB ───────────────────────────────────────── */}
+      {tab === "agent" && canSeeAgentAudit && (
+        <div className="card agent-audit-card">
+          <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="section-title">Recent agent events</div>
+            <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+              This is the audit surface for prompts, tool calls, proposal review decisions, final answers, and failures. If the agent did something stupid, this is where you start looking.
+            </p>
+          </div>
+          {agentRunEvents.length === 0 ? (
+            <div className="card-body" style={{ color: "var(--text-3)", fontSize: 13 }}>
+              No agent events logged yet.
+            </div>
+          ) : (
+            <div className="agent-audit-list">
+              {agentRunEvents.map((event) => {
+                const payload = asRecord(event.payload);
+                const status = typeof payload.status === "string" ? payload.status : "UNKNOWN";
+                const decision = typeof payload.decision === "string" ? payload.decision : status;
+                const statusClass = decision.toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+                const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
+                const reply = typeof payload.reply === "string" ? payload.reply : "";
+                const error = typeof payload.error === "string" ? payload.error : "";
+                const tools = asRecordList(payload.tools);
+                const scopeJobId = typeof payload.scopeJobId === "string" ? payload.scopeJobId : null;
+                const proposalId = typeof payload.proposalId === "string" ? payload.proposalId : null;
+                const actorUserId = typeof payload.userId === "string" ? payload.userId : null;
+                const actor = actorUserId ? userById.get(actorUserId) : null;
+                const note = typeof payload.note === "string" ? payload.note : "";
+                const sourceType = typeof payload.sourceType === "string" ? payload.sourceType : "";
+                const sourcePreview = typeof payload.sourcePreview === "string" ? payload.sourcePreview : "";
+                const acceptedFields = asStringList(payload.acceptedFields);
+                const changedJobFields = asStringList(payload.changedJobFields);
+                const changedInquiryFields = asStringList(payload.changedInquiryFields);
+                const reviewedFieldChanges = asRecordList(payload.reviewedFieldChanges);
+                const decisionImpact = asRecord(payload.decisionImpact);
+                const pageCueCount = tools.reduce((count, tool) => count + asRecordList(tool.pageCues).length, 0);
+                const isReview = event.type === "agent.proposal_reviewed";
+                return (
+                  <details key={event.id} className="agent-audit-item">
+                    <summary>
+                      <span className={`agent-audit-status ${statusClass}`}>{decision}</span>
+                      <strong>
+                        {isReview
+                          ? `Proposal review${proposalId ? ` ${proposalId.slice(0, 8)}` : ""}`
+                          : prompt ? prompt.slice(0, 110) : "Agent run"}
+                      </strong>
+                      <em>{fmtDateTime(event.createdAt)}</em>
+                    </summary>
+                    <div className="agent-audit-body">
+                      <div className="agent-audit-tools">
+                        {scopeJobId && (
+                          <Link href={`/dashboard/jobs/${scopeJobId}`}>Scoped job</Link>
+                        )}
+                        {isReview && event.entityType === "job" && event.entityId && (
+                          <Link href={`/dashboard/jobs/${event.entityId}`}>Reviewed job</Link>
+                        )}
+                        {actor && <span>By {actor.fullName}</span>}
+                        {isReview && sourceType && <span>{sourceType}</span>}
+                        {isReview && acceptedFields.length > 0 && <span>Accepted {acceptedFields.length} field{acceptedFields.length === 1 ? "" : "s"}</span>}
+                        {isReview && changedJobFields.length > 0 && <span>{changedJobFields.length} job field{changedJobFields.length === 1 ? "" : "s"}</span>}
+                        {isReview && changedInquiryFields.length > 0 && <span>{changedInquiryFields.length} RFQ field{changedInquiryFields.length === 1 ? "" : "s"}</span>}
+                        {!isReview && pageCueCount > 0 && <span>{pageCueCount} page cue{pageCueCount === 1 ? "" : "s"}</span>}
+                        {!isReview && tools.length === 0 ? (
+                          <span>No tools</span>
+                        ) : !isReview && tools.map((tool, index) => (
+                          <span key={`${event.id}-${index}`}>
+                            {typeof tool.name === "string" ? tool.name : "tool"}
+                            {tool.ok === false ? " failed" : ""}
+                          </span>
+                        ))}
+                      </div>
+                      {prompt && (
+                        <details className="agent-proposal-source">
+                          <summary>Prompt</summary>
+                          <pre>{prompt.slice(0, 1600)}</pre>
+                        </details>
+                      )}
+                      {sourcePreview && (
+                        <details className="agent-proposal-source">
+                          <summary>Source preview</summary>
+                          <pre>{sourcePreview.slice(0, 1200)}</pre>
+                        </details>
+                      )}
+                      {reviewedFieldChanges.length > 0 && (
+                        <div className="agent-review-field-ledger" aria-label="Reviewed agent field changes">
+                          <div className="agent-review-field-ledger-head">
+                            <span>Scope</span>
+                            <span>Field</span>
+                            <span>Before</span>
+                            <span>After</span>
+                          </div>
+                          {reviewedFieldChanges.slice(0, 10).map((row, index) => {
+                            const scope = typeof row.scope === "string" ? row.scope : "job";
+                            const field = typeof row.field === "string" ? row.field : "field";
+                            const label = typeof row.label === "string" ? row.label : reviewedFieldTokenLabel(`${scope}:${field}`);
+                            return (
+                              <div key={`${event.id}-${scope}-${field}-${index}`} className="agent-review-field-row">
+                                <span>{scope === "rfq" ? "RFQ" : "Job"}</span>
+                                <strong>{label}</strong>
+                                <em>{auditValue(row.before)}</em>
+                                <em>{auditValue(row.after)}</em>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {!isReview && tools.length > 0 && (
+                        <div className="agent-audit-tool-ledger" aria-label="Agent tool calls">
+                          {tools.slice(0, 8).map((tool, index) => {
+                            const name = typeof tool.name === "string" ? tool.name : "tool";
+                            const ok = tool.ok !== false;
+                            const toolError = typeof tool.error === "string" ? tool.error : "";
+                            const pageCues = asRecordList(tool.pageCues);
+                            return (
+                              <details key={`${event.id}-tool-${index}`} className={`agent-audit-tool-row ${ok ? "ok" : "failed"}`}>
+                                <summary>
+                                  <strong>{name}</strong>
+                                  <span>{ok ? "ok" : "failed"}</span>
+                                  {pageCues.length > 0 && <em>{pageCues.length} page cue{pageCues.length === 1 ? "" : "s"}</em>}
+                                </summary>
+                                <pre>{auditInputPreview(tool.input)}</pre>
+                                {toolError && <p className="agent-audit-error">{toolError.slice(0, 700)}</p>}
+                              </details>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {Object.keys(decisionImpact).length > 0 && (
+                        <details className="agent-proposal-source">
+                          <summary>Decision impact</summary>
+                          <pre>{auditInputPreview(decisionImpact)}</pre>
+                        </details>
+                      )}
+                      {note && <p>{note}</p>}
+                      {reply && <p>{reply.slice(0, 1200)}</p>}
+                      {error && <p className="agent-audit-error">{error.slice(0, 700)}</p>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SYSTEM JOBS TAB ──────────────────────────────────────── */}
+      {tab === "jobs" && canSeeAgentAudit && (
+        <div className="card agent-audit-card">
+          <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="section-title">Background job queue</div>
+            <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+              Durable queue for AI/document/email work. Failed jobs here are not harmless; they mean production work stopped somewhere.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+              <Badge tone={failedJobs > 0 ? "danger" : "neutral"}>{failedJobs} failed</Badge>
+              <Badge tone={staleRunningBackgroundJobs > 0 ? "danger" : "neutral"}>{staleRunningBackgroundJobs} stale</Badge>
+              <Badge tone={runningJobs > 0 ? "info" : "neutral"}>{runningJobs} running</Badge>
+              <Badge tone={queuedJobs > 20 ? "warn" : "neutral"}>{queuedJobs} queued</Badge>
+            </div>
+          </div>
+          {backgroundJobs.length === 0 ? (
+            <div className="card-body" style={{ color: "var(--text-3)", fontSize: 13 }}>
+              No recent background jobs.
+            </div>
+          ) : (
+            <div className="agent-audit-list">
+              {backgroundJobs.map((job) => {
+                const payload = asRecord(job.payload);
+                const staleRunning = job.status === "RUNNING"
+                  && job.lockedAt != null
+                  && job.lockedAt < staleBackgroundJobCutoff;
+                const target =
+                  typeof payload.jobId === "string" ? `Job ${payload.jobId.slice(0, 8)}`
+                  : typeof payload.documentId === "string" ? `Document ${payload.documentId.slice(0, 8)}`
+                  : typeof payload.inquiryId === "string" ? `RFQ ${payload.inquiryId.slice(0, 8)}`
+                  : job.dedupeKey ?? job.id.slice(0, 8);
+                return (
+                  <details key={job.id} className="agent-audit-item">
+                    <summary>
+                      <span className={`agent-audit-status ${staleRunning ? "failed" : job.status.toLowerCase()}`}>
+                        {staleRunning ? "STALE" : job.status}
+                      </span>
+                      <strong>{job.type} · {target}</strong>
+                      <em>{fmtDateTime(job.createdAt)}</em>
+                    </summary>
+                    <div className="agent-audit-body">
+                      <div className="agent-audit-tools">
+                        <span>Attempts {job.attempts}/{job.maxAttempts}</span>
+                        <span>Run after {fmtDateTime(job.runAfter)}</span>
+                        {job.lockedAt && <span>Locked {fmtDateTime(job.lockedAt)}</span>}
+                        {job.dedupeKey && <span>{job.dedupeKey.slice(0, 80)}</span>}
+                      </div>
+                      {job.lastError && <p className="agent-audit-error">{job.lastError.slice(0, 900)}</p>}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {job.status === "FAILED" && (
+                          <form action={retryBackgroundJobAction}>
+                            <input type="hidden" name="id" value={job.id} />
+                            <button type="submit" className="btn-sm">Retry</button>
+                          </form>
+                        )}
+                        {job.status === "QUEUED" && job.runAfter > new Date() && (
+                          <form action={runBackgroundJobNowAction}>
+                            <input type="hidden" name="id" value={job.id} />
+                            <button type="submit" className="secondary btn-sm">Run now</button>
+                          </form>
+                        )}
+                        {staleRunning && (
+                          <form action={releaseBackgroundJobLockAction}>
+                            <input type="hidden" name="id" value={job.id} />
+                            <button type="submit" className="secondary btn-sm">Release lock</button>
+                          </form>
+                        )}
+                      </div>
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── SETTINGS TAB ──────────────────────────────────────────── */}
       {tab === "settings" && isAdmin && (
         <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 20, alignItems: "flex-start" }}>
@@ -500,5 +1119,45 @@ function ReassignForm({ users, action, companyOwners }: {
       </div>
       <button type="submit">Reassign all accounts</button>
     </form>
+  );
+}
+
+function BrainScenarioResult({ result }: { result: PricingScenarioResult }) {
+  const scenarioTone = result.verdict.can_quote_customer ? "ready" : result.verdict.approval_required ? "review" : "blocked";
+  return (
+    <div className={`admin-brain-scenario-output ${scenarioTone}`}>
+      <div className="admin-brain-scenario-verdict">
+        <div>
+          <span>Gate</span>
+          <strong>{result.verdict.quote_gate}</strong>
+          <em>{result.verdict.operator_action}</em>
+        </div>
+        <div>
+          <span>Guardrail</span>
+          <strong>{result.verdict.guardrail.toLowerCase().replace("_", " ")}</strong>
+          <em>{result.verdict.target_posture}</em>
+        </div>
+      </div>
+      <div className="admin-brain-price-grid">
+        <span>Buy cost <strong>{result.economics.buy_cost ?? "—"}</strong></span>
+        <span>Floor <strong>{result.economics.floor_price ?? "—"}</strong></span>
+        <span>Recommended <strong>{result.economics.recommended_price ?? "—"}</strong></span>
+        <span>Stretch <strong>{result.economics.stretch_price ?? "—"}</strong></span>
+        <span>Target margin <strong>{pct(result.economics.margin_at_target_pct)}</strong></span>
+        <span>Target buy limit <strong>{result.economics.target_buy_limit_label ?? "—"}</strong></span>
+      </div>
+      <div className="admin-brain-scenario-change">
+        <span>{result.changed_decision.from.quote_gate}</span>
+        <strong>→</strong>
+        <span>{result.changed_decision.to.quote_gate}</span>
+      </div>
+      <div className="admin-brain-scenario-deltas">
+        <span>Recommended {signed(result.deltas.recommended_price)}</span>
+        <span>Floor {signed(result.deltas.floor_price)}</span>
+        <span>Win {signed(result.deltas.win_probability, "%")}</span>
+        <span>Margin {signed(result.deltas.expected_margin_pct, "%")}</span>
+      </div>
+      <p>{result.safety}</p>
+    </div>
   );
 }

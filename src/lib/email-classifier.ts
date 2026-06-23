@@ -23,11 +23,20 @@ export type ParsedRFQ = {
   origin?: string | null;
   destination?: string | null;
   mode?: string | null;
+  containerCount?: number | null;
   containerType?: string | null;
+  stackable?: string | null;
+  topLoad?: string | null;
+  dangerousGoods?: string | null;
+  customsBy?: string | null;
   incoterms?: string | null;
   commodity?: string | null;
   weight?: number | null;
   volume?: number | null;
+  targetPrice?: number | null;
+  targetCurrency?: string | null;
+  targetPriceStatus?: string | null;
+  targetPriceSource?: string | null;
   cargoReadyDate?: string | null;
 };
 
@@ -117,7 +126,7 @@ Kinds:
 
 Hints:
 - The sender's email domain is "${senderDomain}". Known customer-contact domains in this office: ${customerEmailDomains.size > 0 ? [...customerEmailDomains].join(", ") : "(none)"}.
-- For RFQ, parsed fields: origin, destination, mode (SEA-FCL|SEA-LCL|AIR|ROAD|COURIER), containerType (20GP|40GP|40HC|LCL), incoterms, commodity, weight (kg number), volume (cbm number), cargoReadyDate (ISO).
+- For RFQ, parsed fields: origin, destination, mode (SEA-FCL|SEA-LCL|AIR|ROAD|COURIER), containerCount, containerType (20GP|40GP|40HC|LCL), stackable (YES|NO|UNKNOWN), topLoad (YES|NO|UNKNOWN), dangerousGoods (YES|NO|UNKNOWN), customsBy (US|CUSTOMER|FORWARDER|UNKNOWN), incoterms, commodity, weight (kg number), volume (cbm number), targetPrice, targetCurrency, targetPriceStatus (PROVIDED|NO_TARGET|UNKNOWN), targetPriceSource, cargoReadyDate (ISO).
 - For CARRIER_REPLY, rate fields: carrier, total20, total40, total40HC, transitDays, service, validity.
 - Always include a non-empty "reason".
 

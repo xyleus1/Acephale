@@ -17,11 +17,11 @@ export function PopulateJobButton({ jobId }: { jobId: string }) {
       if ("error" in r) {
         setMsg(r.error);
         setTimeout(() => setMsg(null), 6000);
-      } else if (r.filled.length === 0) {
-        setMsg("All fields already filled");
+      } else if (r.proposed.length === 0) {
+        setMsg("No useful proposal");
         setTimeout(() => setMsg(null), 4000);
       } else {
-        setMsg(`Filled ${r.filled.length} field${r.filled.length === 1 ? "" : "s"}`);
+        setMsg(`Proposed ${r.proposed.length} field${r.proposed.length === 1 ? "" : "s"}`);
         router.refresh();
         setTimeout(() => setMsg(null), 5000);
       }
@@ -37,10 +37,10 @@ export function PopulateJobButton({ jobId }: { jobId: string }) {
         disabled={busy}
         className="btn btn-secondary btn-sm"
         style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-        title="Use AI to extract origin, destination, mode, weight, etc from the linked emails"
+        title="Use AI to extract a reviewed field proposal from linked emails"
       >
         <Icon name="sparkles" size={11} />
-        {busy ? "Extracting…" : "AI populate from emails"}
+        {busy ? "Extracting…" : "Propose from emails"}
       </button>
     </div>
   );

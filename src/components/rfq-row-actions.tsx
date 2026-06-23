@@ -49,18 +49,14 @@ export function RfqRowActions({ inquiryId, jobLinked, activeJobs }: {
     : activeJobs.slice(0, 30);
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", display: "inline-flex", gap: 4, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+    <div ref={wrapRef} className="inbox-action-popover-wrap" onClick={(e) => e.stopPropagation()}>
       {!jobLinked && (
         <button
           type="button"
           onClick={doConfirm}
           disabled={busy}
           title="Confirm this RFQ as a real Inquiry-stage job"
-          style={{
-            fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4,
-            background: "var(--brand)", color: "#fff", border: "none", cursor: "pointer",
-            display: "inline-flex", alignItems: "center", gap: 4,
-          }}
+          className="inbox-action-btn primary"
         >
           <Icon name="check" size={11} strokeWidth={2.5} />
           {busy ? "…" : "Confirm"}
@@ -71,53 +67,34 @@ export function RfqRowActions({ inquiryId, jobLinked, activeJobs }: {
         onClick={() => setOpen((o) => !o)}
         disabled={busy}
         title="Merge this RFQ into an existing active job"
-        style={{
-          fontSize: 11, padding: "4px 8px", borderRadius: 4,
-          background: "transparent", color: "var(--text-2)",
-          border: "1px solid var(--border)", cursor: "pointer",
-          display: "inline-flex", alignItems: "center", gap: 4,
-        }}
+        className="inbox-action-btn"
       >
         <Icon name="layers" size={11} /> Merge into…
       </button>
       {open && (
-        <div style={{
-          position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50,
-          width: 340, maxHeight: 360, overflow: "hidden", display: "flex", flexDirection: "column",
-          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6,
-          boxShadow: "0 6px 24px rgba(0,0,0,0.15)",
-        }}>
-          <div style={{ padding: 10, borderBottom: "1px solid var(--border)" }}>
+        <div className="inbox-popover merge">
+          <div className="inbox-popover-search">
             <input
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search jobs by ref, customer…"
-              style={{
-                width: "100%", padding: "6px 10px",
-                border: "1px solid var(--border)", borderRadius: 4,
-                fontSize: 12, outline: "none", background: "var(--surface-2)",
-              }}
+              className="inbox-popover-input"
             />
           </div>
-          <div style={{ overflowY: "auto", flex: 1 }}>
+          <div className="inbox-popover-list">
             {filtered.length === 0 ? (
-              <div style={{ padding: 16, fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
+              <div className="inbox-popover-empty">
                 No active jobs match.
               </div>
             ) : filtered.map((j) => (
               <button
                 key={j.id}
                 onClick={() => pickMerge(j.id)}
-                style={{
-                  display: "block", width: "100%", textAlign: "left",
-                  padding: "8px 12px", background: "transparent", border: "none",
-                  fontSize: 12, color: "var(--text)", cursor: "pointer",
-                  borderTop: "1px solid var(--border)",
-                }}
+                className="inbox-popover-option"
               >
-                <div style={{ fontWeight: 600 }}>{j.reference}{j.customer ? ` · ${j.customer}` : ""}</div>
-                <div style={{ fontSize: 10.5, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>
+                <div className="inbox-popover-option-title">{j.reference}{j.customer ? ` · ${j.customer}` : ""}</div>
+                <div className="inbox-popover-option-meta">
                   {j.type === "SOURCING" ? "Procurement" : "Forwarding"}
                 </div>
               </button>

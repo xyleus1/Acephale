@@ -12,7 +12,7 @@ export function SeedDemoButton() {
   const [tone, setTone] = useState<"info" | "ok" | "err">("info");
 
   function go() {
-    if (!confirm("Run demo setup in this office?\n\nThis will:\n· Consolidate every soybean / SOURCING thread into one real load: Soybean meal — 300 MT to Ashgabat\n· Create a separate DEMO · Black Sea Trading Co job with example PDFs\n\nIdempotent — safe to re-run.")) return;
+    if (!confirm("Set up sample operating data in this office?\n\nThis will consolidate sourcing threads into one load and create a reference job with documents.\n\nIdempotent - safe to re-run.")) return;
     start(async () => {
       setTone("info");
       setMsg("Setting up…");
@@ -25,9 +25,9 @@ export function SeedDemoButton() {
           lines.push(`Soybean error: ${r.soybean.error}`);
         }
         if (r.steelDemo.ok) {
-          lines.push(`Demo → ${r.steelDemo.jobRef} ${r.steelDemo.created ? "(new)" : "(existing)"}`);
+          lines.push(`Reference job: ${r.steelDemo.jobRef} ${r.steelDemo.created ? "(new)" : "(existing)"}`);
         } else {
-          lines.push(`Demo error: ${r.steelDemo.error}`);
+          lines.push(`Reference job error: ${r.steelDemo.error}`);
         }
         const allOk = r.soybean.ok && r.steelDemo.ok;
         setTone(allOk ? "ok" : "err");
@@ -48,7 +48,7 @@ export function SeedDemoButton() {
   const color = tone === "err" ? "var(--danger)" : tone === "ok" ? "var(--brand)" : "var(--text-3)";
 
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+    <div className="seed-demo-button" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
       {msg && (
         <span style={{
           fontSize: 11.5, color, maxWidth: 480,
@@ -65,7 +65,7 @@ export function SeedDemoButton() {
         style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
       >
         <Icon name="sparkles" size={11} />
-        {busy ? "Running…" : "Run demo setup"}
+        {busy ? "Running..." : "Setup data"}
       </button>
     </div>
   );

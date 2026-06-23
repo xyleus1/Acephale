@@ -117,15 +117,15 @@ Set hasNoOffer=true ONLY when the thread genuinely has no price discussion (intr
         if (!m) return;
         let parsed: Partial<SupplierOffer> & { hasNoOffer?: boolean };
         try { parsed = JSON.parse(m[0]); } catch { return; }
-        await thread_persist(thread.id, parsed);
+        await thread_persist(thread.id, session.officeId, parsed);
         extracted++;
       } catch { /* one bad thread shouldn't fail the batch */ }
     }));
   }
 
   // Invalidate the inquiry's cached summary so the next read recomputes.
-  await prisma.inquiry.update({
-    where: { id: inquiryId },
+  await prisma.inquiry.updateMany({
+    where: { id: inquiryId, officeId: session.officeId },
     data: { summaryCache: null, summaryCacheAt: null },
   }).catch(() => {});
 
@@ -133,13 +133,12 @@ Set hasNoOffer=true ONLY when the thread genuinely has no price discussion (intr
   return { ok: true, threads: candidates.length, extracted };
 }
 
-async function thread_persist(threadId: string, parsed: Partial<SupplierOffer> & { hasNoOffer?: boolean }) {
-  await prisma.emailThread.update({
-    where: { id: threadId },
+async function thread_persist(threadId: string, officeId: string, parsed: Partial<SupplierOffer> & { hasNoOffer?: boolean }) {
+  await prisma.emailThread.updateMany({
+    where: { id: threadId, officeId },
     data: {
       supplierOffer: JSON.stringify(parsed),
       supplierOfferAt: new Date(),
     },
   });
 }
-

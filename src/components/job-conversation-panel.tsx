@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { chatWithAgent, type ChatMsg } from "@/lib/agent-chat";
+import { chatWithAgent, type AgentToolTrace, type ChatMsg } from "@/lib/agent-chat";
+import { AGENT_PAGE_CUE_EVENT, type AgentPageCueDetail } from "@/lib/agent-page-presence";
+import { cuesForToolTrace, inferPageCues, type AgentPageCue } from "@/lib/agent-page-cues";
+import { AgentPagePresenceLayer } from "@/components/agent-page-presence";
+import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
 import { Icon } from "@/components/icon";
 
 export type FeedItem = {
@@ -26,7 +30,74 @@ function relTime(iso: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-type ChatItem = ChatMsg & { id: string; at: string };
+type ChatItem = ChatMsg & {
+  id: string;
+  at: string;
+  toolTrace?: AgentToolTrace[];
+};
+type AgentPageAction = {
+  id: number;
+  cues: AgentPageCue[];
+};
+
+const AGENT_TOOLS = [
+  {
+    label: "Brain",
+    detail: "Contract + proof",
+    icon: "shield",
+    prompt: "Inspect the commercial brain for this job. Start with the decision contract, weakest proof gap, next safe move, and stop condition.",
+    cues: [
+      { target: "decision-contract", label: "Reading brain contract", detail: "Checking the allowed move, forbidden move, and stop condition before answering." },
+      { target: "decision-dossier", label: "Reading decision dossier", detail: "Combining quote gate, proof gaps, route, risk, target, and agent boundaries." },
+      { target: "decision-quality", label: "Checking decision quality", detail: "Finding the fragile input that could change the recommendation." },
+    ],
+  },
+  {
+    label: "Qualify",
+    detail: "Missing RFQ facts",
+    icon: "list",
+    prompt: "Run a readiness audit for this job and list what is missing before this RFQ can go to forwarders.",
+    cues: [
+      { target: "source-rfq", label: "Reading source RFQ", detail: "Checking origin, destination, cargo, dates, and missing customer facts." },
+      { target: "job-summary", label: "Checking job summary", detail: "Comparing parsed RFQ fields against the current job record." },
+      { target: "email", label: "Preparing follow-up", detail: "Looking at the email composer and thread history for the next customer ask." },
+    ],
+  },
+  {
+    label: "Price",
+    detail: "Target + margin",
+    icon: "check",
+    prompt: "Check target price, received pricing, margin, and the next pricing action for this job.",
+    cues: [
+      { target: "job-summary", label: "Checking target and margin", detail: "Reading target price, cost, margin, and next milestone." },
+      { target: "carrier-rates", label: "Ranking forwarder rates", detail: "Looking for received rates, pending quotes, and the current best option." },
+      { target: "customer-quote", label: "Checking customer quote", detail: "Comparing the customer-facing quote against cost and target." },
+      { target: "financials", label: "Reviewing financials", detail: "Verifying the job-level revenue, cost, and margin snapshot." },
+    ],
+  },
+  {
+    label: "Replies",
+    detail: "Stale threads",
+    icon: "mail-out",
+    prompt: "Find stale customer or forwarder follow-ups on this load.",
+    cues: [
+      { target: "email", label: "Scanning threads", detail: "Checking the latest customer and forwarder messages for stale replies." },
+      { target: "stage-workbench", label: "Checking current stage", detail: "Matching thread status against the workbench stage." },
+      { target: "timeline", label: "Checking timing", detail: "Using milestone dates to decide what needs chasing." },
+    ],
+  },
+  {
+    label: "Customer",
+    detail: "Draft reply",
+    icon: "mail",
+    prompt: "Draft a concise customer reply for this job based on the current RFQ/pricing status.",
+    cues: [
+      { target: "email", label: "Opening reply context", detail: "Using templates and thread history to draft a customer-safe response." },
+      { target: "job-summary", label: "Checking customer-facing facts", detail: "Pulling status, route, target, and next milestone into the draft." },
+      { target: "customer-quote", label: "Checking quote lines", detail: "Making sure pricing language matches the quote builder." },
+    ],
+  },
+] as const;
 
 export function JobConversationPanel({
   scopeJobId,
@@ -43,8 +114,11 @@ export function JobConversationPanel({
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [pageAction, setPageAction] = useState<AgentPageAction | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const externalCueTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -52,11 +126,42 @@ export function JobConversationPanel({
     }
   }, [chat, busy]);
 
-  async function send(textOverride?: string) {
+  useEffect(() => {
+    function onExternalCues(event: Event) {
+      const detail = (event as CustomEvent<{ cues?: AgentPageCueDetail[] }>).detail;
+      const cues = detail?.cues?.filter((cue) => cue.target && cue.label && cue.detail) ?? [];
+      if (cues.length === 0) return;
+
+      if (externalCueTimerRef.current) {
+        window.clearTimeout(externalCueTimerRef.current);
+      }
+      setPageAction({
+        id: Date.now(),
+        cues,
+      });
+      const clearDelayMs = Math.min(7600, cues.length * 1450 + 900);
+      externalCueTimerRef.current = window.setTimeout(() => {
+        setPageAction(null);
+        externalCueTimerRef.current = null;
+      }, clearDelayMs);
+    }
+
+    window.addEventListener(AGENT_PAGE_CUE_EVENT, onExternalCues);
+    return () => {
+      window.removeEventListener(AGENT_PAGE_CUE_EVENT, onExternalCues);
+      if (externalCueTimerRef.current) window.clearTimeout(externalCueTimerRef.current);
+    };
+  }, []);
+
+  async function send(textOverride?: string, cueOverride?: readonly AgentPageCue[]) {
     const text = (textOverride ?? input).trim();
     if (!text || busy) return;
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
+    setPageAction({
+      id: Date.now(),
+      cues: [...(cueOverride ?? inferPageCues(text, "job"))],
+    });
 
     const history: ChatMsg[] = chat.map(({ role, content }) => ({ role, content }));
     const userItem: ChatItem = {
@@ -67,6 +172,7 @@ export function JobConversationPanel({
     };
     setChat((c) => [...c, userItem]);
     setBusy(true);
+    let clearDelayMs = 900;
     try {
       const res = await chatWithAgent(history, text, scopeJobId);
       const assistantItem: ChatItem = {
@@ -74,9 +180,18 @@ export function JobConversationPanel({
         role: "assistant",
         content: res.reply,
         at: new Date().toISOString(),
+        toolTrace: res.toolTrace,
       };
       setChat((c) => [...c, assistantItem]);
-      if (res.ingestedInquiryId) router.refresh();
+      const actualCues = cuesForToolTrace(res.toolTrace, "job-brief");
+      if (actualCues.length > 0) {
+        clearDelayMs = Math.min(7600, actualCues.length * 1450 + 900);
+        setPageAction({
+          id: Date.now() + 1,
+          cues: [...actualCues],
+        });
+      }
+      if (res.ingestedInquiryId || res.refresh) router.refresh();
     } catch (err) {
       setChat((c) => [...c, {
         id: `err-${Date.now()}`,
@@ -86,6 +201,7 @@ export function JobConversationPanel({
       }]);
     } finally {
       setBusy(false);
+      window.setTimeout(() => setPageAction(null), clearDelayMs);
     }
   }
 
@@ -110,24 +226,77 @@ export function JobConversationPanel({
     ...chat.map((c) => ({ ...c, kind: "chat" as const })),
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
+  if (collapsed) {
+    return (
+      <>
+        <AgentPagePresenceLayer action={pageAction} />
+        <div className="conversation-panel collapsed" aria-label="Collapsed desk assistant">
+          <button
+            type="button"
+            className="conversation-rail-button"
+            onClick={() => setCollapsed(false)}
+            title="Show desk assistant"
+            aria-label="Show desk assistant"
+          >
+            <span className="agent-avatar">A</span>
+            <span className="conversation-rail-copy">
+              <strong>Show desk</strong>
+              <small>{scopeJobReference}</small>
+            </span>
+            <Icon name="chevron-left" size={14} strokeWidth={2.25} />
+          </button>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="conversation-panel">
+      <AgentPagePresenceLayer action={pageAction} />
       <header className="conversation-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="conversation-title-lockup">
           <span className="agent-avatar">A</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Agent</div>
-            <div style={{ fontSize: 10.5, color: "var(--text-3)" }}>
-              Focused on {scopeJobReference}
+            <div className="conversation-title">Desk Assistant</div>
+            <div className="conversation-subtitle">
+              RFQ qualification, pricing, and replies for {scopeJobReference}
             </div>
           </div>
         </div>
-        <span className="live-dot" aria-hidden />
+        <button
+          type="button"
+          className="conversation-collapse"
+          onClick={() => setCollapsed(true)}
+          title="Hide desk assistant"
+          aria-label="Hide desk assistant"
+        >
+          <span>Hide agent</span>
+          <Icon name="chevron-right" size={14} strokeWidth={2.25} />
+        </button>
       </header>
+
+      <div className="conversation-tools" aria-label="Desk assistant tools">
+        {AGENT_TOOLS.map((tool) => (
+          <button
+            key={tool.label}
+            type="button"
+            onClick={() => send(tool.prompt, tool.cues)}
+            disabled={busy}
+            title={tool.prompt}
+            className="conversation-tool"
+          >
+            <Icon name={tool.icon} size={13} strokeWidth={2} />
+            <span>
+              <strong>{tool.label}</strong>
+              <small>{tool.detail}</small>
+            </span>
+          </button>
+        ))}
+      </div>
 
       <div ref={scrollRef} className="conversation-body">
         {merged.length === 0 ? (
-          <div style={{ padding: "20px 4px", fontSize: 13, color: "var(--text-3)" }}>
+          <div className="conversation-empty">
             No activity yet on this job.
           </div>
         ) : (
@@ -137,25 +306,28 @@ export function JobConversationPanel({
                 <span className={`conv-event-icon ${item.who === "auto" ? "auto" : "manual"}`}>
                   <Icon name={item.iconName} size={12} strokeWidth={2} />
                 </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>{item.title}</span>
+                <div className="conv-event-main">
+                  <div className="conv-event-head">
+                    <span className="conv-event-title">{item.title}</span>
                     {item.who === "auto" && (
                       <span className="auto-tag">AUTO</span>
                     )}
                   </div>
                   {item.sub && (
-                    <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 1, lineHeight: 1.4 }}>
+                    <div className="conv-event-sub">
                       {item.sub}
                     </div>
                   )}
                 </div>
-                <span style={{ fontSize: 11, color: "var(--text-3)", flexShrink: 0 }}>{relTime(item.at)}</span>
+                <span className="conv-event-time">{relTime(item.at)}</span>
               </div>
             ) : (
               <div key={item.id} className={`conv-chat conv-chat-${item.role}`}>
                 {item.role === "assistant" && <span className="agent-msg-avatar">A</span>}
-                <div className="conv-chat-body">{item.content}</div>
+                <div className="conv-chat-stack">
+                  <div className="conv-chat-body">{item.content}</div>
+                  {item.role === "assistant" && <AgentToolTraceList trace={item.toolTrace} variant="conversation" />}
+                </div>
               </div>
             )
           )
@@ -184,7 +356,7 @@ export function JobConversationPanel({
             value={input}
             onChange={onChange}
             onKeyDown={onKeyDown}
-            placeholder={`Ask about ${scopeJobReference} or paste an RFQ…`}
+            placeholder={`Paste mail, ask what's missing, or price ${scopeJobReference}...`}
             rows={1}
             disabled={busy}
           />
@@ -194,9 +366,7 @@ export function JobConversationPanel({
             className="agent-send-btn"
             aria-label="Send"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-            </svg>
+            <Icon name="arrow-right" size={14} strokeWidth={2.5} />
           </button>
         </div>
       </div>

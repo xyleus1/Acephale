@@ -21,11 +21,10 @@ export type BoardJob = {
 
 const STATUSES = [
   { key: "PROPOSED",   label: "Proposed"   },
-  { key: "INQUIRY",    label: "Inquiry"    },
-  { key: "QUOTED",     label: "Quoted"     },
-  { key: "BOOKED",     label: "Booked"     },
-  { key: "IN_TRANSIT", label: "In Transit" },
-  { key: "CUSTOMS",    label: "Customs"    },
+  { key: "INQUIRY",    label: "RFQ"        },
+  { key: "QUOTED",     label: "Pricing"    },
+  { key: "BOOKED",     label: "Booked / Waiting Cargo" },
+  { key: "IN_TRANSIT", label: "En Route"   },
   { key: "DELIVERED",  label: "Delivered"  },
 ] as const;
 
@@ -50,7 +49,8 @@ export function JobsBoard({
       // server caught up — override no longer needed (cleared lazily)
       return j.status;
     }
-    return o ?? j.status;
+    const status = o ?? j.status;
+    return status === "CUSTOMS" ? "IN_TRANSIT" : status;
   };
 
   function onDrop(statusKey: string) {
@@ -87,11 +87,10 @@ export function JobsBoard({
         return (
           <div
             key={status.key}
-            className="job-col"
+            className={`job-col${isOver ? " is-over" : ""}`}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setOverCol(status.key); }}
             onDragLeave={(e) => { if (e.currentTarget === e.target) setOverCol(null); }}
             onDrop={(e) => { e.preventDefault(); onDrop(status.key); }}
-            style={isOver ? { outline: "2px dashed var(--brand)", outlineOffset: -2, background: "var(--brand-light)" } : undefined}
           >
             <div className="job-col-header">
               <div className="job-col-title">{labels[status.key] ?? status.label}</div>
@@ -105,31 +104,24 @@ export function JobsBoard({
                   <a
                     key={job.id}
                     href={`/dashboard/jobs/${job.id}`}
-                    className={`job-card${focusedId === job.id ? " focus-match" : ""}`}
+                    className={[
+                      "job-card",
+                      focusedId === job.id ? "focus-match" : "",
+                      dragId === job.id ? "is-dragging" : "",
+                      statusOf(job) === "PROPOSED" ? "is-draft" : "",
+                    ].filter(Boolean).join(" ")}
                     draggable
                     onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragId(job.id); }}
                     onDragEnd={() => { setDragId(null); setOverCol(null); }}
-                    style={{
-                      cursor: "grab",
-                      ...(dragId === job.id ? { opacity: 0.4 } : {}),
-                      ...(statusOf(job) === "PROPOSED" ? { borderStyle: "dashed", borderColor: "var(--brand)", background: "var(--surface)" } : {}),
-                    }}
                   >
-                    <div className="job-card-ref" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {job.reference}
+                    <div className="job-card-ref-line">
+                      <span className="job-card-ref">{job.reference}</span>
                       {statusOf(job) === "PROPOSED" && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3,
-                          background: "var(--brand-light)", color: "var(--brand)",
-                          border: "1px solid var(--brand-border)",
-                          textTransform: "uppercase", letterSpacing: "0.06em",
-                        }}>DRAFT</span>
+                        <span className="job-draft-badge">Draft</span>
                       )}
                     </div>
                     {job.title && (
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {job.title}
-                      </div>
+                      <div className="job-card-title">{job.title}</div>
                     )}
                     <div className="job-card-company">{job.companyName ?? "—"}</div>
                     <div className="job-card-route">
@@ -138,17 +130,12 @@ export function JobsBoard({
                       ) : "Route TBD"}
                     </div>
                     {job.notes && (
-                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.notes}>
+                      <div className="job-card-note" title={job.notes}>
                         {job.notes}
                       </div>
                     )}
                     <div className="job-card-footer">
                       {job.mode && <span className="job-mode-chip">{job.mode}</span>}
-                      {job.eta && (
-                        <span className="job-eta">
-                          ETA {new Date(job.eta).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                        </span>
-                      )}
                     </div>
                     {statusOf(job) === "PROPOSED" && <JobConfirmActions jobId={job.id} />}
                   </a>

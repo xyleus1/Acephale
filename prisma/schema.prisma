@@ -76,25 +76,46 @@ model Office {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
-  companies Company[]
-  activities Activity[]
-  quotes Quote[]
-  shipments ShipmentRecord[]
-  documents CompanyDocument[]
-  laneRates LaneRate[]
-  marginProfiles MarginProfile[]
-  inquiries Inquiry[]
-  jobs         Job[]
-  jobDocuments JobDocument[]
-  emailAccounts EmailAccount[]
-  emailThreads  EmailThread[]
-  assignmentChanges AssignmentChange[]
-  events    Event[]
-  categories CategoryOption[]
-  tasks Task[]
-  riskAlerts RiskAlert[]
-  savedViews SavedView[]
+  users                User[]
+  companies            Company[]
+  activities           Activity[]
+  quotes               Quote[]
+  shipments            ShipmentRecord[]
+  documents            CompanyDocument[]
+  laneRates            LaneRate[]
+  marginProfiles       MarginProfile[]
+  inquiries            Inquiry[]
+  jobs                 Job[]
+  jobDocuments         JobDocument[]
+  emailAccounts        EmailAccount[]
+  emailThreads         EmailThread[]
+  assignmentChanges    AssignmentChange[]
+  events               Event[]
+  categories           CategoryOption[]
+  tasks                Task[]
+  riskAlerts           RiskAlert[]
+  savedViews           SavedView[]
+  targetPriceHistory   TargetPriceHistory[]
+  agentProposals       AgentProposal[]
+  forwarders           Forwarder[]
+  forwarderDrafts      ForwarderRequestDraft[]
+  strategyAssessments  StrategyAssessment[]
+  routeOptions         RouteOption[]
+  priceRecommendations PriceRecommendation[]
+  riskAssessments      RiskAssessment[]
+  strategyActions      StrategyAction[]
+  backgroundJobs       BackgroundJob[]
+  knowledgeSources     KnowledgeSource[]
+  knowledgeObjects     KnowledgeObject[]
+  knowledgeChunks      KnowledgeChunk[]
+  entityMentions       EntityMention[]
+  memoryEvents         MemoryEvent[]
+  agentMemories        AgentMemory[]
+  marketSignals        MarketSignal[]
+  marketSignalLinks    MarketSignalLink[]
+  marketImpactReviews  MarketImpactReview[]
+  marketSignalFeedback MarketSignalFeedback[]
+  marketIngestionRuns  MarketIngestionRun[]
 
   @@unique([name])
 }
@@ -110,8 +131,8 @@ model SavedView {
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 
-  @@index([officeId, userId, createdAt])
   @@unique([officeId, userId, name])
+  @@index([officeId, userId, createdAt])
 }
 
 model CategoryOption {
@@ -130,14 +151,14 @@ model CategoryOption {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  officeId     String
-  email        String
-  passwordHash String
-  fullName     String
-  role         UserRole @default(SALES)
-  isActive     Boolean  @default(true)
-  canViewWholeOffice Boolean @default(false)
+  id                 String   @id @default(cuid())
+  officeId           String
+  email              String
+  passwordHash       String
+  fullName           String
+  role               UserRole @default(SALES)
+  isActive           Boolean  @default(true)
+  canViewWholeOffice Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,7 +166,7 @@ model User {
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 
   ownedCompanies        CompanyOwner[]
-  activitiesCreated     Activity[]     @relation("ActivityCreatedBy")
+  activitiesCreated     Activity[]         @relation("ActivityCreatedBy")
   assignmentChangesMade AssignmentChange[] @relation("AssignmentChangedBy")
 
   @@unique([officeId, email])
@@ -153,34 +174,34 @@ model User {
 }
 
 model Company {
-  id        String         @id @default(cuid())
-  officeId  String
-  name      String
-  status    CustomerStatus @default(UNTOUCHED)
+  id       String         @id @default(cuid())
+  officeId String
+  name     String
+  status   CustomerStatus @default(UNTOUCHED)
 
   // Category values (one per category for MVP)
-  class1     String? // Passive / Potential / Active
-  class2     String? // A-E
-  product    String? // Sea / Air / Road / LTL / Project (MVP: single)
-  lane       String? // Region e.g., "Mediterranean", "America", "Europe"
-  direction  String? // Import / Export / Both
+  class1    String? // Passive / Potential / Active
+  class2    String? // A-E
+  product   String? // Sea / Air / Road / LTL / Project (MVP: single)
+  lane      String? // Region e.g., "Mediterranean", "America", "Europe"
+  direction String? // Import / Export / Both
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 
-  contacts   Contact[]
-  owners     CompanyOwner[]
-  activities Activity[]
-  quotes     Quote[]
-  shipments  ShipmentRecord[]
-  documents  CompanyDocument[]
+  contacts          Contact[]
+  owners            CompanyOwner[]
+  activities        Activity[]
+  quotes            Quote[]
+  shipments         ShipmentRecord[]
+  documents         CompanyDocument[]
   assignmentChanges AssignmentChange[]
-  tasks Task[]
-  riskAlerts RiskAlert[]
-  jobs       Job[]
-  inquiries  Inquiry[]
+  tasks             Task[]
+  riskAlerts        RiskAlert[]
+  jobs              Job[]
+  inquiries         Inquiry[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -191,13 +212,15 @@ model Company {
 }
 
 model Contact {
-  id        String  @id @default(cuid())
-  companyId String
-  fullName  String
-  title     String?
-  email     String?
-  phone     String?
-  notes     String?
+  id                 String    @id @default(cuid())
+  companyId          String
+  fullName           String
+  title              String?
+  email              String?
+  phone              String?
+  notes              String?
+  isApprovedForInbox Boolean   @default(false)
+  approvedForInboxAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -205,11 +228,12 @@ model Contact {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+  @@index([companyId, isApprovedForInbox])
 }
 
 // Multiple owners per company (requested)
 model CompanyOwner {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   companyId String
   userId    String
   isPrimary Boolean @default(false)
@@ -224,41 +248,41 @@ model CompanyOwner {
 }
 
 model Activity {
-  id        String       @id @default(cuid())
-  officeId  String
-  companyId String
-  type      ActivityType
-  occurredAt DateTime    @default(now())
+  id         String       @id @default(cuid())
+  officeId   String
+  companyId  String
+  type       ActivityType
+  occurredAt DateTime     @default(now())
 
-  subject   String?
-  body      String?
-  audioUrl  String?
+  subject  String?
+  body     String?
+  audioUrl String?
 
   createdByUserId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdBy User? @relation("ActivityCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  office    Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("ActivityCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([officeId, companyId, occurredAt])
   @@index([officeId, type, occurredAt])
 }
 
 model Quote {
-  id        String      @id @default(cuid())
-  officeId  String
-  companyId String
-  result    QuoteResult @default(PENDING)
-  origin    String?     // e.g. Istanbul, TR
-  destination String?   // e.g. Hamburg, DE
-  mode      String?     // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
-  value     Float?
-  currency  String?     // e.g. USD, EUR, TRY
-  notes     String?
-  lostReason String?    // Price / Competitor / No volume / Wrong lane / Other
-  quotedAt  DateTime    @default(now())
+  id          String      @id @default(cuid())
+  officeId    String
+  companyId   String
+  result      QuoteResult @default(PENDING)
+  origin      String? // e.g. Istanbul, TR
+  destination String? // e.g. Hamburg, DE
+  mode        String? // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
+  value       Float?
+  currency    String? // e.g. USD, EUR, TRY
+  notes       String?
+  lostReason  String? // Price / Competitor / No volume / Wrong lane / Other
+  quotedAt    DateTime    @default(now())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -272,31 +296,31 @@ model Quote {
 
 // Assignment changes log (audit trail)
 model AssignmentChange {
-  id        String   @id @default(cuid())
-  officeId  String
-  companyId String
+  id              String   @id @default(cuid())
+  officeId        String
+  companyId       String
   changedByUserId String?
-  createdAt DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   // JSON snapshot for MVP simplicity (who added/removed; primary changes, etc.)
   diff Json
 
-  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  changedBy User? @relation("AssignmentChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+  office    Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation("AssignmentChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
 
   @@index([officeId, companyId, createdAt])
 }
 
 // Generic event table for future risk signals / phase2 integrations
 model Event {
-  id        String   @id @default(cuid())
-  officeId  String
-  type      String
+  id         String   @id @default(cuid())
+  officeId   String
+  type       String
   entityType String?
-  entityId  String?
-  payload   Json
-  createdAt DateTime @default(now())
+  entityId   String?
+  payload    Json
+  createdAt  DateTime @default(now())
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 
@@ -304,20 +328,369 @@ model Event {
   @@index([officeId, entityType, entityId])
 }
 
-model Task {
-  id        String     @id @default(cuid())
-  officeId  String
-  companyId String
-  title     String
-  details   String?
-  dueAt     DateTime?
-  status    TaskStatus @default(OPEN)
-  assignedToUserId String?
-  createdByUserId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model BackgroundJob {
+  id          String    @id @default(cuid())
+  officeId    String
+  type        String
+  status      String    @default("QUEUED") // QUEUED / RUNNING / DONE / FAILED
+  payload     Json
+  dedupeKey   String?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  runAfter    DateTime  @default(now())
+  lockedAt    DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  failedAt    DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, status, runAfter])
+  @@index([officeId, type, status])
+  @@index([dedupeKey, status])
+}
+
+// Canonical company-brain source registry. This is intentionally generic:
+// Gmail, WhatsApp, Sheets, CRM rows, documents, strategy snapshots, and agent
+// outputs can all become memory without rewriting the current product flows.
+model KnowledgeSource {
+  id          String   @id @default(cuid())
+  officeId    String
+  type        String
+  label       String?
+  externalId  String?
+  status      String   @default("ACTIVE")
+  trustLevel  String   @default("INTERNAL")
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  office        Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  objects       KnowledgeObject[]
+  events        MemoryEvent[]
+  agentMemories AgentMemory[]
+
+  @@unique([officeId, type, externalId])
+  @@index([officeId, type, status])
+}
+
+model KnowledgeObject {
+  id                   String   @id @default(cuid())
+  officeId             String
+  sourceId             String?
+  sourceType           String
+  sourceExternalId     String
+  canonicalType        String
+  title                String?
+  contentHash          String?
+  rawRef               String?
+  visibility           String   @default("INTERNAL")
+  retentionPolicy      String   @default("DEFAULT")
+  entityType           String?
+  entityId             String?
+  companyId            String?
+  contactId            String?
+  inquiryId            String?
+  jobId                String?
+  emailThreadId        String?
+  emailMessageId       String?
+  jobDocumentId        String?
+  strategyAssessmentId String?
+  agentProposalId      String?
+  occurredAt           DateTime
+  ingestedAt           DateTime @default(now())
+  payloadVersion       Int      @default(1)
+  payload              Json
+  provenance           Json
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  office        Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  source        KnowledgeSource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  chunks        KnowledgeChunk[]
+  mentions      EntityMention[]
+  events        MemoryEvent[]
+  agentMemories AgentMemory[]
+  marketSignals MarketSignal[]
+
+  @@unique([officeId, sourceType, sourceExternalId])
+  @@index([officeId, canonicalType, occurredAt])
+  @@index([officeId, entityType, entityId])
+  @@index([officeId, companyId, occurredAt])
+  @@index([officeId, jobId, occurredAt])
+  @@index([officeId, inquiryId, occurredAt])
+  @@index([officeId, emailThreadId])
+}
+
+model KnowledgeChunk {
+  id             String   @id @default(cuid())
+  officeId       String
+  objectId       String
+  ordinal        Int      @default(0)
+  kind           String   @default("TEXT")
+  text           String
+  tokenCount     Int?
+  sourceSpan     Json?
+  metadata       Json?
+  payloadVersion Int      @default(1)
+  provenance     Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  office   Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  object   KnowledgeObject   @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  mentions EntityMention[]
+
+  @@unique([objectId, ordinal])
+  @@index([officeId, objectId])
+}
+
+model EntityMention {
+  id             String   @id @default(cuid())
+  officeId       String
+  objectId       String?
+  chunkId        String?
+  entityType     String
+  entityId       String
+  label          String?
+  confidence     Float?
+  source         String   @default("SYSTEM")
+  metadata       Json?
+  payloadVersion Int      @default(1)
+  provenance     Json
+  createdAt      DateTime @default(now())
+
+  office Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  object KnowledgeObject? @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  chunk  KnowledgeChunk?  @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, entityType, entityId])
+  @@index([officeId, objectId])
+  @@index([officeId, chunkId])
+}
+
+model MemoryEvent {
+  id               String   @id @default(cuid())
+  officeId         String
+  sourceId         String?
+  objectId         String?
+  sourceType       String
+  sourceExternalId String?
+  eventType        String
+  entityType       String
+  entityId         String
+  actorType        String?
+  actorId          String?
+  occurredAt       DateTime
+  ingestedAt       DateTime @default(now())
+  idempotencyKey   String?
+  payloadVersion   Int      @default(1)
+  payload          Json
+  provenance       Json
+  createdAt        DateTime @default(now())
+
+  office        Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  source        KnowledgeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  object        KnowledgeObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
+  agentMemories AgentMemory[]
+
+  @@unique([officeId, idempotencyKey])
+  @@index([officeId, eventType, occurredAt])
+  @@index([officeId, entityType, entityId, occurredAt])
+  @@index([officeId, sourceType, sourceExternalId])
+}
+
+model AgentMemory {
+  id             String    @id @default(cuid())
+  officeId       String
+  sourceId       String?
+  objectId       String?
+  eventId        String?
+  agentName      String
+  memoryType     String
+  subjectType    String?
+  subjectId      String?
+  companyId      String?
+  jobId          String?
+  inquiryId      String?
+  content        String
+  status         String    @default("ACTIVE")
+  confidence     Float?
+  payloadVersion Int       @default(1)
+  payload        Json?
+  provenance     Json
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  office Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  source KnowledgeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  object KnowledgeObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
+  event  MemoryEvent?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, agentName, status])
+  @@index([officeId, memoryType, status])
+  @@index([officeId, subjectType, subjectId])
+  @@index([officeId, companyId])
+  @@index([officeId, jobId])
+  @@index([officeId, inquiryId])
+}
+
+model MarketSignal {
+  id                   String   @id @default(cuid())
+  officeId             String
+  sourceObjectId       String?
+  category             String
+  severity             String
+  confidence           Float
+  affectedModes        Json
+  affectedOrigins      Json
+  affectedDestinations Json
+  affectedPorts        Json
+  affectedLanes        Json
+  affectedCarriers     Json
+  effectiveFrom        DateTime?
+  effectiveTo          DateTime?
+  summary              String
+  operatorImplication  String?
+  pricingImplication   String?
+  customerImpact       String?
+  recommendedActions   Json
+  sourceRefs           Json
+  dedupeKey            String
+  payloadVersion       Int      @default(1)
+  provenance           Json
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  office       Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  sourceObject KnowledgeObject?    @relation(fields: [sourceObjectId], references: [id], onDelete: SetNull)
+  links        MarketSignalLink[]
+  impactReviews MarketImpactReview[]
+  feedback     MarketSignalFeedback[]
+
+  @@unique([officeId, dedupeKey])
+  @@index([officeId, category, severity, createdAt])
+  @@index([officeId, effectiveFrom, effectiveTo])
+  @@index([officeId, sourceObjectId])
+}
+
+model MarketSignalLink {
+  id         String   @id @default(cuid())
+  officeId   String
+  signalId   String
+  entityType String
+  entityId   String
+  matchType  String
+  confidence Float
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  office Office       @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  signal MarketSignal @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  impactReviews MarketImpactReview[]
+
+  @@unique([signalId, entityType, entityId])
+  @@index([officeId, entityType, entityId])
+  @@index([officeId, signalId])
+}
+
+model MarketImpactReview {
+  id                 String   @id @default(cuid())
+  officeId           String
+  marketSignalId     String
+  marketSignalLinkId String?
+  linkedEntityType   String
+  linkedEntityId     String
+  impactLevel        String
+  impactReason       String
+  recommendedAction  String?
+  status             String   @default("pending")
+  feedbackKind       String?
+  feedbackNote       String?
+  reviewedByUserId   String?
+  reviewedAt         DateTime?
+  actionedAt         DateTime?
+  sourceRefs         Json
+  payloadVersion     Int      @default(1)
+  provenance         Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  office           Office              @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  marketSignal     MarketSignal        @relation(fields: [marketSignalId], references: [id], onDelete: Cascade)
+  marketSignalLink MarketSignalLink?   @relation(fields: [marketSignalLinkId], references: [id], onDelete: SetNull)
+  feedback         MarketSignalFeedback[]
+
+  @@unique([officeId, marketSignalId, linkedEntityType, linkedEntityId])
+  @@index([officeId, status])
+  @@index([marketSignalId])
+  @@index([linkedEntityType, linkedEntityId])
+  @@index([createdAt])
+}
+
+model MarketSignalFeedback {
+  id                   String   @id @default(cuid())
+  officeId             String
+  marketSignalId       String
+  marketImpactReviewId String?
+  userId               String?
+  feedbackKind         String
+  note                 String?
+  createdAt            DateTime @default(now())
+
+  office             Office              @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  marketSignal       MarketSignal        @relation(fields: [marketSignalId], references: [id], onDelete: Cascade)
+  marketImpactReview MarketImpactReview? @relation(fields: [marketImpactReviewId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, feedbackKind, createdAt])
+  @@index([marketSignalId])
+  @@index([marketImpactReviewId])
+}
+
+model MarketIngestionRun {
+  id          String    @id @default(cuid())
+  officeId    String
+  provider    String
+  sourceId    String?
+  query       String?
+  status      String    @default("queued")
+  startedAt   DateTime?
+  completedAt DateTime?
+  resultCount Int       @default(0)
+  objectCount Int       @default(0)
+  signalCount Int       @default(0)
+  reviewCount Int       @default(0)
+  error       String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, provider, status])
+  @@index([officeId, sourceId, createdAt])
+  @@index([officeId, status, createdAt])
+}
+
+model Task {
+  id               String     @id @default(cuid())
+  officeId         String
+  companyId        String
+  title            String
+  details          String?
+  dueAt            DateTime?
+  status           TaskStatus @default(OPEN)
+  assignedToUserId String?
+  createdByUserId  String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([officeId, status, dueAt])
@@ -325,17 +698,17 @@ model Task {
 }
 
 model RiskAlert {
-  id        String    @id @default(cuid())
-  officeId  String
-  companyId String
-  level     RiskLevel
-  reason    String
-  isOpen    Boolean   @default(true)
+  id         String    @id @default(cuid())
+  officeId   String
+  companyId  String
+  level      RiskLevel
+  reason     String
+  isOpen     Boolean   @default(true)
   resolvedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([officeId, isOpen, level, createdAt])
@@ -343,14 +716,14 @@ model RiskAlert {
 }
 
 model CompanyDocument {
-  id          String   @id @default(cuid())
-  officeId    String
-  companyId   String
-  name        String
-  url         String
-  docType     String?  // contract / invoice / proposal / other
+  id               String   @id @default(cuid())
+  officeId         String
+  companyId        String
+  name             String
+  url              String
+  docType          String? // contract / invoice / proposal / other
   uploadedByUserId String?
-  createdAt   DateTime @default(now())
+  createdAt        DateTime @default(now())
 
   office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -361,18 +734,18 @@ model CompanyDocument {
 // ── Pricing module ────────────────────────────────────────────────────────
 
 model LaneRate {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   officeId    String
-  origin      String   // e.g. Istanbul
-  destination String   // e.g. Hamburg
-  mode        String   // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
+  origin      String // e.g. Istanbul
+  destination String // e.g. Hamburg
+  mode        String // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
   baseAmount  Float
-  currency    String   @default("USD")
-  validFrom   DateTime @default(now())
+  currency    String    @default("USD")
+  validFrom   DateTime  @default(now())
   validTo     DateTime?
   notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 
@@ -380,9 +753,9 @@ model LaneRate {
 }
 
 model MarginProfile {
-  id            String  @id @default(cuid())
+  id            String   @id @default(cuid())
   officeId      String
-  label         String  // e.g. "New client", "Existing – standard", "Urgent"
+  label         String // e.g. "New client", "Existing – standard", "Urgent"
   customerTier  String? // new / existing / vip
   urgency       String? // normal / asap / flexible
   marginPercent Float
@@ -398,84 +771,167 @@ model MarginProfile {
 // + sort + JSON shaping on every agent query. Keyed by inquiryId, with kind
 // distinguishing different summary shapes (e.g. supplier-shortlist).
 model Inquiry {
-  id            String   @id @default(cuid())
-  officeId      String
-  companyId     String?
-  subject       String
-  fromEmail     String?
-  fromCompany   String?
-  origin        String?
-  destination   String?
-  mode          String?  // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
-  containerType String?  // 20GP / 40HC / 40DRY / 20DRY etc.
-  commodity     String?
-  weight        Float?
-  volume        Float?
-  incoterms     String?
-  cargoReadyDate DateTime?
-  type          String   @default("FORWARDING") // FORWARDING (move customer's cargo) | SOURCING (find + buy a commodity for customer)
-  status        String   @default("INGESTED") // INGESTED / PARSED / PRICED / QUOTED / WON / LOST
-  rawEmailBody  String?
-  parsedData    String?  // JSON: AI-extracted fields
-  notes         String?
+  id                String    @id @default(cuid())
+  officeId          String
+  companyId         String?
+  subject           String
+  fromEmail         String?
+  fromCompany       String?
+  origin            String?
+  destination       String?
+  mode              String? // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
+  containerCount    Int?
+  containerType     String? // 20GP / 40HC / 40DRY / 20DRY etc.
+  packages          Int?
+  dimensions        String? // JSON [{qty, length, width, height}] in cm
+  stackable         String? // YES / NO / UNKNOWN
+  topLoad           String? // YES / NO / UNKNOWN, only relevant when stackable=NO
+  dangerousGoods    String? // YES / NO / UNKNOWN
+  customsBy         String? // US / CUSTOMER / FORWARDER / UNKNOWN
+  commodity         String?
+  weight            Float?
+  volume            Float?
+  incoterms         String?
+  targetPrice       Float?
+  targetCurrency    String?
+  targetPriceStatus String? // UNKNOWN / PROVIDED / NO_TARGET
+  targetPriceSource String?
+  cargoReadyDate    DateTime?
+  type              String    @default("FORWARDING") // FORWARDING (move customer's cargo) | SOURCING (find + buy a commodity for customer)
+  status            String    @default("INGESTED") // INGESTED / PARSED / PRICED / QUOTED / WON / LOST
+  rawEmailBody      String?
+  parsedData        String? // JSON: AI-extracted fields
+  notes             String?
   // Pre-computed summary cache (JSON). Used by the agent's
   // summarize_supplier_offers tool to skip re-parsing + ranking on every
   // query. Cleared whenever a linked thread is added/updated/awarded so
   // the next read regenerates.
-  summaryCache  String?
-  summaryCacheAt DateTime?
-  receivedAt    DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  summaryCache      String?
+  summaryCacheAt    DateTime?
+  receivedAt        DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  office        Office        @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company       Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  carrierQuotes CarrierQuote[]
-  job           Job?
-  emailThreads  EmailThread[]
+  office              Office                  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company             Company?                @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  carrierQuotes       CarrierQuote[]
+  job                 Job?
+  emailThreads        EmailThread[]
+  targetPriceHistory  TargetPriceHistory[]
+  agentProposals      AgentProposal[]
+  forwarderDrafts     ForwarderRequestDraft[]
+  strategyAssessments StrategyAssessment[]
 
   @@index([officeId, status, receivedAt])
   @@index([officeId, companyId])
 }
 
+model TargetPriceHistory {
+  id              String   @id @default(cuid())
+  officeId        String
+  inquiryId       String?
+  jobId           String?
+  amount          Float?
+  currency        String?
+  status          String   @default("UNKNOWN") // PROVIDED / NO_TARGET / UNKNOWN
+  source          String?
+  note            String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  office  Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  inquiry Inquiry? @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, inquiryId, createdAt])
+  @@index([officeId, jobId, createdAt])
+}
+
 model CarrierQuote {
-  id          String   @id @default(cuid())
-  inquiryId   String
-  carrier     String
-  quoteType   String   @default("EMAIL") // API / EMAIL
-  rateName    String?
-  total20     Float?
-  total40     Float?
-  total40HC   Float?
-  transitDays Int?
-  service     String?
-  validity    String?
+  id             String   @id @default(cuid())
+  inquiryId      String
+  carrier        String
+  quoteType      String   @default("EMAIL") // API / EMAIL
+  rateName       String?
+  total20        Float?
+  total40        Float?
+  total40HC      Float?
+  transitDays    Int?
+  service        String?
+  validity       String?
   transshipments String?
-  status      String   @default("PENDING") // PENDING / RECEIVED
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status         String   @default("PENDING") // PENDING / RECEIVED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
 
   @@index([inquiryId])
 }
 
+model Forwarder {
+  id           String   @id @default(cuid())
+  officeId     String
+  name         String
+  email        String
+  modeCoverage String? // comma-separated modes, blank means all modes
+  apiType      String   @default("EMAIL") // EMAIL / API
+  active       Boolean  @default(true)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  office        Office                  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  requestDrafts ForwarderRequestDraft[]
+
+  @@unique([officeId, email])
+  @@index([officeId, active])
+}
+
+model ForwarderRequestDraft {
+  id              String    @id @default(cuid())
+  officeId        String
+  inquiryId       String
+  forwarderId     String?
+  forwarderName   String
+  toEmail         String
+  subject         String
+  body            String
+  status          String    @default("DRAFT") // DRAFT / DISCARDED / SENT
+  createdByUserId String?
+  senderAccountId String?
+  sentByEmail     String?
+  sentAt          DateTime?
+  gmailMessageId  String?
+  gmailThreadId   String?
+  sendError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  office    Office     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  inquiry   Inquiry    @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  forwarder Forwarder? @relation(fields: [forwarderId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, inquiryId, status])
+  @@index([officeId, forwarderId])
+}
+
 // Shipment history — populated from Siber in Phase 2, or manually entered
 model ShipmentRecord {
-  id          String   @id @default(cuid())
-  officeId    String
-  companyId   String
-  origin      String?
-  destination String?
-  mode        String?  // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
-  weight      Float?   // kg
-  volume      Float?   // cbm
-  revenue     Float?
-  profit      Float?
-  currency    String?  @default("USD")
+  id           String   @id @default(cuid())
+  officeId     String
+  companyId    String
+  origin       String?
+  destination  String?
+  mode         String? // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
+  weight       Float? // kg
+  volume       Float? // cbm
+  revenue      Float?
+  profit       Float?
+  currency     String?  @default("USD")
   shipmentDate DateTime
-  reference   String?  // Siber / carrier reference number
-  source      String   @default("manual") // "siber" | "manual"
+  reference    String? // Siber / carrier reference number
+  source       String   @default("manual") // "siber" | "manual"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -490,77 +946,252 @@ model ShipmentRecord {
 // ── Jobs (forwarding operations) ─────────────────────────────────────────────
 
 model Job {
-  id               String    @id @default(cuid())
+  id               String  @id @default(cuid())
   officeId         String
   companyId        String?
   assignedToUserId String?
-  inquiryId        String?   @unique  // set when converted from an Inquiry
+  inquiryId        String? @unique // set when converted from an Inquiry
 
-  reference        String    // e.g. JOB-2025-001
-  title            String?   // human deal name, e.g. "China Spare Parts" — how the user recalls the load
-  cadence          String?   // ONE_OFF | MONTHLY — recurring business vs one-shot
-  status           JobStatus @default(INQUIRY)
-  type             String    @default("FORWARDING")  // FORWARDING | SOURCING
-  mode             String?   // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
-  origin           String?
-  destination      String?
-  commodity        String?
-  incoterms        String?
-  weight           Float?    // kg
-  volume           Float?    // cbm — auto-computed from dimensions for non-FCL
-  packages         Int?
-  dimensions       String?   // JSON [{qty, length, width, height}] in cm — LCL/AIR/ROAD cargo
-  containerCount   Int?      // FCL: number of containers
-  containerType    String?   // FCL: 20DC / 40DC / 40HC / 20RF / 40RF / OT-FR
-  quantity         Float?    // generic deal quantity, e.g. 350 (TONS), 3 (TRUCKS)
-  quantityUnit     String?   // TONS / TRUCKS / PALLETS / UNITS / KG / CBM — free text
-  quoteLines       String?   // pipe-delimited quote line items (desc|amount|currency per line)
+  reference         String // e.g. JOB-2025-001
+  title             String? // human deal name, e.g. "China Spare Parts" — how the user recalls the load
+  cadence           String? // ONE_OFF | MONTHLY — recurring business vs one-shot
+  status            JobStatus @default(INQUIRY)
+  type              String    @default("FORWARDING") // FORWARDING | SOURCING
+  mode              String? // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
+  origin            String?
+  destination       String?
+  commodity         String?
+  incoterms         String?
+  weight            Float? // kg
+  volume            Float? // cbm — auto-computed from dimensions for non-FCL
+  packages          Int?
+  dimensions        String? // JSON [{qty, length, width, height}] in cm — LCL/AIR/ROAD cargo
+  stackable         String? // YES / NO / UNKNOWN
+  topLoad           String? // YES / NO / UNKNOWN, only relevant when stackable=NO
+  dangerousGoods    String? // YES / NO / UNKNOWN
+  customsBy         String? // US / CUSTOMER / FORWARDER / UNKNOWN
+  containerCount    Int? // FCL: number of containers
+  containerType     String? // FCL: 20DC / 40DC / 40HC / 20RF / 40RF / OT-FR
+  quantity          Float? // generic deal quantity, e.g. 350 (TONS), 3 (TRUCKS)
+  quantityUnit      String? // TONS / TRUCKS / PALLETS / UNITS / KG / CBM — free text
+  targetPrice       Float?
+  targetCurrency    String?
+  targetPriceStatus String? // UNKNOWN / PROVIDED / NO_TARGET
+  targetPriceSource String?
+  quoteLines        String? // pipe-delimited quote line items (desc|amount|currency per line)
 
-  etd              DateTime?
-  eta              DateTime?
+  etd DateTime?
+  eta DateTime?
 
-  revenue          Float?
-  cost             Float?
-  currency         String    @default("USD")
+  revenue  Float?
+  cost     Float?
+  currency String @default("USD")
 
-  notes            String?
-  portalToken      String?   @unique  // public magic-link token for /portal/[token]
-  notifyCustomer   Boolean   @default(true)  // auto-email customer on status/milestone changes
-  customerEmail    String?   // override for status-update emails; defaults to inquiry.fromEmail
-  parentJobId      String?   // when a SOURCING award spins up a child FORWARDING job
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  notes          String?
+  portalToken    String?  @unique // public magic-link token for /portal/[token]
+  notifyCustomer Boolean  @default(true) // auto-email customer on status/milestone changes
+  customerEmail  String? // override for status-update emails; defaults to inquiry.fromEmail
+  parentJobId    String? // when a SOURCING award spins up a child FORWARDING job
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  office       Office        @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company      Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  inquiry      Inquiry?      @relation(fields: [inquiryId], references: [id])
-  parent       Job?          @relation("JobParent", fields: [parentJobId], references: [id], onDelete: SetNull)
-  children     Job[]         @relation("JobParent")
-  documents    JobDocument[]
-  milestones   JobMilestone[]
-  emailThreads EmailThread[]
+  office              Office               @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company             Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  inquiry             Inquiry?             @relation(fields: [inquiryId], references: [id])
+  parent              Job?                 @relation("JobParent", fields: [parentJobId], references: [id], onDelete: SetNull)
+  children            Job[]                @relation("JobParent")
+  documents           JobDocument[]
+  milestones          JobMilestone[]
+  emailThreads        EmailThread[]
+  targetPriceHistory  TargetPriceHistory[]
+  agentProposals      AgentProposal[]
+  strategyAssessments StrategyAssessment[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, createdAt])
   @@index([officeId, companyId])
 }
 
-model JobDocument {
+model AgentProposal {
+  id               String    @id @default(cuid())
+  officeId         String
+  userId           String?
+  jobId            String?
+  inquiryId        String?
+  kind             String
+  status           String    @default("PENDING") // PENDING / APPLIED / DISCARDED
+  payload          Json
+  sourceType       String?
+  sourcePreview    String?
+  toolTrace        Json?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  reviewDecision   String?
+  reviewNote       String?
+  createdAt        DateTime  @default(now())
+  appliedAt        DateTime?
+  expiresAt        DateTime?
+
+  office  Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  inquiry Inquiry? @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, userId, status, createdAt])
+  @@index([officeId, jobId, status])
+  @@index([officeId, inquiryId, status])
+  @@index([officeId, reviewedAt])
+}
+
+// ── Commercial decision brain ───────────────────────────────────────────────
+// Durable assessment snapshots. The engine can recompute any time, but pricing
+// decisions need an audit trail: what we knew, what we recommended, and why.
+
+model StrategyAssessment {
+  id                  String   @id @default(cuid())
+  officeId            String
+  inquiryId           String?
+  jobId               String?
+  entityType          String // INQUIRY / JOB
+  subject             String?
+  recommendation      String // QUOTE / NEGOTIATE / REQUEST_RATES / ASK_CUSTOMER / ESCALATE / DECLINE
+  recommendationLabel String
+  strategyMemo        String
+  score               Int
+  band                String
+  confidence          String // low / medium / high
+  components          Json
+  evidence            Json
+  decisionBrief       Json?
+  inputHash           String
+  status              String   @default("ACTIVE") // ACTIVE / SUPERSEDED
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  office              Office               @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  inquiry             Inquiry?             @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  job                 Job?                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  routeOptions        RouteOption[]
+  priceRecommendation PriceRecommendation?
+  riskAssessments     RiskAssessment[]
+  actions             StrategyAction[]
+
+  @@index([officeId, status, createdAt])
+  @@index([officeId, inquiryId, status, createdAt])
+  @@index([officeId, jobId, status, createdAt])
+  @@index([officeId, inputHash])
+}
+
+model RouteOption {
   id               String   @id @default(cuid())
+  officeId         String
+  assessmentId     String
+  carrierQuoteId   String?
+  label            String
+  route            String?
+  mode             String?
+  provider         String?
+  source           String // RECEIVED_QUOTE / LANE_RATE / HISTORY / FALLBACK
+  cost             Float?
+  currency         String   @default("USD")
+  transitDays      Int?
+  reliabilityScore Int
+  riskScore        Int
+  confidence       String
+  tradeoff         String
+  evidence         Json?
+  createdAt        DateTime @default(now())
+
+  office     Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  assessment StrategyAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, assessmentId])
+  @@index([officeId, carrierQuoteId])
+}
+
+model PriceRecommendation {
+  id                  String   @id @default(cuid())
+  officeId            String
+  assessmentId        String   @unique
+  currency            String   @default("USD")
+  buyCost             Float?
+  costSource          String?
+  floorPrice          Float?
+  recommendedPrice    Float?
+  stretchPrice        Float?
+  walkAwayPrice       Float?
+  expectedMarginPct   Float?
+  expectedGrossProfit Float?
+  winProbability      Int
+  guardrailStatus     String // PASS / REVIEW / BLOCKED / NEEDS_COST
+  rationale           Json
+  createdAt           DateTime @default(now())
+
+  office     Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  assessment StrategyAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, guardrailStatus])
+}
+
+model RiskAssessment {
+  id           String   @id @default(cuid())
+  officeId     String
+  assessmentId String
+  category     String // CARGO / ROUTE / COMMERCIAL / CUSTOMER / CONFIDENCE / TIMING
+  level        String // LOW / MEDIUM / HIGH / CRITICAL
+  score        Int
+  reason       String
+  mitigation   String
+  evidence     Json?
+  createdAt    DateTime @default(now())
+
+  office     Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  assessment StrategyAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, assessmentId])
+  @@index([officeId, level, category])
+}
+
+model StrategyAction {
+  id               String    @id @default(cuid())
+  officeId         String
+  assessmentId     String
+  actionType       String // ASK_CUSTOMER / REQUEST_RATES / COUNTER_FORWARDER / QUOTE_CUSTOMER / ESCALATE / DECLINE
+  priority         String // low / medium / high / critical
+  status           String    @default("PROPOSED") // PROPOSED / APPROVED / APPLIED / REJECTED / FAILED
+  title            String
+  rationale        String
+  payload          Json
+  requiresApproval Boolean   @default(true)
+  approvedByUserId String?
+  approvedAt       DateTime?
+  appliedAt        DateTime?
+  failureReason    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  office     Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  assessment StrategyAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, assessmentId, status])
+  @@index([officeId, actionType, priority, status])
+}
+
+model JobDocument {
+  id               String    @id @default(cuid())
   jobId            String
   officeId         String
   name             String
   url              String?
-  docType          String   // BL / INVOICE / PACKING_LIST / COO / CUSTOMS / BOOKING / OTHER
-  status           String   @default("PENDING") // PENDING / UPLOADED / APPROVED
+  docType          String // BL / INVOICE / PACKING_LIST / COO / CUSTOMS / BOOKING / OTHER
+  status           String    @default("PENDING") // PENDING / UPLOADED / APPROVED
   uploadedByUserId String?
   // AI-generated analysis after the doc is uploaded/approved
-  aiSummary        String?  // 1-3 sentence synopsis of the document content
-  aiFlags          String?  // JSON array of strings: red flags / discrepancies AI noticed
-  aiKeyFields      String?  // JSON object with extracted key fields (BL number, weight, container#, etc)
+  aiSummary        String? // 1-3 sentence synopsis of the document content
+  aiFlags          String? // JSON array of strings: red flags / discrepancies AI noticed
+  aiKeyFields      String? // JSON object with extracted key fields (BL number, weight, container#, etc)
   aiAnalyzedAt     DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
@@ -572,7 +1203,7 @@ model JobDocument {
 model JobMilestone {
   id        String    @id @default(cuid())
   jobId     String
-  type      String    // BOOKING / ETD / ETA / CUSTOMS_ENTRY / CUSTOMS_RELEASE / DELIVERY
+  type      String // BOOKING / ETD / ETA / CUSTOMS_ENTRY / CUSTOMS_RELEASE / DELIVERY
   plannedAt DateTime?
   actualAt  DateTime?
   note      String?
@@ -590,7 +1221,7 @@ model EmailAccount {
   id           String    @id @default(cuid())
   officeId     String
   email        String
-  provider     String    // GMAIL / OUTLOOK / IMAP
+  provider     String // GMAIL / OUTLOOK / IMAP
   accessToken  String?
   refreshToken String?
   isActive     Boolean   @default(true)
@@ -606,24 +1237,24 @@ model EmailAccount {
 }
 
 model EmailThread {
-  id               String   @id @default(cuid())
-  officeId         String
-  jobId            String?
-  inquiryId        String?
-  subject          String
-  participants     String   // JSON array of email addresses
-  externalThreadId String?  // provider thread id (Gmail threadId) for direct mapping on resync
-  autoLinkedAt     DateTime? // when we last attempted auto-link / auto-inquiry
+  id                 String    @id @default(cuid())
+  officeId           String
+  jobId              String?
+  inquiryId          String?
+  subject            String
+  participants       String // JSON array of email addresses
+  externalThreadId   String? // provider thread id (Gmail threadId) for direct mapping on resync
+  autoLinkedAt       DateTime? // when we last attempted auto-link / auto-inquiry
   autoLinkSkipReason String? // why AI decided not to auto-create an inquiry (e.g. "not freight related")
-  supplierOffer    String?  // JSON {supplierName, pricePerUnit, currency, unit, qtyAvailable, incoterms, paymentTerms, leadTime, validity, sampleAvailable, notes}
-  supplierOfferAt  DateTime? // when AI last extracted a supplier offer from this thread
-  awardedAt        DateTime? // operator marked this supplier as winner of the sourcing deal
-  hiddenAt         DateTime? // operator marked thread as not freight-related; hidden from default inbox
-  snoozedUntil     DateTime? // hidden from default inbox until this time
-  lastMessageAt    DateTime @default(now())
-  messageCount     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  supplierOffer      String? // JSON {supplierName, pricePerUnit, currency, unit, qtyAvailable, incoterms, paymentTerms, leadTime, validity, sampleAvailable, notes}
+  supplierOfferAt    DateTime? // when AI last extracted a supplier offer from this thread
+  awardedAt          DateTime? // operator marked this supplier as winner of the sourcing deal
+  hiddenAt           DateTime? // operator marked thread as not freight-related; hidden from default inbox
+  snoozedUntil       DateTime? // hidden from default inbox until this time
+  lastMessageAt      DateTime  @default(now())
+  messageCount       Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   office   Office         @relation(fields: [officeId], references: [id], onDelete: Cascade)
   job      Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
@@ -637,26 +1268,26 @@ model EmailThread {
 }
 
 model EmailMessage {
-  id         String         @id @default(cuid())
-  threadId        String
-  accountId       String?
-  externalId      String?  // provider Message-ID header for dedup
-  gmailMessageId  String?  // provider native message id (Gmail msg.id) — used to fetch attachments
-  direction  EmailDirection
-  fromEmail  String
-  fromName   String?
-  toEmails   String         // JSON array
-  ccEmails   String?        // JSON array
-  subject    String?
-  bodyText   String?
-  bodyHtml   String?
-  attachments String?       // JSON array {name, url, mimeType, size}
-  sentAt     DateTime       @default(now())
-  isRead     Boolean        @default(false)
-  classification     String?  // RFQ | CARRIER_REPLY | CUSTOMER_REPLY | RELATED_NOTE | OTHER (set by AI on inbound)
-  classificationReason String?  // one-line AI explanation
-  classificationAt   DateTime?  // when the classifier last ran
-  createdAt  DateTime       @default(now())
+  id                   String         @id @default(cuid())
+  threadId             String
+  accountId            String?
+  externalId           String? // provider Message-ID header for dedup
+  gmailMessageId       String? // provider native message id (Gmail msg.id) — used to fetch attachments
+  direction            EmailDirection
+  fromEmail            String
+  fromName             String?
+  toEmails             String // JSON array
+  ccEmails             String? // JSON array
+  subject              String?
+  bodyText             String?
+  bodyHtml             String?
+  attachments          String? // JSON array {name, url, mimeType, size}
+  sentAt               DateTime       @default(now())
+  isRead               Boolean        @default(false)
+  classification       String? // RFQ | CARRIER_REPLY | CUSTOMER_REPLY | RELATED_NOTE | OTHER (set by AI on inbound)
+  classificationReason String? // one-line AI explanation
+  classificationAt     DateTime? // when the classifier last ran
+  createdAt            DateTime       @default(now())
 
   thread  EmailThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   account EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
