@@ -577,3 +577,28 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: run the cutover only after a fresh production Neon DB is confirmed,
   use `prisma migrate deploy`, run import dry-run, review counts, import with
   explicit allow flag, validate, set Vercel Production env vars, then merge.
+
+### 2026-06-23 - Production go-live merge
+
+- Branch: main
+- Merge commit: debe8182d99f928793c0ba076cbe6d6d7c51346c
+- PR: #1, `codex/lead-to-quote-batch` -> `main`
+- Task: merge the release branch after Preview validation and production env
+  readiness, triggering Vercel Production from `main`.
+- Release commit included:
+  `073cd434bff8358a3d660147094273ada5307014`
+  (`chore(cutover): add production office and cherry-pick import tooling`).
+- Verification before merge: clean worktree, release branch at `073cd43`,
+  remote `main` at old production commit `49d7154`, PR mergeable, Vercel
+  preview status green, and `npx tsc --noEmit` passed.
+- Merge method: GitHub CLI merge commit via `gh pr merge 1 --merge
+  --delete-branch=false`.
+- Failed/skipped checks: no database migrations were run, no `prisma db push`,
+  `migrate dev`, or `migrate reset` command was run, no live Firecrawl
+  ingestion was run, and market cron was not enabled.
+- Vercel: watch Deployments -> Production for source branch `main`; the latest
+  production deployment should not point at `49d7154`.
+- Follow-up: run the production smoke checklist immediately: login as
+  `mert@usederya.com`, confirm dashboard/intelligence/customer/job pages,
+  quote PDF, portal-token behavior, Gmail OAuth redirect, cron auth rejection,
+  and `MARKET_INTELLIGENCE_CRON_ENABLED=false`.

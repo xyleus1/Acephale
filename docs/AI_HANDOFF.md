@@ -1636,3 +1636,45 @@ Verification:
 - `npx tsc --noEmit`: passed.
 - `npm run build`: passed.
 - `npm run ai:handoff`: passed.
+
+## Go-Live Merge To Main
+
+Status:
+
+- Completed on 2026-06-23.
+- PR #1, `codex/lead-to-quote-batch` -> `main`, was merged with a GitHub merge
+  commit.
+- Main moved from the old production commit `49d7154` to merge commit
+  `debe8182d99f928793c0ba076cbe6d6d7c51346c`.
+- The merge commit includes release commit
+  `073cd434bff8358a3d660147094273ada5307014`
+  (`chore(cutover): add production office and cherry-pick import tooling`).
+- The release branch was not deleted.
+
+Production safety:
+
+- No database migrations were run during go-live.
+- No `prisma db push`, `migrate dev`, or `migrate reset` command was run.
+- Market intelligence cron remained disabled by environment configuration.
+- No live Firecrawl ingestion was run.
+- No secrets were printed.
+
+Vercel:
+
+- Production deployment should trigger from the `main` branch push/merge.
+- Watch Vercel -> Deployments -> Production for source branch `main`.
+- The latest production deployment should no longer point at `49d7154`.
+
+Immediate smoke-test checklist:
+
+- Production app loads.
+- Login works for `mert@usederya.com`.
+- Demo users remain disabled.
+- `/dashboard` loads.
+- `/dashboard/intelligence` loads without enabling market cron.
+- Customer and job pages load.
+- Quote PDF route works.
+- A valid portal token works; `job.id` as portal token fails.
+- Gmail OAuth uses the production redirect URI.
+- Cron routes reject unauthenticated calls.
+- Market intelligence cron remains disabled.
