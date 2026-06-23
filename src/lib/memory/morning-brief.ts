@@ -9,6 +9,7 @@ import {
   getMarketSignalSuppressionReason,
   shouldShowMarketSignalInMorningBrief,
 } from "@/lib/market-intelligence/signal-suppression";
+import { normalizeMarketLane } from "@/lib/market-intelligence/lane-validation";
 
 export type MorningBriefInput = {
   officeId: string;
@@ -36,6 +37,13 @@ function strings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean)
     : [];
+}
+
+function normalizedLanes(value: unknown) {
+  return strings(value)
+    .map(normalizeMarketLane)
+    .filter((lane): lane is string => Boolean(lane))
+    .filter((lane, index, array) => array.indexOf(lane) === index);
 }
 
 export async function generateMorningBrief(input: MorningBriefInput) {
@@ -361,7 +369,7 @@ export async function generateMorningBrief(input: MorningBriefInput) {
         confidence: signal.confidence,
         summary: signal.summary,
         affectedModes: strings(signal.affectedModes),
-        affectedLanes: strings(signal.affectedLanes),
+        affectedLanes: normalizedLanes(signal.affectedLanes),
         operatorImplication: signal.operatorImplication,
         pricingImplication: signal.pricingImplication,
         customerImpact: signal.customerImpact,

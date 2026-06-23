@@ -108,6 +108,8 @@ const DEFAULT_SOURCES: MarketIntelligenceSourceDefinition[] = [
     maxResultsPerRun: 5,
     maxPagesPerRun: 5,
     enabled: false,
+    articleUrlPatterns: ["/trade/automated/cargo-systems-messaging-service/.+", "content.govdelivery.com/.+"],
+    indexUrlPatterns: ["/trade/automated/cargo-systems-messaging-service/?$"],
     notes: "Official CBP CSMS trade and ACE messaging. Use for customs/compliance advisories.",
     termsPolicyNotes: "Official public government source. Keep ingestion limited to CBP/govdelivery domains.",
   },

@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
   }
 
   const dryRun = ["1", "true", "yes"].includes((req.nextUrl.searchParams.get("dryRun") ?? "").toLowerCase());
-  const force = ["1", "true", "yes"].includes((req.nextUrl.searchParams.get("force") ?? "").toLowerCase());
   const source = req.nextUrl.searchParams.get("source");
   const maxSources = Number(req.nextUrl.searchParams.get("maxSources") ?? "");
   const offices = await prisma.office.findMany({ select: { id: true, name: true } });
@@ -28,9 +27,7 @@ export async function GET(req: NextRequest) {
       result: await runScheduledMarketIngestion({
         officeId: office.id,
         dryRun,
-        force,
         sourceIds: source ? [source] : undefined,
-        allowDisabled: Boolean(source),
         maxSources: Number.isFinite(maxSources) ? maxSources : undefined,
       }),
     });

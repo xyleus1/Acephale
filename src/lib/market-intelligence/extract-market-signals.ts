@@ -10,6 +10,11 @@ import {
   isCleanLaneCandidate,
   sanitizeMarketMarkdown,
 } from "./content-hygiene";
+import {
+  detectKnownMarketLocations,
+  normalizeMarketLane,
+  parseMarketLane,
+} from "./lane-validation";
 
 export const MarketSignalCandidateSchema = z.object({
   category: z.enum(MARKET_SIGNAL_CATEGORIES as [MarketSignalCategory, ...MarketSignalCategory[]]),
@@ -37,6 +42,8 @@ export type MarketSignalCandidate = z.infer<typeof MarketSignalCandidateSchema>;
 type ExtractInput = {
   title?: string | null;
   content: string;
+  sourceId?: string | null;
+  sourceCategory?: string | null;
   defaultCategory?: MarketSignalCategory;
   defaultAffectedModes?: string[];
   sourceRefs?: string[];
@@ -61,19 +68,6 @@ const MODE_TERMS: Array<[string, string[]]> = [
   ["road", ["road", "truck", "trucking", "border", "driver"]],
   ["rail", ["rail", "train"]],
 ];
-
-const LOCATION_TERMS: Array<[string, string[]]> = [
-  ["China", ["china", "cn", "shanghai", "ningbo", "shenzhen", "yantian", "qingdao", "xiamen"]],
-  ["Asia", ["asia", "far east", "china", "shanghai", "ningbo", "shenzhen", "yantian"]],
-  ["Northern Europe", ["northern europe", "hamburg", "rotterdam", "antwerp", "bremerhaven", "felixstowe"]],
-  ["Europe", ["europe", "eu", "hamburg", "rotterdam", "antwerp", "germany", "netherlands", "uk"]],
-  ["Turkey", ["turkey", "turkiye", "istanbul", "izmir", "mersin"]],
-  ["United States", ["united states", "usa", "us", "new york", "los angeles", "long beach", "savannah"]],
-  ["Red Sea", ["red sea", "suez"]],
-  ["Panama", ["panama canal", "panama"]],
-];
-
-const PORT_TERMS = ["Shanghai", "Ningbo", "Shenzhen", "Yantian", "Qingdao", "Hamburg", "Rotterdam", "Antwerp", "Bremerhaven", "Istanbul", "Mersin", "Los Angeles", "Long Beach", "New York", "Savannah"];
 
 const CARRIER_TERMS = ["Maersk", "MSC", "CMA CGM", "Hapag-Lloyd", "ONE", "Evergreen", "COSCO", "OOCL", "Yang Ming", "ZIM", "Turkish Cargo", "DHL", "FedEx", "UPS"];
 
@@ -118,12 +112,12 @@ function detectModes(text: string) {
 }
 
 function detectLocations(text: string) {
-  return LOCATION_TERMS.filter(([, terms]) => terms.some((term) => termMatches(text, term))).map(([location]) => location);
+  return detectKnownMarketLocations(text).map((location) => location.label);
 }
 
-function detectNamed(text: string, names: string[]) {
+function detectCarriers(text: string) {
   const source = lower(text);
-  return names.filter((name) => source.includes(lower(name)));
+  return CARRIER_TERMS.filter((name) => source.includes(lower(name)));
 }
 
 function detectLanes(text: string, locations: string[]) {
@@ -139,7 +133,12 @@ function detectLanes(text: string, locations: string[]) {
   if (locations.includes("Turkey") && locations.includes("Europe")) {
     lanes.push("Turkey -> Europe");
   }
-  return unique(lanes).filter(isCleanLaneCandidate).slice(0, 8);
+  return unique(lanes)
+    .map((lane) => normalizeMarketLane(lane))
+    .filter((lane): lane is string => Boolean(lane))
+    .filter(isCleanLaneCandidate)
+    .filter((lane, index, array) => array.indexOf(lane) === index)
+    .slice(0, 8);
 }
 
 function firstSentence(text: string, fallback: string) {
@@ -165,8 +164,8 @@ function implication(category: MarketSignalCategory, severity: string, laneLabel
   }
   if (category === "customs" || category === "compliance") {
     return {
-      operator: "Check documents and customs ownership before promising clearance timing.",
-      pricing: "Protect margin for possible inspection, documentation, or compliance cost.",
+      operator: "Review customs, document, and compliance requirements before quoting or confirming movement.",
+      pricing: "Protect margin for possible inspection, documentation, or compliance cost; do not treat this as a rate signal.",
       customer: "Customers may need updated document asks or compliance caveats.",
     };
   }
@@ -199,15 +198,26 @@ export function extractMarketSignals(input: ExtractInput): MarketSignalCandidate
   const severity = detectSeverity(text);
   const affectedModes = unique([...detectModes(text), ...(input.defaultAffectedModes ?? [])]);
   const locations = unique(detectLocations(text));
-  const affectedPorts = unique(detectNamed(combined, PORT_TERMS));
-  const affectedCarriers = unique(detectNamed(combined, CARRIER_TERMS));
+  const knownLocations = detectKnownMarketLocations(combined);
+  const affectedPorts = unique(knownLocations.filter((location) => location.type === "port").map((location) => location.label));
+  const affectedCarriers = unique(detectCarriers(combined));
   const affectedLanes = detectLanes(combined, locations);
-  const affectedOrigins = locations.filter((location) => !["Europe", "Northern Europe", "United States"].includes(location)).slice(0, 8);
-  const affectedDestinations = locations.filter((location) => ["Europe", "Northern Europe", "United States"].includes(location)).slice(0, 8);
-  const laneLabel = affectedLanes[0] ?? ([affectedOrigins[0], affectedDestinations[0]].filter(Boolean).join(" -> ") || "affected lanes");
+  const isRegulatorySource = input.sourceCategory === "regulatory" || input.sourceId === "cbp-csms" || category === "customs" || category === "compliance";
+  const regulatoryCountry = isRegulatorySource && /cbp|cargo systems messaging|customs and border protection|united states|u\.s\.|usa|\bus\b/i.test(combined)
+    ? "US"
+    : null;
+  const affectedOrigins = isRegulatorySource && affectedLanes.length === 0
+    ? []
+    : locations.filter((location) => !["Europe", "Northern Europe", "US", "United States"].includes(location)).slice(0, 8);
+  const affectedDestinations = isRegulatorySource && affectedLanes.length === 0
+    ? [regulatoryCountry ?? "US"]
+    : locations.filter((location) => ["Europe", "Northern Europe", "US", "United States"].includes(location)).slice(0, 8);
+  const laneLabel = affectedLanes[0]
+    ?? ([affectedOrigins[0], affectedDestinations[0]].filter(Boolean).join(" -> ") || (isRegulatorySource ? "U.S. customs/compliance context" : "affected lanes"));
   const signalConfidence = confidence(text, category, affectedModes, locations, affectedLanes);
   if (signalConfidence < 0.55) return [];
-  if (affectedModes.length === 0 && affectedPorts.length === 0 && affectedLanes.length === 0 && affectedCarriers.length === 0) return [];
+  if (!isRegulatorySource && affectedModes.length === 0 && affectedPorts.length === 0 && affectedLanes.length === 0 && affectedCarriers.length === 0) return [];
+  if (affectedLanes.some((lane) => !parseMarketLane(lane))) return [];
   const implications = implication(category, severity, laneLabel);
   const sourceRefs = input.sourceRefs ?? [];
   const candidate = MarketSignalCandidateSchema.parse({
@@ -227,9 +237,17 @@ export function extractMarketSignals(input: ExtractInput): MarketSignalCandidate
     pricingImplication: implications.pricing,
     customerImpact: implications.customer,
     recommendedActions: [
-      "Find active RFQs on affected lanes",
-      "Re-run strategy before sending customer quote",
-      "Warn operator in morning brief",
+      ...(category === "customs" || category === "compliance"
+        ? [
+          "Review customs/document requirements before quoting or confirming movement",
+          "Check active shipments only if geography, mode, or filing workflow explicitly overlaps",
+          "Keep this as advisory compliance context until a human reviews impact",
+        ]
+        : [
+          "Find active RFQs on affected lanes",
+          "Re-run strategy before sending customer quote",
+          "Warn operator in morning brief",
+        ]),
     ],
     sourceRefs,
     evidenceExcerpt: firstSentence(evidenceText, title),

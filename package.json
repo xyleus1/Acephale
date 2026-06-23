@@ -38,7 +38,9 @@
     "market:ingest": "tsx scripts/ingest-market-intelligence.ts",
     "market:doctor": "tsx scripts/market-doctor.ts",
     "market:ingest:firecrawl": "tsx scripts/ingest-firecrawl-market-intelligence.ts",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "test:market-lane-validation": "tsx scripts/market-lane-validation.test.ts",
+    "cleanup:bad-cbp-market-reviews": "tsx scripts/cleanup-bad-cbp-market-reviews.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

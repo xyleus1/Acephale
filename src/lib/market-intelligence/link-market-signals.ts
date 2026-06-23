@@ -1,11 +1,16 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isCleanLaneCandidate } from "./content-hygiene";
 import { buildSourceQualityLookup, listSourceQualitySummaries } from "./source-quality";
 import { shouldUseMarketSignalInStrategyContext } from "./signal-suppression";
+import {
+  detectKnownMarketLocations,
+  isValidMarketLane,
+  normalizeMarketLane,
+  parseMarketLane,
+} from "./lane-validation";
 
 export type SignalImpact = {
-  entityType: "company" | "job" | "inquiry" | "lane";
+  entityType: "company" | "job" | "inquiry" | "lane" | "country" | "chokepoint";
   entityId: string;
   matchType: string;
   confidence: number;
@@ -25,15 +30,6 @@ type SignalShape = {
   affectedLanes: Prisma.JsonValue;
   affectedCarriers: Prisma.JsonValue;
   summary: string;
-};
-
-const REGION_ALIASES: Record<string, string[]> = {
-  china: ["china", "cn", "shanghai", "ningbo", "shenzhen", "yantian", "qingdao", "xiamen"],
-  asia: ["asia", "far east", "china", "cn", "shanghai", "ningbo", "shenzhen", "yantian"],
-  "northern europe": ["northern europe", "hamburg", "rotterdam", "antwerp", "bremerhaven", "felixstowe", "germany", "netherlands"],
-  europe: ["europe", "eu", "hamburg", "rotterdam", "antwerp", "bremerhaven", "germany", "netherlands", "uk"],
-  turkey: ["turkey", "turkiye", "istanbul", "izmir", "mersin"],
-  "united states": ["united states", "usa", "us", "new york", "los angeles", "long beach", "savannah"],
 };
 
 function strings(value: Prisma.JsonValue | unknown): string[] {
@@ -57,22 +53,11 @@ function normalizeMode(value: string | null | undefined) {
   return mode;
 }
 
-function termMatches(base: string, alias: string) {
-  const normalized = alias.toLowerCase();
-  if (normalized.length <= 3 || /^[a-z]{2,3}$/.test(normalized)) {
-    return new RegExp(`\\b${normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(base);
-  }
-  return base.includes(normalized);
-}
-
 function locationTokens(value: string | null | undefined) {
-  const base = norm(value);
-  const tokens = new Set(base.split(/[^a-z0-9]+/).filter((token) => token.length >= 2));
-  for (const [region, aliases] of Object.entries(REGION_ALIASES)) {
-    if (aliases.some((alias) => termMatches(base, alias))) {
-      tokens.add(region);
-      aliases.forEach((alias) => tokens.add(alias));
-    }
+  const tokens = new Set(norm(value).split(/[^a-z0-9]+/).filter((token) => token.length >= 2));
+  for (const location of detectKnownMarketLocations(value ?? "")) {
+    tokens.add(location.label.toLowerCase());
+    for (const alias of location.aliases) tokens.add(alias.toLowerCase());
   }
   return tokens;
 }
@@ -89,14 +74,22 @@ function locationMatches(signalValues: string[], routeValue: string | null | und
   });
 }
 
+function normalizedLanes(value: Prisma.JsonValue | unknown) {
+  return strings(value)
+    .map(normalizeMarketLane)
+    .filter((lane): lane is string => Boolean(lane))
+    .filter((lane, index, array) => array.indexOf(lane) === index);
+}
+
 function laneMatches(signalLanes: string[], origin: string | null | undefined, destination: string | null | undefined) {
   if (signalLanes.length === 0 || (!origin && !destination)) return false;
   const originTokens = locationTokens(origin);
   const destinationTokens = locationTokens(destination);
   return signalLanes.some((lane) => {
-    const [leftRaw, rightRaw] = lane.split(/\s*(?:->|→|to)\s*/i);
-    const left = locationTokens(leftRaw);
-    const right = locationTokens(rightRaw);
+    const parsed = parseMarketLane(lane);
+    if (!parsed) return false;
+    const left = locationTokens(parsed.from.label);
+    const right = locationTokens(parsed.to.label);
     const leftMatches = [...left].some((token) => originTokens.has(token));
     const rightMatches = [...right].some((token) => destinationTokens.has(token));
     return leftMatches && rightMatches;
@@ -113,7 +106,7 @@ export function scoreSignalAgainstLane(signal: SignalShape, target: {
   const affectedOrigins = strings(signal.affectedOrigins);
   const affectedDestinations = strings(signal.affectedDestinations);
   const affectedPorts = strings(signal.affectedPorts);
-  const affectedLanes = strings(signal.affectedLanes).filter(isCleanLaneCandidate);
+  const affectedLanes = normalizedLanes(signal.affectedLanes);
   const affectedCarriers = strings(signal.affectedCarriers);
 
   let score = 0;
@@ -189,6 +182,9 @@ export async function linkMarketSignalToBusinessObjects(input: {
       where: { id: input.signalId, officeId: input.officeId },
     });
     if (!signal) return [];
+    const affectedLanes = normalizedLanes(signal.affectedLanes);
+    const isCustomsOrCompliance = signal.category === "customs" || signal.category === "compliance";
+    const isRegulatoryContextOnly = isCustomsOrCompliance && affectedLanes.length === 0;
 
     const [jobs, inquiries] = await Promise.all([
       prisma.job.findMany({
@@ -225,43 +221,54 @@ export async function linkMarketSignalToBusinessObjects(input: {
       }
     };
 
-    for (const job of jobs) {
-      const carrierText = job.inquiry?.carrierQuotes.map((quote) => quote.carrier).join(" ") ?? "";
-      const match = scoreSignalAgainstLane(signal, { mode: job.mode, origin: job.origin, destination: job.destination, carrierText });
-      if (!match.matched) continue;
-      impacts.push({
-        entityType: "job",
-        entityId: job.id,
-        matchType: match.matchType,
-        confidence: match.confidence,
-        reason: `${match.reason} Job ${job.reference}.`,
-      });
-      addCompany(job.companyId, match.confidence, `Company has active job ${job.reference} affected by signal.`);
-    }
+    if (!isRegulatoryContextOnly) {
+      for (const job of jobs) {
+        const carrierText = job.inquiry?.carrierQuotes.map((quote) => quote.carrier).join(" ") ?? "";
+        const match = scoreSignalAgainstLane(signal, { mode: job.mode, origin: job.origin, destination: job.destination, carrierText });
+        if (!match.matched) continue;
+        impacts.push({
+          entityType: "job",
+          entityId: job.id,
+          matchType: match.matchType,
+          confidence: match.confidence,
+          reason: `${match.reason} Job ${job.reference}.`,
+        });
+        addCompany(job.companyId, match.confidence, `Company has active job ${job.reference} affected by signal.`);
+      }
 
-    for (const inquiry of inquiries) {
-      const carrierText = inquiry.carrierQuotes.map((quote) => quote.carrier).join(" ");
-      const match = scoreSignalAgainstLane(signal, { mode: inquiry.mode, origin: inquiry.origin, destination: inquiry.destination, carrierText });
-      if (!match.matched) continue;
-      impacts.push({
-        entityType: "inquiry",
-        entityId: inquiry.id,
-        matchType: match.matchType,
-        confidence: match.confidence,
-        reason: `${match.reason} RFQ "${inquiry.subject}".`,
-      });
-      addCompany(inquiry.companyId, match.confidence, `Company has active RFQ "${inquiry.subject}" affected by signal.`);
+      for (const inquiry of inquiries) {
+        const carrierText = inquiry.carrierQuotes.map((quote) => quote.carrier).join(" ");
+        const match = scoreSignalAgainstLane(signal, { mode: inquiry.mode, origin: inquiry.origin, destination: inquiry.destination, carrierText });
+        if (!match.matched) continue;
+        impacts.push({
+          entityType: "inquiry",
+          entityId: inquiry.id,
+          matchType: match.matchType,
+          confidence: match.confidence,
+          reason: `${match.reason} RFQ "${inquiry.subject}".`,
+        });
+        addCompany(inquiry.companyId, match.confidence, `Company has active RFQ "${inquiry.subject}" affected by signal.`);
+      }
     }
 
     impacts.push(...companyConfidence.values());
-    const affectedLanes = strings(signal.affectedLanes).filter(isCleanLaneCandidate);
     for (const lane of affectedLanes) {
+      if (!isValidMarketLane(lane)) continue;
       impacts.push({
         entityType: "lane",
         entityId: lane,
         matchType: "signal_lane",
         confidence: signal.confidence,
         reason: `Lane named by market signal: ${lane}.`,
+      });
+    }
+    if (isRegulatoryContextOnly && strings(signal.affectedDestinations).some((destination) => destination === "US" || destination === "United States")) {
+      impacts.push({
+        entityType: "country",
+        entityId: "US",
+        matchType: "source_country_compliance",
+        confidence: Math.max(0.55, Math.min(0.9, signal.confidence)),
+        reason: "Regulatory source treated as U.S. customs/compliance context; no validated freight lane was detected.",
       });
     }
 
@@ -332,7 +339,7 @@ export async function getMarketSignalsForStrategyContext(input: {
     operatorImplication: link.signal.operatorImplication,
     customerImpact: link.signal.customerImpact,
     affectedModes: strings(link.signal.affectedModes),
-    affectedLanes: strings(link.signal.affectedLanes).filter(isCleanLaneCandidate),
+    affectedLanes: normalizedLanes(link.signal.affectedLanes),
     sourceRefs: strings(link.signal.sourceRefs),
     createdAt: link.signal.createdAt,
   }));

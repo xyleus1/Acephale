@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { SIGNAL_ELIGIBLE_PAGE_TYPES, type MarketContentPageType } from "./content-hygiene";
+import { isValidMarketLane } from "./lane-validation";
 
 type SourceQualityLike = {
   score?: number | null;
@@ -13,6 +14,11 @@ type ReviewLike = {
 
 type FeedbackLike = {
   feedbackKind: string;
+};
+
+type LinkLike = {
+  entityType?: string | null;
+  entityId?: string | null;
 };
 
 type SourceObjectLike = {
@@ -134,6 +140,11 @@ export function getMarketSignalSuppressionReason(input: {
   }
 
   const linkCount = input.signal.links?.length ?? null;
+  const links = (input.signal.links ?? []) as LinkLike[];
+  const laneLinks = links.filter((link) => link.entityType === "lane");
+  if (laneLinks.length > 0 && links.length === laneLinks.length && laneLinks.every((link) => !isValidMarketLane(link.entityId))) {
+    return "invalid_lane_links";
+  }
   if (linkCount === 0 && input.requirePendingReview) return "zero_valid_links";
 
   return null;

@@ -160,6 +160,15 @@ async function main() {
     assert(!brief.recommended_actions.some((action) => JSON.stringify(action.sources).includes(badSignal.id)), "Recommended actions referenced suppressed bad signal.");
     assert(strategyContext.some((signal) => signal.signalId === goodSignal.id), "Strategy context omitted trusted signal.");
     assert(!strategyContext.some((signal) => signal.signalId === badSignal.id), "Strategy context included suppressed bad signal.");
+    const invalidLaneReason = getMarketSignalSuppressionReason({
+      signal: {
+        links: [{ entityType: "lane", entityId: "Countdown -> America" }],
+        impactReviews: [{ status: "pending", feedbackKind: null }],
+        feedback: [],
+      },
+      requirePendingReview: true,
+    });
+    assert(invalidLaneReason === "invalid_lane_links", "Signals with only invalid lane links should be suppressed.");
 
     console.log(JSON.stringify({
       ok: true,
@@ -172,6 +181,7 @@ async function main() {
         id: goodSignal.id,
         sourceQuality: goodQuality ? { score: goodQuality.score, band: goodQuality.scoreBand } : null,
       },
+      invalidLaneReason,
       morningBriefMarketIds: brief.market_intelligence.map((signal) => signal.id),
       strategySignalIds: strategyContext.map((signal) => signal.signalId),
     }, null, 2));

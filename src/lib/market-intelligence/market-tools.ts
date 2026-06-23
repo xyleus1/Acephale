@@ -25,6 +25,7 @@ import {
   shouldSuppressMarketSignal,
   shouldUseMarketSignalInStrategyContext,
 } from "./signal-suppression";
+import { isValidMarketLane, normalizeMarketLane } from "./lane-validation";
 
 function clampLimit(limit: number | null | undefined, fallback = 12) {
   return Math.max(1, Math.min(50, Math.floor(limit ?? fallback)));
@@ -34,6 +35,13 @@ function strings(value: Prisma.JsonValue | unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean)
     : [];
+}
+
+function normalizedLanes(value: Prisma.JsonValue | unknown) {
+  return strings(value)
+    .map(normalizeMarketLane)
+    .filter((lane): lane is string => Boolean(lane))
+    .filter((lane, index, array) => array.indexOf(lane) === index);
 }
 
 function queryTokens(query: string | null | undefined) {
@@ -107,7 +115,7 @@ function compactSignal(signal: Prisma.MarketSignalGetPayload<{
     affectedOrigins: strings(signal.affectedOrigins),
     affectedDestinations: strings(signal.affectedDestinations),
     affectedPorts: strings(signal.affectedPorts),
-    affectedLanes: strings(signal.affectedLanes),
+    affectedLanes: normalizedLanes(signal.affectedLanes),
     affectedCarriers: strings(signal.affectedCarriers),
     effectiveFrom: signal.effectiveFrom,
     effectiveTo: signal.effectiveTo,
@@ -116,7 +124,7 @@ function compactSignal(signal: Prisma.MarketSignalGetPayload<{
     pricingImplication: signal.pricingImplication,
     customerImpact: signal.customerImpact,
     recommendedActions: strings(signal.recommendedActions),
-    links: signal.links.map((link) => ({
+    links: signal.links.filter((link) => link.entityType !== "lane" || isValidMarketLane(link.entityId)).map((link) => ({
       entityType: link.entityType,
       entityId: link.entityId,
       matchType: link.matchType,

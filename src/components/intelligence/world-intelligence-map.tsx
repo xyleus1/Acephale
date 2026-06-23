@@ -5,7 +5,7 @@ import type React from "react";
 import type { IntelligenceHotspot, IntelligenceMapData } from "@/lib/market-intelligence/intelligence-map";
 import { IntelligenceHotspotPanel } from "./intelligence-hotspot-panel";
 import { IntelligenceSourceCard } from "./intelligence-source-card";
-import { WorldMapBase, worldMapBaseSize } from "./world-map-base";
+import { WorldMapBase, worldMapBaseSize, worldMapBaseViewBox } from "./world-map-base";
 
 function project(lat: number, lng: number) {
   return {
@@ -13,6 +13,46 @@ function project(lat: number, lng: number) {
     y: ((90 - lat) / 180) * 500,
   };
 }
+
+type ReferencePoint = {
+  label: string;
+  lat: number;
+  lng: number;
+  align?: "left" | "right";
+};
+
+const CONTINENT_LABELS: ReferencePoint[] = [
+  { label: "North America", lat: 49, lng: -104 },
+  { label: "South America", lat: -18, lng: -60 },
+  { label: "Europe", lat: 54, lng: 16 },
+  { label: "Africa", lat: 4, lng: 21 },
+  { label: "Asia", lat: 39, lng: 93 },
+  { label: "Middle East", lat: 27, lng: 44 },
+  { label: "Oceania", lat: -26, lng: 138 },
+];
+
+const REFERENCE_PORTS: ReferencePoint[] = [
+  { label: "Los Angeles", lat: 33.74, lng: -118.26 },
+  { label: "New York", lat: 40.68, lng: -74.04 },
+  { label: "Rotterdam", lat: 51.92, lng: 4.48 },
+  { label: "Hamburg", lat: 53.55, lng: 9.99 },
+  { label: "Istanbul", lat: 41.01, lng: 28.97 },
+  { label: "Mersin", lat: 36.8, lng: 34.63 },
+  { label: "Jebel Ali", lat: 25.01, lng: 55.06 },
+  { label: "Singapore", lat: 1.29, lng: 103.85 },
+  { label: "Shanghai", lat: 31.23, lng: 121.47 },
+  { label: "Ningbo", lat: 29.87, lng: 121.55 },
+];
+
+const REFERENCE_CHOKEPOINTS: ReferencePoint[] = [
+  { label: "Panama Canal", lat: 9.08, lng: -79.68, align: "right" },
+  { label: "Suez Canal", lat: 30.45, lng: 32.35 },
+  { label: "Gibraltar", lat: 35.96, lng: -5.6, align: "right" },
+  { label: "Bosporus", lat: 41.12, lng: 29.07 },
+  { label: "Hormuz", lat: 26.56, lng: 56.25 },
+  { label: "Bab el-Mandeb", lat: 12.58, lng: 43.33 },
+  { label: "Malacca", lat: 3, lng: 101 },
+];
 
 function severityColor(severity: string) {
   if (severity === "critical") return "#fb7185";
@@ -56,8 +96,9 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
 
       <div style={layoutStyle}>
         <div style={mapCardStyle}>
-          <svg viewBox="0 0 1000 500" role="img" aria-label="Freight market intelligence world map" style={worldMapBaseSize}>
+          <svg viewBox={worldMapBaseViewBox} role="img" aria-label="Freight market intelligence world map" style={worldMapBaseSize}>
             <WorldMapBase />
+            <ReferenceGeographyLayer />
             <g>
               {data.lanes.map((lane) => (
                 <path
@@ -76,7 +117,7 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                 <circle cx="500" cy="250" r="24" fill="#38bdf8" opacity=".18" />
                 <circle cx="500" cy="250" r="10" fill="#38bdf8" opacity=".72" />
                 <text x="528" y="247" fill="#f8fafc" stroke="#020617" strokeWidth="4" paintOrder="stroke" fontSize="16" fontWeight="800">No live market research yet</text>
-                <text x="528" y="267" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12">Use Pull Market Data Now to create source-backed hotspots.</text>
+                <text x="528" y="267" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12">Pull trusted market data to light up the map.</text>
               </g>
             )}
             <g>
@@ -85,6 +126,7 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                 const color = severityColor(hotspot.severity);
                 const active = selected?.id === hotspot.id;
                 const radius = Math.min(18, 7 + hotspot.signalCount * 2 + hotspot.pendingReviewCount);
+                const isChokepoint = hotspot.type === "chokepoint";
                 return (
                   <g
                     key={hotspot.id}
@@ -104,17 +146,28 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                     {hotspot.pendingReviewCount > 0 && (
                       <circle cx={point.x} cy={point.y} r={radius + 12} fill="none" stroke="#fef3c7" strokeWidth="2" opacity=".72" />
                     )}
-                    <circle
-                      cx={point.x}
-                      cy={point.y}
-                      r={radius}
-                      fill={color}
-                      opacity={hotspot.suppressed ? ".38" : ".88"}
-                      stroke="#eff6ff"
-                      strokeWidth={active ? 2.4 : 1}
-                      strokeDasharray={hotspot.suppressed ? "3 3" : undefined}
-                    />
-                    <HotspotGlyph category={hotspot.category} x={point.x - 7} y={point.y - 7} suppressed={hotspot.suppressed} />
+                    {isChokepoint ? (
+                      <path
+                        d={`M ${point.x.toFixed(1)} ${(point.y - radius).toFixed(1)} L ${(point.x + radius).toFixed(1)} ${point.y.toFixed(1)} L ${point.x.toFixed(1)} ${(point.y + radius).toFixed(1)} L ${(point.x - radius).toFixed(1)} ${point.y.toFixed(1)} Z`}
+                        fill={color}
+                        opacity={hotspot.suppressed ? ".38" : ".9"}
+                        stroke="#eff6ff"
+                        strokeWidth={active ? 2.6 : 1.2}
+                        strokeDasharray={hotspot.suppressed ? "3 3" : undefined}
+                      />
+                    ) : (
+                      <circle
+                        cx={point.x}
+                        cy={point.y}
+                        r={radius}
+                        fill={color}
+                        opacity={hotspot.suppressed ? ".38" : ".88"}
+                        stroke="#eff6ff"
+                        strokeWidth={active ? 2.4 : 1}
+                        strokeDasharray={hotspot.suppressed ? "3 3" : undefined}
+                      />
+                    )}
+                    <HotspotGlyph category={hotspot.category} type={hotspot.type} x={point.x - 7} y={point.y - 7} suppressed={hotspot.suppressed} />
                     <circle cx={point.x} cy={point.y} r={radius + 5} fill="none" stroke={color} strokeWidth="1.5" opacity={hotspot.suppressed ? ".18" : ".55"}>
                       <animate attributeName="r" values={`${radius + 5};${radius + 13};${radius + 5}`} dur="2.8s" repeatCount="indefinite" />
                       <animate attributeName="opacity" values={hotspot.suppressed ? ".18;.03;.18" : ".55;.08;.55"} dur="2.8s" repeatCount="indefinite" />
@@ -153,13 +206,98 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
   );
 }
 
+function ReferenceGeographyLayer() {
+  return (
+    <g aria-hidden="true" pointerEvents="none">
+      <g>
+        {CONTINENT_LABELS.map((item) => {
+          const point = project(item.lat, item.lng);
+          return (
+            <text
+              key={`continent-${item.label}`}
+              x={point.x}
+              y={point.y}
+              textAnchor="middle"
+              fill="#dbeafe"
+              stroke="#020617"
+              strokeWidth="3.5"
+              paintOrder="stroke"
+              fontSize="16"
+              fontWeight="900"
+              opacity=".66"
+            >
+              {item.label}
+            </text>
+          );
+        })}
+      </g>
+      <g>
+        {REFERENCE_CHOKEPOINTS.map((item) => {
+          const point = project(item.lat, item.lng);
+          const offset = item.align === "right" ? -9 : 9;
+          return (
+            <g key={`chokepoint-${item.label}`}>
+              <path
+                d={`M ${point.x.toFixed(1)} ${(point.y - 5).toFixed(1)} L ${(point.x + 5).toFixed(1)} ${point.y.toFixed(1)} L ${point.x.toFixed(1)} ${(point.y + 5).toFixed(1)} L ${(point.x - 5).toFixed(1)} ${point.y.toFixed(1)} Z`}
+                fill="#fde68a"
+                stroke="#020617"
+                strokeWidth="1.4"
+                opacity=".86"
+              />
+              <text
+                x={point.x + offset}
+                y={point.y + 4}
+                textAnchor={item.align === "right" ? "end" : "start"}
+                fill="#fef3c7"
+                stroke="#020617"
+                strokeWidth="3"
+                paintOrder="stroke"
+                fontSize="9"
+                fontWeight="900"
+                opacity=".95"
+              >
+                {item.label}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+      <g>
+        {REFERENCE_PORTS.map((item) => {
+          const point = project(item.lat, item.lng);
+          return (
+            <g key={`reference-port-${item.label}`}>
+              <circle cx={point.x} cy={point.y} r="3.5" fill="#67e8f9" stroke="#020617" strokeWidth="1.2" opacity=".88" />
+              <text
+                x={point.x + 6}
+                y={point.y - 5}
+                fill="#bae6fd"
+                stroke="#020617"
+                strokeWidth="2.5"
+                paintOrder="stroke"
+                fontSize="8.5"
+                fontWeight="800"
+                opacity=".84"
+              >
+                {item.label}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    </g>
+  );
+}
+
 function HotspotGlyph({
   category,
+  type,
   x,
   y,
   suppressed,
 }: {
   category: string;
+  type: string;
   x: number;
   y: number;
   suppressed: boolean;
@@ -171,6 +309,9 @@ function HotspotGlyph({
   }
   if (category === "customs" || category === "compliance") {
     return <g transform={`translate(${x} ${y})`}><path {...common} d="M3 1h6l4 4v10H3zM9 1v5h4M5 9h6M5 12h5" /></g>;
+  }
+  if (type === "chokepoint") {
+    return <g transform={`translate(${x} ${y})`}><path {...common} d="M2 8h11M5 4l3-3 3 3M8 1v13M4 12c2 1.5 6 1.5 8 0" /></g>;
   }
   if (category === "port_disruption") {
     return <g transform={`translate(${x} ${y})`}><path {...common} d="M1 14h13M4 12V5l3-3 3 3v7M7 2v12M5 12V9h5v3" /></g>;

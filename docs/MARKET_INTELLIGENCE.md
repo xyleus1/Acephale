@@ -662,3 +662,28 @@ Full runbook:
 ```text
 docs/RUNBOOKS/MARKET_INTELLIGENCE_LIVE_PILOT.md
 ```
+
+## Intelligence Map Visual Contract
+
+The Intelligence map is a trust surface, not decoration.
+
+- The base map must render the local Natural Earth 1:110m public-domain land
+  asset from `src/lib/market-intelligence/world-map-asset.ts`.
+- The map must show fixed geographic reference context even before signals are
+  present: continents, key freight ports, and chokepoints.
+- Market lanes may render only after deterministic freight-location validation.
+- Invalid historical lane links may remain visible as suppressed audit evidence,
+  but they must not appear as affected work, route arcs, Morning Brief
+  recommendations, or strategy context.
+- Raw evidence IDs should be available for audit but visually secondary to
+  operator implications and recommended actions.
+
+Guarded cleanup:
+
+```bash
+ALLOW_MARKET_REVIEW_CLEANUP=1 npm run cleanup:bad-cbp-market-reviews
+```
+
+The cleanup dismisses only pending CBP pseudo-lane reviews that match the
+boilerplate lane validator. It does not delete records and does not mutate jobs,
+RFQs, quotes, prices, customers, milestones, or messages.

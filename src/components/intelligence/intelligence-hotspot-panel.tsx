@@ -14,6 +14,7 @@ export function IntelligenceHotspotPanel({ hotspot }: { hotspot: IntelligenceHot
       </aside>
     );
   }
+  const isComplianceCountry = hotspot.type === "country" && (hotspot.category === "customs" || hotspot.category === "compliance");
 
   return (
     <aside style={panelStyle}>
@@ -24,6 +25,14 @@ export function IntelligenceHotspotPanel({ hotspot }: { hotspot: IntelligenceHot
           <h3 style={titleStyle}>{hotspot.label}</h3>
         </div>
       </div>
+      {isComplianceCountry && (
+        <div style={contextBoxStyle}>
+          <div><strong>Country:</strong> {hotspot.label}</div>
+          <div><strong>Type:</strong> Customs/compliance context</div>
+          <div><strong>Source:</strong> {hotspot.sourceName ?? hotspot.sourceId ?? "market source"}</div>
+          <div><strong>Action:</strong> Review customs/document requirements before treating this as lane-specific exposure.</div>
+        </div>
+      )}
       <p style={bodyStyle}>{hotspot.latestSummary || "No summary yet."}</p>
       <div style={metricGridStyle}>
         <Metric label="Signals" value={hotspot.signalCount} />
@@ -52,14 +61,30 @@ export function IntelligenceHotspotPanel({ hotspot }: { hotspot: IntelligenceHot
               <EntityBadge label={entity.label} />
               {entity.type}: {entity.label}
             </span>
-          )) : <span style={mutedStyle}>No linked jobs/RFQs/customers yet.</span>}
+          )) : <span style={mutedStyle}>No validated lane/job/RFQ/customer links yet.</span>}
         </div>
       </section>
+      {hotspot.suppressedEntities.length > 0 && (
+        <section style={sectionStyle}>
+          <div style={sectionHeadingStyle}>Suppressed / rejected links</div>
+          <div style={pillWrapStyle}>
+            {hotspot.suppressedEntities.slice(0, 8).map((entity) => (
+              <span key={`${entity.type}:${entity.id}`} style={suppressedPillStyle}>
+                {entity.type}: {entity.label} · {entity.reason}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
       <section style={sectionStyle}>
-        <div style={sectionHeadingStyle}>Evidence</div>
-        <div style={pillWrapStyle}>
-          {hotspot.evidenceRefs.slice(0, 8).map((ref) => <code key={ref} style={codePillStyle}>{ref}</code>)}
-        </div>
+        <details style={evidenceDetailsStyle}>
+          <summary style={evidenceSummaryStyle}>Evidence refs ({hotspot.evidenceRefs.length})</summary>
+          <div style={pillWrapStyle}>
+            {hotspot.evidenceRefs.length
+              ? hotspot.evidenceRefs.slice(0, 8).map((ref) => <code key={ref} style={codePillStyle}>{ref}</code>)
+              : <span style={mutedStyle}>No evidence refs available.</span>}
+          </div>
+        </details>
       </section>
       {hotspot.sourceName && (
         <p style={mutedStyle}>Source: {hotspot.sourceName}{hotspot.sourceId ? ` (${hotspot.sourceId})` : ""}</p>
@@ -105,9 +130,13 @@ const bodyStyle: React.CSSProperties = { color: "#e2e8f0", fontSize: 13, lineHei
 const mutedStyle: React.CSSProperties = { color: "#cbd5e1", fontSize: 12, lineHeight: 1.45, margin: 0 };
 const metricGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, margin: "14px 0" };
 const warningStyle: React.CSSProperties = { border: "1px solid rgba(251,113,133,.5)", backgroundColor: "#451a1f", color: "#ffe4e6", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 700 };
+const contextBoxStyle: React.CSSProperties = { border: "1px solid rgba(125,211,252,.38)", backgroundColor: "#0f2a3d", color: "#f8fafc", borderRadius: 8, padding: 10, marginTop: 12, fontSize: 12, lineHeight: 1.55, fontWeight: 650 };
 const sectionStyle: React.CSSProperties = { marginTop: 14 };
 const sectionHeadingStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, color: "#ffffff", fontWeight: 900, fontSize: 13, marginBottom: 8 };
 const listStyle: React.CSSProperties = { margin: 0, paddingLeft: 18, color: "#e2e8f0", fontSize: 12, lineHeight: 1.55, fontWeight: 650 };
 const pillWrapStyle: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 6 };
 const pillStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(125,211,252,.38)", backgroundColor: "#123047", color: "#f8fafc", borderRadius: 999, padding: "4px 8px", fontSize: 11, fontWeight: 700 };
+const suppressedPillStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(251,191,36,.42)", backgroundColor: "#3b2f12", color: "#fef3c7", borderRadius: 999, padding: "4px 8px", fontSize: 11, fontWeight: 800 };
 const codePillStyle: React.CSSProperties = { border: "1px solid rgba(148,163,184,.35)", backgroundColor: "#0f172a", color: "#e0f2fe", borderRadius: 6, padding: "4px 6px", fontSize: 10, fontWeight: 700 };
+const evidenceDetailsStyle: React.CSSProperties = { borderTop: "1px solid rgba(148,163,184,.18)", paddingTop: 10 };
+const evidenceSummaryStyle: React.CSSProperties = { color: "#bfdbfe", cursor: "pointer", fontSize: 12, fontWeight: 850, marginBottom: 8 };

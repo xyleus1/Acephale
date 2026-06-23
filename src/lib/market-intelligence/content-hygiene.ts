@@ -1,4 +1,5 @@
 import type { MarketIntelligenceSourceDefinition } from "./source-registry";
+import { isValidMarketLane } from "./lane-validation";
 
 export const MARKET_CONTENT_PAGE_TYPES = [
   "article",
@@ -254,19 +255,7 @@ export function extractCleanEvidenceText(input: MarketContentHygieneInput | stri
 }
 
 export function isCleanLaneCandidate(value: string | null | undefined) {
-  const text = normalize(value);
-  const textLower = text.toLowerCase();
-  if (!text || text.length > 120) return false;
-  if (SOCIAL_OR_UTILITY_DOMAINS.some((domain) => textLower.includes(domain.replace(":", "")))) return false;
-  if (["facebook", "flickr", "instagram", "twitter", "linkedin", "youtube", "tiktok", "threads"].some((marker) => textLower.includes(marker))) return false;
-  if (/\b(facebook|flickr|instagram|twitter|linkedin|youtube|tiktok|threads|share|links?)\b/i.test(text)) return false;
-  if (/\b(cargo|affected|especially|reports?|operators?|customers?|rates?|surcharges?|pricing|published|advisory)\b/i.test(text)) return false;
-  if (/https?:\/\//i.test(text) || /\b(mailto|tel):/i.test(text)) return false;
-  if (!/(?:->|→|\bto\b)/i.test(text)) return false;
-  const [left = "", right = ""] = text.split(/\s*(?:->|→|\bto\b)\s*/i);
-  if (words(left).length === 0 || words(right).length === 0) return false;
-  if (words(left).length > 3 || words(right).length > 3) return false;
-  return true;
+  return isValidMarketLane(value);
 }
 
 export function classifyMarketContentPageType(input: MarketContentHygieneInput): MarketContentPageType {

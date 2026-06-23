@@ -198,3 +198,46 @@ Use this log for durable product and engineering decisions. Do not put every imp
   controlled by existing workflows and human approval.
 - Revisit when: review feedback volume is large enough to improve source
   scoring, lane matching, or automatic prioritization.
+
+### 2026-06-23 - Use existing public map data and validated freight geography
+
+- Status: accepted
+- Owner: engineering
+- Context: The production Intelligence page rendered a handmade stylized world
+  map and then overlaid market intelligence on top. That looked authoritative
+  while being geographically weak. A CBP scrape also produced pseudo-lanes such
+  as `Countdown -> America` and `Welcome -> U.S. Customs and Border`.
+- Decision: Use Natural Earth public-domain world land data as the offline map
+  base and require all market lane/entity rendering to pass deterministic
+  freight-location validation. CBP/regulatory updates are modeled as
+  country/customs/compliance context unless clean body evidence contains a known
+  origin/destination pair.
+- Rationale: The map is a trust surface. Fake geography and fake lanes are worse
+  than no map. Existing public map data gives recognizable geography without a
+  runtime map dependency, and strict lane validation prevents page chrome from
+  becoming operational advice.
+- Consequences: Unknown or boilerplate location phrases are rejected or shown as
+  suppressed audit data. Operators may need to extend the known-location
+  registry as new lanes/ports become relevant. External intelligence remains
+  advisory and cannot mutate freight records.
+- Revisit when: Derya needs a richer lane graph, port hierarchy, geospatial
+  clustering, or a proper offline vector-map renderer.
+
+### 2026-06-23 - Keep map reference geography visible even without signals
+
+- Status: accepted
+- Owner: engineering
+- Context: The Intelligence page must remain understandable before a market
+  source has produced many clean signals. A technically correct map base is not
+  enough if the user cannot quickly identify continents, ports, and chokepoints.
+- Decision: Render fixed reference geography on top of the Natural Earth base:
+  continent labels, key freight ports, and chokepoints. Keep evidence IDs
+  available but collapsed so operational text stays readable.
+- Rationale: Operators need a fast freight mental model. Reference labels make
+  the map legible and prevent signal dots from floating on an ambiguous dark
+  canvas.
+- Consequences: The reference layer is deterministic and static for now. It
+  should be expanded carefully as new lanes matter, not generated from noisy web
+  text.
+- Revisit when: the registry grows large enough to need zoom, clustering, or a
+  dedicated geospatial renderer.

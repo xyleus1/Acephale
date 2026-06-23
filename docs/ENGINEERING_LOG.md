@@ -658,3 +658,86 @@ Use this file for chronological implementation notes that future agents should s
   `npm run test:intelligence-page-empty-state`, and `npm run build`.
 - Failed/skipped checks: no live Firecrawl ingestion, database migration, or
   operational data mutation was run.
+
+### 2026-06-23 - Intelligence map accuracy, CBP lane validation, and daily cron guard
+
+- Branch: main dirty worktree
+- Task: replace fake handmade geography with a real existing world map asset,
+  prevent CBP/navigation boilerplate from becoming freight lanes, and add a
+  safe daily market-intelligence automation path.
+- Files changed: `src/lib/market-intelligence/world-map-asset.ts`,
+  `src/components/intelligence/world-map-base.tsx`,
+  `src/components/intelligence/world-intelligence-map.tsx`,
+  `src/components/intelligence/intelligence-hotspot-panel.tsx`,
+  `src/lib/market-intelligence/lane-validation.ts`,
+  `src/lib/market-intelligence/extract-market-signals.ts`,
+  `src/lib/market-intelligence/link-market-signals.ts`,
+  `src/lib/market-intelligence/intelligence-map.ts`,
+  `src/lib/market-intelligence/signal-suppression.ts`,
+  `src/lib/market-intelligence/market-tools.ts`,
+  `src/lib/memory/morning-brief.ts`,
+  `src/lib/market-intelligence/scheduled-ingestion.ts`,
+  `src/app/api/cron/market-intelligence/route.ts`,
+  `src/app/dashboard/intelligence/page.tsx`,
+  `scripts/cleanup-bad-cbp-market-reviews.ts`,
+  `scripts/market-lane-validation.test.ts`,
+  `scripts/intelligence-map.test.ts`,
+  `scripts/market-signal-suppression.test.ts`, `scripts/market-doctor.ts`,
+  `vercel.json`, `package.json`, and docs.
+- Behavior added: Natural Earth 1:110m land data is now the offline map base;
+  freight map coordinates include explicit ports, regions, countries, and
+  chokepoints; lane validation rejects pseudo-lanes such as
+  `Countdown -> America` and `Welcome -> U.S. Customs and Border`; CBP/regulatory
+  content becomes U.S. customs/compliance context unless clean article body
+  evidence contains a validated lane; invalid historical lane links are shown as
+  suppressed audit data, not affected work.
+- Automation added: `/api/cron/market-intelligence` is scheduled daily at
+  `0 11 * * *`, requires `CRON_SECRET`, requires
+  `MARKET_INTELLIGENCE_CRON_ENABLED=true` for live runs, clamps to one safe
+  source/day by default, and excludes broad media/FreightWaves/JOC.
+- Cleanup added: `npm run cleanup:bad-cbp-market-reviews` dismisses only pending
+  CBP lane reviews whose lane labels match boilerplate/pseudo-lane rules. It is
+  guarded by `ALLOW_MARKET_REVIEW_CLEANUP=1` and does not delete records.
+- Verification passed so far: `npx tsc --noEmit`,
+  `npm run test:market-lane-validation`,
+  `npm run test:market-signal-suppression`,
+  `npm run test:intelligence-map`,
+  `npm run test:scheduled-market-ingestion`,
+  `npm run test:market-content-hygiene`, and
+  `npm run test:market-intelligence`,
+  `npm run test:manual-market-ingestion-action`,
+  `npm run test:source-quality`, `npm run test:market-impact`,
+  `npm run test:firecrawl`, `npm run test:morning-brief`,
+  `npm run market:doctor`, `npm run memory:doctor`, `npm run build`, and
+  `npm run ai:handoff`.
+- Failed/skipped checks: no live Firecrawl ingestion, Prisma migration,
+  production DB cleanup, or operational data mutation was run.
+
+### 2026-06-23 - V2 Intelligence map visual QA and production cleanup guard
+
+- Branch: main dirty worktree
+- Task: make the Intelligence map visibly read as a real world map, preserve the
+  Natural Earth map asset, reduce text noise, and prepare safe CBP cleanup
+  without running it against an unconfirmed database.
+- Files changed: `src/components/intelligence/world-intelligence-map.tsx`,
+  `src/components/intelligence/world-map-base.tsx`,
+  `src/components/intelligence/intelligence-hotspot-panel.tsx`,
+  `scripts/intelligence-map.test.ts`, `docs/AI_HANDOFF.md`, and
+  `docs/ENGINEERING_LOG.md`.
+- Behavior added: fixed reference labels for continents, freight ports, and
+  chokepoints; stronger land/ocean/coastline contrast; empty-state copy
+  `Pull trusted market data to light up the map.`; collapsed hotspot evidence
+  refs; regression coverage that fails if the map stops using the Natural Earth
+  asset or loses the reference layers.
+- Cleanup status: skipped locally because `DATABASE_URL` was not configured in
+  the shell, so the target could not be confirmed as production Neon. The
+  guarded command remains
+  `ALLOW_MARKET_REVIEW_CLEANUP=1 npm run cleanup:bad-cbp-market-reviews`.
+- Verification passed so far: `npx tsc --noEmit`,
+  `npm run test:intelligence-map`,
+  `npm run test:market-lane-validation`,
+  `npm run test:market-signal-suppression`,
+  `npm run test:market-content-hygiene`, `npm run test:source-quality`,
+  `npm run test:market-intelligence`, and `npm run test:market-impact`.
+- Failed/skipped checks: no live Firecrawl ingestion, Prisma migration,
+  production DB cleanup, or operational data mutation was run.

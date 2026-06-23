@@ -1,10 +1,19 @@
 import { ingestFirecrawlMarketSource } from "./ingest-firecrawl-source";
+import { prisma } from "@/lib/prisma";
 import {
   getMarketIntelligenceSourceRegistry,
   type MarketIntelligenceSourceDefinition,
 } from "./source-registry";
 import { sourceAllowedDomains, sourceRunLimits, validateMarketSourceDefinition } from "./source-policy";
 import type { FirecrawlClientOptions } from "./firecrawl-client";
+import { listSourceQualitySummaries } from "./source-quality";
+
+export const SAFE_SCHEDULED_MARKET_SOURCE_IDS = [
+  "maersk-news-advisories",
+  "drewry-world-container-index",
+  "cbp-csms",
+  "port-of-los-angeles-latest-news",
+] as const;
 
 export type ScheduledMarketIngestionInput = {
   officeId: string;
@@ -41,18 +50,18 @@ export function marketIngestionProviderConfigured() {
 export function scheduledMarketIngestionConfig(input: Partial<ScheduledMarketIngestionInput> = {}) {
   const maxSources = clamp(
     input.maxSources,
-    envInt(process.env.MARKET_INTELLIGENCE_MAX_SOURCES_PER_RUN, 3, 20),
-    20,
+    envInt(process.env.MARKET_INTELLIGENCE_MAX_SOURCES_PER_RUN, 1, 4),
+    4,
   );
   const maxPagesPerRun = clamp(
     input.maxPagesPerRun,
-    envInt(process.env.MARKET_INTELLIGENCE_MAX_PAGES_PER_RUN, 20, 100),
-    100,
+    envInt(process.env.MARKET_INTELLIGENCE_MAX_PAGES_PER_RUN, 3, 25),
+    25,
   );
   const dailyCreditBudget = clamp(
     input.dailyCreditBudget,
-    envInt(process.env.MARKET_INTELLIGENCE_DAILY_CREDIT_BUDGET, 100, 1000),
-    1000,
+    envInt(process.env.MARKET_INTELLIGENCE_DAILY_CREDIT_BUDGET, 25, 200),
+    200,
   );
   return {
     cronEnabled: envBool(process.env.MARKET_INTELLIGENCE_CRON_ENABLED, false),
@@ -65,15 +74,67 @@ export function scheduledMarketIngestionConfig(input: Partial<ScheduledMarketIng
   };
 }
 
-function eligibleSources(input: ScheduledMarketIngestionInput, config: ReturnType<typeof scheduledMarketIngestionConfig>) {
+async function eligibleSources(input: ScheduledMarketIngestionInput, config: ReturnType<typeof scheduledMarketIngestionConfig>) {
   const registry = input.sources ?? getMarketIntelligenceSourceRegistry();
   const requested = new Set((input.sourceIds ?? []).map((id) => id.trim()).filter(Boolean));
+  const applySafeRotation = !input.sources;
+  const quality = applySafeRotation ? await listSourceQualitySummaries({ officeId: input.officeId }).catch(() => []) : [];
+  const qualityById = new Map(quality.map((item) => [item.sourceId, item]));
+  const lastRunBySource = new Map<string, Date>();
+  if (applySafeRotation) {
+    const runs = await prisma.marketIngestionRun.findMany({
+      where: { officeId: input.officeId, sourceId: { in: [...SAFE_SCHEDULED_MARKET_SOURCE_IDS] } },
+      orderBy: { createdAt: "desc" },
+      select: { sourceId: true, createdAt: true },
+      take: 100,
+    }).catch(() => []);
+    for (const run of runs) {
+      if (run.sourceId && !lastRunBySource.has(run.sourceId)) lastRunBySource.set(run.sourceId, run.createdAt);
+    }
+  }
   return registry
     .filter((source) => source.fetchType === "firecrawl_search" || source.fetchType === "firecrawl_scrape")
     .filter((source) => requested.size === 0 || requested.has(source.id))
-    .filter((source) => input.allowDisabled || source.enabled)
+    .filter((source) => !applySafeRotation || SAFE_SCHEDULED_MARKET_SOURCE_IDS.includes(source.id as typeof SAFE_SCHEDULED_MARKET_SOURCE_IDS[number]))
+    .filter((source) => applySafeRotation || input.allowDisabled || source.enabled)
     .filter((source) => validateMarketSourceDefinition(source).ok)
+    .filter((source) => {
+      if (!applySafeRotation) return true;
+      const summary = qualityById.get(source.id);
+      if (!summary) return true;
+      if (summary.scoreBand === "poor") return false;
+      return summary.wrongLinkFeedbackCount + summary.irrelevantFeedbackCount < 5;
+    })
+    .sort((a, b) => {
+      if (!applySafeRotation) return 0;
+      const aLast = lastRunBySource.get(a.id)?.getTime() ?? 0;
+      const bLast = lastRunBySource.get(b.id)?.getTime() ?? 0;
+      if (aLast !== bLast) return aLast - bLast;
+      return SAFE_SCHEDULED_MARKET_SOURCE_IDS.indexOf(a.id as typeof SAFE_SCHEDULED_MARKET_SOURCE_IDS[number])
+        - SAFE_SCHEDULED_MARKET_SOURCE_IDS.indexOf(b.id as typeof SAFE_SCHEDULED_MARKET_SOURCE_IDS[number]);
+    })
     .slice(0, config.maxSources);
+}
+
+export async function getScheduledMarketAutomationStatus(officeId: string) {
+  const config = scheduledMarketIngestionConfig();
+  const registry = getMarketIntelligenceSourceRegistry();
+  const safeSources = registry
+    .filter((source) => SAFE_SCHEDULED_MARKET_SOURCE_IDS.includes(source.id as typeof SAFE_SCHEDULED_MARKET_SOURCE_IDS[number]))
+    .map((source) => ({ id: source.id, name: source.name, enabled: source.enabled, sourceCategory: source.sourceCategory }));
+  const lastRun = await prisma.marketIngestionRun.findFirst({
+    where: { officeId, sourceId: { in: [...SAFE_SCHEDULED_MARKET_SOURCE_IDS] } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, sourceId: true, status: true, createdAt: true, objectCount: true, signalCount: true, reviewCount: true },
+  }).catch(() => null);
+  const eligible = await eligibleSources({ officeId, dryRun: true, allowDisabled: true, maxSources: 1 }, config);
+  return {
+    config,
+    scheduleUtc: "0 11 * * *",
+    safeSources,
+    lastRun,
+    nextRecommendedSource: eligible[0] ? { id: eligible[0].id, name: eligible[0].name } : null,
+  };
 }
 
 export async function runScheduledMarketIngestion(input: ScheduledMarketIngestionInput) {
@@ -108,7 +169,7 @@ export async function runScheduledMarketIngestion(input: ScheduledMarketIngestio
     };
   }
 
-  const sources = eligibleSources(input, config);
+  const sources = await eligibleSources(input, config);
   let remainingPageBudget = config.dailyCreditBudget;
   const results = [];
   for (const source of sources) {

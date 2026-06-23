@@ -1765,3 +1765,110 @@ Verification:
 - `npm run test:intelligence-map`
 - `npm run test:intelligence-page-empty-state`
 - `npm run build`
+
+## Intelligence Map Accuracy And CBP Lane Validation
+
+Status:
+
+- Implemented on 2026-06-23 after production showed fake geography and CBP
+  pseudo-lanes on `/dashboard/intelligence`.
+
+What changed:
+
+- Replaced the hand-drawn blob map with a local Natural Earth 1:110m land asset
+  (`src/lib/market-intelligence/world-map-asset.ts`). This is an existing
+  public-domain map dataset rendered offline; no external tile provider or live
+  map API is used.
+- Added deterministic freight geography in
+  `src/lib/market-intelligence/lane-validation.ts` for known ports, regions,
+  countries, and chokepoints.
+- Valid lanes must normalize to known freight locations. Boilerplate phrases
+  such as `Countdown`, `Welcome`, `Messaging Service`, `Updates`, `Search`, and
+  `Archive` are rejected.
+- CBP/regulatory extraction now models clean items as U.S. customs/compliance
+  context unless clean article body evidence contains a validated freight lane.
+- Map data, Morning Brief, strategy/agent market tools, and signal suppression
+  now filter invalid lane links. Bad historical links remain visible as
+  suppressed/audit data, not recommended affected work.
+- Added guarded cleanup script:
+  `ALLOW_MARKET_REVIEW_CLEANUP=1 npm run cleanup:bad-cbp-market-reviews`.
+  It dismisses pending CBP pseudo-lane reviews and records `wrong_link`
+  feedback; it does not delete records or mutate operational freight data.
+- Added daily market cron entry in `vercel.json`:
+  `/api/cron/market-intelligence` at `0 11 * * *`. Live execution still requires
+  `CRON_SECRET` and `MARKET_INTELLIGENCE_CRON_ENABLED=true`.
+- Daily automation defaults to one safe source/day, three pages/results, and a
+  safe source rotation of Maersk, Drewry WCI, CBP CSMS, and Port of Los Angeles.
+  FreightWaves/JOC/media are excluded.
+
+Verification passed:
+
+```bash
+npx tsc --noEmit
+npm run test:market-lane-validation
+npm run test:market-signal-suppression
+npm run test:intelligence-map
+npm run test:scheduled-market-ingestion
+npm run test:market-content-hygiene
+npm run test:market-intelligence
+npm run test:manual-market-ingestion-action
+npm run test:source-quality
+npm run test:market-impact
+npm run test:firecrawl
+npm run test:morning-brief
+npm run market:doctor
+npm run memory:doctor
+npm run build
+npm run ai:handoff
+```
+
+Safety:
+
+- No live Firecrawl ingestion was run.
+- No Prisma migration was needed.
+- No cleanup was run against production.
+- Keep `MARKET_INTELLIGENCE_CRON_ENABLED=false` until operators explicitly want
+  the daily cron active.
+
+## V2 Intelligence Map Visual QA
+
+Status:
+
+- Implemented on 2026-06-23 for the production Intelligence page readability
+  and trust issue.
+
+What changed:
+
+- The Intelligence map now renders Natural Earth public-domain land geometry
+  plus visible reference labels for continents, key freight ports, and
+  chokepoints. This prevents the map from degrading into a dark decorative
+  canvas when few market signals are present.
+- The map base was brightened with stronger coastline contrast and a darker
+  ocean background so white and cyan labels remain readable.
+- Empty map copy now says: `Pull trusted market data to light up the map.`
+- Hotspot evidence refs are collapsed behind a details control so operator
+  actions and affected work remain the dominant text.
+- The map regression test now asserts that the component uses the Natural Earth
+  asset and includes port/chokepoint reference layers.
+
+Cleanup:
+
+- Production CBP cleanup was not run from the local shell because
+  `DATABASE_URL` was not configured and therefore could not be confirmed as the
+  production Neon database. Use this only after explicitly exporting the
+  confirmed production URL:
+
+```bash
+ALLOW_MARKET_REVIEW_CLEANUP=1 npm run cleanup:bad-cbp-market-reviews
+```
+
+Verification:
+
+- `npx tsc --noEmit`
+- `npm run test:intelligence-map`
+- `npm run test:market-lane-validation`
+- `npm run test:market-signal-suppression`
+- `npm run test:market-content-hygiene`
+- `npm run test:source-quality`
+- `npm run test:market-intelligence`
+- `npm run test:market-impact`

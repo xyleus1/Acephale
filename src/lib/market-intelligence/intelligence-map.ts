@@ -2,13 +2,23 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { buildSourceQualityLookup, listSourceQualitySummaries } from "./source-quality";
 import { getMarketSignalSuppressionReason } from "./signal-suppression";
+import {
+  MARKET_LOCATION_REGISTRY,
+  classifyMarketAffectedEntity,
+  isValidMarketLane,
+  normalizeMarketLane,
+  normalizeMarketLocation,
+  parseMarketLane,
+  rejectBoilerplateLaneCandidate,
+  type MarketLocationDefinition,
+} from "./lane-validation";
 
 export type IntelligenceSeverity = "low" | "medium" | "high" | "critical";
 
 export type IntelligenceHotspot = {
   id: string;
   label: string;
-  type: "port" | "lane" | "country" | "region" | "source" | "customer" | "market";
+  type: "port" | "lane" | "country" | "region" | "source" | "customer" | "market" | "chokepoint";
   lat: number;
   lng: number;
   severity: IntelligenceSeverity;
@@ -28,6 +38,7 @@ export type IntelligenceHotspot = {
   relatedSignalIds: string[];
   relatedReviewIds: string[];
   affectedEntities: Array<{ type: string; id: string; label: string }>;
+  suppressedEntities: Array<{ type: string; id: string; label: string; reason: string }>;
 };
 
 export type IntelligenceLaneArc = {
@@ -99,42 +110,9 @@ export type IntelligenceMapData = {
   }>;
 };
 
-type Coordinates = { label: string; lat: number; lng: number; type: IntelligenceHotspot["type"] };
+type Coordinates = Pick<MarketLocationDefinition, "label" | "lat" | "lng" | "type">;
 
-const LOCATION_LOOKUP: Record<string, Coordinates> = {
-  china: { label: "China", lat: 35.8, lng: 103.8, type: "country" },
-  shanghai: { label: "Shanghai", lat: 31.23, lng: 121.47, type: "port" },
-  ningbo: { label: "Ningbo", lat: 29.87, lng: 121.55, type: "port" },
-  shenzhen: { label: "Shenzhen", lat: 22.54, lng: 114.06, type: "port" },
-  "hong kong": { label: "Hong Kong", lat: 22.32, lng: 114.17, type: "port" },
-  singapore: { label: "Singapore", lat: 1.29, lng: 103.85, type: "port" },
-  europe: { label: "Europe", lat: 50.8, lng: 10.4, type: "region" },
-  "northern europe": { label: "Northern Europe", lat: 54.4, lng: 9.9, type: "region" },
-  hamburg: { label: "Hamburg", lat: 53.55, lng: 9.99, type: "port" },
-  rotterdam: { label: "Rotterdam", lat: 51.92, lng: 4.48, type: "port" },
-  antwerp: { label: "Antwerp", lat: 51.22, lng: 4.4, type: "port" },
-  "los angeles": { label: "Los Angeles", lat: 33.74, lng: -118.26, type: "port" },
-  "long beach": { label: "Long Beach", lat: 33.75, lng: -118.2, type: "port" },
-  "new york": { label: "New York", lat: 40.68, lng: -74.04, type: "port" },
-  savannah: { label: "Savannah", lat: 32.08, lng: -81.09, type: "port" },
-  turkey: { label: "Turkey", lat: 39.0, lng: 35.2, type: "country" },
-  istanbul: { label: "Istanbul", lat: 41.01, lng: 28.97, type: "port" },
-  mersin: { label: "Mersin", lat: 36.8, lng: 34.63, type: "port" },
-  suez: { label: "Suez", lat: 29.97, lng: 32.55, type: "port" },
-  "suez canal": { label: "Suez Canal", lat: 30.45, lng: 32.35, type: "region" },
-  panama: { label: "Panama", lat: 9.08, lng: -79.68, type: "port" },
-  "panama canal": { label: "Panama Canal", lat: 9.08, lng: -79.68, type: "region" },
-  "red sea": { label: "Red Sea", lat: 20.2, lng: 38.2, type: "region" },
-  us: { label: "US", lat: 39.5, lng: -98.35, type: "country" },
-  usa: { label: "US", lat: 39.5, lng: -98.35, type: "country" },
-  "united states": { label: "US", lat: 39.5, lng: -98.35, type: "country" },
-  eu: { label: "EU", lat: 50.5, lng: 10.5, type: "region" },
-  global: { label: "Global Market", lat: 8, lng: 0, type: "market" },
-  "global market": { label: "Global Market", lat: 8, lng: 0, type: "market" },
-  ocean: { label: "Ocean", lat: 5, lng: -30, type: "market" },
-  asia: { label: "Asia", lat: 34, lng: 95, type: "region" },
-  "north america": { label: "North America", lat: 43, lng: -100, type: "region" },
-};
+const GLOBAL_MARKET_COORDINATES: Coordinates = { label: "Global Market", lat: 8, lng: 0, type: "market" };
 
 const SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
 
@@ -183,23 +161,13 @@ function extractionInfo(object: { payload?: Prisma.JsonValue | null } | null | u
   };
 }
 
-function normalizeLocation(value: string) {
-  return value.toLowerCase().replace(/\bcn\b/g, "china").replace(/\beu\b/g, "europe").replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function coordinatesFor(value: string | null | undefined): Coordinates | null {
-  const normalized = normalizeLocation(value ?? "");
-  if (!normalized) return null;
-  if (LOCATION_LOOKUP[normalized]) return LOCATION_LOOKUP[normalized];
-  const found = Object.keys(LOCATION_LOOKUP)
-    .sort((a, b) => b.length - a.length)
-    .find((key) => normalized.includes(key));
-  if (found) return LOCATION_LOOKUP[found];
-  if (/ocean|sea|vessel|carrier|container/.test(normalized)) return LOCATION_LOOKUP.ocean;
-  if (/asia|china|shanghai|ningbo|shenzhen|hong kong|singapore/.test(normalized)) return LOCATION_LOOKUP.asia;
-  if (/europe|hamburg|rotterdam|antwerp/.test(normalized)) return LOCATION_LOOKUP.europe;
-  if (/america|us|los angeles|long beach|new york|savannah/.test(normalized)) return LOCATION_LOOKUP["north america"];
-  return LOCATION_LOOKUP.global;
+function coordinatesFor(value: string | null | undefined, options: { fallback?: boolean } = {}): Coordinates | null {
+  const normalized = normalizeMarketLocation(value);
+  if (normalized) return normalized;
+  if (!options.fallback) return null;
+  const lower = String(value ?? "").toLowerCase();
+  if (/ocean|sea|vessel|carrier|container/.test(lower)) return MARKET_LOCATION_REGISTRY.find((item) => item.label === "Global Ocean") ?? GLOBAL_MARKET_COORDINATES;
+  return GLOBAL_MARKET_COORDINATES;
 }
 
 function defaultLocationLabelsForSource(sourceId: string | null | undefined, sourceName: string | null | undefined, category: string) {
@@ -210,11 +178,28 @@ function defaultLocationLabelsForSource(sourceId: string | null | undefined, sou
   if (id === "port-of-long-beach-news" || /long beach/.test(name)) return ["Long Beach"];
   if (id === "fmc-news-advisories" || /federal maritime|fmc/.test(name)) return ["US", "Ocean"];
   if (id === "drewry-world-container-index" || /drewry|world container index/.test(name)) return ["Shanghai", "Rotterdam", "Los Angeles", "New York"];
-  if (id === "maersk-news-advisories" || /maersk/.test(name)) return ["Ocean", "Global Market"];
+  if (id === "maersk-news-advisories" || /maersk/.test(name)) return ["Global Ocean", "Global Market"];
   if (category === "customs" || category === "compliance") return ["US"];
   if (category === "rate") return ["Ocean", "Global Market"];
-  if (category === "port_disruption") return ["Ocean"];
+  if (category === "port_disruption") return ["Global Ocean"];
   return ["Global Market"];
+}
+
+function isValidLaneLink(link: { entityType: string; entityId: string }) {
+  return link.entityType !== "lane" || isValidMarketLane(link.entityId);
+}
+
+function entityLabelForLink(link: { entityType: string; entityId: string }, entityLabels: Map<string, string>) {
+  if (link.entityType === "lane") return normalizeMarketLane(link.entityId) ?? link.entityId;
+  if (link.entityType === "country" || link.entityType === "chokepoint") return classifyMarketAffectedEntity(link.entityId).label;
+  return entityLabels.get(`${link.entityType}:${link.entityId}`) ?? `${link.entityType}:${link.entityId.slice(0, 8)}`;
+}
+
+function normalizedLanes(value: Prisma.JsonValue | unknown) {
+  return strings(value)
+    .map(normalizeMarketLane)
+    .filter((lane): lane is string => Boolean(lane))
+    .filter((lane, index, array) => array.indexOf(lane) === index);
 }
 
 function compact(value: string | null | undefined, max = 260) {
@@ -301,23 +286,31 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
       ...strings(signal.sourceRefs),
     ].filter((item): item is string => Boolean(item));
     const recommendedActions = strings(signal.recommendedActions);
-    const affectedEntities = signal.links.slice(0, 12).map((link) => ({
+    const validLinks = signal.links.filter(isValidLaneLink);
+    const suppressedEntities = signal.links.filter((link) => !isValidLaneLink(link)).slice(0, 12).map((link) => ({
       type: link.entityType,
       id: link.entityId,
-      label: entityLabels.get(`${link.entityType}:${link.entityId}`) ?? `${link.entityType}:${link.entityId.slice(0, 8)}`,
+      label: entityLabelForLink(link, entityLabels),
+      reason: rejectBoilerplateLaneCandidate(link.entityId) ? "boilerplate_or_chrome_lane" : "unknown_freight_lane",
+    }));
+    const affectedEntities = validLinks.slice(0, 12).map((link) => ({
+      type: link.entityType,
+      id: link.entityId,
+      label: entityLabelForLink(link, entityLabels),
     }));
     const explicitGeoLabels = [
       ...strings(signal.affectedPorts),
       ...strings(signal.affectedOrigins),
       ...strings(signal.affectedDestinations),
-      ...strings(signal.affectedLanes),
+      ...normalizedLanes(signal.affectedLanes),
     ].filter((item): item is string => Boolean(item));
     const usableLabels = explicitGeoLabels.length
       ? explicitGeoLabels
       : defaultLocationLabelsForSource(sourceId, sourceName, signal.category);
 
     for (const rawLabel of usableLabels.slice(0, 10)) {
-      const coords = coordinatesFor(rawLabel) ?? LOCATION_LOOKUP.global;
+      const coords = coordinatesFor(rawLabel, { fallback: !explicitGeoLabels.length });
+      if (!coords) continue;
       const key = `${coords.type}:${coords.label}`;
       const existing = hotspotMap.get(key);
       if (!existing) {
@@ -344,6 +337,7 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
           relatedSignalIds: [signal.id],
           relatedReviewIds: signal.impactReviews.map((review) => review.id),
           affectedEntities: [...affectedEntities],
+          suppressedEntities: [...suppressedEntities],
         });
       } else {
         existing.severity = higherSeverity(existing.severity, signalSeverity);
@@ -362,14 +356,18 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
         for (const entity of affectedEntities) {
           if (!existing.affectedEntities.some((item) => item.type === entity.type && item.id === entity.id)) existing.affectedEntities.push(entity);
         }
+        for (const entity of suppressedEntities) {
+          if (!existing.suppressedEntities.some((item) => item.type === entity.type && item.id === entity.id)) existing.suppressedEntities.push(entity);
+        }
       }
     }
 
-    const lanes = strings(signal.affectedLanes);
+    const lanes = normalizedLanes(signal.affectedLanes);
     for (const lane of lanes) {
-      const [fromRaw, toRaw] = lane.split(/\s*(?:->|→|to)\s*/i);
-      const from = coordinatesFor(fromRaw) ?? coordinatesFor(strings(signal.affectedOrigins)[0]);
-      const to = coordinatesFor(toRaw) ?? coordinatesFor(strings(signal.affectedDestinations)[0]);
+      const parsedLane = parseMarketLane(lane);
+      if (!parsedLane) continue;
+      const from = parsedLane.from ?? coordinatesFor(strings(signal.affectedOrigins)[0]);
+      const to = parsedLane.to ?? coordinatesFor(strings(signal.affectedDestinations)[0]);
       if (!from || !to || from.label === to.label) continue;
       const key = `${from.label}->${to.label}`;
       const existing = laneMap.get(key);
@@ -379,7 +377,7 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
       } else {
         laneMap.set(key, {
           id: key,
-          label: lane,
+          label: parsedLane.label,
           from,
           to,
           severity: signalSeverity,
@@ -431,7 +429,7 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
       impactLevel: review.impactLevel,
       linkedEntityType: review.linkedEntityType,
       linkedEntityId: review.linkedEntityId,
-      linkedEntityLabel: entityLabels.get(`${review.linkedEntityType}:${review.linkedEntityId}`) ?? `${review.linkedEntityType}:${review.linkedEntityId.slice(0, 8)}`,
+      linkedEntityLabel: entityLabelForLink({ entityType: review.linkedEntityType, entityId: review.linkedEntityId }, entityLabels),
       recommendedAction: review.recommendedAction,
       signalId: review.marketSignalId,
       signalSummary: review.marketSignal.summary,

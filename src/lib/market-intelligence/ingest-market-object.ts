@@ -358,6 +358,8 @@ export async function ingestMarketObject(input: IngestMarketObjectInput) {
   const candidates = extractMarketSignals({
     title: input.item.title,
     content: cleanEvidenceText,
+    sourceId: input.source.id,
+    sourceCategory: input.source.sourceCategory,
     defaultCategory: input.source.defaultCategory,
     defaultAffectedModes: input.source.defaultAffectedModes,
     sourceRefs,

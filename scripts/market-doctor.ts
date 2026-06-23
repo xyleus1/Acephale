@@ -7,6 +7,7 @@ import { sourceAllowedDomains, sourceRunLimits, validateMarketSourceDefinition }
 import { listSourceQualitySummaries } from "../src/lib/market-intelligence/source-quality";
 import { getMarketSignalSuppressionReason } from "../src/lib/market-intelligence/signal-suppression";
 import { generateMorningBrief } from "../src/lib/memory/morning-brief";
+import { isValidMarketLane, rejectBoilerplateLaneCandidate } from "../src/lib/market-intelligence/lane-validation";
 
 function argValue(name: string) {
   const prefix = `--${name}=`;
@@ -207,6 +208,8 @@ async function main() {
   const socialLaneLinks = links.filter((link) =>
     link.entityType === "lane" && /\b(facebook|flickr|instagram|twitter|linkedin|youtube|tiktok|threads|links?)\b/i.test(link.entityId)
   );
+  const invalidLaneLinks = links.filter((link) => link.entityType === "lane" && !isValidMarketLane(link.entityId));
+  const boilerplateLaneLinks = links.filter((link) => link.entityType === "lane" && rejectBoilerplateLaneCandidate(link.entityId));
   const skippedMarketUpdates = marketUpdates
     .map((object) => ({ object, extraction: extractionInfo(object.payload) }))
     .filter(({ extraction }) => extraction.extractionStatus && extraction.extractionStatus !== "signal_eligible");
@@ -383,6 +386,19 @@ async function main() {
     .slice(0, 50)
     .map(({ signal, reason }) => ({ id: signal.id, reason, summary: signal.summary.slice(0, 120) })));
   table("Social-link lane/entity candidates", socialLaneLinks.slice(0, 50).map((link) => ({
+    linkId: link.id,
+    signalId: link.signalId,
+    entityId: link.entityId,
+    matchType: link.matchType,
+  })));
+  table("Invalid or unknown lane links", invalidLaneLinks.slice(0, 50).map((link) => ({
+    linkId: link.id,
+    signalId: link.signalId,
+    entityId: link.entityId,
+    matchType: link.matchType,
+    boilerplate: rejectBoilerplateLaneCandidate(link.entityId),
+  })));
+  table("Boilerplate lane links (audit)", boilerplateLaneLinks.slice(0, 50).map((link) => ({
     linkId: link.id,
     signalId: link.signalId,
     entityId: link.entityId,

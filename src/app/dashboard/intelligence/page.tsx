@@ -13,8 +13,10 @@ import {
   recordMarketSignalFeedback,
 } from "@/lib/market-intelligence/market-impact-review";
 import { getManualMarketIngestionRuntimeStatus, SAFE_MANUAL_MARKET_SOURCE_IDS } from "@/lib/market-intelligence/manual-ingestion";
+import { getScheduledMarketAutomationStatus, SAFE_SCHEDULED_MARKET_SOURCE_IDS } from "@/lib/market-intelligence/scheduled-ingestion";
 import { getMarketIntelligenceSourceRegistry } from "@/lib/market-intelligence/source-registry";
 import { getIntelligenceMapData } from "@/lib/market-intelligence/intelligence-map";
+import { normalizeMarketLane } from "@/lib/market-intelligence/lane-validation";
 import { shouldShowMarketBrainEmptyState } from "@/lib/market-intelligence/intelligence-page-state";
 import {
   buildSourceQualityLookup,
@@ -42,6 +44,13 @@ function strings(value: Prisma.JsonValue | unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean)
     : [];
+}
+
+function normalizedLanes(value: Prisma.JsonValue | unknown) {
+  return strings(value)
+    .map(normalizeMarketLane)
+    .filter((lane): lane is string => Boolean(lane))
+    .filter((lane, index, array) => array.indexOf(lane) === index);
 }
 
 function record(value: Prisma.JsonValue | unknown): Record<string, unknown> {
@@ -165,7 +174,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   const registry = getMarketIntelligenceSourceRegistry();
   const sourceCategories = [...new Set(registry.map((source) => source.sourceCategory))].sort();
 
-  const [reviewsRaw, signalsRaw, researchObjectsRaw, runs, sourceQuality, mapData] = await Promise.all([
+  const [reviewsRaw, signalsRaw, researchObjectsRaw, runs, sourceQuality, mapData, scheduledStatus] = await Promise.all([
     prisma.marketImpactReview.findMany({
       where: {
         officeId: session.officeId,
@@ -228,6 +237,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
     }).catch(() => []),
     listSourceQualitySummaries({ officeId: session.officeId }),
     getIntelligenceMapData(session.officeId),
+    getScheduledMarketAutomationStatus(session.officeId),
   ]);
 
   const qualityLookup = buildSourceQualityLookup(sourceQuality);
@@ -321,6 +331,46 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       </div>
 
       <WorldIntelligenceMap data={mapData} />
+
+      <section className="workbench-section intelligence-section">
+        <div className="workbench-card-header">
+          <div>
+            <h2>Daily Market Automation</h2>
+            <p>Hobby-compatible daily cron at 11:00 UTC. Advisory-only; it never mutates jobs, RFQs, quotes, prices, customers, milestones, or messages.</p>
+          </div>
+          <span className={["pricing-status", scheduledStatus.config.cronEnabled ? "status-priced" : "status-needs-info"].join(" ")}>
+            {scheduledStatus.config.cronEnabled ? "enabled" : "disabled"}
+          </span>
+        </div>
+        <div className="intelligence-run-grid">
+          <div className="intelligence-run">
+            <strong>Schedule</strong>
+            <span>0 11 * * * / daily 11:00 UTC</span>
+            <span className="muted">Vercel Hobby-safe: at most once per day.</span>
+          </div>
+          <div className="intelligence-run">
+            <strong>Runtime limits</strong>
+            <span>{scheduledStatus.config.maxSources} source/day · {scheduledStatus.config.maxPagesPerRun} pages/source</span>
+            <span className="muted">Daily credit budget {scheduledStatus.config.dailyCreditBudget}; provider {scheduledStatus.config.providerConfigured ? "configured" : "missing"}; live ingestion {scheduledStatus.config.liveIngestionEnabled ? "enabled" : "disabled"}.</span>
+          </div>
+          <div className="intelligence-run">
+            <strong>Safe rotation</strong>
+            <span>{scheduledStatus.safeSources.map((source) => source.name).join(" → ")}</span>
+            <span className="muted">Media/broad sources are excluded from cron.</span>
+          </div>
+          <div className="intelligence-run">
+            <strong>Next / last</strong>
+            <span>Next: {scheduledStatus.nextRecommendedSource?.name ?? "No safe source currently eligible"}</span>
+            <span className="muted">
+              Last: {scheduledStatus.lastRun ? `${scheduledStatus.lastRun.sourceId} · ${scheduledStatus.lastRun.status} · ${timeLabel(scheduledStatus.lastRun.createdAt)}` : "No scheduled run yet"}
+            </span>
+          </div>
+        </div>
+        <p className="muted">
+          MARKET_INTELLIGENCE_CRON_ENABLED must be true before cron runs live. Current page only exposes status and safe rotation.
+          Safe source ids: {SAFE_SCHEDULED_MARKET_SOURCE_IDS.join(", ")}.
+        </p>
+      </section>
 
       <form className="filter-bar" action="/dashboard/intelligence">
         <input name="q" defaultValue={query} placeholder="Search research feed" />
@@ -472,6 +522,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           ) : researchObjects.map((object) => {
             const sourceMetadata = record(object.source?.metadata);
             const sourceId = sourceIdForObject(object);
+            const sourceMeta = sourceMetaById.get(sourceId ?? "");
             const quality = qualityLookup.bySourceObjectId.get(object.id);
             const extraction = extractionInfo(object);
             return (
@@ -481,6 +532,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                     <span className="pricing-status status-ingested">{object.canonicalType}</span>
                     <span className="muted">{object.source?.label ?? object.source?.type ?? "Market source"}</span>
                     {sourceId && <span className="muted">{sourceId}</span>}
+                    {sourceMeta && <span className="muted">{sourceMeta.sourceCategory}</span>}
                     {typeof sourceMetadata.trustLevel === "string" && <span className="muted">Trust {sourceMetadata.trustLevel}</span>}
                     {quality && <span className="muted">Quality {quality.score}</span>}
                     {extraction.status && <span className="muted">{extraction.status}</span>}
@@ -488,9 +540,12 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                     {typeof extraction.score === "number" && <span className="muted">Content {extraction.score}</span>}
                     <span className="muted">{timeLabel(object.occurredAt)}</span>
                   </div>
-                  <h3 className="intelligence-title-with-icon"><IntelligenceIcon type={sourceMetaById.get(sourceId ?? "")?.sourceCategory ?? "market"} /> {object.title ?? object.sourceExternalId}</h3>
+                  <h3 className="intelligence-title-with-icon"><IntelligenceIcon type={sourceMeta?.sourceCategory ?? "market"} /> {object.title ?? object.sourceExternalId}</h3>
                   <p>{short(object.chunks[0]?.text ?? object.sourceExternalId, 420)}</p>
                   {extraction.reason && <p><strong>Extraction skipped:</strong> {extraction.reason}</p>}
+                  {sourceMeta?.sourceCategory === "regulatory" && (
+                    <p><strong>Modeling:</strong> CBP/regulatory items are treated as customs/compliance context unless the clean body contains a validated freight lane.</p>
+                  )}
                   <div className="intelligence-evidence">
                     <span>KnowledgeObject {object.id}</span>
                     <span>{object.marketSignals.length} signals</span>
@@ -524,6 +579,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           ) : signals.map((signal) => {
             const sourceId = sourceIdForObject(signal.sourceObject);
             const quality = signal.sourceObjectId ? qualityLookup.bySourceObjectId.get(signal.sourceObjectId) : null;
+            const validLanes = normalizedLanes(signal.affectedLanes);
             const suppressionReason = getMarketSignalSuppressionReason({
               signal,
               sourceQuality: quality,
@@ -547,7 +603,10 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                   {signal.pricingImplication && <p><strong>Pricing:</strong> {signal.pricingImplication}</p>}
                   <div className="intelligence-evidence">
                     {strings(signal.affectedModes).slice(0, 4).map((mode) => <span key={mode}>{mode}</span>)}
-                    {strings(signal.affectedLanes).slice(0, 4).map((lane) => <span key={lane}>{lane}</span>)}
+                    {validLanes.slice(0, 4).map((lane) => <span key={lane}>{lane}</span>)}
+                    {(signal.category === "customs" || signal.category === "compliance") && validLanes.length === 0 && (
+                      <span>No valid freight lane detected; treated as U.S. customs/compliance context.</span>
+                    )}
                     <span>{signal.links.length} links</span>
                     <span>{signal.impactReviews.filter((review) => review.status === "pending").length} pending reviews</span>
                     {sourceId && <span>{sourceId}</span>}

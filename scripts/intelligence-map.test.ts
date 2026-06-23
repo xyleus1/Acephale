@@ -1,15 +1,24 @@
 import "dotenv/config";
+import { readFileSync } from "node:fs";
 import { prisma } from "../src/lib/prisma";
 import { getIntelligenceMapData } from "../src/lib/market-intelligence/intelligence-map";
 import { ingestMarketSource } from "../src/lib/market-intelligence/ingest-market-source";
 import { getMarketIntelligenceSource } from "../src/lib/market-intelligence/source-registry";
 import { toMemoryJson } from "../src/lib/memory/record-event";
+import { WORLD_MAP_ASSET_SOURCE, WORLD_MAP_LAND_PATHS } from "../src/lib/market-intelligence/world-map-asset";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
 async function main() {
+  const mapComponentSource = readFileSync("src/components/intelligence/world-intelligence-map.tsx", "utf8");
+  assert(WORLD_MAP_ASSET_SOURCE.name === "Natural Earth 1:110m land", "Expected Natural Earth world map asset.");
+  assert(WORLD_MAP_LAND_PATHS.length > 100, "Expected a real world map asset with many land paths, not handmade continent blobs.");
+  assert(mapComponentSource.includes("REFERENCE_CHOKEPOINTS"), "Expected visible chokepoint reference markers on the intelligence map.");
+  assert(mapComponentSource.includes("REFERENCE_PORTS"), "Expected visible port reference markers on the intelligence map.");
+  assert(mapComponentSource.includes("Pull trusted market data to light up the map."), "Expected explicit empty-state copy for manual ingestion.");
+
   const runId = `intelligence-map-${Date.now()}`;
   const office = await prisma.office.create({ data: { name: runId } });
 
@@ -102,6 +111,39 @@ async function main() {
         provenance: toMemoryJson({ source: "intelligence-map.test" }),
       },
     });
+    const badSignal = await prisma.marketSignal.create({
+      data: {
+        officeId: office.id,
+        category: "customs",
+        severity: "critical",
+        confidence: 0.8,
+        affectedModes: toMemoryJson(["ocean", "air", "road", "rail"]),
+        affectedOrigins: toMemoryJson([]),
+        affectedDestinations: toMemoryJson(["US"]),
+        affectedPorts: toMemoryJson([]),
+        affectedLanes: toMemoryJson(["Countdown -> America", "Welcome -> U.S. Customs and Border"]),
+        affectedCarriers: toMemoryJson([]),
+        summary: "Fixture CBP boilerplate should not become freight lanes.",
+        operatorImplication: "Review customs context only.",
+        pricingImplication: null,
+        customerImpact: null,
+        recommendedActions: toMemoryJson(["Review customs/document requirements."]),
+        sourceRefs: toMemoryJson([]),
+        dedupeKey: `${runId}:bad-cbp-boilerplate`,
+        provenance: toMemoryJson({ source: "intelligence-map.test" }),
+      },
+    });
+    await prisma.marketSignalLink.create({
+      data: {
+        officeId: office.id,
+        signalId: badSignal.id,
+        entityType: "lane",
+        entityId: "Countdown -> America",
+        matchType: "signal_lane",
+        confidence: 0.8,
+        reason: "Fixture bad CBP pseudo-lane.",
+      },
+    });
 
     const data = await getIntelligenceMapData(office.id);
     assert(data.hotspots.length > 0, "Expected map hotspots.");
@@ -114,6 +156,8 @@ async function main() {
     assert(data.hotspots.some((hotspot) => hotspot.label === "Global Market"), "Expected unknown geography to map to Global Market fallback.");
     assert(data.hotspots.some((hotspot) => hotspot.evidenceRefs.some((ref) => ref.startsWith("MarketSignal:"))), "Expected MarketSignal evidence refs.");
     assert(data.hotspots.some((hotspot) => hotspot.affectedEntities.some((entity) => entity.id === job.id || entity.id === inquiry.id || entity.id === company.id)), "Expected linked CRM entities in hotspot data.");
+    assert(!data.lanes.some((lane) => /Countdown|Welcome|America|Customs/.test(lane.label)), "Bad CBP pseudo-lanes should not render as map lanes.");
+    assert(data.hotspots.some((hotspot) => hotspot.suppressedEntities.some((entity) => entity.id === "Countdown -> America")), "Expected invalid CBP lane link to be visible only as suppressed/rejected audit data.");
 
     console.log(JSON.stringify({
       ok: true,

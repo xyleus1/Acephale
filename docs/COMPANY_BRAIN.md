@@ -946,3 +946,32 @@ npm run test:intelligence-map
 npm run test:manual-market-ingestion-action
 npm run test:intelligence-page-empty-state
 ```
+
+## Market Map Accuracy And Lane Trust
+
+The company brain now treats market geography as a governed knowledge layer, not
+as free-form extracted text.
+
+Rules:
+
+- The Intelligence map uses existing Natural Earth public-domain land geometry,
+  generated locally into `src/lib/market-intelligence/world-map-asset.ts`.
+- Market lanes must pass `src/lib/market-intelligence/lane-validation.ts`.
+- Chokepoints, ports, countries, and regions have explicit coordinates and
+  aliases.
+- Boilerplate/page-chrome phrases are rejected before they become
+  `MarketSignalLink` or `MarketImpactReview` rows.
+- CBP/regulatory content becomes U.S. customs/compliance memory unless clean
+  evidence contains a validated freight lane.
+
+This matters for agent trust: Morning Brief, strategy context, and market tools
+should cite market intelligence only when the underlying geography is
+source-backed and validated. Suppressed/rejected links remain queryable for
+audit, but they are not recommended work.
+
+Daily market automation exists as a safe path but remains env-gated:
+
+- Vercel cron: `/api/cron/market-intelligence`, `0 11 * * *`
+- Live runs require `MARKET_INTELLIGENCE_CRON_ENABLED=true`
+- Default safe rotation: Maersk, Drewry WCI, CBP CSMS, Port of Los Angeles
+- No operational freight records are mutated by external intelligence
