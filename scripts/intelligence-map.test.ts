@@ -3,6 +3,7 @@ import { prisma } from "../src/lib/prisma";
 import { getIntelligenceMapData } from "../src/lib/market-intelligence/intelligence-map";
 import { ingestMarketSource } from "../src/lib/market-intelligence/ingest-market-source";
 import { getMarketIntelligenceSource } from "../src/lib/market-intelligence/source-registry";
+import { toMemoryJson } from "../src/lib/memory/record-event";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -79,6 +80,29 @@ async function main() {
       }],
     });
 
+    await prisma.marketSignal.create({
+      data: {
+        officeId: office.id,
+        category: "carrier_advisory",
+        severity: "low",
+        confidence: 0.7,
+        affectedModes: toMemoryJson(["ocean"]),
+        affectedOrigins: toMemoryJson([]),
+        affectedDestinations: toMemoryJson([]),
+        affectedPorts: toMemoryJson([]),
+        affectedLanes: toMemoryJson([]),
+        affectedCarriers: toMemoryJson(["Fixture Carrier"]),
+        summary: "Fixture carrier published a global advisory without lane-specific location evidence.",
+        operatorImplication: "Treat as global carrier context until a lane is identified.",
+        pricingImplication: null,
+        customerImpact: null,
+        recommendedActions: toMemoryJson(["Review only if active work overlaps after human triage."]),
+        sourceRefs: toMemoryJson([]),
+        dedupeKey: `${runId}:global-fallback`,
+        provenance: toMemoryJson({ source: "intelligence-map.test" }),
+      },
+    });
+
     const data = await getIntelligenceMapData(office.id);
     assert(data.hotspots.length > 0, "Expected map hotspots.");
     assert(data.researchItems.length > 0, "Expected research items.");
@@ -87,6 +111,7 @@ async function main() {
     assert(data.metrics.affectedJobs > 0, "Expected affected job metric.");
     assert(data.metrics.affectedRfqs > 0, "Expected affected RFQ metric.");
     assert(data.hotspots.some((hotspot) => ["Shanghai", "China", "Europe", "Hamburg", "Northern Europe"].includes(hotspot.label)), "Expected deterministic freight geocoding hotspot.");
+    assert(data.hotspots.some((hotspot) => hotspot.label === "Global Market"), "Expected unknown geography to map to Global Market fallback.");
     assert(data.hotspots.some((hotspot) => hotspot.evidenceRefs.some((ref) => ref.startsWith("MarketSignal:"))), "Expected MarketSignal evidence refs.");
     assert(data.hotspots.some((hotspot) => hotspot.affectedEntities.some((entity) => entity.id === job.id || entity.id === inquiry.id || entity.id === company.id)), "Expected linked CRM entities in hotspot data.");
 

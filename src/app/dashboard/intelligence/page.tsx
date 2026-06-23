@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Icon } from "@/components/icon";
+import { IntelligenceIcon } from "@/components/intelligence/intelligence-visual-icons";
 import { ManualMarketIngestionControls } from "@/components/intelligence/manual-market-ingestion-controls";
 import { WorldIntelligenceMap } from "@/components/intelligence/world-intelligence-map";
 import {
@@ -11,9 +12,10 @@ import {
   markMarketImpactActioned,
   recordMarketSignalFeedback,
 } from "@/lib/market-intelligence/market-impact-review";
-import { SAFE_MANUAL_MARKET_SOURCE_IDS } from "@/lib/market-intelligence/manual-ingestion";
+import { getManualMarketIngestionRuntimeStatus, SAFE_MANUAL_MARKET_SOURCE_IDS } from "@/lib/market-intelligence/manual-ingestion";
 import { getMarketIntelligenceSourceRegistry } from "@/lib/market-intelligence/source-registry";
 import { getIntelligenceMapData } from "@/lib/market-intelligence/intelligence-map";
+import { shouldShowMarketBrainEmptyState } from "@/lib/market-intelligence/intelligence-page-state";
 import {
   buildSourceQualityLookup,
   listSourceQualitySummaries,
@@ -163,7 +165,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   const registry = getMarketIntelligenceSourceRegistry();
   const sourceCategories = [...new Set(registry.map((source) => source.sourceCategory))].sort();
 
-  const [reviewsRaw, signalsRaw, researchObjectsRaw, runs, sourceQuality, pendingCount, mapData] = await Promise.all([
+  const [reviewsRaw, signalsRaw, researchObjectsRaw, runs, sourceQuality, mapData] = await Promise.all([
     prisma.marketImpactReview.findMany({
       where: {
         officeId: session.officeId,
@@ -225,7 +227,6 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       take: 12,
     }).catch(() => []),
     listSourceQualitySummaries({ officeId: session.officeId }),
-    prisma.marketImpactReview.count({ where: { officeId: session.officeId, status: "pending" } }),
     getIntelligenceMapData(session.officeId),
   ]);
 
@@ -252,6 +253,14 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   ).slice(0, 30);
   const enabledSourceCount = registry.filter((source) => source.enabled).length;
   const disabledSourceCount = registry.length - enabledSourceCount;
+  const runtimeStatus = getManualMarketIngestionRuntimeStatus();
+  const totalSignals = Object.values(mapData.metrics.signalsBySeverity).reduce((sum, count) => sum + count, 0);
+  const affectedWork = mapData.metrics.affectedCustomers + mapData.metrics.affectedJobs + mapData.metrics.affectedRfqs;
+  const hasNoMarketData = shouldShowMarketBrainEmptyState({
+    researchItems: researchObjectsRaw.length,
+    marketSignals: signalsRaw.length,
+    impactReviews: reviewsRaw.length,
+  });
   const safeManualSources = registry
     .filter((source) => SAFE_MANUAL_MARKET_SOURCE_IDS.includes(source.id as typeof SAFE_MANUAL_MARKET_SOURCE_IDS[number]))
     .filter((source) => source.fetchType === "firecrawl_search" || source.fetchType === "firecrawl_scrape")
@@ -282,16 +291,28 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
 
       <div className="stat-grid intelligence-stats">
         <div className="stat-card">
+          <div className="stat-label">24h Research</div>
+          <div className="stat-value">{mapData.metrics.researchItems24h}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">7d Research</div>
+          <div className="stat-value">{mapData.metrics.researchItems7d}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">MarketSignals</div>
+          <div className="stat-value">{totalSignals}</div>
+        </div>
+        <div className="stat-card">
           <div className="stat-label">Pending Reviews</div>
           <div className="stat-value">{mapData.metrics.pendingImpactReviews}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Affected Work</div>
-          <div className="stat-value">{mapData.metrics.affectedCustomers + mapData.metrics.affectedJobs + mapData.metrics.affectedRfqs}</div>
+          <div className="stat-value">{affectedWork}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">7d Research</div>
-          <div className="stat-value">{mapData.metrics.researchItems7d}</div>
+          <div className="stat-label">Source Quality Avg</div>
+          <div className="stat-value">{mapData.metrics.sourceQualityAverage ?? "n/a"}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Suppressed Signals</div>
@@ -332,7 +353,12 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           </div>
           <span className="muted">{enabledSourceCount} enabled / {disabledSourceCount} disabled</span>
         </div>
-        <ManualMarketIngestionControls sources={safeManualSources} isAdmin={session.role === "ADMIN"} />
+        <ManualMarketIngestionControls
+          sources={safeManualSources}
+          isAdmin={session.role === "ADMIN"}
+          isEmpty={hasNoMarketData}
+          runtimeStatus={runtimeStatus}
+        />
         <div className="intelligence-run-grid">
           {sourceQuality.map((quality) => {
             return (
@@ -393,7 +419,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                     {quality && <span className="muted">{quality.name} score {quality.score}</span>}
                     <span className="muted">{timeLabel(review.createdAt)}</span>
                   </div>
-                  <h3>{review.marketSignal.summary}</h3>
+                  <h3 className="intelligence-title-with-icon"><IntelligenceIcon type={review.marketSignal.category} /> {review.marketSignal.summary}</h3>
                   <p>{short(review.impactReason, 360)}</p>
                   {review.recommendedAction && <p><strong>Action:</strong> {review.recommendedAction}</p>}
                   <div className="intelligence-evidence">
@@ -462,7 +488,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                     {typeof extraction.score === "number" && <span className="muted">Content {extraction.score}</span>}
                     <span className="muted">{timeLabel(object.occurredAt)}</span>
                   </div>
-                  <h3>{object.title ?? object.sourceExternalId}</h3>
+                  <h3 className="intelligence-title-with-icon"><IntelligenceIcon type={sourceMetaById.get(sourceId ?? "")?.sourceCategory ?? "market"} /> {object.title ?? object.sourceExternalId}</h3>
                   <p>{short(object.chunks[0]?.text ?? object.sourceExternalId, 420)}</p>
                   {extraction.reason && <p><strong>Extraction skipped:</strong> {extraction.reason}</p>}
                   <div className="intelligence-evidence">
@@ -516,7 +542,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                     {suppressionReason && <span className="muted">{suppressionReason}</span>}
                     <span className="muted">{timeLabel(signal.createdAt)}</span>
                   </div>
-                  <h3>{signal.summary}</h3>
+                  <h3 className="intelligence-title-with-icon"><IntelligenceIcon type={signal.category} /> {signal.summary}</h3>
                   {signal.operatorImplication && <p><strong>Ops:</strong> {signal.operatorImplication}</p>}
                   {signal.pricingImplication && <p><strong>Pricing:</strong> {signal.pricingImplication}</p>}
                   <div className="intelligence-evidence">

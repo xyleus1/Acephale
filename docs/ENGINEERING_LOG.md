@@ -619,13 +619,24 @@ Use this file for chronological implementation notes that future agents should s
   `scripts/manual-market-ingestion-action.test.ts`, `package.json`,
   `docs/MARKET_INTELLIGENCE.md`, `docs/COMPANY_BRAIN.md`,
   `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
-- Behavior added: deterministic map hotspots and lane arcs, visual market
-  intelligence summary, source health cards, admin-only preview/live manual
-  ingestion controls, and safe result summaries.
+- Behavior added: deterministic SVG world map, source-aware hotspots and lane
+  arcs, first-ingestion empty state, runtime readiness badges, source health
+  cards, admin-only preview/live manual ingestion controls, safe bundle pull,
+  and safe result summaries.
 - Safety gates: manual live ingestion requires
   `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true`, refuses when
   `MARKET_INTELLIGENCE_CRON_ENABLED=true`, uses an explicit safe source
   allowlist, clamps to three results/pages, blocks media/FreightWaves/JOC by
   default, and does not mutate operational freight records.
+- Safe bundle: `maersk-news-advisories`, `drewry-world-container-index`, and
+  `cbp-csms` only.
+- Verification passed so far: `npx tsc --noEmit`,
+  `npm run test:intelligence-map`,
+  `npm run test:manual-market-ingestion-action`,
+  `npm run test:intelligence-page-empty-state`,
+  `npm run test:market-content-hygiene`,
+  `npm run test:market-signal-suppression`,
+  `npm run test:source-quality`, `npm run test:market-intelligence`, and
+  `npm run test:market-impact`.
 - Failed/skipped checks: no local live Firecrawl ingestion was run, no market
   cron was enabled, and no Prisma migration was required.

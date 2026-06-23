@@ -1691,8 +1691,13 @@ Status:
 What changed:
 
 - Added `getIntelligenceMapData(officeId)` for deterministic world-map data.
-- Added clickable intelligence map, hotspot panel, source cards, visual icons,
-  and admin manual ingestion controls.
+- Added a local SVG world map, clickable hotspot panel, source cards, visual
+  icons, and admin manual ingestion controls.
+- Added a visible first-ingestion empty state so production does not look like a
+  decorative empty dashboard when Research Feed / Market Signals / Impact
+  Reviews are all empty.
+- Added runtime readiness badges for Firecrawl, manual-live enablement, cron
+  disabled state, provider, safe source count, and result/page clamps.
 - Replaced the old permissive inline "Run one" action with an admin-only manual
   ingestion action.
 - Manual live ingestion requires
@@ -1701,6 +1706,7 @@ What changed:
 - Manual source allowlist is restricted to Maersk, Drewry WCI, CBP CSMS, and
   Port of Los Angeles. FreightWaves/JOC/media are not available by default.
 - Manual pulls clamp to one source and three results/pages.
+- Added a safe bundle action for Maersk + Drewry WCI + CBP CSMS only.
 
 Safety:
 
@@ -1716,6 +1722,7 @@ Verification passed:
 npx tsc --noEmit
 npm run test:intelligence-map
 npm run test:manual-market-ingestion-action
+npm run test:intelligence-page-empty-state
 npm run test:market-content-hygiene
 npm run test:market-signal-suppression
 npm run test:source-quality
@@ -1730,3 +1737,5 @@ Production use:
 - Ensure Vercel Production has
   `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true` before using the live button.
 - Keep `MARKET_INTELLIGENCE_CRON_ENABLED=false`.
+- First manual source should be `maersk-news-advisories`.
+- Review Research Feed, Market Signals, and Impact Reviews before acting.

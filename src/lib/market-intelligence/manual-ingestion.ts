@@ -11,6 +11,12 @@ export const SAFE_MANUAL_MARKET_SOURCE_IDS = [
   "port-of-los-angeles-latest-news",
 ] as const;
 
+export const SAFE_MANUAL_MARKET_BUNDLE_SOURCE_IDS = [
+  "maersk-news-advisories",
+  "drewry-world-container-index",
+  "cbp-csms",
+] as const;
+
 export type SafeManualMarketSourceId = typeof SAFE_MANUAL_MARKET_SOURCE_IDS[number];
 export type ManualMarketIngestionMode = "preview" | "live";
 
@@ -39,8 +45,40 @@ export type ManualMarketIngestionValidation = {
   allowedDomains?: string[];
 };
 
+export type ManualMarketIngestionRuntimeStatus = {
+  firecrawlConfigured: boolean;
+  manualLiveEnabled: boolean;
+  cronEnabled: boolean;
+  provider: string;
+  maxResultsPerRun: number;
+  maxPagesPerRun: number;
+  safeSourceCount: number;
+  safeBundleSourceIds: string[];
+  liveDisabledReason: string | null;
+};
+
+export type ManualMarketIngestionBundleSummary = {
+  ok: boolean;
+  mode: ManualMarketIngestionMode;
+  message: string;
+  sourceIds: string[];
+  summaries: ManualMarketIngestionSummary[];
+  researchItemsCreated: number;
+  marketSignalsCreated: number;
+  marketSignalLinksCreated: number;
+  marketImpactReviewsCreated: number;
+  extractionSkips: number;
+  duplicateOrSkippedCandidates: number;
+  providerErrors: string[];
+};
+
 function envFlag(value: string | undefined) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function envInt(value: string | undefined, fallback: number, max: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(max, Math.floor(parsed))) : fallback;
 }
 
 function normalizeMode(value: string | null | undefined): ManualMarketIngestionMode {
@@ -61,6 +99,30 @@ export function isSafeManualMarketSourceId(sourceId: string): sourceId is SafeMa
 
 export function normalizeManualMarketIngestionMode(value: string | null | undefined) {
   return normalizeMode(value);
+}
+
+export function getManualMarketIngestionRuntimeStatus(env: NodeJS.ProcessEnv = process.env): ManualMarketIngestionRuntimeStatus {
+  const cronEnabled = envFlag(env.MARKET_INTELLIGENCE_CRON_ENABLED);
+  const manualLiveEnabled = envFlag(env.MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED);
+  const firecrawlConfigured = Boolean(env.FIRECRAWL_API_KEY?.trim());
+  const liveDisabledReason = cronEnabled
+    ? "Scheduled market cron is enabled. Manual ingestion is disabled until cron is off."
+    : !manualLiveEnabled
+      ? "Live manual ingestion is disabled. Set MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true."
+      : !firecrawlConfigured
+        ? "FIRECRAWL_API_KEY is not configured."
+        : null;
+  return {
+    firecrawlConfigured,
+    manualLiveEnabled,
+    cronEnabled,
+    provider: env.MARKET_INTELLIGENCE_PROVIDER?.trim() || "firecrawl",
+    maxResultsPerRun: Math.min(3, envInt(env.MARKET_INTELLIGENCE_MAX_RESULTS_PER_RUN, 3, 100)),
+    maxPagesPerRun: Math.min(3, envInt(env.MARKET_INTELLIGENCE_MAX_PAGES_PER_RUN, 3, 100)),
+    safeSourceCount: SAFE_MANUAL_MARKET_SOURCE_IDS.length,
+    safeBundleSourceIds: [...SAFE_MANUAL_MARKET_BUNDLE_SOURCE_IDS],
+    liveDisabledReason,
+  };
 }
 
 export function validateManualMarketIngestionRequest(input: {
@@ -236,4 +298,45 @@ export async function runManualMarketIngestion(input: {
     clientOptions: input.clientOptions,
   });
   return summarizeLiveResult(validation.source, result);
+}
+
+function summarizeBundle(mode: ManualMarketIngestionMode, summaries: ManualMarketIngestionSummary[]): ManualMarketIngestionBundleSummary {
+  const providerErrors = summaries.flatMap((summary) => summary.providerErrors);
+  const ok = summaries.every((summary) => summary.ok);
+  return {
+    ok,
+    mode,
+    message: ok
+      ? "Safe market ingestion bundle completed."
+      : "Safe market ingestion bundle completed with blocked or failed sources.",
+    sourceIds: [...SAFE_MANUAL_MARKET_BUNDLE_SOURCE_IDS],
+    summaries,
+    researchItemsCreated: summaries.reduce((sum, summary) => sum + summary.researchItemsCreated, 0),
+    marketSignalsCreated: summaries.reduce((sum, summary) => sum + summary.marketSignalsCreated, 0),
+    marketSignalLinksCreated: summaries.reduce((sum, summary) => sum + summary.marketSignalLinksCreated, 0),
+    marketImpactReviewsCreated: summaries.reduce((sum, summary) => sum + summary.marketImpactReviewsCreated, 0),
+    extractionSkips: summaries.reduce((sum, summary) => sum + summary.extractionSkips, 0),
+    duplicateOrSkippedCandidates: summaries.reduce((sum, summary) => sum + summary.duplicateOrSkippedCandidates, 0),
+    providerErrors: [...new Set(providerErrors.map(safeError))],
+  };
+}
+
+export async function runSafeMarketIngestionBundle(input: {
+  officeId: string;
+  role: string;
+  mode?: string | null;
+  clientOptions?: FirecrawlClientOptions;
+}): Promise<ManualMarketIngestionBundleSummary> {
+  const mode = normalizeMode(input.mode);
+  const summaries: ManualMarketIngestionSummary[] = [];
+  for (const sourceId of SAFE_MANUAL_MARKET_BUNDLE_SOURCE_IDS) {
+    summaries.push(await runManualMarketIngestion({
+      officeId: input.officeId,
+      role: input.role,
+      sourceId,
+      mode,
+      clientOptions: input.clientOptions,
+    }));
+  }
+  return summarizeBundle(mode, summaries);
 }

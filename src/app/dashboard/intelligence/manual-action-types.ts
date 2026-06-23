@@ -1,10 +1,15 @@
-import type { ManualMarketIngestionMode, ManualMarketIngestionSummary } from "@/lib/market-intelligence/manual-ingestion";
+import type {
+  ManualMarketIngestionBundleSummary,
+  ManualMarketIngestionMode,
+  ManualMarketIngestionSummary,
+} from "@/lib/market-intelligence/manual-ingestion";
 
 export type ManualMarketIngestionActionState = {
   ok: boolean;
   mode?: ManualMarketIngestionMode;
   message: string;
   summary?: ManualMarketIngestionSummary;
+  bundleSummary?: ManualMarketIngestionBundleSummary;
 };
 
 export const initialManualMarketIngestionState: ManualMarketIngestionActionState = {

@@ -106,6 +106,8 @@ const LOCATION_LOOKUP: Record<string, Coordinates> = {
   shanghai: { label: "Shanghai", lat: 31.23, lng: 121.47, type: "port" },
   ningbo: { label: "Ningbo", lat: 29.87, lng: 121.55, type: "port" },
   shenzhen: { label: "Shenzhen", lat: 22.54, lng: 114.06, type: "port" },
+  "hong kong": { label: "Hong Kong", lat: 22.32, lng: 114.17, type: "port" },
+  singapore: { label: "Singapore", lat: 1.29, lng: 103.85, type: "port" },
   europe: { label: "Europe", lat: 50.8, lng: 10.4, type: "region" },
   "northern europe": { label: "Northern Europe", lat: 54.4, lng: 9.9, type: "region" },
   hamburg: { label: "Hamburg", lat: 53.55, lng: 9.99, type: "port" },
@@ -113,15 +115,22 @@ const LOCATION_LOOKUP: Record<string, Coordinates> = {
   antwerp: { label: "Antwerp", lat: 51.22, lng: 4.4, type: "port" },
   "los angeles": { label: "Los Angeles", lat: 33.74, lng: -118.26, type: "port" },
   "long beach": { label: "Long Beach", lat: 33.75, lng: -118.2, type: "port" },
+  "new york": { label: "New York", lat: 40.68, lng: -74.04, type: "port" },
+  savannah: { label: "Savannah", lat: 32.08, lng: -81.09, type: "port" },
   turkey: { label: "Turkey", lat: 39.0, lng: 35.2, type: "country" },
   istanbul: { label: "Istanbul", lat: 41.01, lng: 28.97, type: "port" },
+  mersin: { label: "Mersin", lat: 36.8, lng: 34.63, type: "port" },
   suez: { label: "Suez", lat: 29.97, lng: 32.55, type: "port" },
+  "suez canal": { label: "Suez Canal", lat: 30.45, lng: 32.35, type: "region" },
   panama: { label: "Panama", lat: 9.08, lng: -79.68, type: "port" },
+  "panama canal": { label: "Panama Canal", lat: 9.08, lng: -79.68, type: "region" },
   "red sea": { label: "Red Sea", lat: 20.2, lng: 38.2, type: "region" },
   us: { label: "US", lat: 39.5, lng: -98.35, type: "country" },
   usa: { label: "US", lat: 39.5, lng: -98.35, type: "country" },
+  "united states": { label: "US", lat: 39.5, lng: -98.35, type: "country" },
   eu: { label: "EU", lat: 50.5, lng: 10.5, type: "region" },
-  global: { label: "Global", lat: 8, lng: 0, type: "market" },
+  global: { label: "Global Market", lat: 8, lng: 0, type: "market" },
+  "global market": { label: "Global Market", lat: 8, lng: 0, type: "market" },
   ocean: { label: "Ocean", lat: 5, lng: -30, type: "market" },
   asia: { label: "Asia", lat: 34, lng: 95, type: "region" },
   "north america": { label: "North America", lat: 43, lng: -100, type: "region" },
@@ -187,10 +196,25 @@ function coordinatesFor(value: string | null | undefined): Coordinates | null {
     .find((key) => normalized.includes(key));
   if (found) return LOCATION_LOOKUP[found];
   if (/ocean|sea|vessel|carrier|container/.test(normalized)) return LOCATION_LOOKUP.ocean;
-  if (/asia|china|shanghai|ningbo|shenzhen/.test(normalized)) return LOCATION_LOOKUP.asia;
+  if (/asia|china|shanghai|ningbo|shenzhen|hong kong|singapore/.test(normalized)) return LOCATION_LOOKUP.asia;
   if (/europe|hamburg|rotterdam|antwerp/.test(normalized)) return LOCATION_LOOKUP.europe;
-  if (/america|us|los angeles|long beach/.test(normalized)) return LOCATION_LOOKUP["north america"];
+  if (/america|us|los angeles|long beach|new york|savannah/.test(normalized)) return LOCATION_LOOKUP["north america"];
   return LOCATION_LOOKUP.global;
+}
+
+function defaultLocationLabelsForSource(sourceId: string | null | undefined, sourceName: string | null | undefined, category: string) {
+  const id = sourceId ?? "";
+  const name = (sourceName ?? "").toLowerCase();
+  if (id === "cbp-csms" || /cargo systems messaging|cbp/.test(name)) return ["US"];
+  if (id === "port-of-los-angeles-latest-news" || /port of los angeles/.test(name)) return ["Los Angeles"];
+  if (id === "port-of-long-beach-news" || /long beach/.test(name)) return ["Long Beach"];
+  if (id === "fmc-news-advisories" || /federal maritime|fmc/.test(name)) return ["US", "Ocean"];
+  if (id === "drewry-world-container-index" || /drewry|world container index/.test(name)) return ["Shanghai", "Rotterdam", "Los Angeles", "New York"];
+  if (id === "maersk-news-advisories" || /maersk/.test(name)) return ["Ocean", "Global Market"];
+  if (category === "customs" || category === "compliance") return ["US"];
+  if (category === "rate") return ["Ocean", "Global Market"];
+  if (category === "port_disruption") return ["Ocean"];
+  return ["Global Market"];
 }
 
 function compact(value: string | null | undefined, max = 260) {
@@ -282,15 +306,15 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
       id: link.entityId,
       label: entityLabels.get(`${link.entityType}:${link.entityId}`) ?? `${link.entityType}:${link.entityId.slice(0, 8)}`,
     }));
-    const labels = [
+    const explicitGeoLabels = [
       ...strings(signal.affectedPorts),
       ...strings(signal.affectedOrigins),
       ...strings(signal.affectedDestinations),
       ...strings(signal.affectedLanes),
-      ...strings(signal.affectedModes),
-      sourceName ?? null,
     ].filter((item): item is string => Boolean(item));
-    const usableLabels = labels.length ? labels : ["Global"];
+    const usableLabels = explicitGeoLabels.length
+      ? explicitGeoLabels
+      : defaultLocationLabelsForSource(sourceId, sourceName, signal.category);
 
     for (const rawLabel of usableLabels.slice(0, 10)) {
       const coords = coordinatesFor(rawLabel) ?? LOCATION_LOOKUP.global;

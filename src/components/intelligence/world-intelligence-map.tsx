@@ -5,6 +5,7 @@ import type React from "react";
 import type { IntelligenceHotspot, IntelligenceMapData } from "@/lib/market-intelligence/intelligence-map";
 import { IntelligenceHotspotPanel } from "./intelligence-hotspot-panel";
 import { IntelligenceSourceCard } from "./intelligence-source-card";
+import { WorldMapBase, worldMapBaseSize } from "./world-map-base";
 
 function project(lat: number, lng: number) {
   return {
@@ -55,29 +56,8 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
 
       <div style={layoutStyle}>
         <div style={mapCardStyle}>
-          <svg viewBox="0 0 1000 500" role="img" aria-label="Freight market intelligence world map" style={{ width: "100%", height: "100%", minHeight: 390 }}>
-            <defs>
-              <radialGradient id="ocean-glow" cx="50%" cy="45%" r="70%">
-                <stop offset="0%" stopColor="#12355f" />
-                <stop offset="60%" stopColor="#081a2f" />
-                <stop offset="100%" stopColor="#04111f" />
-              </radialGradient>
-              <filter id="hotspot-blur">
-                <feGaussianBlur stdDeviation="4" />
-              </filter>
-            </defs>
-            <rect width="1000" height="500" fill="url(#ocean-glow)" rx="16" />
-            <g opacity=".24" fill="#5eead4">
-              <path d="M120 140c50-70 130-85 200-45 54 31 50 90-10 120-65 32-148 12-198-30-22-18-20-25 8-45Z" />
-              <path d="M415 125c68-52 170-50 229 8 47 47 31 116-35 139-89 30-201-12-235-82-10-21 0-45 41-65Z" />
-              <path d="M690 155c67-31 146-22 190 31 44 54 25 132-51 154-80 24-175-20-196-83-16-47 3-78 57-102Z" />
-              <path d="M280 310c45-23 116-10 148 25 29 32 16 78-31 93-58 19-127-8-148-55-12-27-1-48 31-63Z" />
-              <path d="M555 330c52-25 132-11 166 31 31 39 10 86-45 99-62 14-134-19-153-68-10-27 0-48 32-62Z" />
-            </g>
-            <g opacity=".18" stroke="#93c5fd" strokeWidth="1">
-              {Array.from({ length: 9 }).map((_, index) => <path key={`lat-${index}`} d={`M 30 ${70 + index * 42} H 970`} />)}
-              {Array.from({ length: 11 }).map((_, index) => <path key={`lng-${index}`} d={`M ${70 + index * 86} 35 V 465`} />)}
-            </g>
+          <svg viewBox="0 0 1000 500" role="img" aria-label="Freight market intelligence world map" style={worldMapBaseSize}>
+            <WorldMapBase />
             <g>
               {data.lanes.map((lane) => (
                 <path
@@ -87,9 +67,18 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                   stroke={severityColor(lane.severity)}
                   strokeWidth={Math.min(5, 1.4 + lane.signalCount)}
                   strokeOpacity=".62"
+                  strokeLinecap="round"
                 />
               ))}
             </g>
+            {data.hotspots.length === 0 && (
+              <g>
+                <circle cx="500" cy="250" r="24" fill="#38bdf8" opacity=".18" />
+                <circle cx="500" cy="250" r="10" fill="#38bdf8" opacity=".72" />
+                <text x="528" y="247" fill="#e0f2fe" fontSize="16" fontWeight="800">No live market research yet</text>
+                <text x="528" y="267" fill="#93c5fd" fontSize="12">Use Pull Market Data Now to create source-backed hotspots.</text>
+              </g>
+            )}
             <g>
               {data.hotspots.map((hotspot) => {
                 const point = project(hotspot.lat, hotspot.lng);
@@ -112,12 +101,25 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                     style={{ cursor: "pointer", outline: "none" }}
                   >
                     <circle cx={point.x} cy={point.y} r={radius + 8} fill={color} opacity={active ? ".25" : ".13"} filter="url(#hotspot-blur)" />
-                    <circle cx={point.x} cy={point.y} r={radius} fill={color} opacity={hotspot.suppressed ? ".45" : ".88"} stroke="#eff6ff" strokeWidth={active ? 2.2 : 1} />
-                    <circle cx={point.x} cy={point.y} r={radius + 5} fill="none" stroke={color} strokeWidth="1.5" opacity=".55">
+                    {hotspot.pendingReviewCount > 0 && (
+                      <circle cx={point.x} cy={point.y} r={radius + 12} fill="none" stroke="#fef3c7" strokeWidth="2" opacity=".72" />
+                    )}
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={radius}
+                      fill={color}
+                      opacity={hotspot.suppressed ? ".38" : ".88"}
+                      stroke="#eff6ff"
+                      strokeWidth={active ? 2.4 : 1}
+                      strokeDasharray={hotspot.suppressed ? "3 3" : undefined}
+                    />
+                    <HotspotGlyph category={hotspot.category} x={point.x - 7} y={point.y - 7} suppressed={hotspot.suppressed} />
+                    <circle cx={point.x} cy={point.y} r={radius + 5} fill="none" stroke={color} strokeWidth="1.5" opacity={hotspot.suppressed ? ".18" : ".55"}>
                       <animate attributeName="r" values={`${radius + 5};${radius + 13};${radius + 5}`} dur="2.8s" repeatCount="indefinite" />
-                      <animate attributeName="opacity" values=".55;.08;.55" dur="2.8s" repeatCount="indefinite" />
+                      <animate attributeName="opacity" values={hotspot.suppressed ? ".18;.03;.18" : ".55;.08;.55"} dur="2.8s" repeatCount="indefinite" />
                     </circle>
-                    <text x={point.x + radius + 7} y={point.y + 4} fill="#dbeafe" fontSize="13" fontWeight={active ? 800 : 600}>{hotspot.label}</text>
+                    <text x={point.x + radius + 7} y={point.y + 4} fill={hotspot.suppressed ? "#94a3b8" : "#dbeafe"} fontSize="13" fontWeight={active ? 800 : 600}>{hotspot.label}</text>
                   </g>
                 );
               })}
@@ -138,6 +140,31 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
       </div>
     </section>
   );
+}
+
+function HotspotGlyph({
+  category,
+  x,
+  y,
+  suppressed,
+}: {
+  category: string;
+  x: number;
+  y: number;
+  suppressed: boolean;
+}) {
+  const stroke = suppressed ? "#cbd5e1" : "#082f49";
+  const common = { fill: "none", stroke, strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (category === "rate") {
+    return <g transform={`translate(${x} ${y})`}><path {...common} d="M1 13h12M3 11l3-4 3 2 3-6M12 3H9M12 3v3" /></g>;
+  }
+  if (category === "customs" || category === "compliance") {
+    return <g transform={`translate(${x} ${y})`}><path {...common} d="M3 1h6l4 4v10H3zM9 1v5h4M5 9h6M5 12h5" /></g>;
+  }
+  if (category === "port_disruption") {
+    return <g transform={`translate(${x} ${y})`}><path {...common} d="M1 14h13M4 12V5l3-3 3 3v7M7 2v12M5 12V9h5v3" /></g>;
+  }
+  return <g transform={`translate(${x} ${y})`}><path {...common} d="M1 10l2-5h8l3 5M3 10c2 2 4 2 6 0 2 2 3 2 5 0M5 5V2h5v3" /></g>;
 }
 
 function MapMetric({ label, value }: { label: string; value: string | number }) {
@@ -162,6 +189,6 @@ const headingStyle: React.CSSProperties = { color: "#f8fafc", margin: "3px 0 0",
 const metricsStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(90px, 1fr))", gap: 8 };
 const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid rgba(125,211,252,.18)", background: "rgba(15,23,42,.6)", borderRadius: 8, padding: "8px 10px" };
 const layoutStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, .8fr)", gap: 14 };
-const mapCardStyle: React.CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(125,211,252,.16)", borderRadius: 12, background: "#04111f", minHeight: 410 };
+const mapCardStyle: React.CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(125,211,252,.16)", borderRadius: 12, background: "#04111f", minHeight: 440 };
 const legendStyle: React.CSSProperties = { position: "absolute", left: 14, bottom: 12, display: "flex", gap: 12, flexWrap: "wrap", color: "#cbd5e1", fontSize: 12, background: "rgba(2,6,23,.55)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 999, padding: "6px 10px" };
 const sourceStripStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginTop: 14 };

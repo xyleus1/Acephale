@@ -1,7 +1,10 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import {
+  SAFE_MANUAL_MARKET_BUNDLE_SOURCE_IDS,
+  getManualMarketIngestionRuntimeStatus,
   runManualMarketIngestion,
+  runSafeMarketIngestionBundle,
   validateManualMarketIngestionRequest,
 } from "../src/lib/market-intelligence/manual-ingestion";
 
@@ -41,6 +44,21 @@ async function main() {
     } as NodeJS.ProcessEnv,
   });
   assert(!blockedSource.ok && blockedSource.error?.includes("allowlist"), "FreightWaves/manual media source should be rejected by allowlist.");
+  const blockedJoc = validateManualMarketIngestionRequest({
+    role: "ADMIN",
+    sourceId: "journal-of-commerce-container-shipping",
+    mode: "live",
+    env: {
+      MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED: "true",
+      MARKET_INTELLIGENCE_CRON_ENABLED: "false",
+      FIRECRAWL_API_KEY: "test-firecrawl-key",
+    } as NodeJS.ProcessEnv,
+  });
+  assert(!blockedJoc.ok && blockedJoc.error?.includes("allowlist"), "JOC/manual media source should be rejected by allowlist.");
+  assert(
+    JSON.stringify(SAFE_MANUAL_MARKET_BUNDLE_SOURCE_IDS) === JSON.stringify(["maersk-news-advisories", "drewry-world-container-index", "cbp-csms"]),
+    "Safe bundle should contain only Maersk, Drewry WCI, and CBP CSMS.",
+  );
 
   const cronEnabled = validateManualMarketIngestionRequest({
     role: "ADMIN",
@@ -80,6 +98,9 @@ async function main() {
   process.env.MARKET_INTELLIGENCE_PROVIDER = "firecrawl";
   process.env.MARKET_INTELLIGENCE_MAX_RESULTS_PER_RUN = "3";
   process.env.MARKET_INTELLIGENCE_MAX_PAGES_PER_RUN = "3";
+  const runtimeStatus = getManualMarketIngestionRuntimeStatus();
+  assert(runtimeStatus.safeBundleSourceIds.length === 3, "Runtime status should report three safe bundle sources.");
+  assert(runtimeStatus.maxResultsPerRun === 3 && runtimeStatus.maxPagesPerRun === 3, "Runtime status should clamp page/result limits.");
 
   const office = await prisma.office.create({ data: { name: runId } });
   const fixtureUrl = "https://www.maersk.com/news/articles/2026/06/22/asia-europe-capacity-pressure";
@@ -215,11 +236,32 @@ async function main() {
     assert(searchBody?.limit === 3, "Manual ingestion search should clamp results to 3.");
     assert(scrapeBody?.onlyMainContent === true, "Manual ingestion scrape should request main content only.");
 
+    const bundle = await runSafeMarketIngestionBundle({
+      officeId: office.id,
+      role: "ADMIN",
+      mode: "live",
+      clientOptions: {
+        apiKey: "test-firecrawl-key",
+        baseUrl: "https://firecrawl.test/v2",
+        fetchImpl,
+      },
+    });
+    assert(bundle.ok, `Expected mocked safe bundle to complete: ${JSON.stringify(bundle)}`);
+    assert(JSON.stringify(bundle.sourceIds) === JSON.stringify([...SAFE_MANUAL_MARKET_BUNDLE_SOURCE_IDS]), "Safe bundle returned unexpected sources.");
+    assert(bundle.sourceIds.every((id) => !id.includes("freightwaves") && !id.includes("journal-of-commerce") && !id.includes("joc")), "Safe bundle included blocked media source.");
+    const afterBundle = {
+      company: await prisma.company.findUnique({ where: { id: company.id }, select: { status: true, lane: true } }),
+      inquiry: await prisma.inquiry.findUnique({ where: { id: inquiry.id }, select: { status: true, targetPrice: true } }),
+      job: await prisma.job.findUnique({ where: { id: job.id }, select: { status: true, targetPrice: true } }),
+    };
+    assert(JSON.stringify(before) === JSON.stringify(afterBundle), "Safe bundle mutated operational CRM records.");
+
     console.log(JSON.stringify({
       ok: true,
       rejectedCases: {
         nonAdmin: nonAdmin.error,
         blockedSource: blockedSource.error,
+        blockedJoc: blockedJoc.error,
         cronEnabled: cronEnabled.error,
         liveFlagMissing: liveFlagMissing.error,
       },
@@ -232,6 +274,12 @@ async function main() {
         marketSignalLinksCreated: summary.marketSignalLinksCreated,
         marketImpactReviewsCreated: summary.marketImpactReviewsCreated,
         extractionSkips: summary.extractionSkips,
+      },
+      safeBundle: {
+        sourceIds: bundle.sourceIds,
+        researchItemsCreated: bundle.researchItemsCreated,
+        marketSignalsCreated: bundle.marketSignalsCreated,
+        marketImpactReviewsCreated: bundle.marketImpactReviewsCreated,
       },
       businessRecordsUnchanged: true,
     }, null, 2));

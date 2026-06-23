@@ -922,13 +922,20 @@ Contract:
 
 - `getIntelligenceMapData(officeId)` returns hotspots, lane arcs, research
   items, impact reviews, source health, and top-level metrics for one office.
-- Map coordinates are deterministic and local. There is no external geocoding.
+- Map coordinates and the base world map are deterministic and local. There is
+  no external geocoding or third-party map provider.
+- The page has an explicit first-ingestion empty state, not a decorative blank
+  map.
+- Runtime status shows whether Firecrawl is configured, manual live ingestion
+  is enabled, cron is disabled, and the result/page clamp is safe.
 - Manual market ingestion is admin-only.
 - Manual live ingestion requires
   `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true`.
 - Manual ingestion refuses to run while
   `MARKET_INTELLIGENCE_CRON_ENABLED=true`.
 - Manual ingestion is source allowlisted and clamps to three results/pages.
+- The safe bundle is intentionally narrow:
+  `maersk-news-advisories`, `drewry-world-container-index`, and `cbp-csms`.
 - External intelligence remains advisory. It can create research, signals,
   links, and impact reviews, but it must not mutate operational freight records.
 
@@ -937,4 +944,5 @@ New checks:
 ```bash
 npm run test:intelligence-map
 npm run test:manual-market-ingestion-action
+npm run test:intelligence-page-empty-state
 ```

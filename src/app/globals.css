@@ -28780,7 +28780,7 @@ button.primary:hover:not(:disabled),
 }
 
 .intelligence-stats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .intelligence-section {
@@ -28836,6 +28836,16 @@ button.primary:hover:not(:disabled),
   font-size: 15px;
   line-height: 1.35;
   color: var(--text-1);
+}
+
+.intelligence-title-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.intelligence-title-with-icon svg {
+  flex: 0 0 auto;
 }
 
 .intelligence-row-main p {

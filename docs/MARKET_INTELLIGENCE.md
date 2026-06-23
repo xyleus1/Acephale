@@ -573,9 +573,11 @@ The map aggregates, per office:
 - source quality summaries
 
 The map uses a fixed freight-location lookup for common locations such as China,
-Shanghai, Ningbo, Shenzhen, Northern Europe, Hamburg, Rotterdam, Antwerp, Los
-Angeles, Long Beach, Istanbul, Suez, Panama, Red Sea, US, EU, Asia, Europe,
-Ocean, and Global. It never calls an external geocoding API.
+Shanghai, Ningbo, Shenzhen, Hong Kong, Singapore, Northern Europe, Hamburg,
+Rotterdam, Antwerp, Los Angeles, Long Beach, New York, Savannah, Istanbul,
+Mersin, Suez, Panama, Red Sea, US, EU, Asia, Europe, Ocean, and Global Market.
+It never calls an external geocoding API. The visual base map is local SVG, not
+an external map provider.
 
 Manual ingestion lives behind
 `src/app/dashboard/intelligence/actions.ts` and
@@ -600,9 +602,18 @@ Current manual allowlist:
 - `cbp-csms`
 - `port-of-los-angeles-latest-news`
 
-The UI exposes preview and live buttons. Preview writes nothing. Live writes only
-Research Feed / `MarketSignal` / `MarketSignalLink` /
-`MarketImpactReview` advisory records through the existing ingestion pipeline.
+The production UI exposes:
+
+- an obvious empty state when there are no research items, signals, or reviews
+- runtime readiness badges for Firecrawl, manual live ingestion, cron, provider,
+  source count, and result/page clamp
+- per-source preview and live buttons
+- a safe bundle button for `maersk-news-advisories`,
+  `drewry-world-container-index`, and `cbp-csms`
+
+Preview writes nothing. Live writes only Research Feed / `MarketSignal` /
+`MarketSignalLink` / `MarketImpactReview` advisory records through the existing
+ingestion pipeline.
 
 ## Evidence Policy
 

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
-import { runManualMarketIngestion } from "@/lib/market-intelligence/manual-ingestion";
+import { runManualMarketIngestion, runSafeMarketIngestionBundle } from "@/lib/market-intelligence/manual-ingestion";
 import type { ManualMarketIngestionActionState } from "./manual-action-types";
 
 export async function runManualMarketIngestionAction(
@@ -41,5 +41,40 @@ export async function runManualMarketIngestionAction(
     mode: summary.mode,
     message: summary.message,
     summary,
+  };
+}
+
+export async function runSafeMarketIngestionBundleAction(
+  _previousState: ManualMarketIngestionActionState,
+  formData: FormData,
+): Promise<ManualMarketIngestionActionState> {
+  const session = await requireSession();
+  const mode = String(formData.get("mode") ?? "live").trim();
+
+  const bundleSummary = await runSafeMarketIngestionBundle({
+    officeId: session.officeId,
+    role: session.role,
+    mode,
+  }).catch((error) => ({
+    ok: false,
+    mode: mode === "live" ? "live" as const : "preview" as const,
+    message: error instanceof Error ? error.message : String(error),
+    sourceIds: [],
+    summaries: [],
+    researchItemsCreated: 0,
+    marketSignalsCreated: 0,
+    marketSignalLinksCreated: 0,
+    marketImpactReviewsCreated: 0,
+    extractionSkips: 0,
+    duplicateOrSkippedCandidates: 0,
+    providerErrors: [error instanceof Error ? error.message : String(error)],
+  }));
+
+  revalidatePath("/dashboard/intelligence");
+  return {
+    ok: bundleSummary.ok,
+    mode: bundleSummary.mode,
+    message: bundleSummary.message,
+    bundleSummary,
   };
 }
