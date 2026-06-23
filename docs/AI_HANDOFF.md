@@ -1297,3 +1297,342 @@ Verification:
 - `npx tsc --noEmit`: passed.
 - `npm run build`: passed.
 - `npm run ai:handoff`: passed.
+
+## D3B Preview Runtime, Env, Staging DB, And Smoke Test
+
+Status:
+
+- Run on 2026-06-22.
+- Preview deployment status from founder input: Ready.
+- Preview URL:
+  `https://derya-crm-git-codex-lead-to-quote-batch-merts-projects-b132014b.vercel.app`
+- Branch: `codex/lead-to-quote-batch`.
+- Preview commit: `3ab82df`.
+- Production remains old at `main @ 49d7154`.
+- No merge to main was performed.
+- No production deploy was run.
+- No production database command was run.
+- No live Firecrawl ingestion was run.
+- Market intelligence cron was not enabled.
+- No customer/supplier messages were sent.
+
+Local release state:
+
+- Worktree was clean before D3B docs were updated.
+- Branch: `codex/lead-to-quote-batch`.
+- Head commit: `3ab82df fix(deploy): make vercel crons hobby-compatible`.
+- `npx tsc --noEmit`: passed.
+
+Preview HTTP checks:
+
+- `/`: `401 Authentication Required`.
+- `/login`: `401 Authentication Required`.
+- `/dashboard`: `401 Authentication Required`.
+- `/dashboard/intelligence`: `401 Authentication Required`.
+- `/api/health`: `401 Authentication Required`.
+- Cron routes checked without secret also returned the Vercel deployment
+  protection page before app-level cron auth could run.
+
+Conclusion:
+
+- Vercel has the deployment Ready, but the Preview is protected by Vercel
+  deployment authentication. The app shell, login page, dashboard, intelligence
+  page, health endpoint, and app-level cron behavior could not be verified from
+  this unauthenticated shell.
+
+Preview env readiness:
+
+- Vercel CLI is not installed locally.
+- The repo has no `.vercel/project.json` link.
+- `/api/health` could not be reached because Preview deployment protection
+  returns `401`.
+- Therefore Preview env vars are `unknown` from this environment. Do not infer
+  they are configured just because the deployment built.
+
+| Variable | Preview status |
+| --- | --- |
+| `DATABASE_URL` | unknown |
+| `DATABASE_URL_UNPOOLED` or `DIRECT_URL` | unknown |
+| `TOKEN_ENCRYPTION_KEY` | unknown |
+| `CRON_SECRET` | unknown |
+| `ANTHROPIC_API_KEY` | unknown |
+| `OPENAI_API_KEY` | unknown |
+| `GOOGLE_CLIENT_ID` | unknown |
+| `GOOGLE_CLIENT_SECRET` | unknown |
+| `GOOGLE_REDIRECT_URI` | unknown |
+| `FIRECRAWL_API_KEY` | unknown |
+| `MARKET_INTELLIGENCE_PROVIDER` | unknown |
+| `MARKET_INTELLIGENCE_CRON_ENABLED` | unknown |
+| `MARKET_INTELLIGENCE_MAX_RESULTS_PER_RUN` | unknown |
+| `MARKET_INTELLIGENCE_MAX_PAGES_PER_RUN` | unknown |
+| `MARKET_INTELLIGENCE_MAX_SOURCES_PER_RUN` | unknown |
+| `MARKET_INTELLIGENCE_DAILY_CREDIT_BUDGET` | unknown |
+
+Staging database migration status:
+
+- Staging DB provider input: unknown.
+- Confirmed staging DB separate from production: unknown.
+- Founder confirmation that it is safe to migrate: not available in this run.
+- Migrations were skipped intentionally.
+- Do not run `migrate deploy` until `DATABASE_URL` is confirmed to point to a
+  staging/preview database that is separate from production.
+- Do not use `prisma db push`, `migrate dev`, or `migrate reset`.
+
+Build/deploy assumptions verified from repo:
+
+- `postinstall` runs `prisma generate`.
+- `build` runs `prisma generate && next build`.
+- No database migration runs during Vercel build.
+- No live Firecrawl ingestion runs during build.
+- `vercel.json` schedules all configured crons daily for Hobby compatibility.
+- App cron routes require `CRON_SECRET` checks in code, although Vercel
+  deployment protection prevented external unauthenticated route testing from
+  reaching the app.
+- Market intelligence cron remains env-gated and is not listed in
+  `vercel.json`.
+
+Manual smoke-test checklist once Preview protection access is available:
+
+- App shell loads.
+- Login page loads or dashboard redirects correctly.
+- Login works with staging credentials only.
+- `/dashboard` loads.
+- `/dashboard/intelligence` loads.
+- Research Feed section loads.
+- Market Signals section loads.
+- Impact Reviews section loads.
+- Customer page loads.
+- Job page loads.
+- Morning Brief loads.
+- Quote PDF route works.
+- A valid portal token works.
+- `job.id` as portal token fails.
+- Gmail OAuth link/callback uses the expected Preview redirect URI, or Gmail is
+  intentionally production-only for Preview.
+- Cron routes reject unauthenticated calls after bypassing Vercel deployment
+  protection.
+- Market cron remains disabled.
+
+Blockers:
+
+- Preview deployment protection blocks unauthenticated smoke tests.
+- Preview env var status is unknown without Vercel CLI/dashboard access or an
+  accessible `/api/health`.
+- Staging DB provider and production separation are unknown, so migrations were
+  correctly skipped.
+
+Recommended next step:
+
+- Provide Vercel Preview access or a Vercel bypass token for smoke testing, or
+  run the manual checklist in the Vercel-authenticated browser.
+- Confirm Preview env vars in the Vercel dashboard without exposing values.
+- Confirm staging DB provider and separation from production.
+- Run `prisma migrate deploy` only after staging DB safety is confirmed.
+- Proceed to H2.2 staging Firecrawl pilot only after Preview app boots,
+  staging DB is migrated, `/dashboard/intelligence` loads, and smoke checks are
+  clean.
+
+## D3C-DB Preview Runtime Database Fix Attempt
+
+Status:
+
+- Run on 2026-06-22.
+- Preview deployment is Ready, but runtime logs show the Preview app is
+  connected to a database whose schema is older than the release branch.
+- No merge to main was performed.
+- No production deploy was run.
+- No production database command was run.
+- No migration was run.
+- No `prisma db push`, `migrate dev`, or `migrate reset` command was run.
+- No live Firecrawl ingestion was run.
+- Market cron was not enabled.
+
+Root cause from Preview runtime logs:
+
+- `PrismaClientKnownRequestError P2022`: `Inquiry.containerCount` does not
+  exist in the current database.
+- `PrismaClientKnownRequestError P2021`: table `public.AgentProposal` does not
+  exist in the current database.
+- This is a runtime database schema mismatch, not a Vercel build problem.
+
+Local release state:
+
+- Branch: `codex/lead-to-quote-batch`.
+- Head commit: `3ab82df fix(deploy): make vercel crons hobby-compatible`.
+- `npx tsc --noEmit`: passed.
+- Worktree already had uncommitted D3B docs changes before D3C docs were
+  appended.
+
+Database target check:
+
+- Local `DATABASE_URL`: configured, but points to local Postgres database
+  `derya_crm_app`.
+- Local `DATABASE_URL_UNPOOLED`: configured, but points to the same local
+  database.
+- Local `DIRECT_URL`: not configured.
+- Local target appears staging/preview: no.
+- Staging database provider input: not provided.
+- Confirmed staging database separate from production: not provided.
+- Founder confirmation it is safe to migrate: not available in this run.
+
+Decision:
+
+- Migrations were intentionally skipped. Running `prisma migrate deploy`
+  without a confirmed staging database would be a blind database operation.
+
+Preview env readiness:
+
+- Vercel CLI is not installed locally.
+- No `.vercel/project.json` link exists.
+- Preview `/api/health` is still protected by Vercel deployment authentication.
+- Preview env var status remains unknown from this shell.
+- Local env status is not equivalent to Vercel Preview env status.
+
+Preview HTTP check:
+
+- `/`: `401 Authentication Required`.
+- `/login`: `401 Authentication Required`.
+- `/dashboard`: `401 Authentication Required`.
+- `/dashboard/intelligence`: `401 Authentication Required`.
+- `/api/health`: `401 Authentication Required`.
+
+Required next step:
+
+1. Create or identify a staging database that is explicitly separate from
+   production.
+2. Configure Vercel Preview `DATABASE_URL` and `DATABASE_URL_UNPOOLED` or
+   `DIRECT_URL` to that staging database.
+3. Confirm safe Preview env values without exposing secrets:
+   `MARKET_INTELLIGENCE_CRON_ENABLED=false`,
+   `MARKET_INTELLIGENCE_PROVIDER=firecrawl`, and conservative market limits.
+4. Apply migrations only against the confirmed staging database:
+
+```bash
+npx prisma migrate status
+npx prisma migrate deploy
+npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+```
+
+5. Expected final diff: `No difference detected`.
+6. Redeploy the Preview after env and migrations are correct.
+7. Re-run smoke tests with Vercel Preview access or a bypass token.
+
+If the staging database is existing/pre-brain with no migration history:
+
+- Follow `docs/RUNBOOKS/PRISMA_BASELINE_DEPLOYMENT.md`.
+- Generate the pre-brain schema from `9727e55`.
+- Diff the existing DB against that schema.
+- If drift appears, stop.
+- Only if it matches, mark
+  `00000000000000_baseline_pre_brain` as applied, then run
+  `prisma migrate deploy`.
+
+Current blockers:
+
+- Staging DB provider/separation are not confirmed.
+- Preview env vars cannot be inspected locally.
+- Preview deployment protection blocks external smoke tests.
+- Runtime schema mismatch remains until the Preview database is corrected and
+  migrated.
+
+Safe-to-proceed status:
+
+- Safe to H2.2 staging Firecrawl pilot: no.
+- Safe to production checklist: no.
+- Safe next action: configure confirmed staging DB and Preview envs, then run
+  migrations against staging only.
+
+## P0 Production Cutover Prep With Fresh Office And Cherry-Pick Import
+
+Status:
+
+- Implemented on 2026-06-23.
+- No production database commands were run.
+- No production deploy was run.
+- No merge to main was performed.
+- No live Firecrawl ingestion was run.
+- Market cron was not enabled.
+- No secrets were printed.
+
+Files added:
+
+- `scripts/create-production-office.ts`
+- `scripts/export-office-cherry-pick.ts`
+- `scripts/import-office-cherry-pick.ts`
+- `scripts/validate-office-import.ts`
+- `docs/RUNBOOKS/PRODUCTION_CUTOVER_CHERRY_PICK.md`
+
+Files updated:
+
+- `package.json`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+- `docs/DECISIONS.md`
+
+New package scripts:
+
+- `npm run seed:production-office`
+- `npm run export:office-cherry-pick`
+- `npm run import:office-cherry-pick`
+- `npm run validate:office-import`
+
+Cutover model:
+
+- Create a fresh Neon production database on the current schema with
+  `prisma migrate deploy`.
+- Create a new real Office/Admin with `npm run seed:production-office`.
+- Export selected safe business data from the old database to JSON.
+- Import that JSON into the new Office after a dry run.
+- Validate the import before setting Vercel Production env vars and merging to
+  main.
+
+Safety model:
+
+- Production office creation requires `ALLOW_PRODUCTION_OFFICE_SEED=1`.
+- Cherry-pick import defaults to dry run and requires
+  `ALLOW_CHERRY_PICK_IMPORT=1` plus `DRY_RUN=false` for writes.
+- Export uses `OLD_DATABASE_URL`; import uses `DATABASE_URL`.
+- Old Gmail OAuth tokens are never exported or imported.
+- Sessions and password hashes are not exported.
+- Old portal tokens are not exported. Jobs that had old portal tokens get new
+  64-hex random tokens during import.
+- Background jobs are not copied.
+- Company-brain memory rows and market-intelligence rows are not copied.
+- Agent proposals and forwarder draft send artifacts are not copied.
+- Documents are metadata-only. Job document URLs are null; company document
+  URLs use a `metadata-only://...` sentinel because the schema requires a URL.
+
+Safe imported data:
+
+- companies
+- contacts
+- company owner references by safe user email only
+- activities
+- quotes
+- shipment records
+- inquiries
+- active jobs by default
+- milestones
+- document metadata
+- carrier quotes
+- forwarders
+- lane rates
+- margin profiles
+- target price history
+
+Email import:
+
+- Off by default with `INCLUDE_EMAILS=false`.
+- If enabled, email threads/messages are sanitized and imported without
+  accounts, OAuth tokens, provider external IDs, Gmail message IDs, HTML bodies,
+  or attachment URLs.
+
+Verification:
+
+- Refusal-path smoke checks for the new scripts: passed with expected guard
+  errors and no writes.
+- `npx prisma validate`: passed.
+- `npm run db:generate`: passed.
+- `npx tsc --noEmit`: passed.
+- `npm run build`: passed.
+- `npm run ai:handoff`: passed.

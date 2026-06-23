@@ -16,6 +16,32 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-06-23 - Cut production over with a fresh database and cherry-pick import
+
+- Status: accepted
+- Owner: engineering
+- Context: The company-brain and market-intelligence release expects the
+  current Prisma schema. Preview runtime failures showed what happens when new
+  code points at an older database schema. Migrating the old production
+  database in place would also carry old sessions, OAuth tokens, portal tokens,
+  background jobs, memory rows, and bad market-intelligence audit residue into
+  the new release.
+- Decision: Production cutover will use a fresh current-schema Neon production
+  database, create a new real Office/Admin, and import only selected business
+  records from the old database through controlled export/import scripts.
+  OAuth tokens, sessions, password hashes, old portal tokens, background jobs,
+  company-brain memory rows, market-intelligence rows, and AI proposal noise
+  will not be copied.
+- Rationale: This keeps the production launch clean, auditable, and reversible
+  at the data-selection layer. It also prevents legacy integration secrets or
+  bad external-intelligence residue from becoming production truth.
+- Consequences: Users must reconnect Gmail after cutover. Portal links must be
+  regenerated. Historical memory/market intelligence can be rebuilt after
+  launch if needed. The import should be reviewed through dry run and
+  validation before main is merged.
+- Revisit when: production has enough clean post-cutover data to justify a
+  separate memory backfill or a carefully scoped historical email import.
+
 ### 2026-06-22 - Add pre-brain Prisma baseline for deployable migration history
 
 - Status: accepted

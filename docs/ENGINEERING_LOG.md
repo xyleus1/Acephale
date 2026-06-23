@@ -477,7 +477,7 @@ Use this file for chronological implementation notes that future agents should s
 ### 2026-06-22 - D3A-FIX Vercel Hobby cron compatibility
 
 - Branch: codex/lead-to-quote-batch
-- Commit: pending
+- Commit: 3ab82df
 - Task: Fix a Vercel Preview deployment blocker on Hobby where
   `/api/cron/background-jobs` used `*/10 * * * *`, which runs more than once per
   day and is rejected before build.
@@ -494,3 +494,86 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: Vercel Hobby cron timing has hourly precision, not minute-level
   precision. This fix unblocks deployment; it is not a substitute for a real
   sub-daily job runner.
+
+### 2026-06-22 - D3B Preview runtime, env, staging DB, and smoke test
+
+- Branch: codex/lead-to-quote-batch
+- Commit: 3ab82df
+- Task: Verify the Ready Vercel Preview runtime, env readiness, staging DB
+  migration safety, and smoke-test path without merging, deploying production,
+  running production DB commands, enabling market cron, or running live
+  Firecrawl.
+- Files changed: `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`.
+- Preview URL:
+  `https://derya-crm-git-codex-lead-to-quote-batch-merts-projects-b132014b.vercel.app`
+- Verification: local `git status --short` was clean before docs updates,
+  branch/head were correct, and `npx tsc --noEmit` passed. Preview HTTP probes
+  for `/`, `/login`, `/dashboard`, `/dashboard/intelligence`, `/api/health`,
+  and cron routes all returned Vercel `401 Authentication Required`, so the
+  deployment is Ready but deployment-protected from this shell.
+- Failed/skipped checks: Preview env status could not be checked because Vercel
+  CLI is unavailable, the repo is not linked with `.vercel/project.json`, and
+  `/api/health` is behind deployment protection. Staging migrations were skipped
+  because provider/separation/founder confirmation are unknown.
+- Caveats: do not confuse Vercel Ready with app runtime verified. The build is
+  deployed, but app shell, auth, dashboard, intelligence page, DB health, and
+  cron auth still need testing with Preview access.
+- Follow-up: get Preview access or a bypass token, confirm Preview env vars,
+  confirm staging DB is separate from production, run migrations only against
+  confirmed staging, then run D3 smoke tests before any H2.2 Firecrawl pilot.
+
+### 2026-06-22 - D3C-DB Preview runtime schema mismatch triage
+
+- Branch: codex/lead-to-quote-batch
+- Commit: 3ab82df
+- Task: Move Preview to a confirmed staging database and apply migrations after
+  runtime logs showed schema mismatch errors.
+- Files changed: `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`.
+- Root cause: Preview runtime logs show Prisma `P2022` for missing
+  `Inquiry.containerCount` and `P2021` for missing table
+  `public.AgentProposal`, which means the Preview app is connected to an older
+  database schema.
+- Verification: `git status --short`, branch, recent log, and
+  `npx tsc --noEmit` were checked. Local `DATABASE_URL` and
+  `DATABASE_URL_UNPOOLED` point to local Postgres database `derya_crm_app`, not
+  a confirmed staging/preview DB. Preview HTTP probes still return Vercel
+  `401 Authentication Required`.
+- Failed/skipped checks: migrations were skipped because staging provider,
+  production separation, and founder confirmation were not provided. Vercel
+  Preview env vars could not be inspected because Vercel CLI is not installed,
+  there is no `.vercel/project.json`, and `/api/health` is protected.
+- Caveats: this remains blocked until Vercel Preview points at a confirmed
+  staging database and the migration path is run against that staging DB only.
+  Do not use `db push`, `migrate dev`, or `migrate reset`.
+- Follow-up: configure Preview `DATABASE_URL`/`DATABASE_URL_UNPOOLED` for a
+  confirmed staging DB, run `prisma migrate deploy`, confirm `No difference
+  detected`, redeploy Preview, then rerun runtime smoke tests.
+
+### 2026-06-23 - P0 production cutover prep with fresh office and cherry-pick import
+
+- Branch: codex/lead-to-quote-batch
+- Commit: not committed
+- Task: Add safe scripts and a runbook for cutting production over to a fresh
+  current-schema Neon database, creating a real Office/Admin, and importing only
+  selected old business data.
+- Files changed: `package.json`, `scripts/create-production-office.ts`,
+  `scripts/export-office-cherry-pick.ts`,
+  `scripts/import-office-cherry-pick.ts`,
+  `scripts/validate-office-import.ts`,
+  `docs/RUNBOOKS/PRODUCTION_CUTOVER_CHERRY_PICK.md`,
+  `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, and
+  `docs/DECISIONS.md`.
+- Verification: refusal-path smoke checks for all four new scripts returned
+  expected guard errors with no writes; `npx prisma validate`,
+  `npm run db:generate`, `npx tsc --noEmit`, `npm run build`, and
+  `npm run ai:handoff` passed.
+- Failed/skipped checks: no production DB command was run, no production deploy
+  was run, no merge to main was performed, no live Firecrawl ingestion was run,
+  and market cron was not enabled.
+- Caveats: import idempotency uses natural keys where the current schema has no
+  source-id field. Company documents use a `metadata-only://...` URL sentinel
+  because the schema requires a URL. Email import is off by default and
+  sanitized if explicitly enabled.
+- Follow-up: run the cutover only after a fresh production Neon DB is confirmed,
+  use `prisma migrate deploy`, run import dry-run, review counts, import with
+  explicit allow flag, validate, set Vercel Production env vars, then merge.
