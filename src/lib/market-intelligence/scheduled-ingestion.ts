@@ -137,6 +137,7 @@ export async function runScheduledMarketIngestion(input: ScheduledMarketIngestio
     const result = await ingestFirecrawlMarketSource({
       officeId: input.officeId,
       source,
+      query: !source.enabled && input.allowDisabled ? source.name : undefined,
       limit: pageBudget,
       strict: false,
       clientOptions: input.clientOptions,

@@ -1678,3 +1678,55 @@ Immediate smoke-test checklist:
 - Gmail OAuth uses the production redirect URI.
 - Cron routes reject unauthenticated calls.
 - Market intelligence cron remains disabled.
+
+## Live Intelligence Map And Manual Ingestion UI
+
+Status:
+
+- Implemented on 2026-06-23 in the main-branch dirty worktree.
+- Goal: make `/dashboard/intelligence` operationally usable in production
+  without enabling scheduled ingestion or running local live Firecrawl from
+  Codex.
+
+What changed:
+
+- Added `getIntelligenceMapData(officeId)` for deterministic world-map data.
+- Added clickable intelligence map, hotspot panel, source cards, visual icons,
+  and admin manual ingestion controls.
+- Replaced the old permissive inline "Run one" action with an admin-only manual
+  ingestion action.
+- Manual live ingestion requires
+  `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true` and refuses to run while
+  `MARKET_INTELLIGENCE_CRON_ENABLED=true`.
+- Manual source allowlist is restricted to Maersk, Drewry WCI, CBP CSMS, and
+  Port of Los Angeles. FreightWaves/JOC/media are not available by default.
+- Manual pulls clamp to one source and three results/pages.
+
+Safety:
+
+- No Prisma migration was needed.
+- No live Firecrawl ingestion was run locally.
+- No scheduled market cron was enabled.
+- External intelligence remains advisory and does not mutate jobs, RFQs, quotes,
+  customers, milestones, prices, or messages.
+
+Verification passed:
+
+```bash
+npx tsc --noEmit
+npm run test:intelligence-map
+npm run test:manual-market-ingestion-action
+npm run test:market-content-hygiene
+npm run test:market-signal-suppression
+npm run test:source-quality
+npm run test:market-intelligence
+npm run test:market-impact
+npm run build
+npm run ai:handoff
+```
+
+Production use:
+
+- Ensure Vercel Production has
+  `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true` before using the live button.
+- Keep `MARKET_INTELLIGENCE_CRON_ENABLED=false`.

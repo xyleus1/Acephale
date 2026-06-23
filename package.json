@@ -17,6 +17,8 @@
     "test:market-impact": "tsx scripts/market-impact-review.test.ts",
     "test:firecrawl": "tsx scripts/firecrawl-smoke.test.ts",
     "test:source-quality": "tsx scripts/source-quality.test.ts",
+    "test:intelligence-map": "tsx scripts/intelligence-map.test.ts",
+    "test:manual-market-ingestion-action": "tsx scripts/manual-market-ingestion-action.test.ts",
     "test:scheduled-market-ingestion": "tsx scripts/scheduled-market-ingestion.test.ts",
     "test:security": "tsx scripts/security-hardening.test.ts",
     "test:market-content-hygiene": "tsx scripts/market-content-hygiene.test.ts",

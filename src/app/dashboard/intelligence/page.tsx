@@ -3,14 +3,17 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Icon } from "@/components/icon";
+import { ManualMarketIngestionControls } from "@/components/intelligence/manual-market-ingestion-controls";
+import { WorldIntelligenceMap } from "@/components/intelligence/world-intelligence-map";
 import {
   acknowledgeMarketImpactReview,
   dismissMarketImpactReview,
   markMarketImpactActioned,
   recordMarketSignalFeedback,
 } from "@/lib/market-intelligence/market-impact-review";
+import { SAFE_MANUAL_MARKET_SOURCE_IDS } from "@/lib/market-intelligence/manual-ingestion";
 import { getMarketIntelligenceSourceRegistry } from "@/lib/market-intelligence/source-registry";
-import { runScheduledMarketIngestion } from "@/lib/market-intelligence/scheduled-ingestion";
+import { getIntelligenceMapData } from "@/lib/market-intelligence/intelligence-map";
 import {
   buildSourceQualityLookup,
   listSourceQualitySummaries,
@@ -27,7 +30,6 @@ type SearchParams = Promise<{
   source?: string;
   sourceCategory?: string;
   q?: string;
-  previewSource?: string;
 }>;
 
 const REVIEW_STATUSES = ["all", "pending", "acknowledged", "dismissed", "actioned", "expired"];
@@ -148,23 +150,6 @@ async function feedbackAction(formData: FormData) {
   revalidatePath("/dashboard/intelligence");
 }
 
-async function runSourceAction(formData: FormData) {
-  "use server";
-  const session = await requireSession();
-  const sourceId = String(formData.get("source_id") ?? "").trim();
-  const limit = Math.min(10, Math.max(1, Number(formData.get("limit") ?? 5)));
-  if (!sourceId) return;
-  await runScheduledMarketIngestion({
-    officeId: session.officeId,
-    sourceIds: [sourceId],
-    maxSources: 1,
-    maxPagesPerRun: limit,
-    force: true,
-    allowDisabled: true,
-  });
-  revalidatePath("/dashboard/intelligence");
-}
-
 export default async function IntelligencePage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSession();
   const sp = await searchParams;
@@ -173,13 +158,12 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   const severity = SIGNAL_SEVERITIES.includes(sp.severity ?? "") ? sp.severity! : "all";
   const sourceFilter = (sp.source ?? "").trim();
   const sourceCategoryFilter = (sp.sourceCategory ?? "").trim();
-  const previewSource = (sp.previewSource ?? "").trim();
   const query = (sp.q ?? "").trim();
   const queryTokens = query.toLowerCase().split(/[^a-z0-9]+/i).filter((token) => token.length >= 3).slice(0, 5);
   const registry = getMarketIntelligenceSourceRegistry();
   const sourceCategories = [...new Set(registry.map((source) => source.sourceCategory))].sort();
 
-  const [reviewsRaw, signalsRaw, researchObjectsRaw, runs, sourceQuality, pendingCount, preview] = await Promise.all([
+  const [reviewsRaw, signalsRaw, researchObjectsRaw, runs, sourceQuality, pendingCount, mapData] = await Promise.all([
     prisma.marketImpactReview.findMany({
       where: {
         officeId: session.officeId,
@@ -242,15 +226,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
     }).catch(() => []),
     listSourceQualitySummaries({ officeId: session.officeId }),
     prisma.marketImpactReview.count({ where: { officeId: session.officeId, status: "pending" } }),
-    previewSource
-      ? runScheduledMarketIngestion({
-          officeId: session.officeId,
-          sourceIds: [previewSource],
-          dryRun: true,
-          allowDisabled: true,
-          maxSources: 1,
-        }).catch((error) => ({ ok: false as const, error: error instanceof Error ? error.message : String(error) }))
-      : Promise.resolve(null),
+    getIntelligenceMapData(session.officeId),
   ]);
 
   const qualityLookup = buildSourceQualityLookup(sourceQuality);
@@ -276,6 +252,16 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   ).slice(0, 30);
   const enabledSourceCount = registry.filter((source) => source.enabled).length;
   const disabledSourceCount = registry.length - enabledSourceCount;
+  const safeManualSources = registry
+    .filter((source) => SAFE_MANUAL_MARKET_SOURCE_IDS.includes(source.id as typeof SAFE_MANUAL_MARKET_SOURCE_IDS[number]))
+    .filter((source) => source.fetchType === "firecrawl_search" || source.fetchType === "firecrawl_scrape")
+    .map((source) => ({
+      id: source.id,
+      name: source.name,
+      sourceCategory: source.sourceCategory,
+      trustLevel: source.trustLevel,
+      allowedDomains: source.allowedDomains,
+    }));
 
   return (
     <div className="intelligence-page">
@@ -297,21 +283,23 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       <div className="stat-grid intelligence-stats">
         <div className="stat-card">
           <div className="stat-label">Pending Reviews</div>
-          <div className="stat-value">{pendingCount}</div>
+          <div className="stat-value">{mapData.metrics.pendingImpactReviews}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Recent Signals</div>
-          <div className="stat-value">{signals.length}</div>
+          <div className="stat-label">Affected Work</div>
+          <div className="stat-value">{mapData.metrics.affectedCustomers + mapData.metrics.affectedJobs + mapData.metrics.affectedRfqs}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Research Items</div>
-          <div className="stat-value">{researchObjects.length}</div>
+          <div className="stat-label">7d Research</div>
+          <div className="stat-value">{mapData.metrics.researchItems7d}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Sources Enabled</div>
-          <div className="stat-value">{enabledSourceCount}/{registry.length}</div>
+          <div className="stat-label">Suppressed Signals</div>
+          <div className="stat-value">{mapData.metrics.suppressedSignals}</div>
         </div>
       </div>
+
+      <WorldIntelligenceMap data={mapData} />
 
       <form className="filter-bar" action="/dashboard/intelligence">
         <input name="q" defaultValue={query} placeholder="Search research feed" />
@@ -340,22 +328,13 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         <div className="workbench-card-header">
           <div>
             <h2>Source Health</h2>
-            <p>Registry policy, deterministic quality score, and single-source controls. Disabled means not scheduled.</p>
+            <p>Registry policy, deterministic quality score, and safe manual Firecrawl controls. Disabled means not scheduled.</p>
           </div>
           <span className="muted">{enabledSourceCount} enabled / {disabledSourceCount} disabled</span>
         </div>
-        {preview && (
-          <div className="intelligence-preview">
-            <div className="intelligence-row-top">
-              <span className="pricing-status status-parsed">Dry run</span>
-              <span className="muted">{previewSource}</span>
-            </div>
-            <pre>{JSON.stringify(preview, null, 2).slice(0, 2400)}</pre>
-          </div>
-        )}
+        <ManualMarketIngestionControls sources={safeManualSources} isAdmin={session.role === "ADMIN"} />
         <div className="intelligence-run-grid">
           {sourceQuality.map((quality) => {
-            const source = sourceMetaById.get(quality.sourceId);
             return (
               <div key={quality.sourceId} className="intelligence-run">
                 <div className="intelligence-row-top">
@@ -371,14 +350,6 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                 <span className="muted">{quality.failedRunCount} failed runs / {quality.wrongLinkFeedbackCount} wrong links / {quality.irrelevantFeedbackCount} irrelevant</span>
                 <div className="intelligence-actions">
                   <a className="btn btn-secondary btn-sm" href={filterHref({ status, category, severity, sourceCategory: sourceCategoryFilter, q: query, source: quality.sourceId })}>Filter</a>
-                  <a className="btn btn-secondary btn-sm" href={filterHref({ status, category, severity, sourceCategory: sourceCategoryFilter, q: query, source: sourceFilter, previewSource: quality.sourceId })}>Preview</a>
-                  {source?.fetchType.startsWith("firecrawl_") && (
-                    <form action={runSourceAction}>
-                      <input type="hidden" name="source_id" value={quality.sourceId} />
-                      <input type="hidden" name="limit" value="5" />
-                      <button className="btn btn-secondary btn-sm" type="submit">Run one</button>
-                    </form>
-                  )}
                 </div>
               </div>
             );

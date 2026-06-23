@@ -559,6 +559,51 @@ External intelligence must never overwrite:
 Operators still need fresh carrier quotes and human review before customer
 pricing is sent.
 
+## Live Intelligence Map And Manual Pull
+
+`/dashboard/intelligence` now starts with a deterministic world intelligence map
+built by `src/lib/market-intelligence/intelligence-map.ts`.
+
+The map aggregates, per office:
+
+- recent `MarketSignal` rows
+- pending `MarketImpactReview` rows
+- recent `KnowledgeObject` rows with canonical type `market_update`
+- linked jobs, RFQs, customers, lanes, modes, ports, origins, and destinations
+- source quality summaries
+
+The map uses a fixed freight-location lookup for common locations such as China,
+Shanghai, Ningbo, Shenzhen, Northern Europe, Hamburg, Rotterdam, Antwerp, Los
+Angeles, Long Beach, Istanbul, Suez, Panama, Red Sea, US, EU, Asia, Europe,
+Ocean, and Global. It never calls an external geocoding API.
+
+Manual ingestion lives behind
+`src/app/dashboard/intelligence/actions.ts` and
+`src/lib/market-intelligence/manual-ingestion.ts`.
+
+Production safety contract:
+
+- only `ADMIN` users can run manual ingestion
+- live runs require `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true`
+- manual runs refuse to execute if `MARKET_INTELLIGENCE_CRON_ENABLED=true`
+- one source per run
+- three results/pages max
+- source must be in the manual allowlist
+- source must have allowed domains
+- broad media sources, FreightWaves, and JOC are blocked
+- no operational job/RFQ/customer/quote/milestone/message records are mutated
+
+Current manual allowlist:
+
+- `maersk-news-advisories`
+- `drewry-world-container-index`
+- `cbp-csms`
+- `port-of-los-angeles-latest-news`
+
+The UI exposes preview and live buttons. Preview writes nothing. Live writes only
+Research Feed / `MarketSignal` / `MarketSignalLink` /
+`MarketImpactReview` advisory records through the existing ingestion pipeline.
+
 ## Evidence Policy
 
 Every market answer should be traceable to:
@@ -582,6 +627,7 @@ Raw ids should stay in tool traces unless an operator asks for audit detail.
 - Source quality is deterministic only; no LLM ranking.
 - No automatic customer messaging.
 - No complex source-management UI.
+- No scheduled ingestion is enabled by this UI.
 - Live RSS/HTML parsing is intentionally basic.
 - Matching relies on text normalization, not a dedicated lane graph.
 - The extractor can miss synonyms and over-match broad geography terms.

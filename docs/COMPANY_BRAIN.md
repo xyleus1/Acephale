@@ -904,3 +904,37 @@ The next live pilot should repeat the same `port-of-long-beach-news` source with
 the same small clamp before testing a second source. Expected behavior: the
 listing page is stored as research, no fake signal is extracted from chrome, no
 social-link lanes are created, and Morning Brief stays quiet.
+
+## Live Intelligence Map And Manual Market Pull
+
+The Intelligence page now uses the company-brain market layer directly instead
+of being only a list view.
+
+Key files:
+
+- `src/lib/market-intelligence/intelligence-map.ts`
+- `src/lib/market-intelligence/manual-ingestion.ts`
+- `src/app/dashboard/intelligence/actions.ts`
+- `src/components/intelligence/world-intelligence-map.tsx`
+- `src/components/intelligence/manual-market-ingestion-controls.tsx`
+
+Contract:
+
+- `getIntelligenceMapData(officeId)` returns hotspots, lane arcs, research
+  items, impact reviews, source health, and top-level metrics for one office.
+- Map coordinates are deterministic and local. There is no external geocoding.
+- Manual market ingestion is admin-only.
+- Manual live ingestion requires
+  `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true`.
+- Manual ingestion refuses to run while
+  `MARKET_INTELLIGENCE_CRON_ENABLED=true`.
+- Manual ingestion is source allowlisted and clamps to three results/pages.
+- External intelligence remains advisory. It can create research, signals,
+  links, and impact reviews, but it must not mutate operational freight records.
+
+New checks:
+
+```bash
+npm run test:intelligence-map
+npm run test:manual-market-ingestion-action
+```

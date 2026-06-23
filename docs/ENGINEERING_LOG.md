@@ -602,3 +602,30 @@ Use this file for chronological implementation notes that future agents should s
   `mert@usederya.com`, confirm dashboard/intelligence/customer/job pages,
   quote PDF, portal-token behavior, Gmail OAuth redirect, cron auth rejection,
   and `MARKET_INTELLIGENCE_CRON_ENABLED=false`.
+
+### 2026-06-23 - Live intelligence map and manual market ingestion controls
+
+- Branch: main
+- Task: make `/dashboard/intelligence` visually useful and add a production
+  admin-only button for one-source market ingestion using deployed Vercel env
+  vars.
+- Files changed: `src/lib/market-intelligence/intelligence-map.ts`,
+  `src/lib/market-intelligence/manual-ingestion.ts`,
+  `src/app/dashboard/intelligence/actions.ts`,
+  `src/app/dashboard/intelligence/manual-action-types.ts`,
+  `src/app/dashboard/intelligence/page.tsx`,
+  `src/components/intelligence/*`,
+  `scripts/intelligence-map.test.ts`,
+  `scripts/manual-market-ingestion-action.test.ts`, `package.json`,
+  `docs/MARKET_INTELLIGENCE.md`, `docs/COMPANY_BRAIN.md`,
+  `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
+- Behavior added: deterministic map hotspots and lane arcs, visual market
+  intelligence summary, source health cards, admin-only preview/live manual
+  ingestion controls, and safe result summaries.
+- Safety gates: manual live ingestion requires
+  `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true`, refuses when
+  `MARKET_INTELLIGENCE_CRON_ENABLED=true`, uses an explicit safe source
+  allowlist, clamps to three results/pages, blocks media/FreightWaves/JOC by
+  default, and does not mutate operational freight records.
+- Failed/skipped checks: no local live Firecrawl ingestion was run, no market
+  cron was enabled, and no Prisma migration was required.
