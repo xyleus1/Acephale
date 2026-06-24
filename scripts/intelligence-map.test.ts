@@ -17,7 +17,16 @@ async function main() {
   assert(WORLD_MAP_LAND_PATHS.length > 100, "Expected a real world map asset with many land paths, not handmade continent blobs.");
   assert(mapComponentSource.includes("REFERENCE_CHOKEPOINTS"), "Expected visible chokepoint reference markers on the intelligence map.");
   assert(mapComponentSource.includes("REFERENCE_PORTS"), "Expected visible port reference markers on the intelligence map.");
-  assert(mapComponentSource.includes("Pull trusted market data to light up the map."), "Expected explicit empty-state copy for manual ingestion.");
+  for (const label of ["Suez Canal", "Panama Canal", "Strait of Hormuz", "Bab el-Mandeb", "Strait of Malacca", "Bosporus", "Gibraltar"]) {
+    assert(mapComponentSource.includes(label), `Expected visible ${label} chokepoint marker.`);
+  }
+  for (const label of ["Shanghai", "Singapore", "Hamburg", "Rotterdam", "Los Angeles", "Long Beach", "Istanbul"]) {
+    assert(mapComponentSource.includes(label), `Expected visible ${label} port marker.`);
+  }
+  for (const label of ["Maersk", "Drewry", "CBP", "Port of LA"]) {
+    assert(mapComponentSource.includes(label), `Expected empty-state source button for ${label}.`);
+  }
+  assert(mapComponentSource.includes("Pull trusted market data to light up the map"), "Expected explicit empty-state copy for manual ingestion.");
 
   const runId = `intelligence-map-${Date.now()}`;
   const office = await prisma.office.create({ data: { name: runId } });
@@ -144,6 +153,28 @@ async function main() {
         reason: "Fixture bad CBP pseudo-lane.",
       },
     });
+    await prisma.marketSignal.create({
+      data: {
+        officeId: office.id,
+        category: "customs",
+        severity: "high",
+        confidence: 0.82,
+        affectedModes: toMemoryJson(["ocean"]),
+        affectedOrigins: toMemoryJson(["Los Angeles"]),
+        affectedDestinations: toMemoryJson(["Long Beach"]),
+        affectedPorts: toMemoryJson([]),
+        affectedLanes: toMemoryJson(["Los Angeles -> Long Beach"]),
+        affectedCarriers: toMemoryJson([]),
+        summary: "Fixture customs advisory should render as U.S. compliance context, not a lane arc.",
+        operatorImplication: "Review customs/document requirements.",
+        pricingImplication: null,
+        customerImpact: null,
+        recommendedActions: toMemoryJson(["Check customs documentation before advising customers."]),
+        sourceRefs: toMemoryJson([]),
+        dedupeKey: `${runId}:valid-customs-lane-context`,
+        provenance: toMemoryJson({ source: "intelligence-map.test", sourceId: "cbp-csms" }),
+      },
+    });
 
     const data = await getIntelligenceMapData(office.id);
     assert(data.hotspots.length > 0, "Expected map hotspots.");
@@ -154,9 +185,11 @@ async function main() {
     assert(data.metrics.affectedRfqs > 0, "Expected affected RFQ metric.");
     assert(data.hotspots.some((hotspot) => ["Shanghai", "China", "Europe", "Hamburg", "Northern Europe"].includes(hotspot.label)), "Expected deterministic freight geocoding hotspot.");
     assert(data.hotspots.some((hotspot) => hotspot.label === "Global Market"), "Expected unknown geography to map to Global Market fallback.");
+    assert(data.hotspots.some((hotspot) => hotspot.label === "US" && hotspot.type === "country" && hotspot.category === "customs"), "Expected customs/CBP signals to render as a U.S. compliance hotspot.");
     assert(data.hotspots.some((hotspot) => hotspot.evidenceRefs.some((ref) => ref.startsWith("MarketSignal:"))), "Expected MarketSignal evidence refs.");
     assert(data.hotspots.some((hotspot) => hotspot.affectedEntities.some((entity) => entity.id === job.id || entity.id === inquiry.id || entity.id === company.id)), "Expected linked CRM entities in hotspot data.");
     assert(!data.lanes.some((lane) => /Countdown|Welcome|America|Customs/.test(lane.label)), "Bad CBP pseudo-lanes should not render as map lanes.");
+    assert(!data.lanes.some((lane) => lane.label === "Los Angeles -> Long Beach"), "Customs/CBP signals should not render as lane arcs.");
     assert(data.hotspots.some((hotspot) => hotspot.suppressedEntities.some((entity) => entity.id === "Countdown -> America")), "Expected invalid CBP lane link to be visible only as suppressed/rejected audit data.");
 
     console.log(JSON.stringify({

@@ -19,40 +19,41 @@ type ReferencePoint = {
   lat: number;
   lng: number;
   align?: "left" | "right";
+  dx?: number;
+  dy?: number;
 };
 
 const CONTINENT_LABELS: ReferencePoint[] = [
-  { label: "North America", lat: 49, lng: -104 },
-  { label: "South America", lat: -18, lng: -60 },
-  { label: "Europe", lat: 54, lng: 16 },
-  { label: "Africa", lat: 4, lng: 21 },
-  { label: "Asia", lat: 39, lng: 93 },
-  { label: "Middle East", lat: 27, lng: 44 },
-  { label: "Oceania", lat: -26, lng: 138 },
+  { label: "North America", lat: 49, lng: -107 },
+  { label: "South America", lat: -18, lng: -61 },
+  { label: "Europe", lat: 54, lng: 18 },
+  { label: "Africa", lat: 3, lng: 22 },
+  { label: "Asia", lat: 39, lng: 92 },
+  { label: "Middle East", lat: 26, lng: 47 },
+  { label: "Oceania", lat: -25, lng: 137 },
 ];
 
 const REFERENCE_PORTS: ReferencePoint[] = [
-  { label: "Los Angeles", lat: 33.74, lng: -118.26 },
-  { label: "New York", lat: 40.68, lng: -74.04 },
-  { label: "Rotterdam", lat: 51.92, lng: 4.48 },
-  { label: "Hamburg", lat: 53.55, lng: 9.99 },
-  { label: "Istanbul", lat: 41.01, lng: 28.97 },
-  { label: "Mersin", lat: 36.8, lng: 34.63 },
-  { label: "Jebel Ali", lat: 25.01, lng: 55.06 },
-  { label: "Singapore", lat: 1.29, lng: 103.85 },
-  { label: "Shanghai", lat: 31.23, lng: 121.47 },
-  { label: "Ningbo", lat: 29.87, lng: 121.55 },
+  { label: "Los Angeles", lat: 33.74, lng: -118.26, align: "right", dx: -8, dy: -7 },
+  { label: "Long Beach", lat: 33.75, lng: -118.2, dx: 8, dy: 11 },
+  { label: "Rotterdam", lat: 51.92, lng: 4.48, align: "right", dx: -8, dy: -8 },
+  { label: "Hamburg", lat: 53.55, lng: 9.99, dx: 8, dy: -13 },
+  { label: "Istanbul", lat: 41.01, lng: 28.97, dx: 8, dy: 12 },
+  { label: "Singapore", lat: 1.29, lng: 103.85, dx: 8, dy: 10 },
+  { label: "Shanghai", lat: 31.23, lng: 121.47, dx: 8, dy: -8 },
 ];
 
 const REFERENCE_CHOKEPOINTS: ReferencePoint[] = [
-  { label: "Panama Canal", lat: 9.08, lng: -79.68, align: "right" },
-  { label: "Suez Canal", lat: 30.45, lng: 32.35 },
-  { label: "Gibraltar", lat: 35.96, lng: -5.6, align: "right" },
-  { label: "Bosporus", lat: 41.12, lng: 29.07 },
-  { label: "Hormuz", lat: 26.56, lng: 56.25 },
-  { label: "Bab el-Mandeb", lat: 12.58, lng: 43.33 },
-  { label: "Malacca", lat: 3, lng: 101 },
+  { label: "Panama Canal", lat: 9.08, lng: -79.68, align: "right", dx: -9, dy: -8 },
+  { label: "Suez Canal", lat: 30.45, lng: 32.35, dx: 9, dy: -10 },
+  { label: "Strait of Hormuz", lat: 26.56, lng: 56.25, dx: 10, dy: -3 },
+  { label: "Bab el-Mandeb", lat: 12.58, lng: 43.33, align: "right", dx: -9, dy: 12 },
+  { label: "Strait of Malacca", lat: 3, lng: 101, dx: 9, dy: 10 },
+  { label: "Bosporus", lat: 41.12, lng: 29.07, dx: 9, dy: 12 },
+  { label: "Gibraltar", lat: 35.96, lng: -5.6, align: "right", dx: -9, dy: 12 },
 ];
+
+const SOURCE_BUTTON_LABELS = ["Maersk", "Drewry", "CBP", "Port of LA"];
 
 function severityColor(severity: string) {
   if (severity === "critical") return "#fb7185";
@@ -114,10 +115,17 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
             </g>
             {data.hotspots.length === 0 && (
               <g>
-                <circle cx="500" cy="250" r="24" fill="#38bdf8" opacity=".18" />
-                <circle cx="500" cy="250" r="10" fill="#38bdf8" opacity=".72" />
-                <text x="528" y="247" fill="#f8fafc" stroke="#020617" strokeWidth="4" paintOrder="stroke" fontSize="16" fontWeight="800">No live market research yet</text>
-                <text x="528" y="267" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12">Pull trusted market data to light up the map.</text>
+                <rect x="318" y="200" width="364" height="104" rx="14" fill="#020617" fillOpacity=".72" stroke="#7dd3fc" strokeOpacity=".58" />
+                <circle cx="350" cy="235" r="24" fill="#38bdf8" opacity=".18" />
+                <circle cx="350" cy="235" r="10" fill="#38bdf8" opacity=".72" />
+                <text x="382" y="232" fill="#f8fafc" stroke="#020617" strokeWidth="4" paintOrder="stroke" fontSize="16" fontWeight="900">Pull trusted market data to light up the map</text>
+                <text x="382" y="253" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12" fontWeight="700">Use official carrier, rate, customs, and port sources.</text>
+                {SOURCE_BUTTON_LABELS.map((label, index) => (
+                  <g key={`empty-source-${label}`} transform={`translate(${382 + index * 72} 270)`}>
+                    <rect width={index === 3 ? 64 : 58} height="20" rx="10" fill="#0f2a3d" stroke="#bae6fd" strokeOpacity=".58" />
+                    <text x={(index === 3 ? 32 : 29)} y="14" textAnchor="middle" fill="#f8fafc" fontSize="10" fontWeight="900">{label}</text>
+                  </g>
+                ))}
               </g>
             )}
             <g>
@@ -127,6 +135,8 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                 const active = selected?.id === hotspot.id;
                 const radius = Math.min(18, 7 + hotspot.signalCount * 2 + hotspot.pendingReviewCount);
                 const isChokepoint = hotspot.type === "chokepoint";
+                const isComplianceCountry = hotspot.type === "country" && (hotspot.category === "customs" || hotspot.category === "compliance");
+                const labelOffset = hotspot.type === "country" ? 14 : radius + 7;
                 return (
                   <g
                     key={hotspot.id}
@@ -146,7 +156,31 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                     {hotspot.pendingReviewCount > 0 && (
                       <circle cx={point.x} cy={point.y} r={radius + 12} fill="none" stroke="#fef3c7" strokeWidth="2" opacity=".72" />
                     )}
-                    {isChokepoint ? (
+                    {isComplianceCountry ? (
+                      <g>
+                        <path
+                          d={`M ${point.x.toFixed(1)} ${(point.y - radius - 7).toFixed(1)} L ${(point.x + radius + 7).toFixed(1)} ${(point.y - radius + 1).toFixed(1)} L ${(point.x + radius + 3).toFixed(1)} ${(point.y + radius + 8).toFixed(1)} Q ${point.x.toFixed(1)} ${(point.y + radius + 15).toFixed(1)} ${(point.x - radius - 3).toFixed(1)} ${(point.y + radius + 8).toFixed(1)} L ${(point.x - radius - 7).toFixed(1)} ${(point.y - radius + 1).toFixed(1)} Z`}
+                          fill="#0f766e"
+                          opacity={hotspot.suppressed ? ".42" : ".94"}
+                          stroke="#fef3c7"
+                          strokeWidth={active ? 2.8 : 1.4}
+                          strokeDasharray={hotspot.suppressed ? "3 3" : undefined}
+                        />
+                        <text
+                          x={point.x}
+                          y={point.y + 5}
+                          textAnchor="middle"
+                          fill="#fef3c7"
+                          stroke="#082f49"
+                          strokeWidth="2"
+                          paintOrder="stroke"
+                          fontSize="12"
+                          fontWeight="950"
+                        >
+                          CBP
+                        </text>
+                      </g>
+                    ) : isChokepoint ? (
                       <path
                         d={`M ${point.x.toFixed(1)} ${(point.y - radius).toFixed(1)} L ${(point.x + radius).toFixed(1)} ${point.y.toFixed(1)} L ${point.x.toFixed(1)} ${(point.y + radius).toFixed(1)} L ${(point.x - radius).toFixed(1)} ${point.y.toFixed(1)} Z`}
                         fill={color}
@@ -167,14 +201,14 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                         strokeDasharray={hotspot.suppressed ? "3 3" : undefined}
                       />
                     )}
-                    <HotspotGlyph category={hotspot.category} type={hotspot.type} x={point.x - 7} y={point.y - 7} suppressed={hotspot.suppressed} />
+                    {!isComplianceCountry && <HotspotGlyph category={hotspot.category} type={hotspot.type} x={point.x - 7} y={point.y - 7} suppressed={hotspot.suppressed} />}
                     <circle cx={point.x} cy={point.y} r={radius + 5} fill="none" stroke={color} strokeWidth="1.5" opacity={hotspot.suppressed ? ".18" : ".55"}>
                       <animate attributeName="r" values={`${radius + 5};${radius + 13};${radius + 5}`} dur="2.8s" repeatCount="indefinite" />
                       <animate attributeName="opacity" values={hotspot.suppressed ? ".18;.03;.18" : ".55;.08;.55"} dur="2.8s" repeatCount="indefinite" />
                     </circle>
                     <text
-                      x={point.x + radius + 7}
-                      y={point.y + 4}
+                      x={point.x + labelOffset}
+                      y={point.y + (isComplianceCountry ? 27 : 4)}
                       fill={hotspot.suppressed ? "#cbd5e1" : "#f8fafc"}
                       stroke="#020617"
                       strokeWidth="3"
@@ -182,7 +216,7 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                       fontSize="13"
                       fontWeight={active ? 900 : 800}
                     >
-                      {hotspot.label}
+                      {isComplianceCountry ? `${hotspot.label} compliance` : hotspot.label}
                     </text>
                   </g>
                 );
@@ -234,7 +268,7 @@ function ReferenceGeographyLayer() {
       <g>
         {REFERENCE_CHOKEPOINTS.map((item) => {
           const point = project(item.lat, item.lng);
-          const offset = item.align === "right" ? -9 : 9;
+          const offset = item.align === "right" ? (item.dx ?? -9) : (item.dx ?? 9);
           return (
             <g key={`chokepoint-${item.label}`}>
               <path
@@ -246,7 +280,7 @@ function ReferenceGeographyLayer() {
               />
               <text
                 x={point.x + offset}
-                y={point.y + 4}
+                y={point.y + (item.dy ?? 4)}
                 textAnchor={item.align === "right" ? "end" : "start"}
                 fill="#fef3c7"
                 stroke="#020617"
@@ -265,12 +299,14 @@ function ReferenceGeographyLayer() {
       <g>
         {REFERENCE_PORTS.map((item) => {
           const point = project(item.lat, item.lng);
+          const textAnchor = item.align === "right" ? "end" : "start";
           return (
             <g key={`reference-port-${item.label}`}>
               <circle cx={point.x} cy={point.y} r="3.5" fill="#67e8f9" stroke="#020617" strokeWidth="1.2" opacity=".88" />
               <text
-                x={point.x + 6}
-                y={point.y - 5}
+                x={point.x + (item.dx ?? 6)}
+                y={point.y + (item.dy ?? -5)}
+                textAnchor={textAnchor}
                 fill="#bae6fd"
                 stroke="#020617"
                 strokeWidth="2.5"
