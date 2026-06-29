@@ -64,6 +64,8 @@ export function AgentChatWidget() {
   const routeCompanyId = routeCompanyIdRaw && routeCompanyIdRaw !== "new" ? routeCompanyIdRaw : undefined;
   const isDashboardWorkbench = pathname === "/dashboard";
   const [open, setOpen] = useState(true);
+  const [dashboardAgentChecked, setDashboardAgentChecked] = useState(!isDashboardWorkbench);
+  const [hasEmbeddedWorkbenchAgent, setHasEmbeddedWorkbenchAgent] = useState(false);
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,12 +90,48 @@ export function AgentChatWidget() {
   }, []);
 
   useEffect(() => {
-    const active = open && !isDashboardWorkbench;
+    if (!isDashboardWorkbench) {
+      setDashboardAgentChecked(true);
+      setHasEmbeddedWorkbenchAgent(false);
+      return;
+    }
+
+    setDashboardAgentChecked(false);
+    let frame = window.requestAnimationFrame(() => {
+      const next = Boolean(document.querySelector(".workbench-agent"));
+      setHasEmbeddedWorkbenchAgent((current) => (current === next ? current : next));
+      setDashboardAgentChecked(true);
+    });
+
+    const observer = new MutationObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const next = Boolean(document.querySelector(".workbench-agent"));
+        setHasEmbeddedWorkbenchAgent((current) => (current === next ? current : next));
+        setDashboardAgentChecked(true);
+      });
+    });
+
+    observer.observe(document.querySelector(".page-container") ?? document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [isDashboardWorkbench]);
+
+  const suppressedByWorkbenchAgent = isDashboardWorkbench && (!dashboardAgentChecked || hasEmbeddedWorkbenchAgent);
+
+  useEffect(() => {
+    const active = open && !suppressedByWorkbenchAgent;
     document.documentElement.classList.toggle("agent-dock-open", active);
     return () => {
       document.documentElement.classList.remove("agent-dock-open");
     };
-  }, [isDashboardWorkbench, open]);
+  }, [open, suppressedByWorkbenchAgent]);
 
   useEffect(() => {
     return () => {
@@ -126,9 +164,9 @@ export function AgentChatWidget() {
     }, durationMs);
   }
 
-  // The dashboard root has a permanent agent panel embedded in the page,
-  // so suppress the floating pill there. Must come AFTER all hooks (Rules of Hooks).
-  if (isDashboardWorkbench) return null;
+  // The dashboard root sometimes has a permanent embedded agent. Suppress the
+  // global dock only in that state; the empty dashboard still needs an agent.
+  if (suppressedByWorkbenchAgent) return null;
 
   async function send(textOverride?: string) {
     const text = (textOverride ?? input).trim();
@@ -202,6 +240,7 @@ export function AgentChatWidget() {
           <div className="agent-title-lockup">
             <span className="agent-avatar">A</span>
             <div>
+              <div className="agent-panel-kicker">Agent</div>
               <div className="agent-panel-title">Desk Assistant</div>
               <div className="agent-panel-subtitle">RFQs, target price, forwarder replies</div>
             </div>

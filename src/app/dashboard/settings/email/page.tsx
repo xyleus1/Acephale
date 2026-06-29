@@ -157,7 +157,7 @@ export default async function EmailSettingsPage({
                 border: "1px solid var(--border)",
                 borderLeft: `3px solid ${gate.status === "ready" ? "var(--success)" : gate.status === "blocked" ? "var(--danger)" : "var(--warning)"}`,
                 borderRadius: "var(--radius)",
-                background: gate.status === "ready" ? "var(--success-bg)" : gate.status === "blocked" ? "var(--danger-bg)" : "var(--warning-bg)",
+                background: "var(--surface)",
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
                   <strong style={{ fontSize: 13, color: "var(--text)" }}>{gate.label}</strong>

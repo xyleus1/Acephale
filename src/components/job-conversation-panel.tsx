@@ -240,7 +240,7 @@ export function JobConversationPanel({
           >
             <span className="agent-avatar">A</span>
             <span className="conversation-rail-copy">
-              <strong>Show desk</strong>
+              <strong>Desk Assistant</strong>
               <small>{scopeJobReference}</small>
             </span>
             <Icon name="chevron-left" size={14} strokeWidth={2.25} />
@@ -257,10 +257,9 @@ export function JobConversationPanel({
         <div className="conversation-title-lockup">
           <span className="agent-avatar">A</span>
           <div>
+            <div className="conversation-kicker">Agent</div>
             <div className="conversation-title">Desk Assistant</div>
-            <div className="conversation-subtitle">
-              RFQ qualification, pricing, and replies for {scopeJobReference}
-            </div>
+            <div className="conversation-subtitle">RFQs, target price, forwarder replies</div>
           </div>
         </div>
         <button
@@ -270,8 +269,7 @@ export function JobConversationPanel({
           title="Hide desk assistant"
           aria-label="Hide desk assistant"
         >
-          <span>Hide agent</span>
-          <Icon name="chevron-right" size={14} strokeWidth={2.25} />
+          <Icon name="x" size={15} strokeWidth={2.5} />
         </button>
       </header>
 

@@ -993,3 +993,41 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: `src/app/globals.css` still contains older overridden color layers.
   The final layer controls the current UI, but the file needs a later deletion
   pass; otherwise every visual fix just adds more CSS archaeology.
+
+### 2026-06-29 - Follow-up shell/agent layout correction
+
+- Branch: main
+- Commit: not committed
+- Task: Fix the remaining layout regressions from the shell redesign: dashboard
+  agent missing in some states, collapsed-agent blank right space on sidebar
+  pages, brown sidebar icons, weak assistant button affordances, and loud
+  decision/setup status colors.
+- Files changed: `src/components/agent-chat-widget.tsx`,
+  `src/components/job-conversation-panel.tsx`,
+  `src/app/dashboard/settings/email/page.tsx`, `src/app/globals.css`,
+  `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
+- Behavior added: `/dashboard` now suppresses the global dock only when an
+  embedded workbench agent is actually present; otherwise the global full-height
+  right dock appears. Collapsed global-agent pages reclaim the full content
+  width. Collapsed embedded workbench agent returns right padding to `0px`.
+  Assistant headers now read `Agent`, `Desk Assistant`, and `RFQs, target price,
+  forwarder replies`; close/send buttons have visible white icons. Sidebar nav
+  icons stay white. Decision queue and setup gate warning states use white
+  surfaces with calm maroon/dark-green status accents instead of panel-wide
+  red/green/tan fills.
+- Verification: `npx tsc --noEmit`, `npm run check:docs`, and `npm run build`
+  passed. Browser smoke on local dev server at `http://localhost:3001` passed
+  after logging in as `admin@demo.local / admin1234`. Desktop measurements at
+  1440x900 confirmed
+  email settings global dock full height, collapsed content/cards expanding to
+  `1382px`/`1322px`, dashboard embedded-agent padding returning from `478.8px`
+  to `0px` after collapse, dashboard fallback global agent appearing when no
+  embedded workbench agent exists, white sidebar icons, white blocked decision
+  surfaces with maroon edge, white setup gates with maroon edge, and no
+  horizontal overflow across Inbox, Pricing, Intelligence, CRM, Email, and
+  Admin with the agent collapsed.
+- Failed/skipped checks: no schema migration, live Gmail sync, or external
+  ingestion was run.
+- Caveat: the local database currently has a focused workbench job, so the
+  no-embedded dashboard fallback was verified by removing the embedded agent in
+  the browser and observing the global dock mount through the new observer.

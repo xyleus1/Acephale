@@ -16,6 +16,86 @@ not committed
 
 ## Task implemented
 
+Follow-up layout correction after visual QA:
+
+- Fixed the dashboard agent suppression bug. `/dashboard` now suppresses the
+  global agent only when an embedded workbench agent actually exists; empty or
+  queue-only dashboard states fall back to the full-height global right dock.
+- Tightened the collapsed-agent layout contract across sidebar routes. When the
+  global agent is inactive, page content and cards fill the available width
+  instead of leaving a reserved right-side gap.
+- Fixed dashboard workbench padding so the embedded agent only reserves width
+  while expanded; its collapsed state returns workbench padding to `0px`.
+- Reworked the assistant header copy to the requested simple stack: `Agent`,
+  `Desk Assistant`, `RFQs, target price, forwarder replies`.
+- Replaced the text-heavy hide control with a visible `x` icon and made send
+  arrows/close icons visibly white inside their buttons.
+- Forced sidebar navigation icons to white in collapsed, hover, and active
+  states.
+- Calmed the decision queue surfaces: blocked proof/contract/action sections
+  now stay white and use maroon only for the left warning edge and small labels,
+  rather than filling whole panels with red/pink.
+- Removed inline pink/green/beige fills from email setup gate rows; the rows are
+  now white with status carried by the left edge and status text.
+
+## Files changed
+
+- `src/app/dashboard/settings/email/page.tsx`
+- `src/app/globals.css`
+- `src/components/agent-chat-widget.tsx`
+- `src/components/job-conversation-panel.tsx`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `npm run build`
+- Local dev server at `http://localhost:3001`
+- Browser smoke login with `admin@demo.local / admin1234`
+- Desktop email settings at 1440x900: global agent open measured full viewport
+  height with right dock width `461px`; after collapse, content margin-right was
+  `0px`, page container width was `1382px`, and visible cards expanded to
+  `1322px`.
+- Desktop dashboard at 1440x900: embedded workbench agent open reserved
+  `478.8px`; after clicking the `x`, workbench padding-right returned to `0px`
+  and visible workbench cards expanded from `843px` to `1322px`.
+- Dashboard fallback check: after removing the embedded workbench agent in the
+  browser, the global agent appeared on `/dashboard`, set `agent-dock-open`, and
+  measured full viewport height.
+- Collapsed sidebar-route sweep for Inbox, Pricing, Intelligence, CRM, Email,
+  and Admin: content margin-right stayed `0px`, page containers measured
+  `1382px`, launcher overlay was present, and horizontal overflow stayed `0`.
+- Color checks: sidebar icon computed color was white; blocked decision queue
+  surface computed white with maroon inset edge; email setup gate computed white
+  with maroon left edge.
+
+## Caveats
+
+- The current dev data has a focused workbench job, so the real dashboard empty
+  state was verified by DOM-removing the embedded workbench agent and letting
+  the new fallback observer take over. That is enough for this UI regression,
+  but a seeded no-job fixture would be cleaner.
+- This was a layout/color pass only. No schema migration, dependency change,
+  live Gmail sync, or external ingestion was run.
+
+## Previous Update
+
+## Date
+
+2026-06-29
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Workbench and global shell layout cleanup:
 
 - Removed the manual sidebar toggle button. The desktop sidebar is now a narrow

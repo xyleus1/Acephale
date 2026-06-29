@@ -31376,3 +31376,219 @@ button.secondary,
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
+
+/* Founder correction layer: keep the desk rich, consistent, and space-aware. */
+.sidebar .nav-link .nav-icon,
+.sidebar .nav-link .nav-icon svg,
+.sidebar .nav-link:hover .nav-icon,
+.sidebar .nav-link:hover .nav-icon svg,
+.sidebar .nav-link.active .nav-icon,
+.sidebar .nav-link.active .nav-icon svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.agent-panel-kicker,
+.conversation-kicker {
+  margin-bottom: 1px !important;
+  color: rgba(255, 255, 255, 0.82) !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.08em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+}
+
+.agent-panel-close,
+.conversation-collapse {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+}
+
+.agent-panel-close svg,
+.conversation-collapse svg,
+.agent-send-btn svg {
+  display: block !important;
+  width: 18px !important;
+  height: 18px !important;
+  color: currentColor !important;
+  opacity: 1 !important;
+  stroke: currentColor !important;
+}
+
+.agent-send-btn {
+  align-self: stretch !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 52px !important;
+  border-color: var(--derya-navy) !important;
+  background: var(--derya-navy) !important;
+  color: #ffffff !important;
+}
+
+.agent-send-btn:disabled {
+  border-color: #7c8794 !important;
+  background: #7c8794 !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+html:not(.agent-dock-open) .content {
+  margin-right: 0 !important;
+}
+
+.page-container,
+html:not(.agent-dock-open) .page-container {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+html:not(.agent-dock-open) .page-container > *,
+html:not(.agent-dock-open) .page-header,
+html:not(.agent-dock-open) .card,
+html:not(.agent-dock-open) .card-flush,
+html:not(.agent-dock-open) .table-shell,
+html:not(.agent-dock-open) .control-card,
+html:not(.agent-dock-open) .portal-card,
+html:not(.agent-dock-open) .report-card,
+html:not(.agent-dock-open) .inbox-layout,
+html:not(.agent-dock-open) .pricing-layout,
+html:not(.agent-dock-open) .admin-layout,
+html:not(.agent-dock-open) .intelligence-layout,
+html:not(.agent-dock-open) .customers-layout {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+html.agent-dock-open .page-container {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+@media (min-width: 1101px) {
+  .workbench-grid {
+    padding-right: 0 !important;
+  }
+
+  .workbench-grid:has(.workbench-agent .conversation-panel:not(.collapsed)) {
+    padding-right: calc(var(--agent-dock-width) + 18px) !important;
+  }
+
+  .workbench-grid:has(.workbench-agent .conversation-panel.collapsed) {
+    padding-right: 0 !important;
+  }
+}
+
+.attention-queue,
+.attention-brief,
+.attention-brief-execution,
+.attention-brief-move,
+.attention-brief-target,
+.attention-brief-contract,
+.attention-brief-proof-gaps,
+.attention-proof-gap,
+.attention-brief-rank,
+.attention-brief-ledger,
+.attention-brief-blockers,
+.attention-brief-action,
+.attention-item,
+.attention-item-move,
+.attention-item-proof-gap,
+.attention-item-rank {
+  background: #ffffff !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+.attention-brief.critical,
+.attention-brief.high,
+.attention-brief.normal,
+.attention-brief.blocked,
+.attention-brief.review {
+  background: #ffffff !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.attention-brief-execution,
+.attention-brief-move,
+.attention-brief-target,
+.attention-brief-rank {
+  background: var(--derya-blue-soft) !important;
+  border-color: var(--derya-blue-border) !important;
+}
+
+.attention-brief-contract,
+.attention-brief-action,
+.attention-brief-ledger,
+.attention-proof-gap {
+  border-left-color: var(--derya-cobalt) !important;
+}
+
+.attention-brief-contract.review,
+.attention-brief-action.review,
+.attention-brief-ledger.review,
+.attention-brief-ledger.rates,
+.attention-brief-gates span.review,
+.attention-brief-evidence span.watch {
+  background: #ffffff !important;
+  border-color: var(--derya-blue-border) !important;
+  color: var(--derya-navy) !important;
+}
+
+.attention-brief-contract.blocked,
+.attention-brief-action.blocked,
+.attention-brief-ledger.blocked,
+.attention-brief-blockers,
+.attention-brief-proof-gaps {
+  background: #ffffff !important;
+  border-color: var(--danger-border) !important;
+  color: var(--text) !important;
+  box-shadow: inset 3px 0 0 var(--danger) !important;
+}
+
+.attention-brief-gates span.blocked,
+.attention-brief-evidence span.weak,
+.quote-draft-error,
+.quote-draft-blockers span {
+  background: #ffffff !important;
+  border-color: var(--danger-border) !important;
+  color: var(--danger) !important;
+}
+
+.attention-brief-gates span.ready,
+.attention-brief-evidence span.strong,
+.attention-proof-gap.ready,
+.attention-brief-ledger.ready {
+  background: #ffffff !important;
+  border-color: var(--success-border) !important;
+  color: var(--success) !important;
+}
+
+.attention-brief-blockers > span,
+.attention-brief-contract.blocked > span,
+.attention-brief-action.blocked > span,
+.attention-brief-ledger.blocked > span,
+.attention-brief-proof-gaps > span {
+  color: var(--danger) !important;
+}
+
+.attention-brief-gates span,
+.attention-brief-evidence span,
+.attention-item-gates span,
+.attention-item-factors span {
+  background: #ffffff !important;
+  border-color: var(--derya-blue-border) !important;
+  color: var(--derya-navy) !important;
+}
