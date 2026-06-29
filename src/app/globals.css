@@ -28973,12 +28973,12 @@ button.primary:hover:not(:disabled),
   --success: #16724f;
   --success-bg: #edf8f3;
   --success-border: #b8ddcd;
-  --warning: #b86f1d;
-  --warning-bg: #fff6e7;
-  --warning-border: #ecc889;
-  --danger: #c73535;
-  --danger-bg: #fff1f1;
-  --danger-border: #efbcbc;
+  --warning: #5a3a25;
+  --warning-bg: #ffffff;
+  --warning-border: #bfd2e2;
+  --danger: #7f1d2d;
+  --danger-bg: #ffffff;
+  --danger-border: #dcb8c0;
   --neutral-bg: #f1f6fb;
   --neutral-border: #cfdeeb;
   --shadow-xs: 0 1px 0 rgba(10, 31, 58, 0.05);
@@ -29357,7 +29357,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .ops-route-waterway {
-  stroke: #187247;
+  stroke: #1f5d43;
   stroke-width: 3.2;
   stroke-dasharray: 1 0;
   filter: drop-shadow(0 2px 4px rgba(10, 31, 58, 0.18));
@@ -29381,14 +29381,14 @@ button.primary:hover:not(:disabled) {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: #198754 !important;
+  background: #1f5d43 !important;
   border: 3px solid #ffffff;
-  box-shadow: 0 0 0 2px rgba(25, 135, 84, 0.42);
+  box-shadow: 0 0 0 2px rgba(31, 93, 67, 0.28);
 }
 
 .ops-route-marker-destination .ops-route-marker-dot {
-  background: #c73535 !important;
-  box-shadow: 0 0 0 2px rgba(199, 53, 53, 0.42);
+  background: #7f1d2d !important;
+  box-shadow: 0 0 0 2px rgba(127, 29, 45, 0.28);
 }
 
 .ops-route-map-card {
@@ -30458,7 +30458,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .ops-route-zoom-line {
-  stroke: #187247;
+  stroke: #1f5d43;
   stroke-width: 2.8;
 }
 
@@ -30475,11 +30475,11 @@ button.primary:hover:not(:disabled) {
 }
 
 .ops-route-zoom-marker.start {
-  background: #198754;
+  background: #1f5d43;
 }
 
 .ops-route-zoom-marker.end {
-  background: #c73535;
+  background: #7f1d2d;
 }
 
 .ops-route-zoom-copy {
@@ -31591,4 +31591,383 @@ html.agent-dock-open .page-container {
   background: #ffffff !important;
   border-color: var(--derya-blue-border) !important;
   color: var(--derya-navy) !important;
+}
+
+/* Palette discipline: walnut, navy, blue-gray, and white first. */
+:root {
+  --success: #1f5d43 !important;
+  --success-bg: #ffffff !important;
+  --success-border: #bdd5c7 !important;
+  --warning: var(--derya-walnut) !important;
+  --warning-bg: #ffffff !important;
+  --warning-border: var(--derya-blue-border) !important;
+  --danger: #7f1d2d !important;
+  --danger-bg: #ffffff !important;
+  --danger-border: #dcb8c0 !important;
+  --info: var(--derya-blue) !important;
+  --info-bg: var(--derya-blue-soft) !important;
+  --info-border: var(--derya-blue-border) !important;
+}
+
+.nav-link.active .nav-icon,
+.nav-link:hover .nav-icon {
+  color: #ffffff !important;
+  stroke: currentColor !important;
+}
+
+.filter-chip.active,
+.filter-chip.dark.active,
+.chip-row .filter-chip.active,
+.view-switcher-tab.active,
+.pricing-tab.active,
+.mode-tab.active,
+.appearance-toggle button.active,
+.load-filter-button.active,
+.record-status-pill,
+.job-focus-status,
+.stage-tab.active,
+.stage-tab.current,
+.stage-tab.current:not(.active),
+.status-step.current .status-step-label {
+  background: var(--derya-navy) !important;
+  border-color: var(--derya-walnut) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 -2px 0 var(--derya-walnut) !important;
+}
+
+.filter-chip.active *,
+.filter-chip.dark.active *,
+.chip-row .filter-chip.active *,
+.view-switcher-tab.active *,
+.pricing-tab.active *,
+.mode-tab.active *,
+.appearance-toggle button.active *,
+.load-filter-button.active *,
+.record-status-pill *,
+.job-focus-status *,
+.stage-tab.active *,
+.stage-tab.current *,
+.status-step.current .status-step-label * {
+  color: #ffffff !important;
+  opacity: 1 !important;
+  stroke: currentColor !important;
+}
+
+.badge-warn,
+.badge-info,
+.opp-pill.opp-info,
+.opp-pill.opp-warn,
+.pricing-status.status-priced,
+.pricing-status.status-parsed,
+.decision-flow-step.review,
+.attention-brief.review {
+  background: #ffffff !important;
+  border-color: var(--derya-blue-border) !important;
+  color: var(--derya-navy) !important;
+}
+
+.badge-good,
+.opp-pill.opp-good,
+.decision-flow-step.completed,
+.attention-brief-gates span.ready,
+.attention-brief-evidence span.strong,
+.attention-proof-gap.ready,
+.attention-brief-ledger.ready {
+  background: #ffffff !important;
+  border-color: var(--success-border) !important;
+  color: var(--success) !important;
+}
+
+.badge-danger,
+.opp-pill.opp-danger,
+.pricing-status.status-needs-info,
+.decision-flow-step.blocked,
+.attention-brief.blocked,
+.attention-brief-contract.blocked,
+.attention-brief-action.blocked,
+.attention-brief-ledger.blocked,
+.attention-brief-blockers,
+.attention-brief-proof-gaps,
+.attention-brief-gates span.blocked,
+.attention-brief-evidence span.weak,
+.quote-draft-error,
+.quote-draft-blockers span {
+  background: #ffffff !important;
+  border-color: var(--danger-border) !important;
+  color: var(--danger) !important;
+}
+
+.pricing-command-board,
+.pricing-command-top,
+.pricing-command-health,
+.pricing-command-phase,
+.pricing-command-details,
+.pricing-command-contract,
+.pricing-command-quality,
+.pricing-command-priority,
+.pricing-command-priority-check,
+.pricing-command-proof-gaps,
+.pricing-command-proof-gap,
+.pricing-command-playbook,
+.pricing-command-route,
+.pricing-command-action,
+.pricing-command-factor,
+.pricing-inquiry-command,
+.pricing-inquiry-playbook,
+.pricing-inquiry-route-decision,
+.pricing-inquiry-route,
+.pricing-mini-factor,
+.strategy-quote-gate,
+.strategy-reason-stack,
+.strategy-blocker-queue,
+.strategy-evidence-stack,
+.strategy-rationale-row,
+.strategy-evidence-row,
+.strategy-blocker-row,
+.strategy-control-contract,
+.strategy-control-contract > div,
+.strategy-quality-chip,
+.strategy-decision-strip div,
+.strategy-agent-handoff,
+.strategy-target-posture,
+.strategy-coverage-posture,
+.strategy-negotiation-posture,
+.strategy-target-grid div,
+.strategy-coverage-grid div,
+.strategy-negotiation-copy div,
+.opp-card,
+.opp-card-top,
+.opp-foot,
+.opp-contract-lockup {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: var(--derya-blue-border) !important;
+  color: var(--text) !important;
+}
+
+.pricing-command-board-head,
+.pricing-command-board-meta span,
+.pricing-command-phase-grid,
+.pricing-command-health > div,
+.pricing-command-priority-check > span,
+.pricing-inquiry-brain-row span,
+.strategy-quote-gate-flags span,
+.strategy-quote-gate-reasons span,
+.strategy-operator-meta span,
+.strategy-operator-reasons span,
+.strategy-negotiation-leverage span,
+.strategy-blocker-row > span,
+.opp-pill-state {
+  background: var(--derya-blue-soft) !important;
+  background-image: none !important;
+  border-color: var(--derya-blue-border) !important;
+  color: var(--derya-navy) !important;
+}
+
+.pricing-command-top span,
+.pricing-command-health span,
+.pricing-command-phase span,
+.pricing-command-playbook span,
+.pricing-command-route span,
+.pricing-command-contract span,
+.pricing-command-action span,
+.pricing-command-quality span,
+.pricing-command-priority span,
+.pricing-command-factor span,
+.pricing-inquiry-command span,
+.pricing-inquiry-brain-row span,
+.pricing-mini-factor em,
+.strategy-rationale-row span,
+.strategy-evidence-row span,
+.strategy-quality-chip span,
+.strategy-agent-handoff span,
+.strategy-target-grid span,
+.strategy-coverage-grid span,
+.strategy-negotiation-copy span,
+.opp-eyebrow,
+.opp-card span {
+  color: var(--text-3) !important;
+}
+
+.pricing-command-top strong,
+.pricing-command-health strong,
+.pricing-command-phase strong,
+.pricing-command-playbook strong,
+.pricing-command-route strong,
+.pricing-command-contract strong,
+.pricing-command-action strong,
+.pricing-command-quality strong,
+.pricing-command-priority strong,
+.pricing-command-factor strong,
+.pricing-inquiry-command strong,
+.pricing-inquiry-route-decision strong,
+.pricing-mini-factor strong,
+.strategy-quote-gate strong,
+.strategy-rationale-row strong,
+.strategy-evidence-row strong,
+.strategy-control-contract strong,
+.strategy-target-grid strong,
+.strategy-coverage-grid strong,
+.strategy-negotiation-copy strong,
+.opp-card strong {
+  color: var(--text) !important;
+}
+
+.pricing-command-top em,
+.pricing-command-top p,
+.pricing-command-health em,
+.pricing-command-phase em,
+.pricing-command-route em,
+.pricing-command-route p,
+.pricing-command-contract em,
+.pricing-command-action em,
+.pricing-command-quality em,
+.pricing-command-priority em,
+.pricing-inquiry-route-decision em,
+.strategy-quote-gate em,
+.strategy-rationale-row em,
+.strategy-evidence-row em,
+.strategy-blocker-row em,
+.strategy-control-contract em,
+.strategy-target-head em,
+.strategy-coverage-head em,
+.strategy-negotiation-head em {
+  color: var(--text-2) !important;
+}
+
+.pricing-command-top.hot,
+.pricing-command-contract.blocked,
+.pricing-command-action.blocked,
+.pricing-command-quality.blocked,
+.pricing-command-priority.blocked,
+.pricing-command-priority-check.blocked,
+.pricing-command-proof-gap.blocked,
+.pricing-command-factor.blocked,
+.pricing-mini-factor.blocked,
+.pricing-inquiry-command.hot,
+.strategy-quote-gate.blocked,
+.strategy-control-contract.blocked,
+.strategy-quality-chip.blocked,
+.strategy-rationale-row.blocker,
+.strategy-evidence-row.blocked,
+.strategy-blocker-row.high,
+.strategy-blocker-row.critical,
+.strategy-target-posture.below-buy,
+.strategy-target-posture.below-floor,
+.strategy-negotiation-posture.escalate,
+.strategy-negotiation-posture.decline,
+.opp-card.opp-danger {
+  border-left-color: var(--danger) !important;
+  box-shadow: inset 3px 0 0 var(--danger) !important;
+}
+
+.pricing-command-top.steady,
+.pricing-command-contract.ready,
+.pricing-command-action.ready,
+.pricing-command-quality.ready,
+.pricing-command-priority.ready,
+.pricing-command-priority-check.ready,
+.pricing-command-proof-gap.ready,
+.pricing-command-route.ready,
+.pricing-command-factor.ready,
+.pricing-mini-factor.ready,
+.pricing-inquiry-command.steady,
+.pricing-inquiry-route-decision.ready,
+.strategy-quote-gate.ready-to-quote,
+.strategy-control-contract.ready,
+.strategy-quality-chip.ready,
+.strategy-evidence-row.ready,
+.strategy-target-posture.generous,
+.strategy-target-posture.within-guardrail,
+.strategy-coverage-posture.strong-live,
+.strategy-coverage-posture.workable-live,
+.strategy-negotiation-posture.sell-confidently,
+.opp-card.opp-good {
+  border-left-color: var(--success) !important;
+  box-shadow: inset 3px 0 0 var(--success) !important;
+}
+
+.pricing-command-top.review,
+.pricing-command-route,
+.pricing-command-contract.review,
+.pricing-command-action.review,
+.pricing-command-quality.review,
+.pricing-command-quality.info,
+.pricing-command-priority.review,
+.pricing-command-priority.rates,
+.pricing-command-priority-check.review,
+.pricing-command-priority-check.rates,
+.pricing-command-priority-check.info,
+.pricing-command-proof-gap.review,
+.pricing-command-proof-gap.info,
+.pricing-command-factor.review,
+.pricing-command-factor.info,
+.pricing-inquiry-command.review,
+.pricing-inquiry-route-decision,
+.strategy-quote-gate.needs-rates,
+.strategy-quote-gate.review-required,
+.strategy-control-contract.review,
+.strategy-quality-chip.review,
+.strategy-rationale-row.review,
+.strategy-rationale-row.support,
+.strategy-rationale-row.info,
+.strategy-evidence-row.review,
+.strategy-evidence-row.info,
+.strategy-coverage-posture.none,
+.strategy-coverage-posture.pending-only,
+.strategy-coverage-posture.history-only,
+.strategy-coverage-posture.benchmark-only,
+.strategy-negotiation-posture.mature-first,
+.strategy-negotiation-posture.get-rates,
+.strategy-negotiation-posture.counter-cost,
+.strategy-negotiation-posture.protect-floor,
+.opp-card.opp-info,
+.opp-card.opp-warn {
+  border-left-color: var(--derya-walnut) !important;
+  box-shadow: inset 3px 0 0 var(--derya-walnut) !important;
+}
+
+.opp-card.opp-good,
+.opp-card.opp-info,
+.opp-card.opp-warn,
+.opp-card.opp-danger {
+  border-top-color: var(--derya-blue-border) !important;
+}
+
+.strategy-quote-gate-flags .ok,
+.opp-pill.decision-ready .opp-pill-state {
+  background: #ffffff !important;
+  border-color: var(--success-border) !important;
+  color: var(--success) !important;
+}
+
+.strategy-quote-gate-flags .blocked,
+.opp-pill.decision-blocked .opp-pill-state {
+  background: #ffffff !important;
+  border-color: var(--danger-border) !important;
+  color: var(--danger) !important;
+}
+
+.strategy-quote-gate-flags .review,
+.opp-pill.decision-review .opp-pill-state {
+  background: #ffffff !important;
+  border-color: var(--derya-blue-border) !important;
+  color: var(--derya-navy) !important;
+}
+
+.attention-item-open {
+  background: var(--derya-navy) !important;
+  border-color: var(--derya-navy) !important;
+  color: #ffffff !important;
+}
+
+.pricing-command-phase svg,
+.pricing-command-phase.get-rates svg,
+.pricing-command-phase.approve-economics svg,
+.pricing-command-phase.quote-customer svg {
+  color: var(--derya-walnut) !important;
+}
+
+.pricing-command-phase.mature-rfq svg {
+  color: var(--danger) !important;
 }

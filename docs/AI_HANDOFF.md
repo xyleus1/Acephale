@@ -16,6 +16,80 @@ not committed
 
 ## Task implemented
 
+App-wide palette discipline and Intelligence map visual cleanup:
+
+- Revamped the active visual system around walnut, navy, white, and light
+  gray-blue surfaces.
+- Added a final palette discipline layer so pricing, decision, status, setup,
+  and strategy widgets stop falling back to amber/tan/pink/bright-green fills.
+- Restricted red/green usage to calm maroon/dark-green text, borders, and
+  narrow left-edge accents for genuinely blocked/ready states.
+- Updated active sidebar/page controls so selected chips and mode buttons use
+  navy with white text instead of beige/brown active fills.
+- Recolored the Intelligence world map, hotspots, legend, reference ports, and
+  entity badges away from bright teal/orange/red/green.
+- Fixed the Intelligence map SVG sizing bug that made the map appear as a
+  mostly blank dark panel by forcing the Natural Earth map to render at its
+  2:1 aspect ratio.
+- Fixed the Intelligence hotspot duplicate evidence-key warning that surfaced
+  as a visible dev overlay issue badge.
+- Replaced loud success fallbacks in small inline components with the dark
+  green/white semantic palette.
+
+## Files changed
+
+- `src/app/globals.css`
+- `src/components/intelligence/world-intelligence-map.tsx`
+- `src/components/intelligence/world-map-base.tsx`
+- `src/components/intelligence/intelligence-hotspot-panel.tsx`
+- `src/components/intelligence/intelligence-visual-icons.tsx`
+- `src/components/pending-quotes-inline.tsx`
+- `src/components/status-badge-toggle.tsx`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `npm run build`
+- Source sweep for disallowed bright palette tokens in `src/app`,
+  `src/components`, and `src/lib`
+- Browser smoke login with `admin@demo.local / admin1234`
+- Desktop screenshots at 1440x900 for Pricing, Intelligence, and Email
+  Settings
+- Strict computed-color audit across `/dashboard`, `/dashboard/inbox`,
+  `/dashboard/pricing`, `/dashboard/intelligence`, `/dashboard/customers`,
+  `/dashboard/settings/email`, `/dashboard/admin`, `/dashboard/jobs`,
+  `/dashboard/reports`, and `/dashboard/activity`: no warm tan/orange panels or
+  loud red/green semantic fills detected.
+
+## Caveats
+
+- The CSS file still contains older overridden theme layers. This change adds a
+  final discipline layer and patches high-risk inline/component colors. A later
+  cleanup pass should delete the obsolete layers instead of continuing to stack
+  overrides.
+- During visual QA, the local Next dev cache corrupted under repeated hot reload
+  and browser passes. Only generated `.next` output was cleared before starting
+  a fresh dev server.
+
+## Previous Update
+
+## Date
+
+2026-06-29
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Gmail historical sync and hourly refresh hardening:
 
 - Changed Gmail sync from one newest-page yearly scan to a two-lane flow:

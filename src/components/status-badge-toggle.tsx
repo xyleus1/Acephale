@@ -12,7 +12,7 @@ const STATUS_OPTIONS = [
 const TONE_STYLES: Record<string, React.CSSProperties> = {
   neutral: { background: "var(--surface-3)", color: "var(--text-2)", border: "1px solid var(--border)" },
   info: { background: "var(--info-bg, #eff6ff)", color: "var(--info, #1d4ed8)", border: "1px solid var(--info-border, #bfdbfe)" },
-  good: { background: "var(--success-bg, #f0fdf4)", color: "var(--success, #16a34a)", border: "1px solid var(--success-border, #bbf7d0)" },
+  good: { background: "var(--success-bg, #ffffff)", color: "var(--success, #1f5d43)", border: "1px solid var(--success-border, #bdd5c7)" },
   danger: { background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger-border)" },
 };
 

@@ -38,7 +38,7 @@ export function EntityBadge({ label }: { label: string }) {
       width: 24,
       height: 24,
       borderRadius: 6,
-      background: "linear-gradient(135deg, #18c7a7, #4f7cff)",
+      background: "linear-gradient(135deg, #0a1f3a, #5a3a25)",
       color: "white",
       fontSize: 10,
       fontWeight: 700,

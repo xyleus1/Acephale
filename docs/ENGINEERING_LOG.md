@@ -17,6 +17,48 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-06-29 - Walnut/navy palette discipline
+
+- Branch: main
+- Commit: not committed
+- Task: Revamp app-wide color usage so the UI consistently uses walnut, navy,
+  white, and light gray-blue; reserve maroon/dark green only for important
+  blocked/ready status accents.
+- Files changed: `src/app/globals.css`,
+  `src/components/intelligence/world-intelligence-map.tsx`,
+  `src/components/intelligence/world-map-base.tsx`,
+  `src/components/intelligence/intelligence-hotspot-panel.tsx`,
+  `src/components/intelligence/intelligence-visual-icons.tsx`,
+  `src/components/pending-quotes-inline.tsx`,
+  `src/components/status-badge-toggle.tsx`, `docs/AI_HANDOFF.md`, and
+  `docs/ENGINEERING_LOG.md`.
+- Behavior added: final palette discipline layer forces pricing, decision,
+  strategy, status, setup, active-chip, and opportunity surfaces back to white
+  or blue-gray structure with walnut/navy emphasis. Red/green states now use
+  calm maroon/dark-green text, borders, or left-edge accents instead of full
+  panel fills. Intelligence map colors were rebuilt around blue-gray land,
+  navy ocean, walnut reference points, maroon critical hotspots, and muted
+  low/medium markers. The map SVG now keeps its 2:1 aspect ratio instead of
+  vertically centering inside a giant blank viewport. Duplicate Intelligence
+  evidence refs now include the index in React keys, removing the visible dev
+  issue badge.
+- Verification: `npx tsc --noEmit`, `npm run check:docs`, and
+  `npm run build` passed. Source sweep found no targeted bright tokens
+  (`#f59e0b`, `#fb7185`, `#34d399`, `#38bdf8`, `#16a34a`, `#22c55e`,
+  `#ef4444`, `#eab308`, `#c73535`, `#198754`, etc.) in `src/app`,
+  `src/components`, or `src/lib`. Browser smoke login with
+  `admin@demo.local / admin1234` passed. Desktop screenshots at 1440x900 passed
+  for Pricing, Intelligence, and Email Settings. Strict computed-color audit
+  across Dashboard, Inbox, Pricing, Intelligence, CRM, Email, Admin, Jobs,
+  Reports, and Activity found no warm tan/orange panels or loud red/green
+  semantic fills.
+- Failed/skipped checks: production deployment not yet verified in this log
+  entry.
+- Caveats: `src/app/globals.css` still has older overridden theme layers. The
+  current UI is controlled by the final layer, but the stylesheet needs a later
+  deletion/refactor pass. Local Next dev cache corrupted during hot-reload QA;
+  only generated `.next` output was cleared before restarting the dev server.
+
 ### 2026-06-22 - Phase 2B logistics intelligence ingestion
 
 - Branch: codex/lead-to-quote-batch

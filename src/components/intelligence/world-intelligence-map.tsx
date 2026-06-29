@@ -55,10 +55,9 @@ const REFERENCE_CHOKEPOINTS: ReferencePoint[] = [
 ];
 
 function severityColor(severity: string) {
-  if (severity === "critical") return "#fb7185";
-  if (severity === "high") return "#f59e0b";
-  if (severity === "medium") return "#38bdf8";
-  return "#34d399";
+  if (severity === "critical" || severity === "high") return "#7f1d2d";
+  if (severity === "medium") return "#1d5b8f";
+  return "#9bb2c8";
 }
 
 function arcPath(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
@@ -114,8 +113,8 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
             </g>
             {data.hotspots.length === 0 && (
               <g>
-                <circle cx="500" cy="250" r="24" fill="#38bdf8" opacity=".18" />
-                <circle cx="500" cy="250" r="10" fill="#38bdf8" opacity=".72" />
+                <circle cx="500" cy="250" r="24" fill="#1d5b8f" opacity=".18" />
+                <circle cx="500" cy="250" r="10" fill="#1d5b8f" opacity=".72" />
                 <text x="528" y="247" fill="#f8fafc" stroke="#020617" strokeWidth="4" paintOrder="stroke" fontSize="16" fontWeight="800">No live market research yet</text>
                 <text x="528" y="267" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12">Pull trusted market data to light up the map.</text>
               </g>
@@ -144,7 +143,7 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                   >
                     <circle cx={point.x} cy={point.y} r={radius + 8} fill={color} opacity={active ? ".25" : ".13"} filter="url(#hotspot-blur)" />
                     {hotspot.pendingReviewCount > 0 && (
-                      <circle cx={point.x} cy={point.y} r={radius + 12} fill="none" stroke="#fef3c7" strokeWidth="2" opacity=".72" />
+                      <circle cx={point.x} cy={point.y} r={radius + 12} fill="none" stroke="#d7b38a" strokeWidth="2" opacity=".72" />
                     )}
                     {isChokepoint ? (
                       <path
@@ -190,10 +189,10 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
             </g>
           </svg>
           <div style={legendStyle}>
-            <span><b style={{ color: "#34d399" }}>●</b> low</span>
-            <span><b style={{ color: "#38bdf8" }}>●</b> medium</span>
-            <span><b style={{ color: "#f59e0b" }}>●</b> high</span>
-            <span><b style={{ color: "#fb7185" }}>●</b> critical</span>
+            <span><b style={{ color: "#9bb2c8" }}>●</b> low</span>
+            <span><b style={{ color: "#1d5b8f" }}>●</b> medium</span>
+            <span><b style={{ color: "#7f1d2d" }}>●</b> high</span>
+            <span><b style={{ color: "#7f1d2d" }}>●</b> critical</span>
           </div>
         </div>
         <IntelligenceHotspotPanel hotspot={selected} />
@@ -239,7 +238,7 @@ function ReferenceGeographyLayer() {
             <g key={`chokepoint-${item.label}`}>
               <path
                 d={`M ${point.x.toFixed(1)} ${(point.y - 5).toFixed(1)} L ${(point.x + 5).toFixed(1)} ${point.y.toFixed(1)} L ${point.x.toFixed(1)} ${(point.y + 5).toFixed(1)} L ${(point.x - 5).toFixed(1)} ${point.y.toFixed(1)} Z`}
-                fill="#fde68a"
+                fill="#d7b38a"
                 stroke="#020617"
                 strokeWidth="1.4"
                 opacity=".86"
@@ -248,7 +247,7 @@ function ReferenceGeographyLayer() {
                 x={point.x + offset}
                 y={point.y + 4}
                 textAnchor={item.align === "right" ? "end" : "start"}
-                fill="#fef3c7"
+                fill="#eaf2f8"
                 stroke="#020617"
                 strokeWidth="3"
                 paintOrder="stroke"
@@ -267,11 +266,11 @@ function ReferenceGeographyLayer() {
           const point = project(item.lat, item.lng);
           return (
             <g key={`reference-port-${item.label}`}>
-              <circle cx={point.x} cy={point.y} r="3.5" fill="#67e8f9" stroke="#020617" strokeWidth="1.2" opacity=".88" />
+              <circle cx={point.x} cy={point.y} r="3.5" fill="#bfd2e2" stroke="#020617" strokeWidth="1.2" opacity=".88" />
               <text
                 x={point.x + 6}
                 y={point.y - 5}
-                fill="#bae6fd"
+                fill="#eaf2f8"
                 stroke="#020617"
                 strokeWidth="2.5"
                 paintOrder="stroke"
@@ -338,11 +337,11 @@ const shellStyle: React.CSSProperties = {
   color: "#f8fafc",
 };
 const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap" };
-const eyebrowStyle: React.CSSProperties = { color: "#d7b38a", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 };
+const eyebrowStyle: React.CSSProperties = { color: "#bfd2e2", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 };
 const headingStyle: React.CSSProperties = { color: "#ffffff", margin: "3px 0 0", fontSize: 24, textShadow: "0 2px 14px rgba(0,0,0,.45)" };
 const metricsStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(90px, 1fr))", gap: 8 };
 const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid rgba(191,210,226,.28)", backgroundColor: "#0a1f3a", backgroundImage: "none", borderRadius: 8, padding: "8px 10px", boxShadow: "0 10px 24px rgba(2,8,23,.18)" };
 const layoutStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, .8fr)", gap: 14 };
-const mapCardStyle: React.CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(125,211,252,.32)", borderRadius: 12, backgroundColor: "#04111f", minHeight: 440, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.04)" };
+const mapCardStyle: React.CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(125,211,252,.32)", borderRadius: 12, backgroundColor: "#04111f", minHeight: 360, paddingBottom: 44, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.04)" };
 const legendStyle: React.CSSProperties = { position: "absolute", left: 14, bottom: 12, display: "flex", gap: 12, flexWrap: "wrap", color: "#e2e8f0", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(2,6,23,.82)", border: "1px solid rgba(148,163,184,.28)", borderRadius: 999, padding: "6px 10px" };
 const sourceStripStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginTop: 14 };

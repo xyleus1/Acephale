@@ -96,9 +96,9 @@ export function PendingQuotesInline({
                         fontSize: 11,
                         padding: "2px 8px",
                         borderRadius: 4,
-                        border: "1px solid var(--success, #16a34a)",
+                        border: "1px solid var(--success, #1f5d43)",
                         background: "transparent",
-                        color: "var(--success, #16a34a)",
+                        color: "var(--success, #1f5d43)",
                         cursor: "pointer",
                         fontWeight: 600,
                       }}
