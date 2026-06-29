@@ -201,41 +201,41 @@ function ResultMetric({ label, value }: { label: string; value: number }) {
 }
 
 const shellStyle: React.CSSProperties = {
-  border: "1px solid rgba(14,165,233,.18)",
+  border: "1px solid var(--border)",
   borderRadius: 10,
   padding: 14,
-  background: "linear-gradient(180deg, rgba(8,47,73,.08), rgba(15,23,42,.04))",
+  background: "var(--surface)",
 };
-const emptyHeroStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(220px, .45fr)", gap: 14, alignItems: "center", border: "1px solid rgba(14,165,233,.28)", borderRadius: 10, padding: 14, marginBottom: 14, background: "linear-gradient(135deg, rgba(14,165,233,.13), rgba(16,185,129,.08))" };
-const emptyTitleStyle: React.CSSProperties = { fontSize: 26, margin: "2px 0 6px", color: "#0f172a" };
-const emptyBodyStyle: React.CSSProperties = { color: "#334155", fontSize: 14, lineHeight: 1.5, margin: 0 };
-const emptyWarningStyle: React.CSSProperties = { border: "1px solid rgba(244,63,94,.22)", background: "rgba(244,63,94,.08)", borderRadius: 8, color: "#be123c", fontWeight: 700, padding: 12, fontSize: 13 };
+const emptyHeroStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(220px, .45fr)", gap: 14, alignItems: "center", border: "1px solid var(--info-border)", borderRadius: 10, padding: 14, marginBottom: 14, background: "var(--info-bg)" };
+const emptyTitleStyle: React.CSSProperties = { fontSize: 26, margin: "2px 0 6px", color: "var(--text)" };
+const emptyBodyStyle: React.CSSProperties = { color: "var(--text-2)", fontSize: 14, lineHeight: 1.5, margin: 0 };
+const emptyWarningStyle: React.CSSProperties = { border: "1px solid var(--danger-border)", background: "var(--danger-bg)", borderRadius: 8, color: "var(--danger)", fontWeight: 700, padding: 12, fontSize: 13 };
 const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 };
-const eyebrowStyle: React.CSSProperties = { color: "#0369a1", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 };
+const eyebrowStyle: React.CSSProperties = { color: "var(--info)", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 };
 const titleStyle: React.CSSProperties = { margin: "2px 0 4px", fontSize: 18 };
-const mutedStyle: React.CSSProperties = { color: "#64748b", fontSize: 12, lineHeight: 1.45, margin: 0 };
+const mutedStyle: React.CSSProperties = { color: "var(--text-3)", fontSize: 12, lineHeight: 1.45, margin: 0 };
 const formStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "end" };
 const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 5 };
-const labelStyle: React.CSSProperties = { color: "#475569", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0 };
-const selectStyle: React.CSSProperties = { minHeight: 36, border: "1px solid #cbd5e1", borderRadius: 8, padding: "0 10px", background: "#fff" };
+const labelStyle: React.CSSProperties = { color: "var(--text-2)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0 };
+const selectStyle: React.CSSProperties = { minHeight: 36, border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", background: "#fff" };
 const buttonRowStyle: React.CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap" };
 const statusGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 12 };
-const statusGoodStyle: React.CSSProperties = { display: "flex", flexDirection: "column", border: "1px solid rgba(16,185,129,.24)", borderRadius: 8, padding: "7px 9px", background: "rgba(16,185,129,.08)", color: "#047857", fontSize: 11 };
-const statusBadStyle: React.CSSProperties = { display: "flex", flexDirection: "column", border: "1px solid rgba(244,63,94,.24)", borderRadius: 8, padding: "7px 9px", background: "rgba(244,63,94,.07)", color: "#be123c", fontSize: 11 };
-const liveBadgeStyle: React.CSSProperties = { border: "1px solid rgba(16,185,129,.3)", background: "rgba(16,185,129,.1)", color: "#047857", borderRadius: 999, padding: "4px 9px", fontSize: 11, fontWeight: 800 };
-const blockedBadgeStyle: React.CSSProperties = { border: "1px solid rgba(244,63,94,.3)", background: "rgba(244,63,94,.1)", color: "#be123c", borderRadius: 999, padding: "4px 9px", fontSize: 11, fontWeight: 800 };
-const warningStyle: React.CSSProperties = { margin: "10px 0 0", color: "#be123c", fontSize: 12 };
+const statusGoodStyle: React.CSSProperties = { display: "flex", flexDirection: "column", border: "1px solid var(--success-border)", borderRadius: 8, padding: "7px 9px", background: "var(--success-bg)", color: "var(--success)", fontSize: 11 };
+const statusBadStyle: React.CSSProperties = { display: "flex", flexDirection: "column", border: "1px solid var(--danger-border)", borderRadius: 8, padding: "7px 9px", background: "var(--danger-bg)", color: "var(--danger)", fontSize: 11 };
+const liveBadgeStyle: React.CSSProperties = { border: "1px solid var(--success-border)", background: "var(--success-bg)", color: "var(--success)", borderRadius: 999, padding: "4px 9px", fontSize: 11, fontWeight: 800 };
+const blockedBadgeStyle: React.CSSProperties = { border: "1px solid var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger)", borderRadius: 999, padding: "4px 9px", fontSize: 11, fontWeight: 800 };
+const warningStyle: React.CSSProperties = { margin: "10px 0 0", color: "var(--danger)", fontSize: 12 };
 const sourceGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, marginTop: 12 };
-const sourceCardStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 3, border: "1px solid #e2e8f0", borderRadius: 8, padding: 9, fontSize: 12, color: "#475569", background: "#fff" };
+const sourceCardStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 3, border: "1px solid var(--border)", borderRadius: 8, padding: 9, fontSize: 12, color: "var(--text-2)", background: "#fff" };
 const quickGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10, marginTop: 12 };
-const quickCardStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, border: "1px solid #dbeafe", borderRadius: 9, padding: 10, background: "#fff", color: "#475569", fontSize: 12 };
-const quickTopStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, color: "#0f172a" };
-const quickIconStyle: React.CSSProperties = { display: "inline-grid", placeItems: "center", width: 30, height: 30, borderRadius: 8, background: "rgba(14,165,233,.1)", color: "#0369a1" };
+const quickCardStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, border: "1px solid var(--border)", borderRadius: 9, padding: 10, background: "#fff", color: "var(--text-2)", fontSize: 12 };
+const quickTopStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, color: "var(--text)" };
+const quickIconStyle: React.CSSProperties = { display: "inline-grid", placeItems: "center", width: 30, height: 30, borderRadius: 8, background: "var(--info-bg)", color: "var(--info)" };
 const bundleStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", border: "1px solid rgba(15,23,42,.1)", borderRadius: 9, padding: 12, background: "rgba(15,23,42,.03)", marginTop: 12, flexWrap: "wrap" };
-const resultStyle: React.CSSProperties = { marginTop: 12, borderTop: "1px solid #e2e8f0", paddingTop: 12 };
+const resultStyle: React.CSSProperties = { marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 };
 const resultHeaderStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 };
 const resultGridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 };
-const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid #e2e8f0", borderRadius: 8, padding: 8, fontSize: 11, color: "#64748b", background: "#fff" };
+const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid var(--border)", borderRadius: 8, padding: 8, fontSize: 11, color: "var(--text-3)", background: "#fff" };
 const smallListStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 5, marginTop: 10 };
-const codeStyle: React.CSSProperties = { display: "block", whiteSpace: "pre-wrap", wordBreak: "break-word", border: "1px solid #e2e8f0", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "#0f172a", background: "#f8fafc" };
-const errorBoxStyle: React.CSSProperties = { marginTop: 10, border: "1px solid rgba(244,63,94,.25)", borderRadius: 8, padding: 9, color: "#be123c", background: "rgba(244,63,94,.06)", fontSize: 12 };
+const codeStyle: React.CSSProperties = { display: "block", whiteSpace: "pre-wrap", wordBreak: "break-word", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "var(--text)", background: "var(--surface-2)" };
+const errorBoxStyle: React.CSSProperties = { marginTop: 10, border: "1px solid var(--danger-border)", borderRadius: 8, padding: 9, color: "var(--danger)", background: "var(--danger-bg)", fontSize: 12 };

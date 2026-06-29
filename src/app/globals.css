@@ -30785,3 +30785,594 @@ button.primary:hover:not(:disabled) {
     justify-content: flex-start;
   }
 }
+
+/* ============================================================
+   WALNUT CONTROL TOWER - authoritative layout and color layer
+   ============================================================ */
+
+:root {
+  --derya-navy: #0a1f3a !important;
+  --derya-navy-2: #12395f !important;
+  --derya-walnut: #5a3a25 !important;
+  --derya-walnut-2: #6c472d !important;
+  --derya-walnut-soft: #efe6dc !important;
+  --derya-blue: #1d5b8f !important;
+  --derya-blue-hover: #123f70 !important;
+  --derya-blue-soft: #eaf2f8 !important;
+  --derya-blue-border: #bfd2e2 !important;
+  --derya-paper: #f5f8fb !important;
+  --derya-paper-2: #edf4fa !important;
+  --derya-panel: #ffffff !important;
+  --derya-line: #cbd9e6 !important;
+  --derya-line-strong: #9bb2c8 !important;
+  --derya-green: #1f5d43 !important;
+  --derya-green-soft: #e8f3ed !important;
+  --derya-green-border: #b8d5c5 !important;
+  --derya-maroon: #7f1d2d !important;
+  --derya-maroon-soft: #f7e8eb !important;
+  --derya-maroon-border: #dcb8c0 !important;
+  --derya-olive: var(--derya-walnut) !important;
+  --derya-olive-hover: var(--derya-walnut-2) !important;
+  --derya-olive-soft: var(--derya-walnut-soft) !important;
+  --derya-olive-border: #c8b49f !important;
+  --derya-clay: var(--derya-walnut) !important;
+  --derya-clay-hover: var(--derya-walnut-2) !important;
+  --derya-clay-soft: var(--derya-walnut-soft) !important;
+  --derya-clay-border: #c8b49f !important;
+  --derya-cobalt: var(--derya-blue) !important;
+  --derya-cobalt-soft: var(--derya-blue-soft) !important;
+  --derya-cobalt-border: var(--derya-blue-border) !important;
+  --derya-vermilion: var(--derya-maroon) !important;
+  --derya-vermilion-soft: var(--derya-maroon-soft) !important;
+  --derya-vermilion-border: var(--derya-maroon-border) !important;
+  --sidebar-width: 236px !important;
+  --sidebar-rail-width: 58px !important;
+  --agent-dock-width: clamp(430px, 32vw, 560px) !important;
+  --ops-agent-width: var(--agent-dock-width) !important;
+  --ops-agent-rail-width: 0px !important;
+  --bg: var(--derya-paper) !important;
+  --surface: var(--derya-panel) !important;
+  --surface-2: var(--derya-paper-2) !important;
+  --surface-3: #e3edf5 !important;
+  --surface-hover: #e7f0f7 !important;
+  --border: var(--derya-line) !important;
+  --border-strong: var(--derya-line-strong) !important;
+  --brand: var(--derya-navy) !important;
+  --brand-hover: var(--derya-navy-2) !important;
+  --brand-light: var(--derya-blue-soft) !important;
+  --brand-border: var(--derya-blue-border) !important;
+  --accent: var(--derya-walnut) !important;
+  --accent-light: var(--derya-walnut-soft) !important;
+  --accent-border: #c8b49f !important;
+  --success: var(--derya-green) !important;
+  --success-bg: var(--derya-green-soft) !important;
+  --success-border: var(--derya-green-border) !important;
+  --warning: var(--derya-walnut) !important;
+  --warning-bg: var(--derya-walnut-soft) !important;
+  --warning-border: #c8b49f !important;
+  --danger: var(--derya-maroon) !important;
+  --danger-bg: var(--derya-maroon-soft) !important;
+  --danger-border: var(--derya-maroon-border) !important;
+  --info: var(--derya-blue) !important;
+  --info-bg: var(--derya-blue-soft) !important;
+  --info-border: var(--derya-blue-border) !important;
+  --neutral-bg: #eef3f7 !important;
+  --neutral-border: var(--derya-line) !important;
+  --text: #0c2036 !important;
+  --text-2: #465a6f !important;
+  --text-3: #6e8091 !important;
+  --muted: #6e8091 !important;
+  --sidebar-bg: var(--derya-navy) !important;
+  --sidebar-border: #17395c !important;
+  --sidebar-text: #c8d8e7 !important;
+  --sidebar-text-active: #ffffff !important;
+  --sidebar-hover: #12395f !important;
+  --sidebar-active-bg: rgba(255, 255, 255, 0.09) !important;
+  --sidebar-active-border: #c6a27d !important;
+  --shadow-xs: 0 1px 0 rgba(10, 31, 58, 0.06) !important;
+  --shadow-sm: 0 8px 24px rgba(10, 31, 58, 0.08) !important;
+  --shadow-md: 0 18px 48px rgba(10, 31, 58, 0.11) !important;
+  --shadow-lg: 0 28px 80px rgba(10, 31, 58, 0.16) !important;
+}
+
+html,
+body,
+.app-shell,
+.content,
+.page-container {
+  background-color: var(--bg) !important;
+  background-image: none !important;
+  color: var(--text) !important;
+}
+
+.sidebar-toggle-btn {
+  display: none !important;
+}
+
+.sidebar {
+  width: var(--sidebar-rail-width) !important;
+  background: var(--sidebar-bg) !important;
+  border-right-color: var(--sidebar-border) !important;
+  box-shadow: 10px 0 34px rgba(10, 31, 58, 0.18) !important;
+  transition: width 160ms ease-out !important;
+}
+
+.sidebar:hover,
+.sidebar:focus-within {
+  width: var(--sidebar-width) !important;
+}
+
+.content {
+  margin-left: var(--sidebar-rail-width) !important;
+  transition: margin-right 160ms ease-out !important;
+}
+
+.sidebar-logo,
+.sidebar-footer {
+  background: #071a31 !important;
+  border-color: var(--sidebar-border) !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .sidebar-logo {
+  justify-content: center !important;
+  padding-right: 10px !important;
+  padding-left: 10px !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .brand {
+  justify-content: center !important;
+  width: 100% !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .brand > div:last-child,
+.sidebar:not(:hover):not(:focus-within) .brand-sub,
+.sidebar:not(:hover):not(:focus-within) .nav-link .nav-link-text,
+.sidebar:not(:hover):not(:focus-within) .nav-section-label,
+.sidebar:not(:hover):not(:focus-within) .user-info,
+.sidebar:not(:hover):not(:focus-within) .sidebar-footer-actions {
+  display: none !important;
+}
+
+.sidebar:hover .brand > div:last-child,
+.sidebar:focus-within .brand > div:last-child,
+.sidebar:hover .user-info,
+.sidebar:focus-within .user-info,
+.sidebar:hover .sidebar-footer-actions,
+.sidebar:focus-within .sidebar-footer-actions {
+  display: block !important;
+}
+
+.sidebar:hover .nav-link .nav-link-text,
+.sidebar:focus-within .nav-link .nav-link-text {
+  display: inline !important;
+}
+
+.sidebar:hover .nav-section-label,
+.sidebar:focus-within .nav-section-label {
+  display: flex !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .nav-link {
+  justify-content: center !important;
+  padding: 10px !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .nav-link.active::before {
+  left: -8px !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .sidebar-nav {
+  padding: 10px 8px !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .user-block {
+  justify-content: center !important;
+  margin-bottom: 0 !important;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  background: var(--sidebar-active-bg) !important;
+  color: var(--sidebar-text-active) !important;
+  box-shadow: inset 3px 0 0 var(--sidebar-active-border) !important;
+}
+
+.nav-link.active .nav-icon,
+.nav-link:hover .nav-icon {
+  color: #d7b38a !important;
+}
+
+.topbar,
+.job-focus-strip {
+  background: rgba(255, 255, 255, 0.97) !important;
+  border-color: var(--border) !important;
+  box-shadow: 0 1px 0 rgba(10, 31, 58, 0.08) !important;
+}
+
+.brand-mark,
+.brand-mark-mini,
+.login-logo.brand-mark {
+  background: var(--derya-blue-soft) !important;
+  border-color: var(--derya-walnut) !important;
+  box-shadow: 0 8px 18px rgba(10, 31, 58, 0.12) !important;
+}
+
+.card,
+.table-shell,
+.record-hero,
+.record-panel,
+.record-notice,
+.record-primary-panel,
+.stage-panel,
+.stage-header,
+.ops-brief,
+.metric-strip,
+.pricing-workspace,
+.pricing-detail,
+.pricing-sidebar,
+.pricing-carrier-card,
+.pricing-settings-card,
+.pricing-margin-card,
+.pricing-inquiry-card,
+.pricing-calculator,
+.pricing-result-panel,
+.inbox-thread-card,
+.inbox-group-card,
+.conversation-panel,
+.agent-panel,
+.product-modal,
+.portal-card,
+.portal-metric-card,
+.report-card,
+.control-card,
+.control-mini-card,
+.login-card,
+.job-card,
+.pipeline-card,
+.sheet-snapshot,
+.sheet-playbook,
+.attention-queue,
+.target-trail {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+.badge-good,
+.opp-pill.opp-good,
+.attention-brief-gates span.ready,
+.attention-brief-evidence span.strong,
+.attention-proof-gap.ready,
+.attention-brief-ledger.ready,
+.decision-flow-step.completed {
+  background: var(--success-bg) !important;
+  border-color: var(--success-border) !important;
+  color: var(--success) !important;
+}
+
+.badge-danger,
+.opp-pill.opp-danger,
+.attention-brief-contract.blocked,
+.attention-brief-action.blocked,
+.attention-brief-ledger.blocked,
+.attention-brief-blockers,
+.attention-brief-proof-gaps,
+.attention-brief-gates span.blocked,
+.attention-brief-evidence span.weak,
+.quote-draft-error,
+.quote-draft-blockers span {
+  background: var(--danger-bg) !important;
+  border-color: var(--danger-border) !important;
+  color: var(--danger) !important;
+}
+
+.badge-warn,
+.opp-pill.opp-warn,
+.decision-flow-step.review,
+.decision-flow-step.blocked,
+.attention-brief.review,
+.attention-brief.blocked {
+  background: var(--warning-bg) !important;
+  border-color: var(--warning-border) !important;
+  color: var(--warning) !important;
+}
+
+.badge-info,
+.opp-pill.opp-info,
+.attention-brief-contract.review,
+.attention-brief-action.review,
+.attention-brief-ledger.review,
+.attention-brief-ledger.rates,
+.attention-brief-gates span.review,
+.attention-brief-evidence span.watch {
+  background: var(--info-bg) !important;
+  border-color: var(--info-border) !important;
+  color: var(--derya-navy) !important;
+}
+
+.ops-route-marker-dot,
+.ops-route-zoom-marker.start,
+.sheet-status-row.booked i {
+  background: var(--success) !important;
+  box-shadow: 0 0 0 2px rgba(31, 93, 67, 0.24) !important;
+}
+
+.ops-route-marker-destination .ops-route-marker-dot,
+.ops-route-zoom-marker.end,
+.sheet-status-row.missed i {
+  background: var(--danger) !important;
+  box-shadow: 0 0 0 2px rgba(127, 29, 45, 0.24) !important;
+}
+
+.agent-fab {
+  top: 14px !important;
+  right: 14px !important;
+  bottom: auto !important;
+  z-index: 80 !important;
+  border-color: var(--derya-walnut) !important;
+  background: var(--derya-navy) !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 34px rgba(10, 31, 58, 0.2) !important;
+}
+
+.agent-fab-dot,
+.live-dot,
+.ops-status-light,
+.stage-real-dot {
+  background: var(--derya-walnut) !important;
+  box-shadow: 0 0 0 3px rgba(90, 58, 37, 0.16) !important;
+}
+
+.agent-panel {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: auto !important;
+  z-index: 75 !important;
+  width: var(--agent-dock-width) !important;
+  height: 100vh !important;
+  max-height: none !important;
+  border-top: 0 !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: -22px 0 60px rgba(10, 31, 58, 0.14) !important;
+}
+
+html.agent-dock-open .content {
+  margin-right: var(--agent-dock-width) !important;
+}
+
+.agent-panel-header,
+.conversation-header {
+  min-height: 66px !important;
+  background: var(--derya-navy) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.agent-panel-title,
+.conversation-title {
+  color: #ffffff !important;
+}
+
+.agent-panel-subtitle,
+.conversation-subtitle {
+  color: rgba(234, 242, 248, 0.72) !important;
+}
+
+.agent-panel-close,
+.conversation-collapse {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.agent-panel-close:hover,
+.conversation-collapse:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
+.agent-panel-body,
+.conversation-body {
+  background: var(--surface-2) !important;
+  background-image: none !important;
+}
+
+.agent-msg-body,
+.conv-chat-body {
+  max-width: min(100%, 520px) !important;
+}
+
+.agent-msg-stack,
+.conv-chat-stack {
+  max-width: min(100%, 540px) !important;
+}
+
+.agent-msg-user .agent-msg-body,
+.conv-chat-user .conv-chat-body,
+.agent-send-btn,
+.btn:not(.btn-secondary):not(.btn-ghost),
+button.primary {
+  background: var(--derya-navy) !important;
+  border-color: var(--derya-navy) !important;
+  color: #ffffff !important;
+}
+
+.agent-msg-avatar,
+.agent-avatar,
+.conv-event-icon.auto,
+.topbar-avatar,
+.user-avatar {
+  background: var(--derya-navy) !important;
+  border-color: var(--derya-walnut) !important;
+  color: #ffffff !important;
+}
+
+.agent-evidence-replay,
+.agent-evidence-trail button,
+.agent-evidence-chip,
+.conversation-tool,
+.agent-tool-button,
+.agent-suggestion,
+.btn-secondary,
+button.secondary,
+.btn.btn-secondary,
+.btn.secondary {
+  background: #ffffff !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.agent-evidence-trail span {
+  background: var(--derya-blue-soft) !important;
+  border-color: var(--derya-blue-border) !important;
+  color: var(--derya-navy) !important;
+}
+
+.agent-evidence-trail button:hover,
+.agent-evidence-replay:hover,
+.agent-evidence-chip.is-actionable:hover,
+.conversation-tool:hover:not(:disabled),
+.agent-tool-button:hover:not(:disabled),
+.agent-suggestion:hover {
+  background: var(--derya-blue-soft) !important;
+  border-color: var(--derya-blue-border) !important;
+  box-shadow: inset 0 -2px 0 var(--derya-walnut) !important;
+  color: var(--derya-navy) !important;
+}
+
+.conversation-panel {
+  overflow: hidden !important;
+}
+
+.settings-env-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.settings-env-row {
+  min-width: 0 !important;
+}
+
+.settings-env-row code {
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+@media (min-width: 1101px) {
+  .workbench-grid,
+  .workbench-grid:has(.conversation-panel:not(.collapsed)) {
+    display: block !important;
+    grid-template-columns: none !important;
+    padding-right: calc(var(--agent-dock-width) + 18px) !important;
+    min-height: calc(100vh - 66px) !important;
+  }
+
+  .workbench-grid:has(.conversation-panel.collapsed) {
+    display: block !important;
+    grid-template-columns: none !important;
+    padding-right: 0 !important;
+  }
+
+  .workbench-agent {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 75 !important;
+    width: var(--agent-dock-width) !important;
+    height: 100vh !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  .content:has(.job-focus-strip) .workbench-agent {
+    top: 0 !important;
+  }
+
+  .workbench-agent .conversation-panel,
+  .workbench-agent .conversation-panel:not(.collapsed) {
+    height: 100vh !important;
+    min-height: 0 !important;
+    border-top: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: -22px 0 60px rgba(10, 31, 58, 0.14) !important;
+  }
+
+  .workbench-agent:has(.conversation-panel.collapsed) {
+    top: 14px !important;
+    right: 14px !important;
+    bottom: auto !important;
+    width: auto !important;
+    height: auto !important;
+    z-index: 82 !important;
+  }
+
+  .workbench-agent .conversation-panel.collapsed {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    box-shadow: var(--shadow-sm) !important;
+  }
+
+  .workbench-agent .conversation-panel.collapsed .conversation-rail-button {
+    min-height: 42px !important;
+    width: auto !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    padding: 8px 10px !important;
+    background: var(--derya-navy) !important;
+    color: #ffffff !important;
+  }
+
+  .workbench-agent .conversation-panel.collapsed .conversation-rail-copy small {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  html.agent-dock-open .content {
+    margin-right: 0 !important;
+  }
+
+  .agent-panel,
+  .workbench-agent {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    max-width: none !important;
+  }
+
+  .workbench-grid,
+  .workbench-grid:has(.conversation-panel.collapsed) {
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%) !important;
+  }
+
+  .content {
+    margin-left: 0 !important;
+  }
+
+  .agent-fab {
+    top: 10px !important;
+    right: 10px !important;
+  }
+
+  .settings-env-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

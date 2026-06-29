@@ -2,7 +2,6 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { LogoutButton } from "@/components/logout-button";
 import { NavLink } from "@/components/nav-link";
-import { SidebarToggle } from "@/components/sidebar-toggle";
 import { LangToggle } from "@/components/lang-toggle";
 import { getLang } from "@/lib/i18n";
 import { getFocusedJob, clearFocusAction } from "@/lib/job-focus";
@@ -49,7 +48,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <div className="brand-sub">Deal Desk</div>
             </div>
           </div>
-          <SidebarToggle />
         </div>
 
         <nav className="sidebar-nav">

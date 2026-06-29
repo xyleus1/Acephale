@@ -135,7 +135,7 @@ export default async function EmailSettingsPage({
           <div>
             <div className="section-title" style={{ marginBottom: 6 }}>Appearance</div>
             <p style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-              Derya uses one warm notebook theme so the deal desk, agent, and pricing brain feel like the same product.
+              Keep the deal desk, agent, and pricing brain on the same operator interface.
             </p>
           </div>
           <AppearanceToggle />
@@ -155,14 +155,14 @@ export default async function EmailSettingsPage({
                 gap: 4,
                 padding: "10px 12px",
                 border: "1px solid var(--border)",
-                borderLeft: `3px solid ${gate.status === "ready" ? "var(--derya-olive)" : gate.status === "blocked" ? "var(--derya-clay)" : "#9a6b2f"}`,
+                borderLeft: `3px solid ${gate.status === "ready" ? "var(--success)" : gate.status === "blocked" ? "var(--danger)" : "var(--warning)"}`,
                 borderRadius: "var(--radius)",
-                background: gate.status === "ready" ? "#eef0df" : gate.status === "blocked" ? "#f2ddcf" : "#f7e3c8",
+                background: gate.status === "ready" ? "var(--success-bg)" : gate.status === "blocked" ? "var(--danger-bg)" : "var(--warning-bg)",
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
                   <strong style={{ fontSize: 13, color: "var(--text)" }}>{gate.label}</strong>
                   <span style={{
-                    color: gate.status === "ready" ? "var(--derya-olive)" : gate.status === "blocked" ? "var(--derya-clay)" : "#7a5521",
+                    color: gate.status === "ready" ? "var(--success)" : gate.status === "blocked" ? "var(--danger)" : "var(--warning)",
                     fontSize: 10.5,
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -260,14 +260,14 @@ export default async function EmailSettingsPage({
                 Callback path: <code>/api/webhooks/whatsapp</code>. Meta will verify this path with <code>hub.challenge</code>, then POST inbound messages into the same inbox/RFQ workflow as email.
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 8 }}>
+            <div className="settings-env-grid">
               {[
                 ["WHATSAPP_VERIFY_TOKEN", !!process.env.WHATSAPP_VERIFY_TOKEN],
                 ["WHATSAPP_APP_SECRET", !!process.env.WHATSAPP_APP_SECRET],
                 ["WHATSAPP_ACCESS_TOKEN", !!process.env.WHATSAPP_ACCESS_TOKEN],
                 ["WHATSAPP_PHONE_NUMBER_ID", !!process.env.WHATSAPP_PHONE_NUMBER_ID],
               ].map(([key, present]) => (
-                <div key={String(key)} style={{
+                <div key={String(key)} className="settings-env-row" style={{
                   padding: "9px 10px",
                   border: "1px solid var(--border)",
                   borderRadius: "var(--radius)",
@@ -379,7 +379,7 @@ export default async function EmailSettingsPage({
                 className="btn"
                 style={{ flex: 1, justifyContent: "center", gap: 10, padding: "12px 16px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}
               >
-                <span style={{ width: 20, height: 20, borderRadius: 4, background: "#EA4335", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 }}>G</span>
+                <span style={{ width: 20, height: 20, borderRadius: 4, background: "var(--derya-navy, var(--derya-ink))", border: "1px solid var(--derya-walnut, var(--border-strong))", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 }}>G</span>
                 Connect a Gmail inbox
               </a>
             ) : (

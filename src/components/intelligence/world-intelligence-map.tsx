@@ -322,26 +322,26 @@ function HotspotGlyph({
 function MapMetric({ label, value }: { label: string; value: string | number }) {
   return (
     <div style={metricStyle}>
-      <span style={{ color: "#bfdbfe", fontSize: 11, fontWeight: 700 }}>{label}</span>
+      <span style={{ color: "#c8d8e7", fontSize: 11, fontWeight: 700 }}>{label}</span>
       <strong style={{ color: "#ffffff", fontSize: 18 }}>{value}</strong>
     </div>
   );
 }
 
 const shellStyle: React.CSSProperties = {
-  border: "1px solid rgba(14,116,144,.34)",
-  backgroundColor: "#08111f",
-  backgroundImage: "linear-gradient(135deg, #07111f 0%, #0b2036 52%, #08111f 100%)",
+  border: "1px solid rgba(191,210,226,.3)",
+  backgroundColor: "#071a31",
+  backgroundImage: "none",
   borderRadius: 12,
   padding: 18,
   boxShadow: "0 18px 60px rgba(2,8,23,.28)",
   color: "#f8fafc",
 };
 const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap" };
-const eyebrowStyle: React.CSSProperties = { color: "#67e8f9", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 };
+const eyebrowStyle: React.CSSProperties = { color: "#d7b38a", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0 };
 const headingStyle: React.CSSProperties = { color: "#ffffff", margin: "3px 0 0", fontSize: 24, textShadow: "0 2px 14px rgba(0,0,0,.45)" };
 const metricsStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(90px, 1fr))", gap: 8 };
-const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid rgba(125,211,252,.34)", backgroundColor: "#13243a", backgroundImage: "linear-gradient(180deg, rgba(14,165,233,.18), rgba(15,23,42,.12))", borderRadius: 8, padding: "8px 10px", boxShadow: "0 10px 24px rgba(2,8,23,.18)" };
+const metricStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 2, border: "1px solid rgba(191,210,226,.28)", backgroundColor: "#0a1f3a", backgroundImage: "none", borderRadius: 8, padding: "8px 10px", boxShadow: "0 10px 24px rgba(2,8,23,.18)" };
 const layoutStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, .8fr)", gap: 14 };
 const mapCardStyle: React.CSSProperties = { position: "relative", overflow: "hidden", border: "1px solid rgba(125,211,252,.32)", borderRadius: 12, backgroundColor: "#04111f", minHeight: 440, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.04)" };
 const legendStyle: React.CSSProperties = { position: "absolute", left: 14, bottom: 12, display: "flex", gap: 12, flexWrap: "wrap", color: "#e2e8f0", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(2,6,23,.82)", border: "1px solid rgba(148,163,184,.28)", borderRadius: 999, padding: "6px 10px" };

@@ -62,7 +62,8 @@ export function AgentChatWidget() {
   const routeCompanyIdRaw = pathname.match(/^\/dashboard\/customers\/([^/]+)/)?.[1];
   const routeJobId = routeJobIdRaw && routeJobIdRaw !== "new" ? routeJobIdRaw : undefined;
   const routeCompanyId = routeCompanyIdRaw && routeCompanyIdRaw !== "new" ? routeCompanyIdRaw : undefined;
-  const [open, setOpen] = useState(false);
+  const isDashboardWorkbench = pathname === "/dashboard";
+  const [open, setOpen] = useState(true);
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,14 +79,37 @@ export function AgentChatWidget() {
   }, [messages, busy, open]);
 
   useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+    try {
+      const saved = window.localStorage.getItem("agent-dock-open");
+      if (saved !== null) setOpen(saved !== "false");
+    } catch {
+      // Storage can be unavailable in locked-down browser contexts; default open is acceptable.
+    }
+  }, []);
+
+  useEffect(() => {
+    const active = open && !isDashboardWorkbench;
+    document.documentElement.classList.toggle("agent-dock-open", active);
+    return () => {
+      document.documentElement.classList.remove("agent-dock-open");
+    };
+  }, [isDashboardWorkbench, open]);
 
   useEffect(() => {
     return () => {
       if (pageCueTimerRef.current) window.clearTimeout(pageCueTimerRef.current);
     };
   }, []);
+
+  function setDockOpen(next: boolean) {
+    setOpen(next);
+    try {
+      window.localStorage.setItem("agent-dock-open", String(next));
+    } catch {
+      // The dock state is a convenience preference, not required app state.
+    }
+    if (next) window.setTimeout(() => inputRef.current?.focus(), 0);
+  }
 
   function showPageCues(cues: readonly AgentPageCue[], durationMs = Math.min(14000, cues.length * 2500 + 2200)) {
     if (cues.length === 0) return;
@@ -104,7 +128,7 @@ export function AgentChatWidget() {
 
   // The dashboard root has a permanent agent panel embedded in the page,
   // so suppress the floating pill there. Must come AFTER all hooks (Rules of Hooks).
-  if (pathname === "/dashboard") return null;
+  if (isDashboardWorkbench) return null;
 
   async function send(textOverride?: string) {
     const text = (textOverride ?? input).trim();
@@ -157,7 +181,7 @@ export function AgentChatWidget() {
       <>
         <AgentPagePresenceLayer action={pageAction} listenForExternalCues />
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => setDockOpen(true)}
           className="agent-fab"
           aria-label="Open agent"
           title="Open agent (Cmd+J)"
@@ -182,7 +206,7 @@ export function AgentChatWidget() {
               <div className="agent-panel-subtitle">RFQs, target price, forwarder replies</div>
             </div>
           </div>
-          <button onClick={() => setOpen(false)} className="agent-panel-close" aria-label="Close">
+          <button onClick={() => setDockOpen(false)} className="agent-panel-close" aria-label="Close">
             <Icon name="x" size={14} strokeWidth={2.5} />
           </button>
         </header>

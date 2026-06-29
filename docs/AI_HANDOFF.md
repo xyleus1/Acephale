@@ -4,6 +4,79 @@
 
 ## Date
 
+2026-06-29
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
+Workbench and global shell layout cleanup:
+
+- Removed the manual sidebar toggle button. The desktop sidebar is now a narrow
+  rail that expands on hover/focus and collapses back automatically.
+- Reworked the global agent into a full-height right-side dock on non-workbench
+  pages. It reserves width only while open; when collapsed, the page expands
+  back into the available space and the launcher overlays the page.
+- Reworked the dashboard workbench agent into a full-height right-side panel
+  from the top of the viewport to the bottom. Its collapsed state returns the
+  right-side width to the workbench and leaves only a compact overlay launcher.
+- Added an authoritative walnut/navy/light blue/white visual layer with calm
+  maroon and dark green semantic colors. This tones down the old bright red,
+  bright green, tan, orange, and mixed-brown surfaces.
+- Recolored the Gmail connect mark away from Google red and moved setup/status
+  gate colors onto the shared app tokens.
+- Toned down hard-coded Intelligence page source/control/map colors so they no
+  longer fight the primary Derya palette.
+- Fixed mobile overflow in the email settings WhatsApp environment grid.
+
+## Files changed
+
+- `src/app/dashboard/layout.tsx`
+- `src/app/dashboard/settings/email/page.tsx`
+- `src/app/globals.css`
+- `src/components/agent-chat-widget.tsx`
+- `src/components/intelligence/intelligence-source-card.tsx`
+- `src/components/intelligence/manual-market-ingestion-controls.tsx`
+- `src/components/intelligence/world-intelligence-map.tsx`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npx tsc --noEmit`
+- Local dev server at `http://localhost:3001`
+- Browser smoke login with `admin@demo.local / admin1234`
+- Desktop dashboard check at 1440x900: sidebar rail measured 58px collapsed and
+  236px on hover; embedded workbench agent measured full viewport height; after
+  collapsing the agent, workbench padding-right returned to `0px`.
+- Desktop email settings check at 1440x900: global agent measured full viewport
+  height on the right; after collapsing it, page content expanded to the full
+  available width with no reserved right gap.
+- Mobile email settings check at 390x844: global agent fit the viewport and the
+  page had no horizontal overflow after the environment-grid fix.
+
+## Caveats
+
+- The stylesheet still contains older legacy color layers below the app history.
+  The new final layer is authoritative for the current UI, but a later cleanup
+  pass should delete dead overridden CSS instead of letting the file keep
+  accumulating sediment.
+- Local Gmail OAuth env was not configured, so the real Gmail OAuth button did
+  not render in the smoke session. The source no longer uses the red Google
+  mark.
+- No schema migration, dependency change, production build, live Gmail sync, or
+  live external ingestion was run.
+
+## Previous Update
+
+## Date
+
 2026-06-28
 
 ## Branch

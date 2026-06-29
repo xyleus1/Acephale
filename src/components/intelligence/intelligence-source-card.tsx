@@ -4,14 +4,20 @@ import type { IntelligenceMapData } from "@/lib/market-intelligence/intelligence
 type SourceHealth = IntelligenceMapData["sourceHealth"][number];
 
 export function IntelligenceSourceCard({ source }: { source: SourceHealth }) {
-  const tone = source.scoreBand === "poor" ? "#fb7185" : source.scoreBand === "watch" ? "#f59e0b" : source.scoreBand === "good" ? "#38bdf8" : "#34d399";
+  const tone = source.scoreBand === "poor"
+    ? "var(--danger)"
+    : source.scoreBand === "watch"
+      ? "var(--warning)"
+      : source.scoreBand === "good"
+        ? "var(--info)"
+        : "var(--success)";
   return (
     <article style={{
-      border: "1px solid rgba(125,211,252,.28)",
+      border: "1px solid rgba(191,210,226,.34)",
       borderRadius: 8,
       padding: 12,
-      backgroundColor: "#0b1728",
-      backgroundImage: "linear-gradient(180deg, rgba(14,165,233,.12), rgba(15,23,42,.08))",
+      backgroundColor: "var(--derya-navy)",
+      backgroundImage: "none",
       color: "#f8fafc",
       minWidth: 190,
       boxShadow: "0 12px 28px rgba(2,8,23,.18)",
@@ -34,11 +40,11 @@ export function IntelligenceSourceCard({ source }: { source: SourceHealth }) {
 }
 
 const pillStyle: React.CSSProperties = {
-  border: "1px solid rgba(125,211,252,.32)",
+  border: "1px solid rgba(191,210,226,.28)",
   borderRadius: 999,
   padding: "3px 7px",
-  color: "#e0f2fe",
+  color: "#dbe7f1",
   fontSize: 11,
   fontWeight: 700,
-  backgroundColor: "#123047",
+  backgroundColor: "#12395f",
 };

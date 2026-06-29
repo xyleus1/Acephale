@@ -953,3 +953,43 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: production should still correct the Vercel env value and keep the
   Google Cloud OAuth Web Client authorized redirect URIs exactly matched to the
   callback URLs operators use.
+
+### 2026-06-29 - Sidebar hover rail, full-height agent dock, and walnut/navy palette cleanup
+
+- Branch: main
+- Commit: not committed
+- Task: Replace the button-driven sidebar with hover/focus expansion, make the
+  agent a full-height right-side dock across the app, reclaim page width when
+  the agent is collapsed, and bring the visible UI back into the requested
+  walnut, navy, light blue-gray, and white palette.
+- Files changed: `src/app/dashboard/layout.tsx`,
+  `src/app/dashboard/settings/email/page.tsx`, `src/app/globals.css`,
+  `src/components/agent-chat-widget.tsx`,
+  `src/components/intelligence/intelligence-source-card.tsx`,
+  `src/components/intelligence/manual-market-ingestion-controls.tsx`,
+  `src/components/intelligence/world-intelligence-map.tsx`,
+  `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
+- Behavior added: desktop sidebar now collapses to a narrow rail and expands on
+  hover/focus with no visible toggle button. The global agent is a full-height
+  right dock on non-workbench pages and only reserves layout width while open;
+  collapsed state restores the page width and shows a compact overlay launcher.
+  The dashboard workbench agent is full viewport height and its collapsed state
+  returns the right-side width to the workbench. A final authoritative CSS layer
+  normalizes app colors to walnut/navy/light blue-gray/white, with calm maroon
+  and dark green reserved for semantic warnings/success states. The Gmail mark,
+  setup gates, and Intelligence controls/source/map surfaces were toned down to
+  the same token set.
+- Verification: `npx tsc --noEmit` passed. Browser smoke on local dev server
+  at `http://localhost:3001` passed after logging in as
+  `admin@demo.local / admin1234`. Desktop dashboard measurements at 1440x900
+  found the sidebar at 58px collapsed and 236px on hover, the embedded agent at
+  full viewport height, and workbench right padding returning to `0px` after
+  agent collapse. Desktop email settings measurements found the global agent at
+  full viewport height and content expanding to the full available width after
+  collapse. Mobile 390x844 email settings check found no horizontal overflow.
+- Failed/skipped checks: no schema migration, dependency change, production
+  build, live Gmail sync, live external ingestion, or production deployment was
+  run.
+- Caveats: `src/app/globals.css` still contains older overridden color layers.
+  The final layer controls the current UI, but the file needs a later deletion
+  pass; otherwise every visual fix just adds more CSS archaeology.
