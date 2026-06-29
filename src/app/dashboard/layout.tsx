@@ -94,7 +94,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <div className="topbar-left">
             <a href="/dashboard" className="topbar-brand">
               <LogoMark mini />
-              <span className="topbar-brand-text">Derya Deal Desk</span>
+              <span className="topbar-brand-text">
+                <strong>Derya Deal Desk</strong>
+                <em>Freight Control Tower</em>
+              </span>
             </a>
           </div>
           <div className="topbar-center">

@@ -90,6 +90,40 @@ These tools read the canonical memory layer plus core CRM/job/strategy tables.
 Phase 2A upgrades them to deterministic hybrid retrieval. Do not pretend this is
 semantic search yet.
 
+## Brain Ops And Granola Notes
+
+Brain Ops note ingestion lives in:
+
+```text
+src/lib/brain-ops/ingest.ts
+src/lib/brain-ops/query.ts
+scripts/ingest-granola-note.ts
+```
+
+Use `granola_meeting_note` for pasted or exported Granola notes. The ingest
+path stores the note as a `DOCUMENT`-backed `KnowledgeObject`, stores note text
+as a `KnowledgeChunk` when provided, and creates reviewable `AgentProposal`
+rows for extracted commitments, decisions, risks, open questions, documents,
+people, organizations, and interactions.
+
+Granola notes can include `operational_refs` for exact scoped linkage:
+
+- `company`: exact company id or name
+- `job`: exact job id or reference
+- `inquiry`: exact inquiry id or subject
+- `contact`: exact contact email or full name within the office
+- `email_thread`, `email_message`, `job_document`, and
+  `strategy_assessment`: scoped exact ids, with provider external ids supported
+  for email thread/message refs where available
+
+Resolved refs become object fields and `EntityMention` rows so job/RFQ/customer
+workflows can retrieve the note through `getOperationalBrainContext`. Unresolved
+or ambiguous refs are preserved for review; do not silently fuzzy-link meeting
+notes or pick the first non-unique exact match.
+
+Exact duplicate payloads are idempotent. Re-running the same Granola payload
+returns existing source/proposal rows instead of creating duplicate proposals.
+
 ## Canonical Taxonomy
 
 Canonical object types live in:

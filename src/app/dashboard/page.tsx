@@ -24,6 +24,7 @@ import { buildReferenceDealOperatorPlaybook, getReferenceDealDecisions, getRefer
 import { listDecisionQueueItems, type DecisionQueueItem } from "@/lib/decision-queue";
 import { buildDecisionQueueBrief, type DecisionQueueBrief } from "@/lib/decision-queue-brief";
 import { operatorToolLabel } from "@/lib/operator-action-labels";
+import { buildRouteViewport, routeZoomPanels, type RouteMapPoint } from "@/lib/route-map-viewport";
 import { createRfqFromReferenceDeal } from "./reference-deal-actions";
 import { Fragment } from "react";
 import {
@@ -49,6 +50,101 @@ const DOC_TYPE_LABEL: Record<string, string> = {
 const MODE_LABEL: Record<string, string> = {
   "SEA-FCL": "Sea FCL", "SEA-LCL": "Sea LCL", AIR: "Air", ROAD: "Road", COURIER: "Courier",
 };
+
+const ROUTE_GEO_LOOKUP: Array<{
+  match: string[];
+  label: string;
+  country: string;
+  countryCode: string;
+  lon: number;
+  lat: number;
+}> = [
+  { match: ["port klang", "klang", "malaysia"], label: "Port Klang", country: "Malaysia", countryCode: "MY", lon: 101.397, lat: 2.999 },
+  { match: ["shannon", "ireland"], label: "Shannon", country: "Ireland", countryCode: "IE", lon: -8.864, lat: 52.713 },
+  { match: ["istanbul", "turkiye", "turkey", "istanbul, tr"], label: "Istanbul", country: "Turkey", countryCode: "TR", lon: 28.978, lat: 41.008 },
+  { match: ["ambarlı", "ambarli", "körfez", "korfez"], label: "Ambarli", country: "Turkey", countryCode: "TR", lon: 28.685, lat: 40.969 },
+  { match: ["singapore"], label: "Singapore", country: "Singapore", countryCode: "SG", lon: 103.852, lat: 1.29 },
+  { match: ["constanta", "constanța", "romania"], label: "Constanta", country: "Romania", countryCode: "RO", lon: 28.634, lat: 44.159 },
+  { match: ["hamburg", "germany"], label: "Hamburg", country: "Germany", countryCode: "DE", lon: 9.993, lat: 53.551 },
+  { match: ["mersin"], label: "Mersin", country: "Turkey", countryCode: "TR", lon: 34.641, lat: 36.812 },
+  { match: ["izmir"], label: "Izmir", country: "Turkey", countryCode: "TR", lon: 27.142, lat: 38.423 },
+  { match: ["adana"], label: "Adana", country: "Turkey", countryCode: "TR", lon: 35.321, lat: 37.0 },
+  { match: ["gemlik"], label: "Gemlik", country: "Turkey", countryCode: "TR", lon: 29.159, lat: 40.431 },
+  { match: ["shanghai", "china"], label: "Shanghai", country: "China", countryCode: "CN", lon: 121.474, lat: 31.23 },
+  { match: ["ningbo"], label: "Ningbo", country: "China", countryCode: "CN", lon: 121.55, lat: 29.868 },
+  { match: ["rotterdam", "netherlands"], label: "Rotterdam", country: "Netherlands", countryCode: "NL", lon: 4.48, lat: 51.924 },
+  { match: ["dubai", "jebel ali", "uae", "united arab emirates"], label: "Jebel Ali", country: "UAE", countryCode: "AE", lon: 55.027, lat: 24.985 },
+  { match: ["jeddah", "saudi"], label: "Jeddah", country: "Saudi Arabia", countryCode: "SA", lon: 39.197, lat: 21.485 },
+  { match: ["ashgabat", "turkmenistan"], label: "Ashgabat", country: "Turkmenistan", countryCode: "TM", lon: 58.383, lat: 37.96 },
+  { match: ["sudan", "port sudan"], label: "Port Sudan", country: "Sudan", countryCode: "SD", lon: 37.216, lat: 19.615 },
+  { match: ["munich", "germany"], label: "Munich", country: "Germany", countryCode: "DE", lon: 11.582, lat: 48.135 },
+  { match: ["texas", "houston"], label: "Houston", country: "United States", countryCode: "US", lon: -95.369, lat: 29.76 },
+];
+
+function routePointFromGeo(label: string, country: string, countryCode: string | null, lon: number, lat: number): RouteMapPoint {
+  return {
+    label,
+    country,
+    countryCode,
+    lon,
+    lat,
+  };
+}
+
+function flagEmoji(countryCode: string | null) {
+  if (!countryCode || countryCode.length !== 2) return "";
+  const code = countryCode.toUpperCase();
+  return String.fromCodePoint(...[...code].map((char) => 127397 + char.charCodeAt(0)));
+}
+
+function routeMapPoint(value: string | null | undefined, fallback: "origin" | "destination"): RouteMapPoint {
+  const raw = (value ?? "").trim();
+  const normalized = raw.toLowerCase();
+  const hit = ROUTE_GEO_LOOKUP.find((entry) => entry.match.some((token) => normalized.includes(token)));
+  if (hit) {
+    return routePointFromGeo(raw || hit.label, hit.country, hit.countryCode, hit.lon, hit.lat);
+  }
+  const fallbackPoint = fallback === "origin"
+    ? { lon: 101.397, lat: 2.999, label: "Origin TBD", country: "Origin" }
+    : { lon: 28.978, lat: 41.008, label: "Destination TBD", country: "Destination" };
+  return routePointFromGeo(raw || fallbackPoint.label, raw || fallbackPoint.country, null, fallbackPoint.lon, fallbackPoint.lat);
+}
+
+const ROUTE_KNOWN_WAYPOINTS = {
+  hongKong: routePointFromGeo("Hong Kong approach", "China", "CN", 114.109, 22.396),
+  singapore: routePointFromGeo("Singapore / Malacca", "Singapore", "SG", 103.852, 1.29),
+  colombo: routePointFromGeo("Colombo sea lane", "Sri Lanka", "LK", 79.861, 6.927),
+  suez: routePointFromGeo("Suez Canal", "Egypt", "EG", 32.55, 29.97),
+};
+
+function routeLegPoints(origin: RouteMapPoint, destination: RouteMapPoint, mode: string | null | undefined) {
+  const seaMode = (mode ?? "").toUpperCase().includes("SEA");
+  const asiaOrigin = origin.lon >= 70 && origin.lon <= 130;
+  const turkeyDestination = destination.lon >= 24 && destination.lon <= 45 && destination.lat >= 35;
+
+  if (seaMode && asiaOrigin && turkeyDestination) {
+    return [
+      origin,
+      ...(origin.lon > 112 ? [ROUTE_KNOWN_WAYPOINTS.hongKong] : []),
+      ROUTE_KNOWN_WAYPOINTS.singapore,
+      ROUTE_KNOWN_WAYPOINTS.colombo,
+      ROUTE_KNOWN_WAYPOINTS.suez,
+      destination,
+    ];
+  }
+
+  return [origin, destination];
+}
+
+function transitSummary(etd: Date | null | undefined, eta: Date | null | undefined) {
+  if (!etd || !eta) return "Transit TBD";
+  const days = Math.max(1, Math.round((eta.getTime() - etd.getTime()) / 86400000));
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+function modeSummary(modeLabel: string, transitLabel: string) {
+  return transitLabel === "Transit TBD" ? `${modeLabel} · timing TBD` : `${modeLabel} · ${transitLabel}`;
+}
 
 function fmt(d: Date | null | undefined) {
   if (!d) return "—";
@@ -769,6 +865,24 @@ async function _DashboardPageImpl(stageOverride: string | null) {
     ? `${job.origin} → ${job.destination}`
     : "Route TBD";
   const modeLabel = job.mode ? (MODE_LABEL[job.mode] ?? job.mode) : "Mode TBD";
+  const routeOrigin = routeMapPoint(job.origin, "origin");
+  const routeDestination = routeMapPoint(job.destination, "destination");
+  const routePoints = routeLegPoints(routeOrigin, routeDestination, job.mode);
+  const routeOverview = buildRouteViewport("overview", routePoints, {
+    minZoom: 2,
+    maxZoom: 5,
+    maxTiles: 18,
+    aspectRatio: 2.88,
+    paddingRatio: 0.18,
+  });
+  const routeWaypoints = routeOverview.points.slice(1, -1);
+  const routeZoomSections = routeZoomPanels(routePoints);
+  const originFlag = flagEmoji(routeOrigin.countryCode);
+  const destinationFlag = flagEmoji(routeDestination.countryCode);
+  const originTimingLabel = job.etd ? `ETD ${fmt(job.etd)}` : "ETD TBD";
+  const destinationTimingLabel = job.eta ? `ETA ${fmt(job.eta)}` : "ETA TBD";
+  const transitLabel = transitSummary(job.etd, job.eta);
+  const routeModeSummary = modeSummary(modeLabel, transitLabel);
   const approvedDocs = docs.filter((d) => d.status === "APPROVED").length;
   const costLabel = job.cost ? `$${job.cost.toLocaleString()}` : "—";
   const marginLabel = job.revenue && job.cost
@@ -806,14 +920,87 @@ async function _DashboardPageImpl(stageOverride: string | null) {
             </div>
           </div>
 
-          <div className="ops-route-visual" aria-hidden="true">
-            <span className="ops-route-label">{job.origin ?? "Origin TBD"}</span>
-            <span className="ops-route-line">
-              <span className="ops-route-port start" />
-              <span className="ops-route-vessel" />
-              <span className="ops-route-port end" />
-            </span>
-            <span className="ops-route-label right">{job.destination ?? "Destination TBD"}</span>
+          <div className="ops-route-summary-strip" aria-label="Route summary">
+            <div className="ops-route-summary-card origin">
+              <span>Origin</span>
+              <strong>{originFlag && <em>{originFlag}</em>}{routeOrigin.label}</strong>
+              <small>{originTimingLabel}</small>
+            </div>
+            <div className="ops-route-summary-mode">
+              <span className="ops-route-summary-line" aria-hidden />
+              <div>
+                <Icon name={job.mode === "AIR" ? "plane" : job.mode === "ROAD" ? "truck" : "ship"} size={20} strokeWidth={2} />
+                <strong>{modeLabel}</strong>
+                <small>{routeModeSummary}</small>
+              </div>
+              <span className="ops-route-summary-line" aria-hidden />
+            </div>
+            <div className="ops-route-summary-card destination">
+              <span>Destination</span>
+              <strong>{destinationFlag && <em>{destinationFlag}</em>}{routeDestination.label}</strong>
+              <small>{destinationTimingLabel}</small>
+            </div>
+          </div>
+
+          <div className={`ops-route-visual ${routeZoomSections.length ? "has-route-zoom" : ""}`} aria-label={`Route map for ${routeLabel}`}>
+            <div className="ops-route-overview" aria-label="Route overview map">
+              <div className="ops-route-map-tiles" aria-hidden="true">
+                {routeOverview.tiles.map((tile) => (
+                  <img key={tile.key} src={tile.src} alt="" style={tile.style} />
+                ))}
+              </div>
+              <svg className="ops-route-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <path className="ops-route-waterway-shadow" d={routeOverview.path} />
+                <path className="ops-route-waterway" d={routeOverview.path} />
+              </svg>
+              {routeWaypoints.map((waypoint, index) => (
+                <div key={waypoint.label} className={`ops-route-waypoint waypoint-${index}`} style={waypoint.markerStyle}>
+                  <span />
+                  <em>{waypoint.label}</em>
+                </div>
+              ))}
+              <div className="ops-route-marker ops-route-marker-origin" style={routeOverview.points[0].markerStyle}>
+                <span className="ops-route-marker-dot" />
+              </div>
+              <div className="ops-route-marker ops-route-marker-destination" style={routeOverview.points[routeOverview.points.length - 1].markerStyle}>
+                <span className="ops-route-marker-dot" />
+              </div>
+              <div className="ops-route-transit-chip">
+                <Icon name={job.mode === "AIR" ? "plane" : job.mode === "ROAD" ? "truck" : "ship"} size={14} strokeWidth={2} />
+                <span>{modeLabel}</span>
+                <strong>{nextMilestoneLabel}</strong>
+              </div>
+              <div className="ops-route-map-attribution">© OpenStreetMap contributors</div>
+            </div>
+            {routeZoomSections.length > 0 && (
+              <div className="ops-route-zoom-panels" aria-label="Route zoom sections">
+                {routeZoomSections.map((panel) => (
+                  <div key={panel.key} className={`ops-route-zoom-panel ${panel.key}`}>
+                    <div className="ops-route-zoom-tiles" aria-hidden="true">
+                      {panel.viewport.tiles.map((tile) => (
+                        <img key={tile.key} src={tile.src} alt="" style={tile.style} />
+                      ))}
+                    </div>
+                    <svg className="ops-route-zoom-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                      <path className="ops-route-zoom-line-shadow" d={panel.viewport.path} />
+                      <path className="ops-route-zoom-line" d={panel.viewport.path} />
+                    </svg>
+                    {panel.viewport.points.map((point, index) => (
+                      <span
+                        key={`${panel.key}-${point.label}-${index}`}
+                        className={`ops-route-zoom-marker ${index === 0 ? "start" : index === panel.viewport.points.length - 1 ? "end" : "mid"}`}
+                        style={point.markerStyle}
+                        aria-hidden="true"
+                      />
+                    ))}
+                    <div className="ops-route-zoom-copy">
+                      <span>{panel.eyebrow}</span>
+                      <strong>{panel.title}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="ops-brief-stats">

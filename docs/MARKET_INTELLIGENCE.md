@@ -644,24 +644,54 @@ Raw ids should stay in tool traces unless an operator asks for audit detail.
 - The extractor can miss synonyms and over-match broad geography terms.
 - All curated external sources ship disabled by default until reviewed.
 
-## Live Pilot Hardening
+## Intelligence Map Contract
 
-Before enabling live market ingestion:
+The `/dashboard/intelligence` map must use real existing geography, not
+handmade decorative continents.
 
-1. Run `npm run market:doctor`.
-2. Confirm no enabled Firecrawl source is missing allowed domains.
-3. Confirm risky broad fetch configuration is empty.
-4. Run a dry-run through the cron route or Research Inbox.
-5. Enable one reviewed source only.
-6. Set `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true` only for the pilot.
-7. Run one source with `--confirm-live`.
-8. Review feedback and source quality before enabling cron.
+Current implementation:
 
-Full runbook:
+- Base map: Natural Earth 1:110m land GeoJSON, generated into
+  `src/lib/market-intelligence/world-map-asset.ts`.
+- Runtime: local/offline SVG rendering. No external map tiles, no geocoding API,
+  no OSM production dependency.
+- Projection: deterministic equirectangular 1000x500 viewBox.
+- Overlays: validated ports, chokepoints, countries, regions, lane arcs,
+  hotspots, and evidence-backed impact-review counts.
+
+Freight geography lives in:
 
 ```text
-docs/RUNBOOKS/MARKET_INTELLIGENCE_LIVE_PILOT.md
+src/lib/market-intelligence/lane-validation.ts
+src/lib/market-intelligence/intelligence-map.ts
 ```
+
+Known ports include Shanghai, Ningbo, Shenzhen, Singapore, Hamburg, Rotterdam,
+Antwerp, Los Angeles, Long Beach, New York, Savannah, Istanbul, and Mersin.
+
+Known chokepoints include Suez Canal, Panama Canal, Strait of Hormuz,
+Bab el-Mandeb, Strait of Malacca, Bosporus, Dardanelles, Strait of Gibraltar,
+English Channel, Cape of Good Hope, and Red Sea.
+
+## Lane Validation And CBP Modeling
+
+Market lanes must normalize to known freight locations. Examples:
+
+- valid: `CN -> EU`, `Shanghai to Hamburg`, `Ningbo -> Rotterdam`
+- rejected: `Countdown -> America`, `Welcome -> U.S. Customs and Border`,
+  `Messaging Service Welcome -> U.S. Customs and Border`
+
+CBP CSMS and other regulatory sources are not lane sources by default. If clean
+body text does not contain a validated freight lane, the signal is modeled as:
+
+- category: `customs` or `compliance`
+- affected country/context: `US`
+- recommended action: review customs/document/compliance requirements
+- no fake lane chips, lane arcs, or lane-specific impact reviews
+
+Historical bad lane links remain visible as suppressed/rejected audit data, but
+Morning Brief, strategy context, and map affected-work sections must ignore
+them.
 
 ## Intelligence Map Visual Contract
 
@@ -687,3 +717,48 @@ ALLOW_MARKET_REVIEW_CLEANUP=1 npm run cleanup:bad-cbp-market-reviews
 The cleanup dismisses only pending CBP pseudo-lane reviews that match the
 boilerplate lane validator. It does not delete records and does not mutate jobs,
 RFQs, quotes, prices, customers, milestones, or messages.
+
+## Daily Automation Contract
+
+`vercel.json` contains a Hobby-compatible daily cron:
+
+```text
+/api/cron/market-intelligence  0 11 * * *
+```
+
+The route still requires:
+
+- `CRON_SECRET`
+- `MARKET_INTELLIGENCE_CRON_ENABLED=true` for live execution
+- Firecrawl provider configuration
+
+Default automation limits:
+
+- one safe source per day
+- three pages/results per source
+- daily credit budget 25 unless env overrides within guardrails
+- safe rotation only: Maersk, Drewry WCI, CBP CSMS, Port of Los Angeles
+- FreightWaves/JOC/media are excluded from scheduled ingestion
+
+Scheduled ingestion remains advisory. It may create Research Feed,
+`MarketSignal`, `MarketSignalLink`, and `MarketImpactReview` rows. It must not
+mutate operational freight records or send messages.
+
+## Live Pilot Hardening
+
+Before enabling live market ingestion:
+
+1. Run `npm run market:doctor`.
+2. Confirm no enabled Firecrawl source is missing allowed domains.
+3. Confirm risky broad fetch configuration is empty.
+4. Run a dry-run through the cron route or Research Inbox.
+5. Enable one reviewed source only.
+6. Set `MARKET_INTELLIGENCE_LIVE_INGESTION_ENABLED=true` only for the pilot.
+7. Run one source with `--confirm-live`.
+8. Review feedback and source quality before enabling cron.
+
+Full runbook:
+
+```text
+docs/RUNBOOKS/MARKET_INTELLIGENCE_LIVE_PILOT.md
+```

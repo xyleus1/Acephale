@@ -11,6 +11,8 @@ import { classifyEmailAttachments } from "./doc-classify";
 import { enqueueBackgroundJob } from "./background-jobs";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
+import { DERYA_LOAD_RFQ_INBOX_EMAILS, getDeryaLoadRfqInbox, isDeryaLoadRfqInbox } from "./derya-inboxes";
+import { emailWorkflowLabelKeys } from "./email-workflow-labels";
 
 // Sync envelope: how many threads max we'll touch in one run, and how far back
 // to look. Each thread is one Gmail API call regardless of how many messages
@@ -23,6 +25,10 @@ const PAGE_SIZE = 100;
 const SYNC_WINDOW = "newer_than:365d";
 // After sync, run AI auto-inquiry on this many unlinked threads.
 const AUTO_INQUIRY_LIMIT = 60;
+
+function buildGmailSyncQuery() {
+  return `${SYNC_WINDOW} -in:spam -in:trash`;
+}
 
 type GmailMessage = {
   id: string;
@@ -144,7 +150,7 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
   // Sweep the last year on every sync. Per-message dedupe by externalId means
   // rescanning old threads is essentially free, and operators want their full
   // inbox available, not just deltas since the previous sync.
-  const threadIds = await listThreadIds(accessToken, SYNC_WINDOW, THREAD_FETCH_LIMIT);
+  const threadIds = await listThreadIds(accessToken, buildGmailSyncQuery(), THREAD_FETCH_LIMIT);
 
   let processed = 0;
   let created = 0;
@@ -264,6 +270,12 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
           classificationAt: classificationLabel ? new Date() : null,
         },
       });
+      const workflowLabels = emailWorkflowLabelKeys({
+        kind: classificationLabel,
+        jobId: localThread.jobId,
+        inquiryId: localThread.inquiryId,
+      });
+      const deryaInbox = getDeryaLoadRfqInbox(account.email);
       const sourceExternalId = `gmail:message:${createdMessage.id}`;
       const messagePayload = {
         messageId: createdMessage.id,
@@ -278,6 +290,8 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
         sentAt,
         classification: classificationLabel,
         classificationReason,
+        workflowLabels,
+        deryaInbox: deryaInbox ? { email: deryaInbox.email, owner: deryaInbox.owner, role: deryaInbox.role } : null,
         attachments,
       };
       const memoryObject = await ingestKnowledgeObject({
@@ -285,7 +299,7 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
         sourceType: "GMAIL",
         sourceExternalId,
         sourceLabel: account.email,
-        sourceMetadata: { accountId: account.id, provider: "GMAIL" },
+        sourceMetadata: { accountId: account.id, provider: "GMAIL", deryaLoadRfqInbox: isDeryaLoadRfqInbox(account.email) },
         canonicalType: "email_message",
         title: subject,
         text: [subject, fromEmail, fromName, body.slice(0, 8000)].filter(Boolean).join("\n"),
@@ -311,7 +325,7 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
         sourceType: "GMAIL",
         sourceExternalId,
         sourceLabel: account.email,
-        sourceMetadata: { accountId: account.id, provider: "GMAIL" },
+        sourceMetadata: { accountId: account.id, provider: "GMAIL", deryaLoadRfqInbox: isDeryaLoadRfqInbox(account.email) },
         objectId: memoryObject?.id ?? null,
         eventType: "gmail.message.ingested",
         entityType: "email_message",
@@ -419,6 +433,67 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
     threadsTouched: touchedThreadDbIds.length,
     autoInquiries,
     autoLinked,
+  };
+}
+
+export async function syncDeryaLoadRfqInboxes(): Promise<
+  | {
+      ok: true;
+      requested: string[];
+      missing: string[];
+      accounts: number;
+      created: number;
+      threadsTouched: number;
+      autoInquiries: number;
+      autoLinked: number;
+      results: Array<{ email: string; ok: boolean; created?: number; threadsTouched?: number; autoInquiries?: number; autoLinked?: number; error?: string }>;
+    }
+  | { error: string }
+> {
+  const session = await requireSession();
+  const accounts = await prisma.emailAccount.findMany({
+    where: {
+      officeId: session.officeId,
+      provider: "GMAIL",
+      isActive: true,
+      OR: DERYA_LOAD_RFQ_INBOX_EMAILS.map((email) => ({ email: { equals: email, mode: "insensitive" as const } })),
+    },
+    orderBy: { email: "asc" },
+  });
+  const connected = new Set(accounts.map((account) => account.email.toLowerCase()));
+  const missing = DERYA_LOAD_RFQ_INBOX_EMAILS.filter((email) => !connected.has(email));
+
+  const results: Array<{ email: string; ok: boolean; created?: number; threadsTouched?: number; autoInquiries?: number; autoLinked?: number; error?: string }> = [];
+  for (const account of accounts) {
+    try {
+      const result = await _syncEmailAccountInternal({ accountId: account.id, officeId: session.officeId });
+      if ("error" in result) {
+        results.push({ email: account.email, ok: false, error: result.error });
+      } else {
+        results.push({
+          email: account.email,
+          ok: true,
+          created: result.created,
+          threadsTouched: result.threadsTouched,
+          autoInquiries: result.autoInquiries,
+          autoLinked: result.autoLinked,
+        });
+      }
+    } catch (e) {
+      results.push({ email: account.email, ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return {
+    ok: true,
+    requested: DERYA_LOAD_RFQ_INBOX_EMAILS,
+    missing,
+    accounts: accounts.length,
+    created: results.reduce((sum, item) => sum + (item.created ?? 0), 0),
+    threadsTouched: results.reduce((sum, item) => sum + (item.threadsTouched ?? 0), 0),
+    autoInquiries: results.reduce((sum, item) => sum + (item.autoInquiries ?? 0), 0),
+    autoLinked: results.reduce((sum, item) => sum + (item.autoLinked ?? 0), 0),
+    results,
   };
 }
 

@@ -6,6 +6,8 @@ import { DisconnectAccountButton } from "@/components/disconnect-account-button"
 import { ResumeAccountButton } from "@/components/resume-account-button";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 import { AppearanceToggle } from "@/components/appearance-toggle";
+import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
+import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
 
 function timeAgo(d: Date | null | undefined) {
   if (!d) return "Never";
@@ -43,11 +45,20 @@ export default async function EmailSettingsPage({
 
   const active = accounts.filter((a) => a.isActive);
   const paused = accounts.filter((a) => !a.isActive);
-  const allowedSenderEmails = ["mert@usederya.com", "oguzhan@usederya.com"];
   const connectedAllowedSenderEmails = active
-    .filter((a) => a.provider === "GMAIL" && allowedSenderEmails.includes(a.email.toLowerCase()))
+    .filter((a) => a.provider === "GMAIL" && DERYA_LOAD_RFQ_INBOX_EMAILS.includes(a.email.toLowerCase()))
     .map((a) => a.email.toLowerCase());
-  const missingAllowedSenderEmails = allowedSenderEmails.filter((email) => !connectedAllowedSenderEmails.includes(email));
+  const missingAllowedSenderEmails = DERYA_LOAD_RFQ_INBOX_EMAILS.filter((email) => !connectedAllowedSenderEmails.includes(email));
+  const accountByEmail = new Map(accounts.map((account) => [account.email.toLowerCase(), account]));
+  const deryaInboxRows = DERYA_LOAD_RFQ_INBOXES.map((inbox) => {
+    const account = accountByEmail.get(inbox.email) ?? null;
+    return {
+      ...inbox,
+      account,
+      status: !account ? "missing" : account.isActive ? "connected" : "paused",
+      messageCount: account ? countByAccount[account.id] ?? 0 : 0,
+    };
+  });
   const oauthConfigured = !!process.env.GOOGLE_CLIENT_ID;
   const whatsAppConfigured = !!(process.env.WHATSAPP_VERIFY_TOKEN && process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
   const whatsAppWebhookConfigured = !!process.env.WHATSAPP_VERIFY_TOKEN;
@@ -60,11 +71,11 @@ export default async function EmailSettingsPage({
     && !!process.env.DOCUMENT_STORAGE_S3_SECRET_ACCESS_KEY;
   const setupGates = [
     {
-      label: "Gmail senders",
+      label: "Derya load/RFQ inboxes",
       status: missingAllowedSenderEmails.length === 0 ? "ready" : oauthConfigured ? "setup required" : "blocked",
       detail: missingAllowedSenderEmails.length === 0
-        ? `Allowed senders connected: ${connectedAllowedSenderEmails.join(", ")}.`
-        : `Connect/reconnect ${missingAllowedSenderEmails.join(", ")} with Gmail Send scope before forwarder email send is production-usable.`,
+        ? `Native load/RFQ inboxes connected: ${connectedAllowedSenderEmails.join(", ")}.`
+        : `Connect or resume ${missingAllowedSenderEmails.join(", ")} so inbound load/RFQ mail from both accounts is visible.`,
     },
     {
       label: "Forwarder directory",
@@ -173,7 +184,7 @@ export default async function EmailSettingsPage({
           background: "var(--surface)", border: "1px solid var(--border)", borderLeft: "3px solid var(--brand)",
           fontSize: 13, color: "var(--text)",
         }}>
-          Connected <strong>{sp.oauth_success}</strong>. Click <em>Sync now</em> below to fetch the last 7 days.
+          Connected <strong>{sp.oauth_success}</strong>. Click <em>Sync now</em> below to fetch the last year.
         </div>
       )}
       {needsReauth.length > 0 && (
@@ -304,6 +315,62 @@ export default async function EmailSettingsPage({
       {/* Connect button(s) */}
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body">
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+            <div>
+              <div className="section-title" style={{ marginBottom: 6 }}>Derya load/RFQ inboxes</div>
+              <p style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+                These configured mailboxes are treated as first-class load/RFQ sources. Sync pulls the last year of Gmail threads, keeps each mailbox separated, and labels freight-related mail as <code>load/rfq</code>, <code>load/customer</code>, <code>load/forwarder</code>, or <code>load/note</code>.
+              </p>
+            </div>
+            <SyncDeryaInboxesButton disabled={connectedAllowedSenderEmails.length === 0} />
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {deryaInboxRows.map((row) => (
+              <div key={row.email} style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0,1fr) auto",
+                gap: 12,
+                alignItems: "center",
+                padding: "12px 14px",
+                border: "1px solid var(--border)",
+                borderLeft: `3px solid ${row.status === "connected" ? "var(--brand)" : row.status === "paused" ? "var(--warning)" : "var(--danger)"}`,
+                borderRadius: "var(--radius)",
+                background: "var(--surface)",
+              }}>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 13 }}>{row.email}</strong>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 900,
+                      textTransform: "uppercase",
+                      color: row.status === "connected" ? "var(--brand)" : row.status === "paused" ? "var(--warning)" : "var(--danger)",
+                    }}>
+                      {row.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 3 }}>
+                    {row.owner} · {row.role}
+                    {row.account ? ` · ${row.messageCount} message${row.messageCount === 1 ? "" : "s"} synced · last sync ${timeAgo(row.account.lastSyncAt)}` : " · not authorized yet"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                  {row.account?.isActive && row.account.provider === "GMAIL" && <SyncAccountButton accountId={row.account.id} />}
+                  {row.account && !row.account.isActive && <ResumeAccountButton accountId={row.account.id} />}
+                  {oauthConfigured && (
+                    <a href={gmailConnectHrefForInbox(row.email)} className="btn btn-secondary btn-sm" style={{ fontSize: 12 }}>
+                      {row.account ? "Reconnect" : "Connect"}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-body">
           <div className="section-title" style={{ marginBottom: 12 }}>Connect a new inbox</div>
           <div style={{ display: "flex", gap: 10 }}>
             {oauthConfigured ? (
@@ -322,7 +389,7 @@ export default async function EmailSettingsPage({
             )}
           </div>
           <p style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 10, marginBottom: 0 }}>
-            You can connect as many inboxes as you want — each one gets its own account record. Each authorization screen will ask for the same Gmail account; switch Google accounts in the consent flow if you want a different one.
+            You can connect as many inboxes as you want — each one gets its own account record. Google will ask you to choose an account in the consent flow; use the targeted Derya inbox rows above for Mert and Oguzhan.
           </p>
         </div>
       </div>
@@ -364,7 +431,7 @@ export default async function EmailSettingsPage({
         <div className="card" style={{ textAlign: "center", padding: "40px 24px", marginBottom: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>No connected inboxes</div>
           <p style={{ fontSize: 13, color: "var(--text-3)" }}>
-            Click <em>Connect a Gmail inbox</em> above to authorize. After that, click <em>Sync now</em> to pull the last 7 days of emails.
+            Click <em>Connect a Gmail inbox</em> above to authorize. After that, click <em>Sync now</em> to pull the last year of emails.
           </p>
         </div>
       )}

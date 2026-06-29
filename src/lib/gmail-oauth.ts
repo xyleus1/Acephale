@@ -16,7 +16,7 @@ function getRedirectUri() {
   return base;
 }
 
-export async function getGmailAuthUrl(): Promise<{ url: string; state: string }> {
+export async function getGmailAuthUrl(args: { loginHint?: string | null } = {}): Promise<{ url: string; state: string }> {
   const session = await requireSession();
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) throw new Error("GOOGLE_CLIENT_ID is not set");
@@ -33,9 +33,11 @@ export async function getGmailAuthUrl(): Promise<{ url: string; state: string }>
     response_type: "code",
     scope: GMAIL_SCOPES.join(" "),
     access_type: "offline",
-    prompt: "consent",
+    prompt: "consent select_account",
     state,
   });
+  const loginHint = args.loginHint?.trim().toLowerCase();
+  if (loginHint) params.set("login_hint", loginHint);
   // Also drop a fallback cookie for older deployments still expecting one.
   // Harmless if the callback ignores it.
   try {

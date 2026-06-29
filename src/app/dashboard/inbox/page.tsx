@@ -13,10 +13,13 @@ import { LoadFilterPicker } from "@/components/load-filter-picker";
 import { RfqRowActions } from "@/components/rfq-row-actions";
 import { SeedDemoButton } from "@/components/seed-demo-button";
 import { Icon } from "@/components/icon";
+import { DERYA_LOAD_RFQ_INBOX_EMAILS, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
+import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/lib/email-workflow-labels";
 import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
 
 const FILTERS = [
   { key: "",                  label: "Active"          },  // default — excludes hidden + snoozed
+  { key: "_LOAD_RFQ",         label: "Load/RFQ"        },
   { key: "_APPROVED_CONTACTS", label: "Approved contacts" },
   { key: "_NEEDS_REPLY",      label: "Awaiting reply"  },
   { key: "_UNLINKED",         label: "Unlinked"        },
@@ -162,6 +165,11 @@ export default async function InboxPage({
   const approvedContactEmails = [...new Set(approvedContacts
     .map((c) => c.email?.trim().toLowerCase())
     .filter((email): email is string => !!email))];
+  const connectedDeryaInboxEmails = new Set(accounts
+    .filter((account) => account.provider === "GMAIL")
+    .map((account) => account.email.toLowerCase())
+    .filter((email) => DERYA_LOAD_RFQ_INBOX_EMAILS.includes(email)));
+  const missingDeryaInboxEmails = DERYA_LOAD_RFQ_INBOX_EMAILS.filter((email) => !connectedDeryaInboxEmails.has(email));
 
   function messageScope(args: { channel?: ChannelFilter; accountId?: string } = {}) {
     const scopedChannel = args.channel ?? channel;
@@ -192,6 +200,13 @@ export default async function InboxPage({
   // Threads with messages, plus their linked job/inquiry
   const where: any = { officeId: session.officeId };
   const now = new Date();
+  const loadRfqRelatedWhere = {
+    OR: [
+      { jobId: { not: null } },
+      { inquiryId: { not: null } },
+      { messages: { some: { direction: "INBOUND" as const, classification: { in: [...LOAD_RFQ_RELATED_CLASSIFICATIONS] } } } },
+    ],
+  };
   // Default ("Active") excludes hidden + currently-snoozed threads. Other filters opt-in.
   if (filter === "_HIDDEN") {
     where.hiddenAt = { not: null };
@@ -209,6 +224,8 @@ export default async function InboxPage({
       where.inquiryId = null;
     } else if (filter === "_LINKED") {
       where.AND.push({ OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] });
+    } else if (filter === "_LOAD_RFQ") {
+      where.AND.push(loadRfqRelatedWhere);
     } else if (filter === "_APPROVED_CONTACTS") {
       where.AND.push({
         messages: {
@@ -331,11 +348,12 @@ export default async function InboxPage({
       },
     },
   };
-  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
+  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalLoadRfq, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeAllChannelsFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeMailFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeWhatsAppFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, loadRfqRelatedWhere] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, approvedContactFilter] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter, jobId: null, inquiryId: null } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, { OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] }] } }),
@@ -353,6 +371,7 @@ export default async function InboxPage({
 
   function countFor(key: string): number {
     if (!key) return totalActive;
+    if (key === "_LOAD_RFQ") return totalLoadRfq;
     if (key === "_APPROVED_CONTACTS") return totalApprovedContacts;
     if (key === "_NEEDS_REPLY") return totalNeedsReply;
     if (key === "_UNLINKED") return totalUnlinked;
@@ -538,6 +557,22 @@ export default async function InboxPage({
         </div>
       )}
 
+      {missingDeryaInboxEmails.length > 0 && (
+        <div className="inbox-source-warning">
+          <div>
+            <strong>Derya load/RFQ inbox incomplete</strong>
+            <span>Missing active Gmail access for {missingDeryaInboxEmails.join(", ")}.</span>
+          </div>
+          <div className="inbox-source-warning-actions">
+            {missingDeryaInboxEmails.map((email) => (
+              <a key={email} href={gmailConnectHrefForInbox(email)} className="btn btn-secondary btn-sm">
+                Connect {email}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       <form method="get" action="/dashboard/inbox" className="inbox-search-form">
         {filter && <input type="hidden" name="filter" value={filter} />}
         {accountFilter && <input type="hidden" name="account" value={accountFilter} />}
@@ -703,6 +738,11 @@ export default async function InboxPage({
               <div className="inbox-row-list">
                 {g.threads.map((t) => {
                   const last = t.messages[t.messages.length - 1];
+                  const workflow = primaryEmailWorkflowLabel({
+                    kind: dominantKind(t.messages),
+                    jobId: t.job?.id ?? null,
+                    inquiryId: t.inquiry?.id ?? null,
+                  });
                   const priority = threadCriticality(t);
                   const source = threadSourceMeta(t.messages);
                   return (
@@ -714,6 +754,7 @@ export default async function InboxPage({
                         </div>
                         <div className="inbox-thread-meta">
                           <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
+                          <span className={`inbox-workflow-label ${workflow.className}`}>{workflow.label}</span>
                           <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
                           {t.messages.length} msg · {timeAgo(t.lastMessageAt)}{last ? ` · last from ${last.fromName ?? last.fromEmail}` : ""}
                         </div>
@@ -736,6 +777,11 @@ export default async function InboxPage({
             const linked = t.job || t.inquiry;
             const kind = dominantKind(t.messages);
             const meta = KIND_META[kind] ?? KIND_META.OTHER;
+            const workflow = primaryEmailWorkflowLabel({
+              kind,
+              jobId: t.job?.id ?? null,
+              inquiryId: t.inquiry?.id ?? null,
+            });
             const last = t.messages[t.messages.length - 1];
             const priority = threadCriticality(t);
             const source = threadSourceMeta(t.messages);
@@ -749,6 +795,7 @@ export default async function InboxPage({
                   <div className="inbox-thread-top">
                     <BulkCheckbox threadId={t.id} />
                     <span className={`inbox-kind-badge ${meta.cls}`}>{meta.label}</span>
+                    <span className={`inbox-workflow-label ${workflow.className}`}>{workflow.label}</span>
                     <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
                     <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
                     <span className="inbox-thread-subject">
@@ -835,6 +882,11 @@ export default async function InboxPage({
                   if (m.attachments) {
                     try { attachments = JSON.parse(m.attachments); } catch { attachments = []; }
                   }
+                  const messageWorkflow = primaryEmailWorkflowLabel({
+                    kind: m.classification,
+                    jobId: t.job?.id ?? null,
+                    inquiryId: t.inquiry?.id ?? null,
+                  });
                   return {
                     id: m.id,
                     direction: m.direction,
@@ -844,6 +896,8 @@ export default async function InboxPage({
                     bodyText: m.bodyText,
                     sentAt: m.sentAt.toISOString(),
                     classification: m.classification,
+                    workflowLabel: messageWorkflow.label,
+                    workflowLabelClass: messageWorkflow.className,
                     gmailMessageId: m.gmailMessageId,
                     attachments,
                   };

@@ -14,6 +14,8 @@ type Message = {
   bodyText: string | null;
   sentAt: string;
   classification: string | null;
+  workflowLabel?: string;
+  workflowLabelClass?: string;
   gmailMessageId: string | null;
   attachments: Attachment[];
 };
@@ -63,6 +65,11 @@ export function ThreadAccordion({
                     <span className="thread-message-direction">
                       {m.direction}
                     </span>
+                    {m.workflowLabel && (
+                      <span className={`thread-workflow-label ${m.workflowLabelClass ?? ""}`}>
+                        {m.workflowLabel}
+                      </span>
+                    )}
                     {m.fromName && (
                       <span className="thread-message-email">
                         &lt;{m.fromEmail}&gt;

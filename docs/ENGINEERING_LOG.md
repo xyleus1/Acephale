@@ -603,6 +603,66 @@ Use this file for chronological implementation notes that future agents should s
   quote PDF, portal-token behavior, Gmail OAuth redirect, cron auth rejection,
   and `MARKET_INTELLIGENCE_CRON_ENABLED=false`.
 
+### 2026-06-23 - Production smoke test after go-live
+
+- Branch: main
+- Production URL: `https://www.derya.ai`
+- Production commit from `/api/health`: `408261c`
+- Deployment status: GitHub/Vercel status API reports success / deployment
+  completed for the production deployment.
+- Route checks: `/login` returned `200`; `/`, `/dashboard`,
+  `/dashboard/intelligence`, `/dashboard/jobs`, `/dashboard/customers`,
+  `/dashboard/inbox`, `/dashboard/pricing`, and `/dashboard/settings/email`
+  returned `307` redirects to `/login`; `/api/health` returned `200` with
+  `ok=true`.
+- Health checks: DB ping passed, recent Prisma field checks passed, and
+  background job backlog passed with `queued=0`, `failed=0`,
+  `staleRunning=0`.
+- Auth smoke: demo login with `admin@demo.local / admin1234` failed and
+  redirected to `/login?error=1`, as expected. Real admin login for
+  `mert@usederya.com` was not tested because the password/session was not
+  available to this shell.
+- Cron smoke: unauthenticated `/api/cron/market-intelligence` and
+  `/api/cron/background-jobs` returned `401`.
+- Runtime logs: Vercel CLI is not installed locally, so runtime logs were not
+  directly available. No Prisma `P2021`/`P2022` or env errors surfaced through
+  `/api/health`.
+- Failed/skipped checks: no database migrations, `db push`, `migrate dev`,
+  `migrate reset`, old-data import, live Firecrawl ingestion, or market cron
+  enablement was run.
+- Follow-up: manually log in as `mert@usederya.com` in production and verify
+  authenticated dashboard/intelligence/customer/job surfaces plus quote PDF and
+  portal-token behavior.
+
+### 2026-06-23 - Derya Brain Ops documentation and controlled proposal path
+
+- Branch: main-era dirty worktree
+- Task: implement a Codex-native Derya Brain Ops layer from the attached prompt
+  without duplicating the existing company-brain schema.
+- Files changed: `AGENTS.md`, `CONTEXT.md`, `package.json`,
+  `.agents/skills/*/SKILL.md`, `.codex/hooks/*`,
+  `src/lib/brain-ops/ingest.ts`, `src/lib/brain-ops/query.ts`,
+  `src/lib/brain-ops/types.ts`, `scripts/check-docs-fresh.ts`,
+  `scripts/check-docs-fresh.test.ts`, `scripts/brain-ops.test.ts`,
+  `docs/current-state/*`, `docs/brain/README.md`, `docs/sops/*`,
+  `docs/templates/*`, `docs/decisions/DR-0001-derya-brain-ops.md`,
+  `docs/gotchas.md`, `docs/DECISIONS.md`, `docs/ENGINEERING_LOG.md`, and
+  `docs/AI_HANDOFF.md`.
+- Behavior added: Brain Ops ingest validation, calibration source/proposal
+  writes through existing `KnowledgeObject` and `AgentProposal`, exact-match
+  organization linking, source-quote enforcement for commitments/decisions/
+  risks/open questions, read-only brain query helpers, docs status checker,
+  repo-scoped Codex skills, and advisory local Codex hook policy.
+- Verification passed: `npm run test:docs`, `npm run test:brain`,
+  `npm run check:docs`, and `npx tsc --noEmit`.
+- Failed/skipped checks: no Prisma schema change was made, so no migration was
+  generated. No production database command, live Firecrawl ingestion, or
+  deployment command was run.
+- Caveat: Brain Ops proposal review/apply UI and API routes are intentionally
+  deferred. The first version is the service layer and operating discipline,
+  because duplicating schemas or slapping on UI before review semantics are
+  clear would make the brain less trustworthy, not more.
+
 ### 2026-06-23 - Live intelligence map and manual market ingestion controls
 
 - Branch: main
@@ -640,6 +700,53 @@ Use this file for chronological implementation notes that future agents should s
   `npm run test:market-impact`.
 - Failed/skipped checks: no local live Firecrawl ingestion was run, no market
   cron was enabled, and no Prisma migration was required.
+
+### 2026-06-23 - Granola meeting notes for Brain Ops operational context
+
+- Branch: main dirty worktree
+- Task: extend the Brain Ops implementation so Granola meeting notes can be
+  added for customer, RFQ, and job workflows and later retrieved as
+  source-backed operational context.
+- Files changed: `src/lib/brain-ops/types.ts`,
+  `src/lib/brain-ops/ingest.ts`, `src/lib/brain-ops/query.ts`,
+  `scripts/ingest-granola-note.ts`, `scripts/brain-ops.test.ts`,
+  `package.json`, `docs/brain/README.md`, `docs/sops/brain-ingest.md`,
+  `docs/current-state/brain-ops.md`, `docs/COMPANY_BRAIN.md`,
+  `docs/ENGINEERING_LOG.md`, and `docs/AI_HANDOFF.md`.
+- Behavior added: `granola_meeting_note` source type, exact
+  `operational_refs` for company/job/inquiry/contact linkage, source
+  `KnowledgeObject` job/RFQ/customer context fields, `EntityMention` rows for
+  exact refs, `getOperationalBrainContext`, and
+  `npm run brain:ingest:granola`.
+- Verification passed: `npx tsc --noEmit`, `npm run test:brain`.
+- Failed/skipped checks: no Prisma schema change, migration, production
+  database command, or live external ingestion was run.
+- Caveat: extraction from raw Granola text is still an upstream agent/skill
+  task. The controlled service accepts structured proposals and stores source
+  text/provenance; it does not silently convert every sentence into trusted
+  business truth.
+
+### 2026-06-23 - Granola Brain Ops hardening pass
+
+- Branch: main dirty worktree
+- Task: second-pass hardening of Granola meeting-note ingest without adding a
+  duplicate brain schema or Prisma migration.
+- Files changed: `src/lib/brain-ops/types.ts`,
+  `src/lib/brain-ops/ingest.ts`, `scripts/brain-ops.test.ts`,
+  `docs/brain/README.md`, `docs/sops/brain-ingest.md`,
+  `docs/current-state/brain-ops.md`, `docs/COMPANY_BRAIN.md`,
+  `docs/ENGINEERING_LOG.md`, and `docs/AI_HANDOFF.md`.
+- Behavior added: exact duplicate payloads now return existing source/proposal
+  rows instead of throwing or writing duplicate proposals; Granola notes require
+  `source.raw_text` or `source.source_uri`; supplied `userId` must belong to the
+  same office; ambiguous exact contact/RFQ refs remain unresolved; id-only refs
+  for email threads/messages, job documents, and strategy assessments are
+  supported conservatively.
+- Verification passed: `npm run test:brain`, `npm run check:docs`,
+  `npm run test:docs`, `npx tsc --noEmit`, and `npm run build`.
+- Failed/skipped checks: no Prisma schema change, migration, production
+  database command, live external ingestion, or Firecrawl run was performed.
+  No `.env` values were inspected or printed.
 
 ### 2026-06-23 - Intelligence page contrast and visibility hardening
 
@@ -713,6 +820,49 @@ Use this file for chronological implementation notes that future agents should s
 - Failed/skipped checks: no live Firecrawl ingestion, Prisma migration,
   production DB cleanup, or operational data mutation was run.
 
+### 2026-06-28 - Workbench navy map visual refresh
+
+- Branch: main
+- Commit: not committed
+- Task: Refresh the focused workbench first viewport to match the requested
+  navy/white control-tower direction with notebook gridlines, topbar subtitle,
+  real route map, country flags, route ETD/ETA strip, remaining brown-surface
+  cleanup, and no dead desktop gap before the agent rail.
+- Files changed: `src/app/dashboard/layout.tsx`,
+  `src/app/dashboard/page.tsx`, `src/app/globals.css`,
+  `src/app/icon.tsx`, `src/components/logo-mark.tsx`,
+  `src/lib/route-map-viewport.ts`, `scripts/route-map-viewport.test.ts`,
+  `scripts/seed-map-example-loads.ts`, `package.json`, `docs/AI_HANDOFF.md`,
+  `docs/DECISIONS.md`, and `docs/ENGINEERING_LOG.md`.
+- Behavior added: dashboard topbar now shows `Derya Deal Desk` plus
+  `Freight Control Tower`; focused deal brief uses OpenStreetMap tiles, a
+  route summary strip, sea-waypoint route paths, deterministic city/port lookup,
+  dynamic country flags, fitted Web Mercator overview tiles, three route-linked
+  zoom sections for long lanes, and responsive mobile map layout. Origin and
+  destination details are kept in the compact route summary above the map, not
+  duplicated as cards inside the map. Final CSS layer replaces the older warm
+  notebook palette with navy/white panels and gridline background; logo, app
+  icon, focus/status pills, and reference-deal sheet surfaces use the new
+  navy/blue token set; desktop workbench now expands to the agent rail.
+- Seed data added: `npx tsx scripts/seed-map-example-loads.ts` creates or
+  updates `DEMO-MAP-001` Port Klang, MY to Istanbul, TR and `DEMO-MAP-002`
+  Shanghai, CN to Mersin, TR in the local demo office.
+- Verification: `npx tsc --noEmit`, `npm run check:docs`,
+  `npm run test:route-map`, and the map seed script passed. Browser smoke
+  passed on local dev server after logging in as
+  `admin@demo.local / admin1234`; desktop checks for both seeded map jobs found
+  expected origin/destination text in the route strip, zero map endpoint cards,
+  fitted overview tiles, route-linked zoom panel overlays, no broken map images,
+  sea waypoints in the rendered route paths, no console errors, and zero old
+  brown/tan hits in the requested sheet/focus/logo color scan. Mobile 390px
+  check for `DEMO-MAP-001` found route strip/map labels present, 8/8 tiles
+  loaded, and no overflow.
+- Failed/skipped checks: no production build, database migration, or live
+  external ingestion was run.
+- Caveats: map tiles are direct public OpenStreetMap URLs and should become a
+  proper production map-provider/caching setup before real traffic. Location
+  placement is deterministic lookup-based, not geocoder-backed.
+
 ### 2026-06-23 - V2 Intelligence map visual QA and production cleanup guard
 
 - Branch: main dirty worktree
@@ -741,3 +891,39 @@ Use this file for chronological implementation notes that future agents should s
   `npm run test:market-intelligence`, and `npm run test:market-impact`.
 - Failed/skipped checks: no live Firecrawl ingestion, Prisma migration,
   production DB cleanup, or operational data mutation was run.
+
+### 2026-06-28 - Native Derya load/RFQ inboxes
+
+- Branch: main
+- Commit: not committed
+- Task: Make `mert@usederya.com` and `oguzhan@usederya.com` first-class
+  native Gmail sources for load/RFQ mail, with Company Brain-style workflow
+  labels focused on load/RFQ relevance.
+- Files changed: `src/lib/derya-inboxes.ts`,
+  `src/lib/email-workflow-labels.ts`, `src/lib/gmail-oauth.ts`,
+  `src/lib/gmail-sync.ts`, `src/app/api/auth/gmail/start/route.ts`,
+  `src/app/dashboard/settings/email/page.tsx`,
+  `src/app/dashboard/inbox/page.tsx`,
+  `src/components/sync-derya-inboxes-button.tsx`,
+  `src/components/thread-accordion.tsx`, `src/app/globals.css`,
+  `scripts/email-workflow-labels.test.ts`, `package.json`, and docs.
+- Behavior added: settings now shows the two expected Derya inboxes with
+  connected/paused/missing status, targeted OAuth connect links, per-account
+  sync, and a combined sync action. Inbox now warns if either expected inbox is
+  missing, adds a `Load/RFQ` filter, and shows derived `load/*` labels on
+  threads/messages. Gmail OAuth uses account selection plus `login_hint`.
+  Gmail sync stores safe workflow-label metadata in memory payloads and keeps
+  sweeping the last year while excluding spam/trash.
+- Follow-up adjustment: the required Derya inbox list now defaults to
+  Mert/Oguzhan but can be extended with comma-separated
+  `DERYA_LOAD_RFQ_INBOXES` in production.
+- Verification: `npm run test:email-labels`, `npx tsc --noEmit`,
+  `npm run check:docs`, and `npm run test:brain` passed. Local dev smoke on
+  `http://localhost:3000` confirmed `/dashboard/inbox` and
+  `/dashboard/settings/email` redirect unauthenticated users to `/login`; the
+  targeted Gmail start route now does the same instead of turning the auth
+  redirect into a 500.
+- Failed/skipped checks: no real Gmail OAuth consent or live Gmail sync was run
+  from this agent session; real accounts still require user consent.
+- Caveats: labels are Derya workflow labels derived from app state, not Gmail
+  label mutations. No schema migration was added.

@@ -16,6 +16,51 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-06-28 - Treat Mert and Oguzhan Gmail as native load/RFQ inboxes
+
+- Status: accepted
+- Owner: engineering
+- Context: Operators need to see load/RFQ-related mail from both
+  `mert@usederya.com` and `oguzhan@usederya.com` in the app without relying on
+  an external Company Brain review queue or manual Gmail searching.
+- Decision: Model the Derya Gmail addresses as expected native inboxes, default
+  to `mert@usederya.com` and `oguzhan@usederya.com`, allow production to extend
+  that required list with `DERYA_LOAD_RFQ_INBOXES`, keep account OAuth/token
+  storage in existing `EmailAccount` rows, and derive `load/*` workflow labels
+  from classifier and job/RFQ link state instead of adding a new email-label
+  schema.
+- Rationale: The existing inbox, sync, memory, and thread promotion pipeline is
+  already tenant-scoped and provenance-aware. A derived label layer gives the
+  operator the Company Brain-style triage language without duplicating data or
+  mutating Google labels.
+- Consequences: Missing/paused configured Derya inboxes are visible setup
+  problems; synced mail remains separated by account; `load/rfq`,
+  `load/customer`, `load/forwarder`, `load/note`, `load/linked`, and
+  `load/related` labels are Derya workflow labels, not Gmail label mutations.
+- Revisit when: operators need label review/apply state, manual overrides, or
+  two-way Gmail label synchronization.
+
+### 2026-06-23 - Layer Derya Brain Ops on existing Knowledge memory
+
+- Status: accepted
+- Owner: engineering
+- Context: The requested Brain Ops work overlaps with the existing
+  company-brain substrate (`KnowledgeSource`, `KnowledgeObject`,
+  `KnowledgeChunk`, `MemoryEvent`, and `AgentProposal`). Adding a second
+  `BrainSource`/`BrainDocument` schema would create duplicated truth and more
+  places for agents to hallucinate from.
+- Decision: Implement Brain Ops as Codex-native docs, skills, safety rails,
+  docs freshness checks, and a controlled ingest/query service on top of the
+  existing memory schema.
+- Rationale: This preserves tenant scoping and provenance while making the repo
+  more agent-legible. Calibration ingest creates reviewable proposals instead
+  of silently writing customer truth.
+- Consequences: Future UI/API review work should consume `AgentProposal` rows
+  created by `src/lib/brain-ops/ingest.ts`. Exact-match entity linking remains
+  the rule; fuzzy merges remain forbidden.
+- Revisit when: proposal review/apply UI needs first-class workflow state that
+  cannot be represented cleanly in `AgentProposal`.
+
 ### 2026-06-23 - Cut production over with a fresh database and cherry-pick import
 
 - Status: accepted
@@ -241,3 +286,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
   text.
 - Revisit when: the registry grows large enough to need zoom, clustering, or a
   dedicated geospatial renderer.
+
+### 2026-06-28 - Render workbench route maps from one Mercator viewport
+
+- Status: accepted
+- Owner: engineering
+- Context: The focused workbench route map originally mixed a static
+  OpenStreetMap world-tile background, separately projected route markers, and
+  unrelated zoom panel tiles. That made plausible-looking but geographically
+  wrong route views.
+- Decision: Route maps in the workbench use `src/lib/route-map-viewport.ts` as
+  the single source for tile selection, marker projection, route SVG paths, and
+  zoom-panel route sections. Origin/destination details stay in the compact
+  summary above the map instead of being duplicated as floating map cards.
+- Rationale: A freight route map is a trust surface. If the map tiles and
+  overlay geometry do not share the same projection, the UI can confidently show
+  the wrong route. Keeping the math in a pure helper also lets tests guard the
+  behavior without needing a browser.
+- Consequences: Future map changes should extend the route viewport helper or
+  replace it with a real map renderer/provider. Do not reintroduce independent
+  static background maps, decorative tile grids, or zoom panels that do not
+  draw the same route segment.
+- Revisit when: Derya needs live geocoding, selectable alternative routes,
+  carrier schedules, AIS-style tracking, or a production map provider/cached
+  tile strategy.
