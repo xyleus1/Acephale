@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const requestedEmail = normalizeEmailAddress(request.nextUrl.searchParams.get("email"));
     const loginHint = isDeryaLoadRfqInbox(requestedEmail) ? requestedEmail : null;
-    const { url } = await getGmailAuthUrl({ loginHint });
+    const { url } = await getGmailAuthUrl({ loginHint, origin: request.nextUrl.origin });
     return NextResponse.redirect(url);
   } catch (e) {
     const digest = typeof (e as { digest?: unknown })?.digest === "string" ? (e as { digest: string }).digest : "";

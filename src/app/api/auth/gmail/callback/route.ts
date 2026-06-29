@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   try { (await cookies()).delete("gmail-oauth-nonce"); } catch { /* ignore */ }
 
   try {
-    const tokens = await exchangeCodeForTokens(code);
+    const tokens = await exchangeCodeForTokens(code, { origin: url.origin });
     const email = await getUserEmail(tokens.access_token);
     const encryptedAccessToken = encryptOAuthTokenForStorage(tokens.access_token);
 

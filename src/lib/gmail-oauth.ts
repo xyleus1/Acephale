@@ -13,22 +13,37 @@ export const GMAIL_SCOPES = [
 export function normalizeGoogleRedirectUri(value: string | null | undefined): string | null {
   const raw = value?.trim();
   if (!raw) return null;
-  const withoutEnvKey = raw.startsWith("GOOGLE_REDIRECT_URI=")
-    ? raw.slice("GOOGLE_REDIRECT_URI=".length).trim()
-    : raw;
+  const unquoted = raw.replace(/^['"]|['"]$/g, "").trim();
+  const withoutEnvKey = unquoted.startsWith("GOOGLE_REDIRECT_URI=")
+    ? unquoted.slice("GOOGLE_REDIRECT_URI=".length).trim()
+    : unquoted;
   return withoutEnvKey.replace(/^['"]|['"]$/g, "");
 }
 
-function getRedirectUri() {
-  const base = normalizeGoogleRedirectUri(process.env.GOOGLE_REDIRECT_URI)
+export function googleOAuthCallbackUriForOrigin(origin: string | null | undefined): string | null {
+  const raw = origin?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    return `${parsed.origin}/api/auth/gmail/callback`;
+  } catch {
+    return null;
+  }
+}
+
+export function getGoogleRedirectUri(origin?: string | null) {
+  const base = googleOAuthCallbackUriForOrigin(origin)
+    || normalizeGoogleRedirectUri(process.env.GOOGLE_REDIRECT_URI)
     || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}/api/auth/gmail/callback` : "http://localhost:3000/api/auth/gmail/callback");
   return base;
 }
 
-export async function getGmailAuthUrl(args: { loginHint?: string | null } = {}): Promise<{ url: string; state: string }> {
+export async function getGmailAuthUrl(args: { loginHint?: string | null; origin?: string | null } = {}): Promise<{ url: string; state: string }> {
   const session = await requireSession();
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) throw new Error("GOOGLE_CLIENT_ID is not set");
+  const redirectUri = getGoogleRedirectUri(args.origin);
 
   // Stateless HMAC-signed state token: officeId + issuedAt + signature.
   // No cookie needed, so we don't lose state across OAuth redirects, sub-
@@ -38,7 +53,7 @@ export async function getGmailAuthUrl(args: { loginHint?: string | null } = {}):
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: redirectUri,
     response_type: "code",
     scope: GMAIL_SCOPES.join(" "),
     access_type: "offline",
@@ -103,10 +118,11 @@ type TokenResponse = {
   id_token?: string;
 };
 
-export async function exchangeCodeForTokens(code: string): Promise<TokenResponse> {
+export async function exchangeCodeForTokens(code: string, args: { origin?: string | null } = {}): Promise<TokenResponse> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) throw new Error("Google OAuth client env vars not set");
+  const redirectUri = getGoogleRedirectUri(args.origin);
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -115,7 +131,7 @@ export async function exchangeCodeForTokens(code: string): Promise<TokenResponse
       code,
       client_id: clientId,
       client_secret: clientSecret,
-      redirect_uri: getRedirectUri(),
+      redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
   });

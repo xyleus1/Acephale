@@ -21,6 +21,10 @@ Production Gmail OAuth redirect hardening:
 - Added redirect URI normalization so a malformed env value pasted as
   `GOOGLE_REDIRECT_URI=https://...` is stripped before constructing the Google
   OAuth URL.
+- Gmail OAuth start now prefers the current request origin for the callback
+  URI, and the callback token exchange uses the callback request origin. This
+  keeps `https://www.derya.ai` flows on `www` instead of losing the session on
+  the apex domain.
 - Added a public health diagnostic that reports the sanitized redirect URI plus
   whether the raw env still has the accidental `GOOGLE_REDIRECT_URI=` prefix.
 - Added a focused config test covering the env-key prefix and quoted URL cases.
@@ -28,6 +32,8 @@ Production Gmail OAuth redirect hardening:
 ## Files changed
 
 - `src/lib/gmail-oauth.ts`
+- `src/app/api/auth/gmail/start/route.ts`
+- `src/app/api/auth/gmail/callback/route.ts`
 - `src/app/api/health/route.ts`
 - `scripts/gmail-oauth-config.test.ts`
 - `package.json`
@@ -46,8 +52,9 @@ Production Gmail OAuth redirect hardening:
 - This is a defensive app-side guard. Production should still fix the Vercel
   value for `GOOGLE_REDIRECT_URI` so the value is only the callback URL, not
   `GOOGLE_REDIRECT_URI=<url>`.
-- The Google Cloud OAuth Web Client must contain the same exact callback URL
-  the app uses in production.
+- The Google Cloud OAuth Web Client must contain the exact callback URL for
+  each host operators use, especially
+  `https://www.derya.ai/api/auth/gmail/callback`.
 
 ## Previous Update
 

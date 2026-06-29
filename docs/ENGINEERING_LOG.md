@@ -936,16 +936,20 @@ Use this file for chronological implementation notes that future agents should s
   `redirect_uri` when `GOOGLE_REDIRECT_URI` is accidentally pasted into Vercel
   as `GOOGLE_REDIRECT_URI=https://...` instead of only the URL value.
 - Files changed: `src/lib/gmail-oauth.ts`,
+  `src/app/api/auth/gmail/start/route.ts`,
+  `src/app/api/auth/gmail/callback/route.ts`,
   `src/app/api/health/route.ts`, `scripts/gmail-oauth-config.test.ts`,
   `package.json`, `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
 - Behavior added: Gmail OAuth now normalizes the configured redirect URI before
   building the Google auth URL. `/api/health` reports the sanitized redirect
   URI and a boolean diagnostic for the env-key prefix so bad Vercel config is
-  visible without leaking secrets.
+  visible without leaking secrets. OAuth start prefers the current request
+  origin for the callback URI, and callback token exchange uses the callback
+  request origin so `www` sessions do not bounce through the apex domain.
 - Verification: `npm run test:gmail-oauth`, `npm run test:email-labels`,
   `npx tsc --noEmit`, and `npm run build` passed.
 - Failed/skipped checks: no real Gmail OAuth consent was completed from this
   agent session.
 - Caveats: production should still correct the Vercel env value and keep the
-  Google Cloud OAuth Web Client authorized redirect URI exactly matched to the
-  production callback URL.
+  Google Cloud OAuth Web Client authorized redirect URIs exactly matched to the
+  callback URLs operators use.
