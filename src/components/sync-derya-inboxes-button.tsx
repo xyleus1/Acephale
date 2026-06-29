@@ -22,6 +22,7 @@ export function SyncDeryaInboxesButton({ disabled = false }: { disabled?: boolea
           `${res.threadsTouched} threads`,
           res.autoInquiries > 0 ? `+${res.autoInquiries} RFQs` : null,
           res.autoLinked > 0 ? `+${res.autoLinked} linked` : null,
+          res.backfillQueued > 0 ? `${res.backfillQueued} backfill windows queued` : null,
           res.missing.length > 0 ? `${res.missing.length} missing` : null,
         ].filter(Boolean).join(" · ");
         setMsg(detail);

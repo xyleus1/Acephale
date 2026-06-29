@@ -13,22 +13,34 @@ import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, getDeryaLoadRfqInbox, isDeryaLoadRfqInbox } from "./derya-inboxes";
 import { emailWorkflowLabelKeys } from "./email-workflow-labels";
+import {
+  buildGmailBackfillWindows,
+  buildRecentGmailSyncQuery,
+  GMAIL_BACKFILL_THREADS_PER_WINDOW,
+} from "./gmail-sync-windows";
 
 // Sync envelope: how many threads max we'll touch in one run, and how far back
 // to look. Each thread is one Gmail API call regardless of how many messages
 // it contains, so we can be generous. Message dedupe by externalId means
 // re-scanning old threads is cheap (one HEAD-style check each).
-const THREAD_FETCH_LIMIT = 500;
+const RECENT_THREAD_FETCH_LIMIT = 500;
 const PAGE_SIZE = 100;
-// Always sweep at least the last year on every sync — users want their full
-// inbox visible, not just what arrived since last sync.
-const SYNC_WINDOW = "newer_than:365d";
 // After sync, run AI auto-inquiry on this many unlinked threads.
 const AUTO_INQUIRY_LIMIT = 60;
+const BACKFILL_DEDUPE_DAYS = 7;
 
-function buildGmailSyncQuery() {
-  return `${SYNC_WINDOW} -in:spam -in:trash`;
-}
+type GmailSyncAutomationScope = "office" | "touched";
+
+type GmailSyncResult = {
+  ok: true;
+  processed: number;
+  created: number;
+  threadsTouched: number;
+  autoInquiries: number;
+  autoLinked: number;
+  backfillQueued?: number;
+  backfillSkipped?: number;
+};
 
 type GmailMessage = {
   id: string;
@@ -114,24 +126,57 @@ async function fetchThread(accessToken: string, threadId: string): Promise<Gmail
 }
 
 export async function syncEmailAccount(accountId: string): Promise<
-  | { ok: true; processed: number; created: number; threadsTouched: number; autoInquiries: number; autoLinked: number }
+  | GmailSyncResult
   | { error: string }
 > {
   const session = await requireSession();
-  return _syncEmailAccountInternal({ accountId, officeId: session.officeId });
+  const result = await _syncEmailAccountInternal({ accountId, officeId: session.officeId });
+  if ("error" in result) return result;
+  const backfill = await enqueueGmailBackfillJobsForAccount({ accountId, officeId: session.officeId });
+  return { ...result, backfillQueued: backfill.queued, backfillSkipped: backfill.skipped };
 }
 
 // Cron-callable version that skips the session check. Caller must already
 // have authorized via the cron secret.
 export async function syncEmailAccountInternal(accountId: string, officeId: string): Promise<
-  | { ok: true; processed: number; created: number; threadsTouched: number; autoInquiries: number; autoLinked: number }
+  | GmailSyncResult
   | { error: string }
 > {
   return _syncEmailAccountInternal({ accountId, officeId });
 }
 
-async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: string; officeId: string }): Promise<
-  | { ok: true; processed: number; created: number; threadsTouched: number; autoInquiries: number; autoLinked: number }
+export async function syncEmailAccountWindowInternal(input: {
+  accountId: string;
+  officeId: string;
+  query: string;
+  threadFetchLimit?: number;
+}): Promise<
+  | GmailSyncResult
+  | { error: string }
+> {
+  return _syncEmailAccountInternal({
+    accountId: input.accountId,
+    officeId: input.officeId,
+    query: input.query,
+    threadFetchLimit: input.threadFetchLimit ?? GMAIL_BACKFILL_THREADS_PER_WINDOW,
+    automationScope: "touched",
+  });
+}
+
+async function _syncEmailAccountInternal({
+  accountId,
+  officeId,
+  query = buildRecentGmailSyncQuery(),
+  threadFetchLimit = RECENT_THREAD_FETCH_LIMIT,
+  automationScope = "touched",
+}: {
+  accountId: string;
+  officeId: string;
+  query?: string;
+  threadFetchLimit?: number;
+  automationScope?: GmailSyncAutomationScope;
+}): Promise<
+  | GmailSyncResult
   | { error: string }
 > {
   const account = await prisma.emailAccount.findFirst({
@@ -147,10 +192,7 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
     return { error: e instanceof Error ? e.message : "token refresh failed" };
   }
 
-  // Sweep the last year on every sync. Per-message dedupe by externalId means
-  // rescanning old threads is essentially free, and operators want their full
-  // inbox available, not just deltas since the previous sync.
-  const threadIds = await listThreadIds(accessToken, buildGmailSyncQuery(), THREAD_FETCH_LIMIT);
+  const threadIds = await listThreadIds(accessToken, query, threadFetchLimit);
 
   let processed = 0;
   let created = 0;
@@ -362,6 +404,7 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
   const unlinked = await prisma.emailThread.findMany({
     where: {
       officeId: account.officeId,
+      ...(automationScope === "touched" ? { id: { in: touchedThreadDbIds.length ? touchedThreadDbIds : ["__none__"] } } : {}),
       jobId: null,
       inquiryId: null,
       autoLinkedAt: null,
@@ -436,6 +479,55 @@ async function _syncEmailAccountInternal({ accountId, officeId }: { accountId: s
   };
 }
 
+export async function enqueueGmailBackfillJobsForAccount(input: {
+  accountId: string;
+  officeId: string;
+}): Promise<{ queued: number; skipped: number }> {
+  const windows = buildGmailBackfillWindows();
+  const recentDoneCutoff = new Date(Date.now() - BACKFILL_DEDUPE_DAYS * 24 * 60 * 60 * 1000);
+  let queued = 0;
+  let skipped = 0;
+
+  for (const window of windows) {
+    const dedupeKey = `gmail-backfill:${input.accountId}:${window.label}`;
+    const existing = await prisma.backgroundJob.findFirst({
+      where: {
+        officeId: input.officeId,
+        type: "GMAIL_SYNC_WINDOW",
+        dedupeKey,
+        OR: [
+          { status: { in: ["QUEUED", "RUNNING"] } },
+          { status: "DONE", completedAt: { gte: recentDoneCutoff } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      skipped++;
+      continue;
+    }
+
+    await enqueueBackgroundJob({
+      officeId: input.officeId,
+      type: "GMAIL_SYNC_WINDOW",
+      payload: {
+        accountId: input.accountId,
+        officeId: input.officeId,
+        label: window.label,
+        after: window.after,
+        before: window.before,
+        query: window.query,
+        threadFetchLimit: GMAIL_BACKFILL_THREADS_PER_WINDOW,
+      },
+      dedupeKey,
+      maxAttempts: 3,
+    });
+    queued++;
+  }
+
+  return { queued, skipped };
+}
+
 export async function syncDeryaLoadRfqInboxes(): Promise<
   | {
       ok: true;
@@ -446,7 +538,9 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
       threadsTouched: number;
       autoInquiries: number;
       autoLinked: number;
-      results: Array<{ email: string; ok: boolean; created?: number; threadsTouched?: number; autoInquiries?: number; autoLinked?: number; error?: string }>;
+      backfillQueued: number;
+      backfillSkipped: number;
+      results: Array<{ email: string; ok: boolean; created?: number; threadsTouched?: number; autoInquiries?: number; autoLinked?: number; backfillQueued?: number; backfillSkipped?: number; error?: string }>;
     }
   | { error: string }
 > {
@@ -463,13 +557,14 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
   const connected = new Set(accounts.map((account) => account.email.toLowerCase()));
   const missing = DERYA_LOAD_RFQ_INBOX_EMAILS.filter((email) => !connected.has(email));
 
-  const results: Array<{ email: string; ok: boolean; created?: number; threadsTouched?: number; autoInquiries?: number; autoLinked?: number; error?: string }> = [];
+  const results: Array<{ email: string; ok: boolean; created?: number; threadsTouched?: number; autoInquiries?: number; autoLinked?: number; backfillQueued?: number; backfillSkipped?: number; error?: string }> = [];
   for (const account of accounts) {
     try {
       const result = await _syncEmailAccountInternal({ accountId: account.id, officeId: session.officeId });
       if ("error" in result) {
         results.push({ email: account.email, ok: false, error: result.error });
       } else {
+        const backfill = await enqueueGmailBackfillJobsForAccount({ accountId: account.id, officeId: session.officeId });
         results.push({
           email: account.email,
           ok: true,
@@ -477,6 +572,8 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
           threadsTouched: result.threadsTouched,
           autoInquiries: result.autoInquiries,
           autoLinked: result.autoLinked,
+          backfillQueued: backfill.queued,
+          backfillSkipped: backfill.skipped,
         });
       }
     } catch (e) {
@@ -493,6 +590,8 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
     threadsTouched: results.reduce((sum, item) => sum + (item.threadsTouched ?? 0), 0),
     autoInquiries: results.reduce((sum, item) => sum + (item.autoInquiries ?? 0), 0),
     autoLinked: results.reduce((sum, item) => sum + (item.autoLinked ?? 0), 0),
+    backfillQueued: results.reduce((sum, item) => sum + (item.backfillQueued ?? 0), 0),
+    backfillSkipped: results.reduce((sum, item) => sum + (item.backfillSkipped ?? 0), 0),
     results,
   };
 }

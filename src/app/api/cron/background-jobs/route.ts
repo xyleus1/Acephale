@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limit = Math.min(50, Math.max(1, Number(req.nextUrl.searchParams.get("limit") ?? 10)));
+  const limit = Math.min(50, Math.max(1, Number(req.nextUrl.searchParams.get("limit") ?? 25)));
   const result = await runDueBackgroundJobs({ limit });
   return NextResponse.json({
     ran: new Date().toISOString(),

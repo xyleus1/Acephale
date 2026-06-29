@@ -21,6 +21,7 @@
     "test:route-map": "tsx scripts/route-map-viewport.test.ts",
     "test:email-labels": "tsx scripts/email-workflow-labels.test.ts",
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",
+    "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
     "test:manual-market-ingestion-action": "tsx scripts/manual-market-ingestion-action.test.ts",
     "test:intelligence-page-empty-state": "tsx scripts/intelligence-page-empty-state.test.ts",
     "test:scheduled-market-ingestion": "tsx scripts/scheduled-market-ingestion.test.ts",

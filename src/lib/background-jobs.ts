@@ -7,6 +7,7 @@ import { maybeNotifyCustomerOnMilestone, maybeNotifyCustomerOnStatusChange } fro
 
 type BackgroundJobType =
   | "ANALYZE_JOB_DOCUMENT"
+  | "GMAIL_SYNC_WINDOW"
   | "PREWARM_OPEN_SOURCING"
   | "PREWARM_INQUIRY_SUMMARY"
   | "CUSTOMER_STATUS_NOTIFY"
@@ -76,6 +77,23 @@ async function executeBackgroundJob(type: string, payload: Record<string, unknow
     const documentId = stringValue(payload.documentId);
     if (!documentId) throw new Error("Missing documentId.");
     await analyzeJobDocument({ documentId, force: booleanValue(payload.force) });
+    return;
+  }
+
+  if (type === "GMAIL_SYNC_WINDOW") {
+    const accountId = stringValue(payload.accountId);
+    const officeId = stringValue(payload.officeId);
+    const query = stringValue(payload.query);
+    const threadFetchLimitRaw = typeof payload.threadFetchLimit === "number" ? payload.threadFetchLimit : null;
+    if (!accountId || !officeId || !query) throw new Error("Missing Gmail sync window payload.");
+    const { syncEmailAccountWindowInternal } = await import("./gmail-sync");
+    const result = await syncEmailAccountWindowInternal({
+      accountId,
+      officeId,
+      query,
+      threadFetchLimit: threadFetchLimitRaw ?? undefined,
+    });
+    if ("error" in result) throw new Error(result.error);
     return;
   }
 

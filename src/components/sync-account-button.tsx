@@ -19,6 +19,7 @@ export function SyncAccountButton({ accountId }: { accountId: string }) {
         const ai = [
           res.autoInquiries > 0 ? `+${res.autoInquiries} inquiries` : null,
           res.autoLinked > 0 ? `+${res.autoLinked} linked` : null,
+          (res.backfillQueued ?? 0) > 0 ? `${res.backfillQueued} backfill windows queued` : null,
         ].filter(Boolean).join(" · ");
         setMsg(`+${res.created} msgs · ${res.threadsTouched} threads${ai ? ` · ${ai}` : ""}`);
         router.refresh();

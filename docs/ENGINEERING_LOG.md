@@ -1031,3 +1031,33 @@ Use this file for chronological implementation notes that future agents should s
 - Caveat: the local database currently has a focused workbench job, so the
   no-embedded dashboard fallback was verified by removing the embedded agent in
   the browser and observing the global dock mount through the new observer.
+
+### 2026-06-29 - Gmail hourly sync and historical backfill windows
+
+- Branch: main
+- Commit: not committed
+- Task: Fix missing older Gmail messages and make production mail refresh at
+  least hourly.
+- Files changed: `src/lib/gmail-sync.ts`, `src/lib/gmail-sync-windows.ts`,
+  `src/lib/background-jobs.ts`,
+  `src/app/api/cron/background-jobs/route.ts`,
+  `src/app/dashboard/settings/email/page.tsx`,
+  `src/components/sync-account-button.tsx`,
+  `src/components/sync-derya-inboxes-button.tsx`,
+  `scripts/gmail-sync-windows.test.ts`, `package.json`, `vercel.json`, and
+  docs.
+- Behavior added: manual Gmail sync now performs an immediate recent sync and
+  queues monthly historical backfill windows for the last five years.
+  Background jobs can execute `GMAIL_SYNC_WINDOW` payloads against a specific
+  Gmail search window, and the background drain defaults to 25 jobs per run.
+  Gmail and background-job crons are scheduled hourly. Post-sync AI automation
+  is scoped to threads touched by the run, avoiding repeated office-wide
+  auto-link passes during historical backfill.
+- Verification: `npm run test:gmail-sync-windows`, `npm run test:gmail-oauth`,
+  `npm run test:email-labels`, `npx tsc --noEmit`, and `npm run build`
+  passed.
+- Failed/skipped checks: no live Gmail sync or production cron run was executed
+  from this agent session.
+- Caveats: hourly Vercel cron may require a paid Vercel plan or an external
+  scheduler. Historical counts will rise progressively as queued window jobs
+  drain; it is not a single synchronous import.

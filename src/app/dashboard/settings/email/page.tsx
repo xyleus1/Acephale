@@ -319,7 +319,7 @@ export default async function EmailSettingsPage({
             <div>
               <div className="section-title" style={{ marginBottom: 6 }}>Derya load/RFQ inboxes</div>
               <p style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-                These configured mailboxes are treated as first-class load/RFQ sources. Sync pulls the last year of Gmail threads, keeps each mailbox separated, and labels freight-related mail as <code>load/rfq</code>, <code>load/customer</code>, <code>load/forwarder</code>, or <code>load/note</code>.
+                These configured mailboxes are treated as first-class load/RFQ sources. Sync pulls recent Gmail immediately, queues older monthly backfill windows, keeps each mailbox separated, and labels freight-related mail as <code>load/rfq</code>, <code>load/customer</code>, <code>load/forwarder</code>, or <code>load/note</code>.
               </p>
             </div>
             <SyncDeryaInboxesButton disabled={connectedAllowedSenderEmails.length === 0} />
@@ -431,7 +431,7 @@ export default async function EmailSettingsPage({
         <div className="card" style={{ textAlign: "center", padding: "40px 24px", marginBottom: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>No connected inboxes</div>
           <p style={{ fontSize: 13, color: "var(--text-3)" }}>
-            Click <em>Connect a Gmail inbox</em> above to authorize. After that, click <em>Sync now</em> to pull the last year of emails.
+            Click <em>Connect a Gmail inbox</em> above to authorize. After that, click <em>Sync now</em> to pull recent mail and queue older backfill.
           </p>
         </div>
       )}

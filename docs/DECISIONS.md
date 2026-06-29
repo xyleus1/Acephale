@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-06-29 - Sync Gmail recently every hour and backfill history by windows
+
+- Status: accepted
+- Owner: engineering
+- Context: The native Derya Gmail inboxes are operational sources, not passive
+  archives. A single `newer_than:365d` scan capped by thread count can miss
+  older messages in busy inboxes, and daily refresh is too stale for load/RFQ
+  operations.
+- Decision: Keep hourly Gmail refresh focused on recent mail, and recover
+  historical mail through queued monthly `GMAIL_SYNC_WINDOW` background jobs.
+  Manual sync enqueues those backfill windows; cron keeps recent mail fresh and
+  drains background work separately.
+- Rationale: Recent mail must arrive predictably without forcing every sync to
+  walk years of Gmail history. Monthly windows avoid the newest-page-only
+  failure mode and give older mail a deterministic path into Derya without
+  blocking the settings page on one giant request.
+- Consequences: Historical backfill is progressive; counts may climb over
+  several background-job runs after manual sync. Hourly cron requires Vercel
+  support for hourly schedules or an external scheduler. Backfill messages
+  remain separated by `EmailAccount` and still use existing tenant-scoped
+  dedupe and classifier/linking flows.
+- Revisit when: Gmail push notifications, Pub/Sub history IDs, or a real worker
+  queue replaces cron polling and DB-backed background jobs.
+
 ### 2026-06-28 - Treat Mert and Oguzhan Gmail as native load/RFQ inboxes
 
 - Status: accepted

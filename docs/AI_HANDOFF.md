@@ -16,6 +16,69 @@ not committed
 
 ## Task implemented
 
+Gmail historical sync and hourly refresh hardening:
+
+- Changed Gmail sync from one newest-page yearly scan to a two-lane flow:
+  recent sync runs immediately, while historical sync is queued as monthly
+  backfill windows for the last five years.
+- Added `GMAIL_SYNC_WINDOW` background jobs so older Gmail threads are pulled
+  progressively instead of depending on one large web request.
+- Manual per-account sync and combined Derya inbox sync now enqueue historical
+  backfill windows and report how many windows were queued.
+- Hourly production refresh is configured for Gmail sync, and the background
+  job drain now also runs hourly with a higher default batch size.
+- Post-sync AI automation is scoped to touched threads for recent/windowed
+  syncs, so old backfill jobs do not repeatedly run AI over every unlinked
+  thread in the office.
+
+## Files changed
+
+- `src/lib/gmail-sync.ts`
+- `src/lib/gmail-sync-windows.ts`
+- `src/lib/background-jobs.ts`
+- `src/app/api/cron/background-jobs/route.ts`
+- `src/app/dashboard/settings/email/page.tsx`
+- `src/components/sync-account-button.tsx`
+- `src/components/sync-derya-inboxes-button.tsx`
+- `scripts/gmail-sync-windows.test.ts`
+- `package.json`
+- `vercel.json`
+- `docs/AI_HANDOFF.md`
+- `docs/DECISIONS.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:gmail-sync-windows`
+- `npm run test:gmail-oauth`
+- `npm run test:email-labels`
+- `npx tsc --noEmit`
+- `npm run build`
+
+## Caveats
+
+- No live Gmail sync was run from this agent session. The next manual sync will
+  enqueue historical window jobs; the hourly background cron then drains them.
+- Hourly Vercel cron requires a plan/scheduler that accepts hourly jobs. If
+  Vercel rejects hourly schedules, use Vercel Pro or an external scheduler that
+  hits the same cron endpoints with `CRON_SECRET`.
+
+## Previous Update
+
+## Date
+
+2026-06-29
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Follow-up layout correction after visual QA:
 
 - Fixed the dashboard agent suppression bug. `/dashboard` now suppresses the
