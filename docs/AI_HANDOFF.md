@@ -99,8 +99,10 @@ Gmail historical sync and hourly refresh hardening:
   progressively instead of depending on one large web request.
 - Manual per-account sync and combined Derya inbox sync now enqueue historical
   backfill windows and report how many windows were queued.
-- Hourly production refresh is configured for Gmail sync, and the background
-  job drain now also runs hourly with a higher default batch size.
+- Hourly production refresh is configured through a GitHub Actions scheduler
+  that calls the protected Gmail sync and background drain endpoints with
+  `CRON_SECRET`. Vercel cron remains daily as a fallback because the current
+  Vercel Hobby plan rejects hourly cron expressions.
 - Post-sync AI automation is scoped to touched threads for recent/windowed
   syncs, so old backfill jobs do not repeatedly run AI over every unlinked
   thread in the office.
@@ -115,6 +117,7 @@ Gmail historical sync and hourly refresh hardening:
 - `src/components/sync-account-button.tsx`
 - `src/components/sync-derya-inboxes-button.tsx`
 - `scripts/gmail-sync-windows.test.ts`
+- `.github/workflows/hourly-gmail-sync.yml`
 - `package.json`
 - `vercel.json`
 - `docs/AI_HANDOFF.md`
@@ -133,9 +136,9 @@ Gmail historical sync and hourly refresh hardening:
 
 - No live Gmail sync was run from this agent session. The next manual sync will
   enqueue historical window jobs; the hourly background cron then drains them.
-- Hourly Vercel cron requires a plan/scheduler that accepts hourly jobs. If
-  Vercel rejects hourly schedules, use Vercel Pro or an external scheduler that
-  hits the same cron endpoints with `CRON_SECRET`.
+- The GitHub Actions scheduler requires a repository secret named
+  `CRON_SECRET` with the same value as production. If that secret is absent,
+  the workflow will fail closed instead of running unauthenticated.
 
 ## Previous Update
 

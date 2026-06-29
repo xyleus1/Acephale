@@ -1086,20 +1086,23 @@ Use this file for chronological implementation notes that future agents should s
   `src/app/dashboard/settings/email/page.tsx`,
   `src/components/sync-account-button.tsx`,
   `src/components/sync-derya-inboxes-button.tsx`,
-  `scripts/gmail-sync-windows.test.ts`, `package.json`, `vercel.json`, and
-  docs.
+  `scripts/gmail-sync-windows.test.ts`,
+  `.github/workflows/hourly-gmail-sync.yml`, `package.json`, `vercel.json`,
+  and docs.
 - Behavior added: manual Gmail sync now performs an immediate recent sync and
   queues monthly historical backfill windows for the last five years.
   Background jobs can execute `GMAIL_SYNC_WINDOW` payloads against a specific
   Gmail search window, and the background drain defaults to 25 jobs per run.
-  Gmail and background-job crons are scheduled hourly. Post-sync AI automation
-  is scoped to threads touched by the run, avoiding repeated office-wide
-  auto-link passes during historical backfill.
+  A GitHub Actions scheduler calls Gmail sync and background-job drain hourly
+  with `CRON_SECRET`; Vercel cron remains daily because Hobby deployments
+  reject hourly cron expressions. Post-sync AI automation is scoped to threads
+  touched by the run, avoiding repeated office-wide auto-link passes during
+  historical backfill.
 - Verification: `npm run test:gmail-sync-windows`, `npm run test:gmail-oauth`,
   `npm run test:email-labels`, `npx tsc --noEmit`, and `npm run build`
   passed.
 - Failed/skipped checks: no live Gmail sync or production cron run was executed
   from this agent session.
-- Caveats: hourly Vercel cron may require a paid Vercel plan or an external
-  scheduler. Historical counts will rise progressively as queued window jobs
-  drain; it is not a single synchronous import.
+- Caveats: the hourly GitHub Actions workflow requires repository secret
+  `CRON_SECRET` to match production. Historical counts will rise progressively
+  as queued window jobs drain; it is not a single synchronous import.
