@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeGoogleRedirectUri } from "@/lib/gmail-oauth";
 
 // Public health check — no auth required. Reports build SHA, env vars
 // (just presence, not values), DB connection, and whether each recently-
@@ -15,7 +16,8 @@ export async function GET() {
     ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
     GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
-    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI ?? "unset",
+    GOOGLE_REDIRECT_URI: normalizeGoogleRedirectUri(process.env.GOOGLE_REDIRECT_URI) ?? "unset",
+    GOOGLE_REDIRECT_URI_HAS_ENV_KEY_PREFIX: !!process.env.GOOGLE_REDIRECT_URI?.trim().startsWith("GOOGLE_REDIRECT_URI="),
     CRON_SECRET: !!process.env.CRON_SECRET,
     WHATSAPP_VERIFY_TOKEN: !!process.env.WHATSAPP_VERIFY_TOKEN,
     WHATSAPP_APP_SECRET: !!process.env.WHATSAPP_APP_SECRET,

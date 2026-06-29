@@ -16,6 +16,55 @@ not committed
 
 ## Task implemented
 
+Production Gmail OAuth redirect hardening:
+
+- Added redirect URI normalization so a malformed env value pasted as
+  `GOOGLE_REDIRECT_URI=https://...` is stripped before constructing the Google
+  OAuth URL.
+- Added a public health diagnostic that reports the sanitized redirect URI plus
+  whether the raw env still has the accidental `GOOGLE_REDIRECT_URI=` prefix.
+- Added a focused config test covering the env-key prefix and quoted URL cases.
+
+## Files changed
+
+- `src/lib/gmail-oauth.ts`
+- `src/app/api/health/route.ts`
+- `scripts/gmail-oauth-config.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:gmail-oauth`
+- `npm run test:email-labels`
+- `npx tsc --noEmit`
+- `npm run build`
+
+## Caveats
+
+- This is a defensive app-side guard. Production should still fix the Vercel
+  value for `GOOGLE_REDIRECT_URI` so the value is only the callback URL, not
+  `GOOGLE_REDIRECT_URI=<url>`.
+- The Google Cloud OAuth Web Client must contain the same exact callback URL
+  the app uses in production.
+
+## Previous Update
+
+## Date
+
+2026-06-28
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Native Derya load/RFQ inbox setup for `mert@usederya.com` and
 `oguzhan@usederya.com`:
 

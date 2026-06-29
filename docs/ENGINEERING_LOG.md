@@ -927,3 +927,25 @@ Use this file for chronological implementation notes that future agents should s
   from this agent session; real accounts still require user consent.
 - Caveats: labels are Derya workflow labels derived from app state, not Gmail
   label mutations. No schema migration was added.
+
+### 2026-06-28 - Gmail OAuth redirect env guard
+
+- Branch: main
+- Commit: not committed
+- Task: Stop production Gmail OAuth from sending Google a malformed
+  `redirect_uri` when `GOOGLE_REDIRECT_URI` is accidentally pasted into Vercel
+  as `GOOGLE_REDIRECT_URI=https://...` instead of only the URL value.
+- Files changed: `src/lib/gmail-oauth.ts`,
+  `src/app/api/health/route.ts`, `scripts/gmail-oauth-config.test.ts`,
+  `package.json`, `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
+- Behavior added: Gmail OAuth now normalizes the configured redirect URI before
+  building the Google auth URL. `/api/health` reports the sanitized redirect
+  URI and a boolean diagnostic for the env-key prefix so bad Vercel config is
+  visible without leaking secrets.
+- Verification: `npm run test:gmail-oauth`, `npm run test:email-labels`,
+  `npx tsc --noEmit`, and `npm run build` passed.
+- Failed/skipped checks: no real Gmail OAuth consent was completed from this
+  agent session.
+- Caveats: production should still correct the Vercel env value and keep the
+  Google Cloud OAuth Web Client authorized redirect URI exactly matched to the
+  production callback URL.

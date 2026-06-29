@@ -10,8 +10,17 @@ export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+export function normalizeGoogleRedirectUri(value: string | null | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  const withoutEnvKey = raw.startsWith("GOOGLE_REDIRECT_URI=")
+    ? raw.slice("GOOGLE_REDIRECT_URI=".length).trim()
+    : raw;
+  return withoutEnvKey.replace(/^['"]|['"]$/g, "");
+}
+
 function getRedirectUri() {
-  const base = process.env.GOOGLE_REDIRECT_URI
+  const base = normalizeGoogleRedirectUri(process.env.GOOGLE_REDIRECT_URI)
     || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}/api/auth/gmail/callback` : "http://localhost:3000/api/auth/gmail/callback");
   return base;
 }
