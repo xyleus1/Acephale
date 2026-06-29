@@ -16,6 +16,51 @@ not committed
 
 ## Task implemented
 
+Vercel Pro hourly Gmail scheduling:
+
+- Switched `/api/cron/gmail-sync` to Vercel hourly cron now that the project is
+  on Vercel Pro.
+- Switched `/api/cron/background-jobs` to run hourly five minutes after Gmail
+  sync, so queued historical Gmail backfill windows drain without waiting for
+  the old daily fallback.
+- Removed the GitHub Actions hourly Gmail scheduler. Vercel is now the single
+  scheduler for production Gmail refresh, which avoids duplicate sync runs.
+
+## Files changed
+
+- `vercel.json`
+- `.github/workflows/hourly-gmail-sync.yml`
+- `docs/AI_HANDOFF.md`
+- `docs/DECISIONS.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run check:docs`
+- `npx tsc --noEmit`
+- `npm run build`
+
+## Caveats
+
+- No live cron run was manually triggered from this agent session. Vercel will
+  run the hourly schedules after deployment.
+
+## Previous Update
+
+## Date
+
+2026-06-29
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 App-wide palette discipline and Intelligence map visual cleanup:
 
 - Revamped the active visual system around walnut, navy, white, and light

@@ -1106,3 +1106,21 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: the hourly GitHub Actions workflow requires repository secret
   `CRON_SECRET` to match production. Historical counts will rise progressively
   as queued window jobs drain; it is not a single synchronous import.
+
+### 2026-06-29 - Move Gmail hourly schedule to Vercel Pro cron
+
+- Branch: main
+- Commit: not committed
+- Task: After the project was upgraded to Vercel Pro, remove the external
+  hourly scheduler workaround and make Vercel cron the production scheduler.
+- Files changed: `vercel.json`, `.github/workflows/hourly-gmail-sync.yml`,
+  `docs/AI_HANDOFF.md`, `docs/DECISIONS.md`, and
+  `docs/ENGINEERING_LOG.md`.
+- Behavior added: `/api/cron/gmail-sync` now runs hourly via Vercel cron, and
+  `/api/cron/background-jobs` runs hourly five minutes later. The GitHub
+  Actions workflow was removed so production does not double-run Gmail sync.
+- Verification: `npm run check:docs`, `npx tsc --noEmit`, and
+  `npm run build` passed.
+- Failed/skipped checks: no live production cron run was triggered manually.
+- Caveats: Vercel is now the only expected hourly scheduler. Re-adding an
+  external scheduler would duplicate sync unless Vercel cron is disabled first.

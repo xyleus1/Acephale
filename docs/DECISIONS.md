@@ -26,19 +26,18 @@ Use this log for durable product and engineering decisions. Do not put every imp
   operations.
 - Decision: Keep hourly Gmail refresh focused on recent mail, and recover
   historical mail through queued monthly `GMAIL_SYNC_WINDOW` background jobs.
-  Manual sync enqueues those backfill windows. Because Vercel Hobby rejects
-  hourly cron, keep Vercel cron daily as a fallback and run the hourly schedule
-  through an external scheduler or GitHub Actions calling the same protected
-  cron endpoints with `CRON_SECRET`.
+  Manual sync enqueues those backfill windows. Now that production runs on
+  Vercel Pro, Vercel cron is the single hourly scheduler for Gmail refresh and
+  background-job draining.
 - Rationale: Recent mail must arrive predictably without forcing every sync to
   walk years of Gmail history. Monthly windows avoid the newest-page-only
   failure mode and give older mail a deterministic path into Derya without
   blocking the settings page on one giant request.
 - Consequences: Historical backfill is progressive; counts may climb over
-  several background-job runs after manual sync. Hourly refresh depends on the
-  external scheduler having the production `CRON_SECRET`. Backfill messages
-  remain separated by `EmailAccount` and still use existing tenant-scoped
-  dedupe and classifier/linking flows.
+  several background-job runs after manual sync. Do not also run the old GitHub
+  Actions hourly workflow, or production will double-hit the sync endpoints.
+  Backfill messages remain separated by `EmailAccount` and still use existing
+  tenant-scoped dedupe and classifier/linking flows.
 - Revisit when: Gmail push notifications, Pub/Sub history IDs, or a real worker
   queue replaces cron polling and DB-backed background jobs.
 
