@@ -1,0 +1,82 @@
+# Conservative command safety rules for this repo.
+
+prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+    justification = "Read-only repository inspection is safe.",
+    match = ["git status", "git status --short"],
+)
+
+prefix_rule(
+    pattern = ["git", "diff"],
+    decision = "allow",
+    justification = "Read-only repository inspection is safe.",
+    match = ["git diff", "git diff -- package.json"],
+)
+
+prefix_rule(
+    pattern = ["rg"],
+    decision = "allow",
+    justification = "Read-only text search is safe.",
+    match = ["rg officeId", "rg --files"],
+)
+
+prefix_rule(
+    pattern = ["ls"],
+    decision = "allow",
+    justification = "Read-only directory listing is safe.",
+    match = ["ls", "ls docs"],
+)
+
+prefix_rule(
+    pattern = ["cat"],
+    decision = "allow",
+    justification = "Read-only file inspection is safe.",
+    match = ["cat package.json", "cat docs/PROJECT_CONTEXT.md"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", ["--force", "--force-with-lease"]],
+    decision = "prompt",
+    justification = "Force pushes rewrite shared history.",
+    match = ["git push --force", "git push --force-with-lease origin branch"],
+    not_match = ["git push origin branch"],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Pushing publishes repository state; confirm the branch and remote first.",
+    match = ["git push", "git push origin codex/example"],
+    not_match = ["git status"],
+)
+
+prefix_rule(
+    pattern = ["rm", ["-rf", "-fr", "-Rf", "-fR"], "/"],
+    decision = "forbidden",
+    justification = "Never delete the filesystem root. Delete a specific project path instead.",
+    match = ["rm -rf /", "rm -fr /"],
+    not_match = ["rm -rf .next"],
+)
+
+prefix_rule(
+    pattern = ["rm", ["-rf", "-fr", "-Rf", "-fR"], "--", "/"],
+    decision = "forbidden",
+    justification = "Never delete the filesystem root. Delete a specific project path instead.",
+    match = ["rm -rf -- /"],
+    not_match = ["rm -rf -- .next"],
+)
+
+prefix_rule(
+    pattern = ["sudo", "rm", ["-rf", "-fr", "-Rf", "-fR"], "/"],
+    decision = "forbidden",
+    justification = "Never delete the filesystem root, especially with elevated permissions.",
+    match = ["sudo rm -rf /"],
+)
+
+prefix_rule(
+    pattern = ["sudo", "rm", ["-rf", "-fr", "-Rf", "-fR"], "--", "/"],
+    decision = "forbidden",
+    justification = "Never delete the filesystem root, especially with elevated permissions.",
+    match = ["sudo rm -rf -- /"],
+)

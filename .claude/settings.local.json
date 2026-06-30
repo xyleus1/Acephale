@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -b \"session=test\" http://localhost:3000/login)",
+      "Bash(npx prisma:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(npm run:*)"
+    ]
+  }
+}
