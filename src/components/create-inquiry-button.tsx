@@ -31,7 +31,7 @@ export function CreateInquiryButton({ threadId }: { threadId: string }) {
         className="inbox-action-btn primary"
       >
         <Icon name="sparkles" size={11} />
-        {busy ? "Creating…" : "Create Inquiry from this thread"}
+        {busy ? "Creating…" : "Create RFQ from thread"}
       </button>
     </div>
   );

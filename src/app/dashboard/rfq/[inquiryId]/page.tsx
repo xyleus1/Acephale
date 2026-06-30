@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { convertToJob, updateInquiryField, updateInquiryStatus, parseRFQWithAI } from "./actions";
+import { updateInquiryField, updateInquiryStatus, parseRFQWithAI } from "./actions";
 import { Icon } from "@/components/icon";
 import { SourcingOffersTable } from "@/components/sourcing-offers-table";
 import { OpportunityScoreCard, OpportunityScorePill } from "@/components/opportunity-score-card";
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
+import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-panel";
 import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
 
@@ -127,14 +128,8 @@ export default async function RFQDetailPage({
 
   if (!inquiry) notFound();
 
-  const companies = await prisma.company.findMany({
-    where: { officeId: session.officeId },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
-
   const sm = STATUS_META[inquiry.status] ?? { label: inquiry.status, cls: "badge-neutral" };
-  const canConvert = !inquiry.job && !["WON", "LOST"].includes(inquiry.status);
+  const canConvert = (!inquiry.job || inquiry.job.status === "PROPOSED") && !["WON", "LOST"].includes(inquiry.status);
 
   const FLOW_HINTS: Record<string, { msg: string; action: string }> = {
     INGESTED: { msg: "This RFQ hasn't been parsed yet.", action: "Parse with AI to extract origin, destination, mode and cargo details." },
@@ -488,7 +483,7 @@ export default async function RFQDetailPage({
 
           <DomesticTruckingRatePanel assessment={domesticPricing} compact />
 
-          {/* Convert to Job */}
+          {/* Convert to Load */}
           {canConvert ? (
             <div className="record-panel record-primary-panel">
               <div className="card-body">
@@ -496,55 +491,21 @@ export default async function RFQDetailPage({
                   <span className="record-primary-icon">
                     <Icon name="check" size={15} strokeWidth={2.5} />
                   </span>
-                  <div className="record-card-title">Convert to Job</div>
+                  <div className="record-card-title">Create Load</div>
                 </div>
-                <form action={convertToJob.bind(null, inquiryId)}>
-                  <label className="field form-row-gap">
-                    <span>Customer</span>
-                    <select name="companyId" defaultValue={inquiry.companyId ?? ""}>
-                      <option value="">— Link to customer —</option>
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="form-grid-2 form-row-gap">
-                    <label className="field"><span>Origin</span>
-                      <input name="origin" defaultValue={inquiry.origin ?? ""} required placeholder="City, CC" />
-                    </label>
-                    <label className="field"><span>Destination</span>
-                      <input name="destination" defaultValue={inquiry.destination ?? ""} required placeholder="City, CC" />
-                    </label>
+                <div className="record-helper-text form-row-gap">
+                  Review current RFQ fields and any carried-forward customer history before this becomes an active load.
+                </div>
+                <RfqLoadReviewButton
+                  inquiryId={inquiryId}
+                  label={inquiry.job?.status === "PROPOSED" ? "Review proposed load" : "Create load from RFQ"}
+                  className="btn record-wide-action"
+                />
+                {!maturity.isMature && (
+                  <div className="record-helper-text">
+                    The load can be created for tracking, but forwarder handoff and quoting stay blocked until missing RFQ facts are explicit.
                   </div>
-                  <div className="form-grid-2 form-row-gap-lg">
-                    <label className="field"><span>Mode</span>
-                      <select name="mode" defaultValue={inquiry.mode ?? ""}>
-                        <option value="">— Select —</option>
-                        <option value="SEA-FCL">Sea FCL</option>
-                        <option value="SEA-LCL">Sea LCL</option>
-                        <option value="AIR">Air</option>
-                        <option value="ROAD">Road</option>
-                        <option value="COURIER">Courier</option>
-                      </select>
-                    </label>
-                    <label className="field"><span>Incoterms</span>
-                      <select name="incoterms" defaultValue={inquiry.incoterms ?? ""}>
-                        <option value="">— Select —</option>
-                        {["EXW","FCA","FOB","CFR","CIF","DAP","DDP"].map(t => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <button className="btn record-wide-action" type="submit" disabled={!maturity.isMature}>
-                    {maturity.isMature ? "Create Job from RFQ" : "Complete RFQ before creating job"} <Icon name="arrow-right" size={13} />
-                  </button>
-                  {!maturity.isMature && (
-                    <div className="record-helper-text">
-                      Server gate is active: non-mature RFQs cannot become jobs or be sent to forwarders.
-                    </div>
-                  )}
-                </form>
+                )}
               </div>
             </div>
           ) : inquiry.job ? (

@@ -22,6 +22,8 @@
     "test:email-labels": "tsx scripts/email-workflow-labels.test.ts",
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
+    "test:rfq-load-draft": "tsx scripts/rfq-load-draft.test.ts",
+    "demo:video-loads": "tsx scripts/reset-video-demo-loads.ts",
     "test:manual-market-ingestion-action": "tsx scripts/manual-market-ingestion-action.test.ts",
     "test:intelligence-page-empty-state": "tsx scripts/intelligence-page-empty-state.test.ts",
     "test:scheduled-market-ingestion": "tsx scripts/scheduled-market-ingestion.test.ts",

@@ -63,6 +63,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: provider sandbox credentials, persisted audit logs, and
   source-backed GBrain retrieval are ready for an operator-reviewed pilot.
 
+### 2026-06-30 - RFQ-to-load conversion is reviewed and starts as inquiry
+
+- Status: accepted
+- Owner: engineering
+- Context: Inbound customer emails can be complete RFQs, partial RFQs, or terse
+  follow-ups where existing customers expect unchanged details to be inferred
+  from previous loads. Blindly promoting an email RFQ risks hiding old
+  assumptions as new facts.
+- Decision: Inbox/RFQ conversion creates an editable review draft first.
+  Current RFQ/email fields win. Missing operational details may be suggested
+  from recent same-customer prior loads, but those fields remain visible,
+  editable, and marked as prior-load context. Prior target prices are not
+  silently carried forward. Confirmed loads start as `INQUIRY`.
+- Rationale: Operators need one click into a useful draft, not a magical
+  mutation that corrupts commercial truth. Separating load tracking from RFQ
+  maturity lets Derya capture work early while keeping quoting and forwarder
+  handoff gated by explicit facts.
+- Consequences: Future RFQ conversion buttons should use the reviewed draft
+  service, preserve source-by-field provenance, and avoid setting jobs directly
+  to quoted/priced stages.
+- Revisit when: reviewed examples are available to improve prior-load
+  suggestion ranking with evaluated deterministic heuristics or AI assistance.
+
 ### 2026-06-29 - Sync Gmail recently every hour and backfill history by windows
 
 - Status: accepted

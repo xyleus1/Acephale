@@ -1,28 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
-import { setupDemoEnvironment, fullDemoCleanup } from "@/lib/setup-demo-actions";
 
-// Direct URL endpoint for running the demo setup. Bypasses the button — if
-// the JS UI fails to fire the action, you can hit this URL in your browser
-// while logged in and get a JSON response with the actual result.
-//
-// Both GET (browser-friendly) and POST work. Auth is enforced by
-// setupDemoEnvironment's underlying requireSession call.
+// Deprecated: this route used to run the older Black Sea/steel demo setup.
+// That seed created stale fake loads that polluted the Inbox/Jobs demo flow.
+// Use `npm run demo:video-loads -- --apply` from the repo for the current
+// two-load Inbox video demo reset.
 async function run(mode: string) {
-  try {
-    if (mode === "cleanup") {
-      const result = await fullDemoCleanup();
-      if ("error" in result) return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
-      return NextResponse.json(result, { status: 200 });
-    }
-    const result = await setupDemoEnvironment();
-    return NextResponse.json({ ok: true, ...result }, { status: 200 });
-  } catch (e) {
-    return NextResponse.json({
-      ok: false,
-      error: e instanceof Error ? e.message : String(e),
-      stack: e instanceof Error ? e.stack?.split("\n").slice(0, 5) : undefined,
-    }, { status: 500 });
-  }
+  return NextResponse.json({
+    ok: false,
+    mode,
+    error: "Legacy demo setup is disabled. Run `npm run demo:video-loads -- --apply` to reset the two Inbox video demo loads.",
+  }, { status: 410 });
 }
 
 export async function GET(req: NextRequest) { return run(req.nextUrl.searchParams.get("mode") ?? "setup"); }

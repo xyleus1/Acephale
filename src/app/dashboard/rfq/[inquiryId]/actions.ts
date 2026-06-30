@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { createJobWithReference } from "@/lib/job-actions";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { buildMissingInfoDraft } from "@/lib/missing-info-draft";
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
+import { createLoadFromRfqReview } from "@/lib/rfq-load-review";
 import Anthropic from "@anthropic-ai/sdk";
 
 function emptyToNull(value: FormDataEntryValue | null) {
@@ -45,144 +45,18 @@ function qualificationFor(input: {
 }
 
 export async function convertToJob(inquiryId: string, formData: FormData) {
-  const session = await requireSession();
-
-  const inquiry = await prisma.inquiry.findFirst({
-    where: { id: inquiryId, officeId: session.officeId },
+  const result = await createLoadFromRfqReview(inquiryId, {
+    companyId: emptyToNull(formData.get("companyId")),
+    origin: emptyToNull(formData.get("origin")),
+    destination: emptyToNull(formData.get("destination")),
+    mode: emptyToNull(formData.get("mode")),
+    incoterms: emptyToNull(formData.get("incoterms")),
+    commodity: emptyToNull(formData.get("commodity")),
+    weight: numberOrNull(formData.get("weight")),
+    volume: numberOrNull(formData.get("volume")),
   });
-  if (!inquiry) throw new Error("Inquiry not found");
-
-  const companyId = formData.get("companyId") ? String(formData.get("companyId")) : inquiry.companyId ?? undefined;
-  const next = {
-    origin: emptyToNull(formData.get("origin")) ?? inquiry.origin,
-    destination: emptyToNull(formData.get("destination")) ?? inquiry.destination,
-    mode: emptyToNull(formData.get("mode")) ?? inquiry.mode,
-    commodity: emptyToNull(formData.get("commodity")) ?? inquiry.commodity,
-    containerCount: inquiry.containerCount,
-    containerType: inquiry.containerType,
-    dimensions: inquiry.dimensions,
-    stackable: inquiry.stackable,
-    topLoad: inquiry.topLoad,
-    dangerousGoods: inquiry.dangerousGoods,
-    customsBy: inquiry.customsBy,
-    weight: numberOrNull(formData.get("weight")) ?? inquiry.weight,
-    volume: numberOrNull(formData.get("volume")) ?? inquiry.volume,
-    targetPrice: inquiry.targetPrice,
-    targetPriceStatus: inquiry.targetPriceStatus,
-  };
-  const qualification = qualificationFor(next);
-
-  if (!qualification.isMature) {
-    const blockedNote = `Blocked job conversion: missing ${qualification.followUpQuestions.join(" ")}`;
-    const blocked = await prisma.inquiry.update({
-      where: { id: inquiryId, officeId: session.officeId },
-      data: {
-        notes: [inquiry.notes, blockedNote].filter(Boolean).join("\n"),
-        status: ["WON", "LOST", "QUOTED"].includes(inquiry.status) ? inquiry.status : "INGESTED",
-      },
-    });
-    await recordMemoryEvent({
-      officeId: session.officeId,
-      sourceType: "INQUIRY",
-      sourceExternalId: `inquiry:${inquiryId}`,
-      eventType: "inquiry.conversion_blocked",
-      entityType: "inquiry",
-      entityId: inquiryId,
-      actorType: "user",
-      actorId: session.userId,
-      occurredAt: blocked.updatedAt,
-      payloadVersion: 1,
-      payload: { inquiryId, missing: qualification.followUpQuestions, status: blocked.status },
-      provenance: {
-        source: "inquiry",
-        operation: "convert_to_job_blocked",
-        path: "src/app/dashboard/rfq/[inquiryId]/actions.ts",
-        function: "convertToJob",
-        sourceRecordId: inquiryId,
-        actorType: "user",
-        actorId: session.userId,
-      },
-      idempotencyKey: `inquiry:${inquiryId}:conversion_blocked:${blocked.updatedAt.toISOString()}`,
-    }).catch(() => null);
-    revalidatePath(`/dashboard/rfq/${inquiryId}`);
-    return;
-  }
-
-  const job = await createJobWithReference(session.officeId, (reference) => prisma.job.create({
-    data: {
-      officeId:   session.officeId,
-      companyId:  companyId ?? null,
-      inquiryId,
-      reference,
-      status:     "QUOTED",
-      mode:       next.mode || "",
-      origin:     next.origin || "",
-      destination:next.destination || "",
-      commodity:  next.commodity || "",
-      incoterms:  String(formData.get("incoterms") || inquiry.incoterms || ""),
-      weight:     next.weight,
-      volume:     next.volume,
-      dimensions:  inquiry.dimensions,
-      stackable:   inquiry.stackable,
-      topLoad:     inquiry.topLoad,
-      dangerousGoods: inquiry.dangerousGoods,
-      customsBy:   inquiry.customsBy,
-      containerCount: inquiry.containerCount,
-      containerType: inquiry.containerType,
-      targetPrice: inquiry.targetPrice,
-      targetCurrency: inquiry.targetCurrency,
-      targetPriceStatus: inquiry.targetPriceStatus,
-      targetPriceSource: inquiry.targetPriceSource,
-      currency:   "USD",
-      assignedToUserId: session.userId,
-    },
-  }));
-
-  const quoted = await prisma.inquiry.update({
-    where: { id: inquiryId },
-    data: { status: "QUOTED" },
-  });
-  await recordMemoryEvent({
-    officeId: session.officeId,
-    sourceType: "INQUIRY",
-    sourceExternalId: `inquiry:${inquiryId}`,
-    eventType: "inquiry.converted_to_job",
-    entityType: "inquiry",
-    entityId: inquiryId,
-    actorType: "user",
-    actorId: session.userId,
-    occurredAt: quoted.updatedAt,
-    payloadVersion: 1,
-    payload: { inquiryId, jobId: job.id, status: quoted.status },
-    provenance: {
-      source: "inquiry",
-      operation: "convert_to_job",
-      path: "src/app/dashboard/rfq/[inquiryId]/actions.ts",
-      function: "convertToJob",
-      sourceRecordId: inquiryId,
-      actorType: "user",
-      actorId: session.userId,
-    },
-    idempotencyKey: `inquiry:${inquiryId}:converted_to_job:${job.id}`,
-  }).catch(() => null);
-
-  if (inquiry.targetPrice != null || inquiry.targetPriceStatus === "NO_TARGET") {
-    await recordTargetPriceHistory({
-      officeId: session.officeId,
-      inquiryId,
-      jobId: job.id,
-      createdByUserId: session.userId,
-      amount: inquiry.targetPrice,
-      currency: inquiry.targetCurrency,
-      status: inquiry.targetPriceStatus,
-      source: inquiry.targetPriceSource,
-      note: "Carried from mature RFQ conversion.",
-    });
-  }
-
-  revalidatePath("/dashboard/rfq");
-  revalidatePath("/dashboard/jobs");
-  redirect(`/dashboard/jobs/${job.id}`);
+  if ("error" in result) throw new Error(result.error);
+  redirect(`/dashboard/jobs/${result.jobId}`);
 }
 
 export async function updateInquiryField(inquiryId: string, formData: FormData) {

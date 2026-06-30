@@ -2,8 +2,9 @@
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { confirmRfqAsJob, mergeRfqIntoExistingJob } from "@/lib/rfq-promote";
+import { mergeRfqIntoExistingJob } from "@/lib/rfq-promote";
 import { Icon } from "@/components/icon";
+import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 
 type ActiveJobOption = { id: string; reference: string; type: string; customer: string | null };
 
@@ -26,13 +27,6 @@ export function RfqRowActions({ inquiryId, jobLinked, activeJobs }: {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  function doConfirm() {
-    start(async () => {
-      const r = await confirmRfqAsJob(inquiryId);
-      if ("error" in r) { alert(r.error); return; }
-      router.push(`/dashboard/jobs/${r.jobId}` as never);
-    });
-  }
   function pickMerge(targetJobId: string) {
     setOpen(false);
     if (!window.confirm("Merge this RFQ into the selected job? Source RFQ's email threads move onto the target; the source RFQ is deleted.")) return;
@@ -51,16 +45,7 @@ export function RfqRowActions({ inquiryId, jobLinked, activeJobs }: {
   return (
     <div ref={wrapRef} className="inbox-action-popover-wrap" onClick={(e) => e.stopPropagation()}>
       {!jobLinked && (
-        <button
-          type="button"
-          onClick={doConfirm}
-          disabled={busy}
-          title="Confirm this RFQ as a real Inquiry-stage job"
-          className="inbox-action-btn primary"
-        >
-          <Icon name="check" size={11} strokeWidth={2.5} />
-          {busy ? "…" : "Confirm"}
-        </button>
+        <RfqLoadReviewButton inquiryId={inquiryId} label="Create load" />
       )}
       <button
         type="button"

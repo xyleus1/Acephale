@@ -8,6 +8,67 @@
 
 ## Branch
 
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
+Inbox RFQ-to-load pipeline, video-demo inbox records, and Today fast lane:
+
+- Added a reviewed RFQ-to-load creation modal from Inbox RFQs and RFQ detail.
+  Operators can edit fields before creating a load, and carried-forward
+  customer history is marked as prior-load context rather than email truth.
+- Added deterministic prior-load autofill for missing route, cargo, and service
+  fields while intentionally excluding prior target price carry-forward.
+- Created a reproducible video-demo reset script and disabled the old visible
+  fake demo seed paths.
+- Added an Inbox `Today` filter and default Today section using
+  `lastMessageAt`, plus a `Sync Derya inboxes` button in the Inbox header.
+
+## Files changed
+
+- `src/lib/rfq-load-draft-core.ts`
+- `src/lib/rfq-load-review.ts`
+- `src/lib/rfq-promote.ts`
+- `src/components/rfq-load-review-button.tsx`
+- `src/components/rfq-row-actions.tsx`
+- `src/components/create-inquiry-button.tsx`
+- `src/app/dashboard/rfq/[inquiryId]/page.tsx`
+- `src/app/dashboard/rfq/[inquiryId]/actions.ts`
+- `src/app/dashboard/inbox/page.tsx`
+- `src/app/globals.css`
+- `scripts/rfq-load-draft.test.ts`
+- `scripts/reset-video-demo-loads.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`
+- `docs/DECISIONS.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:rfq-load-draft`
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `npm run build`
+
+## Caveats
+
+- Browser-authenticated click-through was not run from this session.
+- Production Gmail cron could not be manually triggered from local because the
+  local `CRON_SECRET` did not match production; Vercel cron remains the
+  production scheduler after deploy.
+
+## Previous Update
+
+## Date
+
+2026-06-30
+
+## Branch
+
 codex/domestic-pricing-us-loadboard-20260630
 
 ## Commit

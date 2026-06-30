@@ -8,7 +8,6 @@ import { prisma } from "./prisma";
 import { draftReplyToMessage, draftCounterOffer } from "./sourcing-award";
 import { extractSourcingOffersForInquiry } from "./sourcing-offers";
 import { findStuckJobs } from "./stuck-jobs";
-import { seedDemoLoad } from "./seed-demo-load";
 import { analyzeJobDocument, askAboutDocument } from "./doc-analyze";
 import { createPendingBulkHideThreadsProposal, createPendingJobActionProposal, createPendingJobUpdateProposal } from "./agent-proposals";
 import { qualifyRfq } from "./rfq-qualification";
@@ -836,11 +835,6 @@ export const TOOLS = [
         limit: { type: "number", description: "Max threads to link, default 50" },
       },
     },
-  },
-  {
-    name: "seed_demo_load",
-    description: "Seeds one fully-populated example FORWARDING job for demos: customer 'Black Sea Trading Co', steel coils Constanta → Hamburg, 3 carrier rates, milestones, 3 docs (BL + Invoice + Packing List) with pre-baked AI analysis, portal token. Idempotent — returns the existing demo job if already seeded. Use when the operator says 'seed a demo load', 'create an example job', 'set up demo data'.",
-    input_schema: { type: "object", properties: {} },
   },
   {
     name: "ask_about_document",
@@ -3968,8 +3962,10 @@ export async function dispatchTool(
         });
       }
       case "seed_demo_load": {
-        const r = await seedDemoLoad({ officeId: ctx.officeId });
-        return "error" in r ? { ok: false, error: r.error } : { ok: true, result: r };
+        return {
+          ok: false,
+          error: "Legacy demo seed is disabled. Use `npm run demo:video-loads -- --apply` from the repo to reset the two Inbox video demo loads.",
+        };
       }
       case "ask_about_document": {
         const documentId = String(input.document_id ?? "");

@@ -1172,3 +1172,78 @@ Use this file for chronological implementation notes that future agents should s
   account, booking, tendering, customer send, DB migration, or credential read
   was run. Map locations are deterministic city/state/ZIP matches, not
   external geocoding.
+
+### 2026-06-30 - Reviewed RFQ-to-load creation from Inbox
+
+- Branch: main
+- Commit: not committed
+- Task: Add a reviewed one-click path from detected email RFQs to active loads,
+  with customer-history autofill for unspecified details.
+- Files changed: `src/lib/rfq-load-draft-core.ts`,
+  `src/lib/rfq-load-review.ts`, `src/lib/rfq-promote.ts`,
+  `src/components/rfq-load-review-button.tsx`,
+  `src/components/rfq-row-actions.tsx`,
+  `src/components/create-inquiry-button.tsx`,
+  `src/app/dashboard/rfq/[inquiryId]/page.tsx`,
+  `src/app/dashboard/rfq/[inquiryId]/actions.ts`, `src/app/globals.css`,
+  `scripts/rfq-load-draft.test.ts`, `package.json`, and docs.
+- Behavior added: Inbox RFQs now open a review modal before becoming active
+  loads. The draft builder uses current RFQ fields first, then proposed-load
+  edits, then recent same-customer prior loads for carry-forward fields. Prior
+  target price is intentionally excluded from carry-forward. Created loads are
+  `INQUIRY` stage, email threads are linked to the load, and memory records
+  include field-source provenance.
+- Verification: `npm run test:rfq-load-draft`, `npx tsc --noEmit`,
+  `npm run check:docs`, and `npm run build` passed.
+- Failed/skipped checks: interactive browser click-through of the modal was not
+  run from this session.
+- Caveats: the thread-card action still creates an RFQ first. The reviewed
+  load-creation modal is exposed from Inbox RFQs and RFQ detail.
+
+### 2026-06-30 - Reset video demo loads into Inbox
+
+- Branch: main
+- Commit: not committed
+- Task: Remove old demo/fake loads and create two reproducible demo loads that
+  appear from the Inbox like normal load/RFQ records.
+- Files changed: `scripts/reset-video-demo-loads.ts`,
+  `src/app/dashboard/inbox/page.tsx`, `src/app/dashboard/jobs/page.tsx`,
+  `src/app/api/admin/run-demo-setup/route.ts`, `src/lib/agent-tools.ts`,
+  `src/lib/seed-demo-load-action.ts`, `src/components/seed-demo-button.tsx`,
+  `package.json`, and docs.
+- Behavior added: `npm run demo:video-loads` dry-runs demo cleanup, and
+  `npm run demo:video-loads -- --apply` deletes demo-marked
+  loads/RFQs/threads before seeding exactly two video-demo loads. The Inbox now
+  has a `Demo` filter at `/dashboard/inbox?filter=_DEMO`, and the visible
+  legacy `Setup data` button was removed from Inbox and Jobs headers. The old
+  admin route, server-action wrapper, and agent tool now refuse the legacy demo
+  seed path and point to the explicit reset command instead.
+- Verification: local Prisma verification confirmed the two seeded demo loads
+  have linked inbox threads, inquiries, approved contacts, carrier quotes,
+  target price history, milestones, and job documents. `npx tsc --noEmit`,
+  `npm run check:docs`, and `npm run build` passed.
+- Failed/skipped checks: browser-authenticated visual review of the Inbox demo
+  filter was not run from this session.
+
+### 2026-06-30 - Inbox Today fast lane and manual sync access
+
+- Branch: main
+- Commit: not committed
+- Task: Make same-day RFQs easy to see in Inbox and expose a faster manual
+  pull path for newly arrived Derya RFQ mail.
+- Files changed: `src/app/dashboard/inbox/page.tsx`, `src/app/globals.css`,
+  `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
+- Behavior added: Inbox now has a `Today` filter chip and a compact default
+  Today section showing same-day thread activity by `lastMessageAt`. The Inbox
+  header now includes `Sync Derya inboxes`, reusing the existing combined Gmail
+  sync server action for configured load/RFQ inboxes.
+- Timezone behavior: Today uses `DERYA_INBOX_TIME_ZONE` when set, otherwise
+  `America/Los_Angeles`, to avoid production UTC slicing same-day operator
+  work incorrectly.
+- Production sync attempt: local DB only contained `demo-inbox@usederya.com`,
+  so no real local Gmail pull was possible. A production cron trigger was
+  attempted for `/api/cron/gmail-sync` and `/api/cron/background-jobs`, but
+  production returned `401 Unauthorized` because the local `CRON_SECRET` did
+  not match production. No production sync was run from this shell.
+- Verification: `npx tsc --noEmit`, `npm run check:docs`, and `npm run build`
+  passed.

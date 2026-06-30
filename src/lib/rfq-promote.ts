@@ -3,38 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
-import { confirmProposedJob, createProposedJobForInquiry } from "./job-actions";
+import { createLoadFromRfqReview, getRfqLoadDraft } from "./rfq-load-review";
 
 // Promote an Inquiry (RFQ) to a real INQUIRY-stage Job. If the inquiry has a
 // PROPOSED job already, we just confirm it. If it has no job, we create one
 // then confirm. The result is always a non-PROPOSED job.
 export async function confirmRfqAsJob(inquiryId: string): Promise<{ ok: true; jobId: string } | { error: string }> {
-  const session = await requireSession();
-  const inq = await prisma.inquiry.findFirst({
-    where: { id: inquiryId, officeId: session.officeId },
-    include: { job: { select: { id: true, status: true } } },
-  });
-  if (!inq) return { error: "Inquiry not found" };
-
-  let jobId = inq.job?.id ?? null;
-  if (!jobId) {
-    jobId = await createProposedJobForInquiry(inquiryId);
-    if (!jobId) return { error: "Couldn't create job" };
-  } else if (inq.job?.status !== "PROPOSED") {
-    // Already a real job — nothing to do.
-    return { ok: true, jobId };
-  }
-  const r = await confirmProposedJob(jobId);
-  if ("error" in r) return { error: r.error };
-  await prisma.inquiry.updateMany({
-    where: { id: inquiryId, officeId: session.officeId },
-    data: { status: "PARSED" },
-  });
-  revalidatePath("/dashboard/jobs");
-  revalidatePath("/dashboard/inbox");
-  revalidatePath(`/dashboard/jobs/${jobId}`);
-  revalidatePath(`/dashboard/rfq/${inquiryId}`);
-  return { ok: true, jobId };
+  const draft = await getRfqLoadDraft(inquiryId);
+  if ("error" in draft) return { error: draft.error };
+  const result = await createLoadFromRfqReview(inquiryId, draft.values);
+  if ("error" in result) return { error: result.error };
+  return { ok: true, jobId: result.jobId };
 }
 
 // Move every email thread off the source inquiry onto the target job's

@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { getFocusedJobId } from "@/lib/job-focus";
 import { Icon } from "@/components/icon";
-import { SeedDemoButton } from "@/components/seed-demo-button";
 import { JobsBoard } from "@/components/jobs-board";
 import { JobsTable } from "@/components/jobs-table";
 import { cleanNotes } from "@/lib/quote-lines";
@@ -137,7 +136,6 @@ export default async function JobsPage({
               Table
             </Link>
           </div>
-          <SeedDemoButton />
           <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
             From RFQ
           </Link>

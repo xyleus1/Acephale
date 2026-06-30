@@ -11,14 +11,16 @@ import { BulkCheckbox } from "@/components/bulk-checkbox";
 import { BulkActionBar } from "@/components/bulk-action-bar";
 import { LoadFilterPicker } from "@/components/load-filter-picker";
 import { RfqRowActions } from "@/components/rfq-row-actions";
-import { SeedDemoButton } from "@/components/seed-demo-button";
 import { Icon } from "@/components/icon";
+import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
 import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/lib/email-workflow-labels";
 import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
 
 const FILTERS = [
   { key: "",                  label: "Active"          },  // default — excludes hidden + snoozed
+  { key: "_TODAY",            label: "Today"           },
+  { key: "_DEMO",             label: "Demo"            },
   { key: "_LOAD_RFQ",         label: "Load/RFQ"        },
   { key: "_APPROVED_CONTACTS", label: "Approved contacts" },
   { key: "_NEEDS_REPLY",      label: "Awaiting reply"  },
@@ -37,6 +39,8 @@ const CHANNELS = [
   { key: "whatsapp", label: "WhatsApp" },
 ] as const;
 
+const INBOX_TODAY_TIME_ZONE = process.env.DERYA_INBOX_TIME_ZONE || "America/Los_Angeles";
+
 type ChannelFilter = typeof CHANNELS[number]["key"];
 
 function normalizeChannel(value: string | undefined): ChannelFilter {
@@ -53,6 +57,51 @@ function timeAgo(d: Date) {
   const days = Math.floor(h / 24);
   if (days < 7) return `${days}d ago`;
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function zonedParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+    second: get("second"),
+  };
+}
+
+function zonedTimeToUtc(input: { year: number; month: number; day: number; hour?: number; minute?: number; second?: number }, timeZone: string) {
+  const utcGuess = new Date(Date.UTC(input.year, input.month - 1, input.day, input.hour ?? 0, input.minute ?? 0, input.second ?? 0));
+  const asZoned = zonedParts(utcGuess, timeZone);
+  const zonedAsUtc = Date.UTC(asZoned.year, asZoned.month - 1, asZoned.day, asZoned.hour, asZoned.minute, asZoned.second);
+  const offsetMs = zonedAsUtc - utcGuess.getTime();
+  return new Date(utcGuess.getTime() - offsetMs);
+}
+
+function addUtcDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function todayRange(timeZone: string) {
+  const now = new Date();
+  const parts = zonedParts(now, timeZone);
+  const start = zonedTimeToUtc({ year: parts.year, month: parts.month, day: parts.day }, timeZone);
+  const nextDayParts = zonedParts(addUtcDays(start, 1), timeZone);
+  const end = zonedTimeToUtc({ year: nextDayParts.year, month: nextDayParts.month, day: nextDayParts.day }, timeZone);
+  return { start, end };
 }
 
 const KIND_META: Record<string, { label: string; cls: string }> = {
@@ -200,11 +249,29 @@ export default async function InboxPage({
   // Threads with messages, plus their linked job/inquiry
   const where: any = { officeId: session.officeId };
   const now = new Date();
+  const inboxToday = todayRange(INBOX_TODAY_TIME_ZONE);
+  const todayThreadWhere = {
+    lastMessageAt: {
+      gte: inboxToday.start,
+      lt: inboxToday.end,
+    },
+  };
   const loadRfqRelatedWhere = {
     OR: [
       { jobId: { not: null } },
       { inquiryId: { not: null } },
       { messages: { some: { direction: "INBOUND" as const, classification: { in: [...LOAD_RFQ_RELATED_CLASSIFICATIONS] } } } },
+    ],
+  };
+  const demoThreadWhere = {
+    OR: [
+      { externalThreadId: { startsWith: "demo:" } },
+      { subject: { startsWith: "DEMO" } },
+      { job: { notes: { contains: "[VIDEO_DEMO_LOAD]" } } },
+      { job: { company: { name: { startsWith: "DEMO ·" } } } },
+      { inquiry: { notes: { contains: "[VIDEO_DEMO_LOAD]" } } },
+      { inquiry: { subject: { startsWith: "DEMO" } } },
+      { inquiry: { company: { name: { startsWith: "DEMO ·" } } } },
     ],
   };
   // Default ("Active") excludes hidden + currently-snoozed threads. Other filters opt-in.
@@ -224,6 +291,10 @@ export default async function InboxPage({
       where.inquiryId = null;
     } else if (filter === "_LINKED") {
       where.AND.push({ OR: [{ jobId: { not: null } }, { inquiryId: { not: null } }] });
+    } else if (filter === "_TODAY") {
+      where.AND.push(todayThreadWhere);
+    } else if (filter === "_DEMO") {
+      where.AND.push(demoThreadWhere);
     } else if (filter === "_LOAD_RFQ") {
       where.AND.push(loadRfqRelatedWhere);
     } else if (filter === "_APPROVED_CONTACTS") {
@@ -307,16 +378,18 @@ export default async function InboxPage({
     ] });
   }
 
+  const threadInclude = {
+    messages: {
+      orderBy: { sentAt: "asc" as const },
+      include: { account: { select: { id: true, email: true, provider: true } } },
+    },
+    job: { select: { id: true, reference: true, type: true, company: { select: { name: true } } } },
+    inquiry: { select: { id: true, subject: true, type: true } },
+  };
+
   let threads = await prisma.emailThread.findMany({
     where,
-    include: {
-      messages: {
-        orderBy: { sentAt: "asc" },
-        include: { account: { select: { id: true, email: true, provider: true } } },
-      },
-      job: { select: { id: true, reference: true, type: true, company: { select: { name: true } } } },
-      inquiry: { select: { id: true, subject: true, type: true } },
-    },
+    include: threadInclude,
     orderBy: { lastMessageAt: "desc" },
     take: filter === "_NEEDS_REPLY" ? 200 : 80,
   });
@@ -348,11 +421,13 @@ export default async function InboxPage({
       },
     },
   };
-  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalLoadRfq, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll] = await Promise.all([
+  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalToday, totalDemo, totalLoadRfq, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll, todayThreads] = await Promise.all([
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeAllChannelsFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeMailFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeWhatsAppFilter } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, todayThreadWhere] } }),
+    prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, demoThreadWhere] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, loadRfqRelatedWhere] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, approvedContactFilter] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter, jobId: null, inquiryId: null } }),
@@ -360,6 +435,12 @@ export default async function InboxPage({
     prisma.emailThread.count({ where: { officeId: session.officeId, snoozedUntil: { gt: now }, ...fromActiveAccount } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, hiddenAt: { not: null }, ...fromActiveAccount } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...fromActiveAccount } }),
+    prisma.emailThread.findMany({
+      where: { officeId: session.officeId, AND: [activeFilter, todayThreadWhere] },
+      include: threadInclude,
+      orderBy: { lastMessageAt: "desc" },
+      take: 8,
+    }),
   ]);
   // "Awaiting reply" count is approximate: pull last messages directly via raw count of latest-inbound.
   // Cheap heuristic: same query as fetched threads.
@@ -371,6 +452,8 @@ export default async function InboxPage({
 
   function countFor(key: string): number {
     if (!key) return totalActive;
+    if (key === "_TODAY") return totalToday;
+    if (key === "_DEMO") return totalDemo;
     if (key === "_LOAD_RFQ") return totalLoadRfq;
     if (key === "_APPROVED_CONTACTS") return totalApprovedContacts;
     if (key === "_NEEDS_REPLY") return totalNeedsReply;
@@ -518,7 +601,7 @@ export default async function InboxPage({
           })}
         />
         <div className="page-actions">
-          <SeedDemoButton />
+          <SyncDeryaInboxesButton disabled={connectedDeryaInboxEmails.size === 0} />
           <MergeDuplicatesButton />
           <ReclassifyButton onlyUnclassified={false} />
           <a href="/dashboard/settings/email" className="btn btn-secondary">
@@ -526,6 +609,48 @@ export default async function InboxPage({
           </a>
         </div>
       </div>
+
+      {view === "threads" && !filter && !searchQuery && !focusedLoad && totalToday > 0 && (
+        <section className="today-inbox-panel">
+          <div className="today-inbox-head">
+            <div>
+              <div className="today-inbox-eyebrow">Today</div>
+              <h2>New work that hit the box</h2>
+            </div>
+            <a href={inboxHref({ filter: "_TODAY" })} className="btn btn-secondary btn-sm">
+              View all {totalToday}
+            </a>
+          </div>
+          <div className="today-inbox-list">
+            {todayThreads.map((t) => {
+              const kind = dominantKind(t.messages);
+              const workflow = primaryEmailWorkflowLabel({
+                kind,
+                jobId: t.job?.id ?? null,
+                inquiryId: t.inquiry?.id ?? null,
+              });
+              const source = threadSourceMeta(t.messages);
+              const last = t.messages[t.messages.length - 1];
+              const href = t.job
+                ? `/dashboard/jobs/${t.job.id}`
+                : t.inquiry
+                  ? `/dashboard/rfq/${t.inquiry.id}`
+                  : inboxHref({ filter: "_TODAY" });
+              return (
+                <a key={t.id} href={href} className="today-inbox-row">
+                  <span className={`inbox-workflow-label ${workflow.className}`}>{workflow.label}</span>
+                  <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
+                  <span className="today-inbox-subject">{t.subject || "(no subject)"}</span>
+                  <span className="today-inbox-meta">
+                    {timeAgo(t.lastMessageAt)}
+                    {last ? ` · ${last.fromName ?? last.fromEmail}` : ""}
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {accounts.length > 0 && (
         <div className="chip-row channel-chip-row">
