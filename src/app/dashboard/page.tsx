@@ -24,7 +24,8 @@ import { buildReferenceDealOperatorPlaybook, getReferenceDealDecisions, getRefer
 import { listDecisionQueueItems, type DecisionQueueItem } from "@/lib/decision-queue";
 import { buildDecisionQueueBrief, type DecisionQueueBrief } from "@/lib/decision-queue-brief";
 import { operatorToolLabel } from "@/lib/operator-action-labels";
-import { buildRouteViewport, routeZoomPanels, type RouteMapPoint } from "@/lib/route-map-viewport";
+import { buildRouteViewport, routeZoomPanels } from "@/lib/route-map-viewport";
+import { flagEmoji, modeSummary, routeLegPoints, routeMapPoint, transitSummary } from "@/lib/workbench-route-map";
 import { createRfqFromReferenceDeal } from "./reference-deal-actions";
 import { Fragment } from "react";
 import {
@@ -50,101 +51,6 @@ const DOC_TYPE_LABEL: Record<string, string> = {
 const MODE_LABEL: Record<string, string> = {
   "SEA-FCL": "Sea FCL", "SEA-LCL": "Sea LCL", AIR: "Air", ROAD: "Road", COURIER: "Courier",
 };
-
-const ROUTE_GEO_LOOKUP: Array<{
-  match: string[];
-  label: string;
-  country: string;
-  countryCode: string;
-  lon: number;
-  lat: number;
-}> = [
-  { match: ["port klang", "klang", "malaysia"], label: "Port Klang", country: "Malaysia", countryCode: "MY", lon: 101.397, lat: 2.999 },
-  { match: ["shannon", "ireland"], label: "Shannon", country: "Ireland", countryCode: "IE", lon: -8.864, lat: 52.713 },
-  { match: ["istanbul", "turkiye", "turkey", "istanbul, tr"], label: "Istanbul", country: "Turkey", countryCode: "TR", lon: 28.978, lat: 41.008 },
-  { match: ["ambarlı", "ambarli", "körfez", "korfez"], label: "Ambarli", country: "Turkey", countryCode: "TR", lon: 28.685, lat: 40.969 },
-  { match: ["singapore"], label: "Singapore", country: "Singapore", countryCode: "SG", lon: 103.852, lat: 1.29 },
-  { match: ["constanta", "constanța", "romania"], label: "Constanta", country: "Romania", countryCode: "RO", lon: 28.634, lat: 44.159 },
-  { match: ["hamburg", "germany"], label: "Hamburg", country: "Germany", countryCode: "DE", lon: 9.993, lat: 53.551 },
-  { match: ["mersin"], label: "Mersin", country: "Turkey", countryCode: "TR", lon: 34.641, lat: 36.812 },
-  { match: ["izmir"], label: "Izmir", country: "Turkey", countryCode: "TR", lon: 27.142, lat: 38.423 },
-  { match: ["adana"], label: "Adana", country: "Turkey", countryCode: "TR", lon: 35.321, lat: 37.0 },
-  { match: ["gemlik"], label: "Gemlik", country: "Turkey", countryCode: "TR", lon: 29.159, lat: 40.431 },
-  { match: ["shanghai", "china"], label: "Shanghai", country: "China", countryCode: "CN", lon: 121.474, lat: 31.23 },
-  { match: ["ningbo"], label: "Ningbo", country: "China", countryCode: "CN", lon: 121.55, lat: 29.868 },
-  { match: ["rotterdam", "netherlands"], label: "Rotterdam", country: "Netherlands", countryCode: "NL", lon: 4.48, lat: 51.924 },
-  { match: ["dubai", "jebel ali", "uae", "united arab emirates"], label: "Jebel Ali", country: "UAE", countryCode: "AE", lon: 55.027, lat: 24.985 },
-  { match: ["jeddah", "saudi"], label: "Jeddah", country: "Saudi Arabia", countryCode: "SA", lon: 39.197, lat: 21.485 },
-  { match: ["ashgabat", "turkmenistan"], label: "Ashgabat", country: "Turkmenistan", countryCode: "TM", lon: 58.383, lat: 37.96 },
-  { match: ["sudan", "port sudan"], label: "Port Sudan", country: "Sudan", countryCode: "SD", lon: 37.216, lat: 19.615 },
-  { match: ["munich", "germany"], label: "Munich", country: "Germany", countryCode: "DE", lon: 11.582, lat: 48.135 },
-  { match: ["texas", "houston"], label: "Houston", country: "United States", countryCode: "US", lon: -95.369, lat: 29.76 },
-];
-
-function routePointFromGeo(label: string, country: string, countryCode: string | null, lon: number, lat: number): RouteMapPoint {
-  return {
-    label,
-    country,
-    countryCode,
-    lon,
-    lat,
-  };
-}
-
-function flagEmoji(countryCode: string | null) {
-  if (!countryCode || countryCode.length !== 2) return "";
-  const code = countryCode.toUpperCase();
-  return String.fromCodePoint(...[...code].map((char) => 127397 + char.charCodeAt(0)));
-}
-
-function routeMapPoint(value: string | null | undefined, fallback: "origin" | "destination"): RouteMapPoint {
-  const raw = (value ?? "").trim();
-  const normalized = raw.toLowerCase();
-  const hit = ROUTE_GEO_LOOKUP.find((entry) => entry.match.some((token) => normalized.includes(token)));
-  if (hit) {
-    return routePointFromGeo(raw || hit.label, hit.country, hit.countryCode, hit.lon, hit.lat);
-  }
-  const fallbackPoint = fallback === "origin"
-    ? { lon: 101.397, lat: 2.999, label: "Origin TBD", country: "Origin" }
-    : { lon: 28.978, lat: 41.008, label: "Destination TBD", country: "Destination" };
-  return routePointFromGeo(raw || fallbackPoint.label, raw || fallbackPoint.country, null, fallbackPoint.lon, fallbackPoint.lat);
-}
-
-const ROUTE_KNOWN_WAYPOINTS = {
-  hongKong: routePointFromGeo("Hong Kong approach", "China", "CN", 114.109, 22.396),
-  singapore: routePointFromGeo("Singapore / Malacca", "Singapore", "SG", 103.852, 1.29),
-  colombo: routePointFromGeo("Colombo sea lane", "Sri Lanka", "LK", 79.861, 6.927),
-  suez: routePointFromGeo("Suez Canal", "Egypt", "EG", 32.55, 29.97),
-};
-
-function routeLegPoints(origin: RouteMapPoint, destination: RouteMapPoint, mode: string | null | undefined) {
-  const seaMode = (mode ?? "").toUpperCase().includes("SEA");
-  const asiaOrigin = origin.lon >= 70 && origin.lon <= 130;
-  const turkeyDestination = destination.lon >= 24 && destination.lon <= 45 && destination.lat >= 35;
-
-  if (seaMode && asiaOrigin && turkeyDestination) {
-    return [
-      origin,
-      ...(origin.lon > 112 ? [ROUTE_KNOWN_WAYPOINTS.hongKong] : []),
-      ROUTE_KNOWN_WAYPOINTS.singapore,
-      ROUTE_KNOWN_WAYPOINTS.colombo,
-      ROUTE_KNOWN_WAYPOINTS.suez,
-      destination,
-    ];
-  }
-
-  return [origin, destination];
-}
-
-function transitSummary(etd: Date | null | undefined, eta: Date | null | undefined) {
-  if (!etd || !eta) return "Transit TBD";
-  const days = Math.max(1, Math.round((eta.getTime() - etd.getTime()) / 86400000));
-  return `${days} day${days === 1 ? "" : "s"}`;
-}
-
-function modeSummary(modeLabel: string, transitLabel: string) {
-  return transitLabel === "Transit TBD" ? `${modeLabel} · timing TBD` : `${modeLabel} · ${transitLabel}`;
-}
 
 function fmt(d: Date | null | undefined) {
   if (!d) return "—";
@@ -606,23 +512,139 @@ function DecisionFlowPanel({
   );
 }
 
+function LoadDemoScenarioPanel({
+  reference,
+  routeLabel,
+  modeLabel,
+  customerName,
+  inquiryFrom,
+  targetPriceLabel,
+  quoteCoverageLabel,
+  docsLabel,
+  statusLabel,
+}: {
+  reference: string;
+  routeLabel: string;
+  modeLabel: string;
+  customerName: string | null;
+  inquiryFrom: string | null;
+  targetPriceLabel: string;
+  quoteCoverageLabel: string;
+  docsLabel: string;
+  statusLabel: string;
+}) {
+  const customerLabel = customerName ?? "Unassigned customer";
+  const sourceLabel = inquiryFrom ?? "inbound RFQ source";
+  const steps = [
+    {
+      label: "Inbox capture",
+      title: `${reference} comes in from ${sourceLabel}`,
+      detail: `${modeLabel} on ${routeLabel}; operator starts from the email, not from spreadsheet cleanup.`,
+    },
+    {
+      label: "Agent qualification",
+      title: "Ask the agent what is missing",
+      detail: `The useful gap list is customer, commodity, container details, cargo-ready date, customs/incoterms, and target posture for ${customerLabel}.`,
+    },
+    {
+      label: "Pricing fan-out",
+      title: "Create forwarder drafts once facts are clean",
+      detail: `Current forwarder coverage is ${quoteCoverageLabel}; for the demo, show the agent preparing Black Sea to Adriatic rate requests and waiting for replies.`,
+    },
+    {
+      label: "Quote and documents",
+      title: "Customer confirms, then the RFQ becomes operating work",
+      detail: `Target is ${targetPriceLabel}; document proof is ${docsLabel}. After acceptance, show the document checklist and milestone timeline as the load control surface.`,
+    },
+  ];
+
+  return (
+    <section className="load-demo-scenario" data-agent-target="load-demo-scenario" aria-label={`Demo scenario for ${reference}`}>
+      <div className="load-demo-head">
+        <div>
+          <span>Demo scenario</span>
+          <strong>{routeLabel}</strong>
+        </div>
+        <em>{statusLabel}</em>
+      </div>
+      <div className="load-demo-steps">
+        {steps.map((step, index) => (
+          <div key={step.label} className="load-demo-step">
+            <span>{index + 1}</span>
+            <div>
+              <em>{step.label}</em>
+              <strong>{step.title}</strong>
+              <small>{step.detail}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type DashboardView = "focus" | "overview";
+
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ stage?: string }>;
+  searchParams?: Promise<{ stage?: string; view?: string }>;
 }) {
   const sp = searchParams ? await searchParams : {};
   const stageOverride = sp.stage && ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"].includes(sp.stage)
     ? sp.stage
     : null;
-  return _DashboardPageImpl(stageOverride);
+  const dashboardView: DashboardView = sp.view === "overview" ? "overview" : "focus";
+  return _DashboardPageImpl(stageOverride, dashboardView);
 }
 
-async function _DashboardPageImpl(stageOverride: string | null) {
+async function _DashboardPageImpl(stageOverride: string | null, dashboardView: DashboardView) {
   const session = await requireSession();
   const focusedId = await getFocusedJobId();
   const attentionItems = await listDecisionQueueItems(session.officeId, 8);
   const decisionBrief = buildDecisionQueueBrief(attentionItems);
+
+  if (dashboardView === "overview") {
+    const referenceDealSummary = getReferenceDealSummary();
+    const referenceDealDecisions = getReferenceDealDecisions(undefined, 6);
+    const referenceDealPlaybook = buildReferenceDealOperatorPlaybook(referenceDealDecisions, referenceDealSummary);
+
+    return (
+      <div className="workbench-overview-shell">
+        <section className="ops-brief dashboard-overview-brief" aria-label="Top-down decision dashboard">
+          <div className="ops-brief-copy">
+            <div className="ops-eyebrow">
+              <span className="ops-status-light" aria-hidden />
+              Top-down dashboard
+            </div>
+            <div className="ops-brief-title">
+              <span>Control sheet and RFQ queue</span>
+              <strong>Where the next RFQ money is</strong>
+            </div>
+            <div className="ops-brief-meta">
+              <span>{attentionItems.length} queue items</span>
+              <span>{referenceDealSummary.activeRows} active sheet rows</span>
+              <span>Office-wide view</span>
+            </div>
+          </div>
+          <div className="dashboard-overview-actions">
+            <a href="/dashboard" className="btn btn-secondary">
+              <Icon name="truck" size={15} />
+              Focused load
+            </a>
+          </div>
+        </section>
+        <DecisionFlowPanel
+          summary={referenceDealSummary}
+          approvedDocs={0}
+          totalDocs={0}
+          targetPriceLabel="No load selected"
+        />
+        <DecisionQueueSection items={attentionItems} brief={decisionBrief} />
+        <ReferenceDealSnapshot summary={referenceDealSummary} decisions={referenceDealDecisions} playbook={referenceDealPlaybook} />
+      </div>
+    );
+  }
 
   // Pick a job: focused if any, else most recently updated active job, else latest job
   let jobId: string | null = focusedId;
@@ -654,6 +676,7 @@ async function _DashboardPageImpl(stageOverride: string | null) {
             Start from the decision queue, add a manual RFQ, or create a job. Once a deal exists, this page becomes the focused commercial desk.
           </p>
           <div className="workbench-empty-actions">
+            <a href="/dashboard?view=overview" className="btn btn-secondary">Top-down dashboard</a>
             <a href="/dashboard/rfq/new" className="btn btn-secondary">Manual RFQ</a>
             <a href="/dashboard/jobs/new" className="btn">New Job</a>
           </div>
@@ -851,15 +874,11 @@ async function _DashboardPageImpl(stageOverride: string | null) {
     baseAmount: number; currency: string; validFrom: Date; validTo: Date | null; notes: string | null;
   }[] = [];
 
-  const referenceDealSummary = getReferenceDealSummary();
-  const referenceDealDecisions = getReferenceDealDecisions(undefined, 6);
-  const referenceDealPlaybook = buildReferenceDealOperatorPlaybook(referenceDealDecisions, referenceDealSummary);
-
   const suggestions = [
-    "Rank the control sheet leads.",
-    "What is missing before this RFQ can go to forwarders?",
-    "Check target price and margin.",
-    "Draft the missing-info email to the customer.",
+    `What is missing before ${job.reference} can go to forwarders?`,
+    `Check target price and margin for ${job.reference}.`,
+    `Draft the missing-info email for ${job.reference}.`,
+    `Walk me through the ${job.reference} demo scenario.`,
   ];
   const routeLabel = job.origin && job.destination
     ? `${job.origin} → ${job.destination}`
@@ -1019,14 +1038,6 @@ async function _DashboardPageImpl(stageOverride: string | null) {
           </div>
         </section>
 
-        <DecisionFlowPanel
-          summary={referenceDealSummary}
-          opportunity={opportunity}
-          approvedDocs={approvedDocs}
-          totalDocs={docs.length}
-          targetPriceLabel={targetPriceLabel}
-        />
-
         <TargetPriceTrail
           entries={targetPriceTrail}
           currentLabel={targetPriceLabel}
@@ -1034,9 +1045,17 @@ async function _DashboardPageImpl(stageOverride: string | null) {
           currentStatus={job.targetPriceStatus}
         />
 
-        <DecisionQueueSection items={attentionItems} brief={decisionBrief} />
-
-      <ReferenceDealSnapshot summary={referenceDealSummary} decisions={referenceDealDecisions} playbook={referenceDealPlaybook} />
+        <LoadDemoScenarioPanel
+          reference={job.reference}
+          routeLabel={routeLabel}
+          modeLabel={modeLabel}
+          customerName={job.company?.name ?? null}
+          inquiryFrom={job.inquiry?.fromEmail ?? null}
+          targetPriceLabel={targetPriceLabel}
+          quoteCoverageLabel={`${receivedQuotes.length}/${carrierQuotes.length}`}
+          docsLabel={`${approvedDocs}/${docs.length}`}
+          statusLabel={STATUS_LABEL[visibleStatus] ?? visibleStatus}
+        />
 
       <section className="job-command-panel" aria-label="Focused job" data-agent-target="job-summary">
         <div className="job-command-main">
@@ -1061,6 +1080,10 @@ async function _DashboardPageImpl(stageOverride: string | null) {
         </div>
 
         <div className="job-command-actions">
+            <a href="/dashboard?view=overview" className="btn btn-secondary">
+              <Icon name="grid" size={13} />
+              Top-down dashboard
+            </a>
             <CopyPortalLink jobId={job.id} />
             <JobEditPanel
               job={{

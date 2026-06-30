@@ -16,6 +16,60 @@ not committed
 
 ## Task implemented
 
+Focused load cockpit and route-map correction:
+
+- Moved route lookup and route-leg construction into
+  `src/lib/workbench-route-map.ts`.
+- Added explicit Giresun, Ancona, Shenzhen, Berlin, and Guadalajara geography,
+  plus Black Sea to Adriatic sea waypoints through Bosphorus, Dardanelles, and
+  Adriatic approach.
+- Removed the global control-sheet decision queue and reference-deal snapshot
+  from the focused `/dashboard` load view.
+- Added `/dashboard?view=overview` as the explicit top-down dashboard for
+  global queue/control-sheet work, with a link back to the focused load view.
+- Added a load-specific demo scenario panel so the focused page explains the
+  RFQ -> qualification -> forwarder pricing -> quote/documents walkthrough
+  for the selected load rather than leaking unrelated office-wide work.
+
+## Files changed
+
+- `src/app/dashboard/page.tsx`
+- `src/app/globals.css`
+- `src/lib/workbench-route-map.ts`
+- `scripts/workbench-route-map.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`
+- `docs/DECISIONS.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:workbench-route-map`
+- `npm run test:route-map`
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `npm run build`
+
+## Caveats
+
+- Browser-authenticated visual QA was not run before this handoff.
+
+## Previous Update
+
+## Date
+
+2026-06-30
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Inbox RFQ-to-load pipeline, video-demo inbox records, and Today fast lane:
 
 - Added a `Today RFQs` path: `/dashboard/inbox?filter=_TODAY&view=rfqs`

@@ -19,6 +19,7 @@
     "test:source-quality": "tsx scripts/source-quality.test.ts",
     "test:intelligence-map": "tsx scripts/intelligence-map.test.ts",
     "test:route-map": "tsx scripts/route-map-viewport.test.ts",
+    "test:workbench-route-map": "tsx scripts/workbench-route-map.test.ts",
     "test:email-classifier": "tsx scripts/email-classifier.test.ts",
     "test:email-labels": "tsx scripts/email-workflow-labels.test.ts",
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",

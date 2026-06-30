@@ -16,6 +16,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-06-30 - Separate top-down dashboard from focused load cockpit
+
+- Status: accepted
+- Owner: engineering
+- Context: The focused `/dashboard` load view was rendering office-wide
+  decision queue and control-sheet modules under the selected job. That made a
+  real load like `JOB-2026-021` appear to contain unrelated sheet rows and
+  under-covered RFQs from other lanes.
+- Decision: `/dashboard` defaults to the focused load cockpit and should render
+  only the selected job's route, pricing, timeline, documents, conversation,
+  and load-scoped demo/workflow context. Office-wide queue/control-sheet views
+  live behind an explicit top-down mode at `/dashboard?view=overview`.
+- Rationale: Operators need to trust that a load page is scoped to that load.
+  Global prioritization is useful, but mixing it into a specific load makes the
+  system look like it is hallucinating or cross-contaminating customer work.
+- Consequences: Future dashboard widgets must choose one scope: focused job or
+  office-wide overview. If a widget needs both, it should expose separate
+  scoped variants instead of reusing the same component blindly.
+- Revisit when: the product has a dedicated route structure for
+  `/dashboard/overview` and `/dashboard/jobs/[jobId]/workbench`.
+
 ### 2026-06-30 - Domestic trucking pricing V1 is US-only
 
 - Status: accepted

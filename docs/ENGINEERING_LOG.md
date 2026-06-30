@@ -17,6 +17,32 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-06-30 - Focused load dashboard scope and route-map fix
+
+- Branch: main
+- Commit: not committed
+- Task: Fix the focused load page so it shows a sensible route for
+  Giresun, Turkey to Ancona, Italy and stops rendering unrelated office-wide
+  decision/control-sheet data under the selected load.
+- Files changed: `src/app/dashboard/page.tsx`, `src/app/globals.css`,
+  `src/lib/workbench-route-map.ts`, `scripts/workbench-route-map.test.ts`,
+  `package.json`, `docs/AI_HANDOFF.md`, `docs/DECISIONS.md`, and
+  `docs/ENGINEERING_LOG.md`.
+- Behavior added: route geography moved into a tested helper; Giresun to
+  Ancona sea loads now route through Bosphorus, Dardanelles, and the Adriatic;
+  `/dashboard` defaults to a focused load cockpit; `/dashboard?view=overview`
+  holds the top-down queue/control-sheet dashboard; focused pages now include a
+  load-scoped demo scenario instead of global reference-deal sections.
+- Verification: `npm run test:workbench-route-map`, `npm run test:route-map`,
+  `npx tsc --noEmit`, `npm run check:docs`, and `npm run build` passed.
+- Failed/skipped checks: browser-authenticated visual QA was not run in this
+  session.
+- Caveats: the route helper still uses deterministic known-location matching,
+  not a full geocoder or carrier routing engine.
+- Follow-up: add more reviewed route fixtures as real RFQs expose new ports,
+  and consider promoting `/dashboard?view=overview` to a dedicated
+  `/dashboard/overview` route when navigation stabilizes.
+
 ### 2026-06-29 - Walnut/navy palette discipline
 
 - Branch: main
