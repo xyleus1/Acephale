@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma";
+import { isDeryaRfqSourceSender } from "./derya-inboxes";
 
 export type ClassifiedKind = "RFQ" | "CARRIER_REPLY" | "CUSTOMER_REPLY" | "RELATED_NOTE" | "OTHER";
 
@@ -56,6 +57,15 @@ export async function classifyInboundEmail(args: {
   bodyText: string;
   officeId: string;
 }): Promise<Classification> {
+  if (isDeryaRfqSourceSender(args.fromEmail)) {
+    return {
+      kind: "RFQ",
+      reason: "Message came from the configured Derya RFQ source address.",
+      relatedConfidence: 95,
+      parsed: {},
+    };
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { kind: "OTHER", reason: "ANTHROPIC_API_KEY missing" };
 

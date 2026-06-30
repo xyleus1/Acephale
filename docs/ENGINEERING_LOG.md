@@ -1247,3 +1247,27 @@ Use this file for chronological implementation notes that future agents should s
   not match production. No production sync was run from this shell.
 - Verification: `npx tsc --noEmit`, `npm run check:docs`, and `npm run build`
   passed.
+
+### 2026-06-30 - Today RFQ filter and rfq@ source routing
+
+- Branch: main
+- Commit: not committed
+- Task: Let the Today inbox fast lane jump directly to same-day RFQs, and use
+  `rfq@usederya.com` as a deterministic RFQ source signal.
+- Files changed: `src/app/dashboard/inbox/page.tsx`,
+  `src/lib/derya-inboxes.ts`, `src/lib/email-classifier.ts`,
+  `src/lib/thread-actions.ts`, `src/app/globals.css`,
+  `scripts/email-classifier.test.ts`, `scripts/email-workflow-labels.test.ts`,
+  `package.json`, and docs.
+- Behavior added: `/dashboard/inbox?filter=_TODAY&view=rfqs` now filters the
+  RFQ table by same-day inquiry receipt or same-day linked thread activity.
+  The Today panel has separate `Threads` and `RFQs` buttons. Inbound messages
+  from configured RFQ source senders defaulting to `rfq@usederya.com` classify
+  as `RFQ` before LLM classification, count as load/RFQ-related in filters, and
+  add a source-signal hint to the auto-link/create prompt.
+- Verification: `npm run test:email-classifier`, `npm run test:email-labels`,
+  `npm run test:rfq-load-draft`, `npx tsc --noEmit`, `npm run check:docs`,
+  and `npm run build` passed.
+- Caveats: if the RFQ source alias starts receiving non-RFQ mail, it will
+  intentionally surface in RFQ workflows until removed from
+  `DERYA_RFQ_SOURCE_EMAILS` or routed elsewhere.

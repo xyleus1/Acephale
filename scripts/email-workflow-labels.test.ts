@@ -7,15 +7,21 @@ import {
 } from "../src/lib/email-workflow-labels";
 import {
   DERYA_LOAD_RFQ_INBOX_EMAILS,
+  DERYA_RFQ_SOURCE_EMAILS,
   getDeryaLoadRfqInbox,
   isDeryaLoadRfqInbox,
+  isDeryaRfqSourceSender,
   parseDeryaLoadRfqInboxEnv,
+  parseDeryaRfqSourceEmailEnv,
 } from "../src/lib/derya-inboxes";
 
 assert(DERYA_LOAD_RFQ_INBOX_EMAILS.includes("mert@usederya.com"));
 assert(DERYA_LOAD_RFQ_INBOX_EMAILS.includes("oguzhan@usederya.com"));
+assert(DERYA_RFQ_SOURCE_EMAILS.includes("rfq@usederya.com"));
 assert.equal(isDeryaLoadRfqInbox("MERT@USEDERYA.COM"), true);
 assert.equal(isDeryaLoadRfqInbox("ops@example.com"), false);
+assert.equal(isDeryaRfqSourceSender("RFQ@USEDERYA.COM"), true);
+assert.equal(isDeryaRfqSourceSender("calendar@usederya.com"), false);
 assert.equal(getDeryaLoadRfqInbox("oguzhan@usederya.com")?.owner, "Oguzhan");
 assert.deepEqual(
   parseDeryaLoadRfqInboxEnv("mert@usederya.com, ops@usederya.com, MERT@USEDERYA.COM").map((inbox) => ({
@@ -26,6 +32,10 @@ assert.deepEqual(
     { email: "mert@usederya.com", owner: "Mert" },
     { email: "ops@usederya.com", owner: "Ops" },
   ],
+);
+assert.deepEqual(
+  parseDeryaRfqSourceEmailEnv("rfq@usederya.com, freight@usederya.com, RFQ@USEDERYA.COM"),
+  ["rfq@usederya.com", "freight@usederya.com"],
 );
 
 assert.equal(isLoadRfqRelatedClassification("RFQ"), true);

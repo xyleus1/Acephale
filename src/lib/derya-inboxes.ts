@@ -20,6 +20,10 @@ const DEFAULT_DERYA_LOAD_RFQ_INBOXES: DeryaLoadRfqInbox[] = [
   },
 ];
 
+const DEFAULT_DERYA_RFQ_SOURCE_EMAILS = [
+  "rfq@usederya.com",
+] as const;
+
 function titleCaseLocalPart(email: string): string {
   const local = email.split("@")[0] ?? email;
   return local
@@ -64,9 +68,31 @@ export function normalizeEmailAddress(email: string | null | undefined): string 
   return (email ?? "").trim().toLowerCase();
 }
 
+export function parseDeryaRfqSourceEmailEnv(value: string | null | undefined): string[] {
+  const configured = (value ?? "")
+    .split(",")
+    .map(normalizeEmailAddress)
+    .filter((email) => email.includes("@"));
+
+  const emails = configured.length > 0
+    ? configured
+    : [...DEFAULT_DERYA_RFQ_SOURCE_EMAILS];
+
+  return [...new Set(emails)];
+}
+
+export const DERYA_RFQ_SOURCE_EMAILS = parseDeryaRfqSourceEmailEnv(
+  process.env.DERYA_RFQ_SOURCE_EMAILS
+);
+
 export function isDeryaLoadRfqInbox(email: string | null | undefined): boolean {
   const normalized = normalizeEmailAddress(email);
   return DERYA_LOAD_RFQ_INBOX_EMAILS.includes(normalized);
+}
+
+export function isDeryaRfqSourceSender(email: string | null | undefined): boolean {
+  const normalized = normalizeEmailAddress(email);
+  return DERYA_RFQ_SOURCE_EMAILS.includes(normalized);
 }
 
 export function getDeryaLoadRfqInbox(email: string | null | undefined): DeryaLoadRfqInbox | null {

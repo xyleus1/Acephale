@@ -7,6 +7,16 @@ import { prisma } from "./prisma";
 import { createProposedJobForInquiry } from "./job-actions";
 import { createPendingBulkHideThreadsProposal } from "./agent-proposals";
 import { recordMemoryEvent } from "./memory/record-event";
+import { DERYA_RFQ_SOURCE_EMAILS, isDeryaRfqSourceSender } from "./derya-inboxes";
+
+function deryaRfqSourceSignal(messages: { direction: string; fromEmail: string }[]) {
+  const hasDeryaRfqSourceSender = messages.some((m) =>
+    m.direction === "INBOUND" && isDeryaRfqSourceSender(m.fromEmail)
+  );
+  return hasDeryaRfqSourceSender
+    ? `\nSource signal: at least one inbound message came from configured Derya RFQ source address ${DERYA_RFQ_SOURCE_EMAILS.join(", ")}. Treat this as strong freight/RFQ evidence. Prefer LINK or CREATE; only SKIP if the content is obviously not a freight request.\n`
+    : "";
+}
 
 export async function createInquiryFromThread(threadId: string): Promise<{ ok: true; inquiryId: string } | { error: string }> {
   const session = await requireSession();
@@ -26,6 +36,7 @@ export async function createInquiryFromThread(threadId: string): Promise<{ ok: t
     const dir = m.direction === "OUTBOUND" ? "[US OUT]" : "[INBOUND]";
     return `${dir} ${m.sentAt.toISOString().split("T")[0]} · ${m.fromName ?? m.fromEmail}\nSubject: ${m.subject ?? "(none)"}\n\n${m.bodyText ?? ""}`.trim();
   }).join("\n\n────\n\n");
+  const sourceSignal = deryaRfqSourceSignal(thread.messages);
 
   const client = new Anthropic({ apiKey });
   const result = await client.messages.create({
@@ -67,7 +78,7 @@ Output ONLY a JSON object, no markdown:
 Be conservative — null is better than guessing. If a thread has BOTH sourcing and forwarding aspects, choose the dominant one (whichever stage the conversation is currently in).`,
     messages: [{
       role: "user",
-      content: `EMAIL THREAD (subject: "${thread.subject}", ${thread.messages.length} messages):\n\n${transcript.slice(0, 12000)}`,
+      content: `${sourceSignal}EMAIL THREAD (subject: "${thread.subject}", ${thread.messages.length} messages):\n\n${transcript.slice(0, 12000)}`,
     }],
   });
 
@@ -234,6 +245,7 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
     const dir = m.direction === "OUTBOUND" ? "[US OUT]" : "[INBOUND]";
     return `${dir} ${m.sentAt.toISOString().split("T")[0]} · ${m.fromName ?? m.fromEmail}\nSubject: ${m.subject ?? "(none)"}\n\n${m.bodyText ?? ""}`.trim();
   }).join("\n\n────\n\n");
+  const sourceSignal = deryaRfqSourceSignal(thread.messages);
 
   const client = new Anthropic({ apiKey });
   const result = await client.messages.create({
@@ -276,7 +288,7 @@ ACTIVE JOBS (id | ref | type | customer | source-email | commodity | route | mod
 ${jobHints || "(none)"}`,
     messages: [{
       role: "user",
-      content: `EMAIL THREAD (subject: "${thread.subject}", ${thread.messages.length} messages):\n\n${transcript.slice(0, 12000)}`,
+      content: `${sourceSignal}EMAIL THREAD (subject: "${thread.subject}", ${thread.messages.length} messages):\n\n${transcript.slice(0, 12000)}`,
     }],
   });
 

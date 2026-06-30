@@ -86,6 +86,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: reviewed examples are available to improve prior-load
   suggestion ranking with evaluated deterministic heuristics or AI assistance.
 
+### 2026-06-30 - Treat rfq@usederya.com as a deterministic RFQ source
+
+- Status: accepted
+- Owner: engineering
+- Context: Most inbound load requests are expected to arrive from or through
+  `rfq@usederya.com`. Relying only on generic AI classification makes same-day
+  RFQs too easy to bury under calendar, founder, and operational noise.
+- Decision: `rfq@usederya.com` is the default configured RFQ source sender.
+  Inbound messages from configured RFQ source senders are treated as `RFQ`
+  before LLM classification, count as load/RFQ-related in Inbox filters, and
+  bias auto-link/create away from skipping the thread. The list can be extended
+  with `DERYA_RFQ_SOURCE_EMAILS`.
+- Rationale: This is a strong deterministic production signal, not a style
+  preference. The app should use the address structure the business controls
+  before asking an LLM to infer intent.
+- Consequences: If `rfq@usederya.com` starts receiving non-RFQ mail, route it
+  somewhere else or remove it from `DERYA_RFQ_SOURCE_EMAILS`; otherwise that
+  noise will intentionally surface as RFQ work.
+- Revisit when: there is a richer inbound routing system with per-alias rules,
+  Gmail labels, or mailbox-specific ingestion policies.
+
 ### 2026-06-29 - Sync Gmail recently every hour and backfill history by windows
 
 - Status: accepted

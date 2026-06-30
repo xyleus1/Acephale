@@ -10934,6 +10934,13 @@ details[open] .saved-views-summary::before {
   line-height: 1.2;
 }
 
+.today-inbox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .today-inbox-list {
   display: flex;
   flex-direction: column;
@@ -10977,6 +10984,10 @@ details[open] .saved-views-summary::before {
   .today-inbox-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .today-inbox-actions {
+    justify-content: flex-start;
   }
 
   .today-inbox-row {

@@ -18,6 +18,11 @@ not committed
 
 Inbox RFQ-to-load pipeline, video-demo inbox records, and Today fast lane:
 
+- Added a `Today RFQs` path: `/dashboard/inbox?filter=_TODAY&view=rfqs`
+  now filters the RFQ table, not just the thread list.
+- Added `rfq@usederya.com` as the default deterministic RFQ source sender via
+  `DERYA_RFQ_SOURCE_EMAILS`. Inbound mail from that address is classified as
+  RFQ before LLM classification and counts as load/RFQ work in Inbox filters.
 - Added a reviewed RFQ-to-load creation modal from Inbox RFQs and RFQ detail.
   Operators can edit fields before creating a load, and carried-forward
   customer history is marked as prior-load context rather than email truth.
@@ -40,6 +45,11 @@ Inbox RFQ-to-load pipeline, video-demo inbox records, and Today fast lane:
 - `src/app/dashboard/rfq/[inquiryId]/actions.ts`
 - `src/app/dashboard/inbox/page.tsx`
 - `src/app/globals.css`
+- `src/lib/derya-inboxes.ts`
+- `src/lib/email-classifier.ts`
+- `src/lib/thread-actions.ts`
+- `scripts/email-classifier.test.ts`
+- `scripts/email-workflow-labels.test.ts`
 - `scripts/rfq-load-draft.test.ts`
 - `scripts/reset-video-demo-loads.ts`
 - `package.json`
@@ -50,6 +60,8 @@ Inbox RFQ-to-load pipeline, video-demo inbox records, and Today fast lane:
 ## Verification passed
 
 - `npm run test:rfq-load-draft`
+- `npm run test:email-classifier`
+- `npm run test:email-labels`
 - `npx tsc --noEmit`
 - `npm run check:docs`
 - `npm run build`

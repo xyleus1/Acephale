@@ -13,7 +13,7 @@ import { LoadFilterPicker } from "@/components/load-filter-picker";
 import { RfqRowActions } from "@/components/rfq-row-actions";
 import { Icon } from "@/components/icon";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
-import { DERYA_LOAD_RFQ_INBOX_EMAILS, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
+import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefForInbox, isDeryaRfqSourceSender } from "@/lib/derya-inboxes";
 import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/lib/email-workflow-labels";
 import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
 
@@ -113,9 +113,10 @@ const KIND_META: Record<string, { label: string; cls: string }> = {
   UNCLASSIFIED:    { label: "Unclassified",   cls: "kind-unclassified" },
 };
 
-function dominantKind(messages: { direction: string; classification: string | null }[]): string {
+function dominantKind(messages: { direction: string; classification: string | null; fromEmail?: string | null }[]): string {
   const inbound = messages.filter((m) => m.direction === "INBOUND");
   if (inbound.length === 0) return "OTHER";
+  if (inbound.some((m) => isDeryaRfqSourceSender(m.fromEmail))) return "RFQ";
   const counts: Record<string, number> = {};
   for (const m of inbound) {
     const k = m.classification ?? "UNCLASSIFIED";
@@ -256,11 +257,24 @@ export default async function InboxPage({
       lt: inboxToday.end,
     },
   };
+  const todayInquiryWhere = {
+    OR: [
+      { receivedAt: { gte: inboxToday.start, lt: inboxToday.end } },
+      { emailThreads: { some: todayThreadWhere } },
+    ],
+  };
+  const rfqSourceMessageWhere = {
+    direction: "INBOUND" as const,
+    OR: DERYA_RFQ_SOURCE_EMAILS.map((email) => ({
+      fromEmail: { equals: email, mode: "insensitive" as const },
+    })),
+  };
   const loadRfqRelatedWhere = {
     OR: [
       { jobId: { not: null } },
       { inquiryId: { not: null } },
       { messages: { some: { direction: "INBOUND" as const, classification: { in: [...LOAD_RFQ_RELATED_CLASSIFICATIONS] } } } },
+      { messages: { some: rfqSourceMessageWhere } },
     ],
   };
   const demoThreadWhere = {
@@ -421,12 +435,17 @@ export default async function InboxPage({
       },
     },
   };
-  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalToday, totalDemo, totalLoadRfq, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll, todayThreads] = await Promise.all([
+  const todayRfqCountWhere: any = { officeId: session.officeId, AND: [todayInquiryWhere] };
+  if (accountFilter || channel) {
+    todayRfqCountWhere.AND.push({ emailThreads: { some: messageScope() } });
+  }
+  const [totalActive, totalAllChannelsActive, totalMail, totalWhatsApp, totalToday, totalTodayRfqs, totalDemo, totalLoadRfq, totalApprovedContacts, totalUnlinked, totalLinked, totalSnoozed, totalHidden, totalAll, todayThreads] = await Promise.all([
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeAllChannelsFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeMailFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, ...activeWhatsAppFilter } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, todayThreadWhere] } }),
+    prisma.inquiry.count({ where: todayRfqCountWhere }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, demoThreadWhere] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, loadRfqRelatedWhere] } }),
     prisma.emailThread.count({ where: { officeId: session.officeId, AND: [activeFilter, approvedContactFilter] } }),
@@ -471,9 +490,53 @@ export default async function InboxPage({
     return totalAllChannelsActive;
   }
 
+  const rfqWhere: any = { officeId: session.officeId };
+  const rfqAnd: any[] = [];
+  if (filter === "_TODAY") {
+    rfqAnd.push(todayInquiryWhere);
+  } else if (filter === "_DEMO") {
+    rfqAnd.push({
+      OR: [
+        { notes: { contains: "[VIDEO_DEMO_LOAD]" } },
+        { subject: { startsWith: "DEMO" } },
+        { company: { name: { startsWith: "DEMO ·" } } },
+        { emailThreads: { some: demoThreadWhere } },
+      ],
+    });
+  } else if (filter === "_LINKED") {
+    rfqAnd.push({ job: { isNot: null } });
+  } else if (filter === "_UNLINKED") {
+    rfqAnd.push({ job: null });
+  }
+  if (searchQuery) {
+    rfqAnd.push({
+      OR: [
+        { subject: { contains: searchQuery, mode: "insensitive" } },
+        { fromEmail: { contains: searchQuery, mode: "insensitive" } },
+        { fromCompany: { contains: searchQuery, mode: "insensitive" } },
+        { origin: { contains: searchQuery, mode: "insensitive" } },
+        { destination: { contains: searchQuery, mode: "insensitive" } },
+        { commodity: { contains: searchQuery, mode: "insensitive" } },
+        { notes: { contains: searchQuery, mode: "insensitive" } },
+        { emailThreads: { some: { messages: { some: {
+          OR: [
+            { bodyText: { contains: searchQuery, mode: "insensitive" } },
+            { subject: { contains: searchQuery, mode: "insensitive" } },
+            { fromEmail: { contains: searchQuery, mode: "insensitive" } },
+            { fromName: { contains: searchQuery, mode: "insensitive" } },
+          ],
+        } } } } },
+      ],
+    });
+  }
+  if (accountFilter || channel) {
+    rfqAnd.push({ emailThreads: { some: messageScope() } });
+  }
+  if (rfqAnd.length > 0) rfqWhere.AND = rfqAnd;
+
   // RFQs view: structured inquiry list (replaces the standalone /dashboard/rfq page).
   const rfqs = view === "rfqs" ? await prisma.inquiry.findMany({
-    where: { officeId: session.officeId },
+    where: rfqWhere,
     include: {
       company: { select: { id: true, name: true } },
       job: { select: { id: true, reference: true, status: true } },
@@ -617,9 +680,14 @@ export default async function InboxPage({
               <div className="today-inbox-eyebrow">Today</div>
               <h2>New work that hit the box</h2>
             </div>
-            <a href={inboxHref({ filter: "_TODAY" })} className="btn btn-secondary btn-sm">
-              View all {totalToday}
-            </a>
+            <div className="today-inbox-actions">
+              <a href={inboxHref({ filter: "_TODAY", view: null })} className="btn btn-secondary btn-sm">
+                Threads {totalToday}
+              </a>
+              <a href={inboxHref({ filter: "_TODAY", view: "rfqs" })} className="btn btn-sm">
+                RFQs {totalTodayRfqs}
+              </a>
+            </div>
           </div>
           <div className="today-inbox-list">
             {todayThreads.map((t) => {
@@ -721,7 +789,7 @@ export default async function InboxPage({
       </form>
       {searchQuery && (
         <div className="inbox-result-note">
-          Searching for <strong>{searchQuery}</strong> · {threads.length} match{threads.length === 1 ? "" : "es"}
+          Searching for <strong>{searchQuery}</strong> · {view === "rfqs" ? rfqs.length : threads.length} match{(view === "rfqs" ? rfqs.length : threads.length) === 1 ? "" : "es"}
         </div>
       )}
 
