@@ -8,6 +8,8 @@ import { OpportunityScoreCard, OpportunityScorePill } from "@/components/opportu
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
+import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-panel";
+import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   INGESTED: { label: "RFQ",        cls: "badge-info" },
@@ -149,6 +151,7 @@ export default async function RFQDetailPage({
     ...maturity.missing,
     ...(maturity.targetPriceQuestion ? ["target price or no-target confirmation"] : []),
   ];
+  const domesticPricing = assessDomesticTruckingPricing(inquiry);
 
   return (
     <div>
@@ -482,6 +485,8 @@ export default async function RFQDetailPage({
               </div>
             </div>
           </div>
+
+          <DomesticTruckingRatePanel assessment={domesticPricing} compact />
 
           {/* Convert to Job */}
           {canConvert ? (

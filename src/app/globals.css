@@ -31971,3 +31971,425 @@ html.agent-dock-open .page-container {
 .pricing-command-phase.mature-rfq svg {
   color: var(--danger) !important;
 }
+.domestic-pricing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.domestic-pricing-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.domestic-pricing-hero .eyebrow {
+  margin-bottom: 6px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.domestic-pricing-hero h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.domestic-pricing-hero p {
+  max-width: 760px;
+  margin: 7px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.domestic-pricing-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(78px, 1fr));
+  gap: 8px;
+  min-width: 290px;
+}
+
+.domestic-pricing-summary div,
+.domestic-rate-request-grid div,
+.domestic-draft-economics div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.domestic-pricing-summary span,
+.domestic-rate-request-grid span,
+.domestic-draft-economics span {
+  display: block;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.domestic-pricing-summary strong,
+.domestic-rate-request-grid strong,
+.domestic-draft-economics strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.domestic-pricing-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 330px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.domestic-pricing-queue {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.domestic-pricing-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.domestic-pricing-queue-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+
+.domestic-pricing-queue-item:hover,
+.domestic-pricing-queue-item.selected {
+  background: var(--surface-2);
+}
+
+.domestic-pricing-queue-item.selected {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.domestic-pricing-queue-item span {
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.domestic-pricing-queue-item strong {
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.domestic-pricing-queue-item em,
+.domestic-selected-header em,
+.domestic-provider-card em,
+.domestic-brain-card em {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.domestic-pricing-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.domestic-selected-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.domestic-selected-header span {
+  display: block;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.domestic-selected-header strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.domestic-rate-header {
+  align-items: center;
+}
+
+.domestic-rate-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.domestic-rate-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.domestic-rate-state.ready {
+  border-left-color: var(--success);
+}
+
+.domestic-rate-state strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.domestic-rate-state span {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.domestic-rate-state > span {
+  flex-shrink: 0;
+  color: var(--text-3);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.domestic-rate-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.domestic-rate-badges span,
+.domestic-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--brand);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.domestic-rate-request-grid,
+.domestic-draft-economics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.domestic-section-title {
+  margin-bottom: 7px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.domestic-field-block {
+  min-width: 0;
+}
+
+.domestic-rate-panel .record-chip.ready,
+.domestic-field-row.ready {
+  border-color: var(--success-border);
+  background: #ffffff;
+  color: var(--success);
+}
+
+.domestic-rate-panel .record-chip.review,
+.domestic-field-row.review {
+  border-color: var(--brand-border);
+  background: #ffffff;
+  color: var(--brand);
+}
+
+.domestic-field-grid,
+.domestic-provider-grid,
+.domestic-brain-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.domestic-provider-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.domestic-field-row,
+.domestic-provider-card,
+.domestic-brain-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.domestic-field-row strong,
+.domestic-provider-card strong,
+.domestic-brain-card strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.domestic-field-row span,
+.domestic-provider-card span,
+.domestic-brain-card span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.domestic-provider-card.ready {
+  box-shadow: inset 3px 0 0 var(--success);
+}
+
+.domestic-provider-card.review {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.domestic-rate-table-shell {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.domestic-rate-table td strong,
+.domestic-rate-table td span {
+  display: block;
+}
+
+.domestic-rate-table td span {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.domestic-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.domestic-empty-state strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.domestic-empty-state span {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.domestic-quote-draft {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.domestic-quote-draft.ready {
+  border-left-color: var(--success);
+}
+
+.domestic-draft-body {
+  max-height: 340px;
+  margin: 10px 0 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text-2);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+  .domestic-pricing-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .domestic-provider-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .domestic-pricing-hero,
+  .domestic-selected-header,
+  .domestic-rate-state {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .domestic-pricing-summary,
+  .domestic-rate-request-grid,
+  .domestic-draft-economics,
+  .domestic-field-grid,
+  .domestic-provider-grid,
+  .domestic-brain-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .domestic-rate-header {
+    align-items: flex-start;
+  }
+}

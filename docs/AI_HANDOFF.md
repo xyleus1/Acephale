@@ -4,6 +4,59 @@
 
 ## Date
 
+2026-06-30
+
+## Branch
+
+codex/domestic-pricing-live-20260630
+
+## Commit
+
+not committed
+
+## Task implemented
+
+Domestic trucking instant pricing V1:
+
+- Added `/dashboard/domestic-pricing` and linked it from the dashboard sidebar
+  as `Domestic Rates`.
+- Added a compact RFQ detail panel with required-field blockers, provider
+  readiness, simulated rate options, draft quote economics, and approval
+  warnings.
+- Added deterministic domestic pricing domain logic for normalized truck rate
+  requests, mock/manual providers, quote drafts, and brain-context placeholders.
+- Kept V1 quote-only: no live provider calls, credential reads, customer sends,
+  bookings, tenders, database schema changes, or canonical brain writes.
+
+## Files changed
+
+- `src/lib/domestic-trucking-pricing.ts`
+- `src/components/domestic-trucking-rate-panel.tsx`
+- `src/app/dashboard/domestic-pricing/page.tsx`
+- `src/app/dashboard/layout.tsx`
+- `src/app/dashboard/rfq/[inquiryId]/page.tsx`
+- `src/app/globals.css`
+- `scripts/domestic-trucking-pricing.test.ts`
+- `docs/AI_HANDOFF.md`
+- `docs/DECISIONS.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npx tsx scripts/domestic-trucking-pricing.test.ts`
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run build`
+
+## Caveats
+
+- Provider and GBrain integrations are intentionally stubs. This branch makes
+  the wedge visible on the app, not a live carrier-rating system.
+
+## Previous Update
+
+## Date
+
 2026-06-29
 
 ## Branch

@@ -1124,3 +1124,28 @@ Use this file for chronological implementation notes that future agents should s
 - Failed/skipped checks: no live production cron run was triggered manually.
 - Caveats: Vercel is now the only expected hourly scheduler. Re-adding an
   external scheduler would duplicate sync unless Vercel cron is disabled first.
+
+### 2026-06-30 - Domestic trucking instant pricing V1
+
+- Branch: codex/domestic-pricing-live-20260630
+- Commit: not committed
+- Task: Make the approved domestic trucking instant pricing slice visible in
+  the app and sidebar.
+- Files changed: `src/lib/domestic-trucking-pricing.ts`,
+  `src/components/domestic-trucking-rate-panel.tsx`,
+  `src/app/dashboard/domestic-pricing/page.tsx`,
+  `src/app/dashboard/layout.tsx`,
+  `src/app/dashboard/rfq/[inquiryId]/page.tsx`, `src/app/globals.css`,
+  `scripts/domestic-trucking-pricing.test.ts`, and docs.
+- Behavior added: `/dashboard/domestic-pricing` lists recent office-scoped RFQs
+  and evaluates domestic trucking eligibility, missing provider fields,
+  mock/manual provider readiness, simulated rate options, draft quote
+  economics, approval warnings, and brain-context placeholders. RFQ detail gets
+  a compact `Check domestic trucking rates` panel before conversion.
+- Verification: `npx tsx scripts/domestic-trucking-pricing.test.ts`,
+  `npx tsc --noEmit`, `npm run check:docs`, and
+  `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run build`
+  passed.
+- Failed/skipped checks: no live provider API, GBrain retrieval, booking,
+  tendering, customer send, DB migration, or credential check was run. Those
+  paths intentionally do not exist in V1.

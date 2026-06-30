@@ -16,6 +16,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-06-30 - Domestic trucking V1 is draft-only mock/manual pricing
+
+- Status: accepted
+- Owner: engineering
+- Context: The approved domestic trucking wedge needs an instant pricing feel
+  inside Derya, but the provider bridge and company-brain retrieval are not yet
+  production integrations. Faking live quotes or letting the UI imply booking
+  authority would create bad commercial risk.
+- Decision: V1 exposes a domestic trucking rate workbench and RFQ-side panel
+  using deterministic required-field checks, mock benchmark rates, manual-rate
+  readiness, draft quote economics, approval warnings, and source-slugged
+  brain-context placeholders. It does not store provider credentials, call live
+  rate APIs, send customer emails, book capacity, tender to carriers, or bypass
+  human approval.
+- Rationale: Operators get fast missing-field diagnosis, normalized truckload
+  request shape, provisional economics, and a visible bridge slot for future
+  GBrain context without pretending the system has live provider truth.
+- Consequences: Future provider work must extend the `DomesticRateProvider`
+  boundary and keep `officeId`, provenance, credential status, and approval
+  semantics explicit.
+- Revisit when: provider sandbox credentials, persisted audit logs, and
+  source-backed GBrain retrieval are ready for an operator-reviewed pilot.
+
 ### 2026-06-29 - Sync Gmail recently every hour and backfill history by windows
 
 - Status: accepted
