@@ -8,6 +8,64 @@
 
 ## Branch
 
+codex/domestic-pricing-us-loadboard-20260630
+
+## Commit
+
+not committed
+
+## Task implemented
+
+US-only domestic loadboard correction:
+
+- Tightened domestic trucking eligibility so V1 is US pickup to US delivery
+  only. Road moves outside the United States are now suppressed instead of
+  labeled domestic.
+- Added explicit market scope (`US_DOMESTIC`, `NON_US`, `UNKNOWN`) and US
+  location checks for city/state/ZIP, known US cities, state names/codes, and
+  generic `USA` blockers.
+- Reworked `/dashboard/domestic-pricing` into a loadboard-style first screen
+  with status, lane, equipment, pickup, weight, spot estimate, blockers, and
+  selected-RFQ navigation.
+- Added a selected-lane map panel using OpenStreetMap route tiles when both
+  endpoints resolve to US locations.
+- Added an in-product `Blocking real data` panel explaining that live data is
+  blocked by US lane quality, provider contracts/credentials, missing shipment
+  facts, and approval/audit persistence.
+
+## Files changed
+
+- `src/lib/domestic-trucking-pricing.ts`
+- `src/app/dashboard/domestic-pricing/page.tsx`
+- `src/app/globals.css`
+- `scripts/domestic-trucking-pricing.test.ts`
+- `docs/AI_HANDOFF.md`
+- `docs/DECISIONS.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npx tsx scripts/domestic-trucking-pricing.test.ts`
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run build`
+
+## Caveats
+
+- The map uses deterministic known-city/state/ZIP matching, not a geocoder.
+  Ambiguous city-only locations outside the small known-city table stay blocked
+  until a US state or ZIP is present.
+- Live loadboard/provider data is still not connected. V1 remains mock/manual
+  and draft-only.
+
+## Previous Update
+
+## Date
+
+2026-06-30
+
+## Branch
+
 codex/domestic-pricing-live-20260630
 
 ## Commit

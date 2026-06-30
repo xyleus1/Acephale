@@ -32015,14 +32015,15 @@ html.agent-dock-open .page-container {
 
 .domestic-pricing-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(78px, 1fr));
+  grid-template-columns: repeat(4, minmax(72px, 1fr));
   gap: 8px;
   min-width: 290px;
 }
 
 .domestic-pricing-summary div,
 .domestic-rate-request-grid div,
-.domestic-draft-economics div {
+.domestic-draft-economics div,
+.domestic-real-data-grid div {
   min-width: 0;
   padding: 10px;
   border: 1px solid var(--border);
@@ -32032,7 +32033,8 @@ html.agent-dock-open .page-container {
 
 .domestic-pricing-summary span,
 .domestic-rate-request-grid span,
-.domestic-draft-economics span {
+.domestic-draft-economics span,
+.domestic-real-data-grid span {
   display: block;
   color: var(--text-3);
   font-size: 10.5px;
@@ -32043,7 +32045,8 @@ html.agent-dock-open .page-container {
 
 .domestic-pricing-summary strong,
 .domestic-rate-request-grid strong,
-.domestic-draft-economics strong {
+.domestic-draft-economics strong,
+.domestic-real-data-grid strong {
   display: block;
   margin-top: 3px;
   color: var(--text);
@@ -32148,6 +32151,206 @@ html.agent-dock-open .page-container {
   margin-top: 2px;
   color: var(--text);
   font-size: 14px;
+}
+
+.domestic-loadboard-panel {
+  overflow: hidden;
+}
+
+.domestic-loadboard-shell {
+  max-height: 420px;
+  border-top: 1px solid var(--border);
+}
+
+.domestic-loadboard-table tr.selected td {
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.domestic-loadboard-table td strong,
+.domestic-loadboard-table td span {
+  display: block;
+}
+
+.domestic-loadboard-table td span {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.domestic-board-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.domestic-board-status.ready {
+  border-color: var(--success-border);
+  color: var(--success);
+}
+
+.domestic-board-status.blocked {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.domestic-board-link {
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.domestic-route-card,
+.domestic-real-data-panel {
+  overflow: hidden;
+}
+
+.domestic-route-map {
+  position: relative;
+  min-height: 300px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #d8e6ec;
+}
+
+.domestic-route-map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(10,31,51,0.10));
+}
+
+.domestic-route-map-tiles,
+.domestic-route-map-tiles img,
+.domestic-route-svg {
+  position: absolute;
+  inset: 0;
+}
+
+.domestic-route-map-tiles img {
+  max-width: none;
+}
+
+.domestic-route-svg {
+  z-index: 2;
+}
+
+.domestic-route-line-shadow,
+.domestic-route-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.domestic-route-line-shadow {
+  stroke: rgba(8, 27, 45, 0.28);
+  stroke-width: 4.8;
+}
+
+.domestic-route-line {
+  stroke: var(--derya-navy);
+  stroke-width: 2.4;
+}
+
+.domestic-route-marker {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transform: translate(-10px, -10px);
+  max-width: 180px;
+}
+
+.domestic-route-marker.destination {
+  flex-direction: row-reverse;
+  transform: translate(calc(-100% + 10px), -10px);
+}
+
+.domestic-route-marker span {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: var(--derya-navy);
+  box-shadow: 0 4px 12px rgba(8, 27, 45, 0.24);
+}
+
+.domestic-route-marker.destination span {
+  background: var(--success);
+}
+
+.domestic-route-marker strong {
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.92);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.domestic-route-map-chip {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.94);
+  color: var(--text-2);
+  box-shadow: var(--shadow-xs);
+}
+
+.domestic-route-map-chip span,
+.domestic-route-map-chip strong {
+  font-size: 12px;
+}
+
+.domestic-route-map-chip strong {
+  color: var(--text);
+}
+
+.domestic-route-map-attribution {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  z-index: 4;
+  color: rgba(8, 27, 45, 0.62);
+  font-size: 9px;
+}
+
+.domestic-real-data-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.domestic-real-data-grid span {
+  margin-top: 5px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
 }
 
 .domestic-rate-header {
@@ -32385,7 +32588,8 @@ html.agent-dock-open .page-container {
   .domestic-draft-economics,
   .domestic-field-grid,
   .domestic-provider-grid,
-  .domestic-brain-grid {
+  .domestic-brain-grid,
+  .domestic-real-data-grid {
     grid-template-columns: 1fr;
   }
 

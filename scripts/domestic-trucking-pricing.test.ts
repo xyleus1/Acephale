@@ -8,8 +8,9 @@ const incomplete = assessDomesticTruckingPricing({
   mode: "ROAD",
 });
 
-assert.equal(incomplete.eligible, true, "ROAD RFQs should be domestic-trucking eligible");
-assert(incomplete.blockers.some((blocker) => blocker.includes("pickup")), "pickup window should block provider lookup");
+assert.equal(incomplete.eligible, false, "ROAD alone is not enough; V1 requires US pickup and delivery");
+assert.equal(incomplete.marketScope, "UNKNOWN");
+assert(incomplete.blockers.some((blocker) => blocker.includes("US pickup")), "US pickup should block provider lookup");
 assert.equal(incomplete.rateOptions.length, 0, "missing fields should prevent mock options");
 assert.equal(incomplete.quoteDraft.status, "BLOCKED", "missing fields should block quote draft");
 
@@ -39,6 +40,7 @@ const complete = assessDomesticTruckingPricing({
 });
 
 assert.equal(complete.eligible, true);
+assert.equal(complete.marketScope, "US_DOMESTIC");
 assert.equal(complete.blockers.length, 0, "complete request should have no blocking fields");
 assert.equal(complete.rateOptions.length, 2, "mock provider should return deterministic benchmark options");
 assert(complete.rateOptions.every((option) => option.canBook === false && option.canTender === false), "V1 must not book or tender");
@@ -69,6 +71,54 @@ const hazmatMissingDetails = assessDomesticTruckingPricing({
 
 assert(hazmatMissingDetails.missingRequiredFields.some((field) => field.key === "hazmat_details"));
 assert.equal(hazmatMissingDetails.rateOptions.length, 0, "hazmat quote should block without details");
+
+const turkeyRoad = assessDomesticTruckingPricing({
+  id: "rfq-turkey",
+  officeId: "office-1",
+  subject: "Istanbul to Konya road",
+  fromEmail: "ops@example.com",
+  origin: "Istanbul, Turkey",
+  destination: "Konya, Turkey",
+  mode: "ROAD",
+  containerType: "20GP",
+  packages: 1,
+  commodity: "Machinery",
+  weight: 1000,
+  cargoReadyDate: "2026-07-02T09:00:00.000Z",
+  dangerousGoods: "NO",
+  parsedData: JSON.stringify({
+    temperatureControl: false,
+    accessorialsKnown: true,
+  }),
+});
+
+assert.equal(turkeyRoad.eligible, false, "Turkey road lanes must not appear as US domestic");
+assert.equal(turkeyRoad.marketScope, "NON_US");
+assert(turkeyRoad.blockers.some((blocker) => blocker.includes("US-only")));
+assert.equal(turkeyRoad.rateOptions.length, 0);
+
+const transatlanticRoad = assessDomesticTruckingPricing({
+  id: "rfq-long-beach-lisbon",
+  officeId: "office-1",
+  subject: "Long Beach to Lisbon",
+  fromEmail: "ops@example.com",
+  origin: "Long Beach",
+  destination: "Lisbon",
+  mode: "ROAD",
+  containerType: "53 dry van",
+  packages: 4,
+  commodity: "Parts",
+  weight: 1200,
+  cargoReadyDate: "2026-07-02T09:00:00.000Z",
+  dangerousGoods: "NO",
+  parsedData: JSON.stringify({
+    temperatureControl: false,
+    accessorialsKnown: true,
+  }),
+});
+
+assert.equal(transatlanticRoad.eligible, false, "one US endpoint is not US domestic");
+assert.equal(transatlanticRoad.marketScope, "NON_US");
 
 const ocean = assessDomesticTruckingPricing({
   id: "rfq-ocean",

@@ -2,6 +2,7 @@ export type DomesticMode = "FTL" | "LTL" | "PARTIAL" | "DRAYAGE";
 export type EquipmentType = "DRY_VAN" | "REEFER" | "FLATBED" | "STEP_DECK" | "BOX_TRUCK" | "CONTAINER_DRAYAGE" | "UNKNOWN";
 export type YesNoUnknown = "YES" | "NO" | "UNKNOWN";
 export type RequiredRateFieldStatus = "ready" | "missing" | "assumed" | "advisory";
+export type DomesticMarketScope = "US_DOMESTIC" | "NON_US" | "UNKNOWN";
 
 export type Money = {
   amount: number;
@@ -16,6 +17,18 @@ export type DomesticRateSource = {
   customerEmail: string | null;
 };
 
+export type DomesticLocation = {
+  input: string | null;
+  label: string;
+  isUnitedStates: boolean;
+  isGenericCountryOnly: boolean;
+  confidence: "explicit_country" | "state_or_zip" | "known_city" | "non_us" | "unknown";
+  stateCode: string | null;
+  lat: number | null;
+  lon: number | null;
+  reason: string;
+};
+
 export type DomesticRateRequest = {
   id: string;
   officeId: string | null;
@@ -24,6 +37,9 @@ export type DomesticRateRequest = {
   equipmentType: EquipmentType | null;
   origin: string | null;
   destination: string | null;
+  originLocation: DomesticLocation;
+  destinationLocation: DomesticLocation;
+  marketScope: DomesticMarketScope;
   pickupWindow: string | null;
   deliveryWindow: string | null;
   commodity: string | null;
@@ -112,6 +128,7 @@ export type DomesticBrainContext = {
 export type DomesticPricingAssessment = {
   inquiryId: string;
   eligible: boolean;
+  marketScope: DomesticMarketScope;
   eligibilityLabel: string;
   eligibilityReasons: string[];
   rateRequest: DomesticRateRequest;
@@ -166,6 +183,104 @@ const BRAIN_SOURCE_SLUGS = {
   bridge: "product/domestic-pricing-brain-bridge",
   providerMatrix: "research/domestic-trucking-pricing/provider-matrix",
 };
+
+const US_STATE_POINTS: Record<string, { code: string; label: string; lat: number; lon: number }> = {
+  AL: { code: "AL", label: "Alabama", lat: 32.8067, lon: -86.7911 },
+  AK: { code: "AK", label: "Alaska", lat: 61.3707, lon: -152.4044 },
+  AZ: { code: "AZ", label: "Arizona", lat: 33.7298, lon: -111.4312 },
+  AR: { code: "AR", label: "Arkansas", lat: 34.9697, lon: -92.3731 },
+  CA: { code: "CA", label: "California", lat: 36.1162, lon: -119.6816 },
+  CO: { code: "CO", label: "Colorado", lat: 39.0598, lon: -105.3111 },
+  CT: { code: "CT", label: "Connecticut", lat: 41.5978, lon: -72.7554 },
+  DE: { code: "DE", label: "Delaware", lat: 39.3185, lon: -75.5071 },
+  FL: { code: "FL", label: "Florida", lat: 27.7663, lon: -81.6868 },
+  GA: { code: "GA", label: "Georgia", lat: 33.0406, lon: -83.6431 },
+  HI: { code: "HI", label: "Hawaii", lat: 21.0943, lon: -157.4983 },
+  ID: { code: "ID", label: "Idaho", lat: 44.2405, lon: -114.4788 },
+  IL: { code: "IL", label: "Illinois", lat: 40.3495, lon: -88.9861 },
+  IN: { code: "IN", label: "Indiana", lat: 39.8494, lon: -86.2583 },
+  IA: { code: "IA", label: "Iowa", lat: 42.0115, lon: -93.2105 },
+  KS: { code: "KS", label: "Kansas", lat: 38.5266, lon: -96.7265 },
+  KY: { code: "KY", label: "Kentucky", lat: 37.6681, lon: -84.6701 },
+  LA: { code: "LA", label: "Louisiana", lat: 31.1695, lon: -91.8678 },
+  ME: { code: "ME", label: "Maine", lat: 44.6939, lon: -69.3819 },
+  MD: { code: "MD", label: "Maryland", lat: 39.0639, lon: -76.8021 },
+  MA: { code: "MA", label: "Massachusetts", lat: 42.2302, lon: -71.5301 },
+  MI: { code: "MI", label: "Michigan", lat: 43.3266, lon: -84.5361 },
+  MN: { code: "MN", label: "Minnesota", lat: 45.6945, lon: -93.9002 },
+  MS: { code: "MS", label: "Mississippi", lat: 32.7416, lon: -89.6787 },
+  MO: { code: "MO", label: "Missouri", lat: 38.4561, lon: -92.2884 },
+  MT: { code: "MT", label: "Montana", lat: 46.9219, lon: -110.4544 },
+  NE: { code: "NE", label: "Nebraska", lat: 41.1254, lon: -98.2681 },
+  NV: { code: "NV", label: "Nevada", lat: 38.3135, lon: -117.0554 },
+  NH: { code: "NH", label: "New Hampshire", lat: 43.4525, lon: -71.5639 },
+  NJ: { code: "NJ", label: "New Jersey", lat: 40.2989, lon: -74.5210 },
+  NM: { code: "NM", label: "New Mexico", lat: 34.8405, lon: -106.2485 },
+  NY: { code: "NY", label: "New York", lat: 42.1657, lon: -74.9481 },
+  NC: { code: "NC", label: "North Carolina", lat: 35.6301, lon: -79.8064 },
+  ND: { code: "ND", label: "North Dakota", lat: 47.5289, lon: -99.7840 },
+  OH: { code: "OH", label: "Ohio", lat: 40.3888, lon: -82.7649 },
+  OK: { code: "OK", label: "Oklahoma", lat: 35.5653, lon: -96.9289 },
+  OR: { code: "OR", label: "Oregon", lat: 44.5720, lon: -122.0709 },
+  PA: { code: "PA", label: "Pennsylvania", lat: 40.5908, lon: -77.2098 },
+  RI: { code: "RI", label: "Rhode Island", lat: 41.6809, lon: -71.5118 },
+  SC: { code: "SC", label: "South Carolina", lat: 33.8569, lon: -80.9450 },
+  SD: { code: "SD", label: "South Dakota", lat: 44.2998, lon: -99.4388 },
+  TN: { code: "TN", label: "Tennessee", lat: 35.7478, lon: -86.6923 },
+  TX: { code: "TX", label: "Texas", lat: 31.0545, lon: -97.5635 },
+  UT: { code: "UT", label: "Utah", lat: 40.1500, lon: -111.8624 },
+  VT: { code: "VT", label: "Vermont", lat: 44.0459, lon: -72.7107 },
+  VA: { code: "VA", label: "Virginia", lat: 37.7693, lon: -78.1700 },
+  WA: { code: "WA", label: "Washington", lat: 47.4009, lon: -121.4905 },
+  WV: { code: "WV", label: "West Virginia", lat: 38.4912, lon: -80.9545 },
+  WI: { code: "WI", label: "Wisconsin", lat: 44.2685, lon: -89.6165 },
+  WY: { code: "WY", label: "Wyoming", lat: 42.7560, lon: -107.3025 },
+};
+
+const US_STATE_NAMES = Object.fromEntries(Object.values(US_STATE_POINTS).map((state) => [state.label.toUpperCase(), state.code]));
+
+const US_CITY_POINTS: Record<string, { label: string; stateCode: string; lat: number; lon: number }> = {
+  "ATLANTA": { label: "Atlanta, GA", stateCode: "GA", lat: 33.7490, lon: -84.3880 },
+  "BALTIMORE": { label: "Baltimore, MD", stateCode: "MD", lat: 39.2904, lon: -76.6122 },
+  "BOSTON": { label: "Boston, MA", stateCode: "MA", lat: 42.3601, lon: -71.0589 },
+  "CHARLESTON": { label: "Charleston, SC", stateCode: "SC", lat: 32.7765, lon: -79.9311 },
+  "CHARLOTTE": { label: "Charlotte, NC", stateCode: "NC", lat: 35.2271, lon: -80.8431 },
+  "CHICAGO": { label: "Chicago, IL", stateCode: "IL", lat: 41.8781, lon: -87.6298 },
+  "COLUMBUS": { label: "Columbus, OH", stateCode: "OH", lat: 39.9612, lon: -82.9988 },
+  "DALLAS": { label: "Dallas, TX", stateCode: "TX", lat: 32.7767, lon: -96.7970 },
+  "DENVER": { label: "Denver, CO", stateCode: "CO", lat: 39.7392, lon: -104.9903 },
+  "DETROIT": { label: "Detroit, MI", stateCode: "MI", lat: 42.3314, lon: -83.0458 },
+  "HOUSTON": { label: "Houston, TX", stateCode: "TX", lat: 29.7604, lon: -95.3698 },
+  "INDIANAPOLIS": { label: "Indianapolis, IN", stateCode: "IN", lat: 39.7684, lon: -86.1581 },
+  "JACKSONVILLE": { label: "Jacksonville, FL", stateCode: "FL", lat: 30.3322, lon: -81.6557 },
+  "KANSAS CITY": { label: "Kansas City, MO", stateCode: "MO", lat: 39.0997, lon: -94.5786 },
+  "LAREDO": { label: "Laredo, TX", stateCode: "TX", lat: 27.5036, lon: -99.5076 },
+  "LAS VEGAS": { label: "Las Vegas, NV", stateCode: "NV", lat: 36.1699, lon: -115.1398 },
+  "LONG BEACH": { label: "Long Beach, CA", stateCode: "CA", lat: 33.7701, lon: -118.1937 },
+  "LOS ANGELES": { label: "Los Angeles, CA", stateCode: "CA", lat: 34.0522, lon: -118.2437 },
+  "MEMPHIS": { label: "Memphis, TN", stateCode: "TN", lat: 35.1495, lon: -90.0490 },
+  "MIAMI": { label: "Miami, FL", stateCode: "FL", lat: 25.7617, lon: -80.1918 },
+  "NASHVILLE": { label: "Nashville, TN", stateCode: "TN", lat: 36.1627, lon: -86.7816 },
+  "NEW YORK": { label: "New York, NY", stateCode: "NY", lat: 40.7128, lon: -74.0060 },
+  "NEWARK": { label: "Newark, NJ", stateCode: "NJ", lat: 40.7357, lon: -74.1724 },
+  "NORFOLK": { label: "Norfolk, VA", stateCode: "VA", lat: 36.8508, lon: -76.2859 },
+  "OAKLAND": { label: "Oakland, CA", stateCode: "CA", lat: 37.8044, lon: -122.2712 },
+  "PHOENIX": { label: "Phoenix, AZ", stateCode: "AZ", lat: 33.4484, lon: -112.0740 },
+  "PORTLAND": { label: "Portland, OR", stateCode: "OR", lat: 45.5152, lon: -122.6784 },
+  "SALT LAKE CITY": { label: "Salt Lake City, UT", stateCode: "UT", lat: 40.7608, lon: -111.8910 },
+  "SAN DIEGO": { label: "San Diego, CA", stateCode: "CA", lat: 32.7157, lon: -117.1611 },
+  "SAVANNAH": { label: "Savannah, GA", stateCode: "GA", lat: 32.0809, lon: -81.0912 },
+  "SEATTLE": { label: "Seattle, WA", stateCode: "WA", lat: 47.6062, lon: -122.3321 },
+  "TACOMA": { label: "Tacoma, WA", stateCode: "WA", lat: 47.2529, lon: -122.4443 },
+};
+
+const NON_US_MARKERS = [
+  "TURKEY", "TURKIYE", "TÜRKIYE", "ISTANBUL", "KONYA", "MERSIN", "ALIAGA", "GIRESUN",
+  "GERMANY", "HAMBURG", "BERLIN", "CHINA", "SHENZHEN", "SHENZEN", "SHANGHAI", "JIANGSU",
+  "ITALY", "ANCONA", "PORTUGAL", "LISBON", "MEXICO", "GUADALAJARA", "BULGARIA", "VARNA",
+  "DENMARK", "SKAGEN", "JORDAN", "AKABA", "SAUDI", "JEDDAH", "DJIBOUTI", "BRAZIL", "GEORGIA",
+  "VENEZUELA", "PUERTO CABELLO", "CANADA", "TORONTO", "MONTREAL", "VANCOUVER",
+];
 
 function cleanString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -226,6 +341,133 @@ function formatDate(value: Date | string | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString().slice(0, 10);
+}
+
+function normalizeLocationText(value: string | null | undefined) {
+  return cleanString(value)?.toUpperCase().replace(/[.]/g, "").replace(/\s+/g, " ") ?? "";
+}
+
+function locationFromState(stateCode: string, input: string, confidence: DomesticLocation["confidence"]): DomesticLocation {
+  const state = US_STATE_POINTS[stateCode];
+  return {
+    input,
+    label: input || state.label,
+    isUnitedStates: true,
+    isGenericCountryOnly: false,
+    confidence,
+    stateCode: state.code,
+    lat: state.lat,
+    lon: state.lon,
+    reason: `Matched ${state.label}.`,
+  };
+}
+
+function classifyDomesticLocation(value: string | null | undefined): DomesticLocation {
+  const input = cleanString(value);
+  const normalized = normalizeLocationText(value);
+  if (!input || !normalized) {
+    return {
+      input: null,
+      label: "Missing",
+      isUnitedStates: false,
+      isGenericCountryOnly: false,
+      confidence: "unknown",
+      stateCode: null,
+      lat: null,
+      lon: null,
+      reason: "Missing city/state/ZIP.",
+    };
+  }
+
+  if (/^(USA|US|UNITED STATES|UNITED STATES OF AMERICA)$/.test(normalized)) {
+    return {
+      input,
+      label: input,
+      isUnitedStates: true,
+      isGenericCountryOnly: true,
+      confidence: "explicit_country",
+      stateCode: null,
+      lat: 39.8283,
+      lon: -98.5795,
+      reason: "Country-only USA is not enough for rating; need city/state/ZIP.",
+    };
+  }
+
+  if (NON_US_MARKERS.some((marker) => new RegExp(`\\b${marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(normalized))) {
+    return {
+      input,
+      label: input,
+      isUnitedStates: false,
+      isGenericCountryOnly: false,
+      confidence: "non_us",
+      stateCode: null,
+      lat: null,
+      lon: null,
+      reason: "Location matches a non-US geography.",
+    };
+  }
+
+  const cityHit = Object.entries(US_CITY_POINTS).find(([city]) => new RegExp(`\\b${city}\\b`).test(normalized));
+  if (cityHit) {
+    const [, city] = cityHit;
+    return {
+      input,
+      label: input,
+      isUnitedStates: true,
+      isGenericCountryOnly: false,
+      confidence: "known_city",
+      stateCode: city.stateCode,
+      lat: city.lat,
+      lon: city.lon,
+      reason: `Matched ${city.label}.`,
+    };
+  }
+
+  const stateCodeHit = Object.keys(US_STATE_POINTS).find((code) => new RegExp(`(^|[,\\s])${code}($|[,\\s])`).test(normalized));
+  if (stateCodeHit) return locationFromState(stateCodeHit, input, "state_or_zip");
+
+  const stateNameHit = Object.keys(US_STATE_NAMES).find((stateName) => new RegExp(`\\b${stateName}\\b`).test(normalized));
+  if (stateNameHit) return locationFromState(US_STATE_NAMES[stateNameHit], input, "state_or_zip");
+
+  if (/\b\d{5}(?:-\d{4})?\b/.test(normalized)) {
+    return {
+      input,
+      label: input,
+      isUnitedStates: true,
+      isGenericCountryOnly: false,
+      confidence: "state_or_zip",
+      stateCode: null,
+      lat: 39.8283,
+      lon: -98.5795,
+      reason: "Matched US ZIP format; map point is approximate until city/state is known.",
+    };
+  }
+
+  return {
+    input,
+    label: input,
+    isUnitedStates: false,
+    isGenericCountryOnly: false,
+    confidence: "unknown",
+    stateCode: null,
+    lat: null,
+    lon: null,
+    reason: "Need an explicit US city/state/ZIP.",
+  };
+}
+
+function classifyMarketScope(originLocation: DomesticLocation, destinationLocation: DomesticLocation): DomesticMarketScope {
+  if (
+    originLocation.isUnitedStates
+    && destinationLocation.isUnitedStates
+    && !originLocation.isGenericCountryOnly
+    && !destinationLocation.isGenericCountryOnly
+  ) {
+    return "US_DOMESTIC";
+  }
+  if (originLocation.confidence === "non_us" || destinationLocation.confidence === "non_us") return "NON_US";
+  if (originLocation.isGenericCountryOnly || destinationLocation.isGenericCountryOnly) return "UNKNOWN";
+  return "UNKNOWN";
 }
 
 function normalizeMode(mode: string | null | undefined, containerType: string | null | undefined): DomesticMode | null {
@@ -290,6 +532,11 @@ function buildRateRequest(inquiry: DomesticPricingInquiry): DomesticRateRequest 
   const parsed = safeParsedData(inquiry.parsedData);
   const mode = normalizeMode(inquiry.mode, inquiry.containerType);
   const equipmentType = normalizeEquipment(inquiry.containerType, parsed);
+  const origin = cleanString(inquiry.origin);
+  const destination = cleanString(inquiry.destination);
+  const originLocation = classifyDomesticLocation(origin);
+  const destinationLocation = classifyDomesticLocation(destination);
+  const marketScope = classifyMarketScope(originLocation, destinationLocation);
   const accessorials = extractAccessorials(parsed, inquiry.notes);
   const parsedTemperature = readYesNoUnknown(parsed.temperatureControl ?? parsed.temperature_control ?? parsed.reefer);
   const temperatureControl = equipmentType === "REEFER" ? "YES" : parsedTemperature;
@@ -308,8 +555,11 @@ function buildRateRequest(inquiry: DomesticPricingInquiry): DomesticRateRequest 
     inquiryId: inquiry.id,
     mode,
     equipmentType,
-    origin: cleanString(inquiry.origin),
-    destination: cleanString(inquiry.destination),
+    origin,
+    destination,
+    originLocation,
+    destinationLocation,
+    marketScope,
     pickupWindow,
     deliveryWindow,
     commodity: cleanString(inquiry.commodity),
@@ -352,6 +602,20 @@ export function detectDomesticTruckingMissingFields(request: DomesticRateRequest
   const fields: RequiredRateField[] = [
     requiredField("origin", "Pickup origin", Boolean(request.origin), request.origin ?? "", "Need pickup city/ZIP/address."),
     requiredField("destination", "Delivery destination", Boolean(request.destination), request.destination ?? "", "Need delivery city/ZIP/address."),
+    requiredField(
+      "us_pickup",
+      "US pickup location",
+      request.originLocation.isUnitedStates && !request.originLocation.isGenericCountryOnly,
+      request.originLocation.reason,
+      request.originLocation.isGenericCountryOnly ? "Need pickup city/state/ZIP, not just USA." : request.originLocation.reason,
+    ),
+    requiredField(
+      "us_delivery",
+      "US delivery location",
+      request.destinationLocation.isUnitedStates && !request.destinationLocation.isGenericCountryOnly,
+      request.destinationLocation.reason,
+      request.destinationLocation.isGenericCountryOnly ? "Need delivery city/state/ZIP, not just USA." : request.destinationLocation.reason,
+    ),
     requiredField("mode", "Truckload mode", Boolean(request.mode), request.mode ?? "", "Set Road, FTL, LTL, partial, or drayage."),
     requiredField("equipment", "Equipment type", Boolean(request.equipmentType), request.equipmentType ?? "", "Need dry van, reefer, flatbed, box truck, or drayage basis."),
     requiredField("pickup_window", "Pickup window", Boolean(request.pickupWindow), request.pickupWindow ?? "", "Need pickup date or window."),
@@ -479,7 +743,7 @@ class MockDomesticRateProvider implements DomesticRateProvider {
   }
 
   supports(request: DomesticRateRequest) {
-    return Boolean(request.mode);
+    return Boolean(request.mode) && request.marketScope === "US_DOMESTIC";
   }
 
   validateRequest(request: DomesticRateRequest) {
@@ -562,7 +826,7 @@ class ManualDomesticRateProvider implements DomesticRateProvider {
   }
 
   supports(request: DomesticRateRequest) {
-    return Boolean(request.mode);
+    return Boolean(request.mode) && request.marketScope === "US_DOMESTIC";
   }
 
   validateRequest(request: DomesticRateRequest) {
@@ -705,18 +969,23 @@ function buildBrainContext(): DomesticBrainContext {
   };
 }
 
-export function isDomesticTruckingEligible(mode: string | null | undefined) {
-  return Boolean(normalizeMode(mode, null));
+export function isDomesticTruckingEligible(mode: string | null | undefined, origin?: string | null, destination?: string | null) {
+  if (!normalizeMode(mode, null)) return false;
+  if (origin === undefined && destination === undefined) return true;
+  return classifyMarketScope(classifyDomesticLocation(origin), classifyDomesticLocation(destination)) === "US_DOMESTIC";
 }
 
 export function assessDomesticTruckingPricing(inquiry: DomesticPricingInquiry): DomesticPricingAssessment {
   const request = buildRateRequest(inquiry);
-  const eligible = Boolean(request.mode);
+  const modeEligible = Boolean(request.mode);
+  const eligible = modeEligible && request.marketScope === "US_DOMESTIC";
   const requiredFields = detectDomesticTruckingMissingFields(request);
   const missingRequiredFields = requiredFields.filter((field) => field.status === "missing");
   const blockingFields = requiredFields.filter((field) => field.blocking);
   const blockers = [
-    !eligible ? "RFQ mode is not domestic trucking. Set mode to Road, FTL, LTL, partial, or drayage before rating." : null,
+    !modeEligible ? "RFQ mode is not domestic trucking. Set mode to Road, FTL, LTL, partial, or drayage before rating." : null,
+    modeEligible && request.marketScope === "NON_US" ? "Domestic trucking V1 is US-only. This lane is not US pickup to US delivery." : null,
+    modeEligible && request.marketScope === "UNKNOWN" ? "Domestic trucking V1 needs explicit US pickup and delivery city/state/ZIP before rating." : null,
     ...blockingFields.map((field) => field.detail),
   ].filter((item): item is string => Boolean(item));
   const rateOptions = eligible && blockingFields.length === 0
@@ -727,10 +996,17 @@ export function assessDomesticTruckingPricing(inquiry: DomesticPricingInquiry): 
   return {
     inquiryId: inquiry.id,
     eligible,
-    eligibilityLabel: eligible ? "Domestic trucking candidate" : "Not a domestic trucking RFQ",
+    marketScope: request.marketScope,
+    eligibilityLabel: eligible
+      ? "US domestic trucking candidate"
+      : modeEligible
+        ? request.marketScope === "NON_US" ? "Suppressed: not a US domestic lane" : "Needs US pickup and delivery"
+        : "Not a trucking RFQ",
     eligibilityReasons: eligible
-      ? [`Mode normalized to ${request.mode}.`]
-      : ["Only Road, FTL, LTL, partial, and drayage RFQs use this V1 rate path."],
+      ? [`Mode normalized to ${request.mode}.`, "Pickup and delivery are both recognized as US locations."]
+      : modeEligible
+        ? [request.originLocation.reason, request.destinationLocation.reason]
+        : ["Only Road, FTL, LTL, partial, and drayage RFQs use this V1 rate path."],
     rateRequest: request,
     requiredFields,
     missingRequiredFields,

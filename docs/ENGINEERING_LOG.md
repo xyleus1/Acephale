@@ -1149,3 +1149,26 @@ Use this file for chronological implementation notes that future agents should s
 - Failed/skipped checks: no live provider API, GBrain retrieval, booking,
   tendering, customer send, DB migration, or credential check was run. Those
   paths intentionally do not exist in V1.
+
+### 2026-06-30 - Make domestic trucking page US-only and loadboard-like
+
+- Branch: codex/domestic-pricing-us-loadboard-20260630
+- Commit: not committed
+- Task: Correct the domestic pricing wedge after live review showed Turkey and
+  international lanes being labeled as domestic, and make the page feel more
+  like a loadboard with a map.
+- Files changed: `src/lib/domestic-trucking-pricing.ts`,
+  `src/app/dashboard/domestic-pricing/page.tsx`, `src/app/globals.css`,
+  `scripts/domestic-trucking-pricing.test.ts`, and docs.
+- Behavior added: domestic pricing now classifies lane scope as `US_DOMESTIC`,
+  `NON_US`, or `UNKNOWN`. Only US pickup to US delivery lanes can produce mock
+  rate options. The page now opens with a loadboard table, selected-lane OSM
+  map, and a `Blocking real data` panel explaining provider/data blockers.
+- Verification: `npx tsx scripts/domestic-trucking-pricing.test.ts`,
+  `npx tsc --noEmit`, `npm run check:docs`, and
+  `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run build`
+  passed.
+- Failed/skipped checks: no live provider API, geocoding service, DAT/Truckstop
+  account, booking, tendering, customer send, DB migration, or credential read
+  was run. Map locations are deterministic city/state/ZIP matches, not
+  external geocoding.

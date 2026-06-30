@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-06-30 - Domestic trucking pricing V1 is US-only
+
+- Status: accepted
+- Owner: engineering
+- Context: The first domestic pricing page treated any `ROAD` RFQ as
+  domestic, which incorrectly surfaced Turkey and Europe lanes as domestic
+  trucking candidates. That is commercially misleading and makes the wedge
+  look fake.
+- Decision: Domestic trucking pricing V1 is limited to US pickup to US delivery
+  lanes. The UI may still show non-US road RFQs as suppressed context, but only
+  `US_DOMESTIC` lanes can produce mock/manual rate options or draft quote
+  economics. Unknown/generic locations such as country-only `USA` remain
+  blocked until city/state/ZIP is explicit.
+- Rationale: US domestic truckload/LTL rating, loadboards, and DAT/Truckstop
+  style provider integrations are a different product surface from
+  international road or multimodal forwarding. Mixing them destroys operator
+  trust.
+- Consequences: Future live-provider work should start with US-only adapters,
+  US location normalization, provider credential status, approval state, and
+  audit persistence. International trucking can be added as a separate market
+  model later.
+- Revisit when: there is a deliberate non-US road provider strategy with
+  coverage, contract terms, and lane-normalization rules.
+
 ### 2026-06-30 - Domestic trucking V1 is draft-only mock/manual pricing
 
 - Status: accepted
