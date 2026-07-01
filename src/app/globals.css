@@ -32848,6 +32848,30 @@ html.agent-dock-open .page-container {
   gap: 6px;
 }
 
+.domestic-safety-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  background: #fff7ed;
+}
+
+.domestic-safety-rail span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--danger);
+  font-size: 10.5px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
 .domestic-rate-badges span,
 .domestic-status-pill {
   display: inline-flex;
@@ -32881,6 +32905,20 @@ html.agent-dock-open .page-container {
 
 .domestic-field-block {
   min-width: 0;
+}
+
+.domestic-next-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 10px 10px 26px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .domestic-rate-panel .record-chip.ready,
@@ -32992,6 +33030,34 @@ html.agent-dock-open .page-container {
 
 .domestic-quote-draft.ready {
   border-left-color: var(--success);
+}
+
+.domestic-draft-approval {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.domestic-draft-approval span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.domestic-draft-provenance {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .domestic-draft-body {

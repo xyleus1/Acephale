@@ -16,6 +16,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-01 - RFQ Brain Context V1 is read-only and draft-only
+
+- Status: accepted
+- Owner: engineering
+- Context: The RFQ detail page now surfaces domestic trucking rate context and
+  future GBrain/web-intelligence slots next to real RFQ data. Without explicit
+  boundaries, operators or future agents could mistake mock/manual rate context
+  for a sent quote, approved customer price, live provider rate, or booked load.
+- Decision: RFQ Brain Context V1 must remain read-only against operational
+  truth and draft-only for customer wording. It may compute deterministic
+  missing-field checks, mock benchmark options, manual-rate placeholders,
+  source-tagged brain context, draft economics, next questions, and audit
+  previews. It must not call live providers, read provider credentials, send
+  customer/vendor messages, book/tender freight, persist approval state, or
+  override product RFQ/job truth.
+- Rationale: This gives operators useful pricing/risk context without creating
+  fake authority or hidden side effects.
+- Consequences: Future live integrations must extend the provider boundary,
+  persist office-scoped audit/approval records, and keep customer-facing actions
+  behind explicit human approval.
+- Revisit when: the approval queue, persisted rate audit model, and provider
+  sandbox credentials are ready for an operator-reviewed pilot.
+
 ### 2026-07-01 - Production pentest sandbox self-repairs by cron
 
 - Status: accepted

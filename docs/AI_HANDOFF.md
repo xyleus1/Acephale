@@ -16,6 +16,68 @@ not committed
 
 ## Task implemented
 
+RFQ Brain Context / Domestic Trucking Rates V1 hardening:
+
+- Added `PRODUCT_IMPLEMENTATION_PLAN_RFQ_BRAIN_CONTEXT_V1.md` with the exact
+  low-risk implementation scope.
+- Extended the domestic trucking provider boundary with required-field,
+  normalization, and sandbox methods.
+- Added explicit rate-option provenance, mock/manual/live source labels,
+  selected draft basis, terms, notes, and a non-persisted audit preview.
+- Added eligibility status and deterministic next questions for operators.
+- Made the RFQ panel safety rails visible: draft only, not sent, not booked,
+  human approval required, mock/manual rates only, and no live provider API
+  connected.
+- Kept the product slice schema-free and read-only against operational data:
+  no quote persistence, no customer send, no booking, no tendering, no provider
+  credential read, and no live API call.
+
+## Files changed
+
+- `PRODUCT_IMPLEMENTATION_PLAN_RFQ_BRAIN_CONTEXT_V1.md`
+- `src/lib/domestic-trucking-pricing.ts`
+- `src/components/domestic-trucking-rate-panel.tsx`
+- `src/app/globals.css`
+- `scripts/domestic-trucking-pricing.test.ts`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+- `docs/DECISIONS.md`
+
+## Verification passed
+
+- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npx prisma validate`
+- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run db:generate`
+- `npx tsx scripts/domestic-trucking-pricing.test.ts`
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `npm run lint -- --file src/lib/domestic-trucking-pricing.ts --file src/components/domestic-trucking-rate-panel.tsx`
+- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run build`
+
+## Caveats
+
+- Full `npm run lint` still fails on existing repo-wide lint debt outside this
+  change, mostly old `<a>` navigation rules and `any` usage. The touched
+  TS/TSX files lint clean.
+- GBrain context remains a source-slugged placeholder, not live retrieval.
+- Rate audit data is preview-only and not persisted until an approval workflow
+  exists.
+
+## Previous Update
+
+## Date
+
+2026-07-01
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Production pentest account repair:
 
 - Reproduced the production login failure against

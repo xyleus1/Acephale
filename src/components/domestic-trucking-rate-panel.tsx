@@ -29,10 +29,11 @@ function RateOptionsTable({ options }: { options: DomesticRateOption[] }) {
           <tr>
             <th>Provider</th>
             <th>Service</th>
+            <th>Source</th>
             <th className="numeric">Buy</th>
             <th>Transit</th>
             <th>Validity</th>
-            <th>Confidence</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -46,11 +47,16 @@ function RateOptionsTable({ options }: { options: DomesticRateOption[] }) {
                 <strong>{option.serviceLevel}</strong>
                 <span>{option.mode} / {option.equipmentType}</span>
               </td>
+              <td>
+                <strong>{option.sourceLabel}</strong>
+                <span>{option.provenance}</span>
+              </td>
               <td className="numeric"><strong>{formatMoney(option.buyPrice)}</strong></td>
               <td>{option.transitDays ? `${option.transitDays}d` : "-"}</td>
               <td>{option.validUntil}</td>
               <td>
-                <span className="domestic-status-pill">{option.confidence}</span>
+                <span className="domestic-status-pill">{option.selected ? "selected draft basis" : option.confidence}</span>
+                <span>{option.rateSource} / no booking</span>
               </td>
             </tr>
           ))}
@@ -89,7 +95,13 @@ export function DomesticTruckingRatePanel({
             <strong>{assessment.eligibilityLabel}</strong>
             <span>{assessment.eligibilityReasons.join(" ")}</span>
           </div>
-          <span>{assessment.rateOptions.length} options</span>
+          <span>{assessment.eligibilityStatus.replaceAll("_", " ")} / {assessment.rateOptions.length} options</span>
+        </div>
+
+        <div className="domestic-safety-rail" aria-label="Domestic trucking V1 safety boundaries">
+          {assessment.safetyLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
         </div>
 
         <div className="domestic-rate-badges">
@@ -145,6 +157,17 @@ export function DomesticTruckingRatePanel({
           </div>
         )}
 
+        {assessment.nextQuestions.length > 0 && (
+          <div className="domestic-field-block">
+            <div className="domestic-section-title">Next questions</div>
+            <ol className="domestic-next-question-list">
+              {assessment.nextQuestions.map((question) => (
+                <li key={question}>{question}</li>
+              ))}
+            </ol>
+          </div>
+        )}
+
         <div className="domestic-field-block">
           <div className="domestic-section-title">Provider readiness</div>
           <div className="domestic-provider-grid">
@@ -165,6 +188,11 @@ export function DomesticTruckingRatePanel({
 
         <div className={`domestic-quote-draft ${quoteDraft.status === "DRAFT_ONLY" ? "ready" : "blocked"}`}>
           <div className="domestic-section-title">Quote draft</div>
+          <div className="domestic-draft-approval">
+            <span>Approval: {quoteDraft.approvalState.replaceAll("_", " ")}</span>
+            <span>Send: {quoteDraft.customerSendState.replaceAll("_", " ")}</span>
+            <span>Approved by: {quoteDraft.approvedBy ?? "not approved"}</span>
+          </div>
           {quoteDraft.status === "DRAFT_ONLY" ? (
             <>
               <div className="domestic-draft-economics">
@@ -173,6 +201,11 @@ export function DomesticTruckingRatePanel({
                 <div><span>Gross profit</span><strong>{formatMoney(quoteDraft.expectedGrossProfit)}</strong></div>
                 <div><span>Margin</span><strong>{quoteDraft.expectedMarginPct ?? "-"}%</strong></div>
               </div>
+              {quoteDraft.selectedOptionProvenance && (
+                <div className="domestic-draft-provenance">
+                  Draft basis: {quoteDraft.selectedOptionProvenance}
+                </div>
+              )}
               {!compact && quoteDraft.body && (
                 <pre className="domestic-draft-body">{quoteDraft.body}</pre>
               )}

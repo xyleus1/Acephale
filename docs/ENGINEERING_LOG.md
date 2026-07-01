@@ -1452,3 +1452,42 @@ Use this file for chronological implementation notes that future agents should s
   `/signup` returned `404`.
 - Caveats: if the production DB is reset or the sandbox is damaged later, the
   cron should repair it on the next 5-minute run.
+
+### 2026-07-01 - RFQ Brain Context V1 safety hardening
+
+- Branch: main
+- Commit: not committed
+- Task: Harden the existing RFQ Brain Context / Domestic Trucking Rates V1 so
+  operators can see domestic eligibility, missing fields, source-tagged
+  mock/manual rate options, draft quote economics, and read-only brain-context
+  placeholders without confusing any of it for live freight execution.
+- Files changed: `PRODUCT_IMPLEMENTATION_PLAN_RFQ_BRAIN_CONTEXT_V1.md`,
+  `src/lib/domestic-trucking-pricing.ts`,
+  `src/components/domestic-trucking-rate-panel.tsx`, `src/app/globals.css`,
+  `scripts/domestic-trucking-pricing.test.ts`, `docs/AI_HANDOFF.md`,
+  `docs/ENGINEERING_LOG.md`, and `docs/DECISIONS.md`.
+- Behavior added: provider-neutral adapters now expose required-field,
+  normalization, and sandbox methods; rate options carry mock/manual/live
+  source labels, provenance, selected-draft-basis state, terms, and notes; the
+  assessment exposes eligibility status, operator next questions, V1 safety
+  labels, and a non-persisted audit preview; the panel shows draft/send/approval
+  state directly.
+- Verification:
+  `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npx prisma validate`,
+  `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run db:generate`,
+  `npx tsx scripts/domestic-trucking-pricing.test.ts`, `npx tsc --noEmit`,
+  `npm run check:docs`,
+  `npm run lint -- --file src/lib/domestic-trucking-pricing.ts --file src/components/domestic-trucking-rate-panel.tsx`,
+  and
+  `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run build`
+  passed before this log entry.
+- Failed/skipped checks: full `npm run lint` still fails on existing repo-wide
+  lint debt outside this change, mostly old `<a>` navigation rules and `any`
+  usage. The touched TS/TSX files lint clean. An initial targeted lint command
+  incorrectly included `src/app/globals.css`, which Next lint tried to parse as
+  source; rerunning against only touched TS/TSX files passed.
+- Caveats: no live provider API, GBrain retrieval, customer send, booking,
+  tendering, provider credential read, schema migration, or persisted approval
+  record was added.
+- Follow-up: add persisted quote approval/audit records only after the approval
+  queue design is explicit.

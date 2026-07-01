@@ -3,6 +3,9 @@ export type EquipmentType = "DRY_VAN" | "REEFER" | "FLATBED" | "STEP_DECK" | "BO
 export type YesNoUnknown = "YES" | "NO" | "UNKNOWN";
 export type RequiredRateFieldStatus = "ready" | "missing" | "assumed" | "advisory";
 export type DomesticMarketScope = "US_DOMESTIC" | "NON_US" | "UNKNOWN";
+export type DomesticEligibilityStatus = "eligible" | "missing_info" | "not_domestic_trucking" | "needs_human_review";
+export type DomesticRateSourceType = "mock" | "manual" | "live";
+export type DomesticQuoteApprovalState = "draft" | "needs_approval" | "approved_internal" | "rejected" | "sent_disabled_v1";
 
 export type Money = {
   amount: number;
@@ -93,9 +96,27 @@ export type DomesticRateOption = {
   transitDays: number | null;
   validUntil: string;
   confidence: "simulated" | "manual" | "provider";
+  rateSource: DomesticRateSourceType;
+  sourceLabel: string;
+  provenance: string;
+  selected: boolean;
+  terms: string[];
+  notes: string[];
   warnings: string[];
   canBook: false;
   canTender: false;
+};
+
+export type DomesticRateAuditLog = {
+  requestId: string;
+  inquiryId: string;
+  officeId: string | null;
+  providerCode: string;
+  action: "validate_request" | "mock_quote_generated" | "manual_quote_placeholder" | "draft_quote_generated";
+  source: "mock" | "manual" | "system_generated";
+  provenance: string;
+  noExternalAction: true;
+  createdAt: string;
 };
 
 export type DomesticQuoteDraft = {
@@ -107,7 +128,11 @@ export type DomesticQuoteDraft = {
   sellPrice: Money | null;
   expectedGrossProfit: Money | null;
   expectedMarginPct: number | null;
-  approvalState: "PENDING_HUMAN_APPROVAL";
+  approvalState: DomesticQuoteApprovalState;
+  customerSendState: "sent_disabled_v1";
+  approvedBy: string | null;
+  approvedAt: string | null;
+  selectedOptionProvenance: string | null;
   assumptions: string[];
   blockers: string[];
 };
@@ -128,18 +153,22 @@ export type DomesticBrainContext = {
 export type DomesticPricingAssessment = {
   inquiryId: string;
   eligible: boolean;
+  eligibilityStatus: DomesticEligibilityStatus;
   marketScope: DomesticMarketScope;
   eligibilityLabel: string;
   eligibilityReasons: string[];
   rateRequest: DomesticRateRequest;
   requiredFields: RequiredRateField[];
   missingRequiredFields: RequiredRateField[];
+  nextQuestions: string[];
   blockers: string[];
   providerCredentialStatuses: ProviderCredentialStatus[];
   rateOptions: DomesticRateOption[];
   quoteDraft: DomesticQuoteDraft;
   brainContext: DomesticBrainContext;
   approvalWarnings: string[];
+  safetyLabels: string[];
+  auditLogPreview: DomesticRateAuditLog[];
 };
 
 export type DomesticPricingInquiry = {
@@ -174,7 +203,10 @@ export interface DomesticRateProvider {
   credentialStatus(): ProviderCredentialStatus;
   supports(request: DomesticRateRequest): boolean;
   validateRequest(request: DomesticRateRequest): RequiredRateField[];
+  normalizeResponse(response: unknown, request: DomesticRateRequest): DomesticRateOption[];
+  getRequiredFields(request: DomesticRateRequest): RequiredRateField[];
   getQuote(request: DomesticRateRequest): DomesticRateOption[];
+  sandboxMode(): boolean;
 }
 
 const BRAIN_SOURCE_SLUGS = {
@@ -182,7 +214,22 @@ const BRAIN_SOURCE_SLUGS = {
   product: "product/domestic-trucking-instant-pricing",
   bridge: "product/domestic-pricing-brain-bridge",
   providerMatrix: "research/domestic-trucking-pricing/provider-matrix",
+  rateProviderLandscape: "research/rate-provider-landscape/domestic-trucking-instant-pricing-answer",
+  turkeyUsLane: "research/turkey-us-trade/turkey-us-lane-answer",
+  partnerVendorCandidates: "research/partner-radar/partner-vendor-candidates-answer",
+  webIntelContext: "product/rfq-web-intelligence-context-answer",
+  rfqBrainContext: "product/rfq-brain-context-panel",
+  productBridge: "product/product-brain-bridge",
 };
+
+const V1_SAFETY_LABELS = [
+  "Draft only",
+  "Not sent",
+  "Not booked",
+  "Human approval required",
+  "Mock/manual rates only",
+  "No live provider API connected",
+];
 
 const US_STATE_POINTS: Record<string, { code: string; label: string; lat: number; lon: number }> = {
   AL: { code: "AL", label: "Alabama", lat: 32.8067, lon: -86.7911 },
@@ -750,6 +797,19 @@ class MockDomesticRateProvider implements DomesticRateProvider {
     return detectDomesticTruckingMissingFields(request).filter((field) => field.blocking);
   }
 
+  normalizeResponse(response: unknown, request: DomesticRateRequest) {
+    if (Array.isArray(response)) return response as DomesticRateOption[];
+    return this.getQuote(request);
+  }
+
+  getRequiredFields(request: DomesticRateRequest) {
+    return detectDomesticTruckingMissingFields(request);
+  }
+
+  sandboxMode() {
+    return true;
+  }
+
   getQuote(request: DomesticRateRequest): DomesticRateOption[] {
     if (!this.supports(request) || this.validateRequest(request).length > 0 || !request.mode || !request.equipmentType) return [];
 
@@ -783,6 +843,19 @@ class MockDomesticRateProvider implements DomesticRateProvider {
         transitDays: transit,
         validUntil: addDays(7),
         confidence: "simulated",
+        rateSource: "mock",
+        sourceLabel: "Mock/sandbox deterministic benchmark",
+        provenance: "system_generated:mock_domestic_market:v1",
+        selected: false,
+        terms: [
+          "Internal benchmark only.",
+          "Subject to carrier availability, final accessorials, and human approval.",
+          "No provider credential, booking, tender, or external API call was used.",
+        ],
+        notes: [
+          "Generated from deterministic lane-mile and shipment-fact heuristics.",
+          "Use for operator comparison and draft economics only.",
+        ],
         warnings: ["Simulated benchmark only.", "Human approval required before any customer quote."],
         canBook: false,
         canTender: false,
@@ -799,6 +872,19 @@ class MockDomesticRateProvider implements DomesticRateProvider {
         transitDays: Math.max(1, transit - 1),
         validUntil: addDays(3),
         confidence: "simulated",
+        rateSource: "mock",
+        sourceLabel: "Mock/sandbox deterministic benchmark",
+        provenance: "system_generated:mock_domestic_market:v1",
+        selected: false,
+        terms: [
+          "Internal benchmark only.",
+          "Expedited capacity premium is simulated.",
+          "No provider credential, booking, tender, or external API call was used.",
+        ],
+        notes: [
+          "Generated from deterministic lane-mile and shipment-fact heuristics.",
+          "Use for operator comparison and draft economics only.",
+        ],
         warnings: ["Simulated capacity premium.", "No live provider credential was used."],
         canBook: false,
         canTender: false,
@@ -833,8 +919,20 @@ class ManualDomesticRateProvider implements DomesticRateProvider {
     return detectDomesticTruckingMissingFields(request).filter((field) => field.blocking);
   }
 
-  getQuote() {
+  normalizeResponse() {
     return [];
+  }
+
+  getRequiredFields(request: DomesticRateRequest) {
+    return detectDomesticTruckingMissingFields(request);
+  }
+
+  getQuote(): DomesticRateOption[] {
+    return [];
+  }
+
+  sandboxMode() {
+    return false;
   }
 }
 
@@ -881,7 +979,11 @@ function buildQuoteDraft(request: DomesticRateRequest, options: DomesticRateOpti
       sellPrice: null,
       expectedGrossProfit: null,
       expectedMarginPct: null,
-      approvalState: "PENDING_HUMAN_APPROVAL",
+      approvalState: "needs_approval",
+      customerSendState: "sent_disabled_v1",
+      approvedBy: null,
+      approvedAt: null,
+      selectedOptionProvenance: null,
       assumptions: [],
       blockers: blockers.length ? blockers : ["No domestic rate option is available."],
     };
@@ -927,7 +1029,11 @@ function buildQuoteDraft(request: DomesticRateRequest, options: DomesticRateOpti
     sellPrice: { amount: sellAmount, currency: selected.buyPrice.currency },
     expectedGrossProfit: { amount: grossProfit, currency: selected.buyPrice.currency },
     expectedMarginPct: marginPct,
-    approvalState: "PENDING_HUMAN_APPROVAL",
+    approvalState: "needs_approval",
+    customerSendState: "sent_disabled_v1",
+    approvedBy: null,
+    approvedAt: null,
+    selectedOptionProvenance: selected.provenance,
     assumptions,
     blockers: [],
   };
@@ -942,21 +1048,28 @@ function buildBrainContext(): DomesticBrainContext {
         label: "Customer preferences",
         status: "stub",
         summary: "No live GBrain retrieval yet. Future bridge should pull exact customer preferences with source records.",
-        sourceSlugs: [BRAIN_SOURCE_SLUGS.bridge, BRAIN_SOURCE_SLUGS.product],
+        sourceSlugs: [BRAIN_SOURCE_SLUGS.rfqBrainContext, BRAIN_SOURCE_SLUGS.productBridge],
       },
       {
         key: "lane_notes",
         label: "Lane notes",
         status: "stub",
         summary: "No persisted lane memory is read in V1. Use this slot for prior quotes, route constraints, and risk notes later.",
-        sourceSlugs: [BRAIN_SOURCE_SLUGS.bridge],
+        sourceSlugs: [BRAIN_SOURCE_SLUGS.turkeyUsLane, BRAIN_SOURCE_SLUGS.bridge],
       },
       {
         key: "provider_reliability",
         label: "Provider reliability",
         status: "stub",
         summary: "Tier 0 uses mock/manual providers only. Tier 1 provider discovery is documented but not connected.",
-        sourceSlugs: [BRAIN_SOURCE_SLUGS.providerMatrix],
+        sourceSlugs: [BRAIN_SOURCE_SLUGS.rateProviderLandscape, BRAIN_SOURCE_SLUGS.providerMatrix],
+      },
+      {
+        key: "web_intelligence",
+        label: "Web intelligence",
+        status: "stub",
+        summary: "Future RFQ panel can show proposed web intelligence with confidence, freshness, and source URLs beside product truth.",
+        sourceSlugs: [BRAIN_SOURCE_SLUGS.webIntelContext, BRAIN_SOURCE_SLUGS.partnerVendorCandidates],
       },
       {
         key: "rfq_sop",
@@ -967,6 +1080,113 @@ function buildBrainContext(): DomesticBrainContext {
       },
     ],
   };
+}
+
+function deriveEligibilityStatus(
+  modeEligible: boolean,
+  request: DomesticRateRequest,
+  blockingFields: RequiredRateField[],
+): DomesticEligibilityStatus {
+  if (!modeEligible) return "not_domestic_trucking";
+  if (request.marketScope === "NON_US") return "not_domestic_trucking";
+  if (request.marketScope === "UNKNOWN" || blockingFields.length > 0) return "missing_info";
+  if (
+    request.hazmat === "YES"
+    || request.temperatureControl === "YES"
+    || request.accessorials.length > 0
+  ) {
+    return "needs_human_review";
+  }
+  return "eligible";
+}
+
+function nextQuestionForField(field: RequiredRateField) {
+  const questions: Record<string, string> = {
+    origin: "What is the pickup address or pickup city/state/ZIP?",
+    destination: "What is the delivery address or delivery city/state/ZIP?",
+    us_pickup: "Can you confirm the pickup city/state/ZIP in the United States?",
+    us_delivery: "Can you confirm the delivery city/state/ZIP in the United States?",
+    mode: "Is this FTL, LTL, partial truckload, or drayage?",
+    equipment: "What equipment is required: dry van, reefer, flatbed, box truck, or drayage chassis?",
+    pickup_window: "What pickup date or pickup appointment window should we rate against?",
+    commodity: "What commodity should be declared for the carrier quote?",
+    weight: "What is the shipment weight?",
+    handling_units: "How many pallets, pieces, or handling units, and what are the dimensions?",
+    hazmat: "Is the freight hazmat? If yes, provide UN number, class, packing group, and MSDS.",
+    temperature_control: "Does this need temperature control? If yes, what temperature range?",
+    accessorials: "Are any accessorials needed: liftgate, residential, appointment, inside delivery, or limited access?",
+    contact: "Who is the customer contact for pickup/delivery clarifications?",
+    hazmat_details: "For hazmat freight, what are the UN number, class, packing group, and MSDS reference?",
+    temperature_range: "What temperature range should the reefer or temperature-controlled move maintain?",
+  };
+  return questions[field.key] ?? `Please confirm ${field.label.toLowerCase()}.`;
+}
+
+function buildNextQuestions(requiredFields: RequiredRateField[], request: DomesticRateRequest, eligibilityStatus: DomesticEligibilityStatus) {
+  const questions = requiredFields
+    .filter((field) => field.blocking)
+    .map(nextQuestionForField);
+
+  if (eligibilityStatus === "needs_human_review") {
+    if (request.hazmat === "YES" && request.hazmatDetails) {
+      questions.push("Have ops reviewed the hazmat details and carrier handling restrictions?");
+    }
+    if (request.temperatureControl === "YES" && request.temperatureRange) {
+      questions.push("Have ops confirmed reefer availability and temperature tolerance before quoting?");
+    }
+    if (request.accessorials.length > 0) {
+      questions.push("Have ops confirmed accessorial charges and site constraints with the carrier or customer?");
+    }
+  }
+
+  return Array.from(new Set(questions)).slice(0, 8);
+}
+
+function buildAuditLogPreview(request: DomesticRateRequest, rateOptions: DomesticRateOption[], quoteDraft: DomesticQuoteDraft): DomesticRateAuditLog[] {
+  const createdAt = new Date().toISOString();
+  const logs: DomesticRateAuditLog[] = [
+    {
+      requestId: request.id,
+      inquiryId: request.inquiryId,
+      officeId: request.officeId,
+      providerCode: "system",
+      action: "validate_request",
+      source: "system_generated",
+      provenance: "src/lib/domestic-trucking-pricing.ts:detectDomesticTruckingMissingFields",
+      noExternalAction: true,
+      createdAt,
+    },
+  ];
+
+  for (const option of rateOptions) {
+    logs.push({
+      requestId: request.id,
+      inquiryId: request.inquiryId,
+      officeId: request.officeId,
+      providerCode: option.providerCode,
+      action: option.rateSource === "manual" ? "manual_quote_placeholder" : "mock_quote_generated",
+      source: option.rateSource === "manual" ? "manual" : "mock",
+      provenance: option.provenance,
+      noExternalAction: true,
+      createdAt,
+    });
+  }
+
+  if (quoteDraft.status === "DRAFT_ONLY") {
+    logs.push({
+      requestId: request.id,
+      inquiryId: request.inquiryId,
+      officeId: request.officeId,
+      providerCode: "system",
+      action: "draft_quote_generated",
+      source: "system_generated",
+      provenance: quoteDraft.selectedOptionProvenance ?? "system_generated:draft_only_quote:v1",
+      noExternalAction: true,
+      createdAt,
+    });
+  }
+
+  return logs;
 }
 
 export function isDomesticTruckingEligible(mode: string | null | undefined, origin?: string | null, destination?: string | null) {
@@ -982,20 +1202,27 @@ export function assessDomesticTruckingPricing(inquiry: DomesticPricingInquiry): 
   const requiredFields = detectDomesticTruckingMissingFields(request);
   const missingRequiredFields = requiredFields.filter((field) => field.status === "missing");
   const blockingFields = requiredFields.filter((field) => field.blocking);
+  const eligibilityStatus = deriveEligibilityStatus(modeEligible, request, blockingFields);
   const blockers = [
     !modeEligible ? "RFQ mode is not domestic trucking. Set mode to Road, FTL, LTL, partial, or drayage before rating." : null,
     modeEligible && request.marketScope === "NON_US" ? "Domestic trucking V1 is US-only. This lane is not US pickup to US delivery." : null,
     modeEligible && request.marketScope === "UNKNOWN" ? "Domestic trucking V1 needs explicit US pickup and delivery city/state/ZIP before rating." : null,
     ...blockingFields.map((field) => field.detail),
   ].filter((item): item is string => Boolean(item));
-  const rateOptions = eligible && blockingFields.length === 0
+  const rawRateOptions = eligible && blockingFields.length === 0
     ? PROVIDERS.flatMap((provider) => provider.getQuote(request))
     : [];
-  const quoteDraft = buildQuoteDraft(request, rateOptions, blockers);
+  const quoteDraft = buildQuoteDraft(request, rawRateOptions, blockers);
+  const rateOptions = rawRateOptions.map((option) => ({
+    ...option,
+    selected: option.id === quoteDraft.selectedOptionId,
+  }));
+  const nextQuestions = buildNextQuestions(requiredFields, request, eligibilityStatus);
 
   return {
     inquiryId: inquiry.id,
     eligible,
+    eligibilityStatus,
     marketScope: request.marketScope,
     eligibilityLabel: eligible
       ? "US domestic trucking candidate"
@@ -1010,6 +1237,7 @@ export function assessDomesticTruckingPricing(inquiry: DomesticPricingInquiry): 
     rateRequest: request,
     requiredFields,
     missingRequiredFields,
+    nextQuestions,
     blockers,
     providerCredentialStatuses: [
       ...PROVIDERS.map((provider) => provider.credentialStatus()),
@@ -1023,5 +1251,7 @@ export function assessDomesticTruckingPricing(inquiry: DomesticPricingInquiry): 
       "No booking, carrier tender, or provider side effect exists in V1.",
       "Human approval is required before customer-facing use.",
     ],
+    safetyLabels: V1_SAFETY_LABELS,
+    auditLogPreview: buildAuditLogPreview(request, rateOptions, quoteDraft),
   };
 }
