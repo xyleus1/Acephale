@@ -1323,3 +1323,31 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: if the RFQ source alias starts receiving non-RFQ mail, it will
   intentionally surface in RFQ workflows until removed from
   `DERYA_RFQ_SOURCE_EMAILS` or routed elsewhere.
+
+### 2026-06-30 - Giresun to Ancona workflow load seed
+
+- Branch: main
+- Commit: not committed
+- Task: Create a reproducible, real-looking copy of the Giresun, Turkey to
+  Ancona, Italy load that is complete enough for an end-to-end RFQ to booked
+  load walkthrough.
+- Files changed: `scripts/seed-giresun-workflow-load.ts`, `package.json`,
+  `src/app/dashboard/page.tsx`, `docs/AI_HANDOFF.md`, and
+  `docs/ENGINEERING_LOG.md`.
+- Behavior added: `npm run seed:giresun-workflow` dry-runs the seed; `npm run
+  seed:giresun-workflow -- --apply --create-seed-inbox` creates the Avlia Home
+  customer/contact, RFQ, booked job, inbox threads, forwarder rates, accepted
+  customer quote, quote lines, target-price history, milestones, and generated
+  PDF document records. Add `--reset` to replace the existing seeded copy.
+- Bug fixed: the focused dashboard now reads quote lines through
+  `parseQuoteLines(job)`, so clean `Job.quoteLines` records render the same way
+  on the dashboard as they do on the job page and quote PDF.
+- Verification: `npm run seed:giresun-workflow`, `npm run
+  seed:giresun-workflow -- --apply --create-seed-inbox`, Prisma verification of
+  the seeded job graph, `npm run test:workbench-route-map`, `npm run
+  test:route-map`, `npx tsc --noEmit`, `npm run check:docs`, and `npm run
+  build` passed.
+- Failed/skipped checks: browser-authenticated visual QA was not run in this
+  session.
+- Caveats: generated PDFs are walkthrough artifacts, not legal shipment
+  documents.

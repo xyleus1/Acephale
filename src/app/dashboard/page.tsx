@@ -26,6 +26,7 @@ import { buildDecisionQueueBrief, type DecisionQueueBrief } from "@/lib/decision
 import { operatorToolLabel } from "@/lib/operator-action-labels";
 import { buildRouteViewport, routeZoomPanels } from "@/lib/route-map-viewport";
 import { flagEmoji, modeSummary, routeLegPoints, routeMapPoint, transitSummary } from "@/lib/workbench-route-map";
+import { parseQuoteLines } from "@/lib/quote-lines";
 import { createRfqFromReferenceDeal } from "./reference-deal-actions";
 import { Fragment } from "react";
 import {
@@ -834,10 +835,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
     DELIVERED: "Closed for margin review",
   };
 
-  // Quote lines
-  const quoteLines = (job.notes ?? "")
-    .split("\n").filter((l) => l.includes("|"))
-    .map((l) => { const [desc, amt, cur] = l.split("|"); return { desc, amount: Number(amt), cur }; });
+  const quoteLines = parseQuoteLines(job);
 
   const carrierQuotes = job.inquiry?.carrierQuotes ?? [];
   const receivedQuotes = carrierQuotes.filter((q) => q.status === "RECEIVED");

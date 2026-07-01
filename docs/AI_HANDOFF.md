@@ -16,38 +16,44 @@ not committed
 
 ## Task implemented
 
-Production-facing load playbook and agent message cleanup:
+Giresun to Ancona workflow load seed:
 
-- Added `AgentMessageContent`, a safe markdown-lite renderer for assistant
-  output. Assistant replies now render bold text, paragraphs, and simple lists
-  instead of exposing raw `**markdown**`.
-- Applied the renderer to both the embedded job assistant and global assistant
-  dock.
-- Renamed visible assistant evidence language to source/evidence wording.
-- Replaced the focused dashboard's old scenario panel with a production
-  `Load playbook` panel and removed fake-sounding copy from the focused load
-  suggestions.
+- Added an idempotent seed command for a real-looking, near-complete Avlia Home
+  Giresun, Turkey to Ancona, Italy sea-FCL load.
+- The seed creates the approved customer/contact, RFQ inquiry, booked job,
+  inbox-linked email threads, three forwarder rate replies, customer acceptance,
+  quote lines, target-price history, milestones, and six document records with
+  generated PDF data URLs and AI extraction summaries.
+- The command is dry-run by default. Use `npm run seed:giresun-workflow -- --apply
+  --create-seed-inbox` for a first local write, and add `--reset` to replace the
+  existing seeded copy.
+- Fixed the focused dashboard quote display to read `Job.quoteLines` through
+  `parseQuoteLines`, matching the job page and quote PDF behavior.
 
 ## Files changed
 
-- `src/components/agent-message-content.tsx`
-- `src/components/job-conversation-panel.tsx`
-- `src/components/agent-chat-widget.tsx`
-- `src/components/agent-tool-trace-list.tsx`
 - `src/app/dashboard/page.tsx`
-- `src/app/globals.css`
+- `scripts/seed-giresun-workflow-load.ts`
+- `package.json`
 - `docs/AI_HANDOFF.md`
-- `docs/DECISIONS.md`
 - `docs/ENGINEERING_LOG.md`
 
 ## Verification passed
 
+- `npm run seed:giresun-workflow`
+- `npm run seed:giresun-workflow -- --apply --create-seed-inbox`
+- Prisma verification of the seeded job, threads/messages, quotes, documents,
+  milestones, and target-price history
+- `npm run test:workbench-route-map`
+- `npm run test:route-map`
 - `npx tsc --noEmit`
 - `npm run check:docs`
 - `npm run build`
 
 ## Caveats
 
+- The seed creates generated PDFs for walkthrough data; they are not legal
+  shipment documents.
 - Browser-authenticated visual QA was not run in this session.
 
 ## Previous Update
