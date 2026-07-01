@@ -17,6 +17,32 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-06-30 - Production-facing load playbook and agent text cleanup
+
+- Branch: main
+- Commit: not committed
+- Task: Make the focused load assistant look production-ready by rendering
+  assistant formatting cleanly and removing fake-sounding copy from the
+  focused load workflow.
+- Files changed: `src/components/agent-message-content.tsx`,
+  `src/components/job-conversation-panel.tsx`,
+  `src/components/agent-chat-widget.tsx`,
+  `src/components/agent-tool-trace-list.tsx`,
+  `src/app/dashboard/page.tsx`, `src/app/globals.css`,
+  `docs/AI_HANDOFF.md`, `docs/DECISIONS.md`, and
+  `docs/ENGINEERING_LOG.md`.
+- Behavior added: assistant replies render bold text, paragraphs, and simple
+  lists without raw markdown; visible evidence controls say checked
+  sources/evidence; focused load workflow copy now says `Load playbook` and
+  reads like an operator instruction surface.
+- Verification: `npx tsc --noEmit`, `npm run check:docs`, and
+  `npm run build` passed.
+- Failed/skipped checks: browser-authenticated visual QA was not run in this
+  session.
+- Caveats: this is markdown-lite rendering only, not full Markdown support.
+- Follow-up: use the next live walkthrough to tune the assistant answer style
+  and decide whether source/evidence details should default collapsed.
+
 ### 2026-06-30 - Focused load dashboard scope and route-map fix
 
 - Branch: main
@@ -32,7 +58,7 @@ Use this file for chronological implementation notes that future agents should s
   Ancona sea loads now route through Bosphorus, Dardanelles, and the Adriatic;
   `/dashboard` defaults to a focused load cockpit; `/dashboard?view=overview`
   holds the top-down queue/control-sheet dashboard; focused pages now include a
-  load-scoped demo scenario instead of global reference-deal sections.
+  load-scoped workflow panel instead of global reference-deal sections.
 - Verification: `npm run test:workbench-route-map`, `npm run test:route-map`,
   `npx tsc --noEmit`, `npm run check:docs`, and `npm run build` passed.
 - Failed/skipped checks: browser-authenticated visual QA was not run in this

@@ -16,6 +16,56 @@ not committed
 
 ## Task implemented
 
+Production-facing load playbook and agent message cleanup:
+
+- Added `AgentMessageContent`, a safe markdown-lite renderer for assistant
+  output. Assistant replies now render bold text, paragraphs, and simple lists
+  instead of exposing raw `**markdown**`.
+- Applied the renderer to both the embedded job assistant and global assistant
+  dock.
+- Renamed visible assistant evidence language to source/evidence wording.
+- Replaced the focused dashboard's old scenario panel with a production
+  `Load playbook` panel and removed fake-sounding copy from the focused load
+  suggestions.
+
+## Files changed
+
+- `src/components/agent-message-content.tsx`
+- `src/components/job-conversation-panel.tsx`
+- `src/components/agent-chat-widget.tsx`
+- `src/components/agent-tool-trace-list.tsx`
+- `src/app/dashboard/page.tsx`
+- `src/app/globals.css`
+- `docs/AI_HANDOFF.md`
+- `docs/DECISIONS.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npx tsc --noEmit`
+- `npm run check:docs`
+- `npm run build`
+
+## Caveats
+
+- Browser-authenticated visual QA was not run in this session.
+
+## Previous Update
+
+## Date
+
+2026-06-30
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Focused load cockpit and route-map correction:
 
 - Moved route lookup and route-leg construction into
@@ -27,7 +77,7 @@ Focused load cockpit and route-map correction:
   from the focused `/dashboard` load view.
 - Added `/dashboard?view=overview` as the explicit top-down dashboard for
   global queue/control-sheet work, with a link back to the focused load view.
-- Added a load-specific demo scenario panel so the focused page explains the
+- Added a load-specific workflow panel so the focused page explains the
   RFQ -> qualification -> forwarder pricing -> quote/documents walkthrough
   for the selected load rather than leaking unrelated office-wide work.
 

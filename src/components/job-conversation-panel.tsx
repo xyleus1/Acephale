@@ -7,6 +7,7 @@ import { AGENT_PAGE_CUE_EVENT, type AgentPageCueDetail } from "@/lib/agent-page-
 import { cuesForToolTrace, inferPageCues, type AgentPageCue } from "@/lib/agent-page-cues";
 import { AgentPagePresenceLayer } from "@/components/agent-page-presence";
 import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
+import { AgentMessageContent } from "@/components/agent-message-content";
 import { Icon } from "@/components/icon";
 
 export type FeedItem = {
@@ -323,7 +324,7 @@ export function JobConversationPanel({
               <div key={item.id} className={`conv-chat conv-chat-${item.role}`}>
                 {item.role === "assistant" && <span className="agent-msg-avatar">A</span>}
                 <div className="conv-chat-stack">
-                  <div className="conv-chat-body">{item.content}</div>
+                  <div className="conv-chat-body"><AgentMessageContent content={item.content} /></div>
                   {item.role === "assistant" && <AgentToolTraceList trace={item.toolTrace} variant="conversation" />}
                 </div>
               </div>

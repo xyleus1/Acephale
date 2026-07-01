@@ -512,7 +512,7 @@ function DecisionFlowPanel({
   );
 }
 
-function LoadDemoScenarioPanel({
+function LoadPlaybookPanel({
   reference,
   routeLabel,
   modeLabel,
@@ -549,7 +549,7 @@ function LoadDemoScenarioPanel({
     {
       label: "Pricing fan-out",
       title: "Create forwarder drafts once facts are clean",
-      detail: `Current forwarder coverage is ${quoteCoverageLabel}; for the demo, show the agent preparing Black Sea to Adriatic rate requests and waiting for replies.`,
+      detail: `Current forwarder coverage is ${quoteCoverageLabel}; prepare Black Sea to Adriatic rate requests and wait for comparable replies before quoting.`,
     },
     {
       label: "Quote and documents",
@@ -559,17 +559,17 @@ function LoadDemoScenarioPanel({
   ];
 
   return (
-    <section className="load-demo-scenario" data-agent-target="load-demo-scenario" aria-label={`Demo scenario for ${reference}`}>
-      <div className="load-demo-head">
+    <section className="load-playbook" data-agent-target="load-playbook" aria-label={`Load playbook for ${reference}`}>
+      <div className="load-playbook-head">
         <div>
-          <span>Demo scenario</span>
+          <span>Load playbook</span>
           <strong>{routeLabel}</strong>
         </div>
         <em>{statusLabel}</em>
       </div>
-      <div className="load-demo-steps">
+      <div className="load-playbook-steps">
         {steps.map((step, index) => (
-          <div key={step.label} className="load-demo-step">
+          <div key={step.label} className="load-playbook-step">
             <span>{index + 1}</span>
             <div>
               <em>{step.label}</em>
@@ -878,7 +878,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
     `What is missing before ${job.reference} can go to forwarders?`,
     `Check target price and margin for ${job.reference}.`,
     `Draft the missing-info email for ${job.reference}.`,
-    `Walk me through the ${job.reference} demo scenario.`,
+    `Walk me through the ${job.reference} load playbook.`,
   ];
   const routeLabel = job.origin && job.destination
     ? `${job.origin} → ${job.destination}`
@@ -1045,7 +1045,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           currentStatus={job.targetPriceStatus}
         />
 
-        <LoadDemoScenarioPanel
+        <LoadPlaybookPanel
           reference={job.reference}
           routeLabel={routeLabel}
           modeLabel={modeLabel}

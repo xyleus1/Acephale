@@ -26,7 +26,7 @@ Use this log for durable product and engineering decisions. Do not put every imp
   under-covered RFQs from other lanes.
 - Decision: `/dashboard` defaults to the focused load cockpit and should render
   only the selected job's route, pricing, timeline, documents, conversation,
-  and load-scoped demo/workflow context. Office-wide queue/control-sheet views
+  and load-scoped workflow context. Office-wide queue/control-sheet views
   live behind an explicit top-down mode at `/dashboard?view=overview`.
 - Rationale: Operators need to trust that a load page is scoped to that load.
   Global prioritization is useful, but mixing it into a specific load makes the

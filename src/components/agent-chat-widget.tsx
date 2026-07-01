@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { chatWithAgent, type AgentToolTrace, type ChatMsg } from "@/lib/agent-chat";
 import { AgentPagePresenceLayer, type AgentPageAction } from "@/components/agent-page-presence";
 import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
+import { AgentMessageContent } from "@/components/agent-message-content";
 import { cuesForToolTrace, inferPageCues, type AgentPageCue } from "@/lib/agent-page-cues";
 import { Icon } from "@/components/icon";
 
@@ -295,7 +296,7 @@ export function AgentChatWidget() {
             <div key={i} className={`agent-msg agent-msg-${m.role}`}>
               {m.role === "assistant" && <span className="agent-msg-avatar">A</span>}
               <div className="agent-msg-stack">
-                <div className="agent-msg-body">{m.content}</div>
+                <div className="agent-msg-body"><AgentMessageContent content={m.content} /></div>
                 {m.role === "assistant" && <AgentToolTraceList trace={m.toolTrace} />}
               </div>
             </div>

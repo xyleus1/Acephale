@@ -53,7 +53,7 @@ export function AgentToolTraceList({
     <div className={`agent-evidence-trace ${variant}`} aria-label="Agent tool evidence">
       <div className="agent-evidence-head">
         <span className="agent-evidence-label">
-          Used {trace.length} tool{trace.length === 1 ? "" : "s"}
+          Checked {trace.length} source{trace.length === 1 ? "" : "s"}
           {failures > 0 ? ` · ${failures} failed` : ""}
         </span>
         {trail.length > 0 && (
@@ -61,15 +61,15 @@ export function AgentToolTraceList({
             type="button"
             className="agent-evidence-replay"
             onClick={replayTrail}
-            aria-label="Replay where the agent looked on this page"
-            title="Replay where the agent looked"
+            aria-label="Show where the assistant checked this page"
+            title="Show where the assistant checked"
           >
-            Replay trail
+            Show evidence
           </button>
         )}
       </div>
       {trail.length > 0 && (
-        <ol className="agent-evidence-trail" aria-label="Agent page evidence trail">
+        <ol className="agent-evidence-trail" aria-label="Assistant page evidence">
           {trail.map(({ cue, tool }, index) => (
             <li key={`${tool.name}-${cue.target}-${cue.label}`}>
               <button
