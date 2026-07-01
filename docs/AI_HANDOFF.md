@@ -27,12 +27,15 @@ Giresun to Ancona workflow load seed:
 - The command is dry-run by default. Use `npm run seed:giresun-workflow -- --apply
   --create-seed-inbox` for a first local write, and add `--reset` to replace the
   existing seeded copy.
+- Added `POST /api/admin/seed-giresun-workflow`, ADMIN-only and office-scoped,
+  so production can create/find the same completed copy after deployment.
 - Fixed the focused dashboard quote display to read `Job.quoteLines` through
   `parseQuoteLines`, matching the job page and quote PDF behavior.
 
 ## Files changed
 
 - `src/app/dashboard/page.tsx`
+- `src/app/api/admin/seed-giresun-workflow/route.ts`
 - `scripts/seed-giresun-workflow-load.ts`
 - `package.json`
 - `docs/AI_HANDOFF.md`

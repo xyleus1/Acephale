@@ -110,6 +110,15 @@ async function getOffice() {
   return office;
 }
 
+async function getOfficeById(officeId: string) {
+  const office = await prisma.office.findUnique({
+    where: { id: officeId },
+    select: { id: true, name: true },
+  });
+  if (!office) throw new Error(`Office ${officeId} not found.`);
+  return office;
+}
+
 async function nextJobReference(officeId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `JOB-${year}-`;
@@ -654,15 +663,20 @@ async function seedWorkflowLoad(officeId: string, accountId: string | null) {
   return { job, inquiryId: inquiry.id, threadId: rfqThread.id, accountId };
 }
 
-async function main() {
-  const apply = process.argv.includes("--apply");
-  const reset = process.argv.includes("--reset");
-  const createSeedInbox = process.argv.includes("--create-seed-inbox");
-  const office = await getOffice();
+export async function runGiresunWorkflowSeed(options: {
+  apply: boolean;
+  reset?: boolean;
+  createSeedInbox?: boolean;
+  officeId?: string;
+}) {
+  const apply = options.apply;
+  const reset = Boolean(options.reset);
+  const createSeedInbox = Boolean(options.createSeedInbox);
+  const office = options.officeId ? await getOfficeById(options.officeId) : await getOffice();
   const existing = await existingSeededLoad(office.id);
 
   if (!apply) {
-    console.log(JSON.stringify({
+    return {
       mode: "dry-run",
       office,
       existing,
@@ -675,26 +689,28 @@ async function main() {
       documents: ["BOOKING", "INVOICE", "PACKING_LIST", "BL", "COO", "CUSTOMS"],
       quoteTotal: quoteTotal(),
       buyCost: carriers[0].total40HC,
-    }, null, 2));
-    console.log("Run with --apply to write. Add --reset to replace the existing seeded copy.");
-    return;
+    };
   }
 
   if (existing && !reset) {
-    console.log(JSON.stringify({
+    return {
       ok: true,
       skipped: true,
       reason: "Seeded Giresun workflow load already exists. Use --reset to replace it.",
       job: existing,
-    }, null, 2));
-    return;
+      urls: {
+        job: `/dashboard/jobs/${existing.id}`,
+        inboxThreads: `/dashboard/inbox?job=${existing.id}`,
+        todayRfqs: "/dashboard/inbox?filter=_TODAY&view=rfqs",
+      },
+    };
   }
 
   const removed = reset ? await removeExistingSeededLoad(office.id) : { jobs: [], threads: 0, inquiries: 0 };
   const account = await seedSourceAccount(office.id, createSeedInbox);
   const seeded = await seedWorkflowLoad(office.id, account?.id ?? null);
 
-  console.log(JSON.stringify({
+  return {
     ok: true,
     office,
     removed,
@@ -707,14 +723,28 @@ async function main() {
       inboxThreads: `/dashboard/inbox?job=${seeded.job.id}`,
       todayRfqs: "/dashboard/inbox?filter=_TODAY&view=rfqs",
     },
-  }, null, 2));
+  };
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
+async function main() {
+  const result = await runGiresunWorkflowSeed({
+    apply: process.argv.includes("--apply"),
+    reset: process.argv.includes("--reset"),
+    createSeedInbox: process.argv.includes("--create-seed-inbox"),
   });
+  console.log(JSON.stringify(result, null, 2));
+  if ("mode" in result && result.mode === "dry-run") {
+    console.log("Run with --apply to write. Add --reset to replace the existing seeded copy.");
+  }
+}
+
+if (process.argv[1]?.endsWith("seed-giresun-workflow-load.ts") || process.argv[1]?.endsWith("seed-giresun-workflow-load.js")) {
+  main()
+    .catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

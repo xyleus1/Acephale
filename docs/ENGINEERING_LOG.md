@@ -1331,7 +1331,8 @@ Use this file for chronological implementation notes that future agents should s
 - Task: Create a reproducible, real-looking copy of the Giresun, Turkey to
   Ancona, Italy load that is complete enough for an end-to-end RFQ to booked
   load walkthrough.
-- Files changed: `scripts/seed-giresun-workflow-load.ts`, `package.json`,
+- Files changed: `scripts/seed-giresun-workflow-load.ts`,
+  `src/app/api/admin/seed-giresun-workflow/route.ts`, `package.json`,
   `src/app/dashboard/page.tsx`, `docs/AI_HANDOFF.md`, and
   `docs/ENGINEERING_LOG.md`.
 - Behavior added: `npm run seed:giresun-workflow` dry-runs the seed; `npm run
@@ -1339,6 +1340,8 @@ Use this file for chronological implementation notes that future agents should s
   customer/contact, RFQ, booked job, inbox threads, forwarder rates, accepted
   customer quote, quote lines, target-price history, milestones, and generated
   PDF document records. Add `--reset` to replace the existing seeded copy.
+  `POST /api/admin/seed-giresun-workflow` exposes the same operation in
+  production, scoped to the logged-in ADMIN user's office.
 - Bug fixed: the focused dashboard now reads quote lines through
   `parseQuoteLines(job)`, so clean `Job.quoteLines` records render the same way
   on the dashboard as they do on the job page and quote PDF.
