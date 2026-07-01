@@ -56,12 +56,18 @@ Production pentest account repair:
 - `npx tsx -e '...'` route smoke: valid cron bearer verifies the sandbox
 - `npm run check:docs`
 - `npm run build`
+- Deployed commit `12a6243` reached production.
+- After the Vercel cron ran, production login with
+  `pentest@derya-pentest.invalid / PentestDemo!2026` returned `303` to
+  `/dashboard`, and authenticated `/dashboard` returned `200`.
+- Production login with `admin@demo.local / admin1234` still returned `303` to
+  `/login?error=1`.
+- Production `/signup` returned `404`.
 
 ## Caveats
 
-- The production repair will take effect only after this commit deploys and the
-  Vercel cron fires, or after someone with `CRON_SECRET` manually calls
-  `/api/cron/pentest-demo`.
+- If the production DB is reset or the sandbox is damaged later, the cron route
+  should repair it on the next 5-minute run.
 - The route intentionally returns whether the password source is the default or
   `PENTEST_DEMO_PASSWORD`, but never returns a secret env password value.
 

@@ -1445,5 +1445,10 @@ Use this file for chronological implementation notes that future agents should s
   import smoke for `ensurePentestDemoSeed`, route smoke for unauthorized and
   authorized cron requests, `npm run check:docs`, and `npm run build` passed
   locally.
-- Caveats: the production account becomes usable only after the new commit
-  deploys and the cron route runs, or after a manual call with `CRON_SECRET`.
+- Post-deploy verification: commit `12a6243` reached production, the Vercel
+  cron repaired the target DB by `20:40:52 UTC`, pentest login returned `303`
+  to `/dashboard`, authenticated `/dashboard` returned `200`, legacy
+  `admin@demo.local / admin1234` still returned `303` to `/login?error=1`, and
+  `/signup` returned `404`.
+- Caveats: if the production DB is reset or the sandbox is damaged later, the
+  cron should repair it on the next 5-minute run.
