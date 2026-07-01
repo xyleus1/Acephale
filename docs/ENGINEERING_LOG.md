@@ -1354,3 +1354,33 @@ Use this file for chronological implementation notes that future agents should s
   session.
 - Caveats: generated PDFs are walkthrough artifacts, not legal shipment
   documents.
+
+### 2026-07-01 - Pentest demo sandbox account
+
+- Branch: main
+- Commit: not committed
+- Task: Create a disposable demo account and synthetic tenant for pentesters
+  without exposing real or real-looking operational data, while keeping the
+  agent's commercial/memory surfaces usable.
+- Files changed: `scripts/create-pentest-demo-account.ts`, `package.json`,
+  `docs/AI_HANDOFF.md`, and `docs/ENGINEERING_LOG.md`.
+- Behavior added: `npm run seed:pentest-demo` dry-runs the seed, and `npm run
+  seed:pentest-demo -- --apply` creates `Pentest Sandbox Office` with
+  `pentest@derya-pentest.invalid`, one synthetic RFQ/load, carrier quote
+  comparisons, email threads/messages, documents, milestones, target-price
+  history, lane/margin reference data, memory objects/events, and an active
+  commercial strategy assessment. `npm run test:pentest-demo` verifies the
+  account, seeded graph, memory search, customer dossier, no OAuth tokens,
+  tenant-local job reference, and strategy guardrail.
+- Security posture: local database runs can use the local-only default
+  password `PentestDemo!2026`; production-like or remote database URLs require
+  `PENTEST_DEMO_PASSWORD`. The seed writes no OAuth tokens, provider
+  credentials, live-send records, imported production facts, or real customer
+  data.
+- Verification: `npm run seed:pentest-demo`, `npx tsc --noEmit`,
+  `npm run seed:pentest-demo -- --apply`, an idempotent rerun of
+  `npm run seed:pentest-demo -- --apply`, and `npm run test:pentest-demo`
+  passed before this log entry.
+- Failed/skipped checks: browser-authenticated LLM chat was not clicked in this
+  session; runtime chat still depends on `ANTHROPIC_API_KEY`.
+- Caveats: the local account was created in the configured local database only.

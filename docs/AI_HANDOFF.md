@@ -4,6 +4,61 @@
 
 ## Date
 
+2026-07-01
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
+Pentest demo sandbox account:
+
+- Added `npm run seed:pentest-demo`, a dry-run-by-default seed command for a
+  separate `Pentest Sandbox Office` tenant.
+- The seed creates one ADMIN sandbox user, one synthetic customer/contact, one
+  active RFQ/load, carrier quotes, email threads/messages, target-price
+  history, documents, milestones, lane/margin reference data, memory objects,
+  memory events, and a persisted commercial strategy assessment.
+- The seed intentionally creates no OAuth tokens, provider credentials, live
+  email send state, imported production data, or real customer/supplier facts.
+- Local default login is `pentest@derya-pentest.invalid` with password
+  `PentestDemo!2026`. On production-like or remote DB URLs, the script refuses
+  that default and requires `PENTEST_DEMO_PASSWORD`.
+- Added `npm run test:pentest-demo` to verify the account, tenant isolation,
+  no OAuth tokens, seeded job graph, memory search, customer dossier, and
+  strategy guardrail.
+
+## Files changed
+
+- `scripts/create-pentest-demo-account.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run seed:pentest-demo`
+- `npx tsc --noEmit`
+- `npm run seed:pentest-demo -- --apply`
+- `npm run seed:pentest-demo -- --apply` idempotent rerun
+- `npm run test:pentest-demo`
+
+## Caveats
+
+- Local seed was applied to the configured local database only.
+- The smoke test verifies the deterministic data, memory, and commercial
+  strategy surfaces the agent relies on. Browser chat with the LLM still
+  requires a runtime `ANTHROPIC_API_KEY` and was not browser-clicked here.
+
+## Previous Update
+
+## Date
+
 2026-06-30
 
 ## Branch
