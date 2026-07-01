@@ -167,13 +167,13 @@ async function main() {
 
   const office = await prisma.office.create({ data: { name: "Istanbul Office" } });
 
-  const adminHash = await hashPassword("admin1234");
+  const adminHash = await hashPassword("SeedAdmin!2026");
   const managerHash = await hashPassword("manager1234");
 
   const admin = await prisma.user.create({
     data: {
       officeId: office.id,
-      email: "admin@demo.local",
+      email: "seed-admin@derya.internal",
       fullName: "Derya Kaya",
       role: UserRole.ADMIN,
       canViewWholeOffice: true,
@@ -409,7 +409,7 @@ async function main() {
 
   console.log("✓ Seed complete — Istanbul Office");
   console.log(`  Companies: ${companyList.length}`);
-  console.log("  Admin:    admin@demo.local / admin1234");
+  console.log("  Admin:    seed-admin@derya.internal / SeedAdmin!2026");
   console.log("  Manager:  manager@demo.local / manager1234");
   console.log("  Sales:    sales1@demo.local / sales11234  …  sales8@demo.local / sales81234");
 }

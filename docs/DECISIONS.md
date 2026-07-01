@@ -16,6 +16,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-01 - Public signup and sample admin access stay disabled
+
+- Status: accepted
+- Owner: engineering
+- Context: The login page exposed both public office creation and a legacy
+  `admin@demo.local / admin1234` sample access path. For an internal pentest
+  sandbox, those controls make testers use the wrong account and allow tenant
+  creation outside the prepared sandbox.
+- Decision: The public login page should only allow sign-in. Do not expose
+  sample/admin credentials, `?demo=1` autofill, or a public `/signup` office
+  creation page. Pentest access is provisioned through the explicit
+  `seed:pentest-demo` command and legacy demo admin cleanup through
+  `cleanup:demo-admin`.
+- Rationale: Internal test accounts should be deliberate, resettable, and
+  isolated. Public sample credentials and open tenant creation are noisy and
+  weaken the test surface.
+- Consequences: New offices must be created through controlled setup scripts
+  or future admin-only tooling, not public self-serve signup. Do not re-add
+  `admin@demo.local` as a visible login hint.
+- Revisit when: Derya intentionally supports public self-serve onboarding.
+
 ### 2026-06-30 - Separate top-down dashboard from focused load cockpit
 
 - Status: accepted

@@ -1372,11 +1372,10 @@ Use this file for chronological implementation notes that future agents should s
   commercial strategy assessment. `npm run test:pentest-demo` verifies the
   account, seeded graph, memory search, customer dossier, no OAuth tokens,
   tenant-local job reference, and strategy guardrail.
-- Security posture: local database runs can use the local-only default
-  password `PentestDemo!2026`; production-like or remote database URLs require
-  `PENTEST_DEMO_PASSWORD`. The seed writes no OAuth tokens, provider
-  credentials, live-send records, imported production facts, or real customer
-  data.
+- Security posture: the seed writes no OAuth tokens, provider credentials,
+  live-send records, imported production facts, or real customer data. The
+  pentest password is `PENTEST_DEMO_PASSWORD` when set, otherwise the default
+  `PentestDemo!2026`.
 - Verification: `npm run seed:pentest-demo`, `npx tsc --noEmit`,
   `npm run seed:pentest-demo -- --apply`, an idempotent rerun of
   `npm run seed:pentest-demo -- --apply`, and `npm run test:pentest-demo`
@@ -1384,3 +1383,40 @@ Use this file for chronological implementation notes that future agents should s
 - Failed/skipped checks: browser-authenticated LLM chat was not clicked in this
   session; runtime chat still depends on `ANTHROPIC_API_KEY`.
 - Caveats: the local account was created in the configured local database only.
+
+### 2026-07-01 - Remove public sample/admin login paths
+
+- Branch: main
+- Commit: not committed
+- Task: Remove the visible legacy sample-admin login path, disable public
+  office creation from the login surface, remove the legacy admin account from
+  the local DB, and fix the pentest seed so the documented password works.
+- Files changed: `src/app/login/page.tsx`, `src/app/signup/page.tsx`,
+  `scripts/create-pentest-demo-account.ts`,
+  `scripts/remove-demo-admin-account.ts`,
+  `scripts/reset-video-demo-loads.ts`,
+  `scripts/seed-giresun-workflow-load.ts`,
+  `scripts/seed-map-example-loads.ts`, `prisma/seed.ts`, `package.json`,
+  `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, and `docs/DECISIONS.md`.
+- Behavior added: login now renders only the sign-in form; `?demo=1` no longer
+  prefills `admin@demo.local`; the public `/signup` route is removed; each
+  `seed:pentest-demo -- --apply` resets the pentest password to
+  `PENTEST_DEMO_PASSWORD` when set or `PentestDemo!2026` otherwise; and
+  `cleanup:demo-admin` deletes legacy `admin@demo.local` users from the target
+  database. The older demo seed scripts now choose the first active admin
+  instead of hard-coding `admin@demo.local`, and `prisma/seed.ts` no longer
+  recreates that legacy account.
+- Local data change: ran `npm run seed:pentest-demo -- --apply` to reset the
+  local pentest account password, then ran
+  `npm run cleanup:demo-admin -- --apply` and deleted one `admin@demo.local`
+  user from `Istanbul Office`.
+- Verification: `npm run seed:pentest-demo -- --apply`,
+  `npm run cleanup:demo-admin`, `npm run cleanup:demo-admin -- --apply`,
+  `npm run test:pentest-demo`, `npm run test:demo-admin-removed`,
+  `npm run check:docs`, `npm run build`, and `npx tsc --noEmit` passed before
+  this log entry.
+- Failed/skipped checks: the first `npx tsc --noEmit` run after deleting
+  `/signup` failed on stale generated `.next/types/app/signup` files. The build
+  regenerated Next types and the rerun passed.
+- Caveats: database cleanup applies only to whichever database `DATABASE_URL`
+  targets when the command is run.

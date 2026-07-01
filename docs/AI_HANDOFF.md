@@ -16,6 +16,74 @@ not committed
 
 ## Task implemented
 
+Login hardening for internal pentest access:
+
+- Removed the public login footer that linked to `Create your office` and
+  advertised `admin@demo.local / admin1234` sample access.
+- Removed the public `/signup` page so testers cannot create arbitrary offices
+  by guessing the route.
+- Updated `seed:pentest-demo` so each `--apply` resets the pentest password to
+  `PENTEST_DEMO_PASSWORD` when set, otherwise the documented default
+  `PentestDemo!2026`.
+- Added `cleanup:demo-admin` and `test:demo-admin-removed` for deleting and
+  verifying removal of the legacy `admin@demo.local` account.
+- Updated older demo seed scripts so they do not depend on
+  `admin@demo.local`, and changed `prisma/seed.ts` so it no longer recreates
+  that legacy account.
+- Applied both local database operations: reset the pentest account password and
+  deleted one `admin@demo.local` user from `Istanbul Office`.
+
+## Files changed
+
+- `src/app/login/page.tsx`
+- `src/app/signup/page.tsx`
+- `scripts/create-pentest-demo-account.ts`
+- `scripts/remove-demo-admin-account.ts`
+- `scripts/reset-video-demo-loads.ts`
+- `scripts/seed-giresun-workflow-load.ts`
+- `scripts/seed-map-example-loads.ts`
+- `prisma/seed.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+- `docs/DECISIONS.md`
+
+## Verification passed
+
+- `npm run seed:pentest-demo -- --apply`
+- `npm run cleanup:demo-admin`
+- `npm run cleanup:demo-admin -- --apply`
+- `npm run test:pentest-demo`
+- `npm run test:demo-admin-removed`
+- `npm run check:docs`
+- `npm run build`
+- `npx tsc --noEmit`
+
+## Caveats
+
+- These database operations were applied only to the configured local
+  `DATABASE_URL`. Apply the same commands against any preview/staging database
+  that pentesters actually use.
+- The first `npx tsc --noEmit` run after deleting `/signup` hit stale
+  generated `.next/types/app/signup` files. `npm run build` regenerated Next
+  types and the rerun passed.
+
+## Previous Update
+
+## Date
+
+2026-07-01
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Pentest demo sandbox account:
 
 - Added `npm run seed:pentest-demo`, a dry-run-by-default seed command for a
@@ -26,9 +94,8 @@ Pentest demo sandbox account:
   memory events, and a persisted commercial strategy assessment.
 - The seed intentionally creates no OAuth tokens, provider credentials, live
   email send state, imported production data, or real customer/supplier facts.
-- Local default login is `pentest@derya-pentest.invalid` with password
-  `PentestDemo!2026`. On production-like or remote DB URLs, the script refuses
-  that default and requires `PENTEST_DEMO_PASSWORD`.
+- Default login is `pentest@derya-pentest.invalid` with password
+  `PentestDemo!2026`, unless `PENTEST_DEMO_PASSWORD` is set.
 - Added `npm run test:pentest-demo` to verify the account, tenant isolation,
   no OAuth tokens, seeded job graph, memory search, customer dossier, and
   strategy guardrail.

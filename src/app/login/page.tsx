@@ -3,7 +3,7 @@ import { getSession, loginWithCredentials } from "@/lib/auth";
 import { LogoMark } from "@/components/logo-mark";
 
 type Params = {
-  searchParams: Promise<{ error?: string; demo?: string }>;
+  searchParams: Promise<{ error?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: Params) {
@@ -14,7 +14,6 @@ export default async function LoginPage({ searchParams }: Params) {
 
   const query = await searchParams;
   const hasError = query.error === "1";
-  const demoMode = query.demo === "1";
 
   async function loginAction(formData: FormData) {
     "use server";
@@ -52,7 +51,6 @@ export default async function LoginPage({ searchParams }: Params) {
                 name="email"
                 type="email"
                 required
-                defaultValue={demoMode ? "admin@demo.local" : ""}
                 placeholder="you@yourcompany.com"
                 autoComplete="email"
               />
@@ -63,7 +61,6 @@ export default async function LoginPage({ searchParams }: Params) {
                 name="password"
                 type="password"
                 required
-                defaultValue={demoMode ? "admin1234" : ""}
                 placeholder="••••••••"
                 autoComplete="current-password"
               />
@@ -72,16 +69,6 @@ export default async function LoginPage({ searchParams }: Params) {
               Sign in
             </button>
           </form>
-
-          <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-            <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>
-              Don&apos;t have an account? <a href="/signup" style={{ color: "var(--brand)", fontWeight: 600 }}>Create your office</a>
-            </p>
-            <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0 }}>
-              Or <a href="/login?demo=1" style={{ color: "var(--text-2)", fontWeight: 500 }}>use sample access</a>
-              {" "}— prefills <code style={{ fontSize: 10, background: "var(--surface-3)", padding: "1px 4px", borderRadius: 3 }}>admin@demo.local / admin1234</code>
-            </p>
-          </div>
         </div>
       </div>
     </main>

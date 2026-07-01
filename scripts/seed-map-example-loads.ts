@@ -106,7 +106,8 @@ function addDays(days: number) {
 
 async function getDemoOffice() {
   const demoUser = await prisma.user.findFirst({
-    where: { email: "admin@demo.local" },
+    where: { role: "ADMIN", isActive: true },
+    orderBy: { createdAt: "asc" },
     select: { officeId: true, office: { select: { name: true } } },
   });
   if (demoUser) return { id: demoUser.officeId, name: demoUser.office.name };

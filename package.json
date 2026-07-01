@@ -29,6 +29,8 @@
     "seed:giresun-workflow": "tsx scripts/seed-giresun-workflow-load.ts",
     "seed:pentest-demo": "tsx scripts/create-pentest-demo-account.ts",
     "test:pentest-demo": "tsx scripts/create-pentest-demo-account.ts --verify-only",
+    "cleanup:demo-admin": "tsx scripts/remove-demo-admin-account.ts",
+    "test:demo-admin-removed": "tsx scripts/remove-demo-admin-account.ts --verify-only",
     "test:manual-market-ingestion-action": "tsx scripts/manual-market-ingestion-action.test.ts",
     "test:intelligence-page-empty-state": "tsx scripts/intelligence-page-empty-state.test.ts",
     "test:scheduled-market-ingestion": "tsx scripts/scheduled-market-ingestion.test.ts",

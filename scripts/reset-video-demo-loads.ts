@@ -177,7 +177,8 @@ async function nextDemoJobReference(officeId: string): Promise<string> {
 
 async function getOffice() {
   const admin = await prisma.user.findFirst({
-    where: { email: "admin@demo.local" },
+    where: { role: "ADMIN", isActive: true },
+    orderBy: { createdAt: "asc" },
     select: { officeId: true, office: { select: { name: true } } },
   });
   if (admin) return { id: admin.officeId, name: admin.office.name };
