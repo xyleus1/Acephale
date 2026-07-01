@@ -31634,6 +31634,27 @@ button.primary {
   color: #ffffff !important;
 }
 
+.agent-panel > .agent-panel-header,
+.workbench-agent .conversation-panel > .conversation-header {
+  background: var(--derya-navy) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+.agent-panel > .agent-panel-header .agent-panel-kicker,
+.agent-panel > .agent-panel-header .agent-panel-title,
+.agent-panel > .agent-panel-header .agent-panel-subtitle,
+.workbench-agent .conversation-panel > .conversation-header .conversation-kicker,
+.workbench-agent .conversation-panel > .conversation-header .conversation-title,
+.workbench-agent .conversation-panel > .conversation-header .conversation-subtitle {
+  color: #ffffff !important;
+}
+
+.agent-panel > .agent-panel-header .agent-panel-subtitle,
+.workbench-agent .conversation-panel > .conversation-header .conversation-subtitle {
+  color: rgba(234, 242, 248, 0.76) !important;
+}
+
 .agent-evidence-replay,
 .agent-evidence-trail button,
 .agent-evidence-chip,
