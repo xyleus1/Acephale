@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-01 - Production pentest sandbox self-repairs by cron
+
+- Status: accepted
+- Owner: engineering
+- Context: Local `seed:pentest-demo -- --apply` verified the pentest account,
+  but production login still failed because the deployed app uses a different
+  database. The production shell/database URL is not available to every coding
+  session.
+- Decision: Keep the pentest sandbox provisioned through an idempotent
+  `CRON_SECRET`-protected route at `/api/cron/pentest-demo`, scheduled by
+  Vercel every 5 minutes. The route verifies first and only repairs the
+  sandbox when missing or broken. It also removes legacy `admin@demo.local`
+  rows in the target database.
+- Rationale: A sandbox account that only works in the local database is useless
+  to pentesters. The route uses the same auth pattern as existing cron jobs and
+  avoids exposing production database URLs or secret values to local agents.
+- Consequences: The pentest account is intentionally resettable and synthetic.
+  Do not put real customer, supplier, token, OAuth, or production facts into
+  this tenant. Remove the cron when the internal pentest window ends.
+- Revisit when: there is a first-class internal admin console or controlled
+  deployment task runner for one-off production data operations.
+
 ### 2026-07-01 - Public signup and sample admin access stay disabled
 
 - Status: accepted

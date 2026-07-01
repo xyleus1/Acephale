@@ -1420,3 +1420,30 @@ Use this file for chronological implementation notes that future agents should s
   regenerated Next types and the rerun passed.
 - Caveats: database cleanup applies only to whichever database `DATABASE_URL`
   targets when the command is run.
+
+### 2026-07-01 - Production pentest account auto-provisioning
+
+- Branch: main
+- Commit: not committed
+- Task: Fix the real hosted login failure for
+  `pentest@derya-pentest.invalid` after local verification passed but
+  production still returned invalid credentials.
+- Root cause: production `/api/health` reported commit `3ecdd12` with healthy
+  DB connectivity, and an actual hosted login POST redirected to
+  `/login?error=1`. The code was deployed; the production database did not have
+  a usable pentest sandbox account/password.
+- Files changed: `scripts/create-pentest-demo-account.ts`,
+  `src/app/api/cron/pentest-demo/route.ts`, `vercel.json`,
+  `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, and `docs/DECISIONS.md`.
+- Behavior added: the pentest seed script is now import-safe and exposes
+  `ensurePentestDemoSeed`; `/api/cron/pentest-demo` uses the existing
+  `CRON_SECRET` auth convention to verify or repair the sandbox account and
+  delete legacy `admin@demo.local` rows; Vercel runs that route every 5 minutes.
+- Verification: production health and hosted login failure were reproduced
+  before the fix; `npm run test:pentest-demo`, `npm run
+  test:demo-admin-removed`, `npx tsc --noEmit`, `vercel.json` JSON parsing,
+  import smoke for `ensurePentestDemoSeed`, route smoke for unauthorized and
+  authorized cron requests, `npm run check:docs`, and `npm run build` passed
+  locally.
+- Caveats: the production account becomes usable only after the new commit
+  deploys and the cron route runs, or after a manual call with `CRON_SECRET`.

@@ -16,6 +16,71 @@ not committed
 
 ## Task implemented
 
+Production pentest account repair:
+
+- Reproduced the production login failure against
+  `https://derya-crm.vercel.app/login`: posting
+  `pentest@derya-pentest.invalid / PentestDemo!2026` returned `303` to
+  `/login?error=1`.
+- Confirmed production `/api/health` was already on commit `3ecdd12`, so the
+  root cause was production database state, not stale deployed code.
+- Made `scripts/create-pentest-demo-account.ts` import-safe and exported an
+  idempotent `ensurePentestDemoSeed` helper for server routes.
+- Added `GET/POST /api/cron/pentest-demo`, protected by the existing
+  `CRON_SECRET` pattern, to verify or repair the pentest sandbox and remove
+  legacy `admin@demo.local` rows in the target database.
+- Added the route to Vercel cron every 5 minutes so production can repair the
+  sandbox with its own configured database and cron secret.
+
+## Files changed
+
+- `scripts/create-pentest-demo-account.ts`
+- `src/app/api/cron/pentest-demo/route.ts`
+- `vercel.json`
+- `docs/AI_HANDOFF.md`
+- `docs/ENGINEERING_LOG.md`
+- `docs/DECISIONS.md`
+
+## Verification passed
+
+- Production health check showed `VERCEL_GIT_COMMIT_SHA=3ecdd12` and DB ping
+  healthy before this fix.
+- Production login POST reproduced the invalid-credentials redirect before this
+  fix.
+- `npm run test:pentest-demo`
+- `npm run test:demo-admin-removed`
+- `npx tsc --noEmit`
+- `node -e 'JSON.parse(require("fs").readFileSync("vercel.json","utf8"))'`
+- `npx tsx -e '...'` import smoke for `ensurePentestDemoSeed`
+- `npx tsx -e '...'` route smoke: missing cron secret returns `401`
+- `npx tsx -e '...'` route smoke: valid cron bearer verifies the sandbox
+- `npm run check:docs`
+- `npm run build`
+
+## Caveats
+
+- The production repair will take effect only after this commit deploys and the
+  Vercel cron fires, or after someone with `CRON_SECRET` manually calls
+  `/api/cron/pentest-demo`.
+- The route intentionally returns whether the password source is the default or
+  `PENTEST_DEMO_PASSWORD`, but never returns a secret env password value.
+
+## Previous Update
+
+## Date
+
+2026-07-01
+
+## Branch
+
+main
+
+## Commit
+
+not committed
+
+## Task implemented
+
 Login hardening for internal pentest access:
 
 - Removed the public login footer that linked to `Create your office` and
