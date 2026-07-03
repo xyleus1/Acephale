@@ -3,8 +3,11 @@ import {
   CrmActivityTimeline,
   CrmBadge,
   CrmBrainContextPanel,
+  CrmContactEditForm,
   CrmEntityHeader,
+  CrmInboxApprovalToggle,
   CrmNoteForm,
+  CrmNotice,
   CrmOpportunityForm,
   CrmPriorityBadge,
   CrmStageBadge,
@@ -17,11 +20,19 @@ import { getCrmContact } from "@/lib/crm/data";
 import { getCrmScope } from "@/lib/crm/session";
 import { crmLabel } from "@/lib/crm/types";
 
-export default async function CrmContactDetailPage({ params }: { params: Promise<{ contactId: string }> }) {
+export default async function CrmContactDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ contactId: string }>;
+  searchParams: Promise<{ notice?: string; error?: string }>;
+}) {
   const scope = await getCrmScope();
   const { contactId } = await params;
+  const { notice, error } = await searchParams;
   const contact = await getCrmContact(scope, contactId);
   if (!contact) notFound();
+  const returnTo = `/dashboard/crm/people/${contact.id}`;
   const brainContext = await getCrmBrainContext({ officeId: scope.officeId, contactId: contact.id, companyId: contact.companyId });
 
   return (
@@ -40,13 +51,16 @@ export default async function CrmContactDetailPage({ params }: { params: Promise
           </>
         }
       />
+      <CrmNotice notice={notice} error={error} />
       <div className="crm-detail-shell">
         <aside className="crm-detail-rail">
           <CrmBrainContextPanel context={brainContext} />
           <div className="crm-form-stack">
-            <CrmOpportunityForm company={contact.company} contact={contact} />
-            <CrmTaskForm company={contact.company} contact={contact} />
-            <CrmNoteForm company={contact.company} contact={contact} />
+            <CrmContactEditForm contact={contact} returnTo={returnTo} />
+            <CrmInboxApprovalToggle contact={contact} returnTo={returnTo} />
+            <CrmOpportunityForm company={contact.company} contact={contact} returnTo={returnTo} />
+            <CrmTaskForm company={contact.company} contact={contact} returnTo={returnTo} />
+            <CrmNoteForm company={contact.company} contact={contact} returnTo={returnTo} />
           </div>
         </aside>
         <main className="crm-detail-grid">

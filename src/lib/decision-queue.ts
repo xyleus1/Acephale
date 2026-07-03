@@ -1098,7 +1098,7 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       meta: `${routeLabel(quote)} · ${value} · pending ${age}h`,
       reason: "A customer quote that never becomes won/lost teaches the pricing brain nothing and hides follow-up leakage.",
       actionLabel: age >= 72 ? "Mark won/lost" : "Follow up",
-      href: `/dashboard/customers/${quote.companyId}#quotes`,
+      href: `/dashboard/crm/companies/${quote.companyId}`,
       score,
       ageHours: age,
       priorityFactors: [

@@ -169,7 +169,7 @@ export function ActivityFeed({
             <div className="activity-stale-list">
               {stale.map((c) => (
                 <div key={c.id} className="activity-stale-row">
-                  <Link href={`/dashboard/customers/${c.id}`} className="activity-stale-link">
+                  <Link href={`/dashboard/crm/companies/${c.id}`} className="activity-stale-link">
                     {c.name}
                   </Link>
                   <span className="activity-stale-date">
@@ -208,7 +208,7 @@ function TaskRow({
       <div className="activity-feed-main">
         <span className="activity-feed-row-title">{task.title}</span>
         <span className="activity-feed-sep">·</span>
-        <Link href={`/dashboard/customers/${task.company.id}`} className="activity-feed-link">
+        <Link href={`/dashboard/crm/companies/${task.company.id}`} className="activity-feed-link">
           {task.company.name}
         </Link>
       </div>
@@ -237,7 +237,7 @@ function QuoteRow({
   return (
     <div className={["activity-feed-row", "quote", ageTone].filter(Boolean).join(" ")}>
       <div className="activity-feed-main">
-        <Link href={`/dashboard/customers/${quote.company.id}`} className="activity-feed-row-title">
+        <Link href={`/dashboard/crm/companies/${quote.company.id}`} className="activity-feed-row-title">
           {quote.company.name}
         </Link>
         <div className="activity-feed-meta">

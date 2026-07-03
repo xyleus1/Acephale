@@ -5,6 +5,8 @@ import {
   CrmBrainContextPanel,
   CrmEntityHeader,
   CrmNoteForm,
+  CrmNotice,
+  CrmOpportunityEditForm,
   CrmOpportunityStageForm,
   CrmPriorityBadge,
   CrmStageBadge,
@@ -16,11 +18,19 @@ import { getCrmOpportunity } from "@/lib/crm/data";
 import { getCrmScope } from "@/lib/crm/session";
 import { compactMoney, crmLabel } from "@/lib/crm/types";
 
-export default async function CrmOpportunityDetailPage({ params }: { params: Promise<{ opportunityId: string }> }) {
+export default async function CrmOpportunityDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ opportunityId: string }>;
+  searchParams: Promise<{ notice?: string; error?: string }>;
+}) {
   const scope = await getCrmScope();
   const { opportunityId } = await params;
+  const { notice, error } = await searchParams;
   const opportunity = await getCrmOpportunity(scope, opportunityId);
   if (!opportunity) notFound();
+  const returnTo = `/dashboard/crm/opportunities/${opportunity.id}`;
   const brainContext = await getCrmBrainContext({
     officeId: scope.officeId,
     opportunityId: opportunity.id,
@@ -46,6 +56,7 @@ export default async function CrmOpportunityDetailPage({ params }: { params: Pro
           </>
         }
       />
+      <CrmNotice notice={notice} error={error} />
       <div className="crm-detail-shell">
         <aside className="crm-detail-rail">
           <CrmBrainContextPanel context={brainContext} />
@@ -54,8 +65,9 @@ export default async function CrmOpportunityDetailPage({ params }: { params: Pro
             <CrmOpportunityStageForm opportunity={opportunity} />
           </section>
           <div className="crm-form-stack">
-            <CrmTaskForm company={opportunity.company} contact={opportunity.contact} opportunity={opportunity} inquiryId={opportunity.inquiryId} />
-            <CrmNoteForm company={opportunity.company} contact={opportunity.contact} opportunity={opportunity} inquiryId={opportunity.inquiryId} />
+            <CrmOpportunityEditForm opportunity={opportunity} returnTo={returnTo} />
+            <CrmTaskForm company={opportunity.company} contact={opportunity.contact} opportunity={opportunity} inquiryId={opportunity.inquiryId} returnTo={returnTo} />
+            <CrmNoteForm company={opportunity.company} contact={opportunity.contact} opportunity={opportunity} inquiryId={opportunity.inquiryId} returnTo={returnTo} />
           </div>
         </aside>
         <main className="crm-detail-grid">

@@ -537,3 +537,86 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: Derya needs live geocoding, selectable alternative routes,
   carrier schedules, AIS-style tracking, or a production map provider/cached
   tile strategy.
+
+### 2026-07-03 - /dashboard/crm is the only CRM surface
+
+- Status: accepted
+- Owner: engineering
+- Context: The Internal CRM V1 shipped alongside the legacy
+  `/dashboard/customers` workspace and `/dashboard/pipeline` kanban, giving two
+  divergent UIs over the same `Company` rows and three unsynced lifecycle
+  fields (`Company.status`, `Company.crmStage`, `CrmOpportunity.stage`).
+- Decision: Delete the legacy customers and pipeline UI code, repoint every
+  link to `/dashboard/crm`, add temporary redirects, and treat `crmStage` as
+  the canonical company lifecycle. Legacy DB columns and data stay untouched.
+  Documents, owner management, and the inbox-approval toggle were ported into
+  the CRM company/person pages; quotes UI, saved views, bulk status, and the
+  class1/class2 taxonomy editors were dropped.
+- Rationale: Two account surfaces drift immediately and corrupt trust in both.
+  The founder decided the old CRM code and even its data are expendable; the
+  future surface is the Relationship OS.
+- Consequences: `CustomerStatus` remains in the schema for old rows and the
+  companies CSV export but has no editing surface. New CRM writes still set
+  `status: "UNTOUCHED"` for compatibility.
+- Revisit when: reports/search are modernized to read `crmStage`, or the
+  `status` column is formally dropped.
+
+### 2026-07-03 - Emails resolve to CRM touches automatically
+
+- Status: accepted
+- Owner: engineering
+- Context: `lastTouchAt` was only written by manual CRM notes, so the stale
+  relationships panel flagged accounts the office emails daily, and email
+  history never appeared in CRM timelines.
+- Decision: Every synced inbound/outbound Gmail message is resolved to a CRM
+  company/contact (contact email match, then inquiry link, then job link, then
+  company domain; freemail domains excluded), logged as an EMAIL `Activity`
+  with `sourceRefs`/`provenance`, cached on `EmailThread.companyId/contactId`,
+  and bumps `Company.lastTouchAt`/`Contact.lastTouchAt` forward-only.
+  `Inquiry.companyId` is adopted only on strong (contact-email) matches.
+  A batched backfill script (`npm run backfill:crm-email`) covers history.
+- Rationale: The Relationship OS's core promise (staleness, next actions)
+  is only trustworthy if touches reflect reality, not manual note discipline.
+- Consequences: Additive migration `20260703010000_email_crm_touch` must be
+  applied before deploying this code. Touch logging is wrapped so Gmail
+  sync/send never fail because of CRM writes.
+- Revisit when: WhatsApp or meeting sources should write touches, or domain
+  matching needs a review queue for false positives.
+
+### 2026-07-03 - CRM serves two explicit layers: office book and founder network
+
+- Status: accepted
+- Owner: engineering
+- Context: Docs conflicted on whether the CRM is a sales sub-module or a
+  founder relationship OS. The founder wants both: the AI-native freight
+  office's customer book and the startup's investor/advisor/partner network.
+- Decision: Keep one `Company` table and derive a layer from `crmCategory`
+  (customer/prospect/carrier/broker/customs_broker/freight_backend = office
+  book; partner/vendor/investor/advisor/software_provider/other = network).
+  Companies, people, and opportunities views get layer chips; the command
+  center links both views.
+- Rationale: One data spine, two lenses. Splitting tables would fork every
+  timeline/task/opportunity feature for no benefit at this scale.
+- Consequences: A relationship that is both vendor and customer still needs a
+  category call; `crmTags` can carry the nuance until categories become
+  multi-valued.
+- Revisit when: either layer needs different fields, permissions, or agents.
+
+### 2026-07-03 - CRM agent suggestions persist dismissals as AgentProposal rows
+
+- Status: accepted
+- Owner: engineering
+- Context: The command center's heuristic agent suggestions had no accept or
+  dismiss loop and no audit trail, while the rest of the app already audits
+  agent actions through `AgentProposal`.
+- Decision: Suggestions stay derived-on-read, but dismissing one writes an
+  `AgentProposal` row (kind `CRM_SUGGESTION`, status `DISCARDED`) that the
+  command center filters against for 30 days. RFQ-created opportunities now
+  populate `sourceRefs` (`rfq:` and `email_thread:` refs) so Brain Context
+  panels render linked sources.
+- Rationale: Reuses the existing approval/audit primitive instead of a
+  parallel store, without write-on-read bloat from persisting every render.
+- Consequences: Full agent-generated proposals (create/apply CRM mutations via
+  the dispatcher) remain the documented next slice.
+- Revisit when: an agent starts proposing CRM mutations rather than
+  navigational suggestions.

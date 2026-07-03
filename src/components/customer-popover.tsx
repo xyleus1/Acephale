@@ -66,7 +66,7 @@ export function CustomerPopover({ companyId, name }: { companyId: string; name: 
                     {data.jobsCount} {data.jobsCount === 1 ? "job" : "jobs"} - status {data.status.toLowerCase()}
                   </div>
                 </div>
-                <a href={`/dashboard/customers/${data.id}`} className="btn btn-secondary btn-sm customer-popover-profile">
+                <a href={`/dashboard/crm/companies/${data.id}`} className="btn btn-secondary btn-sm customer-popover-profile">
                   Profile
                 </a>
               </div>

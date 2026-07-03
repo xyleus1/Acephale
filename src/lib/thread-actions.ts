@@ -8,6 +8,7 @@ import { createProposedJobForInquiry } from "./job-actions";
 import { createPendingBulkHideThreadsProposal } from "./agent-proposals";
 import { recordMemoryEvent } from "./memory/record-event";
 import { DERYA_RFQ_SOURCE_EMAILS, isDeryaRfqSourceSender } from "./derya-inboxes";
+import { relinkThreadTouches } from "./crm/email-touch";
 
 function deryaRfqSourceSignal(messages: { direction: string; fromEmail: string }[]) {
   const hasDeryaRfqSourceSender = messages.some((m) =>
@@ -163,6 +164,10 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
     where: { id: threadId, officeId: session.officeId },
     data: { inquiryId: inquiry.id },
   });
+
+  // Re-resolve the thread's CRM counterparty now that it has an inquiry link
+  // and log any missing EMAIL activities. Never throws.
+  await relinkThreadTouches(threadId);
 
   // Re-classify all unclassified / other / related-note inbound messages on this thread
   await prisma.emailMessage.updateMany({
@@ -345,6 +350,8 @@ ${jobHints || "(none)"}`,
         });
         // Make sure the inquiry has a draft Job on the board.
         await createProposedJobForInquiry(inq.id);
+        // Re-resolve the thread's CRM counterparty now that it's inquiry-linked.
+        await relinkThreadTouches(threadId);
         return { ok: true, created: false, linkedInquiryId: inq.id };
       }
     }
@@ -364,6 +371,8 @@ ${jobHints || "(none)"}`,
           },
           data: { classification: "RELATED_NOTE", classificationReason: "Auto-linked to existing job", classificationAt: new Date() },
         });
+        // Re-resolve the thread's CRM counterparty now that it's job-linked.
+        await relinkThreadTouches(threadId);
         return { ok: true, created: false, linkedJobId: job.id };
       }
     }
@@ -445,6 +454,10 @@ ${jobHints || "(none)"}`,
     where: { id: threadId, officeId: thread.officeId },
     data: { inquiryId: inquiry.id, autoLinkedAt: new Date() },
   });
+
+  // Re-resolve the thread's CRM counterparty now that it has an inquiry link
+  // and log any missing EMAIL activities. Never throws.
+  await relinkThreadTouches(threadId);
 
   await prisma.emailMessage.updateMany({
     where: {

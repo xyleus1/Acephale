@@ -36,7 +36,6 @@ export async function resolveQuoteAction(quoteId: string, result: "WON" | "LOST"
     },
   });
   revalidatePath("/dashboard/activity");
-  revalidatePath("/dashboard/pipeline");
 }
 
 export async function updateCompanyStatusAction(companyId: string, status: string) {
@@ -49,6 +48,6 @@ export async function updateCompanyStatusAction(companyId: string, status: strin
     where: { id: companyId, officeId: s.officeId },
     data: { status: status as never },
   });
-  revalidatePath("/dashboard/customers");
-  revalidatePath(`/dashboard/customers/${companyId}`);
+  revalidatePath("/dashboard/crm/companies");
+  revalidatePath(`/dashboard/crm/companies/${companyId}`);
 }

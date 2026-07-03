@@ -334,7 +334,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
             {topCustomers.length === 0 ? (
               <div className="report-empty compact">No revenue yet.</div>
             ) : topCustomers.map(([id, v]) => (
-              <Link key={id} href={`/dashboard/customers/${id}`} className="report-link-measure">
+              <Link key={id} href={`/dashboard/crm/companies/${id}`} className="report-link-measure">
                 <Measure
                   label={v.name}
                   value={v.revenue}

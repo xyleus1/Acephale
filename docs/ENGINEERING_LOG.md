@@ -1521,3 +1521,42 @@ Use this file for chronological implementation notes that future agents should s
   record was added.
 - Follow-up: add persisted quote approval/audit records only after the approval
   queue design is explicit.
+
+### 2026-07-03 - CRM V1.1: fix pack, legacy purge, inbox touches, layers
+
+- Branch: crm-v1-review-and-push
+- Commit: see git log (stacked on 6dcd65c Internal CRM Relationship OS V1)
+- Task: Post-review hardening of CRM V1 plus direction decisions from the
+  founder: (1) fix pack — rank-correct priority/leverage sorting (string enums
+  sorted alphabetically in Postgres), contact and opportunity edit forms,
+  working Follow-ups status filter with Done view and reopen, per-entity
+  filter options, form success/error notices via returnTo redirects, active
+  tab state, `nextActionAt` only moves earlier on task create, fixed inbox
+  link filter key, create flows on People/Opportunities/Follow-ups list pages,
+  removed the Relationships tab (subset list, not a map); (2) purged legacy
+  `/dashboard/customers` + `/dashboard/pipeline` UI, repointed 23 links across
+  13 files, added redirects, ported documents/owners/inbox-approval into CRM
+  pages; (3) Office book vs Network layer views from `crmCategory`;
+  (4) inbox→CRM touch integration: EmailThread.companyId/contactId columns
+  (migration 20260703010000_email_crm_touch), resolver + EMAIL Activity
+  logging hooked into gmail-sync/gmail-send/thread-actions, backfill script;
+  (5) RFQ-created opportunities populate sourceRefs; agent suggestion
+  dismissals persist as AgentProposal audit rows.
+- Files changed: src/lib/crm/*, src/components/crm/*, src/app/dashboard/crm/**,
+  src/app/globals.css, prisma/schema.prisma, prisma/migrations/20260703010000_*,
+  src/lib/gmail-sync.ts, src/lib/gmail-send.ts, src/lib/thread-actions.ts,
+  scripts/backfill-crm-email-touch.ts, scripts/crm-email-touch.test.ts,
+  next.config.ts, package.json, deleted src/app/dashboard/customers/**,
+  src/app/dashboard/pipeline/**, unified-crm-workspace.tsx, pipeline-board.tsx,
+  plus link repoints in layout/jobs/admin/reports/search/components.
+- Verification: npx prisma validate; npx tsc --noEmit clean; npm run test:crm
+  (both suites); npm run audit:tenant-scope (only the pre-existing medium
+  finding at src/lib/rfq-load-review.ts:265); migration chain replayed against
+  a scratch Postgres with prisma migrate diff showing no drift; npm run build.
+- Failed/skipped checks: none.
+- Caveats: production deploy requires `npx prisma migrate deploy` (two pending
+  migrations) BEFORE the code deploys — Vercel build does not run migrations.
+  Legacy `Company.status` no longer has an editing surface.
+- Follow-up: run `npm run backfill:crm-email` against production after deploy;
+  agent-generated CRM mutation proposals via the AgentProposal dispatcher;
+  live GBrain retrieval.

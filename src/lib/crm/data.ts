@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { crmCompanyScope, type CrmUserScope } from "@/lib/crm/scope";
+import { CRM_OPPORTUNITY_STAGES, categoriesForLayer, leverageRank, priorityRank } from "@/lib/crm/types";
 
 const ACTIVE_RFQ_STATUSES = ["INGESTED", "PARSED", "PRICED", "QUOTED"];
 const OPEN_OPPORTUNITY_STAGES = ["idea", "researching", "qualified", "contacted", "meeting_scheduled", "active"];
@@ -13,11 +14,78 @@ export type CrmFilters = {
   priority?: string | null;
   type?: string | null;
   source?: string | null;
+  layer?: string | null;
+  ownerId?: string | null;
 };
 
 function nonEmpty(value: string | null | undefined) {
   const clean = value?.trim();
   return clean ? clean : null;
+}
+
+// String enum columns sort alphabetically in the DB, so ranked ordering happens here.
+function dateAsc(value: Date | null | undefined) {
+  return value ? value.getTime() : Number.POSITIVE_INFINITY;
+}
+
+function dateDesc(value: Date | null | undefined) {
+  return value ? -value.getTime() : 0;
+}
+
+function compareChain(...diffs: number[]) {
+  for (const diff of diffs) if (diff !== 0) return diff;
+  return 0;
+}
+
+function sortCompanies<T extends { crmPriority?: string | null; nextActionAt?: Date | null; updatedAt: Date }>(rows: T[]) {
+  return rows.sort((a, b) =>
+    compareChain(
+      priorityRank(a.crmPriority) - priorityRank(b.crmPriority),
+      dateAsc(a.nextActionAt) - dateAsc(b.nextActionAt),
+      dateDesc(a.updatedAt) - dateDesc(b.updatedAt),
+    ),
+  );
+}
+
+function sortContacts<T extends { leverageLevel?: string | null; nextActionAt?: Date | null; updatedAt: Date }>(rows: T[]) {
+  return rows.sort((a, b) =>
+    compareChain(
+      leverageRank(a.leverageLevel) - leverageRank(b.leverageLevel),
+      dateAsc(a.nextActionAt) - dateAsc(b.nextActionAt),
+      dateDesc(a.updatedAt) - dateDesc(b.updatedAt),
+    ),
+  );
+}
+
+function sortOpportunities<T extends { priority?: string | null; stage?: string; nextActionAt?: Date | null; updatedAt: Date }>(rows: T[]) {
+  return rows.sort((a, b) =>
+    compareChain(
+      priorityRank(a.priority) - priorityRank(b.priority),
+      dateAsc(a.nextActionAt) - dateAsc(b.nextActionAt),
+      dateDesc(a.updatedAt) - dateDesc(b.updatedAt),
+    ),
+  );
+}
+
+function opportunityStageRank(stage: string | null | undefined) {
+  const idx = CRM_OPPORTUNITY_STAGES.indexOf((stage ?? "") as (typeof CRM_OPPORTUNITY_STAGES)[number]);
+  return idx === -1 ? 99 : idx;
+}
+
+function sortTasks<T extends { status: string; dueAt?: Date | null; priority?: string | null; createdAt: Date }>(rows: T[]) {
+  return rows.sort((a, b) =>
+    compareChain(
+      (a.status === "OPEN" ? 0 : 1) - (b.status === "OPEN" ? 0 : 1),
+      dateAsc(a.dueAt) - dateAsc(b.dueAt),
+      priorityRank(a.priority) - priorityRank(b.priority),
+      dateDesc(a.createdAt) - dateDesc(b.createdAt),
+    ),
+  );
+}
+
+function layerFilter(layer: string | null | undefined): Prisma.CompanyWhereInput {
+  const categories = categoriesForLayer(layer);
+  return categories ? { crmCategory: { in: [...categories] } } : {};
 }
 
 function companyTextSearch(q: string): Prisma.CompanyWhereInput[] {
@@ -68,6 +136,7 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
     opportunities,
     staleCompanies,
     recentActivities,
+    dismissedSuggestions,
   ] = await Promise.all([
     prisma.company.count({ where: companyScope }),
     prisma.contact.count({ where: { company: companyScope } }),
@@ -109,8 +178,8 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
         tasks: { where: { status: "OPEN" }, orderBy: [{ dueAt: "asc" }], take: 2 },
         inquiries: { where: { status: { in: ACTIVE_RFQ_STATUSES } }, orderBy: { receivedAt: "desc" }, take: 2 },
       },
-      orderBy: [{ crmPriority: "asc" }, { nextActionAt: "asc" }, { updatedAt: "desc" }],
-      take: 8,
+      orderBy: [{ nextActionAt: "asc" }, { updatedAt: "desc" }],
+      take: 24,
     }),
     prisma.contact.findMany({
       where: {
@@ -119,7 +188,7 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
       },
       include: { company: { select: { id: true, name: true, crmPriority: true } } },
       orderBy: [{ nextActionAt: "asc" }, { updatedAt: "desc" }],
-      take: 8,
+      take: 24,
     }),
     prisma.inquiry.findMany({
       where: {
@@ -145,8 +214,8 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
         contact: { select: { id: true, fullName: true, email: true } },
         inquiry: { select: { id: true, subject: true, status: true } },
       },
-      orderBy: [{ priority: "asc" }, { nextActionAt: "asc" }, { updatedAt: "desc" }],
-      take: 12,
+      orderBy: [{ nextActionAt: "asc" }, { updatedAt: "desc" }],
+      take: 36,
     }),
     prisma.company.findMany({
       where: {
@@ -161,8 +230,8 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
         owners: { include: { user: { select: { fullName: true } } } },
         tasks: { where: { status: "OPEN" }, orderBy: [{ dueAt: "asc" }], take: 1 },
       },
-      orderBy: [{ crmPriority: "asc" }, { updatedAt: "asc" }],
-      take: 8,
+      orderBy: [{ updatedAt: "asc" }],
+      take: 24,
     }),
     prisma.activity.findMany({
       where: {
@@ -177,7 +246,32 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
       orderBy: { occurredAt: "desc" },
       take: 12,
     }),
+    prisma.agentProposal.findMany({
+      where: {
+        officeId: scope.officeId,
+        kind: "CRM_SUGGESTION",
+        status: "DISCARDED",
+        createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) },
+      },
+      select: { payload: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
   ]);
+
+  const dismissedKeys = new Set(
+    dismissedSuggestions
+      .map((proposal) => {
+        const payload = proposal.payload as { key?: unknown } | null;
+        return typeof payload?.key === "string" ? payload.key : null;
+      })
+      .filter(Boolean) as string[],
+  );
+
+  const rankedHighPriorityCompanies = sortCompanies(highPriorityCompanies).slice(0, 8);
+  const rankedHighLeverageContacts = sortContacts(highLeverageContacts).slice(0, 8);
+  const rankedOpportunities = sortOpportunities(opportunities).slice(0, 12);
+  const rankedStaleCompanies = sortCompanies(staleCompanies).slice(0, 8);
 
   const agentSuggestions = [
     ...todayTasks.slice(0, 4).map((task) => ({
@@ -185,7 +279,7 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
       title: `Follow up: ${task.title}`,
       rationale: task.company ? `${task.company.name} has an open internal follow-up.` : "Open internal follow-up.",
       label: "Internal only",
-      href: `/dashboard/crm/tasks`,
+      href: task.company ? `/dashboard/crm/companies/${task.company.id}` : `/dashboard/crm/tasks`,
     })),
     ...activeRfqs.filter((rfq) => !rfq.companyId).slice(0, 3).map((rfq) => ({
       key: `rfq:${rfq.id}`,
@@ -194,23 +288,23 @@ export async function getCrmCommandCenter(scope: CrmUserScope) {
       label: "Human approval required",
       href: `/dashboard/rfq/${rfq.id}`,
     })),
-    ...staleCompanies.slice(0, 3).map((company) => ({
+    ...rankedStaleCompanies.slice(0, 3).map((company) => ({
       key: `company:${company.id}`,
       title: `Refresh ${company.name}`,
       rationale: "Relationship is stale or has no recorded touch.",
       label: "Draft only",
       href: `/dashboard/crm/companies/${company.id}`,
     })),
-  ].slice(0, 8);
+  ].filter((suggestion) => !dismissedKeys.has(suggestion.key)).slice(0, 8);
 
   return {
     counts: { companyCount, contactCount, opportunityCount, openTaskCount },
     todayTasks,
-    highPriorityCompanies,
-    highLeverageContacts,
+    highPriorityCompanies: rankedHighPriorityCompanies,
+    highLeverageContacts: rankedHighLeverageContacts,
     activeRfqs,
-    opportunities,
-    staleCompanies,
+    opportunities: rankedOpportunities,
+    staleCompanies: rankedStaleCompanies,
     recentActivities,
     agentSuggestions,
   };
@@ -220,13 +314,15 @@ export async function listCrmCompanies(scope: CrmUserScope, filters: CrmFilters 
   const q = nonEmpty(filters.q);
   const where: Prisma.CompanyWhereInput = {
     ...crmCompanyScope(scope),
+    ...layerFilter(filters.layer),
     ...(filters.category ? { crmCategory: filters.category } : {}),
     ...(filters.stage ? { crmStage: filters.stage } : {}),
     ...(filters.priority ? { crmPriority: filters.priority } : {}),
     ...(filters.source ? { crmSource: filters.source } : {}),
+    ...(filters.ownerId ? { owners: { some: { userId: filters.ownerId } } } : {}),
     ...(q ? { OR: companyTextSearch(q) } : {}),
   };
-  return prisma.company.findMany({
+  const companies = await prisma.company.findMany({
     where: { officeId: scope.officeId, ...where },
     include: {
       contacts: { orderBy: { updatedAt: "desc" }, take: 2 },
@@ -235,16 +331,34 @@ export async function listCrmCompanies(scope: CrmUserScope, filters: CrmFilters 
       inquiries: { where: { status: { in: ACTIVE_RFQ_STATUSES } }, orderBy: { receivedAt: "desc" }, take: 1 },
       crmOpportunities: { where: { stage: { in: OPEN_OPPORTUNITY_STAGES } }, orderBy: { updatedAt: "desc" }, take: 2 },
     },
-    orderBy: [{ crmPriority: "asc" }, { nextActionAt: "asc" }, { updatedAt: "desc" }],
-    take: 100,
+    orderBy: [{ nextActionAt: "asc" }, { updatedAt: "desc" }],
+    take: 200,
+  });
+  return sortCompanies(companies);
+}
+
+export async function listCrmCompanyOptions(scope: CrmUserScope) {
+  return prisma.company.findMany({
+    where: crmCompanyScope(scope),
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+    take: 300,
+  });
+}
+
+export async function listCrmOfficeUsers(scope: CrmUserScope) {
+  return prisma.user.findMany({
+    where: { officeId: scope.officeId, isActive: true },
+    select: { id: true, fullName: true, email: true },
+    orderBy: { fullName: "asc" },
   });
 }
 
 export async function getCrmCompany(scope: CrmUserScope, companyId: string) {
-  return prisma.company.findFirst({
+  const company = await prisma.company.findFirst({
     where: { id: companyId, officeId: scope.officeId, ...crmCompanyScope(scope) },
     include: {
-      contacts: { orderBy: [{ leverageLevel: "desc" }, { updatedAt: "desc" }] },
+      contacts: { orderBy: [{ updatedAt: "desc" }] },
       owners: { include: { user: { select: { id: true, fullName: true, email: true } } } },
       activities: {
         orderBy: { occurredAt: "desc" },
@@ -256,7 +370,7 @@ export async function getCrmCompany(scope: CrmUserScope, companyId: string) {
         },
       },
       tasks: {
-        orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
+        orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
         take: 40,
         include: {
           contact: { select: { id: true, fullName: true } },
@@ -267,20 +381,31 @@ export async function getCrmCompany(scope: CrmUserScope, companyId: string) {
       inquiries: { orderBy: { receivedAt: "desc" }, take: 20, include: { job: { select: { id: true, reference: true, status: true } } } },
       jobs: { orderBy: { updatedAt: "desc" }, take: 20 },
       crmOpportunities: {
-        orderBy: [{ stage: "asc" }, { priority: "asc" }, { updatedAt: "desc" }],
+        orderBy: [{ updatedAt: "desc" }],
         take: 30,
         include: { contact: { select: { id: true, fullName: true } }, inquiry: { select: { id: true, subject: true, status: true } } },
       },
       documents: { orderBy: { createdAt: "desc" }, take: 12 },
     },
   });
+  if (!company) return null;
+  sortContacts(company.contacts);
+  sortTasks(company.tasks);
+  company.crmOpportunities.sort((a, b) =>
+    compareChain(
+      opportunityStageRank(a.stage) - opportunityStageRank(b.stage),
+      priorityRank(a.priority) - priorityRank(b.priority),
+      dateDesc(a.updatedAt) - dateDesc(b.updatedAt),
+    ),
+  );
+  return company;
 }
 
 export async function listCrmContacts(scope: CrmUserScope, filters: CrmFilters = {}) {
   const q = nonEmpty(filters.q);
-  return prisma.contact.findMany({
+  const contacts = await prisma.contact.findMany({
     where: {
-      company: { officeId: scope.officeId, ...crmCompanyScope(scope) },
+      company: { officeId: scope.officeId, ...crmCompanyScope(scope), ...layerFilter(filters.layer) },
       ...(filters.type ? { relationshipType: filters.type } : {}),
       ...(filters.priority ? { leverageLevel: filters.priority } : {}),
       ...(q ? { OR: contactTextSearch(q) } : {}),
@@ -290,29 +415,36 @@ export async function listCrmContacts(scope: CrmUserScope, filters: CrmFilters =
       tasks: { where: { status: "OPEN" }, orderBy: [{ dueAt: "asc" }], take: 2 },
       crmOpportunities: { orderBy: { updatedAt: "desc" }, take: 2 },
     },
-    orderBy: [{ leverageLevel: "desc" }, { nextActionAt: "asc" }, { updatedAt: "desc" }],
-    take: 150,
+    orderBy: [{ nextActionAt: "asc" }, { updatedAt: "desc" }],
+    take: 300,
   });
+  return sortContacts(contacts);
 }
 
 export async function getCrmContact(scope: CrmUserScope, contactId: string) {
-  return prisma.contact.findFirst({
+  const contact = await prisma.contact.findFirst({
     where: { id: contactId, company: { officeId: scope.officeId, ...crmCompanyScope(scope) } },
     include: {
       company: { include: { owners: { include: { user: { select: { id: true, fullName: true, email: true } } } } } },
       activities: { orderBy: { occurredAt: "desc" }, take: 40, include: { opportunity: { select: { id: true, name: true } }, inquiry: { select: { id: true, subject: true } } } },
-      tasks: { orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }], take: 30, include: { opportunity: { select: { id: true, name: true } }, inquiry: { select: { id: true, subject: true } } } },
+      tasks: { orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 30, include: { opportunity: { select: { id: true, name: true } }, inquiry: { select: { id: true, subject: true } } } },
       crmOpportunities: { orderBy: { updatedAt: "desc" }, include: { inquiry: { select: { id: true, subject: true, status: true } } } },
     },
   });
+  if (!contact) return null;
+  sortTasks(contact.tasks);
+  return contact;
 }
 
 export async function listCrmOpportunities(scope: CrmUserScope, filters: CrmFilters = {}) {
   const q = nonEmpty(filters.q);
-  return prisma.crmOpportunity.findMany({
+  const layer = layerFilter(filters.layer);
+  const restricted = scope.canViewAll ? {} : { owners: { some: { userId: scope.userId } } };
+  const companyWhere = { ...restricted, ...layer };
+  const opportunities = await prisma.crmOpportunity.findMany({
     where: {
       officeId: scope.officeId,
-      company: scope.canViewAll ? undefined : { owners: { some: { userId: scope.userId } } },
+      ...(Object.keys(companyWhere).length ? { company: companyWhere } : {}),
       ...(filters.type ? { type: filters.type } : {}),
       ...(filters.stage ? { stage: filters.stage } : {}),
       ...(filters.priority ? { priority: filters.priority } : {}),
@@ -324,13 +456,14 @@ export async function listCrmOpportunities(scope: CrmUserScope, filters: CrmFilt
       inquiry: { select: { id: true, subject: true, status: true, origin: true, destination: true, mode: true } },
       tasks: { where: { status: "OPEN" }, orderBy: [{ dueAt: "asc" }], take: 2 },
     },
-    orderBy: [{ priority: "asc" }, { nextActionAt: "asc" }, { updatedAt: "desc" }],
-    take: 150,
+    orderBy: [{ nextActionAt: "asc" }, { updatedAt: "desc" }],
+    take: 300,
   });
+  return sortOpportunities(opportunities);
 }
 
 export async function getCrmOpportunity(scope: CrmUserScope, opportunityId: string) {
-  return prisma.crmOpportunity.findFirst({
+  const opportunity = await prisma.crmOpportunity.findFirst({
     where: {
       id: opportunityId,
       officeId: scope.officeId,
@@ -341,14 +474,17 @@ export async function getCrmOpportunity(scope: CrmUserScope, opportunityId: stri
       contact: true,
       inquiry: { include: { job: { select: { id: true, reference: true, status: true } } } },
       activities: { orderBy: { occurredAt: "desc" }, take: 40, include: { contact: { select: { id: true, fullName: true } }, inquiry: { select: { id: true, subject: true } } } },
-      tasks: { orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }], take: 30, include: { contact: { select: { id: true, fullName: true } }, inquiry: { select: { id: true, subject: true } } } },
+      tasks: { orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 30, include: { contact: { select: { id: true, fullName: true } }, inquiry: { select: { id: true, subject: true } } } },
     },
   });
+  if (!opportunity) return null;
+  sortTasks(opportunity.tasks);
+  return opportunity;
 }
 
 export async function listCrmTasks(scope: CrmUserScope, filters: CrmFilters = {}) {
   const q = nonEmpty(filters.q);
-  return prisma.task.findMany({
+  const tasks = await prisma.task.findMany({
     where: {
       officeId: scope.officeId,
       company: scope.canViewAll ? undefined : { owners: { some: { userId: scope.userId } } },
@@ -362,7 +498,8 @@ export async function listCrmTasks(scope: CrmUserScope, filters: CrmFilters = {}
       opportunity: { select: { id: true, name: true, stage: true, priority: true } },
       inquiry: { select: { id: true, subject: true, status: true } },
     },
-    orderBy: [{ status: "asc" }, { dueAt: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
-    take: 200,
+    orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
+    take: 300,
   });
+  return sortTasks(tasks);
 }

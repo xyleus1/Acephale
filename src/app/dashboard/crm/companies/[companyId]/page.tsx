@@ -5,22 +5,33 @@ import {
   CrmCompanyDetailForms,
   CrmCompanyPanels,
   CrmEntityHeader,
+  CrmNotice,
   CrmPriorityBadge,
   CrmSourceBadge,
   CrmStageBadge,
   CrmStrengthBadge,
 } from "@/components/crm/crm-components";
 import { getCrmBrainContext } from "@/lib/crm/brain-context";
-import { getCrmCompany } from "@/lib/crm/data";
+import { getCrmCompany, listCrmOfficeUsers } from "@/lib/crm/data";
 import { getCrmScope } from "@/lib/crm/session";
 import { crmLabel } from "@/lib/crm/types";
 
-export default async function CrmCompanyDetailPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function CrmCompanyDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ companyId: string }>;
+  searchParams: Promise<{ notice?: string; error?: string }>;
+}) {
   const scope = await getCrmScope();
   const { companyId } = await params;
+  const { notice, error } = await searchParams;
   const company = await getCrmCompany(scope, companyId);
   if (!company) notFound();
-  const brainContext = await getCrmBrainContext({ officeId: scope.officeId, companyId: company.id });
+  const [brainContext, users] = await Promise.all([
+    getCrmBrainContext({ officeId: scope.officeId, companyId: company.id }),
+    listCrmOfficeUsers(scope),
+  ]);
 
   return (
     <div className="crm-page">
@@ -40,10 +51,11 @@ export default async function CrmCompanyDetailPage({ params }: { params: Promise
           </>
         }
       />
+      <CrmNotice notice={notice} error={error} />
       <div className="crm-detail-shell">
         <aside className="crm-detail-rail">
           <CrmBrainContextPanel context={brainContext} />
-          <CrmCompanyDetailForms company={company} />
+          <CrmCompanyDetailForms company={company} users={users} returnTo={`/dashboard/crm/companies/${company.id}`} />
         </aside>
         <main>
           <CrmCompanyPanels company={company} />

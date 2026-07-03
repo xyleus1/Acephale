@@ -13,6 +13,7 @@ import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, getDeryaLoadRfqInbox, isDeryaLoadRfqInbox } from "./derya-inboxes";
 import { emailWorkflowLabelKeys } from "./email-workflow-labels";
+import { logEmailTouch } from "./crm/email-touch";
 import {
   buildGmailBackfillWindows,
   buildRecentGmailSyncQuery,
@@ -388,6 +389,19 @@ async function _syncEmailAccountInternal({
       await prisma.emailThread.updateMany({
         where: { id: localThread.id, officeId: account.officeId },
         data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
+      });
+      // CRM touch: resolve the counterparty and log an EMAIL activity.
+      // Never throws — CRM logging must not break sync.
+      await logEmailTouch({
+        officeId: account.officeId,
+        threadId: localThread.id,
+        messageId: createdMessage.id,
+        direction,
+        fromEmail,
+        toEmails: toRaw ? [toRaw] : [],
+        subject,
+        snippet: body || null,
+        sentAt,
       });
       created++;
     }

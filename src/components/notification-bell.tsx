@@ -80,7 +80,7 @@ export function NotificationBell({ overdueTasks, staleCompanies, t }: Props) {
                     return (
                       <Link
                         key={task.id}
-                        href={`/dashboard/customers/${task.company.id}`}
+                        href={`/dashboard/crm/companies/${task.company.id}`}
                         className="notif-item"
                         onClick={() => setOpen(false)}
                       >
@@ -110,7 +110,7 @@ export function NotificationBell({ overdueTasks, staleCompanies, t }: Props) {
                     return (
                       <Link
                         key={company.id}
-                        href={`/dashboard/customers/${company.id}`}
+                        href={`/dashboard/crm/companies/${company.id}`}
                         className="notif-item"
                         onClick={() => setOpen(false)}
                       >

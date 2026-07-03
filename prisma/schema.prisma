@@ -230,6 +230,7 @@ model Company {
   riskAlerts        RiskAlert[]
   jobs              Job[]
   inquiries         Inquiry[]
+  emailThreads      EmailThread[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -272,6 +273,7 @@ model Contact {
   activities       Activity[]
   tasks            Task[]
   crmOpportunities CrmOpportunity[]
+  emailThreads     EmailThread[]
 
   @@index([companyId])
   @@index([companyId, isApprovedForInbox])
@@ -1357,6 +1359,8 @@ model EmailThread {
   officeId           String
   jobId              String?
   inquiryId          String?
+  companyId          String? // CRM company this thread's counterparty resolved to
+  contactId          String? // CRM contact this thread's counterparty resolved to
   subject            String
   participants       String // JSON array of email addresses
   externalThreadId   String? // provider thread id (Gmail threadId) for direct mapping on resync
@@ -1375,12 +1379,16 @@ model EmailThread {
   office   Office         @relation(fields: [officeId], references: [id], onDelete: Cascade)
   job      Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
   inquiry  Inquiry?       @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  company  Company?       @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact  Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
   messages EmailMessage[]
 
   @@index([officeId, jobId])
   @@index([officeId, inquiryId])
   @@index([officeId, lastMessageAt])
   @@index([officeId, externalThreadId])
+  @@index([companyId])
+  @@index([contactId])
 }
 
 model EmailMessage {

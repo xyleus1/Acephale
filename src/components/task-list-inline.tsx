@@ -77,7 +77,7 @@ export function TaskListInline({
                 </td>
                 <td style={{ fontWeight: 500 }}>{task.title}</td>
                 <td>
-                  <Link href={`/dashboard/customers/${task.company.id}`} style={{ color: "var(--brand)" }}>
+                  <Link href={`/dashboard/crm/companies/${task.company.id}`} style={{ color: "var(--brand)" }}>
                     {task.company.name}
                   </Link>
                 </td>

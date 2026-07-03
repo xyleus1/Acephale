@@ -7,6 +7,25 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async redirects() {
+    return [
+      {
+        source: "/dashboard/customers",
+        destination: "/dashboard/crm/companies",
+        permanent: false,
+      },
+      {
+        source: "/dashboard/customers/:companyId",
+        destination: "/dashboard/crm/companies/:companyId",
+        permanent: false,
+      },
+      {
+        source: "/dashboard/pipeline",
+        destination: "/dashboard/crm/opportunities",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

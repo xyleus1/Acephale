@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { getValidAccessToken } from "./gmail-oauth";
+import { logEmailTouch } from "./crm/email-touch";
 
 function encodeGmailRaw(raw: string) {
   return Buffer.from(raw, "utf-8")
@@ -87,7 +88,7 @@ export async function sendNewEmailFromAccount(args: {
       messageCount: 1,
     },
   });
-  await prisma.emailMessage.create({
+  const outboundMessage = await prisma.emailMessage.create({
     data: {
       threadId: localThread.id,
       accountId: account.id,
@@ -100,6 +101,18 @@ export async function sendNewEmailFromAccount(args: {
       bodyText: args.body,
       sentAt: now,
     },
+  });
+  // CRM touch: log the outbound email on the counterparty's timeline. Never throws.
+  await logEmailTouch({
+    officeId: args.officeId,
+    threadId: localThread.id,
+    messageId: outboundMessage.id,
+    direction: "OUTBOUND",
+    fromEmail: account.email,
+    toEmails: [toAddress],
+    subject,
+    snippet: args.body,
+    sentAt: now,
   });
 
   revalidatePath("/dashboard/inbox");
@@ -200,7 +213,7 @@ export async function sendReplyToThread(args: {
 
   // Persist locally as an OUTBOUND EmailMessage so the thread reflects it
   // immediately (without waiting for the next sync).
-  await prisma.emailMessage.create({
+  const outboundMessage = await prisma.emailMessage.create({
     data: {
       threadId: thread.id,
       accountId: account.id,
@@ -217,6 +230,18 @@ export async function sendReplyToThread(args: {
   await prisma.emailThread.updateMany({
     where: { id: thread.id, officeId: session.officeId },
     data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+  });
+  // CRM touch: log the outbound reply on the counterparty's timeline. Never throws.
+  await logEmailTouch({
+    officeId: session.officeId,
+    threadId: thread.id,
+    messageId: outboundMessage.id,
+    direction: "OUTBOUND",
+    fromEmail: account.email,
+    toEmails: [toAddress],
+    subject,
+    snippet: args.body,
+    sentAt: outboundMessage.sentAt,
   });
 
   revalidatePath("/dashboard/inbox");

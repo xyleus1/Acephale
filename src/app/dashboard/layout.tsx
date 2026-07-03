@@ -175,7 +175,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                     Open
                   </a>
                   {focusedJob.customerId && (
-                    <a href={`/dashboard/customers/${focusedJob.customerId}`} className="job-focus-link">
+                    <a href={`/dashboard/crm/companies/${focusedJob.customerId}`} className="job-focus-link">
                       Customer
                     </a>
                   )}

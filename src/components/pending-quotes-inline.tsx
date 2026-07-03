@@ -66,7 +66,7 @@ export function PendingQuotesInline({
             return (
               <tr key={q.id} style={{ opacity: isResolving ? 0.5 : 1 }}>
                 <td>
-                  <Link href={`/dashboard/customers/${q.company.id}`} style={{ color: "var(--brand)", fontWeight: 500 }}>
+                  <Link href={`/dashboard/crm/companies/${q.company.id}`} style={{ color: "var(--brand)", fontWeight: 500 }}>
                     {q.company.name}
                   </Link>
                 </td>

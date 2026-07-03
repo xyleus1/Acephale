@@ -47,6 +47,37 @@ export const CRM_OPPORTUNITY_STAGES = [
 
 export const CRM_PRIORITIES = ["low", "medium", "high", "critical"] as const;
 export const CRM_RELATIONSHIP_STRENGTHS = ["unknown", "weak", "warm", "strong", "trusted"] as const;
+
+// Priority/leverage columns are plain strings, so DB orderBy sorts alphabetically
+// ("high" after "low"); every ranked sort must go through these instead.
+const PRIORITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+const LEVERAGE_RANK: Record<string, number> = { very_high: 0, high: 1, medium: 2, low: 3 };
+
+export function priorityRank(value: string | null | undefined) {
+  return PRIORITY_RANK[value ?? ""] ?? 9;
+}
+
+export function leverageRank(value: string | null | undefined) {
+  return LEVERAGE_RANK[value ?? ""] ?? 9;
+}
+
+export type CrmLayer = "office" | "network";
+
+// Two-layer persona: the freight office book vs the founders' startup network.
+export const CRM_OFFICE_CATEGORIES = ["customer", "prospect", "carrier", "broker", "customs_broker", "freight_backend"] as const;
+export const CRM_NETWORK_CATEGORIES = ["partner", "vendor", "investor", "advisor", "software_provider", "other"] as const;
+
+export function categoriesForLayer(layer: string | null | undefined): readonly string[] | null {
+  if (layer === "office") return CRM_OFFICE_CATEGORIES;
+  if (layer === "network") return CRM_NETWORK_CATEGORIES;
+  return null;
+}
+
+export const CRM_TASK_STATUS_FILTERS = [
+  ["", "Open"],
+  ["done", "Done"],
+  ["all", "All"],
+] as const;
 export const CRM_CONTACT_TYPES = [
   "buyer",
   "shipper",

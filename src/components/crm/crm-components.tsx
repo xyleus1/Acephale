@@ -20,18 +20,33 @@ import {
   type CrmTone,
 } from "@/lib/crm/types";
 import {
+  addCrmCompanyDocumentAction,
   completeCrmTaskAction,
   createCrmCompanyAction,
   createCrmContactAction,
   createCrmNoteAction,
   createCrmOpportunityAction,
   createCrmTaskAction,
+  deleteCrmCompanyDocumentAction,
+  dismissCrmSuggestionAction,
+  reopenCrmTaskAction,
+  toggleCrmContactInboxAction,
   updateCrmCompanyAction,
+  updateCrmContactAction,
+  updateCrmOpportunityAction,
   updateCrmOpportunityStageAction,
+  updateCrmOwnersAction,
 } from "@/lib/crm/actions";
 import type { CrmBrainContext } from "@/lib/crm/brain-context";
 
 type AnyRecord = Record<string, any>;
+
+export type CrmSelectFilter = {
+  name: string;
+  value: string;
+  allLabel: string;
+  options: ReadonlyArray<string | readonly [string, string]>;
+};
 
 const TONE_CLASS: Record<CrmTone, string> = {
   neutral: "crm-badge-neutral",
@@ -103,18 +118,42 @@ export function CrmPageHeader({
   );
 }
 
-export function CrmTabs() {
-  const tabs = [
-    ["/dashboard/crm", "Command"],
-    ["/dashboard/crm/companies", "Companies"],
-    ["/dashboard/crm/people", "People"],
-    ["/dashboard/crm/opportunities", "Opportunities"],
-    ["/dashboard/crm/tasks", "Follow-ups"],
-    ["/dashboard/crm/relationships", "Relationships"],
-  ];
+export function CrmNotice({ notice, error }: { notice?: string | null; error?: string | null }) {
+  if (!notice && !error) return null;
   return (
-    <div className="crm-tabs">
-      {tabs.map(([href, label]) => <a key={href} href={href}>{label}</a>)}
+    <div className={error ? "crm-notice crm-notice-error" : "crm-notice"}>
+      {error ?? notice}
+    </div>
+  );
+}
+
+const LAYER_CHIPS = [
+  ["", "All"],
+  ["office", "Office book"],
+  ["network", "Network"],
+] as const;
+
+export function CrmLayerChips({ basePath, layer, params }: { basePath: string; layer?: string | null; params?: Record<string, string | undefined> }) {
+  const current = layer === "office" || layer === "network" ? layer : "";
+  return (
+    <div className="crm-layer-chips">
+      {LAYER_CHIPS.map(([value, label]) => {
+        const query = new URLSearchParams();
+        for (const [key, paramValue] of Object.entries(params ?? {})) {
+          if (paramValue && key !== "layer" && key !== "notice" && key !== "error") query.set(key, paramValue);
+        }
+        if (value) query.set("layer", value);
+        const search = query.toString();
+        return (
+          <a
+            key={value}
+            href={search ? `${basePath}?${search}` : basePath}
+            className={current === value ? "crm-layer-chip active" : "crm-layer-chip"}
+          >
+            {label}
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -122,56 +161,54 @@ export function CrmTabs() {
 export function CrmFilterBar({
   basePath,
   q,
-  category,
-  stage,
-  priority,
-  type,
+  layer,
+  selects,
 }: {
   basePath: string;
   q?: string;
-  category?: string;
-  stage?: string;
-  priority?: string;
-  type?: string;
+  layer?: string | null;
+  selects?: CrmSelectFilter[];
 }) {
   return (
     <form action={basePath} className="crm-filter-bar">
       <input name="q" placeholder="Search names, domains, notes..." defaultValue={q ?? ""} />
-      {category !== undefined && (
-        <select name="category" defaultValue={category ?? ""}>
-          <option value="">All categories</option>
-          {CRM_COMPANY_CATEGORIES.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}
+      {layer ? <input type="hidden" name="layer" value={layer} /> : null}
+      {(selects ?? []).map((select) => (
+        <select key={select.name} name={select.name} defaultValue={select.value}>
+          <option value="">{select.allLabel}</option>
+          {select.options.map((option) => {
+            const [value, label] = typeof option === "string" ? [option, crmLabel(option)] : option;
+            return <option key={value} value={value}>{label}</option>;
+          })}
         </select>
-      )}
-      {type !== undefined && (
-        <select name="type" defaultValue={type ?? ""}>
-          <option value="">All types</option>
-          {[...CRM_OPPORTUNITY_TYPES, ...CRM_CONTACT_TYPES].map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}
-        </select>
-      )}
-      {stage !== undefined && (
-        <select name="stage" defaultValue={stage ?? ""}>
-          <option value="">All stages</option>
-          {[...CRM_COMPANY_STAGES, ...CRM_OPPORTUNITY_STAGES].map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}
-        </select>
-      )}
-      {priority !== undefined && (
-        <select name="priority" defaultValue={priority ?? ""}>
-          <option value="">All priority</option>
-          {[...CRM_PRIORITIES, ...CRM_LEVERAGE_LEVELS].map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}
-        </select>
-      )}
+      ))}
       <button type="submit">Filter</button>
       <a href={basePath} className="crm-muted-link">Clear</a>
     </form>
   );
 }
 
-export function CrmCreateCompanyForm() {
+function CompanyField({ company, companies }: { company?: AnyRecord | null; companies?: AnyRecord[] }) {
+  if (company) return <input type="hidden" name="companyId" value={company.id} />;
+  return (
+    <label>Company<select name="companyId" required defaultValue="">
+      <option value="" disabled>Pick a company...</option>
+      {(companies ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+    </select></label>
+  );
+}
+
+function ReturnToField({ returnTo }: { returnTo?: string }) {
+  if (!returnTo) return null;
+  return <input type="hidden" name="returnTo" value={returnTo} />;
+}
+
+export function CrmCreateCompanyForm({ returnTo }: { returnTo?: string }) {
   return (
     <details className="crm-create-panel">
       <summary><Icon name="plus" size={13} /> New relationship</summary>
       <form action={createCrmCompanyAction} className="crm-form-grid">
+        <ReturnToField returnTo={returnTo} />
         <label>Company<input name="name" required placeholder="Company, investor, partner..." /></label>
         <label>Domain<input name="domain" placeholder="example.com" /></label>
         <label>Category<select name="crmCategory" defaultValue="prospect">{CRM_COMPANY_CATEGORIES.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
@@ -205,6 +242,10 @@ export function CrmCommandCenter({ data }: { data: AnyRecord }) {
             </div>
           ))}
         </div>
+        <div className="crm-layer-chips">
+          <a href="/dashboard/crm/companies?layer=office" className="crm-layer-chip">Office book</a>
+          <a href="/dashboard/crm/companies?layer=network" className="crm-layer-chip">Network</a>
+        </div>
       </section>
 
       <section className="crm-panel crm-panel-main">
@@ -216,18 +257,27 @@ export function CrmCommandCenter({ data }: { data: AnyRecord }) {
         <CrmPanelHeader title="Agent suggestions" count={data.agentSuggestions.length} />
         <div className="crm-list">
           {data.agentSuggestions.map((item: AnyRecord) => (
-            <a key={item.key} href={item.href} className="crm-suggestion-row">
-              <span>{item.title}</span>
-              <p>{item.rationale}</p>
-              <CrmBadge tone={item.label === "Human approval required" ? "warn" : "info"}>{item.label}</CrmBadge>
-            </a>
+            <div key={item.key} className="crm-suggestion-wrap">
+              <a href={item.href} className="crm-suggestion-row">
+                <span>{item.title}</span>
+                <p>{item.rationale}</p>
+                <CrmBadge tone={item.label === "Human approval required" ? "warn" : "info"}>{item.label}</CrmBadge>
+              </a>
+              <form action={dismissCrmSuggestionAction}>
+                <input type="hidden" name="key" value={item.key} />
+                <input type="hidden" name="title" value={item.title} />
+                <input type="hidden" name="rationale" value={item.rationale} />
+                <input type="hidden" name="href" value={item.href} />
+                <button type="submit" aria-label="Dismiss suggestion"><Icon name="x" size={12} /></button>
+              </form>
+            </div>
           ))}
           {data.agentSuggestions.length === 0 && <CrmEmpty text="No agent-safe suggestions yet." />}
         </div>
       </section>
 
       <section className="crm-panel">
-        <CrmPanelHeader title="Active RFQ context" count={data.activeRfqs.length} href="/dashboard/inbox?filter=_RFQ" />
+        <CrmPanelHeader title="Active RFQ context" count={data.activeRfqs.length} href="/dashboard/inbox?filter=_LINKED" />
         <div className="crm-list">
           {data.activeRfqs.map((rfq: AnyRecord) => (
             <a key={rfq.id} href={`/dashboard/rfq/${rfq.id}`} className="crm-linked-row">
@@ -241,12 +291,12 @@ export function CrmCommandCenter({ data }: { data: AnyRecord }) {
       </section>
 
       <section className="crm-panel">
-        <CrmPanelHeader title="High-priority relationships" count={data.highPriorityCompanies.length} href="/dashboard/crm/companies?priority=high" />
+        <CrmPanelHeader title="High-priority relationships" count={data.highPriorityCompanies.length} href="/dashboard/crm/companies" />
         <CrmCompanyMiniList companies={data.highPriorityCompanies} />
       </section>
 
       <section className="crm-panel">
-        <CrmPanelHeader title="High-leverage people" count={data.highLeverageContacts.length} href="/dashboard/crm/people?priority=high" />
+        <CrmPanelHeader title="High-leverage people" count={data.highLeverageContacts.length} href="/dashboard/crm/people" />
         <div className="crm-list">
           {data.highLeverageContacts.map((contact: AnyRecord) => (
             <a key={contact.id} href={`/dashboard/crm/people/${contact.id}`} className="crm-linked-row">
@@ -429,23 +479,28 @@ export function CrmTaskDirectory({ tasks }: { tasks: AnyRecord[] }) {
 function CrmTaskRows({ tasks, compact = false }: { tasks: AnyRecord[]; compact?: boolean }) {
   return (
     <div className={compact ? "crm-task-list compact" : "crm-task-list"}>
-      {tasks.map((task) => (
-        <div key={task.id} className="crm-task-row">
-          <form action={completeCrmTaskAction}>
-            <input type="hidden" name="taskId" value={task.id} />
-            <button type="submit" aria-label="Mark done"><Icon name="check" size={12} /></button>
-          </form>
-          <div>
-            <strong>{task.title}</strong>
-            <span>{[task.company?.name, task.contact?.fullName, task.opportunity?.name, task.inquiry?.subject].filter(Boolean).join(" · ") || "Internal CRM task"}</span>
+      {tasks.map((task) => {
+        const done = task.status === "DONE";
+        return (
+          <div key={task.id} className={done ? "crm-task-row done" : "crm-task-row"}>
+            <form action={done ? reopenCrmTaskAction : completeCrmTaskAction}>
+              <input type="hidden" name="taskId" value={task.id} />
+              <button type="submit" aria-label={done ? "Reopen" : "Mark done"}>
+                <Icon name={done ? "chevron-up" : "check"} size={12} />
+              </button>
+            </form>
+            <div>
+              <strong>{task.title}</strong>
+              <span>{[task.company?.name, task.contact?.fullName, task.opportunity?.name, task.inquiry?.subject].filter(Boolean).join(" · ") || "Internal CRM task"}</span>
+            </div>
+            <div className="crm-task-meta">
+              {done ? <CrmBadge tone="good">Done</CrmBadge> : <CrmPriorityBadge priority={task.priority} />}
+              <span>{task.dueAt ? relativeDate(task.dueAt) : "No due date"}</span>
+            </div>
           </div>
-          <div className="crm-task-meta">
-            <CrmPriorityBadge priority={task.priority} />
-            <span>{task.dueAt ? relativeDate(task.dueAt) : "No due date"}</span>
-          </div>
-        </div>
-      ))}
-      {tasks.length === 0 && <CrmEmpty text="No open follow-ups here." />}
+        );
+      })}
+      {tasks.length === 0 && <CrmEmpty text="No follow-ups here." />}
     </div>
   );
 }
@@ -539,13 +594,14 @@ export function CrmActivityTimeline({ activities, compact = false }: { activitie
   );
 }
 
-export function CrmCompanyDetailForms({ company }: { company: AnyRecord }) {
+export function CrmCompanyDetailForms({ company, users, returnTo }: { company: AnyRecord; users?: AnyRecord[]; returnTo?: string }) {
   return (
     <div className="crm-form-stack">
       <details className="crm-create-panel">
         <summary>Edit relationship profile</summary>
         <form action={updateCrmCompanyAction} className="crm-form-grid">
           <input type="hidden" name="companyId" value={company.id} />
+          <ReturnToField returnTo={returnTo} />
           <label>Domain<input name="domain" defaultValue={company.domain ?? ""} /></label>
           <label>Website<input name="website" defaultValue={company.website ?? ""} /></label>
           <label>LinkedIn<input name="linkedinUrl" defaultValue={company.linkedinUrl ?? ""} /></label>
@@ -560,20 +616,155 @@ export function CrmCompanyDetailForms({ company }: { company: AnyRecord }) {
           <button type="submit">Save profile</button>
         </form>
       </details>
-      <CrmContactForm company={company} />
-      <CrmOpportunityForm company={company} />
-      <CrmTaskForm company={company} />
-      <CrmNoteForm company={company} />
+      <CrmContactForm company={company} returnTo={returnTo} />
+      <CrmOpportunityForm company={company} returnTo={returnTo} />
+      <CrmTaskForm company={company} returnTo={returnTo} />
+      <CrmNoteForm company={company} returnTo={returnTo} />
+      {users && <CrmOwnersForm company={company} users={users} returnTo={returnTo} />}
+      <CrmDocumentsForm company={company} returnTo={returnTo} />
     </div>
   );
 }
 
-export function CrmContactForm({ company }: { company: AnyRecord }) {
+export function CrmOwnersForm({ company, users, returnTo }: { company: AnyRecord; users: AnyRecord[]; returnTo?: string }) {
+  const ownerIds = new Set((company.owners ?? []).map((owner: AnyRecord) => owner.userId ?? owner.user?.id));
+  const primaryOwnerId = (company.owners ?? []).find((owner: AnyRecord) => owner.isPrimary)?.userId ?? "";
+  return (
+    <details className="crm-create-panel">
+      <summary>Manage owners</summary>
+      <form action={updateCrmOwnersAction} className="crm-form-grid">
+        <input type="hidden" name="companyId" value={company.id} />
+        <ReturnToField returnTo={returnTo} />
+        <div className="crm-form-wide crm-owner-options">
+          {users.map((user) => (
+            <label key={user.id} className="crm-check-row">
+              <input type="checkbox" name="ownerIds" value={user.id} defaultChecked={ownerIds.has(user.id)} />
+              <span>{user.fullName ?? user.email}</span>
+            </label>
+          ))}
+        </div>
+        <label>Primary owner<select name="primaryOwnerId" defaultValue={primaryOwnerId}>
+          <option value="">First selected</option>
+          {users.map((user) => <option key={user.id} value={user.id}>{user.fullName ?? user.email}</option>)}
+        </select></label>
+        <button type="submit">Save owners</button>
+      </form>
+    </details>
+  );
+}
+
+const CRM_DOC_TYPES = ["contract", "invoice", "proposal", "customs", "other"] as const;
+
+export function CrmDocumentsForm({ company, returnTo }: { company: AnyRecord; returnTo?: string }) {
+  return (
+    <details className="crm-create-panel">
+      <summary>Link document</summary>
+      <form action={addCrmCompanyDocumentAction} className="crm-form-grid">
+        <input type="hidden" name="companyId" value={company.id} />
+        <ReturnToField returnTo={returnTo} />
+        <label>Name<input name="name" required /></label>
+        <label>Type<select name="docType" defaultValue="other">{CRM_DOC_TYPES.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
+        <label className="crm-form-wide">URL<input name="url" required placeholder="https://..." /></label>
+        <button type="submit">Save document</button>
+      </form>
+    </details>
+  );
+}
+
+export function CrmDocumentsPanel({ company }: { company: AnyRecord }) {
+  const documents = company.documents ?? [];
+  return (
+    <section className="crm-panel">
+      <CrmPanelHeader title="Documents" count={documents.length} />
+      <div className="crm-list">
+        {documents.map((document: AnyRecord) => (
+          <div key={document.id} className="crm-doc-row">
+            <a href={document.url} target="_blank" rel="noreferrer" className="crm-linked-row">
+              <strong>{document.name}</strong>
+              <span>{[crmLabel(document.docType), fmtDate(document.createdAt)].filter(Boolean).join(" · ")}</span>
+            </a>
+            <form action={deleteCrmCompanyDocumentAction}>
+              <input type="hidden" name="documentId" value={document.id} />
+              <input type="hidden" name="companyId" value={company.id} />
+              <button type="submit" aria-label="Remove document"><Icon name="x" size={12} /></button>
+            </form>
+          </div>
+        ))}
+        {documents.length === 0 && <CrmEmpty text="No linked documents." />}
+      </div>
+    </section>
+  );
+}
+
+export function CrmContactEditForm({ contact, returnTo }: { contact: AnyRecord; returnTo?: string }) {
+  return (
+    <details className="crm-create-panel">
+      <summary>Edit contact</summary>
+      <form action={updateCrmContactAction} className="crm-form-grid">
+        <input type="hidden" name="contactId" value={contact.id} />
+        <ReturnToField returnTo={returnTo} />
+        <label>Name<input name="fullName" defaultValue={contact.fullName ?? ""} required /></label>
+        <label>Title<input name="title" defaultValue={contact.title ?? ""} /></label>
+        <label>Email<input name="email" type="email" defaultValue={contact.email ?? ""} /></label>
+        <label>Phone<input name="phone" defaultValue={contact.phone ?? ""} /></label>
+        <label>LinkedIn<input name="linkedinUrl" defaultValue={contact.linkedinUrl ?? ""} /></label>
+        <label>Location<input name="location" defaultValue={contact.location ?? ""} /></label>
+        <label>Type<select name="relationshipType" defaultValue={contact.relationshipType ?? "buyer"}>{CRM_CONTACT_TYPES.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
+        <label>Leverage<select name="leverageLevel" defaultValue={contact.leverageLevel ?? "medium"}>{CRM_LEVERAGE_LEVELS.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
+        <label>Strength<select name="relationshipStrength" defaultValue={contact.relationshipStrength ?? "unknown"}>{CRM_RELATIONSHIP_STRENGTHS.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
+        <label>Next action<input name="nextActionAt" type="date" defaultValue={dateInputValue(contact.nextActionAt)} /></label>
+        <label className="crm-form-wide">Tags<input name="tags" defaultValue={Array.isArray(contact.tags) ? contact.tags.join(", ") : ""} /></label>
+        <label className="crm-form-wide">Notes<textarea name="notes" defaultValue={contact.notes ?? ""} /></label>
+        <button type="submit">Save contact</button>
+      </form>
+    </details>
+  );
+}
+
+export function CrmInboxApprovalToggle({ contact, returnTo }: { contact: AnyRecord; returnTo?: string }) {
+  const approved = Boolean(contact.isApprovedForInbox);
+  return (
+    <form action={toggleCrmContactInboxAction} className="crm-inline-form">
+      <input type="hidden" name="contactId" value={contact.id} />
+      <input type="hidden" name="approved" value={approved ? "false" : "true"} />
+      <ReturnToField returnTo={returnTo} />
+      <button type="submit" className="crm-muted-link">
+        {approved ? "Revoke inbox approval" : "Approve for inbox"}
+      </button>
+    </form>
+  );
+}
+
+export function CrmOpportunityEditForm({ opportunity, returnTo }: { opportunity: AnyRecord; returnTo?: string }) {
+  return (
+    <details className="crm-create-panel">
+      <summary>Edit opportunity</summary>
+      <form action={updateCrmOpportunityAction} className="crm-form-grid">
+        <input type="hidden" name="opportunityId" value={opportunity.id} />
+        <ReturnToField returnTo={returnTo} />
+        <label>Name<input name="name" defaultValue={opportunity.name ?? ""} required /></label>
+        <label>Type<select name="type" defaultValue={opportunity.type ?? "customer_lead"}>{CRM_OPPORTUNITY_TYPES.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
+        <label>Stage<select name="stage" defaultValue={opportunity.stage ?? "idea"}>{CRM_OPPORTUNITY_STAGES.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
+        <label>Priority<select name="priority" defaultValue={opportunity.priority ?? "medium"}>{CRM_PRIORITIES.map((item) => <option key={item} value={item}>{crmLabel(item)}</option>)}</select></label>
+        <label>Estimated value<input name="estimatedValue" inputMode="decimal" defaultValue={opportunity.estimatedValue ?? ""} /></label>
+        <label>Currency<input name="currency" defaultValue={opportunity.currency ?? "USD"} /></label>
+        <label>Likelihood %<input name="likelihood" inputMode="numeric" defaultValue={opportunity.likelihood ?? ""} /></label>
+        <label>Next action date<input name="nextActionAt" type="date" defaultValue={dateInputValue(opportunity.nextActionAt)} /></label>
+        <label className="crm-form-wide">Next action<input name="nextAction" defaultValue={opportunity.nextAction ?? ""} /></label>
+        <label className="crm-form-wide">Notes<textarea name="notes" defaultValue={opportunity.notes ?? ""} /></label>
+        <button type="submit">Save opportunity</button>
+      </form>
+    </details>
+  );
+}
+
+export function CrmContactForm({ company, companies, returnTo }: { company?: AnyRecord | null; companies?: AnyRecord[]; returnTo?: string }) {
   return (
     <details className="crm-create-panel">
       <summary>Add contact</summary>
       <form action={createCrmContactAction} className="crm-form-grid">
-        <input type="hidden" name="companyId" value={company.id} />
+        <CompanyField company={company} companies={companies} />
+        <ReturnToField returnTo={returnTo} />
         <label>Name<input name="fullName" required /></label>
         <label>Title<input name="title" /></label>
         <label>Email<input name="email" type="email" /></label>
@@ -589,12 +780,13 @@ export function CrmContactForm({ company }: { company: AnyRecord }) {
   );
 }
 
-export function CrmOpportunityForm({ company, contact, inquiryId }: { company: AnyRecord; contact?: AnyRecord | null; inquiryId?: string | null }) {
+export function CrmOpportunityForm({ company, companies, contact, inquiryId, returnTo }: { company?: AnyRecord | null; companies?: AnyRecord[]; contact?: AnyRecord | null; inquiryId?: string | null; returnTo?: string }) {
   return (
     <details className="crm-create-panel">
       <summary>Create opportunity</summary>
       <form action={createCrmOpportunityAction} className="crm-form-grid">
-        <input type="hidden" name="companyId" value={company.id} />
+        <CompanyField company={company} companies={companies} />
+        <ReturnToField returnTo={returnTo} />
         {contact && <input type="hidden" name="contactId" value={contact.id} />}
         {inquiryId && <input type="hidden" name="inquiryId" value={inquiryId} />}
         <label>Name<input name="name" required placeholder="What could happen?" /></label>
@@ -613,12 +805,13 @@ export function CrmOpportunityForm({ company, contact, inquiryId }: { company: A
   );
 }
 
-export function CrmTaskForm({ company, contact, opportunity, inquiryId }: { company: AnyRecord; contact?: AnyRecord | null; opportunity?: AnyRecord | null; inquiryId?: string | null }) {
+export function CrmTaskForm({ company, companies, contact, opportunity, inquiryId, returnTo }: { company?: AnyRecord | null; companies?: AnyRecord[]; contact?: AnyRecord | null; opportunity?: AnyRecord | null; inquiryId?: string | null; returnTo?: string }) {
   return (
     <details className="crm-create-panel">
       <summary>Create follow-up</summary>
       <form action={createCrmTaskAction} className="crm-form-grid">
-        <input type="hidden" name="companyId" value={company.id} />
+        <CompanyField company={company} companies={companies} />
+        <ReturnToField returnTo={returnTo} />
         {contact && <input type="hidden" name="contactId" value={contact.id} />}
         {opportunity && <input type="hidden" name="opportunityId" value={opportunity.id} />}
         {inquiryId && <input type="hidden" name="inquiryId" value={inquiryId} />}
@@ -632,12 +825,13 @@ export function CrmTaskForm({ company, contact, opportunity, inquiryId }: { comp
   );
 }
 
-export function CrmNoteForm({ company, contact, opportunity, inquiryId }: { company: AnyRecord; contact?: AnyRecord | null; opportunity?: AnyRecord | null; inquiryId?: string | null }) {
+export function CrmNoteForm({ company, companies, contact, opportunity, inquiryId, returnTo }: { company?: AnyRecord | null; companies?: AnyRecord[]; contact?: AnyRecord | null; opportunity?: AnyRecord | null; inquiryId?: string | null; returnTo?: string }) {
   return (
     <details className="crm-create-panel">
       <summary>Add internal note</summary>
       <form action={createCrmNoteAction} className="crm-form-grid">
-        <input type="hidden" name="companyId" value={company.id} />
+        <CompanyField company={company} companies={companies} />
+        <ReturnToField returnTo={returnTo} />
         {contact && <input type="hidden" name="contactId" value={contact.id} />}
         {opportunity && <input type="hidden" name="opportunityId" value={opportunity.id} />}
         {inquiryId && <input type="hidden" name="inquiryId" value={inquiryId} />}
@@ -678,6 +872,7 @@ export function CrmCompanyPanels({ company }: { company: AnyRecord }) {
           {company.inquiries.length === 0 && <CrmEmpty text="No linked RFQs." />}
         </div>
       </section>
+      <CrmDocumentsPanel company={company} />
       <section className="crm-panel">
         <CrmPanelHeader title="Linked loads" count={company.jobs.length} />
         <div className="crm-list">
