@@ -177,7 +177,7 @@ export async function updateCrmCompanyAction(formData: FormData) {
       crmPriority: inList(text(formData, "crmPriority"), CRM_PRIORITIES, (existing.crmPriority ?? "medium") as (typeof CRM_PRIORITIES)[number]),
       relationshipStrength: inList(text(formData, "relationshipStrength"), CRM_RELATIONSHIP_STRENGTHS, (existing.relationshipStrength ?? "unknown") as (typeof CRM_RELATIONSHIP_STRENGTHS)[number]),
       crmSource: text(formData, "crmSource") ?? "manual",
-      crmTags: tagsValue(text(formData, "tags")),
+      crmTags: tagsValue(text(formData, "tags")) ?? [],
       crmNotes: text(formData, "crmNotes"),
       nextActionAt: dateValue(formData, "nextActionAt"),
     },
@@ -254,7 +254,7 @@ export async function updateCrmContactAction(formData: FormData) {
       relationshipType: inList(text(formData, "relationshipType"), CRM_CONTACT_TYPES, "buyer"),
       leverageLevel: inList(text(formData, "leverageLevel"), CRM_LEVERAGE_LEVELS, "medium"),
       relationshipStrength: inList(text(formData, "relationshipStrength"), CRM_RELATIONSHIP_STRENGTHS, "unknown"),
-      tags: tagsValue(text(formData, "tags")),
+      tags: tagsValue(text(formData, "tags")) ?? [],
       notes: text(formData, "notes"),
       nextActionAt: dateValue(formData, "nextActionAt"),
     },
@@ -574,6 +574,26 @@ export async function deleteCrmCompanyDocumentAction(formData: FormData) {
   revalidateCrm(companyId);
 }
 
+export async function resolveCrmQuoteAction(formData: FormData) {
+  const session = await requireSession();
+  const quoteId = text(formData, "quoteId");
+  const companyId = text(formData, "companyId");
+  if (!quoteId) return;
+  const result = text(formData, "result");
+  if (result !== "WON" && result !== "LOST") return;
+
+  await prisma.quote.updateMany({
+    where: { id: quoteId, officeId: session.officeId },
+    data: {
+      result,
+      lostReason: result === "LOST" ? text(formData, "lostReason") : null,
+    },
+  });
+
+  revalidateCrm(companyId);
+  revalidatePath("/dashboard");
+}
+
 export async function dismissCrmSuggestionAction(formData: FormData) {
   const session = await requireSession();
   const key = text(formData, "key");
@@ -610,6 +630,9 @@ export async function updateCrmOwnersAction(formData: FormData) {
   const companyId = text(formData, "companyId");
   if (!companyId) return;
   const back = returnPath(formData, `/dashboard/crm/companies/${companyId}`);
+  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
+    redirectWith(back, "error", "Only admins or managers can change owners.");
+  }
   const company = await scopedCompany(session.officeId, companyId);
   if (!company) redirectWith(back, "error", "Company not found.");
 

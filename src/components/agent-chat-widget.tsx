@@ -60,7 +60,7 @@ export function AgentChatWidget() {
   const router = useRouter();
   const pathname = usePathname();
   const routeJobIdRaw = pathname.match(/^\/dashboard\/jobs\/([^/]+)/)?.[1];
-  const routeCompanyIdRaw = pathname.match(/^\/dashboard\/customers\/([^/]+)/)?.[1];
+  const routeCompanyIdRaw = pathname.match(/^\/dashboard\/crm\/companies\/([^/]+)/)?.[1];
   const routeJobId = routeJobIdRaw && routeJobIdRaw !== "new" ? routeJobIdRaw : undefined;
   const routeCompanyId = routeCompanyIdRaw && routeCompanyIdRaw !== "new" ? routeCompanyIdRaw : undefined;
   const isDashboardWorkbench = pathname === "/dashboard";

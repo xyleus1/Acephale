@@ -30,6 +30,7 @@ import {
   deleteCrmCompanyDocumentAction,
   dismissCrmSuggestionAction,
   reopenCrmTaskAction,
+  resolveCrmQuoteAction,
   toggleCrmContactInboxAction,
   updateCrmCompanyAction,
   updateCrmContactAction,
@@ -696,6 +697,40 @@ export function CrmDocumentsPanel({ company }: { company: AnyRecord }) {
   );
 }
 
+export function CrmQuotesPanel({ company }: { company: AnyRecord }) {
+  const quotes = company.quotes ?? [];
+  return (
+    <section className="crm-panel">
+      <CrmPanelHeader title="Quotes" count={quotes.length} />
+      <div className="crm-list">
+        {quotes.map((quote: AnyRecord) => (
+          <div key={quote.id} className="crm-quote-row">
+            <div>
+              <strong>{[quote.origin, quote.destination].filter(Boolean).join(" -> ") || "Quote"}</strong>
+              <span>{[quote.mode, quote.value != null ? compactMoney(quote.value, quote.currency) : null, fmtDate(quote.quotedAt), quote.lostReason].filter(Boolean).join(" · ")}</span>
+            </div>
+            {quote.result === "PENDING" ? (
+              <form action={resolveCrmQuoteAction} className="crm-quote-resolve">
+                <input type="hidden" name="quoteId" value={quote.id} />
+                <input type="hidden" name="companyId" value={company.id} />
+                <select name="result" defaultValue="WON">
+                  <option value="WON">Won</option>
+                  <option value="LOST">Lost</option>
+                </select>
+                <input name="lostReason" placeholder="Lost reason (optional)" />
+                <button type="submit">Resolve</button>
+              </form>
+            ) : (
+              <CrmBadge tone={quote.result === "WON" ? "good" : "danger"}>{crmLabel(quote.result)}</CrmBadge>
+            )}
+          </div>
+        ))}
+        {quotes.length === 0 && <CrmEmpty text="No quotes recorded." />}
+      </div>
+    </section>
+  );
+}
+
 export function CrmContactEditForm({ contact, returnTo }: { contact: AnyRecord; returnTo?: string }) {
   return (
     <details className="crm-create-panel">
@@ -872,6 +907,7 @@ export function CrmCompanyPanels({ company }: { company: AnyRecord }) {
           {company.inquiries.length === 0 && <CrmEmpty text="No linked RFQs." />}
         </div>
       </section>
+      <CrmQuotesPanel company={company} />
       <CrmDocumentsPanel company={company} />
       <section className="crm-panel">
         <CrmPanelHeader title="Linked loads" count={company.jobs.length} />

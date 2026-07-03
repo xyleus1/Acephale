@@ -33738,6 +33738,27 @@ html.agent-dock-open .page-container {
   opacity: 0.6;
 }
 
+.crm-quote-row {
+  display: grid;
+  gap: 8px;
+}
+
+.crm-quote-row > div strong {
+  display: block;
+  font-size: 13px;
+}
+
+.crm-quote-row > div span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.crm-quote-resolve {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
 .crm-doc-row,
 .crm-suggestion-wrap {
   display: grid;

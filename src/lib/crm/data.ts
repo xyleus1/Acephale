@@ -24,8 +24,12 @@ function nonEmpty(value: string | null | undefined) {
 }
 
 // String enum columns sort alphabetically in the DB, so ranked ordering happens here.
+// Finite sentinel (not Infinity): two null dates must diff to 0, not NaN,
+// or the comparator chain never reaches its tiebreakers.
+const NO_DATE = Number.MAX_SAFE_INTEGER;
+
 function dateAsc(value: Date | null | undefined) {
-  return value ? value.getTime() : Number.POSITIVE_INFINITY;
+  return value ? value.getTime() : NO_DATE;
 }
 
 function dateDesc(value: Date | null | undefined) {
@@ -319,7 +323,9 @@ export async function listCrmCompanies(scope: CrmUserScope, filters: CrmFilters 
     ...(filters.stage ? { crmStage: filters.stage } : {}),
     ...(filters.priority ? { crmPriority: filters.priority } : {}),
     ...(filters.source ? { crmSource: filters.source } : {}),
-    ...(filters.ownerId ? { owners: { some: { userId: filters.ownerId } } } : {}),
+    // AND, not a spread: crmCompanyScope already uses the `owners` key for
+    // restricted users, and a user-supplied ownerId must narrow it, not replace it.
+    ...(filters.ownerId ? { AND: [{ owners: { some: { userId: filters.ownerId } } }] } : {}),
     ...(q ? { OR: companyTextSearch(q) } : {}),
   };
   const companies = await prisma.company.findMany({
@@ -380,6 +386,7 @@ export async function getCrmCompany(scope: CrmUserScope, companyId: string) {
       },
       inquiries: { orderBy: { receivedAt: "desc" }, take: 20, include: { job: { select: { id: true, reference: true, status: true } } } },
       jobs: { orderBy: { updatedAt: "desc" }, take: 20 },
+      quotes: { orderBy: { quotedAt: "desc" }, take: 20 },
       crmOpportunities: {
         orderBy: [{ updatedAt: "desc" }],
         take: 30,

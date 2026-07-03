@@ -224,9 +224,16 @@ async function _syncEmailAccountInternal({
 
       const externalId = messageIdHdr ?? msg.id;
 
-      // Skip if already in DB.
-      const existing = await prisma.emailMessage.findUnique({ where: { externalId } });
+      // Skip if already in DB. Messages sent from the app are persisted by
+      // gmail-send with gmailMessageId but a null externalId, so match on
+      // either key or every outbound email would re-ingest as a duplicate.
+      const existing =
+        (await prisma.emailMessage.findUnique({ where: { externalId } })) ??
+        (await prisma.emailMessage.findFirst({ where: { gmailMessageId: msg.id } }));
       if (existing) {
+        if (!existing.externalId) {
+          await prisma.emailMessage.update({ where: { id: existing.id }, data: { externalId } }).catch(() => {});
+        }
         // If we don't have a local thread yet, adopt from existing message.
         if (!localThread) {
           localThread = await prisma.emailThread.findFirst({

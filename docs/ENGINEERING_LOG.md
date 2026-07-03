@@ -1560,3 +1560,19 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: run `npm run backfill:crm-email` against production after deploy;
   agent-generated CRM mutation proposals via the AgentProposal dispatcher;
   live GBrain retrieval.
+
+### 2026-07-03 - CRM V1.1 adversarial review fixes
+
+- Branch: crm-v1-review-and-push (pushed to main)
+- Task: Fixes from the pre-push adversarial review: (1) listCrmCompanies
+  ownerId filter now ANDs with the ownership scope instead of replacing it
+  (restricted users could enumerate colleagues' companies); (2) gmail-sync
+  dedupes messages by externalId OR gmailMessageId and gmail-send stores
+  externalId, so app-sent emails no longer re-ingest as duplicate rows and
+  duplicate CRM EMAIL activities; (3) CRM company page gained a Quotes panel
+  with won/lost resolution (decision-queue pending-quote items had dead-ended
+  after the legacy purge); (4) date comparators use a finite no-date sentinel
+  (Infinity-Infinity=NaN broke tiebreakers); (5) tags can be cleared via edit
+  forms; (6) owner management gated to ADMIN/MANAGER; (7) agent chat widget
+  route context matches /dashboard/crm/companies/:id.
+- Verification: tsc clean, test:crm passes, tenant audit unchanged, build ok.
