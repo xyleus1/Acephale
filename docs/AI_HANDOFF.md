@@ -4,11 +4,11 @@
 
 ## Date
 
-2026-07-01
+2026-07-03
 
 ## Branch
 
-main
+feature/internal-crm-v1
 
 ## Commit
 
@@ -16,51 +16,61 @@ not committed
 
 ## Task implemented
 
-RFQ Brain Context / Domestic Trucking Rates V1 hardening:
+Internal CRM / Relationship OS V1:
 
-- Added `PRODUCT_IMPLEMENTATION_PLAN_RFQ_BRAIN_CONTEXT_V1.md` with the exact
-  low-risk implementation scope.
-- Extended the domestic trucking provider boundary with required-field,
-  normalization, and sandbox methods.
-- Added explicit rate-option provenance, mock/manual/live source labels,
-  selected draft basis, terms, notes, and a non-persisted audit preview.
-- Added eligibility status and deterministic next questions for operators.
-- Made the RFQ panel safety rails visible: draft only, not sent, not booked,
-  human approval required, mock/manual rates only, and no live provider API
-  connected.
-- Kept the product slice schema-free and read-only against operational data:
-  no quote persistence, no customer send, no booking, no tendering, no provider
-  credential read, and no live API call.
+- Added `PRODUCT_CRM_IMPLEMENTATION_PLAN.md` before implementation.
+- Reused `Company` and `Contact` as canonical CRM account/person truth.
+- Added additive relationship metadata to `Company`, `Contact`, `Activity`,
+  and `Task`.
+- Added `CrmOpportunity` for non-load/RFQ relationship opportunities.
+- Added `/dashboard/crm` command center plus companies, people,
+  opportunities, tasks, relationships, and detail pages.
+- Added server-side CRM data helpers/actions with explicit `officeId` and
+  owner scoping.
+- Added CRM Brain Context panels backed by existing customer dossier and
+  operational brain search.
+- Added RFQ detail CRM context and RFQ-linked opportunity creation.
+- Kept V1 internal-only: no email sending, Slack posting, Gmail mutation,
+  booking, tendering, payment, provider API call, or quote commitment.
 
 ## Files changed
 
-- `PRODUCT_IMPLEMENTATION_PLAN_RFQ_BRAIN_CONTEXT_V1.md`
-- `src/lib/domestic-trucking-pricing.ts`
-- `src/components/domestic-trucking-rate-panel.tsx`
+- `PRODUCT_CRM_IMPLEMENTATION_PLAN.md`
+- `PRODUCT_CRM_V1_MANUAL_TEST_GUIDE.md`
+- `PRODUCT_CRM_V1_PR_SUMMARY.md`
+- `prisma/schema.prisma`
+- `prisma/migrations/20260703000100_internal_crm_relationship_os/migration.sql`
+- `src/lib/crm/*`
+- `src/components/crm/crm-components.tsx`
+- `src/app/dashboard/crm/**`
+- `src/app/dashboard/rfq/[inquiryId]/page.tsx`
+- `src/app/dashboard/layout.tsx`
 - `src/app/globals.css`
-- `scripts/domestic-trucking-pricing.test.ts`
+- `scripts/crm-relationship-os.test.ts`
+- `package.json`
 - `docs/AI_HANDOFF.md`
 - `docs/ENGINEERING_LOG.md`
 - `docs/DECISIONS.md`
 
 ## Verification passed
 
-- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npx prisma validate`
-- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run db:generate`
-- `npx tsx scripts/domestic-trucking-pricing.test.ts`
+- `npx prisma validate`
+- `npm run db:generate`
+- `npm run test:crm`
 - `npx tsc --noEmit`
 - `npm run check:docs`
-- `npm run lint -- --file src/lib/domestic-trucking-pricing.ts --file src/components/domestic-trucking-rate-panel.tsx`
-- `DATABASE_URL='postgresql://local:local@127.0.0.1:5432/derya_crm_dummy' npm run build`
+- `npm run audit:tenant-scope` passed in non-strict mode with only one
+  pre-existing medium finding in `src/lib/rfq-load-review.ts`.
+- `npm run build`
 
 ## Caveats
 
-- Full `npm run lint` still fails on existing repo-wide lint debt outside this
-  change, mostly old `<a>` navigation rules and `any` usage. The touched
-  TS/TSX files lint clean.
-- GBrain context remains a source-slugged placeholder, not live retrieval.
-- Rate audit data is preview-only and not persisted until an approval workflow
-  exists.
+- Contacts remain company-scoped in V1.
+- Live GBrain retrieval is not called from browser/client code.
+- CRM-specific persisted agent proposals are not implemented yet; suggestions
+  are derived from stale tasks/RFQs/relationships.
+- Brain workspace root `/Users/mert/derya-ai-brain-setup` is not a git repo,
+  so those docs were updated in place and not committed there.
 
 ## Previous Update
 

@@ -63,7 +63,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
           <NavLink href="/dashboard/intelligence" icon={<Icon name="activity" />}>Intelligence</NavLink>
 
-          <NavLink href="/dashboard/customers" icon={<Icon name="building" />}>CRM</NavLink>
+          <NavLink href="/dashboard/crm" icon={<Icon name="building" />}>Relationships</NavLink>
 
           {/* ─── SETUP ───────────────────────────────────────────────────── */}
           <div className="nav-section-label with-rule">Setup</div>

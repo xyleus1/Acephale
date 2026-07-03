@@ -11,6 +11,8 @@ import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-panel";
 import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
+import { CrmBrainContextPanel, CrmOpportunityForm } from "@/components/crm/crm-components";
+import { getCrmBrainContext } from "@/lib/crm/brain-context";
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   INGESTED: { label: "RFQ",        cls: "badge-info" },
@@ -147,6 +149,11 @@ export default async function RFQDetailPage({
     ...(maturity.targetPriceQuestion ? ["target price or no-target confirmation"] : []),
   ];
   const domesticPricing = assessDomesticTruckingPricing(inquiry);
+  const crmBrainContext = await getCrmBrainContext({
+    officeId: session.officeId,
+    companyId: inquiry.companyId,
+    inquiryId: inquiry.id,
+  });
 
   return (
     <div>
@@ -433,6 +440,15 @@ export default async function RFQDetailPage({
         <div className="record-side-stack">
 
           {referenceSource && <ReferenceDealSourcePanel source={referenceSource} />}
+
+          <CrmBrainContextPanel context={crmBrainContext} />
+
+          {inquiry.company && (
+            <CrmOpportunityForm
+              company={inquiry.company}
+              inquiryId={inquiry.id}
+            />
+          )}
 
           {opportunity && (
             <details className="strategy-audit-details">

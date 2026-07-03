@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-03 - CRM relationship OS reuses company/contact truth
+
+- Status: accepted
+- Owner: engineering
+- Context: The internal CRM needs to track customers, prospects, partners,
+  vendors, investors, advisors, RFQs, follow-ups, and source-linked brain
+  context. The app already has `Company`, `Contact`, `Activity`, `Task`,
+  `Inquiry`, `Job`, and memory models. Creating parallel `CrmCompany` and
+  `CrmContact` tables would split the inbox/RFQ/load source of truth.
+- Decision: V1 reuses `Company` as the account object and `Contact` as the
+  person object, adds nullable relationship metadata to existing records, and
+  adds only one new generic `CrmOpportunity` model for non-load/RFQ
+  relationship opportunities. Contacts remain company-scoped in V1.
+- Rationale: This keeps the product on the coherent path of emails to RFQs to
+  active loads while adding a founder/operator relationship layer around the
+  same data. It avoids Salesforce-style duplication and keeps tenant scoping
+  straightforward.
+- Consequences: Standalone people without a company are not first-class yet.
+  Future standalone-person work should be a deliberate migration, not a quick
+  duplicate table. CRM agent actions stay internal/draft-only until persisted
+  approval records exist.
+- Revisit when: live GBrain retrieval and CRM-specific reviewed agent
+  proposals are ready for production use.
+
 ### 2026-07-01 - RFQ Brain Context V1 is read-only and draft-only
 
 - Status: accepted

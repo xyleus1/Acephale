@@ -25,6 +25,7 @@
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
     "test:rfq-load-draft": "tsx scripts/rfq-load-draft.test.ts",
+    "test:crm": "tsx scripts/crm-relationship-os.test.ts",
     "demo:video-loads": "tsx scripts/reset-video-demo-loads.ts",
     "seed:giresun-workflow": "tsx scripts/seed-giresun-workflow-load.ts",
     "seed:pentest-demo": "tsx scripts/create-pentest-demo-account.ts",

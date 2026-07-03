@@ -17,6 +17,36 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-03 - Internal CRM Relationship OS V1
+
+- Branch: feature/internal-crm-v1
+- Commit: not committed
+- Task: Build an internal CRM/Relationship OS inside the app, reusing existing
+  company/contact/RFQ/load truth and adding a generic opportunity layer.
+- Files changed: `PRODUCT_CRM_IMPLEMENTATION_PLAN.md`,
+  `PRODUCT_CRM_V1_MANUAL_TEST_GUIDE.md`, `PRODUCT_CRM_V1_PR_SUMMARY.md`,
+  `prisma/schema.prisma`,
+  `prisma/migrations/20260703000100_internal_crm_relationship_os/migration.sql`,
+  `src/lib/crm/*`, `src/components/crm/crm-components.tsx`,
+  `src/app/dashboard/crm/**`, `src/app/dashboard/rfq/[inquiryId]/page.tsx`,
+  `src/app/dashboard/layout.tsx`, `src/app/globals.css`,
+  `scripts/crm-relationship-os.test.ts`, `package.json`, and docs.
+- Behavior added: `/dashboard/crm` command center, company/person/opportunity
+  directories, detail pages with Brain Context, internal-only notes/tasks, RFQ
+  linked opportunities, relationship metadata, and a smoke test for CRM
+  constants plus owner scoping.
+- Verification: `npx prisma validate`, `npm run db:generate`,
+  `npm run test:crm`, `npx tsc --noEmit`, `npm run check:docs`,
+  `npm run audit:tenant-scope`, and `npm run build` passed.
+- Failed/skipped checks: tenant-scope audit is clean for the new CRM files; it
+  still reports one pre-existing medium finding in
+  `src/lib/rfq-load-review.ts`.
+- Caveats: contacts remain company-scoped; live GBrain retrieval is not wired
+  into browser/client code; persisted CRM-specific agent proposal review is a
+  future slice.
+- Follow-up: add live server-side GBrain retrieval into CRM entity pages with
+  source citations and a reviewed CRM agent proposal model.
+
 ### 2026-06-30 - Production-facing load playbook and agent text cleanup
 
 - Branch: main

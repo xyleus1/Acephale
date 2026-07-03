@@ -23,10 +23,18 @@ enum CustomerStatus {
 }
 
 enum ActivityType {
+  NOTE
   VISIT
   CALL
   EMAIL
   WHATSAPP
+  MEETING
+  SLACK
+  RFQ
+  QUOTE
+  WEB_INTEL
+  TASK
+  AGENT_SUGGESTION
 }
 
 enum QuoteResult {
@@ -93,6 +101,7 @@ model Office {
   events               Event[]
   categories           CategoryOption[]
   tasks                Task[]
+  crmOpportunities     CrmOpportunity[]
   riskAlerts           RiskAlert[]
   savedViews           SavedView[]
   targetPriceHistory   TargetPriceHistory[]
@@ -186,6 +195,24 @@ model Company {
   lane      String? // Region e.g., "Mediterranean", "America", "Europe"
   direction String? // Import / Export / Both
 
+  // Internal Relationship OS metadata. Existing Company remains the account
+  // source of truth; these fields make it usable for customers, prospects,
+  // vendors, investors, advisors, and strategic partners.
+  domain               String?
+  website              String?
+  linkedinUrl          String?
+  crmCategory          String    @default("customer")
+  crmStage             String    @default("new")
+  crmPriority          String    @default("medium")
+  relationshipStrength String    @default("unknown")
+  crmSource            String    @default("manual")
+  sourceRefs           Json?
+  brainSlug            String?
+  crmTags              Json?
+  crmNotes             String?
+  lastTouchAt          DateTime?
+  nextActionAt         DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -199,12 +226,17 @@ model Company {
   documents         CompanyDocument[]
   assignmentChanges AssignmentChange[]
   tasks             Task[]
+  crmOpportunities  CrmOpportunity[]
   riskAlerts        RiskAlert[]
   jobs              Job[]
   inquiries         Inquiry[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
+  @@index([officeId, crmCategory])
+  @@index([officeId, crmStage])
+  @@index([officeId, crmPriority])
+  @@index([officeId, nextActionAt])
   @@index([officeId, class1])
   @@index([officeId, class2])
   @@index([officeId, product])
@@ -221,14 +253,31 @@ model Contact {
   notes              String?
   isApprovedForInbox Boolean   @default(false)
   approvedForInboxAt DateTime?
+  linkedinUrl        String?
+  location           String?
+  relationshipType   String    @default("buyer")
+  leverageLevel      String    @default("medium")
+  relationshipStrength String  @default("unknown")
+  ownerLabel         String?
+  sourceRefs         Json?
+  brainSlug          String?
+  tags               Json?
+  lastTouchAt        DateTime?
+  nextActionAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  activities       Activity[]
+  tasks            Task[]
+  crmOpportunities CrmOpportunity[]
 
   @@index([companyId])
   @@index([companyId, isApprovedForInbox])
+  @@index([companyId, relationshipType])
+  @@index([companyId, leverageLevel])
+  @@index([companyId, nextActionAt])
 }
 
 // Multiple owners per company (requested)
@@ -251,22 +300,34 @@ model Activity {
   id         String       @id @default(cuid())
   officeId   String
   companyId  String
+  contactId  String?
+  inquiryId  String?
+  opportunityId String?
   type       ActivityType
   occurredAt DateTime     @default(now())
 
   subject  String?
   body     String?
   audioUrl String?
+  source   String?
+  sourceRefs Json?
+  provenance Json?
 
   createdByUserId String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  office    Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation("ActivityCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  office      Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact     Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  inquiry     Inquiry?        @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  opportunity CrmOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  createdBy   User?           @relation("ActivityCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([officeId, companyId, occurredAt])
+  @@index([officeId, contactId, occurredAt])
+  @@index([officeId, opportunityId, occurredAt])
+  @@index([officeId, inquiryId, occurredAt])
   @@index([officeId, type, occurredAt])
 }
 
@@ -681,20 +742,72 @@ model Task {
   id               String     @id @default(cuid())
   officeId         String
   companyId        String
+  contactId        String?
+  inquiryId        String?
+  opportunityId    String?
   title            String
   details          String?
   dueAt            DateTime?
   status           TaskStatus @default(OPEN)
+  priority         String     @default("medium")
+  source           String?
+  sourceRefs       Json?
+  provenance       Json?
   assignedToUserId String?
   createdByUserId  String?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
-  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  office      Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact     Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  inquiry     Inquiry?        @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  opportunity CrmOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
 
   @@index([officeId, status, dueAt])
+  @@index([officeId, priority, dueAt])
+  @@index([officeId, contactId, status])
+  @@index([officeId, opportunityId, status])
+  @@index([officeId, inquiryId, status])
   @@index([companyId, status])
+}
+
+model CrmOpportunity {
+  id              String   @id @default(cuid())
+  officeId        String
+  companyId       String
+  contactId       String?
+  inquiryId       String?
+  name            String
+  type            String   @default("customer_lead")
+  stage           String   @default("idea")
+  estimatedValue  Float?
+  currency        String?  @default("USD")
+  likelihood      Int?
+  priority        String   @default("medium")
+  nextAction      String?
+  nextActionAt    DateTime?
+  source          String   @default("manual")
+  sourceRefs      Json?
+  brainSlug       String?
+  notes           String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  office     Office     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact    Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  inquiry    Inquiry?   @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  activities Activity[]
+  tasks      Task[]
+
+  @@index([officeId, stage, priority])
+  @@index([officeId, type, stage])
+  @@index([officeId, nextActionAt])
+  @@index([officeId, companyId])
+  @@index([officeId, contactId])
+  @@index([officeId, inquiryId])
 }
 
 model RiskAlert {
@@ -821,6 +934,9 @@ model Inquiry {
   agentProposals      AgentProposal[]
   forwarderDrafts     ForwarderRequestDraft[]
   strategyAssessments StrategyAssessment[]
+  crmOpportunities    CrmOpportunity[]
+  activities          Activity[]
+  tasks               Task[]
 
   @@index([officeId, status, receivedAt])
   @@index([officeId, companyId])
