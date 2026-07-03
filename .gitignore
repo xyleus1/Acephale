@@ -20,3 +20,5 @@ prisma/*.db-journal
 npm-debug.log*
 tsconfig.tsbuildinfo
 .claude/worktrees/
+.vercel
+.env*
