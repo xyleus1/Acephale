@@ -4,6 +4,76 @@
 
 ## Date
 
+2026-07-04 (later same day)
+
+## Branch
+
+sidebar-rfq-crm-company-brain (not merged to main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+Sidebar IA rework + Company Brain page:
+
+- Sidebar: Commercial Workflow is now Deal Desk, Incoming RFQs
+  (`/dashboard/rfq`), Loads (`/dashboard/loads`), Pricing, CRM (renamed from
+  Relationships, same route), Company Brain (`/dashboard/brain`). Domestic
+  Rates and Intelligence are archived from the nav (routes stay reachable
+  directly). Inbox moved to the bottom of the Setup section. Topbar chips:
+  "active" now lands on /dashboard/loads, "RFQs" on /dashboard/rfq with a
+  count matching that page's default Open tab (notIn WON/LOST).
+- `/dashboard/rfq` is no longer a redirect to the inbox: it is a real
+  Incoming RFQs list (Inquiry table, status filter tabs, links to detail,
+  "Inbox triage" button keeps the thread view reachable).
+- `/dashboard/loads` (new): dense spreadsheet-style list of all Jobs.
+- `/dashboard/brain` (new): Company Brain. Default view is a full-page
+  ChatGPT-style chat (`CompanyBrainChat`) on the existing `chatWithAgent`
+  server action (same tools/memory as the Desk Assistant dock; dock hides
+  itself only on this chat view). Quiet header switcher reveals secondary
+  sections: To-dos (open Tasks via TaskListInline), Daily news (research
+  feed + high-severity hotspots from `getIntelligenceMapData`, the 11:00 UTC
+  cron output), Intelligence map (external logistics `WorldIntelligenceMap`;
+  internal company map is a placeholder with memory-substrate counts).
+- Merged local branch `intelligence-map-polish` (map geography polish);
+  conflicts resolved keeping main's walnut-navy palette over the branch's
+  teal/cyan colors while taking all structural changes.
+- New shared `LinkRow` client component gives the two new server-rendered
+  tables the full-row click navigation the `.data-row` styling promises.
+
+## Files changed
+
+- `src/app/dashboard/layout.tsx`, `src/app/dashboard/rfq/page.tsx`,
+  `src/app/dashboard/loads/page.tsx` (new), `src/app/dashboard/brain/page.tsx`
+  (new), `src/components/company-brain-chat.tsx` (new),
+  `src/components/link-row.tsx` (new), `src/components/agent-chat-widget.tsx`,
+  `src/app/globals.css`, label fixes in `src/app/dashboard/activity/page.tsx`,
+  `src/app/dashboard/rfq/[inquiryId]/page.tsx`, `src/app/dashboard/rfq/new/page.tsx`,
+  plus the intelligence-map-polish merge
+  (`src/components/intelligence/*`, `src/lib/market-intelligence/intelligence-map.ts`,
+  `src/app/dashboard/intelligence/page.tsx`, `scripts/intelligence-map.test.ts`).
+
+## Verification passed
+
+- `npx tsc --noEmit` clean, `npm run build` clean. No schema changes, no
+  migrations, no new dependencies. Multi-agent adversarial review run; all
+  confirmed findings fixed (chip/page count mismatch, brain-section dock
+  suppression, dead evidence cues, job-focus-strip height, stale labels,
+  truncation wording, table affordances).
+
+## Caveats
+
+- `npm run test:intelligence-map` not run locally (needs DATABASE_URL); its
+  static source assertions were verified by grep after the merge.
+- Company Brain chat is session-only (no persistence), like the dock.
+- Internal company map is an explicit placeholder — configured later.
+
+## Previous Update
+
+## Date
+
 2026-07-04
 
 ## Branch

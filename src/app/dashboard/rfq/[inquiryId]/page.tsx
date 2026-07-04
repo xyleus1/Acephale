@@ -174,7 +174,7 @@ export default async function RFQDetailPage({
       <div className="record-back-row">
         <a href="/dashboard/rfq" className="back-link">
           <Icon name="chevron-left" size={14} />
-          RFQ Inbox
+          Incoming RFQs
         </a>
       </div>
 

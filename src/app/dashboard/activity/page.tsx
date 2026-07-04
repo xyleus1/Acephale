@@ -198,7 +198,7 @@ export default async function ActivityPage() {
           count={rfqsToParse.length + rfqsToPrice.length + rfqsToConvert.length}
           action={
             <a href="/dashboard/rfq" className="control-card-action">
-              Open inbox <Icon name="arrow-right" size={13} />
+              Open RFQs <Icon name="arrow-right" size={13} />
             </a>
           }
         >
