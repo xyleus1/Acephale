@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type React from "react";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -78,6 +79,110 @@ function severityClass(value: string) {
   if (value === "medium") return "status-priced";
   return "status-ingested";
 }
+
+function CollapsibleEvidence({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details style={evidenceDetailsStyle}>
+      <summary style={evidenceSummaryStyle}>{label}</summary>
+      <div className="intelligence-evidence" style={evidenceContentStyle}>
+        {children}
+      </div>
+    </details>
+  );
+}
+
+function EmptyIntelligenceMapCta({ sources }: { sources: Array<{ id: string; name: string; sourceCategory: string }> }) {
+  const labels = new Map([
+    ["maersk-news-advisories", "Maersk"],
+    ["drewry-world-container-index", "Drewry"],
+    ["cbp-csms", "CBP"],
+    ["port-of-los-angeles-latest-news", "Port of LA"],
+  ]);
+  return (
+    <section style={emptyMapCtaStyle}>
+      <div>
+        <div style={emptyEyebrowStyle}>Empty intelligence map</div>
+        <h2 style={emptyTitleStyle}>Pull trusted market data to light up the map</h2>
+        <p style={emptyBodyStyle}>
+          Start with curated carrier, rate-index, customs, and port sources. Manual pulls stay narrow and advisory.
+        </p>
+      </div>
+      <div style={emptyButtonGridStyle}>
+        {sources.map((source) => (
+          <a key={source.id} className="btn btn-secondary btn-sm" href="#source-health" style={emptySourceButtonStyle}>
+            {labels.get(source.id) ?? source.name}
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+const evidenceDetailsStyle: React.CSSProperties = {
+  marginTop: 2,
+  borderTop: "1px solid rgba(148,163,184,.18)",
+  paddingTop: 6,
+};
+
+const evidenceSummaryStyle: React.CSSProperties = {
+  color: "#64748b",
+  cursor: "pointer",
+  fontSize: 11,
+  fontWeight: 850,
+};
+
+const evidenceContentStyle: React.CSSProperties = {
+  marginTop: 7,
+  gap: 4,
+};
+
+const emptyMapCtaStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(260px, .6fr)",
+  gap: 16,
+  alignItems: "center",
+  border: "1px solid rgba(14,116,144,.24)",
+  borderRadius: 10,
+  padding: 16,
+  background: "linear-gradient(135deg, rgba(14,165,233,.12), rgba(16,185,129,.08))",
+};
+
+const emptyEyebrowStyle: React.CSSProperties = {
+  color: "#0369a1",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: 0,
+};
+
+const emptyTitleStyle: React.CSSProperties = {
+  margin: "3px 0 6px",
+  fontSize: 24,
+  color: "#0f172a",
+};
+
+const emptyBodyStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#334155",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const emptyButtonGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+};
+
+const emptySourceButtonStyle: React.CSSProperties = {
+  justifyContent: "center",
+};
 
 function sourceIdFromExternalId(value: string | null | undefined) {
   return value?.match(/^market:([^:]+)/)?.[1] ?? null;
@@ -330,6 +435,8 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         </div>
       </div>
 
+      {hasNoMarketData && <EmptyIntelligenceMapCta sources={safeManualSources} />}
+
       <WorldIntelligenceMap data={mapData} />
 
       <section className="workbench-section intelligence-section">
@@ -395,7 +502,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         <button className="btn btn-secondary" type="submit">Filter</button>
       </form>
 
-      <section className="workbench-section intelligence-section">
+      <section className="workbench-section intelligence-section" id="source-health">
         <div className="workbench-card-header">
           <div>
             <h2>Source Health</h2>
@@ -472,12 +579,12 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                   <h3 className="intelligence-title-with-icon"><IntelligenceIcon type={review.marketSignal.category} /> {review.marketSignal.summary}</h3>
                   <p>{short(review.impactReason, 360)}</p>
                   {review.recommendedAction && <p><strong>Action:</strong> {review.recommendedAction}</p>}
-                  <div className="intelligence-evidence">
+                  <CollapsibleEvidence label="Evidence refs">
                     <span>Signal {review.marketSignal.id}</span>
                     {review.marketSignal.sourceObject && <span>Source {review.marketSignal.sourceObject.id}</span>}
                     {sourceId && <span>{sourceId}</span>}
                     {review.marketSignalLink && <span>{review.marketSignalLink.matchType} {Math.round(review.marketSignalLink.confidence * 100)}%</span>}
-                  </div>
+                  </CollapsibleEvidence>
                 </div>
                 <div className="intelligence-actions">
                   <form action={reviewAction}>
@@ -546,12 +653,12 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                   {sourceMeta?.sourceCategory === "regulatory" && (
                     <p><strong>Modeling:</strong> CBP/regulatory items are treated as customs/compliance context unless the clean body contains a validated freight lane.</p>
                   )}
-                  <div className="intelligence-evidence">
+                  <CollapsibleEvidence label={`Evidence refs (${2 + object.marketSignals.length})`}>
                     <span>KnowledgeObject {object.id}</span>
                     <span>{object.marketSignals.length} signals</span>
                     <span>{object.marketSignals.reduce((sum, signal) => sum + signal.impactReviews.filter((review) => review.status === "pending").length, 0)} pending reviews</span>
                     {quality && <span>{quality.actionedReviewCount} actioned / {quality.dismissedCount} dismissed</span>}
-                  </div>
+                  </CollapsibleEvidence>
                 </div>
                 <div className="intelligence-actions">
                   {object.rawRef && (
@@ -601,7 +708,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                   <h3 className="intelligence-title-with-icon"><IntelligenceIcon type={signal.category} /> {signal.summary}</h3>
                   {signal.operatorImplication && <p><strong>Ops:</strong> {signal.operatorImplication}</p>}
                   {signal.pricingImplication && <p><strong>Pricing:</strong> {signal.pricingImplication}</p>}
-                  <div className="intelligence-evidence">
+                  <CollapsibleEvidence label="Evidence refs and affected geography">
                     {strings(signal.affectedModes).slice(0, 4).map((mode) => <span key={mode}>{mode}</span>)}
                     {validLanes.slice(0, 4).map((lane) => <span key={lane}>{lane}</span>)}
                     {(signal.category === "customs" || signal.category === "compliance") && validLanes.length === 0 && (
@@ -611,7 +718,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                     <span>{signal.impactReviews.filter((review) => review.status === "pending").length} pending reviews</span>
                     {sourceId && <span>{sourceId}</span>}
                     {signal.sourceObject && <span>Source {signal.sourceObject.id}</span>}
-                  </div>
+                  </CollapsibleEvidence>
                 </div>
               </article>
             );
