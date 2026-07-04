@@ -13,6 +13,8 @@ import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-p
 import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
 import { CrmBrainContextPanel, CrmOpportunityForm } from "@/components/crm/crm-components";
 import { getCrmBrainContext } from "@/lib/crm/brain-context";
+import { getBrainBridgeContext } from "@/lib/brain-bridge";
+import { BrainBridgePanel } from "@/components/brain-bridge-panel";
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   INGESTED: { label: "RFQ",        cls: "badge-info" },
@@ -153,6 +155,17 @@ export default async function RFQDetailPage({
     officeId: session.officeId,
     companyId: inquiry.companyId,
     inquiryId: inquiry.id,
+  });
+  const brainBridgeContext = await getBrainBridgeContext({
+    officeId: session.officeId,
+    rfqId: inquiry.id,
+    customerName: inquiry.company?.name ?? inquiry.fromCompany ?? undefined,
+    fromEmail: inquiry.fromEmail ?? undefined,
+    origin: inquiry.origin ?? undefined,
+    destination: inquiry.destination ?? undefined,
+    mode: inquiry.mode ?? undefined,
+    equipmentType: inquiry.containerType ?? undefined,
+    commodity: inquiry.commodity ?? undefined,
   });
 
   return (
@@ -442,6 +455,8 @@ export default async function RFQDetailPage({
           {referenceSource && <ReferenceDealSourcePanel source={referenceSource} />}
 
           <CrmBrainContextPanel context={crmBrainContext} />
+
+          <BrainBridgePanel result={brainBridgeContext} />
 
           {inquiry.company && (
             <CrmOpportunityForm
