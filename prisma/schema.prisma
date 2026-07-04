@@ -1420,3 +1420,15 @@ model EmailMessage {
   @@index([threadId, sentAt])
   @@index([accountId, sentAt])
 }
+
+model LoginCode {
+  id         String    @id @default(cuid())
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([email, createdAt])
+}

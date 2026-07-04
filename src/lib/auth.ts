@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, hashPassword } from "@/lib/password";
+import { isLoginEmailAllowed } from "@/lib/login-code";
 
 const SESSION_COOKIE = "crm_session";
 const ONE_DAY = 60 * 60 * 24;
@@ -46,7 +47,34 @@ function decodeSession(token: string): SessionPayload | null {
   }
 }
 
+async function issueSessionCookie(user: {
+  id: string;
+  email: string;
+  officeId: string;
+  role: string;
+  canViewWholeOffice: boolean;
+}) {
+  const token = encodeSession({
+    userId: user.id,
+    officeId: user.officeId,
+    email: user.email,
+    role: user.role,
+    canViewWholeOffice: user.canViewWholeOffice,
+  });
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: ONE_DAY * 7,
+  });
+}
+
 export async function loginWithCredentials(email: string, password: string) {
+  // Internal deployment: every sign-in path is allowlist-gated.
+  if (!isLoginEmailAllowed(email)) return null;
+
   const users = await prisma.user.findMany({
     where: { email, isActive: true },
     select: { id: true, email: true, officeId: true, role: true, passwordHash: true, canViewWholeOffice: true }
@@ -74,22 +102,23 @@ export async function loginWithCredentials(email: string, password: string) {
 
   if (!user) return null;
 
-  const token = encodeSession({
-    userId: user.id,
-    officeId: user.officeId,
-    email: user.email,
-    role: user.role,
-    canViewWholeOffice: user.canViewWholeOffice
-  });
+  await issueSessionCookie(user);
 
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: ONE_DAY * 7
+  return { userId: user.id, officeId: user.officeId, role: user.role, canViewWholeOffice: user.canViewWholeOffice };
+}
+
+// Completes an email-code login. The caller must have verified the code via
+// verifyLoginCode first; this only turns a proven email into a session.
+export async function loginWithVerifiedEmail(email: string) {
+  if (!isLoginEmailAllowed(email)) return null;
+
+  const user = await prisma.user.findFirst({
+    where: { email, isActive: true },
+    select: { id: true, email: true, officeId: true, role: true, canViewWholeOffice: true },
   });
+  if (!user) return null;
+
+  await issueSessionCookie(user);
 
   return { userId: user.id, officeId: user.officeId, role: user.role, canViewWholeOffice: user.canViewWholeOffice };
 }
@@ -108,6 +137,9 @@ export async function signupWithCredentials(args: {
   const fullName = args.fullName.trim();
   const officeName = args.officeName.trim();
 
+  if (!isLoginEmailAllowed(email)) {
+    return { ok: false, error: "This is an internal deployment. Signups are disabled." };
+  }
   if (!email || !password || !fullName || !officeName) {
     return { ok: false, error: "All fields are required." };
   }

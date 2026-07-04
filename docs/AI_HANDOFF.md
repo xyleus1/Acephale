@@ -4,6 +4,52 @@
 
 ## Date
 
+2026-07-04
+
+## Branch
+
+crm-v1-review-and-push (pushed to main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+Email-code sign-in with founder allowlist:
+
+- Sign-in now emails a 6-digit single-use code (10 min TTL, 5 verify
+  attempts, 3 requests per 15 min) via the office's connected Gmail.
+- Every sign-in path (code, collapsed password fallback, unused signup
+  helper) rejects emails outside the allowlist: mert@usederya.com and
+  oguzhan@usederya.com by default, LOGIN_ALLOWED_EMAILS to override.
+- New LoginCode table (additive migration 20260704000100_login_email_codes,
+  applied to production before deploy). Codes stored HMAC-hashed with
+  AUTH_SECRET; the code email bypasses inbox persistence and CRM touches.
+- Also this session: created the oguzhan@usederya.com ADMIN user in the
+  Derya office (his Gmail account was already connected and syncing).
+
+## Files changed
+
+- `prisma/schema.prisma`, `prisma/migrations/20260704000100_login_email_codes/`
+- `src/lib/login-code.ts` (new), `src/lib/auth.ts`, `src/app/login/page.tsx`
+- `scripts/login-code.test.ts` (new), `package.json`
+
+## Verification passed
+
+- `npx tsc --noEmit`, `npm run test:crm` (3 suites), `npm run check:docs`,
+  `npm run build`, migration applied to production before merge.
+
+## Caveats
+
+- Pentest sandbox and demo-office logins are intentionally dead (allowlist).
+- If Gmail send breaks, use the "Use password instead" disclosure on /login.
+- No change-password UI yet.
+
+## Previous Update
+
+## Date
+
 2026-07-03 (later same day)
 
 ## Branch

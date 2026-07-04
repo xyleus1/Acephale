@@ -620,3 +620,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
   the dispatcher) remain the documented next slice.
 - Revisit when: an agent starts proposing CRM mutations rather than
   navigational suggestions.
+
+### 2026-07-04 - Sign-in is email-code only, allowlisted to the founders
+
+- Status: accepted
+- Owner: engineering
+- Context: The app is an internal tool for the two founders, but login was
+  open email+password for any provisioned user (demo offices, pentest
+  sandbox), and there was no Google sign-in.
+- Decision: Sign-in sends a 6-digit single-use code (10 min TTL, 5 verify
+  attempts, 3 requests/15 min) to the entered email via the office's
+  connected Gmail, and every sign-in path (code, password fallback, signup
+  helper) rejects emails outside the allowlist — default
+  mert@usederya.com + oguzhan@usederya.com, overridable via
+  LOGIN_ALLOWED_EMAILS. A password fallback stays behind a collapsed
+  disclosure as break-glass for Gmail-send outages, allowlist-gated the same
+  way. Codes are HMAC-hashed with AUTH_SECRET in a new LoginCode table
+  (additive migration 20260704000100_login_email_codes) and never create
+  inbox threads or CRM touches.
+- Rationale: Internal-only by construction beats internal-only by policy;
+  emailed codes remove password management for a two-person team.
+- Consequences: Demo-office users, the sinan office, and the pentest sandbox
+  account can no longer sign in anywhere. Google SSO remains unimplemented;
+  Gmail OAuth stays mailbox-connection-only.
+- Revisit when: the team grows past the allowlist, real SSO is wanted, or
+  the pentest sandbox needs login again (add it via LOGIN_ALLOWED_EMAILS —
+  note its .invalid domain cannot receive codes, so it would need the
+  password fallback).

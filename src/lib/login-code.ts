@@ -1,0 +1,172 @@
+import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
+import { getValidAccessToken } from "@/lib/gmail-oauth";
+
+const CODE_TTL_MS = 10 * 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 3;
+const REQUEST_WINDOW_MS = 15 * 60 * 1000;
+const MAX_VERIFY_ATTEMPTS = 5;
+
+// Internal deployment: only the founders can sign in. Extend via the
+// LOGIN_ALLOWED_EMAILS env var (comma-separated) without a code change.
+const DEFAULT_ALLOWED_LOGIN_EMAILS = ["mert@usederya.com", "oguzhan@usederya.com"];
+
+export function allowedLoginEmails(): string[] {
+  const raw = process.env.LOGIN_ALLOWED_EMAILS;
+  if (!raw) return DEFAULT_ALLOWED_LOGIN_EMAILS;
+  const parsed = raw.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+  return parsed.length ? parsed : DEFAULT_ALLOWED_LOGIN_EMAILS;
+}
+
+export function normalizeLoginEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+export function isLoginEmailAllowed(email: string) {
+  return allowedLoginEmails().includes(normalizeLoginEmail(email));
+}
+
+function hashLoginCode(email: string, code: string) {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("AUTH_SECRET is missing.");
+  return crypto.createHmac("sha256", secret).update(`${normalizeLoginEmail(email)}:${code}`).digest("hex");
+}
+
+export function generateLoginCode() {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+}
+
+export type RequestCodeResult =
+  | { ok: true; sentVia: string }
+  | { ok: false; error: "not_allowed" | "no_user" | "rate_limited" | "send_failed" };
+
+async function pickSenderAccount(officeId: string, preferEmail: string) {
+  const own = await prisma.emailAccount.findFirst({
+    where: { officeId, email: preferEmail, provider: "GMAIL", isActive: true },
+  });
+  if (own) return own;
+  return prisma.emailAccount.findFirst({
+    where: { officeId, provider: "GMAIL", isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+function encodeGmailRaw(raw: string) {
+  return Buffer.from(raw, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+// Bare Gmail send: sign-in codes must not create EmailThread/EmailMessage
+// rows or CRM touches, so this deliberately bypasses gmail-send.ts.
+async function sendCodeEmail(accountId: string, from: string, to: string, code: string) {
+  const token = await getValidAccessToken(accountId);
+  const headers = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: Derya sign-in code: ${code}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+  ];
+  const body = [
+    `Your Derya sign-in code is: ${code}`,
+    ``,
+    `It expires in 10 minutes. If you did not request this, ignore this email.`,
+  ].join("\r\n");
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: encodeGmailRaw(headers.join("\r\n") + "\r\n\r\n" + body) }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Gmail send failed: ${res.status} ${detail.slice(0, 200)}`);
+  }
+}
+
+export async function requestLoginCode(rawEmail: string): Promise<RequestCodeResult> {
+  const email = normalizeLoginEmail(rawEmail);
+  if (!isLoginEmailAllowed(email)) return { ok: false, error: "not_allowed" };
+
+  const user = await prisma.user.findFirst({
+    where: { email, isActive: true },
+    select: { id: true, officeId: true },
+  });
+  if (!user) return { ok: false, error: "no_user" };
+
+  const windowStart = new Date(Date.now() - REQUEST_WINDOW_MS);
+  const recent = await prisma.loginCode.count({ where: { email, createdAt: { gte: windowStart } } });
+  if (recent >= MAX_REQUESTS_PER_WINDOW) return { ok: false, error: "rate_limited" };
+
+  const sender = await pickSenderAccount(user.officeId, email);
+  if (!sender) return { ok: false, error: "send_failed" };
+
+  const code = generateLoginCode();
+
+  // Send BEFORE persisting: a failed send must not burn a rate-limit slot or
+  // invalidate a code the user may still be holding from a prior request.
+  try {
+    await sendCodeEmail(sender.id, sender.email, email, code);
+  } catch (error) {
+    console.warn("login code send failed", error);
+    return { ok: false, error: "send_failed" };
+  }
+
+  // Delivered: now invalidate outstanding codes and store the new one.
+  await prisma.loginCode.updateMany({
+    where: { email, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
+  await prisma.loginCode.create({
+    data: {
+      email,
+      codeHash: hashLoginCode(email, code),
+      expiresAt: new Date(Date.now() + CODE_TTL_MS),
+    },
+  });
+
+  return { ok: true, sentVia: sender.email };
+}
+
+export type VerifyCodeResult = { ok: true; email: string } | { ok: false; error: "invalid" };
+
+export async function verifyLoginCode(rawEmail: string, rawCode: string): Promise<VerifyCodeResult> {
+  const email = normalizeLoginEmail(rawEmail);
+  const code = rawCode.trim();
+  if (!isLoginEmailAllowed(email) || !/^\d{6}$/.test(code)) return { ok: false, error: "invalid" };
+
+  const record = await prisma.loginCode.findFirst({
+    where: { email, consumedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!record) return { ok: false, error: "invalid" };
+
+  // Atomically claim one of the allowed attempts. Concurrent submits each
+  // consume a distinct slot, so the 5-guess ceiling holds under a burst
+  // instead of every parallel request reading attempts=0 and passing.
+  const claimed = await prisma.loginCode.updateMany({
+    where: { id: record.id, consumedAt: null, attempts: { lt: MAX_VERIFY_ATTEMPTS } },
+    data: { attempts: { increment: 1 } },
+  });
+  if (claimed.count === 0) return { ok: false, error: "invalid" };
+
+  const expected = Buffer.from(record.codeHash, "hex");
+  const actual = Buffer.from(hashLoginCode(email, code), "hex");
+  const matches = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+
+  if (!matches) {
+    // The attempt was already counted atomically above.
+    return { ok: false, error: "invalid" };
+  }
+
+  // Single-use: consume atomically so a replayed submit cannot log in twice.
+  const consumed = await prisma.loginCode.updateMany({
+    where: { id: record.id, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
+  if (consumed.count === 0) return { ok: false, error: "invalid" };
+
+  return { ok: true, email };
+}

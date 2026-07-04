@@ -1576,3 +1576,20 @@ Use this file for chronological implementation notes that future agents should s
   forms; (6) owner management gated to ADMIN/MANAGER; (7) agent chat widget
   route context matches /dashboard/crm/companies/:id.
 - Verification: tsc clean, test:crm passes, tenant audit unchanged, build ok.
+
+### 2026-07-04 - Email-code sign-in with founder allowlist
+
+- Branch: crm-v1-review-and-push (pushed to main)
+- Task: Replaced primary password login with emailed one-time codes and
+  locked all sign-in paths to an allowlist (mert@usederya.com,
+  oguzhan@usederya.com; LOGIN_ALLOWED_EMAILS override). New LoginCode model +
+  additive migration; codes sent via connected Gmail accounts through a bare
+  send that creates no inbox rows; password login kept as collapsed
+  break-glass fallback, also allowlisted; unused signup helper gated too.
+- Files changed: prisma/schema.prisma, prisma/migrations/20260704000100_login_email_codes/,
+  src/lib/login-code.ts (new), src/lib/auth.ts, src/app/login/page.tsx,
+  scripts/login-code.test.ts (new), package.json.
+- Verification: tsc clean; test:crm (3 suites) passes; migration applied to
+  production before deploy; build ok.
+- Caveats: pentest sandbox and demo-office logins are intentionally dead.
+- Follow-up: change-password / rotate flow if the fallback ever gets used.
