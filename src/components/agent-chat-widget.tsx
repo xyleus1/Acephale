@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { chatWithAgent, type AgentToolTrace, type ChatMsg } from "@/lib/agent-chat";
 import { AgentPagePresenceLayer, type AgentPageAction } from "@/components/agent-page-presence";
 import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
@@ -64,6 +64,13 @@ export function AgentChatWidget() {
   const routeJobId = routeJobIdRaw && routeJobIdRaw !== "new" ? routeJobIdRaw : undefined;
   const routeCompanyId = routeCompanyIdRaw && routeCompanyIdRaw !== "new" ? routeCompanyIdRaw : undefined;
   const isDashboardWorkbench = pathname === "/dashboard";
+  const searchParams = useSearchParams();
+  // Mirror the brain page's section parsing: only the default (chat) view embeds
+  // its own chat; the todos/news/map sections still need the floating dock.
+  const brainSection = searchParams.get("section");
+  const isCompanyBrainPage =
+    pathname.startsWith("/dashboard/brain") &&
+    brainSection !== "todos" && brainSection !== "news" && brainSection !== "map";
   const [open, setOpen] = useState(true);
   const [dashboardAgentChecked, setDashboardAgentChecked] = useState(!isDashboardWorkbench);
   const [hasEmbeddedWorkbenchAgent, setHasEmbeddedWorkbenchAgent] = useState(false);
@@ -127,12 +134,12 @@ export function AgentChatWidget() {
   const suppressedByWorkbenchAgent = isDashboardWorkbench && (!dashboardAgentChecked || hasEmbeddedWorkbenchAgent);
 
   useEffect(() => {
-    const active = open && !suppressedByWorkbenchAgent;
+    const active = open && !suppressedByWorkbenchAgent && !isCompanyBrainPage;
     document.documentElement.classList.toggle("agent-dock-open", active);
     return () => {
       document.documentElement.classList.remove("agent-dock-open");
     };
-  }, [open, suppressedByWorkbenchAgent]);
+  }, [open, suppressedByWorkbenchAgent, isCompanyBrainPage]);
 
   useEffect(() => {
     return () => {
@@ -164,6 +171,9 @@ export function AgentChatWidget() {
       pageCueTimerRef.current = null;
     }, durationMs);
   }
+
+  // The Company Brain chat view IS the chat — the floating dock would duplicate it.
+  if (isCompanyBrainPage) return null;
 
   // The dashboard root sometimes has a permanent embedded agent. Suppress the
   // global dock only in that state; the empty dashboard still needs an agent.

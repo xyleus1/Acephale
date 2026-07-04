@@ -1607,3 +1607,31 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: takes effect on next sign-in; existing 7-day cookies keep their
   old expiry until re-login. No server-side revocation (logout clears the
   cookie locally, as before).
+
+### 2026-07-04 - Sidebar IA rework + Company Brain page
+
+- Branch: sidebar-rfq-crm-company-brain (not merged)
+- Commit: see git log
+- Task: Rework sidebar (Incoming RFQs, Loads, CRM rename, Company Brain;
+  Domestic Rates + Intelligence archived from nav; Inbox moved to Setup
+  bottom), un-redirect /dashboard/rfq into a real Inquiry list, add
+  /dashboard/loads spreadsheet view, add /dashboard/brain full-page chat on
+  chatWithAgent with click-away To-dos / Daily news / Intelligence map
+  sections, merge intelligence-map-polish (kept walnut-navy palette).
+- Files changed: src/app/dashboard/layout.tsx, src/app/dashboard/rfq/page.tsx,
+  src/app/dashboard/loads/page.tsx (new), src/app/dashboard/brain/page.tsx
+  (new), src/components/company-brain-chat.tsx (new),
+  src/components/link-row.tsx (new), src/components/agent-chat-widget.tsx,
+  src/app/globals.css, src/app/dashboard/activity/page.tsx,
+  src/app/dashboard/rfq/[inquiryId]/page.tsx,
+  src/app/dashboard/rfq/new/page.tsx, src/components/intelligence/*,
+  src/lib/market-intelligence/intelligence-map.ts,
+  src/app/dashboard/intelligence/page.tsx, scripts/intelligence-map.test.ts.
+- Verification: tsc clean; next build clean; no migrations; adversarial
+  multi-agent review, all confirmed findings fixed.
+- Failed/skipped checks: test:intelligence-map skipped (no local
+  DATABASE_URL); its static assertions verified by grep post-merge.
+- Caveats: brain chat is session-only; internal company map is a placeholder;
+  dock suppressed only on the brain chat view (sections keep the dock).
+- Follow-up: wire brain sections deeper (user: "we'll configure that bit
+  later"); consider persistence for brain chat threads.

@@ -33841,3 +33841,447 @@ html.agent-dock-open .page-container {
     align-items: stretch;
   }
 }
+
+/* ============================================================
+   ── Company Brain ──
+   Chat-first page at /dashboard/brain with quiet section
+   switcher (To-dos, Daily news, Intelligence map).
+   ============================================================ */
+
+.brain-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Chat view fills the viewport below the topbar so the composer
+   pins to the bottom without the document scrolling. */
+.brain-page-chat {
+  height: calc(100vh - 112px); /* 66px effective topbar (theme min-height) + page-container padding */
+  min-height: 460px;
+}
+
+/* The focused-job strip travels across pages; shrink the pinned chat when present. */
+.content:has(.job-focus-strip) .brain-page-chat {
+  height: calc(100vh - 178px); /* + 66px strip (shares the topbar min-height) */
+}
+
+.brain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.brain-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.brain-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.brain-switch-link {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.brain-switch-link:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.brain-switch-link.active {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.brain-subswitch {
+  gap: 6px;
+}
+
+/* ── Sections (todos / news / map) ── */
+
+.brain-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 880px;
+}
+
+.brain-section-wide {
+  max-width: none;
+}
+
+.brain-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.brain-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.brain-section-note {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.brain-section-link {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand);
+  white-space: nowrap;
+}
+
+.brain-section-link:hover {
+  color: var(--brand-hover);
+  text-decoration: underline;
+}
+
+.brain-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.brain-empty-note {
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 18px 20px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ── Chat column ── */
+
+.brain-chat {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.brain-chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 2px 10px;
+}
+
+.brain-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The full-width column allows wider bubbles than the floating dock. */
+.brain-chat-messages .agent-msg-body {
+  max-width: min(620px, 92%);
+}
+
+.brain-chat-messages .agent-msg-stack {
+  max-width: min(640px, 100%);
+}
+
+.brain-chat-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  max-width: 560px;
+  padding: 24px 12px;
+}
+
+.brain-chat-empty-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.brain-chat-empty-copy {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.brain-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.brain-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.brain-chip:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--brand);
+  color: var(--text);
+}
+
+.brain-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Composer ── */
+
+.brain-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.brain-composer:focus-within {
+  border-color: var(--brand);
+}
+
+.brain-composer textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: inherit;
+  line-height: 1.45;
+  padding: 8px 6px;
+  resize: none;
+  outline: none;
+  min-height: 36px;
+  max-height: 160px;
+}
+
+.brain-composer textarea::placeholder {
+  color: var(--text-3);
+}
+
+.brain-send-btn {
+  width: 34px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brain-send-btn:hover:not(:disabled) {
+  background: var(--brand-hover);
+}
+
+.brain-send-btn:disabled {
+  background: var(--surface-3);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+/* ── Daily news ── */
+
+.brain-hotspot-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.brain-hotspot {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.brain-hotspot-critical {
+  border-left-color: var(--danger);
+}
+
+.brain-hotspot-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.brain-hotspot-severity {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
+.brain-hotspot-critical .brain-hotspot-severity {
+  color: var(--danger);
+}
+
+.brain-hotspot-summary {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.brain-news-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.brain-news-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brain-news-item:last-child {
+  border-bottom: none;
+}
+
+.brain-news-title {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+a.brain-news-title:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.brain-news-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.brain-news-excerpt {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+/* ── Internal map placeholder ── */
+
+.brain-placeholder {
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 22px 24px;
+  max-width: 640px;
+}
+
+.brain-placeholder-copy {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.brain-count-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.brain-count {
+  min-width: 130px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.brain-count-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.brain-count-label {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+@media (max-width: 760px) {
+  .brain-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .brain-page-chat {
+    height: auto;
+    min-height: calc(100vh - 112px);
+  }
+}

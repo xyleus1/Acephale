@@ -280,11 +280,11 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
     if (suppressionReason) suppressedSignalIds.add(signal.id);
     const signalSeverity = severity(signal.severity);
     const pendingReviewCount = signal.impactReviews.filter((review) => review.status === "pending").length;
-    const evidenceRefs = [
+    const evidenceRefs = [...new Set([
       `MarketSignal:${signal.id}`,
       signal.sourceObjectId ? `KnowledgeObject:${signal.sourceObjectId}` : null,
       ...strings(signal.sourceRefs),
-    ].filter((item): item is string => Boolean(item));
+    ].filter((item): item is string => Boolean(item)))];
     const recommendedActions = strings(signal.recommendedActions);
     const validLinks = signal.links.filter(isValidLaneLink);
     const suppressedEntities = signal.links.filter((link) => !isValidLaneLink(link)).slice(0, 12).map((link) => ({
@@ -298,13 +298,16 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
       id: link.entityId,
       label: entityLabelForLink(link, entityLabels),
     }));
+    const isComplianceSignal = signal.category === "customs" || signal.category === "compliance";
     const explicitGeoLabels = [
       ...strings(signal.affectedPorts),
       ...strings(signal.affectedOrigins),
       ...strings(signal.affectedDestinations),
       ...normalizedLanes(signal.affectedLanes),
     ].filter((item): item is string => Boolean(item));
-    const usableLabels = explicitGeoLabels.length
+    const usableLabels = isComplianceSignal
+      ? [...new Set(["US", ...explicitGeoLabels.filter((label) => coordinatesFor(label))])]
+      : explicitGeoLabels.length
       ? explicitGeoLabels
       : defaultLocationLabelsForSource(sourceId, sourceName, signal.category);
 
@@ -362,7 +365,7 @@ export async function getIntelligenceMapData(officeId: string): Promise<Intellig
       }
     }
 
-    const lanes = normalizedLanes(signal.affectedLanes);
+    const lanes = isComplianceSignal ? [] : normalizedLanes(signal.affectedLanes);
     for (const lane of lanes) {
       const parsedLane = parseMarketLane(lane);
       if (!parsedLane) continue;

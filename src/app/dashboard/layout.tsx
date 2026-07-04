@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { LogoutButton } from "@/components/logout-button";
@@ -22,7 +23,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       where: { officeId: session.officeId, status: { notIn: ["DELIVERED", "CANCELLED"] } },
     }),
     prisma.inquiry.count({
-      where: { officeId: session.officeId, status: { in: ["INGESTED", "PARSED", "PRICED"] } },
+      // Matches the default "Open" tab on /dashboard/rfq, where the topbar chip lands.
+      where: { officeId: session.officeId, status: { notIn: ["WON", "LOST"] } },
     }),
     getFocusedJob(session.officeId),
   ]);
@@ -53,17 +55,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <nav className="sidebar-nav">
           <div className="nav-section-label with-rule">Commercial Workflow</div>
 
-          <NavLink href="/dashboard/inbox" icon={<Icon name="mail" />}>Inbox</NavLink>
-
           <NavLink href="/dashboard" icon={<Icon name="grid" />}>Deal Desk</NavLink>
+
+          <NavLink href="/dashboard/rfq" icon={<Icon name="mail-in" />}>Incoming RFQs</NavLink>
+
+          <NavLink href="/dashboard/loads" icon={<Icon name="truck" />}>Loads</NavLink>
 
           <NavLink href="/dashboard/pricing" icon={<Icon name="dollar" />}>Pricing</NavLink>
 
-          <NavLink href="/dashboard/domestic-pricing" icon={<Icon name="truck" />}>Domestic Rates</NavLink>
+          <NavLink href="/dashboard/crm" icon={<Icon name="building" />}>CRM</NavLink>
 
-          <NavLink href="/dashboard/intelligence" icon={<Icon name="activity" />}>Intelligence</NavLink>
+          <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
 
-          <NavLink href="/dashboard/crm" icon={<Icon name="building" />}>Relationships</NavLink>
+          {/* Archived from the nav: /dashboard/domestic-pricing and /dashboard/intelligence stay reachable directly. */}
 
           {/* ─── SETUP ───────────────────────────────────────────────────── */}
           <div className="nav-section-label with-rule">Setup</div>
@@ -73,6 +77,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {(session.role === "ADMIN" || session.role === "MANAGER") && (
             <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
           )}
+
+          <NavLink href="/dashboard/inbox" icon={<Icon name="mail" />}>Inbox</NavLink>
         </nav>
 
         <div className="sidebar-footer">
@@ -104,11 +110,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <CommandPalette />
           </div>
           <div className="topbar-right">
-            <a href="/dashboard/jobs" className="topbar-stat" title="Active jobs">
+            <a href="/dashboard/loads" className="topbar-stat" title="Active jobs">
               <strong>{activeJobs}</strong> active
             </a>
             {pendingRFQs > 0 && (
-              <a href="/dashboard/inbox?view=rfqs" className="topbar-stat topbar-stat-brand" title="RFQs awaiting action">
+              <a href="/dashboard/rfq" className="topbar-stat topbar-stat-brand" title="Open RFQs">
                 <strong>{pendingRFQs}</strong> RFQs
               </a>
             )}
@@ -203,7 +209,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </section>
 
-      <AgentChatWidget />
+      {/* Suspense: the widget reads useSearchParams to stay hidden only on the brain chat view. */}
+      <Suspense fallback={null}>
+        <AgentChatWidget />
+      </Suspense>
       <LiveEventToast />
     </div>
   );
