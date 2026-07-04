@@ -141,6 +141,25 @@ export function buildCustomerQuoteDraft(
     };
   }
 
+  // Hard floor: never draft a customer sell below the margin floor. This binds
+  // the floor to the generated artifact (defense-in-depth vs a poisoned/outlier
+  // buy that collapses the price); the operator must resolve it, not send it.
+  const floorPrice = strategy.price.floorPrice;
+  if (floorPrice != null && recommendedPrice < floorPrice) {
+    return {
+      status: "BLOCKED",
+      blockers: [
+        `Recommended price (${money(recommendedPrice, currency)}) is below the margin floor (${money(floorPrice, currency)}). Review the selected carrier rate before quoting.`,
+        ...blockers,
+      ],
+      subject: null,
+      body: null,
+      lineItems: [],
+      customerFacingAssumptions: [],
+      internalGuardrails,
+    };
+  }
+
   const route = `${context.origin ?? "Origin"} to ${context.destination ?? "Destination"}`;
   const amount = money(recommendedPrice, currency) ?? `${currency} ${recommendedPrice}`;
   const customerName = firstNonEmpty(context.customerName, context.customerEmail, "there");

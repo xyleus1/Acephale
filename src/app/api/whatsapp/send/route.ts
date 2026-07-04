@@ -9,6 +9,12 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const session = await requireSession();
+  // Approval gate (F5/EXT): this endpoint transmits to WhatsApp immediately with
+  // no draft/preview/recipient-allowlist. Disabled by default so an outbound
+  // message can never be sent without an explicit operational opt-in.
+  if (process.env.WHATSAPP_SEND_ENABLED !== "true") {
+    return NextResponse.json({ error: "WhatsApp send is disabled." }, { status: 403 });
+  }
   const input = await req.json().catch(() => null) as {
     to?: string;
     body?: string;
