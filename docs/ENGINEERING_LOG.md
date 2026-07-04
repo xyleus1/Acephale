@@ -1593,3 +1593,17 @@ Use this file for chronological implementation notes that future agents should s
   production before deploy; build ok.
 - Caveats: pentest sandbox and demo-office logins are intentionally dead.
 - Follow-up: change-password / rotate flow if the fallback ever gets used.
+
+### 2026-07-04 - Persistent sessions until explicit logout
+
+- Branch: crm-v1-review-and-push (pushed to main)
+- Task: Session cookie maxAge raised from 7 days to 400 days (SESSION_MAX_AGE
+  in src/lib/auth.ts), the longest lifetime browsers honor per the cookie
+  spec, so sign-in persists across restarts until the user hits Log out.
+  Session is a stateless HMAC cookie with no server-side expiry, so maxAge is
+  the sole lifetime control.
+- Files changed: src/lib/auth.ts.
+- Verification: tsc clean, build ok. No migration.
+- Caveats: takes effect on next sign-in; existing 7-day cookies keep their
+  old expiry until re-login. No server-side revocation (logout clears the
+  cookie locally, as before).

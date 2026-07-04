@@ -7,6 +7,10 @@ import { isLoginEmailAllowed } from "@/lib/login-code";
 
 const SESSION_COOKIE = "crm_session";
 const ONE_DAY = 60 * 60 * 24;
+// Persistent session: stays signed in until explicit logout. 400 days is the
+// longest lifetime browsers honor for a cookie (per the cookie spec cap), so
+// this is effectively "until you log out" without a server-side expiry check.
+const SESSION_MAX_AGE = ONE_DAY * 400;
 
 type SessionPayload = {
   userId: string;
@@ -67,7 +71,7 @@ async function issueSessionCookie(user: {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: ONE_DAY * 7,
+    maxAge: SESSION_MAX_AGE,
   });
 }
 
@@ -191,7 +195,7 @@ export async function signupWithCredentials(args: {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: ONE_DAY * 7,
+    maxAge: SESSION_MAX_AGE,
   });
 
   return { ok: true, userId: result.user.id, officeId: result.office.id };
