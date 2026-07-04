@@ -1,11 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { normalizeGoogleRedirectUri } from "@/lib/gmail-oauth";
 
-// Public health check — no auth required. Reports build SHA, env vars
-// (just presence, not values), DB connection, and whether each recently-
-// added Prisma column is readable. Safe to share output for debugging.
-export async function GET() {
+// Health check. The DETAILED diagnostic (env inventory, model names, queue
+// telemetry) is a pre-auth recon risk (F2), so it is gated behind CRON_SECRET.
+// Unauthenticated callers get only a shallow liveness result.
+function isDiagnosticAuthorized(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const provided =
+    req.headers.get("x-cron-secret") ??
+    req.nextUrl.searchParams.get("secret") ??
+    (req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
+  if (!provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export async function GET(req: NextRequest) {
   const checks: { name: string; ok: boolean; detail?: string }[] = [];
   const env = {
     NODE_ENV: process.env.NODE_ENV ?? "unknown",
@@ -87,6 +101,14 @@ export async function GET() {
   }
 
   const allOk = checks.every((c) => c.ok);
+  // Unauthenticated callers get only liveness; the detailed diagnostic (env
+  // inventory, model names, queue telemetry) requires the CRON_SECRET.
+  if (!isDiagnosticAuthorized(req)) {
+    return NextResponse.json(
+      { ok: allOk, timestamp: new Date().toISOString() },
+      { status: allOk ? 200 : 500 },
+    );
+  }
   return NextResponse.json({
     ok: allOk,
     timestamp: new Date().toISOString(),

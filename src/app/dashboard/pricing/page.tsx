@@ -1195,7 +1195,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
 
   async function addCarrierQuoteAction(formData: FormData) {
     "use server";
-    await requireSession();
+    const s = await requireSession();
     const inquiryId = String(formData.get("inquiryId") ?? "");
     const carrier = String(formData.get("carrier") ?? "").trim();
     const quoteType = String(formData.get("quoteType") ?? "EMAIL");
@@ -1209,6 +1209,19 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
     const transshipments = String(formData.get("transshipments") ?? "").trim() || null;
     const status = total20 || total40 || total40HC ? "RECEIVED" : "PENDING";
     if (!inquiryId || !carrier) return;
+    // Tenant guard: the inquiry must belong to the caller's office (a carrier
+    // quote is scoped only via this relation, so an unvalidated inquiryId would
+    // let one office attach/poison a quote on another office's inquiry).
+    const inquiry = await prisma.inquiry.findFirst({
+      where: { id: inquiryId, officeId: s.officeId },
+      select: { id: true },
+    });
+    if (!inquiry) return;
+    // Ingest sanity: reject non-positive rates. Carrier rates that price the
+    // customer quote must be a positive number; 0/negative is invalid data.
+    for (const rate of [total20, total40, total40HC]) {
+      if (rate != null && rate <= 0) return;
+    }
     await prisma.carrierQuote.create({
       data: {
         inquiryId,
@@ -1231,9 +1244,13 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
 
   async function deleteCarrierQuoteAction(formData: FormData) {
     "use server";
-    await requireSession();
+    const s = await requireSession();
     const id = String(formData.get("id") ?? "");
-    await prisma.carrierQuote.delete({ where: { id } });
+    if (!id) return;
+    // Tenant guard: only delete a quote whose inquiry is in the caller's office.
+    await prisma.carrierQuote.deleteMany({
+      where: { id, inquiry: { officeId: s.officeId } },
+    });
     revalidatePath("/dashboard/pricing");
   }
 

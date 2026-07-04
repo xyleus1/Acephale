@@ -46,7 +46,9 @@ export type WhatsAppIngestResult = {
 
 export function verifyWhatsAppSignature(rawBody: string, signature: string | null): boolean {
   const appSecret = process.env.WHATSAPP_APP_SECRET;
-  if (!appSecret) return true;
+  // Fail closed in production: an unsigned inbound payload must never be
+  // accepted when no app secret is configured (F3). Dev/preview stays permissive.
+  if (!appSecret) return process.env.NODE_ENV !== "production";
   if (!signature?.startsWith("sha256=")) return false;
 
   const expected = `sha256=${crypto.createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex")}`;
