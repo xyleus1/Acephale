@@ -60,9 +60,7 @@ export function AgentChatWidget() {
   const router = useRouter();
   const pathname = usePathname();
   const routeJobIdRaw = pathname.match(/^\/dashboard\/jobs\/([^/]+)/)?.[1];
-  const routeCompanyIdRaw = pathname.match(/^\/dashboard\/crm\/companies\/([^/]+)/)?.[1];
   const routeJobId = routeJobIdRaw && routeJobIdRaw !== "new" ? routeJobIdRaw : undefined;
-  const routeCompanyId = routeCompanyIdRaw && routeCompanyIdRaw !== "new" ? routeCompanyIdRaw : undefined;
   const isDashboardWorkbench = pathname === "/dashboard";
   const searchParams = useSearchParams();
   // Mirror the brain page's section parsing: only the default (chat) view embeds
@@ -191,7 +189,7 @@ export function AgentChatWidget() {
     setMessages(next);
     setBusy(true);
     try {
-      const res = await chatWithAgent(history, text, routeJobId, routeCompanyId);
+      const res = await chatWithAgent(history, text, routeJobId, undefined);
       setMessages([...next, { role: "assistant", content: res.reply, toolTrace: res.toolTrace }]);
       const actualCues = cuesForToolTrace(res.toolTrace);
       if (actualCues.length > 0) {

@@ -11,8 +11,6 @@ import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-panel";
 import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
-import { CrmBrainContextPanel, CrmOpportunityForm } from "@/components/crm/crm-components";
-import { getCrmBrainContext } from "@/lib/crm/brain-context";
 import { getBrainBridgeContext } from "@/lib/brain-bridge";
 import { BrainBridgePanel } from "@/components/brain-bridge-panel";
 
@@ -151,11 +149,6 @@ export default async function RFQDetailPage({
     ...(maturity.targetPriceQuestion ? ["target price or no-target confirmation"] : []),
   ];
   const domesticPricing = assessDomesticTruckingPricing(inquiry);
-  const crmBrainContext = await getCrmBrainContext({
-    officeId: session.officeId,
-    companyId: inquiry.companyId,
-    inquiryId: inquiry.id,
-  });
   const brainBridgeContext = await getBrainBridgeContext({
     officeId: session.officeId,
     rfqId: inquiry.id,
@@ -454,16 +447,7 @@ export default async function RFQDetailPage({
 
           {referenceSource && <ReferenceDealSourcePanel source={referenceSource} />}
 
-          <CrmBrainContextPanel context={crmBrainContext} />
-
           <BrainBridgePanel result={brainBridgeContext} />
-
-          {inquiry.company && (
-            <CrmOpportunityForm
-              company={inquiry.company}
-              inquiryId={inquiry.id}
-            />
-          )}
 
           {opportunity && (
             <details className="strategy-audit-details">
