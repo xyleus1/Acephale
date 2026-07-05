@@ -40,18 +40,10 @@ export default async function CrmPage({ searchParams }: { searchParams: SearchPa
   const rows = contacts.map(toContactRow);
 
   return (
-    <div>
-      <div className="page-header page-header-roomy">
-        <div>
-          <h1 className="page-title">CRM</h1>
-          <p className="page-subtitle">All contacts in one editable sheet.</p>
-        </div>
-      </div>
-      <ContactSheet
-        initialRows={rows}
-        companies={companies.map((c) => c.name)}
-        initialQuery={q ?? ""}
-      />
-    </div>
+    <ContactSheet
+      initialRows={rows}
+      companies={companies.map((c) => c.name)}
+      initialQuery={q ?? ""}
+    />
   );
 }
