@@ -23,9 +23,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const officeId = process.env.DERYA_GOOGLE_SHEET_OFFICE_ID
+  let officeId = process.env.DERYA_GOOGLE_SHEET_OFFICE_ID
     ?? process.env.WHATSAPP_OFFICE_ID
-    ?? (await prisma.office.findFirst({ select: { id: true } }))?.id;
+    ?? null;
+  if (!officeId) {
+    // Never guess between offices: an arbitrary pick could route sheet RFQs
+    // into a demo/sandbox office.
+    const offices = await prisma.office.findMany({ select: { id: true }, take: 2 });
+    if (offices.length > 1) {
+      return NextResponse.json(
+        { error: "Multiple offices exist; set DERYA_GOOGLE_SHEET_OFFICE_ID to pin the sync target." },
+        { status: 400 },
+      );
+    }
+    officeId = offices[0]?.id ?? null;
+  }
   if (!officeId) return NextResponse.json({ error: "No office found for sync." }, { status: 400 });
 
   const result = await syncDeryaGoogleSheetForOffice(officeId);
