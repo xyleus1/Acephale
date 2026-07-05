@@ -16,7 +16,7 @@ const DEFAULT_REPLY_TO = "oguzhan@usederya.com";
 // Customer-facing copy is Turkish (the leads come from TR campaigns);
 // the internal desk forward stays English.
 const CONFIRMATION_SUBJECT = "Talebiniz alındı — Derya";
-const CONFIRMATION_BODY = `Talebiniz Derya operasyon masası tarafından alınmıştır. Bilgileriniz doğru ve eksiksizse talebiniz önümüzdeki 6 saat içinde işleme alınacaktır. Ekibimiz ek detaylar için sizinle iletişime geçebilir.
+const CONFIRMATION_BODY = `Talebiniz Derya fiyatlandırma ekibi tarafından alınmıştır. Bilgileriniz doğru ve eksiksizse talebiniz önümüzdeki 6 saat içinde işleme alınacaktır. Ekibimiz ek detaylar için sizinle iletişime geçebilir.
 —
 Oğuzhan Karaca
 Kurucu Ortak & CEO, Derya
