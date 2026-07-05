@@ -64,8 +64,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "@prisma/client": "^6.7.0",
+    "@types/nodemailer": "^8.0.1",
     "dotenv": "16.6.1",
     "next": "^15.2.4",
+    "nodemailer": "^9.0.3",
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
     "react": "^19.1.0",

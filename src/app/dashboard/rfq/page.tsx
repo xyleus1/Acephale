@@ -4,7 +4,19 @@ import { requireSession } from "@/lib/auth";
 import { deriveInquirySource } from "@/lib/inquiry-source";
 import { Icon } from "@/components/icon";
 import { RfqExpandableRows, type RfqRowData } from "@/components/rfq-expandable-rows";
+import { RfqSendAllButton } from "@/components/rfq-send-all-button";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
+import {
+  buildDeskForwardEmail,
+  buildLeadConfirmationEmail,
+  countPendingDeskForwards,
+  isSingleEmailAddress,
+  rfqMailConfigured,
+} from "@/lib/rfq-mail";
+
+// Send-all pushes up to 60 sequential SMTP sends through a server action on
+// this segment; the default function timeout would cut the batch short.
+export const maxDuration = 300;
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   INGESTED: { label: "RFQ",        cls: "badge-info" },
@@ -105,12 +117,23 @@ export default async function RFQPage({
     take: 200,
   });
 
+  const mailConfigured = rfqMailConfigured();
+
   const rows: RfqRowData[] = inquiriesRaw.map((inq) => {
     const sm = STATUS_META[inq.status] ?? { label: inq.status, cls: "badge-neutral" };
     const source = deriveInquirySource(inq);
     const parsed = safeParse(inq.parsedData);
     const isLead = parsed.source === "meta-leads";
     const answers = isLead ? safeParse(JSON.stringify(parsed.answers ?? {})) : {};
+
+    const forwardEmail = buildDeskForwardEmail(inq);
+    const confirmationEmail = buildLeadConfirmationEmail(inq);
+    const sentLabel = (value: unknown) => {
+      const date = typeof value === "string" ? new Date(value) : null;
+      return date && !Number.isNaN(date.getTime())
+        ? date.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+        : null;
+    };
 
     const target = inq.targetPrice != null
       ? `${inq.targetCurrency ?? "USD"} ${inq.targetPrice.toLocaleString("en-GB")}`
@@ -182,8 +205,31 @@ export default async function RFQPage({
       facts,
       leadAnswers,
       notesExcerpt,
+      mailConfigured,
+      forward: {
+        to: forwardEmail.to,
+        cc: forwardEmail.cc,
+        replyTo: null,
+        subject: forwardEmail.subject,
+        text: forwardEmail.text,
+        sentAtLabel: sentLabel(parsed.deskForwardedAt),
+      },
+      confirmation: {
+        // A non-single address (or a comma-smuggled list) must never become
+        // an SMTP recipient — surface it as unsendable instead.
+        to: isSingleEmailAddress(inq.fromEmail) ? confirmationEmail.to : null,
+        cc: [],
+        replyTo: confirmationEmail.replyTo,
+        subject: confirmationEmail.subject,
+        text: confirmationEmail.text,
+        sentAtLabel: sentLabel(parsed.confirmationSentAt),
+      },
     };
   });
+
+  // Office-wide count with the same predicate the Send-all action uses —
+  // never the filtered view's count, or the confirm dialog lies.
+  const pendingForwards = mailConfigured ? await countPendingDeskForwards(session.officeId) : 0;
 
   return (
     <div>
@@ -195,6 +241,7 @@ export default async function RFQPage({
           </p>
         </div>
         <div className="page-actions">
+          <RfqSendAllButton pending={pendingForwards} disabled={!mailConfigured} />
           <SyncGoogleSheetButton />
           <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
             <Icon name="inbox" size={13} />
@@ -242,9 +289,10 @@ export default async function RFQPage({
                 <th style={{ cursor: "default" }}>Mode</th>
                 <th style={{ cursor: "default" }}>Status</th>
                 <th style={{ cursor: "default" }} className="numeric">Target Price</th>
+                <th style={{ cursor: "default" }} className="numeric">Send</th>
               </tr>
             </thead>
-            <RfqExpandableRows rows={rows} colSpan={8} />
+            <RfqExpandableRows rows={rows} colSpan={9} />
           </table>
         </div>
       )}

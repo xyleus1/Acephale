@@ -601,6 +601,25 @@ async function syncMetaLeadRows(officeId: string, rows: string[][]) {
       `Meta lead: ${commodity ?? shipmentType ?? "shipment"}${route ? ` — ${route}` : ""}`
     ).slice(0, 160);
 
+    const existing = await prisma.inquiry.findFirst({
+      where: { officeId, parsedData: { contains: `"sourceKey":"${sourceKey}"` } },
+      select: { id: true, status: true, parsedData: true },
+    });
+
+    // Send stamps live in parsedData; a resync rewrite must not erase them.
+    let existingStamps: Record<string, unknown> = {};
+    if (existing?.parsedData) {
+      try {
+        const prev = JSON.parse(existing.parsedData);
+        if (prev && typeof prev === "object") {
+          if (prev.deskForwardedAt) existingStamps.deskForwardedAt = prev.deskForwardedAt;
+          if (prev.confirmationSentAt) existingStamps.confirmationSentAt = prev.confirmationSentAt;
+        }
+      } catch {
+        existingStamps = {};
+      }
+    }
+
     const parsedData = JSON.stringify({
       source: "meta-leads",
       sourceKey,
@@ -614,6 +633,7 @@ async function syncMetaLeadRows(officeId: string, rows: string[][]) {
       fullName,
       phone,
       answers: { commercial, shipmentType, loadInfo, timing, transportPref, existingQuote },
+      ...existingStamps,
     });
 
     const leadBody = notes([
@@ -637,11 +657,6 @@ async function syncMetaLeadRows(officeId: string, rows: string[][]) {
       ["Commodity", commodity],
       ["Lead status", leadStatus],
     ]);
-
-    const existing = await prisma.inquiry.findFirst({
-      where: { officeId, parsedData: { contains: `"sourceKey":"${sourceKey}"` } },
-      select: { id: true, status: true },
-    });
 
     const data = {
       subject,

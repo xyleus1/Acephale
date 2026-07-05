@@ -1,8 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
+import { sendDeskForwardAction, sendLeadConfirmationAction } from "@/app/dashboard/rfq/actions";
+
+export type RfqEmailPreview = {
+  to: string | null;
+  cc: string[];
+  replyTo: string | null;
+  subject: string;
+  text: string;
+  sentAtLabel: string | null;
+};
 
 export type RfqRowData = {
   id: string;
@@ -26,9 +37,99 @@ export type RfqRowData = {
   facts: Array<{ label: string; value: string }>;
   leadAnswers: Array<{ label: string; value: string }>;
   notesExcerpt: string | null;
+  mailConfigured: boolean;
+  forward: RfqEmailPreview;
+  confirmation: RfqEmailPreview;
 };
 
-function ExpandedPanel({ row }: { row: RfqRowData }) {
+function EmailPreviewCard({
+  title,
+  hint,
+  preview,
+  disabledReason,
+  externalError,
+  onClearExternalError,
+  onSend,
+}: {
+  title: string;
+  hint: string;
+  preview: RfqEmailPreview;
+  disabledReason: string | null;
+  externalError?: string | null;
+  onClearExternalError?: () => void;
+  onSend: () => Promise<{ ok: true } | { error: string }>;
+}) {
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [justSent, setJustSent] = useState(false);
+
+  const sent = Boolean(preview.sentAtLabel) || justSent;
+  const shownError = error ?? externalError ?? null;
+
+  function send() {
+    startTransition(async () => {
+      setError(null);
+      onClearExternalError?.();
+      try {
+        const res = await onSend();
+        if ("error" in res) {
+          setError(res.error);
+        } else {
+          setJustSent(true);
+          router.refresh();
+        }
+      } catch {
+        // A rejected action (network drop, server crash) leaves delivery
+        // unknown — say so instead of crashing to the error boundary.
+        setError("Send failed or was interrupted — check with the recipient before retrying.");
+      }
+    });
+  }
+
+  return (
+    <div className="rfq-mail-card">
+      <div className="rfq-mail-card-head">
+        <div>
+          <div className="rfq-expand-block-title">{title}</div>
+          <div className="rfq-mail-hint">{hint}</div>
+        </div>
+        <div className="rfq-mail-card-actions">
+          {sent && (
+            <span className="rfq-mail-sent">
+              <Icon name="check" size={11} strokeWidth={2.5} />
+              Sent{preview.sentAtLabel ? ` ${preview.sentAtLabel}` : ""}
+            </span>
+          )}
+          <button
+            className={`btn btn-sm${sent ? " btn-secondary" : ""}`}
+            disabled={busy || Boolean(disabledReason)}
+            title={disabledReason ?? undefined}
+            onClick={send}
+          >
+            <Icon name="mail-out" size={12} strokeWidth={2.25} />
+            {busy ? "Sending…" : sent ? "Send again" : "Send"}
+          </button>
+        </div>
+      </div>
+      <div className="rfq-mail-meta">
+        <div><span>To</span><strong>{preview.to ?? "—"}</strong></div>
+        {preview.cc.length > 0 && <div><span>Cc</span><strong>{preview.cc.join(", ")}</strong></div>}
+        {preview.replyTo && <div><span>Reply-To</span><strong>{preview.replyTo}</strong></div>}
+        <div><span>Subject</span><strong>{preview.subject}</strong></div>
+      </div>
+      <pre className="rfq-mail-body">{preview.text}</pre>
+      {shownError && <div className="rfq-mail-error">{shownError}</div>}
+    </div>
+  );
+}
+
+function ExpandedPanel({ row, forwardError, onClearForwardError }: {
+  row: RfqRowData;
+  forwardError: string | null;
+  onClearForwardError: () => void;
+}) {
+  const mailDisabled = row.mailConfigured ? null : "RFQ mail is not configured (RFQ_MAIL_APP_PASSWORD).";
   return (
     <div className="rfq-expand-panel">
       <div className="rfq-expand-columns">
@@ -95,6 +196,25 @@ function ExpandedPanel({ row }: { row: RfqRowData }) {
         </div>
       )}
 
+      <div className="rfq-mail-grid">
+        <EmailPreviewCard
+          title="Forward to desk"
+          hint="Relevant load fields from rfq@usederya.com"
+          preview={row.forward}
+          disabledReason={mailDisabled}
+          externalError={forwardError}
+          onClearExternalError={onClearForwardError}
+          onSend={() => sendDeskForwardAction(row.id)}
+        />
+        <EmailPreviewCard
+          title="Confirmation to lead"
+          hint="Booking-received note, replies go to oguzhan@"
+          preview={row.confirmation}
+          disabledReason={mailDisabled ?? (row.confirmation.to ? null : "No valid single sender email address on this RFQ.")}
+          onSend={() => sendLeadConfirmationAction(row.id)}
+        />
+      </div>
+
       <div className="rfq-expand-actions">
         <Link href={`/dashboard/rfq/${row.id}` as never} className="btn btn-sm">
           Open full RFQ
@@ -106,6 +226,68 @@ function ExpandedPanel({ row }: { row: RfqRowData }) {
           </Link>
         )}
       </div>
+    </div>
+  );
+}
+
+function RowSendCell({ row, onExpand, onError }: {
+  row: RfqRowData;
+  onExpand: () => void;
+  onError: (message: string) => void;
+}) {
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+  const [failed, setFailed] = useState(false);
+  const [justSent, setJustSent] = useState(false);
+
+  const sent = Boolean(row.forward.sentAtLabel) || justSent;
+  const confirmed = Boolean(row.confirmation.sentAtLabel);
+
+  function send() {
+    startTransition(async () => {
+      setFailed(false);
+      try {
+        const res = await sendDeskForwardAction(row.id);
+        if ("error" in res) {
+          setFailed(true);
+          onError(res.error);
+          onExpand(); // the expanded forward card displays the error
+        } else {
+          setJustSent(true);
+          router.refresh();
+        }
+      } catch {
+        setFailed(true);
+        onError("Send failed or was interrupted — check with the recipient before retrying.");
+        onExpand();
+      }
+    });
+  }
+
+  return (
+    <div className="rfq-row-send">
+      {sent ? (
+        <span className="rfq-mail-sent" title={`Forwarded to desk${row.forward.sentAtLabel ? ` · ${row.forward.sentAtLabel}` : ""}`}>
+          <Icon name="check" size={11} strokeWidth={2.5} />
+          Desk
+        </span>
+      ) : (
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={busy || !row.mailConfigured}
+          title={row.mailConfigured ? "Forward load details to the desk (expand row to preview)" : "RFQ mail is not configured"}
+          onClick={send}
+        >
+          <Icon name="mail-out" size={12} strokeWidth={2.25} />
+          {busy ? "…" : failed ? "Retry" : "Desk"}
+        </button>
+      )}
+      {confirmed && (
+        <span className="rfq-mail-sent" title={`Confirmation sent to lead · ${row.confirmation.sentAtLabel}`}>
+          <Icon name="check" size={11} strokeWidth={2.5} />
+          Lead
+        </span>
+      )}
     </div>
   );
 }
@@ -124,6 +306,7 @@ export function RfqExpandableRows({ rows, colSpan }: { rows: RfqRowData[]; colSp
             open={open}
             colSpan={colSpan}
             onToggle={() => setOpenId(open ? null : row.id)}
+            onExpand={() => setOpenId(row.id)}
           />
         );
       })}
@@ -131,20 +314,30 @@ export function RfqExpandableRows({ rows, colSpan }: { rows: RfqRowData[]; colSp
   );
 }
 
-function RowPair({ row, open, colSpan, onToggle }: {
+function RowPair({ row, open, colSpan, onToggle, onExpand }: {
   row: RfqRowData;
   open: boolean;
   colSpan: number;
   onToggle: () => void;
+  onExpand: () => void;
 }) {
+  const [forwardError, setForwardError] = useState<string | null>(null);
   return (
     <>
       <tr
         className={`data-row${open ? " rfq-row-open" : ""}`}
         aria-expanded={open}
+        tabIndex={0}
         onClick={(e) => {
-          if ((e.target as HTMLElement).closest("a")) return; // inner links win
+          if ((e.target as HTMLElement).closest("a, button")) return; // inner controls win
           onToggle();
+        }}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return; // let inner controls keep their keys
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
         }}
       >
         <td className="data-muted" title={row.receivedFull}>{row.receivedAgo}</td>
@@ -174,11 +367,18 @@ function RowPair({ row, open, colSpan, onToggle }: {
         <td>{row.mode ?? <span className="data-muted">—</span>}</td>
         <td><span className={`badge ${row.statusCls}`}>{row.statusLabel}</span></td>
         <td className="numeric">{row.target}</td>
+        <td className="numeric">
+          <RowSendCell row={row} onExpand={onExpand} onError={setForwardError} />
+        </td>
       </tr>
       {open && (
         <tr className="rfq-expand-row">
           <td colSpan={colSpan}>
-            <ExpandedPanel row={row} />
+            <ExpandedPanel
+              row={row}
+              forwardError={forwardError}
+              onClearForwardError={() => setForwardError(null)}
+            />
           </td>
         </tr>
       )}
