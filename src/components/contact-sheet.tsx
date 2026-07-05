@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   createContactAction,
   deleteContactAction,
@@ -100,22 +100,111 @@ function CellSelect({
   // Local state so the picked value stays visible during the save round trip;
   // a failed save remounts the cell (key bump) back to the stored value.
   const [local, setLocal] = useState(value ?? "");
+  const [menu, setMenu] = useState<{ top: number; left: number; up: boolean } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const items: Array<readonly [string, string]> = allowEmpty ? [["", "—"], ...options] : [...options];
+  const label = options.find(([v]) => v === local)?.[1] ?? "—";
+
+  function openMenu() {
+    const r = triggerRef.current!.getBoundingClientRect();
+    const height = items.length * 30 + 10;
+    const up = r.bottom + height > window.innerHeight - 8;
+    setMenu({ top: up ? r.top - 4 : r.bottom + 4, left: r.left, up });
+  }
+
+  function close(refocus = false) {
+    setMenu(null);
+    if (refocus) triggerRef.current?.focus();
+  }
+
+  function pick(v: string) {
+    close(true);
+    if (v === local) return;
+    setLocal(v);
+    onCommit(v);
+  }
+
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!menuRef.current?.contains(t) && !triggerRef.current?.contains(t)) close();
+    };
+    const onScroll = (e: Event) => {
+      if (!menuRef.current?.contains(e.target as Node)) close();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu !== null]);
+
+  function onMenuKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close(true);
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>(".sheet-select-option") ?? []);
+      const idx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === "ArrowDown" ? Math.min(idx + 1, buttons.length - 1) : Math.max(idx - 1, 0);
+      buttons[next]?.focus();
+    }
+  }
+
   return (
-    <select
-      className={`sheet-select${local ? "" : " sheet-select-empty"}`}
-      value={local}
-      onChange={(e) => {
-        setLocal(e.target.value);
-        onCommit(e.target.value);
-      }}
-    >
-      {allowEmpty && <option value="">—</option>}
-      {options.map(([v, label]) => (
-        <option key={v} value={v}>
-          {label}
-        </option>
-      ))}
-    </select>
+    <>
+      <button
+        type="button"
+        ref={triggerRef}
+        className={`sheet-select-trigger${local ? "" : " sheet-select-empty"}`}
+        onClick={() => (menu ? close() : openMenu())}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+            if (!menu) {
+              e.preventDefault();
+              openMenu();
+            }
+          }
+        }}
+      >
+        <span className="sheet-select-label">{label}</span>
+        <Icon name="chevron-down" size={12} strokeWidth={2} />
+      </button>
+      {menu && (
+        <div
+          ref={menuRef}
+          className="sheet-select-menu"
+          role="listbox"
+          style={{ top: menu.top, left: menu.left, transform: menu.up ? "translateY(-100%)" : undefined }}
+          onKeyDown={onMenuKeyDown}
+        >
+          {items.map(([v, optionLabel]) => (
+            <button
+              type="button"
+              key={v || "(empty)"}
+              className={`sheet-select-option${v === local ? " selected" : ""}`}
+              role="option"
+              aria-selected={v === local}
+              autoFocus={v === local}
+              onClick={() => pick(v)}
+            >
+              <span className="sheet-select-check">{v === local && <Icon name="check" size={12} strokeWidth={2.5} />}</span>
+              {optionLabel}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

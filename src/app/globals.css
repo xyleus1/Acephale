@@ -33174,12 +33174,13 @@ html.agent-dock-open .page-container {
 }
 
 .sheet-table input.sheet-input,
-.sheet-table select.sheet-select {
+.sheet-table button.sheet-select-trigger {
   background: transparent !important;
   border: 1px solid transparent !important;
   border-radius: 4px;
   box-shadow: none !important;
   font-size: 12.5px;
+  font-weight: 450;
   color: var(--text) !important;
   padding: 6px 6px;
   width: 100%;
@@ -33188,25 +33189,90 @@ html.agent-dock-open .page-container {
   overflow: hidden;
 }
 
-.sheet-table select.sheet-select {
-  padding-right: 18px;
+.sheet-table button.sheet-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   cursor: pointer;
+  text-align: left;
+}
+
+.sheet-table button.sheet-select-trigger svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.sheet-select-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sheet-table input.sheet-input:hover,
-.sheet-table select.sheet-select:hover {
+.sheet-table button.sheet-select-trigger:hover:not(:disabled) {
   border-color: var(--border) !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .sheet-table input.sheet-input:focus,
-.sheet-table select.sheet-select:focus {
+.sheet-table button.sheet-select-trigger:focus-visible {
   border-color: var(--brand) !important;
   background: var(--surface) !important;
   box-shadow: 0 0 0 2px rgba(29, 91, 143, 0.12) !important;
+  outline: none;
 }
 
-.sheet-table select.sheet-select-empty {
+.sheet-table button.sheet-select-trigger.sheet-select-empty {
   color: var(--text-3) !important;
+}
+
+.sheet-select-menu {
+  position: fixed;
+  z-index: 400;
+  min-width: 170px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+}
+
+.sheet-select-menu button.sheet-select-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 10px 6px 7px;
+  border: none !important;
+  border-radius: 5px;
+  background: transparent !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+  font-size: 12.5px;
+  font-weight: 450;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sheet-select-menu button.sheet-select-option:hover:not(:disabled),
+.sheet-select-menu button.sheet-select-option:focus-visible {
+  background: var(--surface-2) !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+.sheet-select-menu button.sheet-select-option.selected {
+  font-weight: 650;
+}
+
+.sheet-select-check {
+  display: inline-flex;
+  width: 14px;
+  flex: none;
+  color: var(--brand);
 }
 
 .sheet-touch {
