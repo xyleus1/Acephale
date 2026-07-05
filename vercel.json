@@ -17,6 +17,10 @@
       "schedule": "0 11 * * *"
     },
     {
+      "path": "/api/google-sheets/sync",
+      "schedule": "25 * * * *"
+    },
+    {
       "path": "/api/cron/pentest-demo",
       "schedule": "*/5 * * * *"
     }

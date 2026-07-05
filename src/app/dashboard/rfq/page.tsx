@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { deriveInquirySource } from "@/lib/inquiry-source";
 import { Icon } from "@/components/icon";
 import { LinkRow } from "@/components/link-row";
+import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   INGESTED: { label: "RFQ",        cls: "badge-info" },
@@ -57,6 +59,15 @@ export default async function RFQPage({
     },
     include: {
       company: { select: { id: true, name: true } },
+      emailThreads: {
+        take: 1,
+        select: {
+          messages: {
+            take: 1,
+            select: { account: { select: { email: true, provider: true } } },
+          },
+        },
+      },
     },
     orderBy: { receivedAt: "desc" },
     take: 200,
@@ -72,6 +83,7 @@ export default async function RFQPage({
           </p>
         </div>
         <div className="page-actions">
+          <SyncGoogleSheetButton />
           <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
             <Icon name="inbox" size={13} />
             Inbox triage
@@ -113,6 +125,7 @@ export default async function RFQPage({
                 <th style={{ cursor: "default" }}>Received</th>
                 <th style={{ cursor: "default" }}>Subject</th>
                 <th style={{ cursor: "default" }}>From</th>
+                <th style={{ cursor: "default" }}>Source</th>
                 <th style={{ cursor: "default" }}>Lane</th>
                 <th style={{ cursor: "default" }}>Mode</th>
                 <th style={{ cursor: "default" }}>Status</th>
@@ -123,6 +136,7 @@ export default async function RFQPage({
               {inquiries.map((inq) => {
                 const sm = STATUS_META[inq.status] ?? { label: inq.status, cls: "badge-neutral" };
                 const from = inq.fromCompany ?? inq.company?.name ?? inq.fromEmail ?? "—";
+                const source = deriveInquirySource(inq);
                 return (
                   <LinkRow key={inq.id} href={`/dashboard/rfq/${inq.id}`}>
                     <td className="data-muted">{timeAgo(inq.receivedAt)}</td>
@@ -136,6 +150,10 @@ export default async function RFQPage({
                       {inq.fromEmail && from !== inq.fromEmail && (
                         <div className="data-subline">{inq.fromEmail}</div>
                       )}
+                    </td>
+                    <td>
+                      <div>{source.label}</div>
+                      {source.detail && <div className="data-subline">{source.detail}</div>}
                     </td>
                     <td>
                       {inq.origin || inq.destination ? (
