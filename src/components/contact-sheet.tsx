@@ -27,15 +27,15 @@ type SortKey =
   | "lastTouchAt";
 
 const COLUMNS: Array<{ key: SortKey | "notes"; label: string; width?: number }> = [
-  { key: "name", label: "Name", width: 120 },
-  { key: "company", label: "Company", width: 130 },
-  { key: "type", label: "Type", width: 110 },
-  { key: "status", label: "Status", width: 100 },
-  { key: "relationship", label: "Relationship", width: 95 },
-  { key: "email", label: "Email", width: 160 },
-  { key: "phone", label: "Phone", width: 105 },
-  { key: "location", label: "Location", width: 100 },
-  { key: "lastTouchAt", label: "Last contacted", width: 90 },
+  { key: "name", label: "Name", width: 140 },
+  { key: "company", label: "Company", width: 140 },
+  { key: "type", label: "Type", width: 135 },
+  { key: "status", label: "Status", width: 110 },
+  { key: "relationship", label: "Relationship", width: 105 },
+  { key: "email", label: "Email", width: 210 },
+  { key: "phone", label: "Phone", width: 115 },
+  { key: "location", label: "Location", width: 110 },
+  { key: "lastTouchAt", label: "Last contacted", width: 105 },
   { key: "notes", label: "Notes" },
 ];
 
