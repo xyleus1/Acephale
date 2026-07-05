@@ -18,7 +18,7 @@ export type InquirySourceInput = {
 };
 
 export type InquirySourceInfo = {
-  kind: "sheet" | "whatsapp" | "email" | "manual";
+  kind: "sheet" | "lead" | "whatsapp" | "email" | "manual";
   label: string;
   detail: string | null;
 };
@@ -38,6 +38,13 @@ export function deriveInquirySource(inq: InquirySourceInput): InquirySourceInfo 
     const row = typeof parsed.rowNumber === "number" ? `row ${parsed.rowNumber}` : null;
     const tab = typeof parsed.tab === "string" ? parsed.tab : null;
     return { kind: "sheet", label: "Google Sheet", detail: [tab, row].filter(Boolean).join(" · ") || null };
+  }
+
+  if (parsed.source === "meta-leads") {
+    const platform = typeof parsed.platform === "string" ? parsed.platform : null;
+    const label = platform === "ig" ? "Instagram lead" : platform === "fb" ? "Facebook lead" : "Meta lead";
+    const campaign = typeof parsed.campaignName === "string" ? parsed.campaignName : null;
+    return { kind: "lead", label, detail: campaign };
   }
 
   const account = inq.emailThreads?.[0]?.messages?.[0]?.account ?? null;

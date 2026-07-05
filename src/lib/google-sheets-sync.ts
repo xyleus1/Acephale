@@ -14,13 +14,19 @@ const DEFAULT_REQUESTS_TAB = "06/2026 Talepler";
 const DEFAULT_OPERATIONS_TAB = "Operasyonlar";
 const DEFAULT_REQUESTS_GID = "0";
 const DEFAULT_OPERATIONS_GID = "883687961";
+// Meta (Instagram/Facebook) Lead Ads export sheet — link-viewable, one lead per row.
+const DEFAULT_META_LEADS_SPREADSHEET_ID = "12Fvi6qzU_TLx-a5X49ggV5dyxDqFfLnDG3TTpuxlrlA";
+const DEFAULT_META_LEADS_TAB = "Sayfa1";
+const DEFAULT_META_LEADS_GID = "0";
 
 type SyncSummary = {
   ok: true;
   spreadsheetId: string;
   requests: { created: number; updated: number; skipped: number };
   operations: { created: number; updated: number; skipped: number; companiesCreated: number };
+  leads: { created: number; updated: number; skipped: number };
   proposedJobsCreated: number;
+  warnings: string[];
 };
 
 type Money = { amount: number | null; currency: string | null };
@@ -32,6 +38,9 @@ function sheetsConfig() {
     operationsTab: process.env.DERYA_GOOGLE_SHEET_OPERATIONS_TAB ?? DEFAULT_OPERATIONS_TAB,
     requestsGid: process.env.DERYA_GOOGLE_SHEET_REQUESTS_GID ?? DEFAULT_REQUESTS_GID,
     operationsGid: process.env.DERYA_GOOGLE_SHEET_OPERATIONS_GID ?? DEFAULT_OPERATIONS_GID,
+    metaLeadsSpreadsheetId: process.env.DERYA_META_LEADS_SHEET_ID ?? DEFAULT_META_LEADS_SPREADSHEET_ID,
+    metaLeadsTab: process.env.DERYA_META_LEADS_SHEET_TAB ?? DEFAULT_META_LEADS_TAB,
+    metaLeadsGid: process.env.DERYA_META_LEADS_SHEET_GID ?? DEFAULT_META_LEADS_GID,
   };
 }
 
@@ -537,6 +546,194 @@ async function syncOperationRows(officeId: string, rows: string[][]) {
   return { created, updated, skipped, companiesCreated };
 }
 
+// Meta Lead Ads answers use underscores for spaces (e.g. "hayır,_bireysel_gönderi").
+function pretty(value: unknown): string | null {
+  return clean(String(value ?? "").replace(/_/g, " "));
+}
+
+async function syncMetaLeadRows(officeId: string, rows: string[][]) {
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  const config = sheetsConfig();
+
+  const dataRows = rows[0]?.[0]?.trim() === "id" ? rows.slice(1) : rows;
+  for (const row of dataRows) {
+    const sourceKey = clean(row[0]);
+    if (!sourceKey) {
+      skipped++;
+      continue;
+    }
+
+    const receivedAt = parseDate(row[1]) ?? new Date();
+    const adName = clean(row[3]);
+    const campaignName = clean(row[7]);
+    const formName = clean(row[9]);
+    const organic = clean(row[10]) === "true";
+    const platform = clean(row[11]);
+    const commercial = pretty(row[12]);
+    const shipmentType = pretty(row[13]);
+    const loadInfo = pretty(row[14]);
+    const timing = pretty(row[15]);
+    const transportPref = pretty(row[16]);
+    const existingQuote = pretty(row[17]);
+    const budgetRaw = clean(row[18]);
+    const origin = clean(row[19]);
+    const destination = clean(row[20]);
+    const commodity = clean(row[21]);
+    const email = clean(row[22]);
+    const fullName = clean(row[23]);
+    const phone = clean(row[24])?.replace(/^p:/, "") ?? null;
+    const companyRaw = clean(row[25]);
+    const companyName = companyRaw && companyRaw !== "." ? companyRaw : null;
+    const leadStatus = clean(row[28]);
+
+    const budget = parseMoney(budgetRaw, "USD");
+    const platformLabel = platform === "ig" ? "Instagram" : platform === "fb" ? "Facebook" : platform ?? "Meta";
+    const route = [origin, destination].filter(Boolean).join(" → ");
+    const subject = (
+      `Meta lead: ${commodity ?? shipmentType ?? "shipment"}${route ? ` — ${route}` : ""}`
+    ).slice(0, 160);
+
+    const parsedData = JSON.stringify({
+      source: "meta-leads",
+      sourceKey,
+      platform,
+      organic,
+      adName,
+      campaignName,
+      formName,
+      leadStatus,
+      budget: budgetRaw,
+      fullName,
+      phone,
+      answers: { commercial, shipmentType, loadInfo, timing, transportPref, existingQuote },
+    });
+
+    const leadBody = notes([
+      ["Lead", sourceKey],
+      ["Platform", organic ? `${platformLabel} (organic)` : platformLabel],
+      ["Campaign", campaignName],
+      ["Ad", adName],
+      ["Form", formName],
+      ["Name", fullName],
+      ["Phone", phone],
+      ["Company", companyName],
+      ["Commercial shipment", commercial],
+      ["Shipment type", shipmentType],
+      ["Load info", loadInfo],
+      ["Timing", timing],
+      ["Transport preference", transportPref],
+      ["Existing quote", existingQuote],
+      ["Budget", budgetRaw],
+      ["Origin", origin],
+      ["Destination", destination],
+      ["Commodity", commodity],
+      ["Lead status", leadStatus],
+    ]);
+
+    const existing = await prisma.inquiry.findFirst({
+      where: { officeId, parsedData: { contains: `"sourceKey":"${sourceKey}"` } },
+      select: { id: true, status: true },
+    });
+
+    const data = {
+      subject,
+      fromEmail: email,
+      fromCompany: companyName ?? fullName,
+      origin,
+      destination,
+      commodity,
+      type: "FORWARDING",
+      status: "INGESTED",
+      targetPrice: budget.amount,
+      targetCurrency: budget.amount != null ? budget.currency ?? "USD" : null,
+      targetPriceStatus: budget.amount != null ? "PROVIDED" : "UNKNOWN",
+      targetPriceSource: budget.amount != null ? "Meta lead form budget" : null,
+      rawEmailBody: leadBody,
+      parsedData,
+      notes: leadBody,
+      receivedAt,
+    };
+
+    const eventType = existing ? "meta_leads.inquiry.updated" : "meta_leads.inquiry.created";
+    // Operators advance lead RFQs in-app; a resync must not reset their status.
+    const saved = existing
+      ? await prisma.inquiry.update({ where: { id: existing.id }, data: { ...data, status: existing.status } })
+      : await prisma.inquiry.create({ data: { officeId, ...data } });
+
+    const sourceExternalId = `meta_leads:${sourceKey}`;
+    const payload = {
+      inquiryId: saved.id,
+      sourceKey,
+      spreadsheetId: config.metaLeadsSpreadsheetId,
+      tab: config.metaLeadsTab,
+      subject,
+      platform,
+      campaignName,
+      origin,
+      destination,
+      targetPrice: budget.amount,
+      targetCurrency: budget.currency,
+      operation: existing ? "update" : "create",
+    };
+    const memoryObject = await ingestKnowledgeObject({
+      officeId,
+      sourceType: "GOOGLE_SHEETS",
+      sourceExternalId,
+      sourceLabel: `Meta leads (${config.metaLeadsTab})`,
+      sourceMetadata: { spreadsheetId: config.metaLeadsSpreadsheetId, tab: config.metaLeadsTab },
+      canonicalType: "rfq",
+      title: subject,
+      text: [subject, leadBody].filter(Boolean).join("\n"),
+      entityType: "inquiry",
+      entityId: saved.id,
+      inquiryId: saved.id,
+      occurredAt: saved.updatedAt,
+      payload,
+      provenance: {
+        source: "google_sheets",
+        operation: existing ? "sync_meta_lead_row_update" : "sync_meta_lead_row_create",
+        path: "src/lib/google-sheets-sync.ts",
+        function: "syncMetaLeadRows",
+        sourceRecordId: saved.id,
+        sourceExternalId: sourceKey,
+      },
+    }).catch(() => null);
+    await recordMemoryEvent({
+      officeId,
+      sourceType: "GOOGLE_SHEETS",
+      sourceExternalId,
+      sourceLabel: `Meta leads (${config.metaLeadsTab})`,
+      sourceMetadata: { spreadsheetId: config.metaLeadsSpreadsheetId, tab: config.metaLeadsTab },
+      objectId: memoryObject?.id ?? null,
+      eventType,
+      entityType: "inquiry",
+      entityId: saved.id,
+      occurredAt: saved.updatedAt,
+      payloadVersion: 1,
+      payload,
+      provenance: {
+        source: "google_sheets",
+        operation: existing ? "sync_meta_lead_row_update" : "sync_meta_lead_row_create",
+        path: "src/lib/google-sheets-sync.ts",
+        function: "syncMetaLeadRows",
+        sourceRecordId: saved.id,
+        sourceExternalId: sourceKey,
+      },
+      idempotencyKey: `meta_leads:${sourceKey}:${saved.id}:${existing ? "updated" : "created"}:${memoryPayloadDigest(payload)}`,
+    }).catch(() => null);
+
+    if (existing) {
+      updated++;
+    } else {
+      created++;
+    }
+  }
+
+  return { created, updated, skipped };
+}
+
 export async function syncDeryaGoogleSheet(): Promise<SyncSummary | { error: string }> {
   const session = await requireSession();
   return syncDeryaGoogleSheetForOffice(session.officeId);
@@ -544,7 +741,14 @@ export async function syncDeryaGoogleSheet(): Promise<SyncSummary | { error: str
 
 export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<SyncSummary | { error: string }> {
   const config = sheetsConfig();
+  const warnings: string[] = [];
+  let requests = { created: 0, updated: 0, skipped: 0 };
+  let operations = { created: 0, updated: 0, skipped: 0, companiesCreated: 0 };
+  let leads = { created: 0, updated: 0, skipped: 0 };
+  let anySucceeded = false;
 
+  // The deal sheet (Talepler/Operasyonlar) and the Meta leads sheet are
+  // independent sources; one being unreadable must not block the other.
   try {
     const [requestRows, operationRows] = await Promise.all([
       fetchValues({
@@ -561,25 +765,46 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
       }),
     ]);
 
-    const requests = await syncRequestRows(officeId, requestRows);
-    const operations = await syncOperationRows(officeId, operationRows);
-    const proposedJobsCreated = await ensureProposedJobsForOpenInquiries(officeId);
-
-    revalidatePath("/dashboard");
-    revalidatePath("/dashboard/inbox");
-    revalidatePath("/dashboard/rfq");
-    revalidatePath("/dashboard/jobs");
-    revalidatePath("/dashboard/pricing");
-    revalidatePath("/dashboard/settings/email");
-
-    return {
-      ok: true,
-      spreadsheetId: config.spreadsheetId,
-      requests,
-      operations,
-      proposedJobsCreated,
-    };
+    requests = await syncRequestRows(officeId, requestRows);
+    operations = await syncOperationRows(officeId, operationRows);
+    anySucceeded = true;
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    warnings.push(`Deal sheet: ${e instanceof Error ? e.message : String(e)}`);
   }
+
+  try {
+    const leadRows = await fetchValues({
+      spreadsheetId: config.metaLeadsSpreadsheetId,
+      tab: config.metaLeadsTab,
+      range: "A1:AC998",
+      gid: config.metaLeadsGid,
+    });
+    leads = await syncMetaLeadRows(officeId, leadRows);
+    anySucceeded = true;
+  } catch (e) {
+    warnings.push(`Lead sheet: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  if (!anySucceeded) {
+    return { error: warnings.join(" | ") };
+  }
+
+  const proposedJobsCreated = await ensureProposedJobsForOpenInquiries(officeId);
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/inbox");
+  revalidatePath("/dashboard/rfq");
+  revalidatePath("/dashboard/jobs");
+  revalidatePath("/dashboard/pricing");
+  revalidatePath("/dashboard/settings/email");
+
+  return {
+    ok: true,
+    spreadsheetId: config.spreadsheetId,
+    requests,
+    operations,
+    leads,
+    proposedJobsCreated,
+    warnings,
+  };
 }

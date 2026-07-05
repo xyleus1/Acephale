@@ -18,8 +18,10 @@ export function SyncGoogleSheetButton() {
       } else {
         setMsg(
           `${res.requests.created + res.requests.updated} RFQs · ` +
+          `${res.leads.created + res.leads.updated} leads · ` +
           `${res.operations.created + res.operations.updated} jobs · ` +
-          `${res.operations.companiesCreated} companies`
+          `${res.operations.companiesCreated} companies` +
+          (res.warnings.length > 0 ? ` · ${res.warnings[0]}` : "")
         );
         router.refresh();
         setTimeout(() => setMsg(null), 7000);
