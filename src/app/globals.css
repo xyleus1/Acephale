@@ -33110,6 +33110,9 @@ html.agent-dock-open .page-container {
 
 /* ============================================================
    CRM CONTACT SHEET
+   Note: the theme layer above forces button/input/select colors with
+   !important, so the flat spreadsheet look needs !important + higher
+   specificity to win.
    ============================================================ */
 
 .contact-sheet .sheet-toolbar {
@@ -33119,20 +33122,31 @@ html.agent-dock-open .page-container {
   margin-bottom: 12px;
 }
 
-.sheet-search {
-  flex: 0 0 320px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font: inherit;
+.contact-sheet .mode-tab {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-2) !important;
+  box-shadow: none !important;
   font-size: 13px;
-  color: var(--text);
+  font-weight: 550;
 }
 
-.sheet-search:focus {
-  outline: none;
-  border-color: var(--brand);
+.contact-sheet .mode-tab:hover:not(.active) {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+
+.contact-sheet .mode-tab.active {
+  background: var(--brand) !important;
+  color: #fff !important;
+}
+
+.contact-sheet input.sheet-search {
+  flex: 0 0 320px;
+  padding: 7px 10px;
+  font-size: 13px;
+  border-radius: var(--radius);
 }
 
 .sheet-error {
@@ -33147,58 +33161,67 @@ html.agent-dock-open .page-container {
 
 .sheet-table {
   table-layout: fixed;
-  min-width: 1180px;
+  min-width: 1400px;
 }
 
 .sheet-table td {
-  padding: 2px 4px;
+  padding: 1px 3px;
   vertical-align: middle;
 }
 
-.sheet-input,
-.sheet-select {
-  width: 100%;
-  border: 1px solid transparent;
+.sheet-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+.sheet-table input.sheet-input,
+.sheet-table select.sheet-select {
+  background: transparent !important;
+  border: 1px solid transparent !important;
   border-radius: 4px;
-  background: transparent;
-  font: inherit;
+  box-shadow: none !important;
   font-size: 12.5px;
-  color: var(--text);
-  padding: 5px 6px;
+  color: var(--text) !important;
+  padding: 6px 6px;
+  width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.sheet-input:hover,
-.sheet-select:hover {
-  border-color: var(--border);
-}
-
-.sheet-input:focus,
-.sheet-select:focus {
-  outline: none;
-  border-color: var(--brand);
-  background: var(--surface);
-}
-
-.sheet-select {
+.sheet-table select.sheet-select {
+  padding-right: 18px;
   cursor: pointer;
 }
 
-.sheet-select-empty {
-  color: var(--text-3);
+.sheet-table input.sheet-input:hover,
+.sheet-table select.sheet-select:hover {
+  border-color: var(--border) !important;
+}
+
+.sheet-table input.sheet-input:focus,
+.sheet-table select.sheet-select:focus {
+  border-color: var(--brand) !important;
+  background: var(--surface) !important;
+  box-shadow: 0 0 0 2px rgba(29, 91, 143, 0.12) !important;
+}
+
+.sheet-table select.sheet-select-empty {
+  color: var(--text-3) !important;
 }
 
 .sheet-touch {
   font-size: 12px;
   color: var(--text-2);
   white-space: nowrap;
-  padding: 5px 10px;
+  padding: 6px 8px !important;
 }
 
 .sheet-row-busy td {
   opacity: 0.55;
 }
 
-.sheet-draft-row td {
+.sheet-draft-row td,
+.sheet-table tbody tr.sheet-draft-row:hover td {
   background: var(--surface-2);
 }
 
@@ -33207,22 +33230,25 @@ html.agent-dock-open .page-container {
   justify-content: center;
 }
 
-.sheet-del {
+.sheet-table button.sheet-del {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none !important;
   border-radius: 4px;
-  background: transparent;
-  color: var(--text-3);
+  background: transparent !important;
+  color: var(--text-3) !important;
+  box-shadow: none !important;
   cursor: pointer;
 }
 
-.sheet-del:hover {
-  background: var(--danger-bg);
-  color: var(--danger);
+.sheet-table button.sheet-del:hover:not(:disabled) {
+  background: var(--danger-bg) !important;
+  color: var(--danger) !important;
+  box-shadow: none !important;
 }
 
 .sheet-count {
