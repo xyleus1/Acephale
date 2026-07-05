@@ -177,7 +177,8 @@ function parseMoney(value: unknown, fallbackCurrency?: string | null): Money {
   const raw = clean(value);
   if (!raw) return { amount: null, currency: normalizeCurrency(fallbackCurrency ?? null) };
 
-  const currencyMatch = raw.match(/\b(USD|EUR|EURO|TRY|TL|GBP)\b|[$€£]/i);
+  // No leading \b: budgets like "3000euro" have no boundary between digit and letter.
+  const currencyMatch = raw.match(/(USD|EURO?|TRY|TL|GBP)\b|[$€£]/i);
   const numberMatch = raw.match(/-?\d[\d.,]*/);
   if (!numberMatch) return { amount: null, currency: normalizeCurrency(currencyMatch?.[0] ?? fallbackCurrency ?? null) };
 
