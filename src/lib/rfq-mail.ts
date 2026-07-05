@@ -13,10 +13,13 @@ const DEFAULT_FORWARD_TO = "oguzhan@usederya.com";
 const DEFAULT_FORWARD_CC = "gozde.sen@andelog.com,nazli.bagcicek@andelog.com";
 const DEFAULT_REPLY_TO = "oguzhan@usederya.com";
 
-const CONFIRMATION_BODY = `Your request has been received by the Derya deal desk. Your request will be processed in the next 6 hours if all the details are correct. The team may reach out for extra details.
+// Customer-facing copy is Turkish (the leads come from TR campaigns);
+// the internal desk forward stays English.
+const CONFIRMATION_SUBJECT = "Talebiniz alındı — Derya";
+const CONFIRMATION_BODY = `Talebiniz Derya operasyon masası tarafından alınmıştır. Bilgileriniz doğru ve eksiksizse talebiniz önümüzdeki 6 saat içinde işleme alınacaktır. Ekibimiz ek detaylar için sizinle iletişime geçebilir.
 —
-Oguzhan Karaca
-Co-Founder & CEO, Derya
+Oğuzhan Karaca
+Kurucu Ortak & CEO, Derya
 https://usederya.com/`;
 
 export function rfqMailConfig() {
@@ -180,7 +183,7 @@ export function buildLeadConfirmationEmail(inq: InquiryForMail) {
     to: inq.fromEmail,
     cc: [] as string[],
     replyTo: config.replyTo,
-    subject: "Your request has been received — Derya",
+    subject: CONFIRMATION_SUBJECT,
     text: CONFIRMATION_BODY,
   };
 }
