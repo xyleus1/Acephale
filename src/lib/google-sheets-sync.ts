@@ -588,7 +588,12 @@ async function syncMetaLeadRows(officeId: string, rows: string[][]) {
     const companyName = companyRaw && companyRaw !== "." ? companyRaw : null;
     const leadStatus = clean(row[28]);
 
-    const budget = parseMoney(budgetRaw, "USD");
+    // Lead forms are free text; people paste phone numbers into the budget
+    // field. Anything outside a sane freight budget is noise, not a price.
+    const budgetParsed = parseMoney(budgetRaw, "USD");
+    const budget = budgetParsed.amount != null && budgetParsed.amount > 0 && budgetParsed.amount <= 1_000_000
+      ? budgetParsed
+      : { amount: null, currency: null };
     const platformLabel = platform === "ig" ? "Instagram" : platform === "fb" ? "Facebook" : platform ?? "Meta";
     const route = [origin, destination].filter(Boolean).join(" → ");
     const subject = (
