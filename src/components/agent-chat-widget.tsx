@@ -189,7 +189,7 @@ export function AgentChatWidget() {
     setMessages(next);
     setBusy(true);
     try {
-      const res = await chatWithAgent(history, text, routeJobId, undefined);
+      const res = await chatWithAgent(history, text, routeJobId);
       setMessages([...next, { role: "assistant", content: res.reply, toolTrace: res.toolTrace }]);
       const actualCues = cuesForToolTrace(res.toolTrace);
       if (actualCues.length > 0) {

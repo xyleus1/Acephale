@@ -26,17 +26,17 @@ type SortKey =
   | "location"
   | "lastTouchAt";
 
-const COLUMNS: Array<{ key: SortKey | "notes"; label: string; width: number }> = [
-  { key: "name", label: "Name", width: 150 },
-  { key: "company", label: "Company", width: 160 },
-  { key: "type", label: "Type", width: 140 },
-  { key: "status", label: "Status", width: 120 },
-  { key: "relationship", label: "Relationship", width: 110 },
-  { key: "email", label: "Email", width: 200 },
-  { key: "phone", label: "Phone", width: 130 },
-  { key: "location", label: "Location", width: 130 },
-  { key: "lastTouchAt", label: "Last contacted", width: 110 },
-  { key: "notes", label: "Notes", width: 220 },
+const COLUMNS: Array<{ key: SortKey | "notes"; label: string; width?: number }> = [
+  { key: "name", label: "Name", width: 120 },
+  { key: "company", label: "Company", width: 130 },
+  { key: "type", label: "Type", width: 110 },
+  { key: "status", label: "Status", width: 100 },
+  { key: "relationship", label: "Relationship", width: 95 },
+  { key: "email", label: "Email", width: 160 },
+  { key: "phone", label: "Phone", width: 105 },
+  { key: "location", label: "Location", width: 100 },
+  { key: "lastTouchAt", label: "Last contacted", width: 90 },
+  { key: "notes", label: "Notes" },
 ];
 
 function fmtLastTouch(iso: string | null): string {
@@ -97,11 +97,17 @@ function CellSelect({
   allowEmpty?: boolean;
   onCommit: (next: string) => void;
 }) {
+  // Local state so the picked value stays visible during the save round trip;
+  // a failed save remounts the cell (key bump) back to the stored value.
+  const [local, setLocal] = useState(value ?? "");
   return (
     <select
-      className={`sheet-select${value ? "" : " sheet-select-empty"}`}
-      value={value ?? ""}
-      onChange={(e) => onCommit(e.target.value)}
+      className={`sheet-select${local ? "" : " sheet-select-empty"}`}
+      value={local}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        onCommit(e.target.value);
+      }}
     >
       {allowEmpty && <option value="">—</option>}
       {options.map(([v, label]) => (
@@ -127,6 +133,11 @@ const EMPTY_DRAFT: Draft = {
   notes: "",
 };
 
+// Cells revert per field on a failed save: map patch keys to the field used in cell keys.
+function patchFields(patch: ContactPatch): string[] {
+  return Object.keys(patch).map((k) => (k === "companyName" ? "company" : k));
+}
+
 export function ContactSheet({
   initialRows,
   companies,
@@ -142,8 +153,9 @@ export function ContactSheet({
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [busyCounts, setBusyCounts] = useState<Record<string, number>>({});
   const [revisions, setRevisions] = useState<Record<string, number>>({});
   const [, startTransition] = useTransition();
 
@@ -194,10 +206,22 @@ export function ContactSheet({
   }
 
   function markBusy(id: string, busy: boolean) {
-    setBusyIds((prev) => {
-      const next = new Set(prev);
-      if (busy) next.add(id);
-      else next.delete(id);
+    setBusyCounts((prev) => {
+      const next = { ...prev };
+      const n = (next[id] ?? 0) + (busy ? 1 : -1);
+      if (n <= 0) delete next[id];
+      else next[id] = n;
+      return next;
+    });
+  }
+
+  function revertCells(rowId: string, fields: string[]) {
+    setRevisions((prev) => {
+      const next = { ...prev };
+      for (const field of fields) {
+        const key = `${rowId}:${field}`;
+        next[key] = (next[key] ?? 0) + 1;
+      }
       return next;
     });
   }
@@ -205,33 +229,53 @@ export function ContactSheet({
   function commit(row: ContactRow, patch: ContactPatch) {
     markBusy(row.id, true);
     startTransition(async () => {
-      const res = await updateContactAction(row.id, patch);
-      markBusy(row.id, false);
-      if ("error" in res) {
-        flash(res.error);
-        setRevisions((prev) => ({ ...prev, [row.id]: (prev[row.id] ?? 0) + 1 }));
-        return;
+      try {
+        const res = await updateContactAction(row.id, patch);
+        if ("error" in res) {
+          flash(res.error);
+          revertCells(row.id, patchFields(patch));
+          return;
+        }
+        setRows((prev) => prev.map((r) => (r.id === row.id ? res.row : r)));
+      } catch {
+        flash("Could not save — check your connection and try again.");
+        revertCells(row.id, patchFields(patch));
+      } finally {
+        markBusy(row.id, false);
       }
-      setRows((prev) => prev.map((r) => (r.id === row.id ? res.row : r)));
     });
+  }
+
+  function commitCompany(row: ContactRow, name: string) {
+    const known = companies.some((c) => c.toLowerCase() === name.toLowerCase());
+    if (!known && !window.confirm(`“${name}” is a new company — create it?`)) {
+      revertCells(row.id, ["company"]);
+      return;
+    }
+    commit(row, { companyName: name });
   }
 
   function remove(row: ContactRow) {
     if (!window.confirm(`Delete ${row.name}? This cannot be undone.`)) return;
     markBusy(row.id, true);
     startTransition(async () => {
-      const res = await deleteContactAction(row.id);
-      markBusy(row.id, false);
-      if ("error" in res) {
-        flash(res.error);
-        return;
+      try {
+        const res = await deleteContactAction(row.id);
+        if ("error" in res) {
+          flash(res.error);
+          return;
+        }
+        setRows((prev) => prev.filter((r) => r.id !== row.id));
+      } catch {
+        flash("Could not delete — check your connection and try again.");
+      } finally {
+        markBusy(row.id, false);
       }
-      setRows((prev) => prev.filter((r) => r.id !== row.id));
     });
   }
 
   function saveDraft() {
-    if (!draft) return;
+    if (!draft || savingDraft) return;
     if (!draft.name.trim()) {
       flash("Name is required.");
       return;
@@ -240,15 +284,32 @@ export function ContactSheet({
       flash("Company is required.");
       return;
     }
-    const payload = { ...draft, companyName: draft.company };
+    setSavingDraft(true);
+    const payload: ContactPatch = {
+      name: draft.name,
+      companyName: draft.company,
+      type: draft.type,
+      status: draft.status,
+      relationship: draft.relationship,
+      email: draft.email,
+      phone: draft.phone,
+      location: draft.location,
+      notes: draft.notes,
+    };
     startTransition(async () => {
-      const res = await createContactAction(payload);
-      if ("error" in res) {
-        flash(res.error);
-        return;
+      try {
+        const res = await createContactAction(payload);
+        if ("error" in res) {
+          flash(res.error);
+          return;
+        }
+        setRows((prev) => [res.row, ...prev]);
+        setDraft(null);
+      } catch {
+        flash("Could not add the contact — check your connection and try again.");
+      } finally {
+        setSavingDraft(false);
       }
-      setRows((prev) => [res.row, ...prev]);
-      setDraft(null);
     });
   }
 
@@ -322,9 +383,9 @@ export function ContactSheet({
         <table className="data-table sheet-table">
           <colgroup>
             {COLUMNS.map((col) => (
-              <col key={col.key} style={{ width: col.width }} />
+              <col key={col.key} style={col.width ? { width: col.width } : undefined} />
             ))}
-            <col style={{ width: 40 }} />
+            <col style={{ width: 32 }} />
           </colgroup>
           <thead>
             <tr>
@@ -378,14 +439,16 @@ export function ContactSheet({
                 </td>
                 <td>
                   <div className="sheet-draft-actions">
-                    <button type="button" className="btn btn-sm" onClick={saveDraft}>Save</button>
+                    <button type="button" className="btn btn-sm" disabled={savingDraft} onClick={saveDraft}>
+                      {savingDraft ? "Saving…" : "Save"}
+                    </button>
                   </div>
                 </td>
                 <td>
                   <input className="sheet-input" placeholder="Notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
                 </td>
                 <td>
-                  <button type="button" className="sheet-del" title="Discard" onClick={() => setDraft(null)}>
+                  <button type="button" className="sheet-del" title="Discard" disabled={savingDraft} onClick={() => setDraft(null)}>
                     <Icon name="x" size={13} />
                   </button>
                 </td>
@@ -399,39 +462,44 @@ export function ContactSheet({
               </tr>
             )}
             {visible.map((row) => {
-              const rev = revisions[row.id] ?? 0;
-              const busy = busyIds.has(row.id);
+              const rev = (field: string) => revisions[`${row.id}:${field}`] ?? 0;
+              const busy = (busyCounts[row.id] ?? 0) > 0;
               return (
                 <tr key={row.id} className={busy ? "sheet-row-busy" : undefined}>
                   <td>
-                    <CellInput key={`n${rev}:${row.name}`} value={row.name} onCommit={(v) => commit(row, { name: v })} />
+                    <CellInput key={`n${rev("name")}:${row.name}`} value={row.name} onCommit={(v) => commit(row, { name: v })} />
                   </td>
                   <td>
-                    <CellInput key={`c${rev}:${row.company}`} value={row.company} list="crm-company-options" onCommit={(v) => commit(row, { companyName: v })} />
+                    <CellInput
+                      key={`c${rev("company")}:${row.company}`}
+                      value={row.company}
+                      list="crm-company-options"
+                      onCommit={(v) => commitCompany(row, v)}
+                    />
                   </td>
                   <td>
-                    <CellSelect value={row.type} options={CONTACT_TYPES} allowEmpty onCommit={(v) => commit(row, { type: v })} />
+                    <CellSelect key={`t${rev("type")}:${row.type ?? ""}`} value={row.type} options={CONTACT_TYPES} allowEmpty onCommit={(v) => commit(row, { type: v })} />
                   </td>
                   <td>
-                    <CellSelect value={row.status} options={CONTACT_STATUSES} allowEmpty onCommit={(v) => commit(row, { status: v })} />
+                    <CellSelect key={`s${rev("status")}:${row.status ?? ""}`} value={row.status} options={CONTACT_STATUSES} allowEmpty onCommit={(v) => commit(row, { status: v })} />
                   </td>
                   <td>
-                    <CellSelect value={row.relationship} options={RELATIONSHIP_LEVELS} onCommit={(v) => commit(row, { relationship: v })} />
+                    <CellSelect key={`r${rev("relationship")}:${row.relationship}`} value={row.relationship} options={RELATIONSHIP_LEVELS} onCommit={(v) => commit(row, { relationship: v })} />
                   </td>
                   <td>
-                    <CellInput key={`e${rev}:${row.email ?? ""}`} value={row.email} onCommit={(v) => commit(row, { email: v })} />
+                    <CellInput key={`e${rev("email")}:${row.email ?? ""}`} value={row.email} onCommit={(v) => commit(row, { email: v })} />
                   </td>
                   <td>
-                    <CellInput key={`p${rev}:${row.phone ?? ""}`} value={row.phone} onCommit={(v) => commit(row, { phone: v })} />
+                    <CellInput key={`p${rev("phone")}:${row.phone ?? ""}`} value={row.phone} onCommit={(v) => commit(row, { phone: v })} />
                   </td>
                   <td>
-                    <CellInput key={`l${rev}:${row.location ?? ""}`} value={row.location} onCommit={(v) => commit(row, { location: v })} />
+                    <CellInput key={`l${rev("location")}:${row.location ?? ""}`} value={row.location} onCommit={(v) => commit(row, { location: v })} />
                   </td>
                   <td className="sheet-touch" title={row.lastTouchAt ? new Date(row.lastTouchAt).toLocaleString("en-GB") : undefined}>
                     {fmtLastTouch(row.lastTouchAt)}
                   </td>
                   <td>
-                    <CellInput key={`o${rev}:${row.notes ?? ""}`} value={row.notes} onCommit={(v) => commit(row, { notes: v })} />
+                    <CellInput key={`o${rev("notes")}:${row.notes ?? ""}`} value={row.notes} onCommit={(v) => commit(row, { notes: v })} />
                   </td>
                   <td>
                     <button type="button" className="sheet-del" title={`Delete ${row.name}`} onClick={() => remove(row)}>

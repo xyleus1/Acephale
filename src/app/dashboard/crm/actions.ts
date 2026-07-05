@@ -116,12 +116,6 @@ export async function createContactAction(patch: ContactPatch): Promise<ActionRe
 
 export async function updateContactAction(contactId: string, patch: ContactPatch): Promise<ActionResult> {
   const session = await requireSession();
-  const existing = await prisma.contact.findFirst({
-    where: { id: contactId, company: { officeId: session.officeId } },
-    select: { id: true },
-  });
-  if (!existing) return { error: "Contact not found." };
-
   const data = buildData(patch);
   if ("error" in data) return data;
 
@@ -133,11 +127,17 @@ export async function updateContactAction(contactId: string, patch: ContactPatch
     data.companyId = companyId;
   }
 
-  const contact = await prisma.contact.update({
-    where: { id: contactId },
+  const updated = await prisma.contact.updateMany({
+    where: { id: contactId, company: { officeId: session.officeId } },
     data,
+  });
+  if (updated.count === 0) return { error: "Contact not found." };
+
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, company: { officeId: session.officeId } },
     select: ROW_SELECT,
   });
+  if (!contact) return { error: "Contact not found." };
   revalidatePath("/dashboard/crm");
   return { row: toContactRow(contact) };
 }
