@@ -286,7 +286,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       data: { officeId: s.officeId, companyId, changedByUserId: s.userId, diff: { type: "assign", userId } }
     });
     revalidatePath("/dashboard/admin");
-    revalidatePath("/dashboard/crm/companies");
+    revalidatePath("/dashboard/crm");
   }
 
   async function reassignCompaniesAction(formData: FormData) {
@@ -313,7 +313,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       });
     }
     revalidatePath("/dashboard/admin");
-    revalidatePath("/dashboard/crm/companies");
+    revalidatePath("/dashboard/crm");
   }
 
   async function toggleUserVisibilityAction(formData: FormData) {
@@ -342,7 +342,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       create: { officeId: s.officeId, type, value, isActive: true }
     });
     revalidatePath("/dashboard/admin");
-    revalidatePath("/dashboard/crm/companies");
+    revalidatePath("/dashboard/crm");
   }
 
   async function toggleCategoryAction(formData: FormData) {
@@ -356,7 +356,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       data: { isActive },
     });
     revalidatePath("/dashboard/admin");
-    revalidatePath("/dashboard/crm/companies");
+    revalidatePath("/dashboard/crm");
   }
 
   async function retryBackgroundJobAction(formData: FormData) {
@@ -501,7 +501,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     <StatCell label="Pending quotes" value={u.pendingQuoteCount} tone={u.pendingQuoteCount > 3 ? "warn" : "default"} />
                   </div>
                   <div style={{ marginTop: 12, display: "flex", gap: 6 }}>
-                    <Link href={`/dashboard/crm/companies?ownerId=${u.id}`} style={{ flex: 1 }}>
+                    <Link href="/dashboard/crm" style={{ flex: 1 }}>
                       <button type="button" className="secondary btn-sm" style={{ width: "100%", fontSize: 11 }}>View accounts</button>
                     </Link>
                   </div>
@@ -585,7 +585,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     {unassignedCompanies.map((c) => (
                       <tr key={c.id}>
                         <td>
-                          <Link href={`/dashboard/crm/companies/${c.id}`} style={{ fontWeight: 600, color: "var(--brand)", fontSize: 13 }}>{c.name}</Link>
+                          <Link href={`/dashboard/crm?q=${encodeURIComponent(c.name)}`} style={{ fontWeight: 600, color: "var(--brand)", fontSize: 13 }}>{c.name}</Link>
                         </td>
                         <td>
                           <Badge tone={c.status === "WORKED" ? "good" : c.status === "IN_PROGRESS" ? "info" : c.status === "LOST" ? "danger" : "neutral"}>

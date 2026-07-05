@@ -1262,7 +1262,7 @@ export default async function JobDetailPage({
             <div className="worktable-section-header">Customer</div>
             <div className="record-card-body">
               {job.company ? (
-                <a href={`/dashboard/crm/companies/${job.company.id}`} className="record-customer-link">
+                <a href={`/dashboard/crm?q=${encodeURIComponent(job.company.name)}`} className="record-customer-link">
                   {job.company.name}
                 </a>
               ) : (

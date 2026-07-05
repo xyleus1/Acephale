@@ -29,17 +29,17 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/dashboard/customers",
-        destination: "/dashboard/crm/companies",
+        destination: "/dashboard/crm",
         permanent: false,
       },
       {
         source: "/dashboard/customers/:companyId",
-        destination: "/dashboard/crm/companies/:companyId",
+        destination: "/dashboard/crm",
         permanent: false,
       },
       {
         source: "/dashboard/pipeline",
-        destination: "/dashboard/crm/opportunities",
+        destination: "/dashboard/crm",
         permanent: false,
       },
     ];

@@ -259,6 +259,8 @@ model Contact {
   relationshipType   String    @default("buyer")
   leverageLevel      String    @default("medium")
   relationshipStrength String  @default("unknown")
+  category           String? // customer / potential_customer / logistics_contact / high_value / other
+  status             String? // not_contacted / contacted / in_talks / active / cold
   ownerLabel         String?
   sourceRefs         Json?
   brainSlug          String?
@@ -280,6 +282,7 @@ model Contact {
   @@index([companyId, relationshipType])
   @@index([companyId, leverageLevel])
   @@index([companyId, nextActionAt])
+  @@index([category])
 }
 
 // Multiple owners per company (requested)

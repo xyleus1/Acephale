@@ -57,7 +57,6 @@ export default async function CompanyBrainPage({ searchParams }: { searchParams:
               Collected from the daily ops crons and the CRM. Tick a task to mark it done.
             </p>
           </div>
-          <Link href="/dashboard/crm/tasks" className="brain-section-link">Full follow-ups view</Link>
         </div>
         <div className="brain-card">
           <TaskListInline

@@ -11,6 +11,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { LiveEventToast } from "@/components/live-event-toast";
 import { Icon } from "@/components/icon";
 import { LogoMark } from "@/components/logo-mark";
+import { HideOnRoutes } from "@/components/hide-on-routes";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -151,6 +152,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             ? `${focusedJob.origin} → ${focusedJob.destination}`
             : focusedJob.origin ?? focusedJob.destination ?? "Route TBD";
           return (
+            <HideOnRoutes prefixes={["/dashboard/crm"]}>
             <div className="job-focus-strip">
               <div className="job-focus-strip-inner">
                 <span className="job-focus-icon" aria-hidden>
@@ -179,7 +181,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                     Open
                   </a>
                   {focusedJob.customerId && (
-                    <a href={`/dashboard/crm/companies/${focusedJob.customerId}`} className="job-focus-link">
+                    <a href="/dashboard/crm" className="job-focus-link">
                       Customer
                     </a>
                   )}
@@ -199,6 +201,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 </div>
               </div>
             </div>
+            </HideOnRoutes>
           );
         })()}
 
