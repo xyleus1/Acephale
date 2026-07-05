@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { deriveInquirySource } from "@/lib/inquiry-source";
 import { Icon } from "@/components/icon";
-import { LinkRow } from "@/components/link-row";
+import { RfqExpandableRows, type RfqRowData } from "@/components/rfq-expandable-rows";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -38,6 +38,38 @@ function timeAgo(d: Date) {
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
+function safeParse(json: string | null): Record<string, unknown> {
+  if (!json) return {};
+  try {
+    const value = JSON.parse(json);
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function str(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function prettyDimensions(json: string | null): string | null {
+  if (!json) return null;
+  try {
+    const arr = JSON.parse(json);
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    return arr
+      .map((d) => `${d?.qty ?? 1}× ${d?.length ?? "?"}×${d?.width ?? "?"}×${d?.height ?? "?"} cm`)
+      .join("; ");
+  } catch {
+    return null;
+  }
+}
+
+function choice(value: string | null, map: Record<string, string>): string | null {
+  if (!value || value === "UNKNOWN") return null;
+  return map[value] ?? value;
+}
+
 export default async function RFQPage({
   searchParams,
 }: {
@@ -48,7 +80,7 @@ export default async function RFQPage({
 
   const filter = FILTER_TABS.some((t) => t.key === status) ? (status as string) : "";
 
-  const inquiries = await prisma.inquiry.findMany({
+  const inquiriesRaw = await prisma.inquiry.findMany({
     where: {
       officeId: session.officeId,
       ...(filter === ""
@@ -73,13 +105,93 @@ export default async function RFQPage({
     take: 200,
   });
 
+  const rows: RfqRowData[] = inquiriesRaw.map((inq) => {
+    const sm = STATUS_META[inq.status] ?? { label: inq.status, cls: "badge-neutral" };
+    const source = deriveInquirySource(inq);
+    const parsed = safeParse(inq.parsedData);
+    const isLead = parsed.source === "meta-leads";
+    const answers = isLead ? safeParse(JSON.stringify(parsed.answers ?? {})) : {};
+
+    const target = inq.targetPrice != null
+      ? `${inq.targetCurrency ?? "USD"} ${inq.targetPrice.toLocaleString("en-GB")}`
+      : inq.targetPriceStatus === "NO_TARGET" ? "No target" : "Ask";
+
+    const facts = [
+      { label: "Commodity", value: inq.commodity },
+      {
+        label: "Equipment",
+        value: inq.containerType ? `${inq.containerCount ?? 1} × ${inq.containerType}` : null,
+      },
+      { label: "Packages", value: inq.packages != null ? String(inq.packages) : null },
+      { label: "Weight", value: inq.weight != null ? `${inq.weight.toLocaleString("en-GB")} kg` : null },
+      { label: "Volume", value: inq.volume != null ? `${inq.volume.toLocaleString("en-GB")} cbm` : null },
+      { label: "Dimensions", value: prettyDimensions(inq.dimensions) },
+      { label: "Stackable", value: choice(inq.stackable, { YES: "Yes", NO: "No" }) },
+      { label: "Top load", value: choice(inq.topLoad, { YES: "Yes", NO: "No" }) },
+      { label: "Dangerous goods", value: choice(inq.dangerousGoods, { YES: "Yes", NO: "No" }) },
+      { label: "Customs by", value: choice(inq.customsBy, { US: "Us", CUSTOMER: "Customer", FORWARDER: "Forwarder" }) },
+      { label: "Incoterms", value: inq.incoterms },
+      {
+        label: "Cargo ready",
+        value: inq.cargoReadyDate
+          ? new Date(inq.cargoReadyDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+          : null,
+      },
+      { label: "Target price", value: target + (inq.targetPriceSource ? ` (${inq.targetPriceSource})` : "") },
+      { label: "Deal type", value: inq.type === "SOURCING" ? "Sourcing" : "Forwarding" },
+    ].filter((f): f is { label: string; value: string } => Boolean(f.value));
+
+    const leadAnswers = isLead
+      ? [
+          { label: "Commercial shipment", value: str(answers.commercial) },
+          { label: "Shipment type", value: str(answers.shipmentType) },
+          { label: "Load info", value: str(answers.loadInfo) },
+          { label: "Timing", value: str(answers.timing) },
+          { label: "Transport preference", value: str(answers.transportPref) },
+          { label: "Existing quote", value: str(answers.existingQuote) },
+          { label: "Budget (as written)", value: str(parsed.budget) },
+        ].filter((f): f is { label: string; value: string } => Boolean(f.value))
+      : [];
+
+    const notesRaw = isLead ? null : inq.notes ?? inq.rawEmailBody;
+    const notesExcerpt = notesRaw
+      ? notesRaw.trim().slice(0, 600) + (notesRaw.trim().length > 600 ? "…" : "")
+      : null;
+
+    return {
+      id: inq.id,
+      receivedAgo: timeAgo(inq.receivedAt),
+      receivedFull: new Date(inq.receivedAt).toLocaleString("en-GB", {
+        day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+      }),
+      subject: inq.subject,
+      from: inq.fromCompany ?? inq.company?.name ?? inq.fromEmail ?? "—",
+      fromEmail: inq.fromEmail,
+      phone: str(parsed.phone),
+      contactName: str(parsed.fullName),
+      companyId: inq.company?.id ?? null,
+      companyName: inq.company?.name ?? inq.fromCompany,
+      sourceLabel: source.label,
+      sourceDetail: source.detail,
+      origin: inq.origin,
+      destination: inq.destination,
+      mode: inq.mode,
+      statusLabel: sm.label,
+      statusCls: sm.cls,
+      target,
+      facts,
+      leadAnswers,
+      notesExcerpt,
+    };
+  });
+
   return (
     <div>
       <div className="page-header page-header-roomy">
         <div>
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
-            {inquiries.length} {filter === "" ? "open " : ""}RFQ{inquiries.length === 1 ? "" : "s"} shown · newest first
+            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown · newest first · click a row for load details
           </p>
         </div>
         <div className="page-actions">
@@ -106,7 +218,7 @@ export default async function RFQPage({
         ))}
       </div>
 
-      {inquiries.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="card empty-state-card">
           <Icon name="inbox" size={36} className="empty-state-graphic" />
           <div className="empty-state-title">No RFQs match</div>
@@ -132,51 +244,7 @@ export default async function RFQPage({
                 <th style={{ cursor: "default" }} className="numeric">Target Price</th>
               </tr>
             </thead>
-            <tbody>
-              {inquiries.map((inq) => {
-                const sm = STATUS_META[inq.status] ?? { label: inq.status, cls: "badge-neutral" };
-                const from = inq.fromCompany ?? inq.company?.name ?? inq.fromEmail ?? "—";
-                const source = deriveInquirySource(inq);
-                return (
-                  <LinkRow key={inq.id} href={`/dashboard/rfq/${inq.id}`}>
-                    <td className="data-muted">{timeAgo(inq.receivedAt)}</td>
-                    <td>
-                      <a href={`/dashboard/rfq/${inq.id}`} className="data-cell-strong">
-                        {inq.subject}
-                      </a>
-                    </td>
-                    <td>
-                      <div>{from}</div>
-                      {inq.fromEmail && from !== inq.fromEmail && (
-                        <div className="data-subline">{inq.fromEmail}</div>
-                      )}
-                    </td>
-                    <td>
-                      <div>{source.label}</div>
-                      {source.detail && <div className="data-subline">{source.detail}</div>}
-                    </td>
-                    <td>
-                      {inq.origin || inq.destination ? (
-                        <span>{inq.origin ?? "?"} → {inq.destination ?? "?"}</span>
-                      ) : (
-                        <span className="data-muted">—</span>
-                      )}
-                    </td>
-                    <td>{inq.mode ?? <span className="data-muted">—</span>}</td>
-                    <td>
-                      <span className={`badge ${sm.cls}`}>{sm.label}</span>
-                    </td>
-                    <td className="numeric">
-                      {inq.targetPrice != null ? (
-                        `${inq.targetCurrency ?? "USD"} ${inq.targetPrice.toLocaleString("en-GB")}`
-                      ) : (
-                        <span className="data-muted">—</span>
-                      )}
-                    </td>
-                  </LinkRow>
-                );
-              })}
-            </tbody>
+            <RfqExpandableRows rows={rows} colSpan={8} />
           </table>
         </div>
       )}

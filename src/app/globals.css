@@ -34285,3 +34285,78 @@ a.brain-news-title:hover {
     min-height: calc(100vh - 112px);
   }
 }
+
+/* ── Incoming RFQs: inline expandable load details ───────────────────── */
+.rfq-row-caret {
+  display: inline-flex;
+  vertical-align: -1px;
+  margin-right: 7px;
+  color: var(--text-3);
+  transition: transform 0.15s ease;
+}
+
+tr.rfq-row-open .rfq-row-caret {
+  transform: rotate(90deg);
+}
+
+tr.rfq-row-open td {
+  background: var(--surface-2);
+}
+
+.rfq-expand-row td {
+  padding: 0;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.rfq-expand-panel {
+  padding: 14px 18px 16px;
+}
+
+.rfq-expand-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.rfq-expand-block-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.rfq-expand-block .record-fact-grid {
+  margin-top: 8px;
+}
+
+.rfq-expand-block .record-fact {
+  background: var(--surface);
+}
+
+.rfq-expand-notes {
+  margin-top: 14px;
+}
+
+.rfq-expand-notes pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-2);
+}
+
+.rfq-expand-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
