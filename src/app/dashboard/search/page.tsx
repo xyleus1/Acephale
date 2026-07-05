@@ -125,7 +125,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
                 {companies.map((c) => (
                   <tr key={c.id}>
                     <td>
-                      <Link href={`/dashboard/crm/companies/${c.id}`} style={{ fontWeight: 600, color: "var(--brand)" }}>
+                      <Link href={`/dashboard/crm?q=${encodeURIComponent(c.name)}`} style={{ fontWeight: 600, color: "var(--brand)" }}>
                         {c.name}
                       </Link>
                     </td>
@@ -164,7 +164,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
                   <tr key={c.id}>
                     <td style={{ fontWeight: 500 }}>{c.fullName}</td>
                     <td>
-                      <Link href={`/dashboard/crm/companies/${c.company.id}`} style={{ color: "var(--brand)" }}>
+                      <Link href={`/dashboard/crm?q=${encodeURIComponent(c.company.name)}`} style={{ color: "var(--brand)" }}>
                         {c.company.name}
                       </Link>
                     </td>
@@ -209,7 +209,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
                     </td>
                     <td style={{ fontWeight: 500 }}>{a.subject ?? "—"}</td>
                     <td>
-                      <Link href={`/dashboard/crm/companies/${a.company.id}`} style={{ color: "var(--brand)" }}>
+                      <Link href={`/dashboard/crm?q=${encodeURIComponent(a.company.name)}`} style={{ color: "var(--brand)" }}>
                         {a.company.name}
                       </Link>
                     </td>

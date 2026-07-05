@@ -172,7 +172,7 @@ const translations = {
       adminSettings: "Yönetim Ayarları",
     },
     topbar: {
-      title: "CRM Komuta Merkezi",
+      title: "CRM",
       sub: "Müşterileri, takipleri ve satış riskini yönetin",
       searchPlaceholder: "Firma, kişi ara…",
     },

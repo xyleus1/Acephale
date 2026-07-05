@@ -292,7 +292,7 @@ export async function applySetCustomer(jobId: string, officeId: string, args: { 
   }
   revalidatePath(`/dashboard/jobs/${jobId}`);
   revalidatePath("/dashboard/jobs");
-  revalidatePath("/dashboard/crm/companies");
+  revalidatePath("/dashboard/crm");
   return { ok: true, created, companyName: company.name };
 }
 
@@ -312,7 +312,7 @@ export async function applyRenameCompany(jobId: string, officeId: string, newNam
   if (existing) return { error: `Another customer named "${newName}" already exists` };
   await prisma.company.update({ where: { id: job.company.id }, data: { name: newName } });
   revalidatePath(`/dashboard/jobs/${jobId}`);
-  revalidatePath("/dashboard/crm/companies");
+  revalidatePath("/dashboard/crm");
   return { ok: true, from, to: newName };
 }
 

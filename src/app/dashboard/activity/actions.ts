@@ -48,6 +48,5 @@ export async function updateCompanyStatusAction(companyId: string, status: strin
     where: { id: companyId, officeId: s.officeId },
     data: { status: status as never },
   });
-  revalidatePath("/dashboard/crm/companies");
-  revalidatePath(`/dashboard/crm/companies/${companyId}`);
+  revalidatePath("/dashboard/crm");
 }

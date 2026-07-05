@@ -1,30 +1,57 @@
-import {
-  CrmCommandCenter,
-  CrmCreateCompanyForm,
-  CrmNotice,
-  CrmPageHeader,
-} from "@/components/crm/crm-components";
-import { CrmTabs } from "@/components/crm/crm-tabs";
-import { getCrmCommandCenter } from "@/lib/crm/data";
-import { getCrmScope } from "@/lib/crm/session";
+import { prisma } from "@/lib/prisma";
+import { requireSession } from "@/lib/auth";
+import { toContactRow } from "@/lib/contact-fields";
+import { ContactSheet } from "@/components/contact-sheet";
 
-type SearchParams = Promise<{ notice?: string; error?: string }>;
+type SearchParams = Promise<{ q?: string }>;
 
-export default async function CrmHomePage({ searchParams }: { searchParams: SearchParams }) {
-  const scope = await getCrmScope();
-  const params = await searchParams;
-  const data = await getCrmCommandCenter(scope);
+export default async function CrmPage({ searchParams }: { searchParams: SearchParams }) {
+  const session = await requireSession();
+  const { q } = await searchParams;
+
+  const [contacts, companies] = await Promise.all([
+    prisma.contact.findMany({
+      where: { company: { officeId: session.officeId } },
+      select: {
+        id: true,
+        fullName: true,
+        companyId: true,
+        category: true,
+        status: true,
+        relationshipStrength: true,
+        email: true,
+        phone: true,
+        location: true,
+        notes: true,
+        lastTouchAt: true,
+        company: { select: { name: true } },
+      },
+      orderBy: [{ lastTouchAt: { sort: "desc", nulls: "last" } }, { updatedAt: "desc" }],
+      take: 2000,
+    }),
+    prisma.company.findMany({
+      where: { officeId: session.officeId },
+      select: { name: true },
+      orderBy: { name: "asc" },
+      take: 1500,
+    }),
+  ]);
+
+  const rows = contacts.map(toContactRow);
 
   return (
-    <div className="crm-page">
-      <CrmPageHeader
-        title="CRM Command Center"
-        subtitle="Founder/operator view of relationships, RFQs, follow-ups, and source-linked brain context."
-        actions={<CrmCreateCompanyForm returnTo="/dashboard/crm" />}
+    <div>
+      <div className="page-header page-header-roomy">
+        <div>
+          <h1 className="page-title">CRM</h1>
+          <p className="page-subtitle">All contacts in one editable sheet.</p>
+        </div>
+      </div>
+      <ContactSheet
+        initialRows={rows}
+        companies={companies.map((c) => c.name)}
+        initialQuery={q ?? ""}
       />
-      <CrmTabs />
-      <CrmNotice notice={params.notice} error={params.error} />
-      <CrmCommandCenter data={data} />
     </div>
   );
 }
