@@ -352,8 +352,8 @@ function RowPair({ row, open, colSpan, onToggle, onExpand }: {
           }
         }}
       >
-        <td className="data-cell-mono">{row.reference ?? <span className="data-muted">—</span>}</td>
         <td className="data-muted" title={row.receivedFull}>{row.receivedAgo}</td>
+        <td className="data-cell-mono">{row.reference ?? <span className="data-muted">—</span>}</td>
         <td>
           <span className="rfq-row-caret" aria-hidden>
             <Icon name="chevron-right" size={12} strokeWidth={2.5} />

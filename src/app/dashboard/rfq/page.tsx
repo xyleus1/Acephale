@@ -285,8 +285,8 @@ export default async function RFQPage({
           <table className="data-table">
             <thead>
               <tr>
-                <th style={{ cursor: "default" }}>Ref</th>
                 <th style={{ cursor: "default" }}>Received</th>
+                <th style={{ cursor: "default" }}>Ref</th>
                 <th style={{ cursor: "default" }}>Subject</th>
                 <th style={{ cursor: "default" }}>From</th>
                 <th style={{ cursor: "default" }}>Source</th>
