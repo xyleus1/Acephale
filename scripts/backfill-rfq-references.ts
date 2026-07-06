@@ -56,13 +56,23 @@ async function main() {
     for (const inq of missing) {
       const prefix = fileReferencePrefix(inq.receivedAt);
       if (!counters.has(prefix)) counters.set(prefix, await seedCounter(office.id, prefix));
-      const next = (counters.get(prefix) ?? 0) + 1;
-      counters.set(prefix, next);
-      const reference = `${prefix}${String(next).padStart(4, "0")}`;
 
-      console.log(`  ${reference}  ${inq.receivedAt.toISOString().slice(0, 10)}  ${inq.subject.slice(0, 60)}`);
-      if (apply) {
-        await prisma.inquiry.update({ where: { id: inq.id }, data: { reference } });
+      // Live intake competes for the current month's numbers while this runs;
+      // on a unique-constraint collision re-seed from the DB and take the next.
+      for (let attempt = 0; ; attempt++) {
+        const next = (counters.get(prefix) ?? 0) + 1;
+        counters.set(prefix, next);
+        const reference = `${prefix}${String(next).padStart(4, "0")}`;
+        try {
+          if (apply) {
+            await prisma.inquiry.update({ where: { id: inq.id }, data: { reference } });
+          }
+          console.log(`  ${reference}  ${inq.receivedAt.toISOString().slice(0, 10)}  ${inq.subject.slice(0, 60)}`);
+          break;
+        } catch (e) {
+          if ((e as { code?: string })?.code !== "P2002" || attempt >= 5) throw e;
+          counters.set(prefix, await seedCounter(office.id, prefix));
+        }
       }
     }
   }

@@ -442,8 +442,15 @@ async function syncOperationRows(officeId: string, rows: string[][]) {
     const route = splitRoute(operation);
     const existing = await prisma.job.findUnique({
       where: { officeId_reference: { officeId, reference } },
-      select: { id: true },
+      select: { id: true, notes: true },
     });
+    // Only overwrite jobs this sheet created itself (marked "Imported from:"
+    // in notes). A sheet row whose reference happens to match an app-created
+    // load must never clobber the operator's data.
+    if (existing && !(existing.notes ?? "").includes("Imported from:")) {
+      skipped++;
+      continue;
+    }
 
     const data = {
       companyId: company.id,

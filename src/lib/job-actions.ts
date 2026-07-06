@@ -58,9 +58,19 @@ export async function createProposedJobForInquiry(inquiryId: string): Promise<st
     },
   });
 
-  const job = inquiry.reference
-    ? await createJob(inquiry.reference)
-    : await createJobWithReference(inquiry.officeId, createJob);
+  let job;
+  if (inquiry.reference) {
+    try {
+      job = await createJob(inquiry.reference);
+    } catch (e) {
+      // Another load already holds this file number (sheet import, legacy
+      // data). Issue a fresh number instead of leaving the RFQ unconvertible.
+      if ((e as { code?: string })?.code !== "P2002") throw e;
+      job = await createJobWithReference(inquiry.officeId, createJob);
+    }
+  } else {
+    job = await createJobWithReference(inquiry.officeId, createJob);
+  }
   return job.id;
 }
 

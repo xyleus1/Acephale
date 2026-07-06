@@ -34,26 +34,38 @@ export async function nextFileReference(officeId: string, date: Date = new Date(
   ]);
   let max = 0;
   for (const row of [...inquiries, ...jobs]) {
-    const n = parseInt((row.reference ?? "").slice(prefix.length), 10);
+    const tail = (row.reference ?? "").slice(prefix.length);
+    // Only well-formed all-digit tails count — a malformed ref (sheet import
+    // typo like "DRY26070001-A") must not be able to jump the sequence.
+    if (!/^\d{4,}$/.test(tail)) continue;
+    const n = parseInt(tail, 10);
     if (Number.isFinite(n) && n > max) max = n;
   }
   return `${prefix}${String(max + 1).padStart(4, "0")}`;
 }
 
-// Run a create that retries with a fresh reference if two creates race into
-// the same number (unique constraint violation). Pass `date` when the record
-// belongs to an earlier month (e.g. resyncing old sheet rows) so the YYMM in
-// the reference matches when the RFQ actually arrived.
+// Allocate the next number and run the create while holding a per-office
+// advisory lock. The unique indexes on Inquiry and Job are per-table, so two
+// concurrent creates hitting DIFFERENT tables could otherwise both scan the
+// same max and mint the same number without any constraint firing; the
+// transaction-scoped lock serializes the scan + insert. P2002 retry stays as
+// a backstop for collisions the lock can't see (e.g. a backfill running
+// against an older deploy). Pass `date` when the record belongs to an earlier
+// month (e.g. resyncing old sheet rows) so the YYMM matches arrival.
 export async function createWithFileReference<T>(
   officeId: string,
   create: (reference: string) => Promise<T>,
   date: Date = new Date()
 ): Promise<T> {
+  const lockKey = `${officeId}:${fileReferencePrefix(date)}`;
   let lastErr: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const reference = await nextFileReference(officeId, date);
     try {
-      return await create(reference);
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        const reference = await nextFileReference(officeId, date);
+        return await create(reference);
+      }, { timeout: 15000 });
     } catch (e) {
       lastErr = e;
       const code = (e as { code?: string })?.code;

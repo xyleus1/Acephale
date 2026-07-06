@@ -250,8 +250,8 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
   }
 
   // Inquiry (the source RFQ) — reuse orphan from previous failed run if found
-  const { createWithFileReference, nextFileReference } = await import("./references");
-  const inquiry = orphanInquiry
+  const { createWithFileReference } = await import("./references");
+  let inquiry = orphanInquiry
     ? await prisma.inquiry.update({
         where: { id: orphanInquiry.id },
         data: { companyId: company.id },
@@ -281,9 +281,17 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
         },
       }));
 
-  // Job — set up like a mid-pipeline shipment. The load carries the RFQ's
-  // file number; orphan inquiries from older runs may not have one yet.
-  const reference = inquiry.reference ?? await nextFileReference(args.officeId);
+  // Orphan inquiries from runs before the numbering system may lack a file
+  // number — assign one so the RFQ and its load always share a reference.
+  if (!inquiry.reference) {
+    const inquiryId = inquiry.id;
+    inquiry = await createWithFileReference(args.officeId, (reference) =>
+      prisma.inquiry.update({ where: { id: inquiryId }, data: { reference } })
+    );
+  }
+
+  // Job — set up like a mid-pipeline shipment, carrying the RFQ's file number.
+  const reference = inquiry.reference as string;
   const portalToken = createPortalToken();
   const etd = new Date(Date.now() + 6 * 86400000);
   const eta = new Date(Date.now() + 16 * 86400000);

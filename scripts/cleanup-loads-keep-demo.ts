@@ -8,6 +8,11 @@ import { prisma } from "../src/lib/prisma";
 // job. If the kept job's RFQ carries a DRY file number, the job is renamed to
 // it so the demo shows the reference system loads use going forward.
 //
+// ORDERING: run only against a deployment that no longer auto-creates
+// PROPOSED jobs from open inquiries (commit 0caaf55+). Against older code the
+// hourly gmail/sheets crons would recreate a load for every open RFQ within
+// the hour, silently undoing the cleanup.
+//
 // Usage: tsx scripts/cleanup-loads-keep-demo.ts --office=<id> --keep=<job reference> [--apply]
 
 async function main() {
