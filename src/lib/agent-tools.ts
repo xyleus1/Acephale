@@ -11,6 +11,7 @@ import { findStuckJobs } from "./stuck-jobs";
 import { analyzeJobDocument, askAboutDocument } from "./doc-analyze";
 import { createPendingBulkHideThreadsProposal, createPendingJobActionProposal, createPendingJobUpdateProposal } from "./agent-proposals";
 import { qualifyRfq } from "./rfq-qualification";
+import { openInquiryStatusFilter } from "./inquiry-status";
 import { buildMissingInfoDraft } from "./missing-info-draft";
 import { parsePipeLines } from "./quote-lines";
 import { assessInquiryStrategy, assessJobStrategy, compactStrategyForAgent, loadInquiryStrategyInput, loadJobStrategyInput } from "./commercial-strategy-persistence";
@@ -1955,7 +1956,7 @@ async function listPricingCommandsForAgent(officeId: string, args: { limit?: unk
     prisma.inquiry.count({
       where: {
         officeId,
-        status: { in: ["INGESTED", "PARSED", "NEEDS_INFO", "PRICED", "QUOTED"] },
+        status: openInquiryStatusFilter(),
         strategyAssessments: { none: { status: "ACTIVE" } },
       },
     }),
@@ -2590,7 +2591,7 @@ export async function dispatchTool(
         };
       }
       case "list_open_inquiries": {
-        const where: any = { officeId: ctx.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } };
+        const where: any = { officeId: ctx.officeId, status: openInquiryStatusFilter() };
         if (input.type) where.type = String(input.type);
         const rows = await prisma.inquiry.findMany({
           where,
@@ -2781,7 +2782,7 @@ export async function dispatchTool(
           }),
           findStuckJobs(ctx.officeId, { daysThreshold: 5, max: 5 }),
           prisma.inquiry.findMany({
-            where: { officeId: ctx.officeId, type: "SOURCING", status: { in: ["PARSED", "PRICED", "QUOTED"] } },
+            where: { officeId: ctx.officeId, type: "SOURCING", status: openInquiryStatusFilter() },
             include: { _count: { select: { emailThreads: true } } },
             take: 20,
           }),
@@ -3255,7 +3256,7 @@ export async function dispatchTool(
                 select: { inquiry: { select: inquirySelect } },
               }))?.inquiry ?? null
             : await prisma.inquiry.findFirst({
-                where: { officeId: ctx.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+                where: { officeId: ctx.officeId, status: openInquiryStatusFilter() },
                 select: inquirySelect,
                 orderBy: { receivedAt: "desc" },
               });

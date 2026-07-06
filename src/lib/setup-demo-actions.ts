@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
+import { openInquiryStatusFilter } from "./inquiry-status";
 import { mergeAllOpenInquiriesIntoOne } from "./merge-actions";
 import { ensureProposedJobsForOpenInquiries, confirmProposedJob } from "./job-actions";
 import { extractSourcingOffersForInquiry } from "./sourcing-offers";
@@ -98,7 +99,7 @@ export async function consolidateAshgabatSoybeanLoad(opts: {
     where: {
       officeId: session.officeId,
       type: "SOURCING",
-      status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] },
+      status: openInquiryStatusFilter(),
     },
     select: { id: true, job: { select: { id: true, status: true } } },
   });
@@ -124,7 +125,7 @@ export async function consolidateAshgabatSoybeanLoad(opts: {
       where: {
         officeId: session.officeId,
         type: "SOURCING",
-        status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] },
+        status: openInquiryStatusFilter(),
       },
       select: { id: true },
     });

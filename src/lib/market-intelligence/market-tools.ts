@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { buildEvidenceRefs, formatEvidenceForAgent, formatEvidenceForUser, type MemoryEvidenceRef } from "@/lib/memory/evidence";
 import { hybridSearchMemory } from "@/lib/memory/hybrid-search";
 import { FirecrawlClient } from "./firecrawl-client";
@@ -563,7 +564,7 @@ export async function getCustomerMarketExposure(input: {
 
   const [jobs, inquiries, directLinks] = await Promise.all([
     prisma.job.findMany({ where: { officeId: input.officeId, companyId: company.id, status: { notIn: ["DELIVERED", "CANCELLED"] } }, select: { id: true, reference: true, origin: true, destination: true, mode: true }, take: 50 }),
-    prisma.inquiry.findMany({ where: { officeId: input.officeId, companyId: company.id, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } }, select: { id: true, subject: true, origin: true, destination: true, mode: true }, take: 50 }),
+    prisma.inquiry.findMany({ where: { officeId: input.officeId, companyId: company.id, status: openInquiryStatusFilter() }, select: { id: true, subject: true, origin: true, destination: true, mode: true }, take: 50 }),
     prisma.marketSignalLink.findMany({
       where: { officeId: input.officeId, entityType: "company", entityId: company.id },
       include: {

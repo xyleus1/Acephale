@@ -14,6 +14,9 @@ import {
   sendRfqMail,
   type SendStampKey,
 } from "@/lib/rfq-mail";
+import { normalizeInquiryStatusInput } from "@/lib/inquiry-status";
+import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
+import { recordMemoryEvent } from "@/lib/memory/record-event";
 
 const INQUIRY_MAIL_INCLUDE = {
   company: { select: { name: true } },
@@ -154,4 +157,179 @@ export async function sendAllDeskForwardsAction(): Promise<
   revalidatePath("/dashboard/rfq");
   if (sent === 0 && failed > 0) return { error: firstError ?? "All sends failed." };
   return { ok: true, sent, failed, skipped, remaining: pending.length - batch.length };
+}
+
+// ── Inline sheet edits on /dashboard/rfq ────────────────────────────────────
+
+export type InquiryRowPatch = {
+  subject?: string;
+  fromCompany?: string;
+  fromEmail?: string;
+  origin?: string;
+  destination?: string;
+  mode?: string;
+  status?: string;
+  // Free text like "USD 1200", "1200", "no target" or "" (= ask).
+  target?: string;
+};
+
+type RowActionResult = { ok: true } | { error: string };
+
+function trimmedOrNull(value: string, max: number): string | null {
+  const text = value.trim().slice(0, max);
+  return text ? text : null;
+}
+
+// "1,200" and "1.200" are both thousands; "1200,50" and "1200.50" are both
+// decimals; "1.234.567,89" (Turkish/European) and "1,234,567.89" both work.
+function parseAmount(raw: string): number | null {
+  let s = raw.replace(/\s/g, "");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma !== -1 && lastDot !== -1) {
+    // Both present: the later separator is the decimal point.
+    s = lastComma > lastDot
+      ? s.replace(/\./g, "").replace(",", ".")
+      : s.replace(/,/g, "");
+  } else if (lastComma !== -1 || lastDot !== -1) {
+    const sep = lastComma !== -1 ? "," : ".";
+    const parts = s.split(sep);
+    const isGrouping = parts.length > 1 && parts[0].length <= 3 && parts.slice(1).every((p) => p.length === 3);
+    if (isGrouping) s = parts.join("");
+    else if (parts.length === 2) s = `${parts[0]}.${parts[1]}`;
+    else return null;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseTargetInput(input: string, fallbackCurrency: string | null):
+  | { targetPrice: number | null; targetCurrency: string | null; targetPriceStatus: string; targetPriceSource: string | null }
+  | { error: string } {
+  const text = input.trim();
+  if (!text) {
+    return { targetPrice: null, targetCurrency: fallbackCurrency, targetPriceStatus: "UNKNOWN", targetPriceSource: null };
+  }
+  if (/^no\s*target$/i.test(text)) {
+    return { targetPrice: null, targetCurrency: fallbackCurrency, targetPriceStatus: "NO_TARGET", targetPriceSource: "manual" };
+  }
+  const match = text.match(/^(?:([A-Za-z]{3})\s*|\$\s*)?([\d][\d,.\s]*)$/);
+  const amount = match ? parseAmount(match[2]) : null;
+  if (amount == null) return { error: 'Target price should look like "USD 1200", "1200", "no target" — or be empty.' };
+  const currency = match![1] ? match![1].toUpperCase() : text.startsWith("$") ? "USD" : fallbackCurrency ?? "USD";
+  return { targetPrice: amount, targetCurrency: currency, targetPriceStatus: "PROVIDED", targetPriceSource: "manual" };
+}
+
+export async function updateInquiryRowAction(
+  inquiryId: string,
+  patch: InquiryRowPatch,
+): Promise<RowActionResult> {
+  const session = await requireSession();
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: inquiryId, officeId: session.officeId },
+  });
+  if (!inquiry) return { error: "RFQ not found." };
+
+  const data: Record<string, string | number | null> = {};
+
+  if (patch.subject !== undefined) {
+    const subject = trimmedOrNull(patch.subject, 300);
+    if (!subject) return { error: "Subject is required." };
+    data.subject = subject;
+  }
+  if (patch.fromCompany !== undefined) data.fromCompany = trimmedOrNull(patch.fromCompany, 160);
+  if (patch.fromEmail !== undefined) {
+    const email = trimmedOrNull(patch.fromEmail, 200);
+    if (email && !isSingleEmailAddress(email)) {
+      return { error: "Sender email must be a single valid address (or empty)." };
+    }
+    data.fromEmail = email;
+  }
+  if (patch.origin !== undefined) data.origin = trimmedOrNull(patch.origin, 120);
+  if (patch.destination !== undefined) data.destination = trimmedOrNull(patch.destination, 120);
+  if (patch.mode !== undefined) data.mode = trimmedOrNull(patch.mode, 24)?.toUpperCase() ?? null;
+  if (patch.status !== undefined) {
+    const status = normalizeInquiryStatusInput(patch.status.slice(0, 40));
+    if (!status) return { error: "Status is required." };
+    // These would collide with the filter-tab keys on /dashboard/rfq.
+    if (["ALL", "OPEN"].includes(status.toUpperCase())) {
+      return { error: `“${status}” is a reserved name — pick another status.` };
+    }
+    data.status = status;
+  }
+  if (patch.target !== undefined) {
+    const target = parseTargetInput(patch.target, inquiry.targetCurrency);
+    if ("error" in target) return target;
+    Object.assign(data, target);
+  }
+  if (Object.keys(data).length === 0) return { ok: true };
+
+  const updated = await prisma.inquiry.update({
+    where: { id: inquiryId, officeId: session.officeId },
+    data,
+  });
+
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "INQUIRY",
+    sourceExternalId: `inquiry:${inquiryId}`,
+    eventType: "inquiry.updated",
+    entityType: "inquiry",
+    entityId: inquiryId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: updated.updatedAt,
+    payloadVersion: 1,
+    payload: { inquiryId, changedFields: Object.keys(data), status: updated.status },
+    provenance: {
+      source: "inquiry",
+      operation: "sheet_update",
+      path: "src/app/dashboard/rfq/actions.ts",
+      function: "updateInquiryRowAction",
+      sourceRecordId: inquiryId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `inquiry:${inquiryId}:updated:${updated.updatedAt.toISOString()}`,
+  }).catch(() => null);
+
+  if (patch.target !== undefined && targetPriceChanged(inquiry, updated)) {
+    await recordTargetPriceHistory({
+      officeId: session.officeId,
+      inquiryId,
+      createdByUserId: session.userId,
+      amount: updated.targetPrice,
+      currency: updated.targetCurrency,
+      status: updated.targetPriceStatus,
+      source: updated.targetPriceSource,
+      note: "RFQ sheet edit.",
+    }).catch(() => null);
+  }
+
+  revalidatePath("/dashboard/rfq");
+  return { ok: true };
+}
+
+export async function deleteInquiryRowAction(inquiryId: string): Promise<RowActionResult> {
+  const session = await requireSession();
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: inquiryId, officeId: session.officeId },
+    select: { id: true, job: { select: { id: true, reference: true, status: true } } },
+  });
+  if (!inquiry) return { error: "RFQ not found." };
+  if (inquiry.job && inquiry.job.status !== "PROPOSED") {
+    return { error: `This RFQ is linked to load ${inquiry.job.reference} — delete the load first, or set the RFQ to Ignored instead.` };
+  }
+  // An auto-created PROPOSED shell load goes with its RFQ.
+  if (inquiry.job) {
+    await prisma.job.deleteMany({
+      where: { id: inquiry.job.id, officeId: session.officeId, status: "PROPOSED" },
+    });
+  }
+  const deleted = await prisma.inquiry.deleteMany({
+    where: { id: inquiryId, officeId: session.officeId },
+  });
+  if (deleted.count === 0) return { error: "RFQ not found." };
+  revalidatePath("/dashboard/rfq");
+  return { ok: true };
 }

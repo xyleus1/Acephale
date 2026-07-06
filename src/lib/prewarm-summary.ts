@@ -2,6 +2,7 @@
 
 import { prisma } from "./prisma";
 import { extractSourcingOffersForInquiry } from "./sourcing-offers";
+import { openInquiryStatusFilter } from "./inquiry-status";
 
 // Pre-warms an inquiry's summary cache so the agent's first query returns
 // in <100ms instead of doing the full extract+sort+shape pipeline.
@@ -70,7 +71,7 @@ export async function prewarmInquirySummary(inquiryId: string): Promise<void> {
 // + after major data changes.
 export async function prewarmAllOpenInquiries(officeId: string): Promise<{ count: number }> {
   const inquiries = await prisma.inquiry.findMany({
-    where: { officeId, type: "SOURCING", status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+    where: { officeId, type: "SOURCING", status: openInquiryStatusFilter() },
     select: { id: true },
   });
   // Don't parallelize across inquiries (each one already parallelizes its

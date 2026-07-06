@@ -19,6 +19,7 @@ import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { buildCompactCustomerMemoryContext } from "@/lib/memory/customer-dossier";
 import { buildCompactJobMemoryContext } from "@/lib/memory/search-memory";
 import { dimensionsSummary } from "@/lib/cargo";
+import { openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { operatorMetricLabel } from "@/lib/operator-action-labels";
 import {
   parsedCargoVolumeReview,
@@ -432,7 +433,7 @@ async function buildOpsContext(officeId: string) {
       take: 15,
     }),
     prisma.inquiry.findMany({
-      where: { officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+      where: { officeId, status: openInquiryStatusFilter() },
       include: { company: { select: { name: true } } },
       orderBy: { receivedAt: "desc" },
       take: 10,

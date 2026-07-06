@@ -10,6 +10,7 @@ import {
   shouldShowMarketSignalInMorningBrief,
 } from "@/lib/market-intelligence/signal-suppression";
 import { normalizeMarketLane } from "@/lib/market-intelligence/lane-validation";
+import { openInquiryStatusFilter } from "@/lib/inquiry-status";
 
 export type MorningBriefInput = {
   officeId: string;
@@ -135,7 +136,7 @@ export async function generateMorningBrief(input: MorningBriefInput) {
       select: { id: true, reference: true, status: true, eta: true, etd: true, origin: true, destination: true, company: { select: { id: true, name: true } } },
     }),
     prisma.inquiry.findMany({
-      where: { officeId: input.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] }, receivedAt: { lt: staleRfqCutoff } },
+      where: { officeId: input.officeId, status: openInquiryStatusFilter(), receivedAt: { lt: staleRfqCutoff } },
       orderBy: { receivedAt: "asc" },
       take: limit,
       select: { id: true, subject: true, status: true, type: true, origin: true, destination: true, receivedAt: true, company: { select: { id: true, name: true } }, fromEmail: true },

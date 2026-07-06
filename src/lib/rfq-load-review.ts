@@ -367,9 +367,11 @@ export async function createLoadFromRfqReview(
     ?? (values.companyName ? await resolveCompanyIdByName(session.officeId, values.companyName) : inquiry.companyId);
 
   const qualification = qualifyRfq(values);
-  const nextInquiryStatus = ["WON", "LOST", "QUOTED"].includes(inquiry.status)
-    ? inquiry.status
-    : qualification.isMature ? "PARSED" : "INGESTED";
+  // Only auto-flip the legacy parse-maturity pair; never demote an
+  // operator-set status (canonical BOOKED/PRICING/… or a custom one).
+  const nextInquiryStatus = ["INGESTED", "PARSED"].includes(inquiry.status)
+    ? qualification.isMature ? "PARSED" : "INGESTED"
+    : inquiry.status;
 
   let jobId = inquiry.job?.id ?? null;
   if (!jobId) {

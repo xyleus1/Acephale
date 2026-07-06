@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
+import { openInquiryStatusFilter } from "../src/lib/inquiry-status";
 
 type Check = { name: string; ok: boolean; detail?: string };
 
@@ -55,7 +56,7 @@ async function main() {
     prisma.user.count({ where: { officeId: office.id, role: "ADMIN", isActive: true } }),
     prisma.company.count({ where: { officeId: office.id } }),
     prisma.contact.count({ where: { company: { officeId: office.id } } }),
-    prisma.inquiry.count({ where: { officeId: office.id, status: { notIn: ["WON", "LOST"] } } }),
+    prisma.inquiry.count({ where: { officeId: office.id, status: openInquiryStatusFilter() } }),
     prisma.job.count({ where: { officeId: office.id, status: { notIn: ["DELIVERED", "CANCELLED"] } } }),
     prisma.emailAccount.count({
       where: {

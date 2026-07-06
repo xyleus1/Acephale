@@ -3,9 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { deriveInquirySource } from "@/lib/inquiry-source";
 import { Icon } from "@/components/icon";
-import { RfqExpandableRows, type RfqRowData } from "@/components/rfq-expandable-rows";
+import { RfqExpandableRows, type RfqRowData, type SheetOption } from "@/components/rfq-expandable-rows";
 import { RfqSendAllButton } from "@/components/rfq-send-all-button";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
+import {
+  INQUIRY_MODES,
+  INQUIRY_MODE_VALUES,
+  INQUIRY_STATUSES,
+  INQUIRY_STATUS_VALUES,
+  canonicalInquiryStatus,
+  inquiryStatusValuesFor,
+  openInquiryStatusFilter,
+} from "@/lib/inquiry-status";
 import {
   buildDeskForwardEmail,
   buildLeadConfirmationEmail,
@@ -17,26 +26,6 @@ import {
 // Send-all pushes up to 60 sequential SMTP sends through a server action on
 // this segment; the default function timeout would cut the batch short.
 export const maxDuration = 300;
-
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  INGESTED: { label: "RFQ",        cls: "badge-info" },
-  PARSED:   { label: "Mature RFQ", cls: "badge-neutral" },
-  PRICED:   { label: "Pricing",    cls: "badge-warn" },
-  QUOTED:   { label: "Quoted",     cls: "badge-good" },
-  WON:      { label: "Won",        cls: "badge-good" },
-  LOST:     { label: "Lost",       cls: "badge-danger" },
-};
-
-const FILTER_TABS = [
-  { key: "",         label: "Open" },
-  { key: "all",      label: "All" },
-  { key: "INGESTED", label: "RFQ" },
-  { key: "PARSED",   label: "Mature RFQ" },
-  { key: "PRICED",   label: "Pricing" },
-  { key: "QUOTED",   label: "Quoted" },
-  { key: "WON",      label: "Won" },
-  { key: "LOST",     label: "Lost" },
-] as const;
 
 function timeAgo(d: Date) {
   const diff = Date.now() - new Date(d).getTime();
@@ -90,16 +79,53 @@ export default async function RFQPage({
   const session = await requireSession();
   const { status } = await searchParams;
 
-  const filter = FILTER_TABS.some((t) => t.key === status) ? (status as string) : "";
+  // Custom statuses/modes added on the fly live as plain strings on rows —
+  // whatever is in use in this office becomes a tab and a dropdown option.
+  const [statusGroups, modeGroups] = await Promise.all([
+    prisma.inquiry.groupBy({ by: ["status"], where: { officeId: session.officeId } }),
+    prisma.inquiry.groupBy({ by: ["mode"], where: { officeId: session.officeId, mode: { not: null } } }),
+  ]);
+  const customStatuses = [...new Set(
+    statusGroups
+      .map((g) => g.status)
+      .filter((s) => !INQUIRY_STATUS_VALUES.includes(canonicalInquiryStatus(s)))
+      // Would collide with the built-in tab keys.
+      .filter((s) => !["all", "open"].includes(s.toLowerCase()))
+  )].sort();
+  const customModes = [...new Set(
+    modeGroups
+      .map((g) => g.mode as string)
+      .filter((m) => !INQUIRY_MODE_VALUES.includes(m.toUpperCase()))
+  )].sort();
+
+  const statusOptions: SheetOption[] = [
+    ...INQUIRY_STATUSES,
+    ...customStatuses.map((s) => [s, s] as const),
+  ];
+  const modeOptions: SheetOption[] = [
+    ...INQUIRY_MODES,
+    ...customModes.map((m) => [m, m] as const),
+  ];
+
+  const filterTabs: Array<{ key: string; label: string }> = [
+    { key: "", label: "Open" },
+    { key: "all", label: "All" },
+    ...INQUIRY_STATUSES.map(([value, label]) => ({ key: value, label })),
+    ...customStatuses.map((s) => ({ key: s, label: s })),
+  ];
+
+  const filter = filterTabs.some((t) => t.key === status) ? (status as string) : "";
 
   const inquiriesRaw = await prisma.inquiry.findMany({
     where: {
       officeId: session.officeId,
       ...(filter === ""
-        ? { status: { notIn: ["WON", "LOST"] } }
+        ? { status: openInquiryStatusFilter() }
         : filter === "all"
           ? {}
-          : { status: filter }),
+          : INQUIRY_STATUS_VALUES.includes(filter)
+            ? { status: { in: inquiryStatusValuesFor(filter) } }
+            : { status: filter }),
     },
     include: {
       company: { select: { id: true, name: true } },
@@ -121,7 +147,6 @@ export default async function RFQPage({
   const mailConfigured = rfqMailConfigured();
 
   const rows: RfqRowData[] = inquiriesRaw.map((inq) => {
-    const sm = STATUS_META[inq.status] ?? { label: inq.status, cls: "badge-neutral" };
     const source = deriveInquirySource(inq);
     const parsed = safeParse(inq.parsedData);
     const isLead = parsed.source === "meta-leads";
@@ -193,6 +218,7 @@ export default async function RFQPage({
       }),
       subject: inq.subject,
       from: inq.fromCompany ?? inq.company?.name ?? inq.fromEmail ?? "—",
+      fromCompany: inq.fromCompany,
       fromEmail: inq.fromEmail,
       phone: str(parsed.phone),
       contactName: str(parsed.fullName),
@@ -203,9 +229,14 @@ export default async function RFQPage({
       origin: inq.origin,
       destination: inq.destination,
       mode: inq.mode,
-      statusLabel: sm.label,
-      statusCls: sm.cls,
+      // Canonicalized so legacy rows (INGESTED, WON, …) read and edit as
+      // their canonical status; a re-pick writes the canonical value.
+      status: canonicalInquiryStatus(inq.status),
       target,
+      targetInput: inq.targetPrice != null
+        ? `${inq.targetCurrency ?? "USD"} ${inq.targetPrice}`
+        : inq.targetPriceStatus === "NO_TARGET" ? "no target" : "",
+      targetPlaceholder: "Ask",
       facts,
       leadAnswers,
       notesExcerpt,
@@ -241,7 +272,7 @@ export default async function RFQPage({
         <div>
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
-            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown · newest first · click a row for load details
+            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown · newest first · click a cell to edit, changes save automatically · the arrow opens load details
           </p>
         </div>
         <div className="page-actions">
@@ -258,10 +289,10 @@ export default async function RFQPage({
       </div>
 
       <div className="mode-tabs" style={{ marginBottom: 16 }}>
-        {FILTER_TABS.map((t) => (
+        {filterTabs.map((t) => (
           <Link
             key={t.key || "open"}
-            href={`/dashboard/rfq${t.key ? `?status=${t.key}` : ""}` as "/dashboard/rfq"}
+            href={`/dashboard/rfq${t.key ? `?status=${encodeURIComponent(t.key)}` : ""}` as "/dashboard/rfq"}
             className={`mode-tab${filter === t.key ? " active" : ""}`}
           >
             {t.label}
@@ -282,7 +313,20 @@ export default async function RFQPage({
         </div>
       ) : (
         <div className="card table-shell">
-          <table className="data-table">
+          <table className="data-table sheet-table rfq-sheet">
+            <colgroup>
+              <col style={{ width: 74 }} />
+              <col style={{ width: 112 }} />
+              <col />
+              <col style={{ width: 172 }} />
+              <col style={{ width: 124 }} />
+              <col style={{ width: 190 }} />
+              <col style={{ width: 104 }} />
+              <col style={{ width: 116 }} />
+              <col style={{ width: 112 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 32 }} />
+            </colgroup>
             <thead>
               <tr>
                 <th style={{ cursor: "default" }}>Received</th>
@@ -295,9 +339,15 @@ export default async function RFQPage({
                 <th style={{ cursor: "default" }}>Status</th>
                 <th style={{ cursor: "default" }} className="numeric">Target Price</th>
                 <th style={{ cursor: "default" }} className="numeric">Send</th>
+                <th style={{ cursor: "default" }} aria-label="Row actions" />
               </tr>
             </thead>
-            <RfqExpandableRows rows={rows} colSpan={10} />
+            <RfqExpandableRows
+              rows={rows}
+              colSpan={11}
+              statusOptions={statusOptions}
+              modeOptions={modeOptions}
+            />
           </table>
         </div>
       )}

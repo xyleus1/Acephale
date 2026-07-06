@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   createContactAction,
   deleteContactAction,
@@ -13,6 +13,7 @@ import {
   RELATIONSHIP_LEVELS,
   type ContactRow,
 } from "@/lib/contact-fields";
+import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { Icon } from "@/components/icon";
 
 type SortKey =
@@ -46,166 +47,6 @@ function fmtLastTouch(iso: string | null): string {
   if (days === 1) return "Yesterday";
   if (days < 30) return `${days}d ago`;
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function CellInput({
-  value,
-  placeholder,
-  list,
-  onCommit,
-}: {
-  value: string | null;
-  placeholder?: string;
-  list?: string;
-  onCommit: (next: string) => void;
-}) {
-  const cancelled = useRef(false);
-  return (
-    <input
-      className="sheet-input"
-      defaultValue={value ?? ""}
-      placeholder={placeholder}
-      list={list}
-      onBlur={(e) => {
-        if (cancelled.current) {
-          cancelled.current = false;
-          e.target.value = value ?? "";
-          return;
-        }
-        const next = e.target.value.trim();
-        if (next !== (value ?? "")) onCommit(next);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
-        if (e.key === "Escape") {
-          cancelled.current = true;
-          e.currentTarget.blur();
-        }
-      }}
-    />
-  );
-}
-
-function CellSelect({
-  value,
-  options,
-  allowEmpty,
-  onCommit,
-}: {
-  value: string | null;
-  options: ReadonlyArray<readonly [string, string]>;
-  allowEmpty?: boolean;
-  onCommit: (next: string) => void;
-}) {
-  // Local state so the picked value stays visible during the save round trip;
-  // a failed save remounts the cell (key bump) back to the stored value.
-  const [local, setLocal] = useState(value ?? "");
-  const [menu, setMenu] = useState<{ top: number; left: number; up: boolean } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const items: Array<readonly [string, string]> = allowEmpty ? [["", "—"], ...options] : [...options];
-  const label = options.find(([v]) => v === local)?.[1] ?? "—";
-
-  function openMenu() {
-    const r = triggerRef.current!.getBoundingClientRect();
-    const height = items.length * 30 + 10;
-    const up = r.bottom + height > window.innerHeight - 8;
-    setMenu({ top: up ? r.top - 4 : r.bottom + 4, left: r.left, up });
-  }
-
-  function close(refocus = false) {
-    setMenu(null);
-    if (refocus) triggerRef.current?.focus();
-  }
-
-  function pick(v: string) {
-    close(true);
-    if (v === local) return;
-    setLocal(v);
-    onCommit(v);
-  }
-
-  useEffect(() => {
-    if (!menu) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (!menuRef.current?.contains(t) && !triggerRef.current?.contains(t)) close();
-    };
-    const onScroll = (e: Event) => {
-      if (!menuRef.current?.contains(e.target as Node)) close();
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onScroll);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onScroll);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menu !== null]);
-
-  function onMenuKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      close(true);
-      return;
-    }
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>(".sheet-select-option") ?? []);
-      const idx = buttons.indexOf(document.activeElement as HTMLButtonElement);
-      const next = e.key === "ArrowDown" ? Math.min(idx + 1, buttons.length - 1) : Math.max(idx - 1, 0);
-      buttons[next]?.focus();
-    }
-  }
-
-  return (
-    <>
-      <button
-        type="button"
-        ref={triggerRef}
-        className={`sheet-select-trigger${local ? "" : " sheet-select-empty"}`}
-        onClick={() => (menu ? close() : openMenu())}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-            if (!menu) {
-              e.preventDefault();
-              openMenu();
-            }
-          }
-        }}
-      >
-        <span className="sheet-select-label">{label}</span>
-        <Icon name="chevron-down" size={12} strokeWidth={2} />
-      </button>
-      {menu && (
-        <div
-          ref={menuRef}
-          className="sheet-select-menu"
-          role="listbox"
-          style={{ top: menu.top, left: menu.left, transform: menu.up ? "translateY(-100%)" : undefined }}
-          onKeyDown={onMenuKeyDown}
-        >
-          {items.map(([v, optionLabel]) => (
-            <button
-              type="button"
-              key={v || "(empty)"}
-              className={`sheet-select-option${v === local ? " selected" : ""}`}
-              role="option"
-              aria-selected={v === local}
-              autoFocus={v === local}
-              onClick={() => pick(v)}
-            >
-              <span className="sheet-select-check">{v === local && <Icon name="check" size={12} strokeWidth={2.5} />}</span>
-              {optionLabel}
-            </button>
-          ))}
-        </div>
-      )}
-    </>
-  );
 }
 
 type Draft = Record<"name" | "company" | "type" | "status" | "relationship" | "email" | "phone" | "location" | "notes", string>;

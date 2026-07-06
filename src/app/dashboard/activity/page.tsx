@@ -15,7 +15,9 @@ const STATUS_LABEL: Record<string, string> = {
 const RFQ_NEXT: Record<string, string> = {
   INGESTED: "Parse with AI",
   PARSED: "Request carrier rates",
+  RECEIVED: "Request carrier rates",
   PRICED: "Convert to Job",
+  PRICING: "Convert to Job",
   QUOTED: "Awaiting reply",
 };
 
@@ -96,13 +98,15 @@ export default async function ActivityPage() {
       take: 5,
     }),
     prisma.inquiry.findMany({
-      where: { officeId: session.officeId, status: "PARSED" },
+      // RECEIVED is the canonical successor of the legacy PARSED stage.
+      where: { officeId: session.officeId, status: { in: ["PARSED", "RECEIVED"] } },
       include: { company: { select: { name: true } } },
       orderBy: { receivedAt: "desc" },
       take: 5,
     }),
     prisma.inquiry.findMany({
-      where: { officeId: session.officeId, status: "PRICED", job: null },
+      // PRICING is the canonical successor of the legacy PRICED stage.
+      where: { officeId: session.officeId, status: { in: ["PRICED", "PRICING"] }, job: null },
       include: { company: { select: { name: true } } },
       orderBy: { receivedAt: "desc" },
       take: 5,

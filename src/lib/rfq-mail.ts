@@ -2,6 +2,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 import { prisma } from "./prisma";
 import { deriveInquirySource } from "./inquiry-source";
+import { openInquiryStatusFilter } from "./inquiry-status";
 
 // Outbound RFQ mail from the rfq@usederya.com desk address. This account is
 // not OAuth-connected (no refresh token), so delivery goes over Gmail SMTP
@@ -332,7 +333,8 @@ export function pendingDeskForwardWhere(officeId: string) {
   return {
     officeId,
     parsedData: { contains: '"source":"meta-leads"' },
-    status: { notIn: ["WON", "LOST"] },
+    // Booked/missed/ignored leads must not be desk-forwarded by Send-all.
+    status: openInquiryStatusFilter(),
   };
 }
 

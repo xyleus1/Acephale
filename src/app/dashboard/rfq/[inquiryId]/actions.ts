@@ -90,9 +90,11 @@ export async function updateInquiryField(inquiryId: string, formData: FormData) 
     notes: String(formData.get("notes") || ""),
   };
   const qualification = qualificationFor(data);
-  const nextStatus = ["QUOTED", "WON", "LOST"].includes(inquiry.status)
-    ? inquiry.status
-    : qualification.isMature ? "PARSED" : "INGESTED";
+  // Only auto-flip the legacy parse-maturity pair; a status the operator set
+  // (canonical BOOKED/PRICING/… or a custom one) must survive field edits.
+  const nextStatus = ["INGESTED", "PARSED"].includes(inquiry.status)
+    ? qualification.isMature ? "PARSED" : "INGESTED"
+    : inquiry.status;
 
   const updated = await prisma.inquiry.update({
     where: { id: inquiryId, officeId: session.officeId },
@@ -256,10 +258,13 @@ ${inquiry.rawEmailBody.slice(0, 2000)}`,
   const qualification = qualificationFor(data);
 
   const updated = await prisma.inquiry.update({
-    where: { id: inquiryId },
+    where: { id: inquiryId, officeId: session.officeId },
     data: {
       ...data,
-      status: qualification.isMature ? "PARSED" : "INGESTED",
+      // Same guard as updateInquiryField: never demote an operator-set status.
+      status: ["INGESTED", "PARSED"].includes(inquiry.status)
+        ? qualification.isMature ? "PARSED" : "INGESTED"
+        : inquiry.status,
       parsedData: JSON.stringify({ ...parsed, qualification }),
     },
   });

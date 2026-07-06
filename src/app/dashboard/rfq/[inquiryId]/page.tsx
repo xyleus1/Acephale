@@ -13,15 +13,12 @@ import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-p
 import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
 import { getBrainBridgeContext } from "@/lib/brain-bridge";
 import { BrainBridgePanel } from "@/components/brain-bridge-panel";
-
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  INGESTED: { label: "RFQ",        cls: "badge-info" },
-  PARSED:   { label: "Mature RFQ", cls: "badge-neutral" },
-  PRICED:   { label: "Pricing",    cls: "badge-warn" },
-  QUOTED:   { label: "Quoted", cls: "badge-good" },
-  WON:      { label: "Won",    cls: "badge-good" },
-  LOST:     { label: "Lost",   cls: "badge-danger" },
-};
+import {
+  canonicalInquiryStatus,
+  CLOSED_INQUIRY_STATUSES,
+  inquiryStatusBadgeCls,
+  inquiryStatusLabel,
+} from "@/lib/inquiry-status";
 
 function fmt(d: Date | null | undefined) {
   if (!d) return "—";
@@ -130,16 +127,15 @@ export default async function RFQDetailPage({
 
   if (!inquiry) notFound();
 
-  const sm = STATUS_META[inquiry.status] ?? { label: inquiry.status, cls: "badge-neutral" };
-  const canConvert = (!inquiry.job || inquiry.job.status === "PROPOSED") && !["WON", "LOST"].includes(inquiry.status);
+  const sm = { label: inquiryStatusLabel(inquiry.status), cls: inquiryStatusBadgeCls(inquiry.status) };
+  const canConvert = (!inquiry.job || inquiry.job.status === "PROPOSED") && !CLOSED_INQUIRY_STATUSES.includes(inquiry.status);
 
+  // Keyed by canonical status so legacy values (INGESTED/PARSED/PRICED/QUOTED) hit too.
   const FLOW_HINTS: Record<string, { msg: string; action: string }> = {
-    INGESTED: { msg: "This RFQ hasn't been parsed yet.", action: "Parse with AI to extract origin, destination, mode and cargo details." },
-    PARSED:   { msg: "RFQ is mature.", action: "Move it into pricing only when the fields below are complete." },
-    PRICED:   { msg: "Forwarder rates collected.", action: "Prepare the customer quote or convert to a job after approval." },
-    QUOTED:   { msg: "Quote has been sent to the customer.", action: "Waiting for customer reply. Mark as Won or Lost when outcome is known." },
+    RECEIVED: { msg: "This RFQ is waiting on pricing.", action: "Parse with AI or fill the fields below, then move it to Pricing." },
+    PRICING:  { msg: "RFQ is in pricing.", action: "Prepare the customer quote or convert to a load. Mark it Booked or Missed when the outcome is known." },
   };
-  const flowHint = !inquiry.job ? FLOW_HINTS[inquiry.status] : null;
+  const flowHint = !inquiry.job ? FLOW_HINTS[canonicalInquiryStatus(inquiry.status)] : null;
   const strategyRun = await assessInquiryStrategy(session.officeId, inquiry.id);
   const opportunity = strategyRun?.strategy;
   const maturity = qualifyRfq(inquiry);
@@ -183,7 +179,7 @@ export default async function RFQDetailPage({
               <div className="record-notice-text">{flowHint.action}</div>
             </div>
           </div>
-          {inquiry.status === "INGESTED" && inquiry.rawEmailBody && (
+          {canonicalInquiryStatus(inquiry.status) === "RECEIVED" && inquiry.rawEmailBody && (
             <form action={parseRFQWithAI.bind(null, inquiry.id)} className="record-notice-action">
               <button className="btn btn-sm" type="submit">
                 <Icon name="sparkles" size={12} strokeWidth={2} /> Parse with AI
@@ -216,8 +212,8 @@ export default async function RFQDetailPage({
               </a>
             ) : (
               <>
-                <form action={updateInquiryStatus.bind(null, inquiryId, "LOST")}>
-                  <button className="btn btn-secondary btn-sm" type="submit">Mark Lost</button>
+                <form action={updateInquiryStatus.bind(null, inquiryId, "MISSED")}>
+                  <button className="btn btn-secondary btn-sm" type="submit">Mark Missed</button>
                 </form>
               </>
             )}

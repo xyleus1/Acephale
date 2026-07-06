@@ -1,6 +1,7 @@
 import "dotenv/config";
 import crypto from "node:crypto";
 import { prisma } from "../src/lib/prisma";
+import { openInquiryStatusFilter } from "../src/lib/inquiry-status";
 import { getMarketIntelligenceSourceRegistry } from "../src/lib/market-intelligence/source-registry";
 import { scheduledMarketIngestionConfig } from "../src/lib/market-intelligence/scheduled-ingestion";
 import { sourceAllowedDomains, sourceRunLimits, validateMarketSourceDefinition } from "../src/lib/market-intelligence/source-policy";
@@ -189,7 +190,7 @@ async function main() {
       : Promise.resolve([]),
     inquiryIds.length
       ? prisma.inquiry.findMany({
-          where: { id: { in: inquiryIds }, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+          where: { id: { in: inquiryIds }, status: openInquiryStatusFilter() },
           select: { id: true },
         })
       : Promise.resolve([]),

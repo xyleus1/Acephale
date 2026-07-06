@@ -4,6 +4,75 @@
 
 ## Date
 
+2026-07-06
+
+## Branch
+
+berlin (Conductor workspace, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+RFQ page rebuilt as an inline-editable sheet + new status vocabulary + focused-load strip removed:
+
+- The focused-load context strip ("FOCUSED DRY… · customer · route · status")
+  no longer renders on any page; removed from `src/app/dashboard/layout.tsx`.
+  The focus-cookie mechanism stays (dashboard workbench + ⌘K still use it);
+  `src/components/hide-on-routes.tsx` deleted (strip was its only consumer).
+- `/dashboard/rfq` cells now edit in place like the CRM sheet: subject,
+  from company/email, origin → destination, mode, status, target price.
+  Blur/Enter saves via `updateInquiryRowAction`; failed saves revert the cell
+  and flash an inline error row. Per-row ✕ deletes (confirm dialog;
+  status Ignored is the archive path). The chevron button expands load
+  details as before.
+- New RFQ status set (control-sheet lingo): BOOKED / PRICING / MISSED ($) /
+  RECEIVED / IGNORED — `src/lib/inquiry-status.ts`. Legacy values alias onto
+  it (INGESTED,PARSED→RECEIVED; PRICED,QUOTED→PRICING; WON→BOOKED;
+  LOST→MISSED) so NO data backfill was needed; automations that still write
+  legacy values keep working. "Open" = notIn {BOOKED,MISSED,IGNORED,WON,LOST};
+  every open-inquiry predicate in the app now shares
+  `openInquiryStatusFilter()`.
+- Status and mode dropdowns support "Add option…" — a brand-new value typed
+  in the cell becomes an option and a filter tab for the office (options and
+  tabs are derived from values in use; Inquiry.status/mode are free strings,
+  no migration).
+- RFQ detail: field edits and AI parse no longer demote an operator-set
+  status; "Mark Lost" is now "Mark Missed" (writes MISSED).
+
+## Files changed
+
+`src/lib/inquiry-status.ts` (new), `src/components/sheet-cells.tsx` (new —
+CellInput/CellSelect extracted from contact-sheet, plus allowCreate),
+`src/components/contact-sheet.tsx`, `src/components/rfq-expandable-rows.tsx`,
+`src/app/dashboard/rfq/{page,actions}.tsx`,
+`src/app/dashboard/rfq/[inquiryId]/{page,actions}.tsx`,
+`src/app/dashboard/layout.tsx`, `src/app/globals.css`, open-filter swaps in
+inbox/activity/domestic-pricing/pricing pages and
+agent-chat/agent-tools/decision-queue/email-classifier/thread-actions/
+merge-actions/setup-demo-actions/job-actions/rfq-mail/prewarm-summary/
+morning-brief/market-tools/link-market-signals libs, plus
+`scripts/market-doctor.ts`, `scripts/validate-office-import.ts`.
+
+## Verification passed
+
+tsc clean; next build clean; eslint no new errors; test:strategy,
+test:rfq-load-draft, test:email-labels pass; adversarial multi-agent diff
+review, confirmed findings fixed. No schema changes — safe to deploy without
+migrations.
+
+## Caveats
+
+Legacy status values remain in the DB (aliases handle display/filtering).
+Custom statuses/modes persist only while ≥1 row uses them. Dead job-focus-*
+CSS left in globals.css. DB-backed tests skipped (no local DATABASE_URL).
+
+## Previous Update
+
+## Date
+
 2026-07-04 (later same day)
 
 ## Branch

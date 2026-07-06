@@ -15,6 +15,7 @@ import { Icon } from "@/components/icon";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefForInbox, isDeryaRfqSourceSender } from "@/lib/derya-inboxes";
 import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/lib/email-workflow-labels";
+import { inquiryStatusBadgeCls, inquiryStatusLabel, openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
 
 const FILTERS = [
@@ -557,7 +558,7 @@ export default async function InboxPage({
 
   // Open inquiries shown in the bulk-action "Link to load" picker.
   const openInquiriesForBulk = (await prisma.inquiry.findMany({
-    where: { officeId: session.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+    where: { officeId: session.officeId, status: openInquiryStatusFilter() },
     select: { id: true, subject: true, type: true },
     orderBy: { receivedAt: "desc" },
     take: 50,
@@ -657,7 +658,7 @@ export default async function InboxPage({
             take: 100,
           }).then((jobs) => jobs.map((j) => ({ id: j.id, reference: j.reference, type: j.type, customer: j.company?.name ?? null })))}
           unlinkedInquiries={await prisma.inquiry.findMany({
-            where: { officeId: session.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] }, job: null },
+            where: { officeId: session.officeId, status: openInquiryStatusFilter(), job: null },
             select: { id: true, subject: true, type: true },
             orderBy: { receivedAt: "desc" },
             take: 60,
@@ -1254,15 +1255,6 @@ type RfqRow = {
   _count: { emailThreads: number };
 };
 
-const RFQ_STATUS_META: Record<string, { label: string; cls: string }> = {
-  INGESTED: { label: "RFQ",        cls: "badge-info" },
-  PARSED:   { label: "Mature RFQ", cls: "badge-neutral" },
-  PRICED:   { label: "Pricing",    cls: "badge-warn" },
-  QUOTED:   { label: "Quoted", cls: "badge-good" },
-  WON:      { label: "Won",    cls: "badge-good" },
-  LOST:     { label: "Lost",   cls: "badge-danger" },
-};
-
 function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: string; reference: string; type: string; customer: string | null }[] }) {
   if (rfqs.length === 0) {
     return (
@@ -1292,7 +1284,7 @@ function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: s
         </thead>
         <tbody>
           {rfqs.map((r) => {
-            const sm = RFQ_STATUS_META[r.status] ?? { label: r.status, cls: "badge-neutral" };
+            const sm = { label: inquiryStatusLabel(r.status), cls: inquiryStatusBadgeCls(r.status) };
             return (
               <tr key={r.id} className="data-row">
                 <td>

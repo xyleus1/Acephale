@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { canonicalInquiryStatus } from "@/lib/inquiry-status";
 import Link from "next/link";
 
 type SearchParams = Promise<{ period?: string }>;
@@ -132,12 +133,16 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     .filter((j) => ["BOOKED", "IN_TRANSIT", "CUSTOMS"].includes(j.status))
     .reduce((s, j) => s + (j.revenue ?? 0), 0);
 
+  // Funnel over canonical statuses (canonicalInquiryStatus maps legacy values;
+  // PRICING merges the old PRICED+QUOTED stages, so "quoted" counts raw QUOTED
+  // rows plus rows with a known outcome).
+  const canon = new Map(inquiriesRecent.map((i) => [i, canonicalInquiryStatus(i.status)]));
   const rfqByStatus = {
     received: inquiriesRecent.length,
-    parsed: inquiriesRecent.filter((i) => ["PARSED", "PRICED", "QUOTED", "WON", "LOST"].includes(i.status)).length,
-    priced: inquiriesRecent.filter((i) => ["PRICED", "QUOTED", "WON", "LOST"].includes(i.status)).length,
-    quoted: inquiriesRecent.filter((i) => ["QUOTED", "WON", "LOST"].includes(i.status)).length,
-    won: inquiriesRecent.filter((i) => i.status === "WON").length,
+    parsed: inquiriesRecent.filter((i) => i.status === "PARSED" || ["PRICING", "BOOKED", "MISSED"].includes(canon.get(i)!)).length,
+    priced: inquiriesRecent.filter((i) => ["PRICING", "BOOKED", "MISSED"].includes(canon.get(i)!)).length,
+    quoted: inquiriesRecent.filter((i) => i.status === "QUOTED" || ["BOOKED", "MISSED"].includes(canon.get(i)!)).length,
+    won: inquiriesRecent.filter((i) => canon.get(i) === "BOOKED").length,
   };
   const rfqWinRate = rfqByStatus.won + rfqByStatus.quoted > 0
     ? Math.round((rfqByStatus.won / Math.max(rfqByStatus.won + rfqByStatus.quoted, 1)) * 100)

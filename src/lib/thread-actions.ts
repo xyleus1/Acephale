@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "./auth";
 import { prisma } from "./prisma";
 import { createWithFileReference } from "./references";
+import { openInquiryStatusFilter } from "./inquiry-status";
 import { createPendingBulkHideThreadsProposal } from "./agent-proposals";
 import { recordMemoryEvent } from "./memory/record-event";
 import { DERYA_RFQ_SOURCE_EMAILS, isDeryaRfqSourceSender } from "./derya-inboxes";
@@ -221,7 +222,7 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
   // existing record instead of creating a duplicate.
   const [openInquiries, activeJobs] = await Promise.all([
     prisma.inquiry.findMany({
-      where: { officeId: thread.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+      where: { officeId: thread.officeId, status: openInquiryStatusFilter() },
       select: { id: true, subject: true, type: true, fromEmail: true, fromCompany: true, commodity: true, origin: true, destination: true, mode: true, notes: true, company: { select: { name: true } } },
       orderBy: { receivedAt: "desc" },
       take: 80,

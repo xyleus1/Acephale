@@ -20,6 +20,7 @@ import { buildStrategyDecisionBrief, buildStrategyExecutionPacket, buildStrategy
 import { commercialChecklistItemsWithActions } from "@/lib/commercial-checklist-actions";
 import { buildPricingCommandFactors, type PricingCommandFactor } from "@/lib/pricing-command-factors";
 import { operatorMaturityLabel, operatorMetricLabel, operatorPhaseLabel, operatorToolLabel } from "@/lib/operator-action-labels";
+import { canonicalInquiryStatus } from "@/lib/inquiry-status";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 
 type SearchParams = Promise<{ inquiry?: string }>;
@@ -37,13 +38,20 @@ const MAJOR_FORWARDERS = new Set([
 ]);
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  INGESTED: { label: "RFQ", className: "status-ingested" },
-  PARSED: { label: "Mature RFQ", className: "status-parsed" },
+  // Canonical RFQ statuses (see src/lib/inquiry-status.ts).
+  BOOKED: { label: "Booked", className: "status-priced" },
+  PRICING: { label: "Pricing", className: "status-priced" },
+  MISSED: { label: "Missed ($)", className: "status-needs-info" },
+  RECEIVED: { label: "Received", className: "status-ingested" },
+  IGNORED: { label: "Ignored", className: "status-needs-info" },
+  // Legacy values still on old rows.
+  INGESTED: { label: "Received", className: "status-ingested" },
+  PARSED: { label: "Received", className: "status-parsed" },
   NEEDS_INFO: { label: "Needs Info", className: "status-needs-info" },
   PRICED: { label: "Pricing", className: "status-priced" },
-  QUOTED: { label: "Quoted", className: "status-sent" },
-  WON: { label: "Won", className: "status-priced" },
-  LOST: { label: "Lost", className: "status-needs-info" },
+  QUOTED: { label: "Pricing", className: "status-sent" },
+  WON: { label: "Booked", className: "status-priced" },
+  LOST: { label: "Missed ($)", className: "status-needs-info" },
 };
 
 type CarrierQuoteRow = {
@@ -2338,9 +2346,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                     <input type="hidden" name="id" value={selectedInquiry.id} />
                     <AutoSubmitSelect
                       name="status"
-                      defaultValue={selectedInquiry.status}
+                      defaultValue={canonicalInquiryStatus(selectedInquiry.status)}
                       className="pricing-status-select"
-                      options={["INGESTED", "PARSED", "NEEDS_INFO", "PRICED", "QUOTED", "WON", "LOST"].map((s) => ({ value: s, label: statusMeta(s).label }))}
+                      options={[...new Set([canonicalInquiryStatus(selectedInquiry.status), "BOOKED", "PRICING", "MISSED", "RECEIVED", "IGNORED"])].map((s) => ({ value: s, label: statusMeta(s).label }))}
                     />
                   </form>
                   <form action={deleteInquiryAction}>

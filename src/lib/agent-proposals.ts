@@ -9,6 +9,7 @@ import { buildAgentProposalDecisionImpact } from "@/lib/agent-proposal-impact";
 import { filterScopedProposalFields } from "@/lib/agent-proposal-scope";
 import { buildReviewedFieldChanges, type ReviewedFieldChange } from "@/lib/agent-proposal-review";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
+import { CLOSED_INQUIRY_STATUSES } from "@/lib/inquiry-status";
 
 export type AgentProposalApplyResult = {
   ok: boolean;
@@ -38,7 +39,10 @@ type BulkActionProposalType =
   | "DEDUP_INQUIRIES"
   | "MERGE_INQUIRIES_INTO_ONE";
 
-const OPEN_INQUIRY_STATUSES = ["INGESTED", "PARSED", "PRICED", "QUOTED"];
+// Open = anything not closed; custom statuses added on the RFQ sheet stay open.
+function isOpenInquiryStatus(status: string): boolean {
+  return !CLOSED_INQUIRY_STATUSES.includes(status);
+}
 
 function proposalWhere(input: ApplyJobProposalInput): Prisma.AgentProposalWhereInput {
   const where: Prisma.AgentProposalWhereInput = {
@@ -540,7 +544,7 @@ async function applyDedupClusters(officeId: string, clusters: Record<string, unk
     }
     if (losers.length === 0) continue;
     const unsafe = [keeper, ...losers].some((inquiry) =>
-      !OPEN_INQUIRY_STATUSES.includes(inquiry.status) || (inquiry.job && inquiry.job.status !== "PROPOSED")
+      !isOpenInquiryStatus(inquiry.status) || (inquiry.job && inquiry.job.status !== "PROPOSED")
     );
     if (unsafe) continue;
 
@@ -590,7 +594,7 @@ async function applyMergeAllOpenInquiries(officeId: string, actionInput: Record<
   }
   if (losers.length === 0) return { ok: false as const, message: "No proposed loser inquiries still exist. Nothing changed." };
   const unsafe = [keeper, ...losers].some((inquiry) =>
-    !OPEN_INQUIRY_STATUSES.includes(inquiry.status) || (inquiry.job && inquiry.job.status !== "PROPOSED")
+    !isOpenInquiryStatus(inquiry.status) || (inquiry.job && inquiry.job.status !== "PROPOSED")
   );
   if (unsafe) {
     return { ok: false as const, message: "At least one inquiry became a real job or closed after the proposal was created. Nothing changed." };

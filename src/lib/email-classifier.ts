@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma";
+import { openInquiryStatusFilter } from "./inquiry-status";
 import { isDeryaRfqSourceSender } from "./derya-inboxes";
 
 export type ClassifiedKind = "RFQ" | "CARRIER_REPLY" | "CUSTOMER_REPLY" | "RELATED_NOTE" | "OTHER";
@@ -72,7 +73,7 @@ export async function classifyInboundEmail(args: {
   // Pull current state of the office for matching context
   const [inquiries, jobs, customers] = await Promise.all([
     prisma.inquiry.findMany({
-      where: { officeId: args.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+      where: { officeId: args.officeId, status: openInquiryStatusFilter() },
       select: { id: true, subject: true, fromEmail: true, fromCompany: true, origin: true, destination: true, mode: true, company: { select: { name: true } } },
       orderBy: { receivedAt: "desc" },
       take: 30,

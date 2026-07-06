@@ -3,6 +3,7 @@ import { Icon } from "@/components/icon";
 import { requireSession } from "@/lib/auth";
 import { assessDomesticTruckingPricing, type DomesticPricingAssessment, type DomesticPricingInquiry, type Money } from "@/lib/domestic-trucking-pricing";
 import { prisma } from "@/lib/prisma";
+import { openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { buildRouteViewport, type RouteMapPoint } from "@/lib/route-map-viewport";
 
 type SearchParams = Promise<{ inquiry?: string }>;
@@ -191,7 +192,7 @@ export default async function DomesticPricingPage({
   const inquiries = await prisma.inquiry.findMany({
     where: {
       officeId: session.officeId,
-      status: { in: ["INGESTED", "PARSED", "PRICED", "NEEDS_INFO"] },
+      status: openInquiryStatusFilter(),
     },
     include: {
       company: { select: { name: true } },

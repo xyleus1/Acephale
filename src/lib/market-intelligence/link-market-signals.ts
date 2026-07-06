@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { buildSourceQualityLookup, listSourceQualitySummaries } from "./source-quality";
 import { shouldUseMarketSignalInStrategyContext } from "./signal-suppression";
 import {
@@ -196,7 +197,7 @@ export async function linkMarketSignalToBusinessObjects(input: {
         take: 250,
       }),
       prisma.inquiry.findMany({
-        where: { officeId: input.officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+        where: { officeId: input.officeId, status: openInquiryStatusFilter() },
         select: {
           id: true, companyId: true, subject: true, origin: true, destination: true, mode: true,
           carrierQuotes: { select: { carrier: true } },

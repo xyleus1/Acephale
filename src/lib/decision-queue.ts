@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
+import { openInquiryStatusFilter } from "./inquiry-status";
 import { requiredRfqMissing } from "./opportunity-score";
 import { assessInquiryStrategy, assessJobStrategy } from "./commercial-strategy-persistence";
 import {
@@ -567,7 +568,7 @@ function takeBalancedQueue(items: DecisionQueueItem[], limit: number) {
 export async function listDecisionQueueItems(officeId: string, limit = 10): Promise<DecisionQueueItem[]> {
   const [inquiries, threads, proposals, pendingQuotes] = await Promise.all([
     prisma.inquiry.findMany({
-      where: { officeId, status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] } },
+      where: { officeId, status: openInquiryStatusFilter() },
       include: {
         carrierQuotes: {
           select: { id: true, status: true, createdAt: true },

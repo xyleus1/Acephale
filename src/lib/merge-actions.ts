@@ -4,9 +4,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
+import { openInquiryStatusFilter } from "./inquiry-status";
 import { createPendingBulkActionProposal } from "./agent-proposals";
-
-const OPEN_INQUIRY_STATUSES = ["INGESTED", "PARSED", "PRICED", "QUOTED"];
 
 type MergeArgs = {
   type?: "SOURCING" | "FORWARDING";
@@ -54,7 +53,7 @@ async function openMergeCandidates(officeId: string, type?: "SOURCING" | "FORWAR
   return prisma.inquiry.findMany({
     where: {
       officeId,
-      status: { in: OPEN_INQUIRY_STATUSES },
+      status: openInquiryStatusFilter(),
       ...(type ? { type } : {}),
       OR: [
         { job: null },
@@ -80,7 +79,7 @@ export async function proposeDuplicateInquiryConsolidation(): Promise<
   const inquiries = await prisma.inquiry.findMany({
     where: {
       officeId: session.officeId,
-      status: { in: OPEN_INQUIRY_STATUSES },
+      status: openInquiryStatusFilter(),
     },
     select: {
       id: true, subject: true, type: true, fromEmail: true, fromCompany: true,
@@ -298,7 +297,7 @@ export async function consolidateDuplicateInquiries(): Promise<
   const inquiries = await prisma.inquiry.findMany({
     where: {
       officeId: session.officeId,
-      status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] },
+      status: openInquiryStatusFilter(),
     },
     select: {
       id: true, subject: true, type: true, fromEmail: true, fromCompany: true,
@@ -431,12 +430,12 @@ export async function mergeAllOpenInquiriesIntoOne(args: {
 
   const where: {
     officeId: string;
-    status: { in: string[] };
+    status: { notIn: string[] };
     type?: string;
     job: { is: { status: string } } | null;
   } = {
     officeId: session.officeId,
-    status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] },
+    status: openInquiryStatusFilter(),
     // Only consider inquiries whose linked job is still PROPOSED (or has no
     // job yet). Confirmed jobs are real work and shouldn't be merged.
     job: null,
@@ -447,7 +446,7 @@ export async function mergeAllOpenInquiriesIntoOne(args: {
   const candidates = await prisma.inquiry.findMany({
     where: {
       officeId: session.officeId,
-      status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] },
+      status: openInquiryStatusFilter(),
       ...(args.type ? { type: args.type } : {}),
       OR: [
         { job: null },

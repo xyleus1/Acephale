@@ -1635,3 +1635,56 @@ Use this file for chronological implementation notes that future agents should s
   dock suppressed only on the brain chat view (sections keep the dock).
 - Follow-up: wire brain sections deeper (user: "we'll configure that bit
   later"); consider persistence for brain chat threads.
+
+### 2026-07-06 - RFQ inline-editable sheet, new status vocabulary, focused-load strip removed
+
+- Branch: berlin (Conductor workspace)
+- Commit: see git log
+- Task: (1) Remove the focused-load context strip from the dashboard layout
+  on all pages (focus cookie mechanism kept — the workbench still uses it;
+  unused hide-on-routes.tsx deleted). (2) Make /dashboard/rfq an inline-
+  editable sheet like the CRM: subject, from company/email, lane, mode,
+  status and target price edit in place; per-row delete with confirm
+  (status Ignored doubles as archive). (3) New RFQ status vocabulary
+  BOOKED / PRICING / MISSED ($) / RECEIVED / IGNORED with legacy aliases
+  (INGESTED,PARSED→RECEIVED; PRICED,QUOTED→PRICING; WON→BOOKED;
+  LOST→MISSED) in src/lib/inquiry-status.ts — no data backfill needed; all
+  "open inquiry" predicates now share openInquiryStatusFilter(). New status
+  and mode options can be added on the fly from the cell dropdowns
+  ("Add option…"); options and filter tabs derive from values in use.
+- Files changed: src/lib/inquiry-status.ts (new),
+  src/components/sheet-cells.tsx (new, extracted from contact-sheet with
+  allowCreate), src/components/contact-sheet.tsx,
+  src/components/rfq-expandable-rows.tsx, src/app/dashboard/rfq/page.tsx,
+  src/app/dashboard/rfq/actions.ts (updateInquiryRowAction /
+  deleteInquiryRowAction), src/app/dashboard/rfq/[inquiryId]/{page,actions}.tsx
+  (status guards: field edits / AI parse no longer demote operator-set
+  statuses), src/app/dashboard/layout.tsx (strip removed),
+  src/components/hide-on-routes.tsx (deleted), src/app/globals.css,
+  open-filter swaps in inbox, activity, domestic-pricing, pricing page
+  (canonical status select), agent-chat, agent-tools, decision-queue,
+  email-classifier, thread-actions, merge-actions, setup-demo-actions,
+  job-actions, rfq-mail, prewarm-summary, morning-brief, market-tools,
+  link-market-signals, scripts/market-doctor.ts,
+  scripts/validate-office-import.ts.
+- Verification: tsc clean; next build clean; eslint no new errors (102
+  pre-existing before and after); test:strategy, test:rfq-load-draft,
+  test:email-labels pass; adversarial multi-agent review over the diff —
+  confirmed findings fixed: status-demotion guards added to
+  rfq-load-review.ts and job-actions.ts confirmProposedJob; merge-actions +
+  agent-proposals open-status checks unified; reports funnel canonicalized;
+  target parser handles Turkish/European separators ("1.200" = 1200);
+  delete refuses RFQs linked to a real load (deletes PROPOSED shells);
+  reserved status names "all"/"open" rejected; parseRFQWithAI update
+  officeId-scoped; select-menu padding clicks no longer toggle the row;
+  job-focus.ts trimmed to getFocusedJobId.
+- Failed/skipped checks: DB-backed tests (test:security, test:crm) skipped —
+  no local DATABASE_URL in this workspace.
+- Caveats: no schema change, no data backfill — legacy status values stay in
+  the DB and alias onto the canonical set for display/filtering. Custom
+  statuses/modes persist only while at least one row uses them (options are
+  derived from data, not a config table). Old job-focus-* CSS is now dead
+  but left in globals.css.
+- Follow-up: optional one-off backfill of legacy status values to canonical;
+  consider a CategoryOption-backed store if custom options should survive
+  having zero rows.

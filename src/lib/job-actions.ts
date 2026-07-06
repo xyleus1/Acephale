@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { createWithFileReference } from "./references";
+import { openInquiryStatusFilter } from "./inquiry-status";
 
 // Run a job create that retries with a fresh reference if two creates race
 // into the same number (unique constraint violation). Loads share the DRY
@@ -82,7 +83,7 @@ export async function ensureProposedJobsForOpenInquiries(officeId: string): Prom
   const inquiries = await prisma.inquiry.findMany({
     where: {
       officeId,
-      status: { in: ["INGESTED", "PARSED", "PRICED", "QUOTED"] },
+      status: openInquiryStatusFilter(),
       job: null,
     },
     select: { id: true },
@@ -110,8 +111,10 @@ export async function confirmProposedJob(jobId: string): Promise<{ ok: true } | 
     data: { status: "INQUIRY" },
   });
   if (job.inquiryId) {
-    await prisma.inquiry.update({
-      where: { id: job.inquiryId },
+    // Mark a freshly-ingested RFQ as matured; never demote an operator-set
+    // status (canonical BOOKED/PRICING/… or a custom one).
+    await prisma.inquiry.updateMany({
+      where: { id: job.inquiryId, status: { in: ["INGESTED", "PARSED"] } },
       data: { status: "PARSED" },
     });
   }

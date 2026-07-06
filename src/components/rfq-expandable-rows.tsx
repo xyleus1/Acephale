@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
+import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
-import { sendDeskForwardAction, sendLeadConfirmationAction } from "@/app/dashboard/rfq/actions";
+import {
+  deleteInquiryRowAction,
+  sendDeskForwardAction,
+  sendLeadConfirmationAction,
+  updateInquiryRowAction,
+  type InquiryRowPatch,
+} from "@/app/dashboard/rfq/actions";
 
 export type RfqEmailPreview = {
   to: string | null;
@@ -25,6 +32,7 @@ export type RfqRowData = {
   receivedFull: string;
   subject: string;
   from: string;
+  fromCompany: string | null;
   fromEmail: string | null;
   phone: string | null;
   contactName: string | null;
@@ -35,9 +43,10 @@ export type RfqRowData = {
   origin: string | null;
   destination: string | null;
   mode: string | null;
-  statusLabel: string;
-  statusCls: string;
+  status: string;
   target: string;
+  targetInput: string;
+  targetPlaceholder: string;
   facts: Array<{ label: string; value: string }>;
   leadAnswers: Array<{ label: string; value: string }>;
   notesExcerpt: string | null;
@@ -45,6 +54,8 @@ export type RfqRowData = {
   forward: RfqEmailPreview;
   confirmation: RfqEmailPreview;
 };
+
+export type SheetOption = readonly [string, string];
 
 function EmailPreviewCard({
   title,
@@ -304,7 +315,12 @@ function RowSendCell({ row, onExpand, onError }: {
   );
 }
 
-export function RfqExpandableRows({ rows, colSpan }: { rows: RfqRowData[]; colSpan: number }) {
+export function RfqExpandableRows({ rows, colSpan, statusOptions, modeOptions }: {
+  rows: RfqRowData[];
+  colSpan: number;
+  statusOptions: ReadonlyArray<SheetOption>;
+  modeOptions: ReadonlyArray<SheetOption>;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
@@ -317,6 +333,8 @@ export function RfqExpandableRows({ rows, colSpan }: { rows: RfqRowData[]; colSp
             row={row}
             open={open}
             colSpan={colSpan}
+            statusOptions={statusOptions}
+            modeOptions={modeOptions}
             onToggle={() => setOpenId(open ? null : row.id)}
             onExpand={() => setOpenId(row.id)}
           />
@@ -326,22 +344,82 @@ export function RfqExpandableRows({ rows, colSpan }: { rows: RfqRowData[]; colSp
   );
 }
 
-function RowPair({ row, open, colSpan, onToggle, onExpand }: {
+function RowPair({ row, open, colSpan, statusOptions, modeOptions, onToggle, onExpand }: {
   row: RfqRowData;
   open: boolean;
   colSpan: number;
+  statusOptions: ReadonlyArray<SheetOption>;
+  modeOptions: ReadonlyArray<SheetOption>;
   onToggle: () => void;
   onExpand: () => void;
 }) {
+  const router = useRouter();
   const [forwardError, setForwardError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [busy, startTransition] = useTransition();
+  const [revisions, setRevisions] = useState<Record<string, number>>({});
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const rev = (field: string) => revisions[field] ?? 0;
+
+  function flash(message: string) {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setEditError(message);
+    flashTimer.current = setTimeout(() => setEditError(null), 6000);
+  }
+
+  // Cells revert per field on a failed save (key bump remounts to the stored value).
+  function revertCells(fields: string[]) {
+    setRevisions((prev) => {
+      const next = { ...prev };
+      for (const field of fields) next[field] = (next[field] ?? 0) + 1;
+      return next;
+    });
+  }
+
+  function commit(patch: InquiryRowPatch) {
+    const fields = Object.keys(patch);
+    startTransition(async () => {
+      try {
+        const res = await updateInquiryRowAction(row.id, patch);
+        if ("error" in res) {
+          flash(res.error);
+          revertCells(fields);
+          return;
+        }
+        router.refresh();
+      } catch {
+        flash("Could not save — check your connection and try again.");
+        revertCells(fields);
+      }
+    });
+  }
+
+  function remove() {
+    const name = row.reference ?? row.subject;
+    if (!window.confirm(`Delete RFQ ${name}? This cannot be undone.\n\nTip: set status to Ignored to archive it instead.`)) return;
+    startTransition(async () => {
+      try {
+        const res = await deleteInquiryRowAction(row.id);
+        if ("error" in res) {
+          flash(res.error);
+          return;
+        }
+        router.refresh();
+      } catch {
+        flash("Could not delete — check your connection and try again.");
+      }
+    });
+  }
+
   return (
     <>
       <tr
-        className={`data-row${open ? " rfq-row-open" : ""}`}
+        className={`data-row${open ? " rfq-row-open" : ""}${busy ? " sheet-row-busy" : ""}`}
         aria-expanded={open}
         tabIndex={0}
         onClick={(e) => {
-          if ((e.target as HTMLElement).closest("a, button")) return; // inner controls win
+          if ((e.target as HTMLElement).closest("a, button, input, textarea, select, .sheet-select-menu")) return; // inner controls win
           onToggle();
         }}
         onKeyDown={(e) => {
@@ -352,38 +430,117 @@ function RowPair({ row, open, colSpan, onToggle, onExpand }: {
           }
         }}
       >
-        <td className="data-muted" title={row.receivedFull}>{row.receivedAgo}</td>
-        <td className="data-cell-mono">{row.reference ?? <span className="data-muted">—</span>}</td>
+        <td className="data-muted rfq-ro" title={row.receivedFull}>{row.receivedAgo}</td>
+        <td className="data-cell-mono rfq-ro">{row.reference ?? <span className="data-muted">—</span>}</td>
         <td>
-          <span className="rfq-row-caret" aria-hidden>
-            <Icon name="chevron-right" size={12} strokeWidth={2.5} />
-          </span>
-          <span className="data-cell-strong">{row.subject}</span>
+          <div className="rfq-subject-cell">
+            <button
+              type="button"
+              className="rfq-row-caret"
+              aria-expanded={open}
+              aria-label={open ? "Collapse load details" : "Expand load details"}
+              title={open ? "Collapse load details" : "Expand load details"}
+              onClick={onToggle}
+            >
+              <Icon name="chevron-right" size={12} strokeWidth={2.5} />
+            </button>
+            <CellInput
+              key={`su${rev("subject")}:${row.subject}`}
+              value={row.subject}
+              placeholder="Subject"
+              onCommit={(v) => commit({ subject: v })}
+            />
+          </div>
         </td>
         <td>
-          <div>{row.from}</div>
-          {row.fromEmail && row.from !== row.fromEmail && (
-            <div className="data-subline">{row.fromEmail}</div>
-          )}
+          <div className="rfq-cell-stack">
+            <CellInput
+              key={`fc${rev("fromCompany")}:${row.fromCompany ?? ""}`}
+              value={row.fromCompany}
+              placeholder={row.companyName ?? "Company / name"}
+              onCommit={(v) => commit({ fromCompany: v })}
+            />
+            <CellInput
+              key={`fe${rev("fromEmail")}:${row.fromEmail ?? ""}`}
+              value={row.fromEmail}
+              placeholder="Email"
+              onCommit={(v) => commit({ fromEmail: v })}
+            />
+          </div>
         </td>
-        <td>
+        <td className="rfq-ro">
           <div>{row.sourceLabel}</div>
           {row.sourceDetail && <div className="data-subline">{row.sourceDetail}</div>}
         </td>
         <td>
-          {row.origin || row.destination ? (
-            <span>{row.origin ?? "?"} → {row.destination ?? "?"}</span>
-          ) : (
-            <span className="data-muted">—</span>
-          )}
+          <div className="rfq-cell-lane">
+            <CellInput
+              key={`or${rev("origin")}:${row.origin ?? ""}`}
+              value={row.origin}
+              placeholder="Origin"
+              onCommit={(v) => commit({ origin: v })}
+            />
+            <span className="rfq-lane-arrow" aria-hidden>→</span>
+            <CellInput
+              key={`de${rev("destination")}:${row.destination ?? ""}`}
+              value={row.destination}
+              placeholder="Destination"
+              onCommit={(v) => commit({ destination: v })}
+            />
+          </div>
         </td>
-        <td>{row.mode ?? <span className="data-muted">—</span>}</td>
-        <td><span className={`badge ${row.statusCls}`}>{row.statusLabel}</span></td>
-        <td className="numeric">{row.target}</td>
+        <td>
+          <CellSelect
+            key={`mo${rev("mode")}:${row.mode ?? ""}`}
+            value={row.mode}
+            options={modeOptions}
+            allowEmpty
+            allowCreate
+            createLabel="Add mode…"
+            onCommit={(v) => commit({ mode: v })}
+          />
+        </td>
+        <td>
+          <CellSelect
+            key={`st${rev("status")}:${row.status}`}
+            value={row.status}
+            options={statusOptions}
+            allowCreate
+            createLabel="Add status…"
+            onCommit={(v) => commit({ status: v })}
+          />
+        </td>
         <td className="numeric">
+          <CellInput
+            key={`ta${rev("target")}:${row.targetInput}`}
+            value={row.targetInput}
+            placeholder={row.targetPlaceholder}
+            title='Target price — e.g. "USD 1200", "no target", or empty for ask'
+            onCommit={(v) => commit({ target: v })}
+          />
+        </td>
+        <td className="numeric rfq-ro">
           <RowSendCell row={row} onExpand={onExpand} onError={setForwardError} />
         </td>
+        <td className="rfq-ro">
+          <button
+            type="button"
+            className="sheet-del"
+            title={`Delete RFQ ${row.reference ?? ""}`.trim()}
+            disabled={busy}
+            onClick={remove}
+          >
+            <Icon name="x" size={13} />
+          </button>
+        </td>
       </tr>
+      {editError && (
+        <tr className="rfq-expand-row">
+          <td colSpan={colSpan}>
+            <div className="rfq-mail-error">{editError}</div>
+          </td>
+        </tr>
+      )}
       {open && (
         <tr className="rfq-expand-row">
           <td colSpan={colSpan}>

@@ -33111,6 +33111,99 @@ html.agent-dock-open .page-container {
   color: var(--text-3);
 }
 
+/* "Add option…" affordance at the bottom of a sheet select menu */
+.sheet-select-menu button.sheet-select-option.sheet-select-create {
+  color: var(--text-2) !important;
+}
+
+.sheet-select-menu input.sheet-select-create-input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.sheet-select-menu input.sheet-select-create-input:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+
+/* ============================================================
+   RFQ SHEET (inline-editable Incoming RFQs table)
+   ============================================================ */
+
+.rfq-sheet {
+  min-width: 1280px;
+}
+
+/* Read-only cells keep the roomy data-table padding the inputs provide themselves. */
+.rfq-sheet td.rfq-ro {
+  padding: 8px 8px;
+}
+
+.rfq-sheet .rfq-subject-cell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rfq-sheet .rfq-subject-cell input.sheet-input {
+  font-weight: 600;
+}
+
+.rfq-sheet button.rfq-row-caret {
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-right: 2px;
+  border: none !important;
+  border-radius: 4px;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.rfq-sheet button.rfq-row-caret:hover {
+  background: var(--surface-2) !important;
+  color: var(--text);
+}
+
+.rfq-sheet .rfq-cell-stack {
+  display: grid;
+}
+
+.rfq-sheet .rfq-cell-stack input.sheet-input + input.sheet-input {
+  font-size: 11.5px;
+  color: var(--text-2) !important;
+  padding-top: 0;
+}
+
+.rfq-sheet .rfq-cell-lane {
+  display: flex;
+  align-items: center;
+}
+
+.rfq-sheet .rfq-lane-arrow {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.rfq-sheet td.numeric input.sheet-input {
+  text-align: right;
+}
+
+.rfq-sheet .rfq-mail-error {
+  margin: 6px 10px;
+}
+
 /* ============================================================
    BRAIN BRIDGE PANEL (RFQ detail)
    ============================================================ */
