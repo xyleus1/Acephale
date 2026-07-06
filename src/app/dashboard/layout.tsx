@@ -5,13 +5,12 @@ import { LogoutButton } from "@/components/logout-button";
 import { NavLink } from "@/components/nav-link";
 import { LangToggle } from "@/components/lang-toggle";
 import { getLang } from "@/lib/i18n";
-import { getFocusedJob, clearFocusAction } from "@/lib/job-focus";
 import { AgentChatWidget } from "@/components/agent-chat-widget";
 import { CommandPalette } from "@/components/command-palette";
 import { LiveEventToast } from "@/components/live-event-toast";
 import { Icon } from "@/components/icon";
 import { LogoMark } from "@/components/logo-mark";
-import { HideOnRoutes } from "@/components/hide-on-routes";
+import { openInquiryStatusFilter } from "@/lib/inquiry-status";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -19,26 +18,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const lang = await getLang();
 
   // Live pipeline status for the topbar
-  const [activeJobs, pendingRFQs, focusedJob] = await Promise.all([
+  const [activeJobs, pendingRFQs] = await Promise.all([
     prisma.job.count({
       where: { officeId: session.officeId, status: { notIn: ["DELIVERED", "CANCELLED"] } },
     }),
     prisma.inquiry.count({
       // Matches the default "Open" tab on /dashboard/rfq, where the topbar chip lands.
-      where: { officeId: session.officeId, status: { notIn: ["WON", "LOST"] } },
+      where: { officeId: session.officeId, status: openInquiryStatusFilter() },
     }),
-    getFocusedJob(session.officeId),
   ]);
-
-  const STATUS_META: Record<string, { label: string; className: string }> = {
-    INQUIRY:    { label: "RFQ",       className: "status-inquiry" },
-    QUOTED:     { label: "Pricing",   className: "status-quoted" },
-    BOOKED:     { label: "Booked",    className: "status-booked" },
-    IN_TRANSIT: { label: "En Route",  className: "status-in-transit" },
-    CUSTOMS:    { label: "En Route",  className: "status-in-transit" },
-    DELIVERED:  { label: "Delivered", className: "status-delivered" },
-    CANCELLED:  { label: "Cancelled", className: "status-cancelled" },
-  };
 
   return (
     <div className="app-shell">
@@ -144,66 +132,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </details>
           </div>
         </header>
-
-        {/* Focused-job context strip — travels across pages */}
-        {focusedJob && (() => {
-          const meta = STATUS_META[focusedJob.status] ?? STATUS_META.INQUIRY;
-          const route = focusedJob.origin && focusedJob.destination
-            ? `${focusedJob.origin} → ${focusedJob.destination}`
-            : focusedJob.origin ?? focusedJob.destination ?? "Route TBD";
-          return (
-            <HideOnRoutes prefixes={["/dashboard/crm"]}>
-            <div className="job-focus-strip">
-              <div className="job-focus-strip-inner">
-                <span className="job-focus-icon" aria-hidden>
-                  <Icon name="truck" size={14} strokeWidth={2} />
-                </span>
-                <span className="job-focus-label">FOCUSED</span>
-                <a href={`/dashboard/jobs/${focusedJob.id}`} className="job-focus-ref">
-                  {focusedJob.reference}
-                </a>
-                <span className="job-focus-sep">·</span>
-                <span className="job-focus-customer">{focusedJob.customerName ?? "No customer"}</span>
-                <span className="job-focus-sep">·</span>
-                <span className="job-focus-route">{route}</span>
-                {focusedJob.mode && (
-                  <>
-                    <span className="job-focus-sep">·</span>
-                    <span className="job-focus-mode">{focusedJob.mode}</span>
-                  </>
-                )}
-                <span className={["job-focus-status", meta.className].join(" ")}>
-                  {meta.label}
-                </span>
-
-                <div className="job-focus-actions">
-                  <a href={`/dashboard/jobs/${focusedJob.id}`} className="job-focus-link">
-                    Open
-                  </a>
-                  {focusedJob.customerId && (
-                    <a href="/dashboard/crm" className="job-focus-link">
-                      Customer
-                    </a>
-                  )}
-                  {focusedJob.inquiryId && (
-                    <a href={`/dashboard/rfq/${focusedJob.inquiryId}`} className="job-focus-link">
-                      Source RFQ
-                    </a>
-                  )}
-                  <a href={`/api/jobs/${focusedJob.id}/quote-pdf`} target="_blank" className="job-focus-link">
-                    Quote PDF
-                  </a>
-                  <form action={clearFocusAction}>
-                    <button type="submit" className="job-focus-clear" aria-label="Clear focus" title="Clear focus">
-                      <Icon name="x" size={12} strokeWidth={2.5} />
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
-            </HideOnRoutes>
-          );
-        })()}
 
         <div className="page-container">
           {children}
