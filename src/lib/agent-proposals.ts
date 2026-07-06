@@ -3,7 +3,6 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { applyAddMilestone, applyRenameCompany, applySetCustomer } from "@/lib/agent-actions";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
-import { ensureProposedJobsForOpenInquiries } from "@/lib/job-actions";
 import { awardSupplier } from "@/lib/sourcing-award";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { buildAgentProposalDecisionImpact } from "@/lib/agent-proposal-impact";
@@ -566,7 +565,6 @@ async function applyDedupClusters(officeId: string, clusters: Record<string, unk
     clusterCount++;
   }
 
-  if (mergedCount > 0) await ensureProposedJobsForOpenInquiries(officeId);
   return { clusterCount, mergedCount, affectedInquiryIds: [...new Set(affectedInquiryIds)] };
 }
 
@@ -627,7 +625,6 @@ async function applyMergeAllOpenInquiries(officeId: string, actionInput: Record<
   const note = `\n\n[Reviewed consolidation ${new Date().toISOString().split("T")[0]}: merged ${losers.length} inquir${losers.length === 1 ? "y" : "ies"} into this deal: ${losers.map((loser) => `"${loser.subject}"`).join(", ")}]`;
   await appendInquiryAuditNote(keeper.id, note);
 
-  await ensureProposedJobsForOpenInquiries(officeId);
   const keeperJob = await prisma.job.findFirst({
     where: { inquiryId: keeper.id, officeId },
     select: { id: true, commodity: true, origin: true, destination: true, weight: true },

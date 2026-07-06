@@ -5,7 +5,6 @@ import { Icon } from "@/components/icon";
 import { DraftModal } from "@/components/draft-modal";
 import { draftMissingInfoEmail } from "@/app/dashboard/rfq/[inquiryId]/actions";
 import { draftMissingInfoForJobAction } from "@/app/dashboard/jobs/[jobId]/actions";
-import { dispatchAgentPageCues } from "@/lib/agent-page-presence";
 
 type DraftState = {
   to: string;
@@ -27,14 +26,6 @@ export function MissingInfoDraftButton({
   const [pending, startTransition] = useTransition();
 
   function run() {
-    dispatchAgentPageCues([
-      { target: "strategy", label: "Reading cockpit decision", detail: "Using the commercial brain to decide why this RFQ is not mature." },
-      { target: "decision-reasons", label: "Reading reason stack", detail: "Checking the ranked causes before asking the customer anything." },
-      { target: "blocker-resolution", label: "Finding first blocker", detail: "Using the blocker queue instead of guessing which field matters most." },
-      { target: "target-price", label: "Checking target answer", detail: "Confirming whether the customer gave a target or explicitly has no target." },
-      { target: "strategy-evidence", label: "Checking evidence", detail: "Separating explicit cargo facts from fields the agent still needs to ask for." },
-      { target: "agent-action", label: "Drafting customer ask", detail: "Preparing a review-first missing-info message without sending it." },
-    ]);
     startTransition(async () => {
       setError(null);
       const result = inquiryId
@@ -49,9 +40,6 @@ export function MissingInfoDraftButton({
       const to = result.to ?? "";
       const subject = result.subject ?? "Missing RFQ information";
       const body = result.body ?? "";
-      dispatchAgentPageCues([
-        { target: "agent-action", label: "Draft ready for review", detail: "The agent produced editable text only; no email was sent." },
-      ]);
       setDraft({
         to,
         subject,

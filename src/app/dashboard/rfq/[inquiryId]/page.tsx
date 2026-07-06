@@ -198,6 +198,7 @@ export default async function RFQDetailPage({
         <div className="record-hero-top">
           <div className="record-hero-main">
             <div className="record-eyebrow">
+              {inquiry.reference && <span className="record-chip data-cell-mono">{inquiry.reference}</span>}
               <span className={`badge ${sm.cls}`}>{sm.label}</span>
               {opportunity && <OpportunityScorePill score={opportunity} />}
               <span className="record-chip">{fmt(inquiry.receivedAt)}</span>
@@ -211,7 +212,7 @@ export default async function RFQDetailPage({
           <div className="record-actions">
             {inquiry.job ? (
               <a href={`/dashboard/jobs/${inquiry.job.id}`} className="btn btn-sm">
-                Job {inquiry.job.reference} <Icon name="arrow-right" size={13} />
+                Load {inquiry.job.reference} <Icon name="arrow-right" size={13} />
               </a>
             ) : (
               <>

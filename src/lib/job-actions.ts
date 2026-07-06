@@ -3,49 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
-
-// Generate the next job reference for an office. Counting rows is wrong:
-// when jobs are deleted, count + 1 collides with an existing reference. We
-// pull the max existing reference for this year and increment.
-export async function nextJobReference(officeId: string): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `JOB-${year}-`;
-  const existing = await prisma.job.findMany({
-    where: { officeId, reference: { startsWith: prefix } },
-    select: { reference: true },
-  });
-  let max = 0;
-  for (const j of existing) {
-    const tail = j.reference.slice(prefix.length);
-    const n = parseInt(tail, 10);
-    if (Number.isFinite(n) && n > max) max = n;
-  }
-  return `${prefix}${String(max + 1).padStart(3, "0")}`;
-}
+import { createWithFileReference } from "./references";
 
 // Run a job create that retries with a fresh reference if two creates race
-// into the same number (unique constraint violation).
+// into the same number (unique constraint violation). Loads share the DRY
+// file-number sequence with incoming RFQs (see src/lib/references.ts).
 export async function createJobWithReference<T>(
   officeId: string,
   create: (reference: string) => Promise<T>
 ): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const reference = await nextJobReference(officeId);
-    try {
-      return await create(reference);
-    } catch (e) {
-      lastErr = e;
-      const code = (e as { code?: string })?.code;
-      if (code !== "P2002") throw e; // only retry unique-constraint collisions
-    }
-  }
-  throw lastErr;
+  return createWithFileReference(officeId, create);
 }
 
 // Create a PROPOSED-stage Job for an Inquiry that doesn't have one yet.
-// Used by the auto-link flow so every freight-related thread shows up on the
-// jobs board as a draft until the operator confirms it.
+// Only called on explicit operator action (RFQ → load review) and demo setup;
+// loads are never auto-created from ingestion anymore. The job carries the
+// inquiry's DRY file number so the RFQ and the load share one reference.
 // IMPORTANT: caller must have already verified office ownership of the inquiry.
 export async function createProposedJobForInquiry(inquiryId: string): Promise<string | null> {
   const inquiry = await prisma.inquiry.findUnique({
@@ -55,7 +28,7 @@ export async function createProposedJobForInquiry(inquiryId: string): Promise<st
   if (!inquiry) return null;
   if (inquiry.job) return inquiry.job.id;
 
-  const job = await createJobWithReference(inquiry.officeId, (reference) => prisma.job.create({
+  const createJob = (reference: string) => prisma.job.create({
     data: {
       officeId: inquiry.officeId,
       companyId: inquiry.companyId ?? null,
@@ -83,7 +56,11 @@ export async function createProposedJobForInquiry(inquiryId: string): Promise<st
       targetPriceSource: inquiry.targetPriceSource ?? null,
       currency: "USD",
     },
-  }));
+  });
+
+  const job = inquiry.reference
+    ? await createJob(inquiry.reference)
+    : await createJobWithReference(inquiry.officeId, createJob);
   return job.id;
 }
 

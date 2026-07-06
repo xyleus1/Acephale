@@ -19,7 +19,6 @@ type EnginePart = {
   fix: string;
   tone: EngineTone;
   icon: EngineIcon;
-  target: string;
 };
 
 function money(value: number | null | undefined, currency = "USD") {
@@ -78,13 +77,9 @@ function componentLabel(key: string) {
   return key.replace(/([A-Z])/g, " $1").toLowerCase();
 }
 
-function partAnchor(target: string) {
-  return { "data-agent-target": target };
-}
-
 function EngineBoardNode({ part }: { part: EnginePart }) {
   return (
-    <article className={`brain-engine-node ${part.key} ${part.tone}`} {...partAnchor(part.target)}>
+    <article className={`brain-engine-node ${part.key} ${part.tone}`}>
       <div className="brain-engine-node-head">
         <span className="brain-engine-icon"><Icon name={part.icon} size={15} /></span>
         <div>
@@ -144,7 +139,6 @@ export function CommercialBrainEngineSchematic({
       fix: firstBlocker?.ask ?? "Keep source facts explicit; do not infer missing customer data.",
       tone: intakeTone,
       icon: "list",
-      target: "blocker-resolution",
     },
     {
       key: "evidence",
@@ -155,7 +149,6 @@ export function CommercialBrainEngineSchematic({
       fix: firstGap?.action ?? "Evidence can feed pricing, route, and risk checks without hiding weak inputs.",
       tone: evidenceTone,
       icon: "activity",
-      target: "strategy-evidence",
     },
     {
       key: "pricing",
@@ -166,7 +159,6 @@ export function CommercialBrainEngineSchematic({
       fix: strategy.price.rationale[0] ?? "Use the guardrail before any customer-facing price leaves the desk.",
       tone: guardrailTone(strategy.price.guardrailStatus),
       icon: "dollar",
-      target: "financials",
     },
     {
       key: "route",
@@ -177,7 +169,6 @@ export function CommercialBrainEngineSchematic({
       fix: routeDecision.selectionRule,
       tone: routeTone(routeDecision),
       icon: "ship",
-      target: "movement",
     },
     {
       key: "risk",
@@ -188,7 +179,6 @@ export function CommercialBrainEngineSchematic({
       fix: topRisk?.mitigation ?? "Keep risk clear by preserving route, document, and approval proof.",
       tone: riskTone(topRisk?.score),
       icon: "shield",
-      target: "risk",
     },
     {
       key: "output",
@@ -199,7 +189,6 @@ export function CommercialBrainEngineSchematic({
       fix: forbiddenMove,
       tone: outputTone,
       icon: "settings",
-      target: "decision-contract",
     },
   ];
 
@@ -229,7 +218,7 @@ export function CommercialBrainEngineSchematic({
   ];
 
   return (
-    <section className={`commercial-brain-engine ${outputTone}`} data-agent-target="strategy" aria-label="Commercial decision engine schematic">
+    <section className={`commercial-brain-engine ${outputTone}`} aria-label="Commercial decision engine schematic">
       <div className="brain-engine-header">
         <div>
           <span>Commercial decision engine</span>
@@ -266,7 +255,7 @@ export function CommercialBrainEngineSchematic({
         <EngineBoardNode part={routePart} />
         <EngineBoardNode part={riskPart} />
 
-        <article className={`brain-engine-core ${coreTone}`} data-agent-target="decision-quality">
+        <article className={`brain-engine-core ${coreTone}`}>
           <div className="brain-engine-core-ring" aria-hidden>
             <span />
             <span />
@@ -301,7 +290,7 @@ export function CommercialBrainEngineSchematic({
       </div>
 
       <div className="brain-engine-lower-grid">
-        <div className="brain-engine-panel price" data-agent-target="financials">
+        <div className="brain-engine-panel price">
           <div className="brain-engine-panel-head">
             <span>Price ladder</span>
             <strong>{strategy.price.currency}</strong>
@@ -316,7 +305,7 @@ export function CommercialBrainEngineSchematic({
           </div>
         </div>
 
-        <div className="brain-engine-panel route" data-agent-target="movement">
+        <div className="brain-engine-panel route">
           <div className="brain-engine-panel-head">
             <span>Route chamber</span>
             <strong>{routeDecision.selected?.label ?? "No selected route"}</strong>
@@ -339,14 +328,14 @@ export function CommercialBrainEngineSchematic({
           </div>
         </div>
 
-        <div className="brain-engine-panel proof" data-agent-target="strategy-evidence">
+        <div className="brain-engine-panel proof">
           <div className="brain-engine-panel-head">
             <span>Proof queue</span>
             <strong>{packet.evidence.gaps.length > 0 ? `${packet.evidence.gaps.length} to clear` : "Clear"}</strong>
           </div>
           <div className="brain-engine-proof-list">
             {proofRows.map((gap) => (
-              <div key={`${gap.key}-${gap.target}`} className={toneFromEvidence(gap.tone)} data-agent-target={gap.target}>
+              <div key={`${gap.key}-${gap.target}`} className={toneFromEvidence(gap.tone)}>
                 <span>{gap.owner} / {gap.label}</span>
                 <strong>{gap.action}</strong>
                 <em>{operatorMetricLabel(gap.metric, gap.tone)} / {gap.detail}</em>
@@ -355,7 +344,7 @@ export function CommercialBrainEngineSchematic({
           </div>
         </div>
 
-        <div className="brain-engine-panel contract" data-agent-target="decision-contract">
+        <div className="brain-engine-panel contract">
           <div className="brain-engine-panel-head">
             <span>Decision contract</span>
             <strong>{packet.contract.title}</strong>
@@ -373,7 +362,7 @@ export function CommercialBrainEngineSchematic({
           </div>
         </div>
 
-        <div className="brain-engine-panel commands" data-agent-target="agent-action">
+        <div className="brain-engine-panel commands">
           <div className="brain-engine-panel-head">
             <span>Command ledger</span>
             <strong>{packet.primary.label}</strong>
@@ -389,7 +378,7 @@ export function CommercialBrainEngineSchematic({
           </div>
         </div>
 
-        <div className="brain-engine-panel risks" data-agent-target="risk">
+        <div className="brain-engine-panel risks">
           <div className="brain-engine-panel-head">
             <span>Risk stack</span>
             <strong>{topRisk?.level ?? "LOW"}</strong>

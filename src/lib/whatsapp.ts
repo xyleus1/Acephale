@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { classifyInboundEmail } from "./email-classifier";
 import { autoCreateInquiryFromThread } from "./thread-actions";
-import { ensureProposedJobsForOpenInquiries } from "./job-actions";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
 
@@ -297,7 +296,6 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
     }
   }
 
-  await ensureProposedJobsForOpenInquiries(officeId);
   await prisma.emailAccount.updateMany({
     where: { officeId, provider: "WHATSAPP" },
     data: { lastSyncAt: new Date() },

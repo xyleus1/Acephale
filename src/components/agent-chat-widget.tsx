@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { chatWithAgent, type AgentToolTrace, type ChatMsg } from "@/lib/agent-chat";
-import { AgentPagePresenceLayer, type AgentPageAction } from "@/components/agent-page-presence";
 import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
 import { AgentMessageContent } from "@/components/agent-message-content";
-import { cuesForToolTrace, inferPageCues, type AgentPageCue } from "@/lib/agent-page-cues";
 import { Icon } from "@/components/icon";
 
 type ChatItem = ChatMsg & {
@@ -75,10 +73,8 @@ export function AgentChatWidget() {
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [pageAction, setPageAction] = useState<AgentPageAction | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const pageCueTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -139,12 +135,6 @@ export function AgentChatWidget() {
     };
   }, [open, suppressedByWorkbenchAgent, isCompanyBrainPage]);
 
-  useEffect(() => {
-    return () => {
-      if (pageCueTimerRef.current) window.clearTimeout(pageCueTimerRef.current);
-    };
-  }, []);
-
   function setDockOpen(next: boolean) {
     setOpen(next);
     try {
@@ -153,21 +143,6 @@ export function AgentChatWidget() {
       // The dock state is a convenience preference, not required app state.
     }
     if (next) window.setTimeout(() => inputRef.current?.focus(), 0);
-  }
-
-  function showPageCues(cues: readonly AgentPageCue[], durationMs = Math.min(14000, cues.length * 2500 + 2200)) {
-    if (cues.length === 0) return;
-    if (pageCueTimerRef.current) {
-      window.clearTimeout(pageCueTimerRef.current);
-    }
-    setPageAction({
-      id: Date.now(),
-      cues: [...cues],
-    });
-    pageCueTimerRef.current = window.setTimeout(() => {
-      setPageAction(null);
-      pageCueTimerRef.current = null;
-    }, durationMs);
   }
 
   // The Company Brain chat view IS the chat — the floating dock would duplicate it.
@@ -182,7 +157,6 @@ export function AgentChatWidget() {
     if (!text || busy) return;
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
-    showPageCues(inferPageCues(text), 9000);
 
     const history: ChatMsg[] = messages.map(({ role, content }) => ({ role, content }));
     const next: ChatItem[] = [...messages, { role: "user", content: text }];
@@ -191,10 +165,6 @@ export function AgentChatWidget() {
     try {
       const res = await chatWithAgent(history, text, routeJobId);
       setMessages([...next, { role: "assistant", content: res.reply, toolTrace: res.toolTrace }]);
-      const actualCues = cuesForToolTrace(res.toolTrace);
-      if (actualCues.length > 0) {
-        showPageCues(actualCues);
-      }
       if (res.ingestedInquiryId || res.refresh) {
         router.refresh();
       }
@@ -225,25 +195,21 @@ export function AgentChatWidget() {
 
   if (!open) {
     return (
-      <>
-        <AgentPagePresenceLayer action={pageAction} listenForExternalCues />
-        <button
-          onClick={() => setDockOpen(true)}
-          className="agent-fab"
-          aria-label="Open agent"
-          title="Open agent (Cmd+J)"
-        >
-          <Icon name="sparkles" size={14} strokeWidth={2.25} />
-          <span>Desk Assistant</span>
-          <span className="agent-fab-dot" aria-hidden />
-        </button>
-      </>
+      <button
+        onClick={() => setDockOpen(true)}
+        className="agent-fab"
+        aria-label="Open agent"
+        title="Open agent (Cmd+J)"
+      >
+        <Icon name="sparkles" size={14} strokeWidth={2.25} />
+        <span>Desk Assistant</span>
+        <span className="agent-fab-dot" aria-hidden />
+      </button>
     );
   }
 
   return (
     <>
-      <AgentPagePresenceLayer action={pageAction} listenForExternalCues />
       <div className="agent-panel" role="dialog" aria-label="Desk assistant">
         <header className="agent-panel-header">
           <div className="agent-title-lockup">

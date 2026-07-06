@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TOOLS, dispatchTool } from "@/lib/agent-tools";
 import { qualifyRfq } from "@/lib/rfq-qualification";
+import { createWithFileReference } from "@/lib/references";
 import { applyPendingJobAgentProposal } from "@/lib/agent-proposals";
 import { recordTargetPriceHistory } from "@/lib/target-price-history";
 import { buildReferenceDealOperatorPlaybook, getReferenceDealDecisions, getReferenceDealSummary } from "@/lib/reference-deals";
@@ -14,7 +15,6 @@ import { assessJobStrategy } from "@/lib/commercial-strategy-persistence";
 import { buildStrategyExecutionPacket } from "@/lib/commercial-strategy";
 import { buildDocumentReadiness } from "@/lib/document-readiness";
 import { buildAgentProposalDecisionImpact } from "@/lib/agent-proposal-impact";
-import { deriveToolPageCues, type AgentTracePageCue } from "@/lib/agent-trace-cues";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { buildCompactCustomerMemoryContext } from "@/lib/memory/customer-dossier";
 import { buildCompactJobMemoryContext } from "@/lib/memory/search-memory";
@@ -33,7 +33,6 @@ export type AgentToolTrace = {
   name: string;
   ok: boolean;
   error?: string | null;
-  pageCues?: AgentTracePageCue[];
 };
 
 export type ChatResult = {
@@ -51,7 +50,6 @@ type InternalToolTrace = {
   input: unknown;
   ok: boolean;
   error?: string | null;
-  pageCues?: AgentToolTrace["pageCues"];
 };
 
 function exposeToolTrace(tools: InternalToolTrace[]): AgentToolTrace[] {
@@ -59,28 +57,7 @@ function exposeToolTrace(tools: InternalToolTrace[]): AgentToolTrace[] {
     name: tool.name,
     ok: tool.ok,
     error: tool.error ?? null,
-    pageCues: tool.pageCues?.slice(0, 4),
   }));
-}
-
-function pasteProposalPageCues(status: "created" | "no_change" | "parsed_only" = "created"): AgentTracePageCue[] {
-  if (status === "parsed_only") {
-    return [
-      { target: "source-rfq", label: "Reading pasted RFQ facts", detail: "Separating explicit pasted facts from missing or conflicting RFQ data." },
-      { target: "blocker-resolution", label: "Checking missing fields", detail: "Showing what must be asked before the RFQ is mature." },
-    ];
-  }
-  if (status === "no_change") {
-    return [
-      { target: "decision-dossier", label: "Checking current dossier", detail: "The paste did not create a reviewable field change, so the live decision dossier remains authoritative." },
-      { target: "source-rfq", label: "Checking pasted facts", detail: "No empty job fields were safely filled from the paste." },
-    ];
-  }
-  return [
-    { target: "proposal-dossier", label: "Reviewing pasted RFQ proposal", detail: "Checking how the pasted facts change maturity, gate, target, and the next safe agent action." },
-    { target: "decision-dossier", label: "Comparing current dossier", detail: "Keeping the proposed diff tied to the live commercial gate and weakest evidence." },
-    { target: "blocker-resolution", label: "Checking remaining blockers", detail: "Confirming what is still missing after the proposed paste update." },
-  ];
 }
 
 function shouldPreflightCommercialBrain(userMessage: string) {
@@ -951,7 +928,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
             matureAfterApply: qualification.isMature,
           },
           ok: true,
-          pageCues: pasteProposalPageCues(proposalId ? "created" : "no_change"),
         };
         return finishSpecialRun({
           reply: `${appliedText}${skippedText}${conflictText}${impactText}${missingText}${applyText}`,
@@ -959,7 +935,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
           toolTrace: [{
             name: trace.name,
             ok: true,
-            pageCues: trace.pageCues,
           }],
         }, [trace]);
       }
@@ -975,7 +950,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
           input: { scopeJobId, parseStatus: "failed" },
           ok: false,
           error: "Could not extract reliable RFQ facts from pasted text.",
-          pageCues: pasteProposalPageCues("parsed_only"),
         }]);
       }
       const qualification = buildQualificationFromParsed(parsed);
@@ -999,14 +973,12 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
           matureAfterParse: qualification.isMature,
         },
         ok: true,
-        pageCues: pasteProposalPageCues("parsed_only"),
       };
       return finishSpecialRun({
         reply: `${factsText}${missingText} No record changed. Open a specific job/RFQ and paste again, or explicitly say "create RFQ" if this should become a new RFQ.`,
         toolTrace: [{
           name: trace.name,
           ok: true,
-          pageCues: trace.pageCues,
         }],
       }, [trace]);
     }
@@ -1018,16 +990,17 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     const subject = subjectMatch?.[1]?.trim().slice(0, 120) ?? "Pasted RFQ";
     const fromEmail = fromMatch?.[1]?.trim() ?? null;
 
-    const inquiry = await prisma.inquiry.create({
+    const inquiry = await createWithFileReference(session.officeId, (reference) => prisma.inquiry.create({
       data: {
         officeId: session.officeId,
+        reference,
         subject,
         fromEmail,
         status: "INGESTED",
         rawEmailBody: userMessage,
         receivedAt: new Date(),
       },
-    });
+    }));
     await recordMemoryEvent({
       officeId: session.officeId,
       sourceType: "AGENT",
@@ -1125,7 +1098,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
             matureAfterCreate: qualification.isMature,
           },
           ok: true,
-          pageCues: pasteProposalPageCues("parsed_only"),
         }]);
       }
     } catch { /* ignore */ }
@@ -1138,7 +1110,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       name: "paste_rfq_create",
       input: { inquiryId: inquiry.id, parsed: false },
       ok: true,
-      pageCues: pasteProposalPageCues("parsed_only"),
     }]);
   }
 
@@ -1186,7 +1157,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       input: { job_id: effectiveScopeJobId, reason: "scoped commercial preflight" },
       ok: !!brain.ok,
       error: brain.ok ? null : brain.error,
-      pageCues: brain.ok ? deriveToolPageCues("inspect_brain", brain.result) : undefined,
     });
     if (brain.ok) {
       brainPreflightContext = formatBrainPreflightContext(brain.result);
@@ -1261,7 +1231,6 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
           input: tu.input ?? {},
           ok: !!r.ok,
           error: r.ok ? null : typeof r.error === "string" ? r.error : "tool failed",
-          pageCues: r.ok ? deriveToolPageCues(tu.name, r.result) : undefined,
         });
         return {
           type: "tool_result",

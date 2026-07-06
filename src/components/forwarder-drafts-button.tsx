@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { createForwarderDraftsForJobAction } from "@/app/dashboard/jobs/[jobId]/actions";
 import { Icon } from "@/components/icon";
-import { dispatchAgentPageCues } from "@/lib/agent-page-presence";
 
 type DraftSummary = {
   id: string;
@@ -54,26 +53,8 @@ export function ForwarderDraftsButton({
   const [pending, startTransition] = useTransition();
 
   function run() {
-    dispatchAgentPageCues([
-      { target: "strategy", label: "Checking RFQ gate", detail: "Making sure only a mature RFQ can move to forwarder draft creation." },
-      { target: "decision-reasons", label: "Reading reason stack", detail: "Confirming why this should move before creating any outbound drafts." },
-      { target: "blocker-resolution", label: "Auditing required fields", detail: "Reading origin, destination, mode, cargo, DG, customs, and target-price state." },
-      { target: "carrier-rates", label: "Preparing forwarder handoff", detail: "Selecting eligible forwarders and review-only outbound drafts." },
-      { target: "agent-action", label: "Creating reviewed drafts", detail: "No forwarder email is sent from this action." },
-    ]);
     startTransition(async () => {
       const next = await createForwarderDraftsForJobAction(jobId);
-      dispatchAgentPageCues([
-        {
-          target: next.ok && next.status === "READY" ? "carrier-rates" : "blocker-resolution",
-          label: next.ok && next.status === "READY" ? "Drafts ready for review" : "Draft creation blocked",
-          detail: next.ok
-            ? next.status === "READY"
-              ? `${next.createdDrafts.length} new and ${next.existingDrafts.length} existing drafts are ready to inspect.`
-              : `Missing before handoff: ${next.missing.join(", ")}.`
-            : next.error,
-        },
-      ]);
       setResult(next);
     });
   }

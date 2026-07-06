@@ -15,7 +15,7 @@ export function CommercialChecklistRow({
   showStopRule?: boolean;
 }) {
   return (
-    <div className={`${className} ${item.tone}`} data-agent-target={item.target}>
+    <div className={`${className} ${item.tone}`}>
       <span>{index + 1}</span>
       <div>
         <strong>{item.label} · {item.owner.toLowerCase()}</strong>

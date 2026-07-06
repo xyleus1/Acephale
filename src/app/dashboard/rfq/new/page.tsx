@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Icon } from "@/components/icon";
 import { qualifyRfq } from "@/lib/rfq-qualification";
+import { createWithFileReference } from "@/lib/references";
 import { recordTargetPriceHistory } from "@/lib/target-price-history";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 
@@ -50,13 +51,14 @@ async function createRFQ(formData: FormData) {
   };
   const qualification = qualifyRfq(data);
 
-  const inquiry = await prisma.inquiry.create({
+  const inquiry = await createWithFileReference(session.officeId, (reference) => prisma.inquiry.create({
     data: {
       ...data,
+      reference,
       status: qualification.isMature ? "PARSED" : "INGESTED",
       parsedData: JSON.stringify({ qualification }),
     },
-  });
+  }));
   await recordMemoryEvent({
     officeId: session.officeId,
     sourceType: "INQUIRY",

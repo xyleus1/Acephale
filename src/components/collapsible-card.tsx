@@ -7,18 +7,16 @@ export function CollapsibleCard({
   title,
   meta,
   defaultOpen = true,
-  agentTarget,
   children,
 }: {
   title: string;
   meta?: React.ReactNode;
   defaultOpen?: boolean;
-  agentTarget?: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="card" data-agent-target={agentTarget}>
+    <div className="card">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

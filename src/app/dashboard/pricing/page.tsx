@@ -10,6 +10,7 @@ import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
 import { NegotiationPlanDraftButton } from "@/components/negotiation-plan-draft-button";
 import { OpportunityScoreCard, OpportunityScorePill } from "@/components/opportunity-score-card";
 import { requiredRfqMissing } from "@/lib/opportunity-score";
+import { createWithFileReference } from "@/lib/references";
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { sendNewEmailFromAccount } from "@/lib/gmail-send";
@@ -914,14 +915,6 @@ function pricingCommandTone(priority?: StrategyOperatorDecision["priority"]) {
   return "steady";
 }
 
-function pricingPriorityTarget(key: StrategyCommercialPriority["rows"][number]["key"]) {
-  if (key === "value" || key === "margin") return "financials";
-  if (key === "target") return "target-price";
-  if (key === "route") return "movement";
-  if (key === "risk") return "decision-reasons";
-  return "strategy-evidence";
-}
-
 export default async function PricingPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSession();
   const sp = await searchParams;
@@ -1035,9 +1028,10 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
     const targetCurrency = String(formData.get("targetCurrency") || "USD");
     const targetPriceStatus = targetPrice != null ? "PROVIDED" : String(formData.get("targetPriceStatus") || "UNKNOWN");
     const targetPriceSource = String(formData.get("targetPriceSource") || "").trim() || null;
-    const inquiry = await prisma.inquiry.create({
+    const inquiry = await createWithFileReference(s.officeId, (reference) => prisma.inquiry.create({
       data: {
         officeId: s.officeId,
+        reference,
         subject,
         fromEmail,
         fromCompany,
@@ -1052,7 +1046,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
         targetPriceSource,
         status: "INGESTED",
       },
-    });
+    }));
     await recordMemoryEvent({
       officeId: s.officeId,
       sourceType: "INQUIRY",
@@ -1673,7 +1667,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
     ];
 
     return (
-      <section className={`pricing-decision-rail ${decision.priority}`} data-agent-target="pricing-command" aria-label="Pricing command rail">
+      <section className={`pricing-decision-rail ${decision.priority}`} aria-label="Pricing command rail">
         <div className="pricing-decision-head">
           <div>
             <span className="pricing-section-label">Pricing command</span>
@@ -1687,7 +1681,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
         </div>
 
         <div className="pricing-decision-body">
-          <div className="pricing-decision-primary" data-agent-target="agent-action">
+          <div className="pricing-decision-primary">
             <div className="pricing-decision-icon"><Icon name={actionLocked ? "alert" : "zap"} size={16} /></div>
             <div>
               <span>{operatorPhaseLabel(decision.phase)}</span>
@@ -1697,22 +1691,22 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
           </div>
 
           <div className="pricing-decision-proof">
-            <div data-agent-target="decision-reasons">
+            <div>
               <span>Why first</span>
               <strong>{primaryReason?.summary ?? "No ranked reason"}</strong>
               <em>{primaryReason?.detail ?? "The strategy brain did not produce a primary rationale."}</em>
             </div>
-            <div data-agent-target="strategy-evidence">
+            <div>
               <span>Weakest evidence</span>
               <strong>{weakestEvidence?.label ?? "Covered"}</strong>
               <em>{weakestEvidence?.detail ?? "No weak evidence is blocking this pricing action."}</em>
             </div>
-            <div data-agent-target="decision-quality">
+            <div>
               <span>Decision quality</span>
               <strong>{operatorMetricLabel(decisionQuality?.metric ?? `${opportunity.components.confidence}/100`, decisionQuality?.tone)}</strong>
               <em>{decisionQuality?.detail ?? "Confidence score exists, but no decision-quality audit was produced."}</em>
             </div>
-            <div data-agent-target="target-price">
+            <div>
               <span>Target posture</span>
               <strong>{target.label}</strong>
               <em>{target.target == null ? "No target captured" : strategyMoney(target.target, target.currency)}</em>
@@ -1720,7 +1714,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
           </div>
         </div>
 
-        <div className={`pricing-decision-priority ${commercialPriority.tone}`} data-agent-target="commercial-priority" aria-label="Commercial priority">
+        <div className={`pricing-decision-priority ${commercialPriority.tone}`} aria-label="Commercial priority">
           <div className="pricing-decision-priority-head">
             <div>
               <span>Commercial priority</span>
@@ -1735,14 +1729,14 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
           </div>
           <div className="pricing-decision-priority-grid">
             {commercialPriority.rows.slice(0, 4).map((row) => (
-              <div key={row.key} className={`pricing-decision-priority-row ${row.tone}`} data-agent-target={pricingPriorityTarget(row.key)}>
+              <div key={row.key} className={`pricing-decision-priority-row ${row.tone}`}>
                 <span>{row.label}</span>
                 <strong>{row.value}</strong>
                 <em>{row.detail}</em>
               </div>
             ))}
           </div>
-          <div className="pricing-decision-priority-checklist" data-agent-target="agent-action" aria-label="Pricing operator checklist">
+          <div className="pricing-decision-priority-checklist" aria-label="Pricing operator checklist">
             {priorityChecklist.map(({ item, actionKind }, index) => (
               <CommercialChecklistRow
                 key={`${item.key}-${item.target}-${index}`}
@@ -1780,7 +1774,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
           </div>
         </div>
 
-        <div className="pricing-decision-proof-gaps" data-agent-target="strategy-evidence" aria-label="Pricing proof gap queue">
+        <div className="pricing-decision-proof-gaps" aria-label="Pricing proof gap queue">
           <div className="pricing-decision-proof-gaps-head">
             <span>Proof gap queue</span>
             <strong>{proofGaps.length > 0 ? `${proofGaps.length} input${proofGaps.length === 1 ? "" : "s"} to clear` : "Proof queue clear"}</strong>
@@ -1789,7 +1783,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
           {proofGaps.length > 0 ? (
             <div className="pricing-decision-proof-gaps-list">
               {proofGaps.slice(0, 4).map((gap, index) => (
-                <div key={`${gap.key}-${index}`} className={`pricing-decision-proof-gap ${gap.tone}`} data-agent-target={gap.target}>
+                <div key={`${gap.key}-${index}`} className={`pricing-decision-proof-gap ${gap.tone}`}>
                   <span>{index + 1}</span>
                   <div>
                     <strong>{gap.label} · {gap.owner.toLowerCase()}</strong>
@@ -1803,14 +1797,14 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
         </div>
 
         {firstBlocker && (
-          <div className={`pricing-decision-blocker ${firstBlocker.priority}`} data-agent-target="blocker-resolution">
+          <div className={`pricing-decision-blocker ${firstBlocker.priority}`}>
             <span>Clear next</span>
             <strong>{firstBlocker.ask}</strong>
             <em>{firstBlocker.why}</em>
           </div>
         )}
 
-        <div className={`pricing-decision-contract ${contractTone}`} data-agent-target="decision-contract" aria-label="Pricing decision contract">
+        <div className={`pricing-decision-contract ${contractTone}`} aria-label="Pricing decision contract">
           <div>
             <span>Decision contract</span>
             <strong>{decisionContract.title}</strong>
@@ -1835,7 +1829,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
 
         <div className="pricing-decision-flow" aria-label="Pricing decision flow">
           {flow.map((item) => (
-            <div key={item.key} className={`pricing-decision-step ${item.state}`} data-agent-target={item.key === "coverage" ? "carrier-rates" : item.key === "guardrail" ? "financials" : item.key === "quote" ? "customer-quote" : "source-rfq"}>
+            <div key={item.key} className={`pricing-decision-step ${item.state}`}>
               <Icon name={item.icon} size={14} />
               <span>{item.label}</span>
               <strong>{item.metric}</strong>
@@ -1891,7 +1885,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
           )}
         </div>
 
-        <div className={`pricing-decision-route ${routeDecision.canQuoteCustomer ? "ready" : "review"}`} data-agent-target="movement">
+        <div className={`pricing-decision-route ${routeDecision.canQuoteCustomer ? "ready" : "review"}`}>
           <div className="pricing-decision-route-head">
             <div>
               <span>Route decision</span>
@@ -1931,7 +1925,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
         </div>
       </div>
 
-      <section className="pricing-command-board" data-agent-target="pricing-command-queue" aria-label="Pricing brain queue">
+      <section className="pricing-command-board" aria-label="Pricing brain queue">
         <div className="pricing-command-board-head">
           <div>
             <span className="pricing-section-label">Pricing brain queue</span>
@@ -1957,7 +1951,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
             <em>{topCommandRow?.inquiry.subject ?? "Create or assess an RFQ to start the pricing queue."}</em>
             {topCommandRow?.summary.commandReason && <p>{topCommandRow.summary.commandReason}</p>}
             {topCommandRow?.summary.commercialPriority && (
-              <div className={`pricing-command-priority ${topCommandRow.summary.commercialPriority.tone}`} data-agent-target="commercial-priority" aria-label="Top command commercial priority">
+              <div className={`pricing-command-priority ${topCommandRow.summary.commercialPriority.tone}`} aria-label="Top command commercial priority">
                 <div>
                   <span>Commercial priority</span>
                   <strong>{topCommandRow.summary.commercialPriority.label}</strong>
@@ -1982,10 +1976,10 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
               </div>
             )}
             {topCommandRow?.summary.proofGaps.length ? (
-              <div className="pricing-command-proof-gaps" data-agent-target="strategy-evidence" aria-label="Top command proof gaps">
+              <div className="pricing-command-proof-gaps" aria-label="Top command proof gaps">
                 <span>Proof gaps</span>
                 {topCommandRow.summary.proofGaps.slice(0, 3).map((gap, index) => (
-                  <div key={`${gap.key}-${index}`} className={`pricing-command-proof-gap ${gap.tone}`} data-agent-target={gap.target}>
+                  <div key={`${gap.key}-${index}`} className={`pricing-command-proof-gap ${gap.tone}`}>
                     <strong>{gap.label} · {gap.owner.toLowerCase()}</strong>
                     <em>{gap.action}</em>
                   </div>
@@ -1993,7 +1987,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
               </div>
             ) : null}
             {topCommandRow?.summary && (
-              <div className={`pricing-command-action ${topCommandRow.summary.decisionContract.state}`} data-agent-target="agent-action" aria-label="Safe pricing command action">
+              <div className={`pricing-command-action ${topCommandRow.summary.decisionContract.state}`} aria-label="Safe pricing command action">
                 <div>
                   <span>Safe reviewed action</span>
                   <strong>{operatorToolLabel(topCommandRow.summary.playbookToolHint)}</strong>
@@ -2055,7 +2049,6 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                   {topCommandRow.summary.decisionContract && (
                     <div
                       className={`pricing-command-contract ${topCommandRow.summary.decisionContract.state}`}
-                      data-agent-target="decision-contract"
                       aria-label="Top command decision contract"
                     >
                       <span>Decision contract</span>
@@ -2072,7 +2065,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                     </div>
                   )}
                   {topCommandRow.summary.decisionQuality && (
-                    <div className={`pricing-command-quality ${topCommandRow.summary.decisionQuality.tone}`} data-agent-target="decision-quality" aria-label="Top command decision quality">
+                    <div className={`pricing-command-quality ${topCommandRow.summary.decisionQuality.tone}`} aria-label="Top command decision quality">
                       <span>Decision quality</span>
                       <strong>{topCommandRow.summary.decisionQuality.metric}</strong>
                       <em>{topCommandRow.summary.decisionQuality.detail}</em>
@@ -2093,7 +2086,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                     </div>
                   </div>
                   {topCommandRow.summary.routeLabel && (
-                    <div className={`pricing-command-route ${topCommandRow.summary.routeCanQuoteCustomer ? "ready" : "review"}`} data-agent-target="movement">
+                    <div className={`pricing-command-route ${topCommandRow.summary.routeCanQuoteCustomer ? "ready" : "review"}`}>
                       <span>Route evidence</span>
                       <strong>{topCommandRow.summary.routeLabel}</strong>
                       <em>
@@ -2105,7 +2098,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                     </div>
                   )}
                   {topCommandRow.summary.priorityFactors.length ? (
-                    <div className="pricing-command-factors" data-agent-target="decision-reasons" aria-label="Pricing priority factors">
+                    <div className="pricing-command-factors" aria-label="Pricing priority factors">
                       {topCommandRow.summary.priorityFactors.slice(0, 6).map((factor) => (
                         <div key={`${factor.label}-${factor.value}`} className={`pricing-command-factor ${factor.tone}`}>
                           <span>{factor.label}</span>

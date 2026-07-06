@@ -5,8 +5,6 @@ import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { getValidAccessToken } from "./gmail-oauth";
 import { classifyInboundEmail } from "./email-classifier";
-import { autoCreateInquiryFromThread } from "./thread-actions";
-import { ensureProposedJobsForOpenInquiries } from "./job-actions";
 import { classifyEmailAttachments } from "./doc-classify";
 import { enqueueBackgroundJob } from "./background-jobs";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
@@ -26,11 +24,7 @@ import {
 // re-scanning old threads is cheap (one HEAD-style check each).
 const RECENT_THREAD_FETCH_LIMIT = 500;
 const PAGE_SIZE = 100;
-// After sync, run AI auto-inquiry on this many unlinked threads.
-const AUTO_INQUIRY_LIMIT = 60;
 const BACKFILL_DEDUPE_DAYS = 7;
-
-type GmailSyncAutomationScope = "office" | "touched";
 
 type GmailSyncResult = {
   ok: true;
@@ -160,7 +154,6 @@ export async function syncEmailAccountWindowInternal(input: {
     officeId: input.officeId,
     query: input.query,
     threadFetchLimit: input.threadFetchLimit ?? GMAIL_BACKFILL_THREADS_PER_WINDOW,
-    automationScope: "touched",
   });
 }
 
@@ -169,13 +162,11 @@ async function _syncEmailAccountInternal({
   officeId,
   query = buildRecentGmailSyncQuery(),
   threadFetchLimit = RECENT_THREAD_FETCH_LIMIT,
-  automationScope = "touched",
 }: {
   accountId: string;
   officeId: string;
   query?: string;
   threadFetchLimit?: number;
-  automationScope?: GmailSyncAutomationScope;
 }): Promise<
   | GmailSyncResult
   | { error: string }
@@ -418,40 +409,10 @@ async function _syncEmailAccountInternal({
     }
   }
 
-  // ── Auto-create Inquiries for unlinked freight-related threads ─────────────
-  // After sync, walk the unlinked threads in this office and let AI synthesize
-  // an Inquiry for each one that looks freight-related. Skips and remembers
-  // non-freight threads so we don't re-ask on every sync.
-  const unlinked = await prisma.emailThread.findMany({
-    where: {
-      officeId: account.officeId,
-      ...(automationScope === "touched" ? { id: { in: touchedThreadDbIds.length ? touchedThreadDbIds : ["__none__"] } } : {}),
-      jobId: null,
-      inquiryId: null,
-      autoLinkedAt: null,
-      messages: { some: { direction: "INBOUND" } },
-    },
-    orderBy: { lastMessageAt: "desc" },
-    take: AUTO_INQUIRY_LIMIT,
-    select: { id: true },
-  });
-
-  let autoInquiries = 0;
-  let autoLinked = 0;
-  for (const t of unlinked) {
-    try {
-      const r = await autoCreateInquiryFromThread(t.id);
-      if ("ok" in r) {
-        if (r.created) autoInquiries++;
-        else if ("linkedInquiryId" in r || "linkedJobId" in r) autoLinked++;
-      }
-    } catch {
-      // best-effort
-    }
-  }
-
-  // Backfill PROPOSED jobs for any open inquiry that doesn't have one yet.
-  await ensureProposedJobsForOpenInquiries(account.officeId);
+  // Mail is ingested and classified only — it never auto-creates RFQs. Both
+  // the mail funnel and the Meta lead funnel land in Google Sheets, and the
+  // sheet sync is the single automated source of new Inquiries. Operators can
+  // still promote a thread manually from the inbox ("Create RFQ from thread").
 
   // Pre-warm supplier-offer summaries out-of-band. This is AI-heavy work; it
   // should not live inside the Gmail sync request.
@@ -495,8 +456,9 @@ async function _syncEmailAccountInternal({
     processed,
     created,
     threadsTouched: touchedThreadDbIds.length,
-    autoInquiries,
-    autoLinked,
+    // Mail never auto-creates RFQs anymore; fields kept for result-shape compat.
+    autoInquiries: 0,
+    autoLinked: 0,
   };
 }
 
@@ -699,46 +661,11 @@ export async function reclassifyMessages(args: { onlyUnclassified?: boolean; lim
     }
   }
 
-  // After reclassification, retry the auto-link/auto-inquiry pass on ALL
-  // unlinked threads — including ones we previously skipped — so newly-created
-  // inquiries get a chance to claim related threads (e.g. once a soybean
-  // sourcing inquiry exists, the older soybean emails should now link to it).
-  // Clear prior skip markers so the AI runs fresh.
-  await prisma.emailThread.updateMany({
-    where: { officeId: session.officeId, jobId: null, inquiryId: null },
-    data: { autoLinkedAt: null, autoLinkSkipReason: null },
-  });
-  const unlinked = await prisma.emailThread.findMany({
-    where: {
-      officeId: session.officeId,
-      jobId: null,
-      inquiryId: null,
-      messages: { some: { direction: "INBOUND" } },
-    },
-    orderBy: { lastMessageAt: "desc" },
-    take: 40,
-    select: { id: true },
-  });
-  let autoInquiries = 0;
-  let autoLinked = 0;
-  for (const t of unlinked) {
-    try {
-      const r = await autoCreateInquiryFromThread(t.id);
-      if ("ok" in r) {
-        if (r.created) autoInquiries++;
-        else if ("linkedInquiryId" in r || "linkedJobId" in r) autoLinked++;
-      }
-    } catch {
-      // best-effort
-    }
-  }
-
-  // Backfill any open inquiry without a Job.
-  await ensureProposedJobsForOpenInquiries(session.officeId);
-
+  // Reclassification only relabels messages and links threads to EXISTING
+  // inquiries/jobs — it never creates new RFQs from mail.
   revalidatePath("/dashboard/inbox");
   revalidatePath("/dashboard/rfq");
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/jobs");
-  return { ok: true, processed, relinked: relinked + autoLinked, autoInquiries };
+  return { ok: true, processed, relinked, autoInquiries: 0 };
 }

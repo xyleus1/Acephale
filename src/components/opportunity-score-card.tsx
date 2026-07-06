@@ -102,7 +102,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
   };
 
   return (
-    <section className={`opp-card ${toneClass(score.score)}`} data-agent-target="strategy">
+    <section className={`opp-card ${toneClass(score.score)}`}>
       <div className="opp-card-top">
         <div>
           <div className="opp-eyebrow">Strategy</div>
@@ -116,7 +116,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
         </div>
       </div>
 
-      <div className={`strategy-control-contract ${decisionContract.state}`} data-agent-target="decision-contract" aria-label="Commercial decision contract">
+      <div className={`strategy-control-contract ${decisionContract.state}`} aria-label="Commercial decision contract">
         <div>
           <span className="strategy-section-label">Weakest proof</span>
           <strong>{weakestProof ? `${weakestProof.label}: ${evidenceStateLabel(weakestProof.tone)}` : "No weak proof"}</strong>
@@ -132,7 +132,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
           <strong>{firstForbiddenMove}</strong>
           <em>{decisionContract.nextHumanQuestion ?? decisionContract.summary}</em>
         </div>
-        <div className={`strategy-quality-chip ${decisionQuality?.tone ?? "info"}`} data-agent-target="decision-quality">
+        <div className={`strategy-quality-chip ${decisionQuality?.tone ?? "info"}`}>
           <span>Decision quality</span>
           <strong>{evidenceStateLabel(decisionQuality?.tone)}</strong>
           <em>{decisionQuality?.detail ?? "Decision-quality audit has not been attached to this strategy."}</em>
@@ -202,7 +202,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
       {(decisionReasons.length > 0 || blockerQueue.length > 0 || evidenceChecks.length > 0) && (
         <div className="strategy-rationale-grid" aria-label="Decision rationale and evidence">
           {decisionReasons.length > 0 && (
-            <div className="strategy-reason-stack" data-agent-target="decision-reasons">
+            <div className="strategy-reason-stack">
               <div className="strategy-rationale-head">
                 <span className="strategy-section-label">Why this move</span>
                 <strong>Decision stack</strong>
@@ -218,7 +218,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
           )}
 
           {blockerQueue.length > 0 ? (
-            <div className="strategy-blocker-queue" data-agent-target="blocker-resolution">
+            <div className="strategy-blocker-queue">
               <div className="strategy-rationale-head">
                 <span className="strategy-section-label">Clear next</span>
                 <strong>{blockerQueue[0].label}</strong>
@@ -234,7 +234,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
               ))}
             </div>
           ) : (
-            <div className="strategy-blocker-queue clear" data-agent-target="blocker-resolution">
+            <div className="strategy-blocker-queue clear">
               <div className="strategy-rationale-head">
                 <span className="strategy-section-label">Clear next</span>
                 <strong>No blocker queue</strong>
@@ -244,7 +244,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
           )}
 
           {evidenceChecks.length > 0 && (
-            <div className="strategy-evidence-stack" data-agent-target="strategy-evidence">
+            <div className="strategy-evidence-stack">
               <div className="strategy-rationale-head">
                 <span className="strategy-section-label">Evidence</span>
                 <strong>Trust ledger</strong>

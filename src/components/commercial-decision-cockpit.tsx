@@ -124,22 +124,6 @@ function evidenceIcon(key: string): Parameters<typeof Icon>[0]["name"] {
   }
 }
 
-function priorityRowTarget(key: string) {
-  switch (key) {
-    case "value":
-    case "margin":
-      return "financials";
-    case "target":
-      return "target-price";
-    case "route":
-      return "movement";
-    case "risk":
-      return "decision-reasons";
-    default:
-      return "strategy-evidence";
-  }
-}
-
 export function CommercialDecisionCockpit({
   strategy,
   docs,
@@ -308,7 +292,7 @@ export function CommercialDecisionCockpit({
   ];
 
   return (
-    <section className={`commercial-cockpit ${gateTone}`} data-agent-target="strategy">
+    <section className={`commercial-cockpit ${gateTone}`}>
       <div className="commercial-cockpit-head">
         <div>
           <div className="commercial-cockpit-kicker">Commercial brain</div>
@@ -324,7 +308,7 @@ export function CommercialDecisionCockpit({
       <div className="commercial-cockpit-system" aria-label="Commercial decision system">
         <div className="commercial-cockpit-spine">
           {flow.map((item, index) => (
-            <div key={item.key} className={`commercial-cockpit-spine-step ${item.tone}`} data-agent-target={item.target}>
+            <div key={item.key} className={`commercial-cockpit-spine-step ${item.tone}`}>
               <span className="commercial-cockpit-spine-index">{index + 1}</span>
               <div className="commercial-cockpit-spine-icon"><Icon name={item.icon} size={14} /></div>
               <div>
@@ -337,7 +321,7 @@ export function CommercialDecisionCockpit({
         </div>
 
         <div className="commercial-cockpit-right-rail">
-          <div className={`commercial-cockpit-command-panel ${agentTone}`} data-agent-target="agent-action">
+          <div className={`commercial-cockpit-command-panel ${agentTone}`}>
             <div>
               <span>Current command</span>
               <strong>{strategy.operatorDecision.ctaLabel}</strong>
@@ -356,7 +340,7 @@ export function CommercialDecisionCockpit({
               </div>
             </div>
             {firstBlockerAsk && (
-              <div className="commercial-cockpit-next-ask" data-agent-target="blocker-resolution">
+              <div className="commercial-cockpit-next-ask">
                 <span>Clear first</span>
                 <strong>{firstBlockerAsk.ask}</strong>
                 <em>{firstBlockerAsk.why}</em>
@@ -384,7 +368,7 @@ export function CommercialDecisionCockpit({
             </div>
           </div>
 
-          <div className="commercial-cockpit-proof-gaps" data-agent-target="strategy-evidence" aria-label="Commercial proof gap queue">
+          <div className="commercial-cockpit-proof-gaps" aria-label="Commercial proof gap queue">
             <div className="commercial-cockpit-proof-gaps-head">
               <span>Proof queue</span>
               <strong>{proofGaps.length > 0 ? `${proofGaps.length} input${proofGaps.length === 1 ? "" : "s"} to clear` : "Clear"}</strong>
@@ -393,7 +377,7 @@ export function CommercialDecisionCockpit({
             {proofGaps.length > 0 && (
               <div className="commercial-cockpit-proof-gaps-list">
                 {proofGaps.slice(0, 3).map((gap, index) => (
-                  <div key={`${gap.key}-${index}`} className={`commercial-cockpit-proof-gap ${gap.tone}`} data-agent-target={gap.target}>
+                  <div key={`${gap.key}-${index}`} className={`commercial-cockpit-proof-gap ${gap.tone}`}>
                     <span>{index + 1}</span>
                     <div>
                       <strong>{gap.label} · {gap.owner.toLowerCase()}</strong>
@@ -406,7 +390,7 @@ export function CommercialDecisionCockpit({
             )}
           </div>
 
-          <div className={`commercial-cockpit-contract ${contractTone}`} data-agent-target="decision-contract" aria-label="Decision contract">
+          <div className={`commercial-cockpit-contract ${contractTone}`} aria-label="Decision contract">
             <div className="commercial-cockpit-contract-head">
               <div>
                 <span>Decision contract</span>
@@ -430,7 +414,7 @@ export function CommercialDecisionCockpit({
       </div>
 
       <div className="commercial-cockpit-proof-board">
-        <div className={`commercial-cockpit-priority ${commercialPriority.tone}`} data-agent-target="commercial-priority" aria-label="Commercial priority brief">
+        <div className={`commercial-cockpit-priority ${commercialPriority.tone}`} aria-label="Commercial priority brief">
           <div className="commercial-cockpit-priority-head">
             <div>
               <span>Priority</span>
@@ -445,7 +429,7 @@ export function CommercialDecisionCockpit({
           </div>
           <div className="commercial-cockpit-priority-grid">
             {commercialPriority.rows.slice(0, 4).map((row) => (
-              <div key={row.key} className={`commercial-cockpit-priority-row ${row.tone}`} data-agent-target={priorityRowTarget(row.key)}>
+              <div key={row.key} className={`commercial-cockpit-priority-row ${row.tone}`}>
                 <span>{row.label}</span>
                 <strong>{row.value}</strong>
                 <em>{row.detail}</em>
@@ -457,7 +441,7 @@ export function CommercialDecisionCockpit({
       </div>
 
       {routeDecisionRows.length > 0 && (
-        <div className={`commercial-cockpit-route-decision ${routeDecision.canQuoteCustomer ? "ready" : "review"}`} data-agent-target="movement" aria-label="Route decision table">
+        <div className={`commercial-cockpit-route-decision ${routeDecision.canQuoteCustomer ? "ready" : "review"}`} aria-label="Route decision table">
           <div className="commercial-cockpit-route-head">
             <div>
               <span>Route decision</span>
@@ -518,7 +502,7 @@ export function CommercialDecisionCockpit({
           <strong>{weakestEvidence ? `Weakest: ${weakestEvidence.label}` : "Primary inputs covered"}</strong>
         </summary>
         <div className="commercial-cockpit-detail-grid">
-          <div className="commercial-cockpit-dossier" data-agent-target="decision-dossier" aria-label="Decision dossier">
+          <div className="commercial-cockpit-dossier" aria-label="Decision dossier">
             <div className="commercial-cockpit-dossier-head">
               <span>Decision dossier</span>
               <strong>{decisionBrief.nextAction.label}</strong>
@@ -559,7 +543,7 @@ export function CommercialDecisionCockpit({
           )}
 
           {decisionReasons.length > 0 && (
-            <div className="commercial-cockpit-reasons" data-agent-target="decision-reasons" aria-label="Decision rationale stack">
+            <div className="commercial-cockpit-reasons" aria-label="Decision rationale stack">
               <div className="commercial-cockpit-reasons-head">
                 <span>Reason stack</span>
                 <strong>Why this action now</strong>
@@ -574,7 +558,7 @@ export function CommercialDecisionCockpit({
             </div>
           )}
 
-          <div className="commercial-cockpit-evidence-map" data-agent-target="strategy-evidence" aria-label="Decision evidence map">
+          <div className="commercial-cockpit-evidence-map" aria-label="Decision evidence map">
             <div className="commercial-cockpit-evidence-map-head">
               <span>Evidence map</span>
               <strong>{weakestEvidence ? `Weakest input: ${weakestEvidence.label}` : "Primary inputs covered"}</strong>
@@ -585,7 +569,6 @@ export function CommercialDecisionCockpit({
                 <div
                   key={check.key}
                   className={`commercial-cockpit-evidence-check ${check.tone}`}
-                  data-agent-target={check.key === "decision_quality" ? "decision-quality" : undefined}
                 >
                   <div className="commercial-cockpit-evidence-icon">
                     <Icon name={evidenceIcon(check.key)} size={14} />
@@ -633,7 +616,7 @@ export function CommercialDecisionCockpit({
             </div>
           </div>
 
-          <div className={`commercial-cockpit-contract ${contractTone}`} data-agent-target="decision-contract" aria-label="Decision contract details">
+          <div className={`commercial-cockpit-contract ${contractTone}`} aria-label="Decision contract details">
             <div className="commercial-cockpit-contract-head">
               <div>
                 <span>Full contract</span>

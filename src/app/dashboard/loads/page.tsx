@@ -38,6 +38,12 @@ export default async function LoadsPage() {
             All loads, newest first — spreadsheet view. {jobs.length} row{jobs.length === 1 ? "" : "s"} shown.
           </p>
         </div>
+        <div className="page-actions">
+          <a href="/dashboard/rfq" className="btn">
+            <Icon name="inbox" size={13} />
+            Move RFQ into loads
+          </a>
+        </div>
       </div>
 
       {jobs.length === 0 ? (
@@ -45,8 +51,11 @@ export default async function LoadsPage() {
           <Icon name="box" size={36} className="empty-state-graphic" />
           <div className="empty-state-title">No loads yet</div>
           <p className="empty-state-copy">
-            Loads are created when an RFQ is converted, or manually added from the Deal Pipeline.
+            Loads only appear here when you move an incoming RFQ into loads — open an RFQ and use “Move to loads”.
           </p>
+          <a href="/dashboard/rfq" className="btn">
+            Open incoming RFQs
+          </a>
         </div>
       ) : (
         <div className="card table-shell" style={{ maxHeight: "75vh" }}>

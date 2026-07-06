@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { draftNegotiationPlanForJob } from "@/app/dashboard/jobs/[jobId]/actions";
 import { Icon } from "@/components/icon";
-import { dispatchAgentPageCues } from "@/lib/agent-page-presence";
 
 type DraftResult = Awaited<ReturnType<typeof draftNegotiationPlanForJob>>;
 type ReadyDraft = Extract<DraftResult, { ok: true }>;
@@ -27,28 +26,14 @@ export function NegotiationPlanDraftButton({
   const [pending, startTransition] = useTransition();
 
   function openDraft() {
-    dispatchAgentPageCues([
-      { target: "strategy", label: "Building negotiation stance", detail: "Reading quote gate, decision reasons, target posture, and top risk." },
-      { target: "decision-reasons", label: "Reading leverage reasons", detail: "Using the ranked rationale instead of a generic pricing script." },
-      { target: "strategy-evidence", label: "Checking weak evidence", detail: "Finding anything too thin to use in a customer or forwarder negotiation." },
-      { target: "financials", label: "Checking guardrails", detail: "Comparing buy cost, floor, recommended sell, and target buy limit." },
-      { target: "carrier-rates", label: "Checking leverage", detail: "Using coverage and route tradeoffs before drafting counter language." },
-      { target: "agent-action", label: "Drafting negotiation plan", detail: "Creating review-only customer and forwarder talk tracks." },
-    ]);
     startTransition(async () => {
       setError(null);
       setCopied(false);
       const next = await draftNegotiationPlanForJob(jobId);
       if (!next.ok) {
-        dispatchAgentPageCues([
-          { target: "strategy", label: "Negotiation plan blocked", detail: next.error },
-        ]);
         setError(next.error);
         return;
       }
-      dispatchAgentPageCues([
-        { target: "decision-reasons", label: "Negotiation draft ready", detail: "The plan is review-only and anchored to the visible reason stack." },
-      ]);
       setResult(next);
       setText(next.draft.body);
     });

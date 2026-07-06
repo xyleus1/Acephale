@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { simulatePricingScenarioForJob } from "@/app/dashboard/jobs/[jobId]/actions";
 import { Icon } from "@/components/icon";
-import { dispatchAgentPageCues } from "@/lib/agent-page-presence";
 
 type ScenarioResult = Awaited<ReturnType<typeof simulatePricingScenarioForJob>>;
 type ReadyScenario = Extract<ScenarioResult, { ok: true }>["result"];
@@ -50,11 +49,6 @@ export function PricingScenarioSandbox({
       setError("Enter a target, buy cost, or floor margin to simulate.");
       return;
     }
-    dispatchAgentPageCues([
-      { target: "financials", label: "Running pricing scenario", detail: "Testing target, buy cost, floor, and margin without changing job data." },
-      { target: "strategy", label: "Checking quote gate", detail: "The brain will still block quote if RFQ facts are missing." },
-      { target: "agent-action", label: "Scenario only", detail: "No target history, quote, or carrier price will be written." },
-    ]);
     startTransition(async () => {
       setError(null);
       const next = await simulatePricingScenarioForJob(jobId, {
@@ -69,22 +63,14 @@ export function PricingScenarioSandbox({
       if (!next.ok) {
         setError(next.error);
         setResult(null);
-        dispatchAgentPageCues([{ target: "strategy", label: "Scenario blocked", detail: next.error }]);
         return;
       }
       setResult(next.result);
-      dispatchAgentPageCues([
-        {
-          target: next.result.verdict.can_quote_customer ? "financials" : "strategy",
-          label: next.result.verdict.can_quote_customer ? "Scenario quote-ready" : "Scenario still blocked",
-          detail: `${next.result.verdict.quote_gate}; ${next.result.safety}`,
-        },
-      ]);
     });
   }
 
   return (
-    <div className="pricing-scenario-sandbox" data-agent-target="pricing-scenario">
+    <div className="pricing-scenario-sandbox">
       <div className="pricing-scenario-head">
         <div>
           <span>Scenario sandbox</span>

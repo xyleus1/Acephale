@@ -629,7 +629,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {/* ── COMMERCIAL BRAIN TAB ─────────────────────────────────── */}
       {tab === "brain" && canSeeAgentAudit && (
-        <div className="admin-brain" data-agent-target="admin-brain">
+        <div className="admin-brain">
           <form action="/dashboard/admin" method="get" className="admin-brain-selector">
             <input type="hidden" name="tab" value="brain" />
             <label>
@@ -662,7 +662,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               />
 
               <section className="admin-brain-grid">
-                <form action="/dashboard/admin" method="get" className="admin-brain-card admin-brain-scenario" data-agent-target="pricing-scenario">
+                <form action="/dashboard/admin" method="get" className="admin-brain-card admin-brain-scenario">
                   <input type="hidden" name="tab" value="brain" />
                   <input type="hidden" name="brainJobId" value={selectedBrainJobId ?? ""} />
                   <div className="admin-brain-card-head">
@@ -780,7 +780,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 const changedInquiryFields = asStringList(payload.changedInquiryFields);
                 const reviewedFieldChanges = asRecordList(payload.reviewedFieldChanges);
                 const decisionImpact = asRecord(payload.decisionImpact);
-                const pageCueCount = tools.reduce((count, tool) => count + asRecordList(tool.pageCues).length, 0);
                 const isReview = event.type === "agent.proposal_reviewed";
                 return (
                   <details key={event.id} className="agent-audit-item">
@@ -806,7 +805,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                         {isReview && acceptedFields.length > 0 && <span>Accepted {acceptedFields.length} field{acceptedFields.length === 1 ? "" : "s"}</span>}
                         {isReview && changedJobFields.length > 0 && <span>{changedJobFields.length} job field{changedJobFields.length === 1 ? "" : "s"}</span>}
                         {isReview && changedInquiryFields.length > 0 && <span>{changedInquiryFields.length} RFQ field{changedInquiryFields.length === 1 ? "" : "s"}</span>}
-                        {!isReview && pageCueCount > 0 && <span>{pageCueCount} page cue{pageCueCount === 1 ? "" : "s"}</span>}
                         {!isReview && tools.length === 0 ? (
                           <span>No tools</span>
                         ) : !isReview && tools.map((tool, index) => (
@@ -857,13 +855,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                             const name = typeof tool.name === "string" ? tool.name : "tool";
                             const ok = tool.ok !== false;
                             const toolError = typeof tool.error === "string" ? tool.error : "";
-                            const pageCues = asRecordList(tool.pageCues);
                             return (
                               <details key={`${event.id}-tool-${index}`} className={`agent-audit-tool-row ${ok ? "ok" : "failed"}`}>
                                 <summary>
                                   <strong>{name}</strong>
                                   <span>{ok ? "ok" : "failed"}</span>
-                                  {pageCues.length > 0 && <em>{pageCues.length} page cue{pageCues.length === 1 ? "" : "s"}</em>}
                                 </summary>
                                 <pre>{auditInputPreview(tool.input)}</pre>
                                 {toolError && <p className="agent-audit-error">{toolError.slice(0, 700)}</p>}

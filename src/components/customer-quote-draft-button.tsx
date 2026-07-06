@@ -7,7 +7,6 @@ import {
   applyCustomerQuoteDraftAction,
   draftCustomerQuoteForJob,
 } from "@/app/dashboard/jobs/[jobId]/actions";
-import { dispatchAgentPageCues } from "@/lib/agent-page-presence";
 
 type DraftResult = Awaited<ReturnType<typeof draftCustomerQuoteForJob>>;
 type ReadyDraft = Extract<DraftResult, { ok: true }>;
@@ -29,34 +28,14 @@ export function CustomerQuoteDraftButton({
   const [applying, startApplyTransition] = useTransition();
 
   function openDraft() {
-    dispatchAgentPageCues([
-      { target: "strategy", label: "Checking quote gate", detail: "Verifying the commercial brain allows a customer-facing quote." },
-      { target: "decision-reasons", label: "Reading quote rationale", detail: "Checking the ranked commercial reasons before drafting customer-facing text." },
-      { target: "strategy-evidence", label: "Checking evidence", detail: "Confirming the quote is backed by enough RFQ, coverage, target, and risk evidence." },
-      { target: "carrier-rates", label: "Checking market cost", detail: "Reading received forwarder cost before preparing sell-side text." },
-      { target: "financials", label: "Checking margin", detail: "Comparing buy cost, floor, recommended sell, and expected margin." },
-      { target: "agent-action", label: "Preparing customer quote", detail: "Creating reviewed quote text only; no customer message is sent." },
-    ]);
     startTransition(async () => {
       setError(null);
       setApplyMsg(null);
       const result = await draftCustomerQuoteForJob(jobId);
       if (!result.ok) {
-        dispatchAgentPageCues([
-          { target: "strategy", label: "Quote draft blocked", detail: result.error },
-        ]);
         setError(result.error);
         return;
       }
-      dispatchAgentPageCues([
-        {
-          target: result.status === "READY" ? "financials" : "blocker-resolution",
-          label: result.status === "READY" ? "Quote draft ready" : "Quote gate blocked",
-          detail: result.status === "READY"
-            ? "The quote text and line item are ready for review."
-            : "The agent refused to quote because blockers or guardrails remain.",
-        },
-      ]);
       setDraft(result);
       setText([
         `To: ${result.to ?? "(no customer email)"}`,
@@ -75,23 +54,14 @@ export function CustomerQuoteDraftButton({
   }
 
   function applyLineItem() {
-    dispatchAgentPageCues([
-      { target: "financials", label: "Applying reviewed line", detail: "Updating the internal quote line after the operator chose to use it." },
-    ]);
     startApplyTransition(async () => {
       setError(null);
       setApplyMsg(null);
       const result = await applyCustomerQuoteDraftAction(jobId);
       if (!result.ok) {
-        dispatchAgentPageCues([
-          { target: "financials", label: "Line item not applied", detail: result.error },
-        ]);
         setError(result.error);
         return;
       }
-      dispatchAgentPageCues([
-        { target: "financials", label: "Line item applied", detail: result.message },
-      ]);
       setApplyMsg(result.message);
       router.refresh();
     });

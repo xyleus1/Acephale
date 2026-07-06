@@ -5,7 +5,7 @@ import type { JobStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
-import { ensureProposedJobsForOpenInquiries } from "./job-actions";
+import { createWithFileReference } from "./references";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
 
@@ -25,7 +25,6 @@ type SyncSummary = {
   requests: { created: number; updated: number; skipped: number };
   operations: { created: number; updated: number; skipped: number; companiesCreated: number };
   leads: { created: number; updated: number; skipped: number };
-  proposedJobsCreated: number;
   warnings: string[];
 };
 
@@ -332,7 +331,11 @@ async function syncRequestRows(officeId: string, rows: string[][]) {
     const eventType = existing ? "google_sheets.inquiry.updated" : "google_sheets.inquiry.created";
     const saved = existing
       ? await prisma.inquiry.update({ where: { id: existing.id }, data })
-      : await prisma.inquiry.create({ data: { officeId, ...data } });
+      : await createWithFileReference(
+          officeId,
+          (reference) => prisma.inquiry.create({ data: { officeId, reference, ...data } }),
+          receivedAt
+        );
     const sourceExternalId = `google_sheets:request:${sourceKey}`;
     const payload = {
       inquiryId: saved.id,
@@ -681,7 +684,11 @@ async function syncMetaLeadRows(officeId: string, rows: string[][]) {
     // Operators advance lead RFQs in-app; a resync must not reset their status.
     const saved = existing
       ? await prisma.inquiry.update({ where: { id: existing.id }, data: { ...data, status: existing.status } })
-      : await prisma.inquiry.create({ data: { officeId, ...data } });
+      : await createWithFileReference(
+          officeId,
+          (reference) => prisma.inquiry.create({ data: { officeId, reference, ...data } }),
+          receivedAt
+        );
 
     const sourceExternalId = `meta_leads:${sourceKey}`;
     const payload = {
@@ -810,8 +817,6 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
     return { error: warnings.join(" | ") };
   }
 
-  const proposedJobsCreated = await ensureProposedJobsForOpenInquiries(officeId);
-
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/inbox");
   revalidatePath("/dashboard/rfq");
@@ -825,7 +830,6 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
     requests,
     operations,
     leads,
-    proposedJobsCreated,
     warnings,
   };
 }

@@ -98,7 +98,7 @@ function TargetPriceTrail({
       : "Needs customer answer";
 
   return (
-    <section className="target-trail" data-agent-target="target-price" aria-label="Target price history">
+    <section className="target-trail" aria-label="Target price history">
       <div className="target-trail-head">
         <div>
           <div className="target-trail-kicker">Target price memory</div>
@@ -162,7 +162,7 @@ function DeskSafeAction({ brief }: { brief: DeskExecutionBrief }) {
   const contractState = brief.decision_contract?.state ?? "review";
 
   return (
-    <div className={`attention-brief-action ${contractState}`} data-agent-target="agent-action" aria-label="Safe desk action">
+    <div className={`attention-brief-action ${contractState}`} aria-label="Safe desk action">
       <div>
         <span>Safe reviewed action</span>
         <strong>{operatorToolLabel(toolHint)}</strong>
@@ -203,7 +203,7 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
   if (items.length === 0) return null;
   const ledgerStop = firstCommandLedgerStop(brief);
   return (
-    <section className="attention-queue" data-agent-target="decision-queue" aria-label="Decision queue">
+    <section className="attention-queue" aria-label="Decision queue">
       <div className="attention-queue-header">
         <span className="live-dot" aria-hidden />
         <strong>Decision queue</strong>
@@ -236,7 +236,6 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
               {brief.execution_brief.decision_contract && (
                 <div
                   className={`attention-brief-contract ${brief.execution_brief.decision_contract.state}`}
-                  data-agent-target="decision-contract"
                   aria-label="Desk decision contract"
                 >
                   <span>Decision contract</span>
@@ -260,7 +259,6 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
                       key={`${gap.key}-${gap.target}-${index}`}
                       href={brief.execution_brief?.href ?? "/dashboard"}
                       className={`attention-proof-gap ${gap.tone}`}
-                      data-agent-target={gap.target}
                     >
                       <strong>{gap.owner} · {gap.label}</strong>
                       <em>{gap.action}</em>
@@ -275,7 +273,6 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
                     <span
                       key={`${gate.label}-${gate.metric}`}
                       className={gate.status}
-                      data-agent-target={gate.label === "Decision quality" ? "decision-quality" : undefined}
                       aria-label={`${gate.label}: ${gate.metric}`}
                     >
                       {gate.label}
@@ -305,7 +302,6 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
                     <span
                       key={`execution-${factor.label}`}
                       className={factor.tone}
-                      data-agent-target={factor.label === "Decision quality" ? "decision-quality" : undefined}
                     >
                       {factor.label}
                       <strong>{factor.value}</strong>
@@ -361,7 +357,6 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
                     <span
                       key={`${item.key}-${gate.label}-${gate.metric}`}
                       className={gate.status}
-                      data-agent-target={gate.label === "Decision quality" ? "decision-quality" : undefined}
                       aria-label={`${gate.label}: ${gate.metric}`}
                     >
                       <em>{gate.label}</em>
@@ -376,7 +371,6 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
                     <span
                       key={`${item.key}-${gap.key}-${gap.target}-${index}`}
                       className={`attention-item-proof-gap ${gap.tone}`}
-                      data-agent-target={gap.target}
                     >
                       <em>{gap.owner} · {gap.label}</em>
                       <strong>{gap.action}</strong>
@@ -401,7 +395,6 @@ function DecisionQueueSection({ items, brief }: { items: DecisionQueueItem[]; br
                     <span
                       key={`${item.key}-${factor.label}`}
                       className={factor.tone}
-                      data-agent-target={factor.label === "Decision quality" ? "decision-quality" : undefined}
                     >
                       {factor.label}
                       <strong>{factor.value}</strong>
@@ -487,7 +480,7 @@ function DecisionFlowPanel({
   ];
 
   return (
-    <section className="decision-flow-panel" data-agent-target="decision-flow">
+    <section className="decision-flow-panel">
       <div className="decision-flow-head">
         <div>
           <div className="decision-flow-kicker">Commercial brain</div>
@@ -560,7 +553,7 @@ function LoadPlaybookPanel({
   ];
 
   return (
-    <section className="load-playbook" data-agent-target="load-playbook" aria-label={`Load playbook for ${reference}`}>
+    <section className="load-playbook" aria-label={`Load playbook for ${reference}`}>
       <div className="load-playbook-head">
         <div>
           <span>Load playbook</span>
@@ -784,7 +777,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
     iconName: "box",
     who: job.inquiry ? "auto" : "manual",
     title: job.inquiry ? `Converted to ${job.reference}` : `Job ${job.reference} created manually`,
-    sub: `Status set to ${STATUS_LABEL[job.status]}`,
+    sub: `Status set to ${STATUS_LABEL[job.status] ?? job.status}`,
   });
   for (const m of milestones) {
     if (m.actualAt) {
@@ -920,7 +913,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
     <div className="workbench-grid">
       {/* LEFT: main workspace stack */}
       <div className="workbench-main">
-        <section className="ops-brief" aria-label="Lead-to-quote desk brief" data-agent-target="job-brief">
+        <section className="ops-brief" aria-label="Lead-to-quote desk brief">
           <div className="ops-brief-copy">
             <div className="ops-eyebrow">
               <span className="ops-status-light" aria-hidden />
@@ -1055,7 +1048,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           statusLabel={STATUS_LABEL[visibleStatus] ?? visibleStatus}
         />
 
-      <section className="job-command-panel" aria-label="Focused job" data-agent-target="job-summary">
+      <section className="job-command-panel" aria-label="Focused job">
         <div className="job-command-main">
           <div className="job-command-eyebrow">
             <span className="job-reference">{job.reference}</span>
@@ -1148,7 +1141,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
       </section>
 
       {opportunity && (
-        <details className="strategy-audit-details" data-agent-target="strategy">
+        <details className="strategy-audit-details">
           <summary>
             <span>Strategy audit details</span>
             <strong>Score, ladder, evidence, and risks</strong>
@@ -1157,7 +1150,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
         </details>
       )}
 
-      <div className="card workbench-card" data-agent-target="timeline">
+      <div className="card workbench-card">
         <div className="workbench-card-header">
           <div className="workbench-kicker">Deal Timeline</div>
           <div className="workbench-note small">
@@ -1214,7 +1207,6 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           <CollapsibleCard
             title="Forwarder pricing"
             defaultOpen={false}
-            agentTarget="forwarder-pricing"
             meta={receivedQuotes.length > 0
               ? <span>· {receivedQuotes.length} of {carrierQuotes.length} replied</span>
               : null
@@ -1265,7 +1257,6 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           <CollapsibleCard
             title="Documents"
             defaultOpen
-            agentTarget="documents"
             meta={<span>· {docs.filter((d) => d.status === "APPROVED").length}/{docs.length} approved</span>}
           >
             <div className="workbench-card-body tight">
@@ -1308,7 +1299,6 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           <CollapsibleCard
             title="Financials"
             defaultOpen={false}
-            agentTarget="financials"
             meta={
               <a href={`/api/jobs/${job.id}/quote-pdf`} target="_blank" className="workbench-link-action">
                 <Icon name="external" size={10} /> Quote PDF
@@ -1378,7 +1368,7 @@ function ReferenceDealSnapshot({
   const statusTotal = Math.max(1, Object.values(summary.byStatus).reduce((sum, count) => sum + count, 0));
 
   return (
-    <section className="sheet-snapshot" data-agent-target="reference-deals">
+    <section className="sheet-snapshot">
       <div className="sheet-snapshot-header">
         <div>
           <div className="sheet-kicker">Control sheet decision board</div>
@@ -1409,7 +1399,7 @@ function ReferenceDealSnapshot({
         </div>
       </div>
 
-      <div className="sheet-playbook" data-agent-target="reference-deal-playbook">
+      <div className="sheet-playbook">
         <div className="sheet-playbook-main">
           <div className="sheet-section-label">Operator playbook</div>
           <strong>{playbook.headline}</strong>
@@ -1457,7 +1447,6 @@ function ReferenceDealSnapshot({
             <div
               key={deal.dealId}
               className={`sheet-deal-row ${decisionClass}`}
-              data-agent-target={`reference-deal-row reference-deal-${decisionClass}${index === 0 ? " reference-deal-top" : ""}`}
             >
               <div className="sheet-deal-score">
                 {deal.tone === "critical" ? "Critical" : deal.tone === "high" ? "High" : "Normal"}
@@ -1547,7 +1536,7 @@ function StageWorkbench({
 
   const STAGE_KEYS = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"] as const;
   return (
-    <div className="stage-shell" data-agent-target="stage-workbench">
+    <div className="stage-shell">
       <div className="stage-header">
         <div className="stage-heading">
           <div className="stage-eyebrow">
@@ -1611,7 +1600,7 @@ function InquiryStage({ job, carrierQuotes, receivedQuotes, laneRates }: { job: 
       {laneRates.length > 0 && <LaneRatesPanel laneRates={laneRates} />}
     <div className="workbench-grid-2">
       {/* Source RFQ */}
-      <div className="card" data-agent-target="source-rfq">
+      <div className="card">
         <div className="worktable-section-header split">
           <span>Source RFQ</span>
           {job.inquiry && (
@@ -1640,7 +1629,7 @@ function InquiryStage({ job, carrierQuotes, receivedQuotes, laneRates }: { job: 
       </div>
 
       {/* Carrier rate procurement */}
-      <div className="card" data-agent-target="carrier-rates">
+      <div className="card">
         <div className="worktable-section-header split">
           <span>Carrier Rates ({receivedQuotes.length}/{carrierQuotes.length})</span>
           {receivedQuotes.length > 0 && (
@@ -1756,7 +1745,7 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
   return (
     <div className="workbench-stack">
       {/* Carrier rate aggregation table (same shape as the Lane Prices page) */}
-      <div className="card stage-panel" data-agent-target="carrier-rates">
+      <div className="card stage-panel">
         <div className="worktable-section-header split">
           <div>
             <div className="stage-panel-title">Carrier rates received</div>
@@ -1834,7 +1823,7 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
       {laneRates.length > 0 && <LaneRatesPanel laneRates={laneRates} />}
 
       {/* Customer-facing quote builder */}
-      <div className="card" data-agent-target="customer-quote">
+      <div className="card">
         <div className="worktable-section-header split">
           <span>Customer quote - {job.reference}</span>
           <div className="workbench-actions-inline">
@@ -1890,7 +1879,7 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
 
 function LaneRatesPanel({ laneRates }: { laneRates: any[] }) {
   return (
-    <div className="card" data-agent-target="lane-rates">
+    <div className="card">
       <div className="worktable-section-header split">
         <span>Standard Lane Rates - {laneRates.length} match{laneRates.length === 1 ? "" : "es"} for this lane</span>
         <span className="workbench-note small">From your rate library</span>
@@ -1931,7 +1920,7 @@ function LaneRatesPanel({ laneRates }: { laneRates: any[] }) {
 function DocumentsStage({ job, docs }: { job: any; docs: any[] }) {
   const approved = docs.filter((d) => d.status === "APPROVED").length;
   return (
-    <div className="card" data-agent-target="documents">
+    <div className="card">
       <div className="worktable-section-header">
         Documents · {approved}/{docs.length} approved
       </div>
@@ -2029,7 +2018,7 @@ function InTransitStage({ job, docs, carrierQuotes }: { job: any; docs: any[]; c
   return (
     <div className="workbench-stack">
       <div className="workbench-grid-2">
-        <div className="card" data-agent-target="movement">
+        <div className="card">
           <div className="worktable-section-header">Email-tracked movement</div>
           <div className="stage-detail-grid">
             <span>Carrier</span>
@@ -2042,7 +2031,7 @@ function InTransitStage({ job, docs, carrierQuotes }: { job: any; docs: any[]; c
             <span>Tracked from email threads</span>
           </div>
         </div>
-        <div className="card" data-agent-target="carrier-rates">
+        <div className="card">
           <div className="worktable-section-header">Carrier rates received <span className="worktable-header-meta">- {received.length} of {carrierQuotes.length}</span></div>
           <div className="workbench-card-body">
             {received.length === 0 ? (
@@ -2082,7 +2071,7 @@ function DeliveredStage({ job, quoteLines }: { job: any; quoteLines: { desc: str
   const margin = job.revenue && job.cost ? job.revenue - job.cost : null;
   const marginPct = job.revenue && job.cost ? ((job.revenue - job.cost) / job.revenue) * 100 : null;
   return (
-    <div className="card" data-agent-target="settlement">
+    <div className="card">
       <div className="worktable-section-header">Final settlement</div>
       <div className="workbench-settlement-grid">
         <div>

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { qualifyRfq } from "@/lib/rfq-qualification";
+import { createWithFileReference } from "@/lib/references";
 import { getReferenceDealById, referenceDealDecisionPlan, referenceDealToRfqDraft } from "@/lib/reference-deals";
 
 export async function createRfqFromReferenceDeal(formData: FormData) {
@@ -46,9 +47,10 @@ export async function createRfqFromReferenceDeal(formData: FormData) {
   };
   const qualification = qualifyRfq(qualificationInput);
 
-  const inquiry = await prisma.inquiry.create({
+  const inquiry = await createWithFileReference(session.officeId, (reference) => prisma.inquiry.create({
     data: {
       officeId: session.officeId,
+      reference,
       subject: draft.subject,
       fromCompany: draft.fromCompany,
       type: draft.type,
@@ -90,7 +92,7 @@ export async function createRfqFromReferenceDeal(formData: FormData) {
       status: qualification.isMature ? "PARSED" : "INGESTED",
       receivedAt: new Date(),
     },
-  });
+  }));
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/rfq");

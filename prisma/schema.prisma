@@ -892,6 +892,7 @@ model Inquiry {
   id                String    @id @default(cuid())
   officeId          String
   companyId         String?
+  reference         String? // freight file number, e.g. DRY26070001 — assigned at intake, carried onto the converted load
   subject           String
   fromEmail         String?
   fromCompany       String?
@@ -943,6 +944,7 @@ model Inquiry {
   activities          Activity[]
   tasks               Task[]
 
+  @@unique([officeId, reference])
   @@index([officeId, status, receivedAt])
   @@index([officeId, companyId])
 }

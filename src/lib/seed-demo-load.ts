@@ -250,15 +250,17 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
   }
 
   // Inquiry (the source RFQ) — reuse orphan from previous failed run if found
+  const { createWithFileReference, nextFileReference } = await import("./references");
   const inquiry = orphanInquiry
     ? await prisma.inquiry.update({
         where: { id: orphanInquiry.id },
         data: { companyId: company.id },
       })
-    : await prisma.inquiry.create({
+    : await createWithFileReference(args.officeId, (reference) => prisma.inquiry.create({
         data: {
           officeId: args.officeId,
           companyId: company.id,
+          reference,
           subject: "DEMO · Steel coils — Constanta to Hamburg, 1x40HC",
           fromEmail: "ops@blackseatrading.example",
           fromCompany: "Black Sea Trading Co",
@@ -277,12 +279,11 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
           notes: "Customer is repeat shipper — 4 prior loads on this lane.",
           rawEmailBody: "[Demo seed] Original RFQ from Black Sea Trading Co requesting rate Constanta → Hamburg, 1x40HC steel coils.",
         },
-      });
+      }));
 
-  // Job — set up like a mid-pipeline shipment.
-  // Reference must be next-available (not count+1) — see nextJobReference.
-  const { nextJobReference } = await import("./job-actions");
-  const reference = await nextJobReference(args.officeId);
+  // Job — set up like a mid-pipeline shipment. The load carries the RFQ's
+  // file number; orphan inquiries from older runs may not have one yet.
+  const reference = inquiry.reference ?? await nextFileReference(args.officeId);
   const portalToken = createPortalToken();
   const etd = new Date(Date.now() + 6 * 86400000);
   const eta = new Date(Date.now() + 16 * 86400000);

@@ -4,7 +4,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
-import { ensureProposedJobsForOpenInquiries } from "./job-actions";
 import { createPendingBulkActionProposal } from "./agent-proposals";
 
 const OPEN_INQUIRY_STATUSES = ["INGESTED", "PARSED", "PRICED", "QUOTED"];
@@ -397,9 +396,6 @@ Rules:
     await prisma.$executeRaw`UPDATE "Inquiry" SET "notes" = COALESCE("notes", '') || ${noteAppend} WHERE "id" = ${keeper.id}`;
   }
 
-  // After merging, backfill PROPOSED jobs for keepers that lost theirs.
-  await ensureProposedJobsForOpenInquiries(session.officeId);
-
   revalidatePath("/dashboard/rfq");
   revalidatePath("/dashboard/inbox");
   revalidatePath("/dashboard/jobs");
@@ -544,8 +540,7 @@ The commodity field should be a comma-separated list of the underlying commoditi
   });
   await prisma.$executeRaw`UPDATE "Inquiry" SET "notes" = COALESCE("notes", '') || ${auditNote} WHERE "id" = ${keeper.id}`;
 
-  // Backfill or fetch the keeper's PROPOSED job, and propagate the new subject/commodity.
-  await ensureProposedJobsForOpenInquiries(session.officeId);
+  // If the keeper already has a load, propagate the new subject/commodity to it.
   const keeperJob = await prisma.job.findFirst({
     where: { inquiryId: keeper.id, officeId: session.officeId },
     select: { id: true, commodity: true, origin: true, destination: true, weight: true },

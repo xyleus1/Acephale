@@ -112,7 +112,7 @@ export function StageEmailPanel({
   }
 
   return (
-    <div id="job-email" className="card stage-email" data-agent-target="email">
+    <div id="job-email" className="card stage-email">
       <div className="worktable-section-header split">
         <span>Email · {threads.length} {threads.length === 1 ? "thread" : "threads"} on this job</span>
         <a href="/dashboard/settings/email" className="workbench-link-action">

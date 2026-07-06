@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
+import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { sendDeskForwardAction, sendLeadConfirmationAction } from "@/app/dashboard/rfq/actions";
 
 export type RfqEmailPreview = {
@@ -17,6 +18,9 @@ export type RfqEmailPreview = {
 
 export type RfqRowData = {
   id: string;
+  reference: string | null;
+  jobId: string | null;
+  jobReference: string | null;
   receivedAgo: string;
   receivedFull: string;
   subject: string;
@@ -216,7 +220,15 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
       </div>
 
       <div className="rfq-expand-actions">
-        <Link href={`/dashboard/rfq/${row.id}` as never} className="btn btn-sm">
+        {row.jobId ? (
+          <Link href={`/dashboard/jobs/${row.jobId}` as never} className="btn btn-sm">
+            <Icon name="box" size={12} strokeWidth={2.25} />
+            Load {row.jobReference ?? ""}
+          </Link>
+        ) : (
+          <RfqLoadReviewButton inquiryId={row.id} label="Move to loads" className="btn btn-sm" />
+        )}
+        <Link href={`/dashboard/rfq/${row.id}` as never} className="btn btn-secondary btn-sm">
           Open full RFQ
           <Icon name="arrow-right" size={12} strokeWidth={2.5} />
         </Link>
@@ -340,6 +352,7 @@ function RowPair({ row, open, colSpan, onToggle, onExpand }: {
           }
         }}
       >
+        <td className="data-cell-mono">{row.reference ?? <span className="data-muted">—</span>}</td>
         <td className="data-muted" title={row.receivedFull}>{row.receivedAgo}</td>
         <td>
           <span className="rfq-row-caret" aria-hidden>

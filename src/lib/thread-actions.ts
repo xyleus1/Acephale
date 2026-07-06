@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "./auth";
 import { prisma } from "./prisma";
-import { createProposedJobForInquiry } from "./job-actions";
+import { createWithFileReference } from "./references";
 import { createPendingBulkHideThreadsProposal } from "./agent-proposals";
 import { recordMemoryEvent } from "./memory/record-event";
 import { DERYA_RFQ_SOURCE_EMAILS, isDeryaRfqSourceSender } from "./derya-inboxes";
@@ -94,9 +94,10 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
     `--- ${m.direction} from ${m.fromEmail} on ${m.sentAt.toISOString().split("T")[0]} ---\n${m.bodyText ?? ""}`
   ).join("\n\n").slice(0, 20000);
 
-  const inquiry = await prisma.inquiry.create({
+  const inquiry = await createWithFileReference(session.officeId, (reference) => prisma.inquiry.create({
     data: {
       officeId: session.officeId,
+      reference,
       subject: parsed.subject ?? thread.subject ?? "Email thread",
       fromEmail: parsed.fromEmail ?? thread.messages.find((x) => x.direction === "INBOUND")?.fromEmail ?? null,
       fromCompany: parsed.fromCompany ?? thread.messages.find((x) => x.direction === "INBOUND")?.fromName ?? null,
@@ -125,7 +126,7 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
       notes: parsed.summary ?? null,
       receivedAt: thread.messages[0].sentAt,
     },
-  });
+  }));
   await recordMemoryEvent({
     officeId: session.officeId,
     sourceType: thread.externalThreadId?.startsWith("whatsapp:") ? "WHATSAPP" : "GMAIL",
@@ -179,9 +180,6 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
     },
     data: { classification: "RELATED_NOTE", classificationReason: "Attached when thread was promoted to Inquiry", classificationAt: new Date() },
   });
-
-  // Spin up a draft Job on the kanban board for this inquiry.
-  await createProposedJobForInquiry(inquiry.id);
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/rfq");
@@ -348,8 +346,6 @@ ${jobHints || "(none)"}`,
           },
           data: { classification: "RELATED_NOTE", classificationReason: "Auto-linked to existing inquiry", classificationAt: new Date() },
         });
-        // Make sure the inquiry has a draft Job on the board.
-        await createProposedJobForInquiry(inq.id);
         // Re-resolve the thread's CRM counterparty now that it's inquiry-linked.
         await relinkThreadTouches(threadId);
         return { ok: true, created: false, linkedInquiryId: inq.id };
@@ -389,9 +385,10 @@ ${jobHints || "(none)"}`,
     `--- ${mm.direction} from ${mm.fromEmail} on ${mm.sentAt.toISOString().split("T")[0]} ---\n${mm.bodyText ?? ""}`
   ).join("\n\n").slice(0, 20000);
 
-  const inquiry = await prisma.inquiry.create({
+  const inquiry = await createWithFileReference(thread.officeId, (reference) => prisma.inquiry.create({
     data: {
       officeId: thread.officeId,
+      reference,
       subject: parsed.subject ?? thread.subject ?? "Email thread",
       fromEmail: parsed.fromEmail ?? thread.messages.find((x) => x.direction === "INBOUND")?.fromEmail ?? null,
       fromCompany: parsed.fromCompany ?? thread.messages.find((x) => x.direction === "INBOUND")?.fromName ?? null,
@@ -420,7 +417,7 @@ ${jobHints || "(none)"}`,
       notes: parsed.summary ?? null,
       receivedAt: thread.messages[0].sentAt,
     },
-  });
+  }));
   await recordMemoryEvent({
     officeId: thread.officeId,
     sourceType: thread.externalThreadId?.startsWith("whatsapp:") ? "WHATSAPP" : "GMAIL",
@@ -468,9 +465,6 @@ ${jobHints || "(none)"}`,
     },
     data: { classification: "RELATED_NOTE", classificationReason: "Attached when thread was auto-promoted to Inquiry", classificationAt: new Date() },
   });
-
-  // Spin up a draft Job on the board for the new Inquiry.
-  await createProposedJobForInquiry(inquiry.id);
 
   return { ok: true, created: true, inquiryId: inquiry.id };
 }

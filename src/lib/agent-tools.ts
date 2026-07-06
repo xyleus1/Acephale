@@ -2594,7 +2594,7 @@ export async function dispatchTool(
         if (input.type) where.type = String(input.type);
         const rows = await prisma.inquiry.findMany({
           where,
-          select: { id: true, subject: true, type: true, commodity: true, origin: true, destination: true, status: true },
+          select: { id: true, reference: true, subject: true, type: true, commodity: true, origin: true, destination: true, status: true },
           take: Math.min(50, Number(input.limit ?? 20)),
           orderBy: { receivedAt: "desc" },
         });
@@ -2606,7 +2606,7 @@ export async function dispatchTool(
           include: {
             messages: { orderBy: { sentAt: "desc" }, take: 1 },
             job: { select: { reference: true } },
-            inquiry: { select: { subject: true } },
+            inquiry: { select: { reference: true, subject: true } },
           },
           orderBy: { lastMessageAt: "desc" },
           take: 100,
@@ -2617,7 +2617,7 @@ export async function dispatchTool(
             thread_id: t.id, subject: t.subject,
             last_from: t.messages[0].fromName ?? t.messages[0].fromEmail,
             last_at: t.messages[0].sentAt,
-            linked_to: t.job?.reference ?? t.inquiry?.subject ?? null,
+            linked_to: t.job?.reference ?? t.inquiry?.reference ?? t.inquiry?.subject ?? null,
           }));
         return { ok: true, result: awaiting };
       }

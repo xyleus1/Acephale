@@ -103,6 +103,7 @@ export default async function RFQPage({
     },
     include: {
       company: { select: { id: true, name: true } },
+      job: { select: { id: true, reference: true } },
       emailThreads: {
         take: 1,
         select: {
@@ -183,6 +184,9 @@ export default async function RFQPage({
 
     return {
       id: inq.id,
+      reference: inq.reference,
+      jobId: inq.job?.id ?? null,
+      jobReference: inq.job?.reference ?? null,
       receivedAgo: timeAgo(inq.receivedAt),
       receivedFull: new Date(inq.receivedAt).toLocaleString("en-GB", {
         day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -281,6 +285,7 @@ export default async function RFQPage({
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ cursor: "default" }}>Ref</th>
                 <th style={{ cursor: "default" }}>Received</th>
                 <th style={{ cursor: "default" }}>Subject</th>
                 <th style={{ cursor: "default" }}>From</th>
@@ -292,7 +297,7 @@ export default async function RFQPage({
                 <th style={{ cursor: "default" }} className="numeric">Send</th>
               </tr>
             </thead>
-            <RfqExpandableRows rows={rows} colSpan={9} />
+            <RfqExpandableRows rows={rows} colSpan={10} />
           </table>
         </div>
       )}

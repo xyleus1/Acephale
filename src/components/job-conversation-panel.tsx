@@ -3,9 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { chatWithAgent, type AgentToolTrace, type ChatMsg } from "@/lib/agent-chat";
-import { AGENT_PAGE_CUE_EVENT, type AgentPageCueDetail } from "@/lib/agent-page-presence";
-import { cuesForToolTrace, inferPageCues, type AgentPageCue } from "@/lib/agent-page-cues";
-import { AgentPagePresenceLayer } from "@/components/agent-page-presence";
 import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
 import { AgentMessageContent } from "@/components/agent-message-content";
 import { Icon } from "@/components/icon";
@@ -36,10 +33,6 @@ type ChatItem = ChatMsg & {
   at: string;
   toolTrace?: AgentToolTrace[];
 };
-type AgentPageAction = {
-  id: number;
-  cues: AgentPageCue[];
-};
 
 const AGENT_TOOLS = [
   {
@@ -47,56 +40,30 @@ const AGENT_TOOLS = [
     detail: "Contract + proof",
     icon: "shield",
     prompt: "Inspect the commercial brain for this job. Start with the decision contract, weakest proof gap, next safe move, and stop condition.",
-    cues: [
-      { target: "decision-contract", label: "Reading brain contract", detail: "Checking the allowed move, forbidden move, and stop condition before answering." },
-      { target: "decision-dossier", label: "Reading decision dossier", detail: "Combining quote gate, proof gaps, route, risk, target, and agent boundaries." },
-      { target: "decision-quality", label: "Checking decision quality", detail: "Finding the fragile input that could change the recommendation." },
-    ],
   },
   {
     label: "Qualify",
     detail: "Missing RFQ facts",
     icon: "list",
     prompt: "Run a readiness audit for this job and list what is missing before this RFQ can go to forwarders.",
-    cues: [
-      { target: "source-rfq", label: "Reading source RFQ", detail: "Checking origin, destination, cargo, dates, and missing customer facts." },
-      { target: "job-summary", label: "Checking job summary", detail: "Comparing parsed RFQ fields against the current job record." },
-      { target: "email", label: "Preparing follow-up", detail: "Looking at the email composer and thread history for the next customer ask." },
-    ],
   },
   {
     label: "Price",
     detail: "Target + margin",
     icon: "check",
     prompt: "Check target price, received pricing, margin, and the next pricing action for this job.",
-    cues: [
-      { target: "job-summary", label: "Checking target and margin", detail: "Reading target price, cost, margin, and next milestone." },
-      { target: "carrier-rates", label: "Ranking forwarder rates", detail: "Looking for received rates, pending quotes, and the current best option." },
-      { target: "customer-quote", label: "Checking customer quote", detail: "Comparing the customer-facing quote against cost and target." },
-      { target: "financials", label: "Reviewing financials", detail: "Verifying the job-level revenue, cost, and margin snapshot." },
-    ],
   },
   {
     label: "Replies",
     detail: "Stale threads",
     icon: "mail-out",
     prompt: "Find stale customer or forwarder follow-ups on this load.",
-    cues: [
-      { target: "email", label: "Scanning threads", detail: "Checking the latest customer and forwarder messages for stale replies." },
-      { target: "stage-workbench", label: "Checking current stage", detail: "Matching thread status against the workbench stage." },
-      { target: "timeline", label: "Checking timing", detail: "Using milestone dates to decide what needs chasing." },
-    ],
   },
   {
     label: "Customer",
     detail: "Draft reply",
     icon: "mail",
     prompt: "Draft a concise customer reply for this job based on the current RFQ/pricing status.",
-    cues: [
-      { target: "email", label: "Opening reply context", detail: "Using templates and thread history to draft a customer-safe response." },
-      { target: "job-summary", label: "Checking customer-facing facts", detail: "Pulling status, route, target, and next milestone into the draft." },
-      { target: "customer-quote", label: "Checking quote lines", detail: "Making sure pricing language matches the quote builder." },
-    ],
   },
 ] as const;
 
@@ -116,10 +83,8 @@ export function JobConversationPanel({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [pageAction, setPageAction] = useState<AgentPageAction | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const externalCueTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -127,42 +92,11 @@ export function JobConversationPanel({
     }
   }, [chat, busy]);
 
-  useEffect(() => {
-    function onExternalCues(event: Event) {
-      const detail = (event as CustomEvent<{ cues?: AgentPageCueDetail[] }>).detail;
-      const cues = detail?.cues?.filter((cue) => cue.target && cue.label && cue.detail) ?? [];
-      if (cues.length === 0) return;
-
-      if (externalCueTimerRef.current) {
-        window.clearTimeout(externalCueTimerRef.current);
-      }
-      setPageAction({
-        id: Date.now(),
-        cues,
-      });
-      const clearDelayMs = Math.min(7600, cues.length * 1450 + 900);
-      externalCueTimerRef.current = window.setTimeout(() => {
-        setPageAction(null);
-        externalCueTimerRef.current = null;
-      }, clearDelayMs);
-    }
-
-    window.addEventListener(AGENT_PAGE_CUE_EVENT, onExternalCues);
-    return () => {
-      window.removeEventListener(AGENT_PAGE_CUE_EVENT, onExternalCues);
-      if (externalCueTimerRef.current) window.clearTimeout(externalCueTimerRef.current);
-    };
-  }, []);
-
-  async function send(textOverride?: string, cueOverride?: readonly AgentPageCue[]) {
+  async function send(textOverride?: string) {
     const text = (textOverride ?? input).trim();
     if (!text || busy) return;
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
-    setPageAction({
-      id: Date.now(),
-      cues: [...(cueOverride ?? inferPageCues(text, "job"))],
-    });
 
     const history: ChatMsg[] = chat.map(({ role, content }) => ({ role, content }));
     const userItem: ChatItem = {
@@ -173,7 +107,6 @@ export function JobConversationPanel({
     };
     setChat((c) => [...c, userItem]);
     setBusy(true);
-    let clearDelayMs = 900;
     try {
       const res = await chatWithAgent(history, text, scopeJobId);
       const assistantItem: ChatItem = {
@@ -184,14 +117,6 @@ export function JobConversationPanel({
         toolTrace: res.toolTrace,
       };
       setChat((c) => [...c, assistantItem]);
-      const actualCues = cuesForToolTrace(res.toolTrace, "job-brief");
-      if (actualCues.length > 0) {
-        clearDelayMs = Math.min(7600, actualCues.length * 1450 + 900);
-        setPageAction({
-          id: Date.now() + 1,
-          cues: [...actualCues],
-        });
-      }
       if (res.ingestedInquiryId || res.refresh) router.refresh();
     } catch (err) {
       setChat((c) => [...c, {
@@ -202,7 +127,6 @@ export function JobConversationPanel({
       }]);
     } finally {
       setBusy(false);
-      window.setTimeout(() => setPageAction(null), clearDelayMs);
     }
   }
 
@@ -230,7 +154,6 @@ export function JobConversationPanel({
   if (collapsed) {
     return (
       <>
-        <AgentPagePresenceLayer action={pageAction} />
         <div className="conversation-panel collapsed" aria-label="Collapsed desk assistant">
           <button
             type="button"
@@ -253,7 +176,6 @@ export function JobConversationPanel({
 
   return (
     <div className="conversation-panel">
-      <AgentPagePresenceLayer action={pageAction} />
       <header className="conversation-header">
         <div className="conversation-title-lockup">
           <span className="agent-avatar">A</span>
@@ -279,7 +201,7 @@ export function JobConversationPanel({
           <button
             key={tool.label}
             type="button"
-            onClick={() => send(tool.prompt, tool.cues)}
+            onClick={() => send(tool.prompt)}
             disabled={busy}
             title={tool.prompt}
             className="conversation-tool"

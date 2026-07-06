@@ -19,7 +19,6 @@ import { SubmitButton } from "@/components/submit-button";
 import { JobNote } from "@/components/job-note";
 import { CustomerQuoteDraftButton } from "@/components/customer-quote-draft-button";
 import { CommercialDecisionCockpit } from "@/components/commercial-decision-cockpit";
-import { AgentPagePresenceLayer } from "@/components/agent-page-presence";
 import { AgentAuditRerunButton } from "@/components/agent-audit-rerun-button";
 import { parseQuoteLines, cleanNotes } from "@/lib/quote-lines";
 import { CONTAINER_TYPE_LABEL, dimensionsSummary } from "@/lib/cargo";
@@ -386,7 +385,7 @@ function ProposalDecisionDossier({
   ];
 
   return (
-    <div className={`agent-proposal-dossier ${mode}`} data-agent-target="proposal-dossier" aria-label="Proposal decision dossier">
+    <div className={`agent-proposal-dossier ${mode}`} aria-label="Proposal decision dossier">
       <div className="agent-proposal-dossier-head">
         <div>
           <span>{mode === "reviewed" ? "Reviewed decision dossier" : "Apply preview dossier"}</span>
@@ -532,7 +531,7 @@ export default async function JobDetailPage({
     iconName: "box",
     kind: job.inquiry ? "auto" : "manual",
     title: job.inquiry ? `Converted to ${job.reference}` : `Job ${job.reference} created manually`,
-    sub: `Status set to ${STATUS_LABEL[job.status]}`,
+    sub: `Status set to ${STATUS_LABEL[job.status] ?? job.status}`,
   });
   for (const m of timelineMilestones) {
     if (m.actualAt) {
@@ -704,7 +703,6 @@ export default async function JobDetailPage({
 
   return (
     <div className="record-page">
-      <AgentPagePresenceLayer listenForExternalCues />
       {/* Back */}
       <div className="record-back-row">
         <a href="/dashboard/jobs" className="back-link">
@@ -713,7 +711,7 @@ export default async function JobDetailPage({
       </div>
 
       {/* Header strip */}
-      <div className="record-hero" data-agent-target="job-summary">
+      <div className="record-hero">
         <div className="record-hero-top">
           <div className="record-hero-main">
             <div className="record-eyebrow">
@@ -1198,13 +1196,11 @@ export default async function JobDetailPage({
                               const name = typeof tool.name === "string" ? tool.name : "tool";
                               const ok = tool.ok !== false;
                               const toolError = typeof tool.error === "string" ? tool.error : "";
-                              const pageCues = asRecordList(tool.pageCues);
                               return (
                                 <details key={`${event.id}-tool-${index}`} className={`agent-audit-tool-row ${ok ? "ok" : "failed"}`}>
                                   <summary>
                                     <strong>{name}</strong>
                                     <span>{ok ? "ok" : "failed"}</span>
-                                    {pageCues.length > 0 && <em>{pageCues.length} page cue{pageCues.length === 1 ? "" : "s"}</em>}
                                   </summary>
                                   <pre>{auditInputPreview(tool.input)}</pre>
                                   {toolError && <p className="agent-audit-error">{toolError.slice(0, 700)}</p>}
@@ -1233,7 +1229,7 @@ export default async function JobDetailPage({
           )}
 
           {job.targetPriceHistory.length > 0 && (
-            <div className="card" data-agent-target="target-price">
+            <div className="card">
               <div className="worktable-section-header">Target price history</div>
               <div className="record-row-list compact">
                 {job.targetPriceHistory.map((entry) => (
@@ -1296,7 +1292,7 @@ export default async function JobDetailPage({
 
           {/* Forwarding: forwarder pricing */}
           {job.type === "FORWARDING" && (
-          <div className="card" data-agent-target="carrier-rates">
+          <div className="card">
             <div className="worktable-section-header">
               Forwarder pricing
               {receivedQuotes.length > 0 && (
@@ -1371,7 +1367,7 @@ export default async function JobDetailPage({
           )}
 
           {/* Milestones */}
-          <div className="card" data-agent-target="timeline">
+          <div className="card">
             <div className="worktable-section-header">Milestones</div>
             <div className="record-card-body compact">
               {timelineMilestones.map((m) => {
@@ -1412,7 +1408,7 @@ export default async function JobDetailPage({
           </div>
 
           {/* Documents */}
-          <div className="card" data-agent-target="documents">
+          <div className="card">
             <div className="worktable-section-header">
               Documents
               <span className="record-section-note">
@@ -1504,7 +1500,7 @@ export default async function JobDetailPage({
           </div>
 
           {/* Financials & Quote */}
-          <div className="card" data-agent-target="financials">
+          <div className="card">
             <div className="worktable-section-header record-split-header">
               <span>Financials & Quote</span>
               <a href={`/api/jobs/${jobId}/quote-pdf`} target="_blank" className="record-header-link">

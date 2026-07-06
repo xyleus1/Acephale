@@ -9,7 +9,6 @@ import {
 } from "@/app/dashboard/jobs/[jobId]/actions";
 import { DraftModal } from "@/components/draft-modal";
 import { Icon } from "@/components/icon";
-import { dispatchAgentPageCues } from "@/lib/agent-page-presence";
 
 type ToolKind = "missing_info" | "forwarder" | "customer_quote";
 
@@ -57,13 +56,6 @@ export function AgentAuditRerunButton({
     if (!kind) return;
     setError(null);
     setResult(null);
-    dispatchAgentPageCues([
-      {
-        target: "agent-action",
-        label: "Rerunning stale draft",
-        detail: "Using the current RFQ and pricing facts instead of the stale audit snapshot.",
-      },
-    ]);
     startTransition(async () => {
       if (kind === "missing_info") {
         const next = await draftMissingInfoForJobAction(jobId);

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { chatWithAgent, type AgentToolTrace, type ChatMsg } from "@/lib/agent-chat";
-import { AgentPagePresenceLayer } from "@/components/agent-page-presence";
 import { AgentToolTraceList } from "@/components/agent-tool-trace-list";
 import { AgentMessageContent } from "@/components/agent-message-content";
 import { Icon } from "@/components/icon";
@@ -93,8 +92,6 @@ export function CompanyBrainChat() {
 
   return (
     <>
-      {/* Listens for the evidence/cue events dispatched by AgentToolTraceList. */}
-      <AgentPagePresenceLayer listenForExternalCues />
       <div className="brain-chat" aria-label="Company brain chat">
         <div ref={scrollRef} className="brain-chat-scroll">
           {messages.length === 0 && !busy ? (
