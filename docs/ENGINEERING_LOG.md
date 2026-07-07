@@ -1688,3 +1688,56 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: optional one-off backfill of legacy status values to canonical;
   consider a CategoryOption-backed store if custom options should survive
   having zero rows.
+
+### 2026-07-07 - RFQ sheet: Gmail-style multi-select + bulk status change
+
+- Branch: rfq-bulk-select-status (Conductor workspace walla-walla)
+- Commit: not committed
+- Task: Add row checkboxes + select-all to /dashboard/rfq and a sticky bulk
+  bar to change status of the selected RFQs (one-click Ignore, or any status
+  from the vocabulary incl. office custom statuses).
+- Files changed: src/app/dashboard/rfq/actions.ts
+  (bulkUpdateInquiryStatusAction: office-scoped updateMany, status
+  normalization + reserved-name guard shared with single-row path, 200-id
+  cap, per-row inquiry.updated memory events, operation sheet_bulk_status),
+  src/app/dashboard/rfq/page.tsx (table markup moved out; renders RfqSheet),
+  src/components/rfq-expandable-rows.tsx (RfqSheet owns table + selection
+  state + RfqBulkBar; RowPair gets checkbox cell; expand-row colSpan now 12),
+  src/app/globals.css (rfq-select-cell/box, tr.rfq-row-selected tint).
+- Verification: tsc clean; next build clean; eslint no new findings in
+  touched files (2 pre-existing no-html-link-for-pages errors in
+  rfq/page.tsx confirmed on base commit via stash).
+- Failed/skipped checks: DB-backed tests skipped — no local DATABASE_URL.
+- Caveats: selection state is component-local (not bulk-select-store — the
+  module singleton would leak selection between inbox and RFQ pages);
+  select-all covers the 200 visible rows only; stale selected ids are pruned
+  against visible rows before acting.
+- Follow-up: shift-click range selection; bulk desk-forward could reuse the
+  same bar.
+
+### 2026-07-07 - RFQ sheet: per-user column layout (hide / reorder / resize)
+
+- Branch: rfq-bulk-select-status (Conductor workspace walla-walla)
+- Commit: not committed (same change set as the multi-select entry above)
+- Task: Column headers on /dashboard/rfq can be hidden (Columns picker in a
+  table-toolbar, jobs-table chrome), reordered (HTML5 drag-and-drop between
+  headers with a landing-edge indicator), and resized (pointer drag on the
+  header's right edge, clamped 60-640px); "Reset layout" restores defaults.
+  Layout saved per user.
+- Files changed: src/components/rfq-expandable-rows.tsx (SHEET_COLUMNS model,
+  SheetLayout sanitize/persist to localStorage `derya.rfqSheet.layout.<userId>`,
+  header DnD + resize handlers, Columns picker, cells rendered by key,
+  MemoRowPair so drag/resize re-renders only colgroup/thead),
+  src/app/dashboard/rfq/page.tsx (userId prop, subtitle hint),
+  src/app/globals.css (.rfq-sheet table-layout: fixed + td/div truncation,
+  min-width: 0 on sheet inputs, rfq-th drag/drop/resize affordances,
+  rfq-layout-reset picker row).
+- Verification: tsc clean; next build clean; eslint no new findings in
+  touched files.
+- Failed/skipped checks: DB-backed tests skipped — no local DATABASE_URL.
+- Caveats: persistence is per user per browser (localStorage, no schema
+  change; DB roaming would need a migration). HTML5 DnD = mouse only.
+  Default layout flashes briefly before the stored layout loads (same as
+  jobs-table). Select/actions columns are fixed chrome.
+- Follow-up: DB-backed user preference store if layouts should roam devices;
+  keyboard-accessible reorder.

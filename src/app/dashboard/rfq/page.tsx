@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { deriveInquirySource } from "@/lib/inquiry-source";
 import { Icon } from "@/components/icon";
-import { RfqExpandableRows, type RfqRowData, type SheetOption } from "@/components/rfq-expandable-rows";
+import { RfqSheet, type RfqRowData, type SheetOption } from "@/components/rfq-expandable-rows";
 import { RfqSendAllButton } from "@/components/rfq-send-all-button";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 import {
@@ -274,7 +274,7 @@ export default async function RFQPage({
         <div>
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
-            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown · newest first · click a cell to edit, changes save automatically · the arrow opens load details
+            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
           </p>
         </div>
         <div className="page-actions">
@@ -314,44 +314,12 @@ export default async function RFQPage({
           </a>
         </div>
       ) : (
-        <div className="card table-shell">
-          <table className="data-table sheet-table rfq-sheet">
-            <colgroup>
-              <col style={{ width: 74 }} />
-              <col style={{ width: 112 }} />
-              <col />
-              <col style={{ width: 172 }} />
-              <col style={{ width: 124 }} />
-              <col style={{ width: 190 }} />
-              <col style={{ width: 104 }} />
-              <col style={{ width: 116 }} />
-              <col style={{ width: 112 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 32 }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th style={{ cursor: "default" }}>Received</th>
-                <th style={{ cursor: "default" }}>Ref</th>
-                <th style={{ cursor: "default" }}>Subject</th>
-                <th style={{ cursor: "default" }}>From</th>
-                <th style={{ cursor: "default" }}>Source</th>
-                <th style={{ cursor: "default" }}>Lane</th>
-                <th style={{ cursor: "default" }}>Mode</th>
-                <th style={{ cursor: "default" }}>Status</th>
-                <th style={{ cursor: "default" }} className="numeric">Target Price</th>
-                <th style={{ cursor: "default" }} className="numeric">Send</th>
-                <th style={{ cursor: "default" }} aria-label="Row actions" />
-              </tr>
-            </thead>
-            <RfqExpandableRows
-              rows={rows}
-              colSpan={11}
-              statusOptions={statusOptions}
-              modeOptions={modeOptions}
-            />
-          </table>
-        </div>
+        <RfqSheet
+          rows={rows}
+          statusOptions={statusOptions}
+          modeOptions={modeOptions}
+          userId={session.userId}
+        />
       )}
     </div>
   );

@@ -33138,11 +33138,106 @@ html.agent-dock-open .page-container {
 
 .rfq-sheet {
   min-width: 1280px;
+  /* User-set column widths are exact; content truncates instead of stretching
+     the column. Cell dropdowns are position:fixed, so clipping can't hide them. */
+  table-layout: fixed;
+}
+
+.rfq-sheet tr.data-row > td,
+.rfq-sheet tr.data-row td > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Inputs in flex/grid cells must shrink with a narrowed column (min-width:auto
+   would otherwise hold them at their intrinsic ~20ch width and clip). */
+.rfq-sheet input.sheet-input,
+.rfq-sheet button.sheet-select-trigger {
+  min-width: 0;
 }
 
 /* Read-only cells keep the roomy data-table padding the inputs provide themselves. */
 .rfq-sheet td.rfq-ro {
   padding: 8px 8px;
+}
+
+/* Leading multi-select column (Gmail-style bulk status changes) */
+.rfq-sheet th.rfq-select-cell,
+.rfq-sheet td.rfq-select-cell {
+  padding: 8px 2px 8px 12px;
+}
+
+.rfq-sheet .rfq-select-box {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.rfq-sheet .rfq-select-box input {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--brand);
+}
+
+/* Draggable, resizable column headers (th is sticky = positioned, so the
+   resize handle anchors to it) */
+.rfq-sheet th.rfq-th {
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rfq-sheet th.rfq-th-dragging {
+  opacity: 0.45;
+}
+
+.rfq-sheet th.rfq-th-drop-left {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.rfq-sheet th.rfq-th-drop-right {
+  box-shadow: inset -3px 0 0 var(--brand);
+}
+
+.rfq-th-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rfq-th-resize:hover,
+.rfq-sheet th.rfq-th-resizing .rfq-th-resize {
+  box-shadow: inset -2px 0 0 var(--brand);
+}
+
+/* "Reset layout" row at the bottom of the columns picker */
+.table-picker-menu button.rfq-layout-reset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 14px;
+  border: none !important;
+  border-top: 1px solid var(--border) !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-2) !important;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.table-picker-menu button.rfq-layout-reset:hover {
+  background: var(--surface-2) !important;
 }
 
 .rfq-sheet .rfq-subject-cell {
@@ -33731,6 +33826,12 @@ tr.rfq-row-open .rfq-row-caret {
 
 tr.rfq-row-open td {
   background: var(--surface-2);
+}
+
+/* Ticked rows stay visibly marked, hover included (Gmail-style). */
+tr.rfq-row-selected td,
+.sheet-table tbody tr.rfq-row-selected:hover td {
+  background: var(--brand-light);
 }
 
 .rfq-expand-row td {

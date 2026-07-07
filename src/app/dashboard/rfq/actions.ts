@@ -310,6 +310,76 @@ export async function updateInquiryRowAction(
   return { ok: true };
 }
 
+// Bulk status change from the sheet's multi-select — one office-scoped
+// updateMany, then the same memory event the single-row edit records, per row.
+// Capped at the sheet's page size; ids beyond it are silently impossible to
+// select in the UI anyway.
+const BULK_STATUS_CAP = 200;
+
+export async function bulkUpdateInquiryStatusAction(
+  inquiryIds: string[],
+  statusInput: string,
+): Promise<{ ok: true; updated: number } | { error: string }> {
+  const session = await requireSession();
+  const ids = [...new Set(inquiryIds.filter((id) => typeof id === "string" && id))]
+    .slice(0, BULK_STATUS_CAP);
+  if (ids.length === 0) return { error: "No RFQs selected." };
+
+  const status = normalizeInquiryStatusInput(statusInput.slice(0, 40));
+  if (!status) return { error: "Status is required." };
+  // These would collide with the filter-tab keys on /dashboard/rfq.
+  if (["ALL", "OPEN"].includes(status.toUpperCase())) {
+    return { error: `“${status}” is a reserved name — pick another status.` };
+  }
+
+  const result = await prisma.inquiry.updateMany({
+    where: { id: { in: ids }, officeId: session.officeId },
+    data: { status },
+  });
+  if (result.count === 0) return { error: "No matching RFQs found." };
+
+  const updatedRows = await prisma.inquiry.findMany({
+    where: { id: { in: ids }, officeId: session.officeId },
+    select: { id: true, status: true, updatedAt: true },
+  });
+  await Promise.allSettled(
+    updatedRows.map((row) =>
+      recordMemoryEvent({
+        officeId: session.officeId,
+        sourceType: "INQUIRY",
+        sourceExternalId: `inquiry:${row.id}`,
+        eventType: "inquiry.updated",
+        entityType: "inquiry",
+        entityId: row.id,
+        actorType: "user",
+        actorId: session.userId,
+        occurredAt: row.updatedAt,
+        payloadVersion: 1,
+        payload: {
+          inquiryId: row.id,
+          changedFields: ["status"],
+          status: row.status,
+          bulk: true,
+          batchSize: result.count,
+        },
+        provenance: {
+          source: "inquiry",
+          operation: "sheet_bulk_status",
+          path: "src/app/dashboard/rfq/actions.ts",
+          function: "bulkUpdateInquiryStatusAction",
+          sourceRecordId: row.id,
+          actorType: "user",
+          actorId: session.userId,
+        },
+        idempotencyKey: `inquiry:${row.id}:updated:${row.updatedAt.toISOString()}`,
+      }),
+    ),
+  );
+
+  revalidatePath("/dashboard/rfq");
+  return { ok: true, updated: result.count };
+}
+
 export async function deleteInquiryRowAction(inquiryId: string): Promise<RowActionResult> {
   const session = await requireSession();
   const inquiry = await prisma.inquiry.findFirst({

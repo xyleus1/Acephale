@@ -4,6 +4,96 @@
 
 ## Date
 
+2026-07-07
+
+## Branch
+
+rfq-bulk-select-status (Conductor workspace walla-walla, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+RFQ sheet: Gmail-style multi-select + bulk status change, and per-user
+column layout (hide / reorder / resize).
+
+Column layout (second change in this set):
+
+- The 10 data columns (Received … Send) can be hidden via a "Columns (N)"
+  toolbar picker (same chrome as the Loads table), reordered by dragging a
+  header onto another (drop indicator shows the landing edge), and resized by
+  dragging a header's right edge (clamped 60–640px). "Reset layout" in the
+  picker restores defaults. The select-checkbox and row-actions columns are
+  fixed chrome.
+- Layout persists to localStorage keyed per account:
+  `derya.rfqSheet.layout.<userId>` — per user per browser, no schema change.
+  Stored layouts are sanitized on load (unknown keys dropped, new columns
+  appended, all-hidden falls back to all-visible, widths clamped).
+- `.rfq-sheet` switched to `table-layout: fixed` so user widths are exact;
+  cell content truncates with ellipsis instead of stretching columns (cell
+  dropdown menus are position:fixed, so clipping cannot hide them);
+  `min-width: 0` added to sheet inputs so they shrink in narrowed columns.
+- Rows render cells by column key and are memoized (`MemoRowPair`) — header
+  drag/resize only re-renders colgroup/thead, not the 200 rows.
+
+Multi-select + bulk status change (first change in this set):
+
+- Every sheet row gets a leading checkbox; the header checkbox selects/clears
+  all visible rows (indeterminate when partially selected). Ticked rows are
+  tinted (`tr.rfq-row-selected`); clicking the checkbox never toggles the
+  row's expand panel.
+- Selecting ≥1 row shows a sticky bulk bar (same `.bulk-action-bar` chrome as
+  inbox triage): "N selected", one-click **Ignore**, a **Set status ▾**
+  dropdown listing the full status vocabulary (canonical + office custom
+  statuses), and **Clear**. Errors surface inline in the bar; selection is
+  kept on failure, cleared on success.
+- New server action `bulkUpdateInquiryStatusAction(ids, status)` in
+  `src/app/dashboard/rfq/actions.ts`: office-scoped `updateMany`, same status
+  normalization + reserved-name ("all"/"open") guard as the single-row edit,
+  capped at 200 ids (the sheet's page size), records the same
+  `inquiry.updated` memory event per row (operation `sheet_bulk_status`).
+- Structural: the table markup (colgroup/thead) moved from
+  `rfq/page.tsx` into the client component; `RfqExpandableRows` (tbody-only)
+  became `RfqSheet` (full table + bulk bar). Selection is plain React state
+  local to the sheet — deliberately NOT the shared `bulk-select-store`
+  singleton, which would leak selections across inbox ⇄ RFQ pages. Stale ids
+  (row left the filter after refresh) are pruned against visible rows before
+  any action.
+
+## Files changed
+
+`src/app/dashboard/rfq/actions.ts` (new bulk action),
+`src/app/dashboard/rfq/page.tsx` (renders RfqSheet with userId, table markup
+removed), `src/components/rfq-expandable-rows.tsx` (column model + layout
+persistence + header DnD/resize + Columns picker + RfqSheet + RfqBulkBar +
+checkbox cells + memoized rows), `src/app/globals.css` (select column,
+selected-row tint, fixed table layout + truncation, th drag/resize
+affordances, picker reset row).
+
+## Verification passed
+
+tsc clean; next build clean; eslint — no new findings in touched files (the
+two `<a href="/dashboard/rfq/new">` errors in rfq/page.tsx pre-exist on the
+base commit, verified via stash). DB-backed tests skipped (no local
+DATABASE_URL in this workspace).
+
+## Caveats
+
+Column layout is per user per browser (localStorage) — it does not roam
+across devices; a DB-backed preference store would need a schema migration
+(deliberately avoided). Header drag uses HTML5 DnD — mouse only, no touch or
+keyboard reorder (hide/show via picker works everywhere). First paint uses
+the default layout until the stored one loads (same flash the Loads table
+has). Select-all covers the visible page only (query takes 200 newest). No
+shift-click range selection. Bulk bar only changes status — bulk delete/send
+deliberately out of scope.
+
+## Previous Update
+
+## Date
+
 2026-07-06
 
 ## Branch

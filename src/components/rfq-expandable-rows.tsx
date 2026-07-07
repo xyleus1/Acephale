@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import {
+  bulkUpdateInquiryStatusAction,
   deleteInquiryRowAction,
   sendDeskForwardAction,
   sendLeadConfirmationAction,
@@ -445,43 +446,415 @@ function RowSendCell({ row, onExpand, onError }: {
   );
 }
 
-export function RfqExpandableRows({ rows, colSpan, statusOptions, modeOptions }: {
-  rows: RfqRowData[];
-  colSpan: number;
+// ── Column layout (hide / reorder / resize, saved per user) ─────────────────
+//
+// The select-checkbox column and the row-actions (delete) column are fixed
+// chrome; the 10 data columns between them are customizable. The layout is
+// persisted to localStorage keyed by user id — same device-level persistence
+// the Loads table uses, but scoped per account so shared machines don't leak
+// layouts between users.
+
+type SheetColumnKey =
+  | "received" | "ref" | "subject" | "from" | "source"
+  | "lane" | "mode" | "status" | "target" | "send";
+
+type SheetColumn = {
+  key: SheetColumnKey;
+  label: string;
+  // null = no fixed width; the column absorbs the remaining table width.
+  width: number | null;
+  numeric?: boolean;
+};
+
+const SHEET_COLUMNS: ReadonlyArray<SheetColumn> = [
+  { key: "received", label: "Received", width: 74 },
+  { key: "ref", label: "Ref", width: 112 },
+  { key: "subject", label: "Subject", width: null },
+  { key: "from", label: "From", width: 172 },
+  { key: "source", label: "Source", width: 124 },
+  { key: "lane", label: "Lane", width: 190 },
+  { key: "mode", label: "Mode", width: 104 },
+  { key: "status", label: "Status", width: 116 },
+  { key: "target", label: "Target Price", width: 112, numeric: true },
+  { key: "send", label: "Send", width: 120, numeric: true },
+];
+
+const COLUMN_KEYS = SHEET_COLUMNS.map((c) => c.key);
+const COLUMN_BY_KEY = Object.fromEntries(SHEET_COLUMNS.map((c) => [c.key, c])) as
+  Record<SheetColumnKey, SheetColumn>;
+const MIN_COL_WIDTH = 60;
+const MAX_COL_WIDTH = 640;
+
+type SheetLayout = {
+  order: SheetColumnKey[];
+  hidden: SheetColumnKey[];
+  widths: Partial<Record<SheetColumnKey, number>>;
+};
+
+function defaultLayout(): SheetLayout {
+  return { order: [...COLUMN_KEYS], hidden: [], widths: {} };
+}
+
+// A stored layout may predate columns added since (or reference removed ones):
+// unknown keys are dropped, new columns appear at their default position, and
+// a layout that would hide everything falls back to all-visible.
+function sanitizeLayout(raw: unknown): SheetLayout {
+  if (!raw || typeof raw !== "object") return defaultLayout();
+  const value = raw as Partial<Record<keyof SheetLayout, unknown>>;
+  const known = (arr: unknown): SheetColumnKey[] =>
+    Array.isArray(arr)
+      ? [...new Set(arr.filter((k): k is SheetColumnKey => COLUMN_KEYS.includes(k as SheetColumnKey)))]
+      : [];
+  const storedOrder = known(value.order);
+  const order = [...storedOrder, ...COLUMN_KEYS.filter((k) => !storedOrder.includes(k))];
+  let hidden = known(value.hidden);
+  if (hidden.length >= COLUMN_KEYS.length) hidden = [];
+  const widths: Partial<Record<SheetColumnKey, number>> = {};
+  if (value.widths && typeof value.widths === "object") {
+    for (const key of COLUMN_KEYS) {
+      const w = (value.widths as Record<string, unknown>)[key];
+      if (typeof w === "number" && Number.isFinite(w)) {
+        widths[key] = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, Math.round(w)));
+      }
+    }
+  }
+  return { order, hidden, widths };
+}
+
+function RfqBulkBar({ ids, statusOptions, onDone }: {
+  ids: string[];
   statusOptions: ReadonlyArray<SheetOption>;
-  modeOptions: ReadonlyArray<SheetOption>;
+  onDone: () => void;
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function applyStatus(status: string) {
+    setMenuOpen(false);
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await bulkUpdateInquiryStatusAction(ids, status);
+        if ("error" in res) {
+          setError(res.error);
+          return;
+        }
+        onDone();
+        router.refresh();
+      } catch {
+        setError("Could not update — check your connection and try again.");
+      }
+    });
+  }
 
   return (
-    <tbody>
-      {rows.map((row) => {
-        const open = openId === row.id;
-        return (
-          <RowPair
-            key={row.id}
-            row={row}
-            open={open}
-            colSpan={colSpan}
-            statusOptions={statusOptions}
-            modeOptions={modeOptions}
-            onToggle={() => setOpenId(open ? null : row.id)}
-            onExpand={() => setOpenId(row.id)}
-          />
-        );
-      })}
-    </tbody>
+    <div className="bulk-action-bar">
+      <span className="bulk-action-count">{ids.length} selected</span>
+      {error && <span className="bulk-action-status" title={error}>{error}</span>}
+      <div className="bulk-action-divider" />
+      <button
+        className="bulk-action-btn"
+        disabled={busy}
+        title="Set the selected RFQs to Ignored"
+        onClick={() => applyStatus("IGNORED")}
+      >
+        <Icon name="x" size={11} /> {busy ? "Saving…" : "Ignore"}
+      </button>
+      <div className="bulk-action-dropdown">
+        <button className="bulk-action-btn" disabled={busy} onClick={() => setMenuOpen((o) => !o)}>
+          <Icon name="tag" size={11} /> Set status <Icon name="chevron-down" size={11} />
+        </button>
+        {menuOpen && (
+          <div className="bulk-action-popover narrow">
+            {statusOptions.map(([value, label]) => (
+              <button
+                key={value}
+                className="inbox-popover-option"
+                onClick={() => applyStatus(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="bulk-action-spacer">
+        <button className="bulk-action-btn outline" disabled={busy} onClick={onDone}>Clear</button>
+      </div>
+    </div>
   );
 }
 
-function RowPair({ row, open, colSpan, statusOptions, modeOptions, onToggle, onExpand }: {
+export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
+  rows: RfqRowData[];
+  statusOptions: ReadonlyArray<SheetOption>;
+  modeOptions: ReadonlyArray<SheetOption>;
+  userId: string;
+}) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+
+  // ── Column layout, persisted per user ──
+  const storageKey = `derya.rfqSheet.layout.${userId}`;
+  const [layout, setLayout] = useState<SheetLayout>(defaultLayout);
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const [dragKey, setDragKey] = useState<SheetColumnKey | null>(null);
+  const [dropKey, setDropKey] = useState<SheetColumnKey | null>(null);
+  const [resizingKey, setResizingKey] = useState<SheetColumnKey | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) setLayout(sanitizeLayout(JSON.parse(raw)));
+    } catch {}
+    setLayoutLoaded(true);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (layoutLoaded) {
+      try { localStorage.setItem(storageKey, JSON.stringify(layout)); } catch {}
+    }
+  }, [layout, layoutLoaded, storageKey]);
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    }
+    if (pickerOpen) document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [pickerOpen]);
+
+  // Stable across width changes so row memoization holds while resizing.
+  const columns = useMemo(
+    () => layout.order.filter((k) => !layout.hidden.includes(k)).map((k) => COLUMN_BY_KEY[k]),
+    [layout.order, layout.hidden],
+  );
+  const colSpan = columns.length + 2;
+
+  function toggleHidden(key: SheetColumnKey) {
+    setLayout((prev) => {
+      const hidden = prev.hidden.includes(key)
+        ? prev.hidden.filter((k) => k !== key)
+        : [...prev.hidden, key];
+      if (hidden.length >= COLUMN_KEYS.length) return prev; // keep ≥1 column visible
+      return { ...prev, hidden };
+    });
+  }
+
+  // Classic sortable semantics: the dragged column lands on the target's slot;
+  // dragging rightwards inserts after the target so the last slot is reachable.
+  function moveColumn(from: SheetColumnKey, to: SheetColumnKey) {
+    if (from === to) return;
+    setLayout((prev) => {
+      const order = [...prev.order];
+      const fromIdx = order.indexOf(from);
+      const toIdx = order.indexOf(to);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      order.splice(fromIdx, 1);
+      order.splice(order.indexOf(to) + (fromIdx < toIdx ? 1 : 0), 0, from);
+      return { ...prev, order };
+    });
+  }
+
+  function startResize(e: React.PointerEvent, key: SheetColumnKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = (e.target as HTMLElement).closest("th");
+    const startWidth = th?.getBoundingClientRect().width
+      ?? layout.widths[key] ?? COLUMN_BY_KEY[key].width ?? 160;
+    const startX = e.clientX;
+    setResizingKey(key);
+    const onMove = (ev: PointerEvent) => {
+      const width = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, Math.round(startWidth + ev.clientX - startX)));
+      setLayout((prev) => ({ ...prev, widths: { ...prev.widths, [key]: width } }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setResizingKey(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  // ── Selection ──
+  // Selection can outlive a refresh or a tab switch (this component instance
+  // persists across server re-renders), so act only on ids still visible.
+  const selectedVisible = rows.filter((r) => selected.has(r.id)).map((r) => r.id);
+  const allSelected = rows.length > 0 && selectedVisible.length === rows.length;
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const toggleOpen = useCallback((id: string) => {
+    setOpenId((prev) => (prev === id ? null : id));
+  }, []);
+  const expandRow = useCallback((id: string) => setOpenId(id), []);
+
+  function toggleSelectAll() {
+    setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
+  }
+
+  const dragIdx = dragKey ? columns.findIndex((c) => c.key === dragKey) : -1;
+
+  return (
+    <>
+      {selectedVisible.length > 0 && (
+        <RfqBulkBar
+          ids={selectedVisible}
+          statusOptions={statusOptions}
+          onDone={() => setSelected(new Set())}
+        />
+      )}
+      <div className="table-toolbar">
+        <div ref={pickerRef} className="table-picker">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickerOpen((o) => !o)}>
+            <Icon name="grid" size={12} />
+            Columns ({columns.length})
+          </button>
+          {pickerOpen && (
+            <div className="table-picker-menu">
+              {layout.order.map((key) => {
+                const def = COLUMN_BY_KEY[key];
+                const visible = !layout.hidden.includes(key);
+                return (
+                  <label key={key} className="table-picker-option">
+                    <input
+                      type="checkbox"
+                      checked={visible}
+                      disabled={visible && columns.length === 1}
+                      onChange={() => toggleHidden(key)}
+                    />
+                    {def.label}
+                  </label>
+                );
+              })}
+              <button
+                type="button"
+                className="rfq-layout-reset"
+                onClick={() => setLayout(defaultLayout())}
+              >
+                Reset layout
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="card table-shell">
+        <table className="data-table sheet-table rfq-sheet">
+          <colgroup>
+            <col style={{ width: 36 }} />
+            {columns.map((c) => {
+              const width = layout.widths[c.key] ?? c.width;
+              return <col key={c.key} style={width != null ? { width } : undefined} />;
+            })}
+            <col style={{ width: 32 }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th style={{ cursor: "default" }} className="rfq-select-cell">
+                <label className="rfq-select-box" title={allSelected ? "Clear selection" : "Select all"}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = !allSelected && selectedVisible.length > 0;
+                    }}
+                    onChange={toggleSelectAll}
+                    aria-label={allSelected ? "Clear selection" : "Select all RFQs"}
+                  />
+                </label>
+              </th>
+              {columns.map((c, idx) => {
+                const isDrop = dropKey === c.key && dragKey != null && dragKey !== c.key;
+                const dropCls = isDrop
+                  ? dragIdx !== -1 && dragIdx < idx ? " rfq-th-drop-right" : " rfq-th-drop-left"
+                  : "";
+                return (
+                  <th
+                    key={c.key}
+                    className={`rfq-th${c.numeric ? " numeric" : ""}${dragKey === c.key ? " rfq-th-dragging" : ""}${resizingKey === c.key ? " rfq-th-resizing" : ""}${dropCls}`}
+                    title="Drag to move · drag the right edge to resize"
+                    draggable={resizingKey == null}
+                    onDragStart={(e) => {
+                      setDragKey(c.key);
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", c.key);
+                    }}
+                    onDragOver={(e) => {
+                      if (!dragKey) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (dropKey !== c.key) setDropKey(c.key);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragKey) moveColumn(dragKey, c.key);
+                      setDragKey(null);
+                      setDropKey(null);
+                    }}
+                    onDragEnd={() => {
+                      setDragKey(null);
+                      setDropKey(null);
+                    }}
+                  >
+                    {c.label}
+                    <span
+                      className="rfq-th-resize"
+                      aria-hidden="true"
+                      draggable={false}
+                      onDragStart={(e) => e.preventDefault()}
+                      onPointerDown={(e) => startResize(e, c.key)}
+                    />
+                  </th>
+                );
+              })}
+              <th style={{ cursor: "default" }} aria-label="Row actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <MemoRowPair
+                key={row.id}
+                row={row}
+                open={openId === row.id}
+                selected={selected.has(row.id)}
+                columns={columns}
+                colSpan={colSpan}
+                statusOptions={statusOptions}
+                modeOptions={modeOptions}
+                onToggle={toggleOpen}
+                onExpand={expandRow}
+                onToggleSelect={toggleSelect}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOptions, onToggle, onExpand, onToggleSelect }: {
   row: RfqRowData;
   open: boolean;
+  selected: boolean;
+  columns: ReadonlyArray<SheetColumn>;
   colSpan: number;
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
-  onToggle: () => void;
-  onExpand: () => void;
+  onToggle: (id: string) => void;
+  onExpand: (id: string) => void;
+  onToggleSelect: (id: string) => void;
 }) {
   const router = useRouter();
   const [forwardError, setForwardError] = useState<string | null>(null);
@@ -542,116 +915,162 @@ function RowPair({ row, open, colSpan, statusOptions, modeOptions, onToggle, onE
     });
   }
 
+  function cell(column: SheetColumn) {
+    switch (column.key) {
+      case "received":
+        return (
+          <td key="received" className="data-muted rfq-ro" title={row.receivedFull}>{row.receivedAgo}</td>
+        );
+      case "ref":
+        return (
+          <td key="ref" className="data-cell-mono rfq-ro">{row.reference ?? <span className="data-muted">—</span>}</td>
+        );
+      case "subject":
+        return (
+          <td key="subject">
+            <div className="rfq-subject-cell">
+              <button
+                type="button"
+                className="rfq-row-caret"
+                aria-expanded={open}
+                aria-label={open ? "Collapse load details" : "Expand load details"}
+                title={open ? "Collapse load details" : "Expand load details"}
+                onClick={() => onToggle(row.id)}
+              >
+                <Icon name="chevron-right" size={12} strokeWidth={2.5} />
+              </button>
+              <CellInput
+                key={`su${rev("subject")}:${row.subject}`}
+                value={row.subject}
+                placeholder="Subject"
+                onCommit={(v) => commit({ subject: v })}
+              />
+            </div>
+          </td>
+        );
+      case "from":
+        return (
+          <td key="from">
+            <div className="rfq-cell-stack">
+              <CellInput
+                key={`fc${rev("fromCompany")}:${row.fromCompany ?? ""}`}
+                value={row.fromCompany}
+                placeholder={row.companyName ?? "Company / name"}
+                onCommit={(v) => commit({ fromCompany: v })}
+              />
+              <CellInput
+                key={`fe${rev("fromEmail")}:${row.fromEmail ?? ""}`}
+                value={row.fromEmail}
+                placeholder="Email"
+                onCommit={(v) => commit({ fromEmail: v })}
+              />
+            </div>
+          </td>
+        );
+      case "source":
+        return (
+          <td key="source" className="rfq-ro">
+            <div>{row.sourceLabel}</div>
+            {row.sourceDetail && <div className="data-subline">{row.sourceDetail}</div>}
+          </td>
+        );
+      case "lane":
+        return (
+          <td key="lane">
+            <div className="rfq-cell-lane">
+              <CellInput
+                key={`or${rev("origin")}:${row.origin ?? ""}`}
+                value={row.origin}
+                placeholder="Origin"
+                onCommit={(v) => commit({ origin: v })}
+              />
+              <span className="rfq-lane-arrow" aria-hidden>→</span>
+              <CellInput
+                key={`de${rev("destination")}:${row.destination ?? ""}`}
+                value={row.destination}
+                placeholder="Destination"
+                onCommit={(v) => commit({ destination: v })}
+              />
+            </div>
+          </td>
+        );
+      case "mode":
+        return (
+          <td key="mode">
+            <CellSelect
+              key={`mo${rev("mode")}:${row.mode ?? ""}`}
+              value={row.mode}
+              options={modeOptions}
+              allowEmpty
+              allowCreate
+              createLabel="Add mode…"
+              onCommit={(v) => commit({ mode: v })}
+            />
+          </td>
+        );
+      case "status":
+        return (
+          <td key="status">
+            <CellSelect
+              key={`st${rev("status")}:${row.status}`}
+              value={row.status}
+              options={statusOptions}
+              allowCreate
+              createLabel="Add status…"
+              onCommit={(v) => commit({ status: v })}
+            />
+          </td>
+        );
+      case "target":
+        return (
+          <td key="target" className="numeric">
+            <CellInput
+              key={`ta${rev("target")}:${row.targetInput}`}
+              value={row.targetInput}
+              placeholder={row.targetPlaceholder}
+              title='Target price — e.g. "USD 1200", "no target", or empty for ask'
+              onCommit={(v) => commit({ target: v })}
+            />
+          </td>
+        );
+      case "send":
+        return (
+          <td key="send" className="numeric rfq-ro">
+            <RowSendCell row={row} onExpand={() => onExpand(row.id)} onError={setForwardError} />
+          </td>
+        );
+    }
+  }
+
   return (
     <>
       <tr
-        className={`data-row${open ? " rfq-row-open" : ""}${busy ? " sheet-row-busy" : ""}`}
+        className={`data-row${open ? " rfq-row-open" : ""}${selected ? " rfq-row-selected" : ""}${busy ? " sheet-row-busy" : ""}`}
         aria-expanded={open}
         tabIndex={0}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("a, button, input, textarea, select, .sheet-select-menu")) return; // inner controls win
-          onToggle();
+          onToggle(row.id);
         }}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return; // let inner controls keep their keys
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onToggle();
+            onToggle(row.id);
           }
         }}
       >
-        <td className="data-muted rfq-ro" title={row.receivedFull}>{row.receivedAgo}</td>
-        <td className="data-cell-mono rfq-ro">{row.reference ?? <span className="data-muted">—</span>}</td>
-        <td>
-          <div className="rfq-subject-cell">
-            <button
-              type="button"
-              className="rfq-row-caret"
-              aria-expanded={open}
-              aria-label={open ? "Collapse load details" : "Expand load details"}
-              title={open ? "Collapse load details" : "Expand load details"}
-              onClick={onToggle}
-            >
-              <Icon name="chevron-right" size={12} strokeWidth={2.5} />
-            </button>
-            <CellInput
-              key={`su${rev("subject")}:${row.subject}`}
-              value={row.subject}
-              placeholder="Subject"
-              onCommit={(v) => commit({ subject: v })}
+        <td className="rfq-ro rfq-select-cell">
+          <label className="rfq-select-box" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(row.id)}
+              aria-label={`Select RFQ ${row.reference ?? row.subject}`}
             />
-          </div>
+          </label>
         </td>
-        <td>
-          <div className="rfq-cell-stack">
-            <CellInput
-              key={`fc${rev("fromCompany")}:${row.fromCompany ?? ""}`}
-              value={row.fromCompany}
-              placeholder={row.companyName ?? "Company / name"}
-              onCommit={(v) => commit({ fromCompany: v })}
-            />
-            <CellInput
-              key={`fe${rev("fromEmail")}:${row.fromEmail ?? ""}`}
-              value={row.fromEmail}
-              placeholder="Email"
-              onCommit={(v) => commit({ fromEmail: v })}
-            />
-          </div>
-        </td>
-        <td className="rfq-ro">
-          <div>{row.sourceLabel}</div>
-          {row.sourceDetail && <div className="data-subline">{row.sourceDetail}</div>}
-        </td>
-        <td>
-          <div className="rfq-cell-lane">
-            <CellInput
-              key={`or${rev("origin")}:${row.origin ?? ""}`}
-              value={row.origin}
-              placeholder="Origin"
-              onCommit={(v) => commit({ origin: v })}
-            />
-            <span className="rfq-lane-arrow" aria-hidden>→</span>
-            <CellInput
-              key={`de${rev("destination")}:${row.destination ?? ""}`}
-              value={row.destination}
-              placeholder="Destination"
-              onCommit={(v) => commit({ destination: v })}
-            />
-          </div>
-        </td>
-        <td>
-          <CellSelect
-            key={`mo${rev("mode")}:${row.mode ?? ""}`}
-            value={row.mode}
-            options={modeOptions}
-            allowEmpty
-            allowCreate
-            createLabel="Add mode…"
-            onCommit={(v) => commit({ mode: v })}
-          />
-        </td>
-        <td>
-          <CellSelect
-            key={`st${rev("status")}:${row.status}`}
-            value={row.status}
-            options={statusOptions}
-            allowCreate
-            createLabel="Add status…"
-            onCommit={(v) => commit({ status: v })}
-          />
-        </td>
-        <td className="numeric">
-          <CellInput
-            key={`ta${rev("target")}:${row.targetInput}`}
-            value={row.targetInput}
-            placeholder={row.targetPlaceholder}
-            title='Target price — e.g. "USD 1200", "no target", or empty for ask'
-            onCommit={(v) => commit({ target: v })}
-          />
-        </td>
-        <td className="numeric rfq-ro">
-          <RowSendCell row={row} onExpand={onExpand} onError={setForwardError} />
-        </td>
+        {columns.map((c) => cell(c))}
         <td className="rfq-ro">
           <button
             type="button"
@@ -685,3 +1104,7 @@ function RowPair({ row, open, colSpan, statusOptions, modeOptions, onToggle, onE
     </>
   );
 }
+
+// Rows skip re-rendering while headers are dragged/resized (layout width
+// changes touch only the colgroup) and when other rows are selected/expanded.
+const MemoRowPair = memo(RowPair);
