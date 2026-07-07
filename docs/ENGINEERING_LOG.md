@@ -1741,3 +1741,19 @@ Use this file for chronological implementation notes that future agents should s
   jobs-table). Select/actions columns are fixed chrome.
 - Follow-up: DB-backed user preference store if layouts should roam devices;
   keyboard-accessible reorder.
+
+### 2026-07-07 - RFQ sheet: column resize follows the pointer
+
+- Branch: rfq-bulk-select-status → main
+- Task: Fix inverted-feeling resize: with the table pinned to 100% width the
+  freed space flowed back into the flex Subject column, shifting columns the
+  opposite way of the drag.
+- Fix: first resize snapshots every visible column's rendered width into the
+  saved layout; from then on the table's inline width/min-width is exactly
+  the sum of its columns (no slack to redistribute), so the dragged edge
+  tracks the pointer and the table grows/shrinks with horizontal scroll.
+  Untouched layouts keep the flex-Subject fill; Reset layout returns to it.
+  MAX_COL_WIDTH raised 640→1200 so a wide flexed Subject isn't clamped at
+  snapshot time.
+- Files changed: src/components/rfq-expandable-rows.tsx.
+- Verification: tsc clean; next build clean.

@@ -483,7 +483,12 @@ const COLUMN_KEYS = SHEET_COLUMNS.map((c) => c.key);
 const COLUMN_BY_KEY = Object.fromEntries(SHEET_COLUMNS.map((c) => [c.key, c])) as
   Record<SheetColumnKey, SheetColumn>;
 const MIN_COL_WIDTH = 60;
-const MAX_COL_WIDTH = 640;
+// Generous cap: on first resize every visible column's rendered width is
+// snapshotted, and a flexed Subject on a wide screen can legitimately be huge.
+const MAX_COL_WIDTH = 1200;
+// Fixed chrome columns (select checkbox / row actions).
+const SELECT_COL_WIDTH = 36;
+const ACTIONS_COL_WIDTH = 32;
 
 type SheetLayout = {
   order: SheetColumnKey[];
@@ -635,6 +640,17 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
   );
   const colSpan = columns.length + 2;
 
+  // Two width modes. Untouched layout: table fills the shell and Subject
+  // flexes into the leftover space. Once the user has resized anything, every
+  // column is a definite px and the table is exactly their sum — otherwise
+  // the browser redistributes slack into the flex column, and a drag on one
+  // edge visibly moves other columns the opposite way.
+  const customized = Object.keys(layout.widths).length > 0;
+  const colPx = (c: SheetColumn) => layout.widths[c.key] ?? c.width ?? 300;
+  const tableWidth = customized
+    ? SELECT_COL_WIDTH + columns.reduce((sum, c) => sum + colPx(c), 0) + ACTIONS_COL_WIDTH
+    : null;
+
   function toggleHidden(key: SheetColumnKey) {
     setLayout((prev) => {
       const hidden = prev.hidden.includes(key)
@@ -667,6 +683,25 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
     const startWidth = th?.getBoundingClientRect().width
       ?? layout.widths[key] ?? COLUMN_BY_KEY[key].width ?? 160;
     const startX = e.clientX;
+    // Lock every visible column to its current rendered width before tracking
+    // the drag. From here on the table is exactly as wide as its columns — no
+    // flex slack to redistribute — so the dragged edge follows the pointer
+    // instead of the freed space flowing back into the flex column and
+    // shoving everything the other way.
+    const headerRow = th?.parentElement;
+    if (headerRow) {
+      const ths = headerRow.querySelectorAll("th.rfq-th");
+      setLayout((prev) => {
+        const widths = { ...prev.widths };
+        columns.forEach((c, i) => {
+          const el = ths[i];
+          if (el && widths[c.key] == null) {
+            widths[c.key] = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, Math.round(el.getBoundingClientRect().width)));
+          }
+        });
+        return { ...prev, widths };
+      });
+    }
     setResizingKey(key);
     const onMove = (ev: PointerEvent) => {
       const width = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, Math.round(startWidth + ev.clientX - startX)));
@@ -750,14 +785,14 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
         </div>
       </div>
       <div className="card table-shell">
-        <table className="data-table sheet-table rfq-sheet">
+        <table className="data-table sheet-table rfq-sheet" style={tableWidth != null ? { width: tableWidth, minWidth: tableWidth } : undefined}>
           <colgroup>
-            <col style={{ width: 36 }} />
+            <col style={{ width: SELECT_COL_WIDTH }} />
             {columns.map((c) => {
-              const width = layout.widths[c.key] ?? c.width;
+              const width = customized ? colPx(c) : c.width;
               return <col key={c.key} style={width != null ? { width } : undefined} />;
             })}
-            <col style={{ width: 32 }} />
+            <col style={{ width: ACTIONS_COL_WIDTH }} />
           </colgroup>
           <thead>
             <tr>
