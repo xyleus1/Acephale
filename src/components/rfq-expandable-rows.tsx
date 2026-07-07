@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
@@ -21,6 +21,13 @@ export type RfqEmailPreview = {
   subject: string;
   text: string;
   sentAtLabel: string | null;
+};
+
+export type RfqWhatsAppPreview = {
+  phoneDisplay: string | null;
+  waUrl: string | null;
+  text: string;
+  missing: string[];
 };
 
 export type RfqRowData = {
@@ -53,6 +60,7 @@ export type RfqRowData = {
   mailConfigured: boolean;
   forward: RfqEmailPreview;
   confirmation: RfqEmailPreview;
+  whatsapp: RfqWhatsAppPreview;
 };
 
 export type SheetOption = readonly [string, string];
@@ -139,12 +147,96 @@ function EmailPreviewCard({
   );
 }
 
+// Collapsed-by-default drawer for the outbound drafts, so expanding a row
+// shows the load first and the generated messages only on demand.
+function DraftsDrawer({ title, hint, badges, open, onToggle, children }: {
+  title: string;
+  hint: string;
+  badges?: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`rfq-drafts${open ? " rfq-drafts-open" : ""}`}>
+      <button type="button" className="rfq-drafts-toggle" aria-expanded={open} onClick={onToggle}>
+        <Icon name="chevron-right" size={11} strokeWidth={2.5} className="rfq-drafts-caret" />
+        <span className="rfq-drafts-title">{title}</span>
+        <span className="rfq-drafts-hint">{hint}</span>
+        {badges && <span className="rfq-drafts-badges">{badges}</span>}
+      </button>
+      {open && children}
+    </section>
+  );
+}
+
+function WhatsAppPreviewCard({ preview }: { preview: RfqWhatsAppPreview }) {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function copy() {
+    navigator.clipboard.writeText(preview.text).then(
+      () => {
+        setCopied(true);
+        setCopyError(false);
+        if (copyTimer.current) clearTimeout(copyTimer.current);
+        copyTimer.current = setTimeout(() => setCopied(false), 2000);
+      },
+      () => setCopyError(true),
+    );
+  }
+
+  return (
+    <div className="rfq-mail-card">
+      <div className="rfq-mail-card-head">
+        <div>
+          <div className="rfq-expand-block-title">WhatsApp inquiry</div>
+          <div className="rfq-mail-hint">Sent from your own phone — copy it, or open the chat prefilled</div>
+        </div>
+        <div className="rfq-mail-card-actions">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={copy}>
+            <Icon name={copied ? "check" : "copy"} size={12} strokeWidth={2.25} />
+            {copied ? "Copied" : "Copy"}
+          </button>
+          {preview.waUrl ? (
+            <a className="btn btn-sm" href={preview.waUrl} target="_blank" rel="noopener noreferrer">
+              <Icon name="message-circle" size={12} strokeWidth={2.25} />
+              Open WhatsApp
+            </a>
+          ) : (
+            <button type="button" className="btn btn-sm" disabled title="No usable phone number on this RFQ.">
+              <Icon name="message-circle" size={12} strokeWidth={2.25} />
+              Open WhatsApp
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="rfq-mail-meta">
+        <div><span>To</span><strong>{preview.phoneDisplay ?? "no phone number on this RFQ"}</strong></div>
+        {preview.missing.length > 0 && <div><span>Asks</span><strong>{preview.missing.join(", ")}</strong></div>}
+      </div>
+      <pre className="rfq-mail-body">{preview.text}</pre>
+      {copyError && <div className="rfq-mail-error">Could not copy — select the message text manually.</div>}
+    </div>
+  );
+}
+
 function ExpandedPanel({ row, forwardError, onClearForwardError }: {
   row: RfqRowData;
   forwardError: string | null;
   onClearForwardError: () => void;
 }) {
   const mailDisabled = row.mailConfigured ? null : "RFQ mail is not configured (RFQ_MAIL_APP_PASSWORD).";
+  const [mailOpen, setMailOpen] = useState(Boolean(forwardError));
+  const [waOpen, setWaOpen] = useState(false);
+
+  // A failed row-level "Desk" send surfaces its error on the forward card —
+  // the drawer has to open or the message stays hidden.
+  useEffect(() => {
+    if (forwardError) setMailOpen(true);
+  }, [forwardError]);
+
   return (
     <div className="rfq-expand-panel">
       <div className="rfq-expand-columns">
@@ -211,24 +303,62 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
         </div>
       )}
 
-      <div className="rfq-mail-grid">
-        <EmailPreviewCard
-          title="Forward to desk"
-          hint="Relevant load fields from rfq@usederya.com"
-          preview={row.forward}
-          disabledReason={mailDisabled}
-          externalError={forwardError}
-          onClearExternalError={onClearForwardError}
-          onSend={() => sendDeskForwardAction(row.id)}
-        />
-        <EmailPreviewCard
-          title="Confirmation to lead"
-          hint="Booking-received note, replies go to oguzhan@"
-          preview={row.confirmation}
-          disabledReason={mailDisabled ?? (row.confirmation.to ? null : "No valid single sender email address on this RFQ.")}
-          onSend={() => sendLeadConfirmationAction(row.id)}
-        />
-      </div>
+      <DraftsDrawer
+        title="Email drafts"
+        hint="Forward to desk · confirmation to lead"
+        badges={
+          <>
+            {row.forward.sentAtLabel && (
+              <span className="rfq-mail-sent">
+                <Icon name="check" size={11} strokeWidth={2.5} />
+                Desk
+              </span>
+            )}
+            {row.confirmation.sentAtLabel && (
+              <span className="rfq-mail-sent">
+                <Icon name="check" size={11} strokeWidth={2.5} />
+                Lead
+              </span>
+            )}
+          </>
+        }
+        open={mailOpen}
+        onToggle={() => setMailOpen((v) => !v)}
+      >
+        <div className="rfq-mail-grid">
+          <EmailPreviewCard
+            title="Forward to desk"
+            hint="Relevant load fields from rfq@usederya.com"
+            preview={row.forward}
+            disabledReason={mailDisabled}
+            externalError={forwardError}
+            onClearExternalError={onClearForwardError}
+            onSend={() => sendDeskForwardAction(row.id)}
+          />
+          <EmailPreviewCard
+            title="Confirmation to lead"
+            hint="Booking-received note, replies go to oguzhan@"
+            preview={row.confirmation}
+            disabledReason={mailDisabled ?? (row.confirmation.to ? null : "No valid single sender email address on this RFQ.")}
+            onSend={() => sendLeadConfirmationAction(row.id)}
+          />
+        </div>
+      </DraftsDrawer>
+
+      <DraftsDrawer
+        title="WhatsApp draft"
+        hint={
+          row.whatsapp.missing.length > 0
+            ? `Asks for ${row.whatsapp.missing.join(", ")} (in Turkish)`
+            : "Nothing missing — tells the lead pricing is underway (in Turkish)"
+        }
+        open={waOpen}
+        onToggle={() => setWaOpen((v) => !v)}
+      >
+        <div className="rfq-mail-grid">
+          <WhatsAppPreviewCard preview={row.whatsapp} />
+        </div>
+      </DraftsDrawer>
 
       <div className="rfq-expand-actions">
         {row.jobId ? (

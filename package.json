@@ -25,6 +25,7 @@
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
     "test:rfq-load-draft": "tsx scripts/rfq-load-draft.test.ts",
+    "test:rfq-whatsapp": "tsx scripts/rfq-whatsapp.test.ts",
     "test:crm": "tsx scripts/crm-sheet.test.ts && tsx scripts/crm-email-touch.test.ts && tsx scripts/login-code.test.ts",
     "backfill:crm-email": "tsx scripts/backfill-crm-email-touch.ts",
     "backfill:rfq-references": "tsx scripts/backfill-rfq-references.ts",

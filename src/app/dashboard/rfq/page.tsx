@@ -22,6 +22,7 @@ import {
   isSingleEmailAddress,
   rfqMailConfigured,
 } from "@/lib/rfq-mail";
+import { buildWhatsAppInquiry } from "@/lib/rfq-whatsapp";
 
 // Send-all pushes up to 60 sequential SMTP sends through a server action on
 // this segment; the default function timeout would cut the batch short.
@@ -259,6 +260,7 @@ export default async function RFQPage({
         text: confirmationEmail.text,
         sentAtLabel: sentLabel(parsed.confirmationSentAt),
       },
+      whatsapp: buildWhatsAppInquiry(inq),
     };
   });
 

@@ -33895,3 +33895,79 @@ tr.rfq-row-open td {
   gap: 8px;
   white-space: nowrap;
 }
+
+/* ── Incoming RFQs: collapsed draft drawers (email + WhatsApp) ───────── */
+.rfq-drafts {
+  margin-top: 14px;
+}
+
+.rfq-drafts + .rfq-drafts {
+  margin-top: 8px;
+}
+
+.rfq-drafts-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.rfq-drafts-toggle:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.rfq-drafts-open .rfq-drafts-toggle {
+  border-style: solid;
+}
+
+.rfq-drafts-caret {
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: transform 0.15s ease;
+}
+
+.rfq-drafts-open .rfq-drafts-caret {
+  transform: rotate(90deg);
+}
+
+.rfq-drafts-title {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.rfq-drafts-toggle:hover .rfq-drafts-title {
+  color: var(--text-2);
+}
+
+.rfq-drafts-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.rfq-drafts-badges {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rfq-drafts .rfq-mail-grid {
+  margin-top: 10px;
+}
