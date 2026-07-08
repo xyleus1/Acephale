@@ -1,15 +1,26 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { draftReplyToMessage } from "@/lib/sourcing-award";
+import { sendWhatsAppReplyToThread } from "@/lib/whatsapp-reply";
 import { DraftModal } from "@/components/draft-modal";
 
-export function InboxQuickReply({ threadId, threadSubject }: { threadId: string; threadSubject: string }) {
+export function InboxQuickReply({ threadId, threadSubject, channel = "email" }: {
+  threadId: string;
+  threadSubject: string;
+  /** "whatsapp" adds a plain-text quick composer next to the AI reply. */
+  channel?: "email" | "whatsapp";
+}) {
+  const router = useRouter();
   const [busy, start] = useTransition();
   const [intent, setIntent] = useState("");
   const [showIntent, setShowIntent] = useState(false);
   const [draft, setDraft] = useState<{ draft: string; replyTo: string | null; channel: "email" | "whatsapp" } | null>(null);
+  const [quickText, setQuickText] = useState("");
+  const [sending, startSend] = useTransition();
+  const [sendState, setSendState] = useState<"idle" | "sent" | "error">("idle");
 
   function go(useIntent: boolean) {
     start(async () => {
@@ -24,9 +35,52 @@ export function InboxQuickReply({ threadId, threadSubject }: { threadId: string;
     });
   }
 
+  function sendQuick() {
+    const body = quickText.trim();
+    if (!body || sending) return;
+    startSend(async () => {
+      setSendState("idle");
+      const r = await sendWhatsAppReplyToThread({ threadDbId: threadId, body });
+      if ("error" in r) {
+        setSendState("error");
+        alert(r.error);
+        return;
+      }
+      setQuickText("");
+      setSendState("sent");
+      setTimeout(() => setSendState("idle"), 2000);
+      router.refresh();
+    });
+  }
+
   return (
     <>
       <div className="inbox-action-group" onClick={(e) => e.stopPropagation()}>
+        {channel === "whatsapp" && !showIntent && (
+          <span className="wa-composer wa-composer-inline" style={{ display: "inline-flex" }}>
+            <input
+              type="text"
+              value={quickText}
+              onChange={(e) => setQuickText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); sendQuick(); }
+              }}
+              placeholder="Mesaj yaz…"
+              className="wa-composer-input"
+              style={{ width: 150 }}
+              disabled={sending}
+            />
+            <button
+              type="button"
+              onClick={sendQuick}
+              disabled={sending || !quickText.trim()}
+              className="inbox-action-btn primary"
+              title="Send via the CRM WhatsApp number"
+            >
+              {sending ? "…" : sendState === "sent" ? "Sent" : "Send"}
+            </button>
+          </span>
+        )}
         {!showIntent ? (
           <>
             <button

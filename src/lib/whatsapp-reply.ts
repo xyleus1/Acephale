@@ -58,6 +58,12 @@ export async function sendWhatsAppReplyToThread(args: {
     // surface as "not sent" or the operator would send a duplicate.
   }
 
+  // Replying implies the operator has read the conversation.
+  await prisma.emailMessage.updateMany({
+    where: { threadId: thread.id, direction: "INBOUND", isRead: false },
+    data: { isRead: true },
+  }).catch(() => null);
+
   revalidatePath("/dashboard/inbox");
   if (thread.inquiryId) revalidatePath(`/dashboard/rfq/${thread.inquiryId}`);
   return { ok: true };
