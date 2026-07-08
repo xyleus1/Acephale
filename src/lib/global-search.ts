@@ -9,6 +9,7 @@
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { inquiryStatusLabel } from "./inquiry-status";
+import { displayParty } from "./whatsapp-display";
 
 export type GlobalSearchGroup = "loads" | "rfqs" | "companies" | "contacts" | "threads";
 
@@ -112,6 +113,10 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
   }
 
   const contains = { contains: q, mode: "insensitive" as const };
+  // Pasting a phone number ("+90 532 111 22 33") should find the WhatsApp
+  // thread/RFQ even though the stored address is "whatsapp:905321112233".
+  const queryDigits = q.replace(/\D/g, "");
+  const digitsContains = queryDigits.length >= 7 ? { contains: queryDigits } : null;
 
   const [jobs, inquiries, companies, contacts, threads] = await Promise.all([
     prisma.job.findMany({
@@ -140,6 +145,7 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
           { origin: contains },
           { destination: contains },
           { commodity: contains },
+          ...(digitsContains ? [{ fromEmail: digitsContains }] : []),
         ],
       },
       select: inquirySelect,
@@ -166,10 +172,21 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
         hiddenAt: null,
         OR: [
           { subject: contains },
-          { messages: { some: { OR: [{ fromEmail: contains }, { fromName: contains }] } } },
+          { messages: { some: { OR: [
+            { fromEmail: contains },
+            { fromName: contains },
+            ...(digitsContains ? [{ fromEmail: digitsContains }] : []),
+          ] } } },
         ],
       },
-      select: { id: true, subject: true, lastMessageAt: true, messageCount: true },
+      select: {
+        id: true, subject: true, lastMessageAt: true, messageCount: true,
+        messages: {
+          orderBy: { sentAt: "desc" as const },
+          take: 1,
+          select: { fromEmail: true, fromName: true, account: { select: { provider: true } } },
+        },
+      },
       orderBy: { lastMessageAt: "desc" },
       take: 4,
     }),
@@ -198,14 +215,20 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
       status: null,
       href: `/dashboard/crm?q=${encodeURIComponent(c.fullName)}`,
     })),
-    ...threads.map((t) => ({
-      group: "threads" as const,
-      id: t.id,
-      ref: null,
-      title: t.subject,
-      detail: `${t.messageCount} message${t.messageCount === 1 ? "" : "s"} · ${t.lastMessageAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
-      status: null,
-      href: `/dashboard/inbox?q=${encodeURIComponent(t.subject.slice(0, 80))}`,
-    })),
+    ...threads.map((t) => {
+      const last = t.messages[0];
+      const isWhatsApp = last?.account?.provider === "WHATSAPP";
+      const sender = last ? displayParty(last.fromEmail, last.fromName) : null;
+      const channelParam = isWhatsApp ? "&channel=whatsapp" : "";
+      return {
+        group: "threads" as const,
+        id: t.id,
+        ref: null,
+        title: t.subject,
+        detail: `${sender ? `${sender} · ` : ""}${t.messageCount} message${t.messageCount === 1 ? "" : "s"} · ${t.lastMessageAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
+        status: isWhatsApp ? "WhatsApp" : "Email",
+        href: `/dashboard/inbox?q=${encodeURIComponent(t.subject.slice(0, 80))}${channelParam}`,
+      };
+    }),
   ];
 }

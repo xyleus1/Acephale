@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
+import { whatsAppPartyLabel } from "./whatsapp-display";
 import { classifyInboundEmail } from "./email-classifier";
 import { autoCreateInquiryFromThread } from "./thread-actions";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
@@ -282,7 +283,7 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
         const contact = value.contacts?.find((c) => c.wa_id === message.from) ?? value.contacts?.[0];
         const contactName = contact?.profile?.name ?? null;
         const externalThreadId = `whatsapp:${phoneNumberId}:${message.from}`;
-        const subject = `WhatsApp · ${contactName ?? message.from}`;
+        const subject = `WhatsApp · ${whatsAppPartyLabel(senderAddress, contactName)}`;
         const bodyText = messageBody(message);
         const sentAt = sentAtFromWhatsApp(message.timestamp);
 

@@ -26,6 +26,7 @@ import { OpportunityScoreCard } from "@/components/opportunity-score-card";
 import { assessJobStrategy } from "@/lib/commercial-strategy-persistence";
 import { draftFreshnessKey, type DraftFreshnessScope } from "@/lib/draft-freshness";
 import { reviewedFieldTokenLabel } from "@/lib/agent-proposal-review";
+import { displayParty, isWhatsAppAddress } from "@/lib/whatsapp-display";
 
 const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"] as const;
 const STATUS_SELECT = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED", "CANCELLED"] as const;
@@ -65,7 +66,7 @@ function relTime(d: Date) {
 
 type AutoEvent = {
   at: Date;
-  iconName: "inbox" | "sparkles" | "ship" | "box" | "check" | "file" | "file-check" | "mail-in" | "mail-out" | "user";
+  iconName: "inbox" | "sparkles" | "ship" | "box" | "check" | "file" | "file-check" | "mail-in" | "mail-out" | "user" | "whatsapp";
   kind: "auto" | "manual";
   title: string;
   sub?: string;
@@ -497,7 +498,7 @@ export default async function JobDetailPage({
       at: new Date(job.inquiry.receivedAt),
       iconName: "inbox", kind: "auto",
       title: "RFQ captured from inbox",
-      sub: `"${job.inquiry.subject}" — ${job.inquiry.fromEmail ?? job.inquiry.fromCompany ?? "Unknown sender"}`,
+      sub: `"${job.inquiry.subject}" — ${displayParty(job.inquiry.fromEmail) || job.inquiry.fromCompany || "Unknown sender"}`,
     });
     if (job.inquiry.parsedData) {
       events.push({
@@ -556,12 +557,15 @@ export default async function JobDetailPage({
   }
   for (const thread of job.emailThreads) {
     for (const msg of thread.messages) {
+      const isWa = isWhatsAppAddress(msg.fromEmail);
       events.push({
         at: new Date(msg.sentAt),
-        iconName: msg.direction === "INBOUND" ? "mail-in" : "mail-out",
+        iconName: isWa ? "whatsapp" : msg.direction === "INBOUND" ? "mail-in" : "mail-out",
         kind: msg.direction === "INBOUND" ? "auto" : "manual",
-        title: msg.direction === "INBOUND" ? "Inbound email" : "Outbound email",
-        sub: `${msg.fromEmail ?? thread.subject}`,
+        title: msg.direction === "INBOUND"
+          ? (isWa ? "Inbound WhatsApp" : "Inbound email")
+          : (isWa ? "Outbound WhatsApp" : "Outbound email"),
+        sub: isWa ? displayParty(msg.fromEmail, msg.fromName) : `${msg.fromEmail ?? thread.subject}`,
       });
     }
   }
@@ -1265,7 +1269,11 @@ export default async function JobDetailPage({
                 <span className="record-muted">No customer linked</span>
               )}
               {job.inquiry?.fromEmail && (
-                <div className="record-small-muted">{job.inquiry.fromEmail}</div>
+                <div className="record-small-muted">
+                  {isWhatsAppAddress(job.inquiry.fromEmail) && (
+                    <Icon name="whatsapp" size={11} />
+                  )}{isWhatsAppAddress(job.inquiry.fromEmail) ? " " : ""}{displayParty(job.inquiry.fromEmail)}
+                </div>
               )}
             </div>
           </div>

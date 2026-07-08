@@ -17,7 +17,7 @@ const GROUP_LABEL: Record<GlobalSearchGroup, string> = {
   rfqs: "RFQs",
   companies: "Companies",
   contacts: "Contacts",
-  threads: "Email",
+  threads: "Conversations",
 };
 
 const GROUP_ORDER: GlobalSearchGroup[] = ["loads", "rfqs", "companies", "contacts", "threads"];
@@ -129,7 +129,7 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Search loads, RFQs, companies, contacts, email…"
+            placeholder="Search loads, RFQs, companies, contacts, email, WhatsApp…"
           />
           <kbd>ESC</kbd>
         </div>

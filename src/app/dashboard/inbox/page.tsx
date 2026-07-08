@@ -17,6 +17,7 @@ import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefF
 import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/lib/email-workflow-labels";
 import { inquiryStatusBadgeCls, inquiryStatusLabel, openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
+import { displayParty, whatsAppAccountLabel } from "@/lib/whatsapp-display";
 
 const FILTERS = [
   { key: "",                  label: "Active"          },  // default — excludes hidden + snoozed
@@ -145,7 +146,7 @@ function threadSourceMeta(messages: { account?: { provider: string; email: strin
   const badge = channelBadge(account);
   return {
     ...badge,
-    accountLabel: account?.email ?? "unknown source",
+    accountLabel: account ? whatsAppAccountLabel(account.email) : "unknown source",
   };
 }
 
@@ -712,7 +713,7 @@ export default async function InboxPage({
                   <span className="today-inbox-subject">{t.subject || "(no subject)"}</span>
                   <span className="today-inbox-meta">
                     {timeAgo(t.lastMessageAt)}
-                    {last ? ` · ${last.fromName ?? last.fromEmail}` : ""}
+                    {last ? ` · ${displayParty(last.fromEmail, last.fromName)}` : ""}
                   </span>
                 </a>
               );
@@ -744,7 +745,7 @@ export default async function InboxPage({
                 className={`filter-chip source-chip ${badge.cls}${accountFilter === a.id ? " active" : ""}`}
               >
                 <span className={`inbox-channel-dot ${badge.cls}`} />
-                {a.email}
+                {whatsAppAccountLabel(a.email)}
               </a>
             );
           })}
@@ -908,7 +909,7 @@ export default async function InboxPage({
               <p className="empty-state-copy">
                 {totalSnoozed > 0 ? `${totalSnoozed} thread${totalSnoozed === 1 ? "" : "s"} snoozed. ` : ""}
                 {totalHidden > 0 ? `${totalHidden} hidden as not freight-related. ` : ""}
-                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" className="data-link">Email Settings</a> to pull fresh mail manually, or wait — the platform auto-syncs every 15 minutes.
+                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" className="data-link">Channel Settings</a> to pull fresh mail manually, or wait — mail auto-syncs every 15 minutes and WhatsApp arrives instantly.
               </p>
             </>
           )}
@@ -950,7 +951,7 @@ export default async function InboxPage({
                           <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
                           <span className={`inbox-workflow-label ${workflow.className}`}>{workflow.label}</span>
                           <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
-                          {t.messages.length} msg · {timeAgo(t.lastMessageAt)}{last ? ` · last from ${last.fromName ?? last.fromEmail}` : ""}
+                          {t.messages.length} msg · {timeAgo(t.lastMessageAt)}{last ? ` · last from ${displayParty(last.fromEmail, last.fromName)}` : ""}
                         </div>
                       </div>
                       <div className="inbox-row-actions">
@@ -1054,7 +1055,7 @@ export default async function InboxPage({
                   {last && (
                     <div className="inbox-preview">
                       <div className="inbox-preview-meta">
-                        Latest: {last.fromName ?? last.fromEmail} · {source.accountLabel} · {timeAgo(last.sentAt)}
+                        Latest: {displayParty(last.fromEmail, last.fromName)} · {source.accountLabel} · {timeAgo(last.sentAt)}
                       </div>
                       {last.bodyText && (
                         <div className="inbox-preview-body">
@@ -1294,7 +1295,7 @@ function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: s
                 </td>
                 <td>
                   <div>{r.company?.name ?? r.fromCompany ?? "—"}</div>
-                  {r.fromEmail && <div className="data-subline">{r.fromEmail}</div>}
+                  {r.fromEmail && <div className="data-subline">{displayParty(r.fromEmail)}</div>}
                 </td>
                 <td>
                   {r.origin || r.destination ? (

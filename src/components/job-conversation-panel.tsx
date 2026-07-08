@@ -11,7 +11,7 @@ export type FeedItem = {
   kind: "event";
   id: string;
   at: string; // ISO
-  iconName: "inbox" | "sparkles" | "ship" | "box" | "check" | "file" | "file-check" | "mail-in" | "mail-out";
+  iconName: "inbox" | "sparkles" | "ship" | "box" | "check" | "file" | "file-check" | "mail-in" | "mail-out" | "whatsapp";
   who: "auto" | "manual";
   title: string;
   sub?: string;

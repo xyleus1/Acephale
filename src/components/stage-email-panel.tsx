@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { draftStageEmail, logOutboundEmail } from "@/lib/job-email";
 import { STAGE_TEMPLATES, type StageHint } from "@/lib/job-email-types";
 import { Icon } from "@/components/icon";
+import { displayParty } from "@/lib/whatsapp-display";
 
 export type ThreadMsg = {
   id: string;
@@ -231,7 +232,7 @@ function ThreadAccordion({ thread }: { thread: ThreadView }) {
           </div>
           <div className="stage-email-thread-meta">
             {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"}
-            {last ? ` · last from ${last.fromName ?? last.fromEmail}` : ""}
+            {last ? ` · last from ${displayParty(last.fromEmail, last.fromName)}` : ""}
           </div>
         </div>
         <Icon name={open ? "chevron-up" : "chevron-down"} size={13} />

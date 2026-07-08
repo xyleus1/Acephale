@@ -18,7 +18,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const lang = await getLang();
 
   // Live pipeline status for the topbar
-  const [activeJobs, pendingRFQs] = await Promise.all([
+  const now = new Date();
+  const [activeJobs, pendingRFQs, waCandidateThreads] = await Promise.all([
     prisma.job.count({
       where: { officeId: session.officeId, status: { notIn: ["DELIVERED", "CANCELLED"] } },
     }),
@@ -26,7 +27,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
       // Matches the default "Open" tab on /dashboard/rfq, where the topbar chip lands.
       where: { officeId: session.officeId, status: openInquiryStatusFilter() },
     }),
+    // WhatsApp threads awaiting a reply (same heuristic as the inbox's
+    // "Awaiting reply" chip: latest message is inbound).
+    prisma.emailThread.findMany({
+      where: {
+        officeId: session.officeId,
+        hiddenAt: null,
+        OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }],
+        messages: { some: { account: { isActive: true, provider: "WHATSAPP" } } },
+      },
+      select: { messages: { orderBy: { sentAt: "desc" }, take: 1, select: { direction: true } } },
+      take: 100,
+    }),
   ]);
+  const waAwaitingReply = waCandidateThreads.filter((t) => t.messages[0]?.direction === "INBOUND").length;
 
   return (
     <div className="app-shell">
@@ -59,7 +73,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {/* ─── SETUP ───────────────────────────────────────────────────── */}
           <div className="nav-section-label with-rule">Setup</div>
 
-          <NavLink href="/dashboard/settings/email" icon={<Icon name="settings" />}>Email</NavLink>
+          <NavLink href="/dashboard/settings/email" icon={<Icon name="settings" />}>Channels</NavLink>
 
           {(session.role === "ADMIN" || session.role === "MANAGER") && (
             <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
@@ -105,6 +119,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 <strong>{pendingRFQs}</strong> RFQs
               </a>
             )}
+            {waAwaitingReply > 0 && (
+              <a
+                href="/dashboard/inbox?channel=whatsapp&filter=_NEEDS_REPLY"
+                className="topbar-stat topbar-stat-wa"
+                title="WhatsApp conversations awaiting a reply"
+              >
+                <strong>{waAwaitingReply}</strong> WhatsApp
+              </a>
+            )}
             <span className="topbar-divider" />
             <details className="topbar-menu">
               <summary aria-label="User menu">
@@ -115,7 +138,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                   <div className="topbar-menu-user">{session.email.split("@")[0]}</div>
                   <div className="topbar-menu-email">{session.email}</div>
                 </div>
-                <a href="/dashboard/settings/email" className="topbar-menu-item">Email accounts</a>
+                <a href="/dashboard/settings/email" className="topbar-menu-item">Email &amp; WhatsApp</a>
                 {(session.role === "ADMIN" || session.role === "MANAGER") && (
                   <a href="/dashboard/admin" className="topbar-menu-item">Admin</a>
                 )}
