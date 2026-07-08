@@ -3,10 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { sendReplyToThread } from "@/lib/gmail-send";
+import { sendWhatsAppReplyToThread } from "@/lib/whatsapp-reply";
 
 export function DraftModal({
   title, subtitle, draft, onClose,
-  threadDbId, replyTo,
+  threadDbId, replyTo, channel = "email",
 }: {
   title: string;
   subtitle?: string;
@@ -15,6 +16,8 @@ export function DraftModal({
   /** If provided, "Send" button appears and uses Gmail send to deliver as a real reply. */
   threadDbId?: string;
   replyTo?: string | null;
+  /** "whatsapp" routes Send through the CRM's WhatsApp number instead of Gmail. */
+  channel?: "email" | "whatsapp";
 }) {
   const router = useRouter();
   const [text, setText] = useState(draft);
@@ -34,11 +37,16 @@ export function DraftModal({
     if (!text.trim()) { setStatus({ kind: "err", msg: "Draft is empty" }); return; }
     start(async () => {
       setStatus(null);
-      const r = await sendReplyToThread({
-        threadDbId,
-        body: text,
-        replyTo: replyTo ?? undefined,
-      });
+      let r: { ok: true } | { error: string; needsReauth?: boolean };
+      if (channel === "whatsapp") {
+        r = await sendWhatsAppReplyToThread({ threadDbId, body: text });
+      } else {
+        r = await sendReplyToThread({
+          threadDbId,
+          body: text,
+          replyTo: replyTo ?? undefined,
+        });
+      }
       if ("error" in r) {
         setStatus({ kind: "err", msg: r.error, needsReauth: r.needsReauth });
         return;

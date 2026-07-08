@@ -88,6 +88,111 @@ function whatsappAddress(phone: string) {
   return `whatsapp:${phone.replace(/[^\d]/g, "")}`;
 }
 
+// True when outbound sending through the Cloud API is operationally enabled.
+// Mirrors the /api/whatsapp/send gate (F5/EXT): sending is opt-in via env.
+export function whatsAppSendConfigured(): boolean {
+  return (
+    process.env.WHATSAPP_SEND_ENABLED === "true" &&
+    Boolean(process.env.WHATSAPP_ACCESS_TOKEN) &&
+    Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID)
+  );
+}
+
+function whatsAppAutoReadEnabled(): boolean {
+  return process.env.WHATSAPP_AUTO_READ_ENABLED === "true";
+}
+
+// Mark an inbound message as read (blue ticks) via the Cloud API. Best-effort:
+// a failure must never break webhook ingest, so callers wrap or ignore errors.
+export async function markWhatsAppMessageRead(args: {
+  messageId: string;
+  phoneNumberId?: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = args.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const graphVersion = process.env.WHATSAPP_GRAPH_API_VERSION ?? "v23.0";
+  if (!accessToken || !phoneNumberId) return { error: "WhatsApp credentials are not configured." };
+
+  const res = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      status: "read",
+      message_id: args.messageId,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { error: `WhatsApp mark-read failed: ${res.status} ${body.slice(0, 200)}` };
+  }
+  return { ok: true };
+}
+
+// Store an outbound WhatsApp text into the matching inbox thread (find or
+// create by the counterparty number). Shared by the /api/whatsapp/send route
+// and the RFQ/inbox server actions so every send leaves the same trail.
+export async function logOutboundWhatsAppMessage(args: {
+  officeId: string;
+  to: string; // digits or formatted; normalized here
+  body: string;
+  providerMessageId: string | null;
+  threadId?: string | null;
+}): Promise<{ threadId: string }> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!phoneNumberId) throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured.");
+
+  const account = await ensureWhatsAppAccount({ officeId: args.officeId, phoneNumberId });
+  const normalizedTo = args.to.replace(/[^\d]/g, "");
+  const fromAddress = `whatsapp:${phoneNumberId}`;
+  const toAddress = `whatsapp:${normalizedTo}`;
+
+  let thread = args.threadId
+    ? await prisma.emailThread.findFirst({ where: { id: args.threadId, officeId: args.officeId } })
+    : null;
+
+  if (!thread) {
+    const externalThreadId = `whatsapp:${phoneNumberId}:${normalizedTo}`;
+    thread = await prisma.emailThread.findFirst({
+      where: { officeId: args.officeId, externalThreadId },
+    });
+    if (!thread) {
+      thread = await prisma.emailThread.create({
+        data: {
+          officeId: args.officeId,
+          subject: `WhatsApp · ${normalizedTo}`,
+          participants: JSON.stringify([fromAddress, toAddress]),
+          externalThreadId,
+          lastMessageAt: new Date(),
+        },
+      });
+    }
+  }
+
+  await prisma.emailMessage.create({
+    data: {
+      threadId: thread.id,
+      accountId: account.id,
+      externalId: args.providerMessageId,
+      direction: "OUTBOUND",
+      fromEmail: fromAddress,
+      toEmails: JSON.stringify([toAddress]),
+      subject: thread.subject,
+      bodyText: args.body,
+      sentAt: new Date(),
+    },
+  });
+  await prisma.emailThread.updateMany({
+    where: { id: thread.id, officeId: args.officeId },
+    data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+  });
+
+  return { threadId: thread.id };
+}
+
 function messageBody(message: WhatsAppTextMessage) {
   if (message.type === "text" && message.text?.body) return message.text.body;
   return `[Unsupported WhatsApp ${message.type || "unknown"} message]`;
@@ -275,6 +380,12 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
 
         touchedThreadIds.add(localThread.id);
         created++;
+
+        // Auto-read (blue ticks) — opt-in via WHATSAPP_AUTO_READ_ENABLED.
+        // Best-effort: a Graph API hiccup must not fail webhook ingest.
+        if (whatsAppAutoReadEnabled()) {
+          await markWhatsAppMessageRead({ messageId: message.id, phoneNumberId }).catch(() => null);
+        }
       }
     }
   }
