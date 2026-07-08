@@ -13,6 +13,12 @@ import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-p
 import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
 import { getBrainBridgeContext } from "@/lib/brain-bridge";
 import { BrainBridgePanel } from "@/components/brain-bridge-panel";
+import { deriveInquirySource } from "@/lib/inquiry-source";
+import { displayParty } from "@/lib/whatsapp-display";
+import { buildWhatsAppInquiry } from "@/lib/rfq-whatsapp";
+import { whatsAppSendConfigured } from "@/lib/whatsapp";
+import { WhatsAppPreviewCard } from "@/components/whatsapp-preview-card";
+import { sendWhatsAppInquiryAction } from "@/app/dashboard/rfq/actions";
 import {
   canonicalInquiryStatus,
   CLOSED_INQUIRY_STATUSES,
@@ -119,7 +125,12 @@ export default async function RFQDetailPage({
       carrierQuotes: { orderBy: { createdAt: "asc" } },
       job: { select: { id: true, reference: true, status: true } },
       emailThreads: {
-        include: { messages: { orderBy: { sentAt: "asc" } } },
+        include: {
+          messages: {
+            orderBy: { sentAt: "asc" },
+            include: { account: { select: { email: true, provider: true } } },
+          },
+        },
       },
       targetPriceHistory: { orderBy: { createdAt: "desc" }, take: 8 },
     },
@@ -145,6 +156,29 @@ export default async function RFQDetailPage({
     ...(maturity.targetPriceQuestion ? ["target price or no-target confirmation"] : []),
   ];
   const domesticPricing = assessDomesticTruckingPricing(inquiry);
+  const source = deriveInquirySource(inquiry);
+  const isWaSource = source.kind === "whatsapp";
+  const waThreads = inquiry.emailThreads.filter((t) =>
+    t.messages.some((m) => m.account?.provider === "WHATSAPP"),
+  );
+  const mailThreads = inquiry.emailThreads.filter((t) => !waThreads.includes(t));
+  let parsedJson: Record<string, unknown> = {};
+  if (inquiry.parsedData) {
+    try {
+      const value = JSON.parse(inquiry.parsedData);
+      if (value && typeof value === "object" && !Array.isArray(value)) parsedJson = value;
+    } catch {
+      parsedJson = {};
+    }
+  }
+  const waSentLabel = typeof parsedJson.whatsappSentAt === "string" && !Number.isNaN(new Date(parsedJson.whatsappSentAt).getTime())
+    ? new Date(parsedJson.whatsappSentAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : null;
+  const waPreview = {
+    ...buildWhatsAppInquiry(inquiry),
+    sentAtLabel: waSentLabel,
+    configured: whatsAppSendConfigured(),
+  };
   const brainBridgeContext = await getBrainBridgeContext({
     officeId: session.officeId,
     rfqId: inquiry.id,
@@ -197,11 +231,19 @@ export default async function RFQDetailPage({
               {inquiry.reference && <span className="record-chip data-cell-mono">{inquiry.reference}</span>}
               <span className={`badge ${sm.cls}`}>{sm.label}</span>
               {opportunity && <OpportunityScorePill score={opportunity} />}
+              {isWaSource && (
+                <span
+                  className="record-chip"
+                  style={{ color: "var(--whatsapp)", background: "var(--whatsapp-bg)", borderColor: "var(--whatsapp-border)", display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  <Icon name="whatsapp" size={11} strokeWidth={2} /> WhatsApp
+                </span>
+              )}
               <span className="record-chip">{fmt(inquiry.receivedAt)}</span>
             </div>
             <h1 className="record-title">{inquiry.subject}</h1>
             <p className="record-subtitle">
-              {inquiry.fromEmail ?? inquiry.fromCompany ?? "Unknown sender"}
+              {displayParty(inquiry.fromEmail) || inquiry.fromCompany || "Unknown sender"}
               {inquiry.company && ` · ${inquiry.company.name}`}
             </p>
           </div>
@@ -225,12 +267,12 @@ export default async function RFQDetailPage({
         {/* Left: email body + parsed fields */}
         <div className="record-side-stack">
 
-          {/* Raw email */}
+          {/* Raw source message(s) — a WhatsApp transcript is not an email */}
           {inquiry.rawEmailBody && (
             <div className="record-panel">
               <div className="record-card-header">
                 <div className="record-card-title">
-                  <Icon name="mail" size={13} /> Email Content
+                  <Icon name={isWaSource ? "whatsapp" : "mail"} size={13} /> {isWaSource ? "Original Messages" : "Email Content"}
                 </div>
               </div>
               <div className="card-body">
@@ -263,10 +305,59 @@ export default async function RFQDetailPage({
             />
           )}
 
+          {/* WhatsApp conversations — chat rendering, not email chrome */}
+          {waThreads.map((thread) => (
+            <div key={thread.id} className="record-panel">
+              <div className="record-card-header">
+                <div className="record-card-title">
+                  <Icon name="whatsapp" size={13} /> WhatsApp Conversation
+                </div>
+                <a href={`/dashboard/inbox?inquiry=${inquiry.id}`} className="data-link" style={{ fontSize: 12 }}>
+                  Open in inbox →
+                </a>
+              </div>
+              <div className="wa-thread">
+                {thread.messages.map((msg, i) => {
+                  const isOutbound = msg.direction === "OUTBOUND";
+                  const day = (d: Date) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                  const prev = thread.messages[i - 1];
+                  const showDay = !prev || day(prev.sentAt) !== day(msg.sentAt);
+                  const isMediaNote = Boolean(msg.bodyText?.startsWith("[Unsupported WhatsApp"));
+                  return (
+                    <div key={msg.id} style={{ display: "contents" }}>
+                      {showDay && <div className="wa-day-sep">{day(msg.sentAt)}</div>}
+                      <div className={`wa-bubble ${isOutbound ? "outbound" : "inbound"}`}>
+                        {!isOutbound && (
+                          <div className="wa-bubble-sender">{displayParty(msg.fromEmail, msg.fromName)}</div>
+                        )}
+                        <span className={isMediaNote ? "wa-media-note" : undefined}>
+                          {msg.bodyText ?? "—"}
+                        </span>
+                        <span className="wa-bubble-meta">
+                          {new Date(msg.sentAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          {isOutbound && <span className="wa-tick">✓</span>}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* WhatsApp inquiry draft + send — same card as the RFQ sheet */}
+          {isWaSource && (
+            <div className="record-panel">
+              <div className="card-body">
+                <WhatsAppPreviewCard preview={waPreview} onSend={sendWhatsAppInquiryAction.bind(null, inquiry.id)} />
+              </div>
+            </div>
+          )}
+
           {/* Email threads */}
-          {inquiry.emailThreads.length > 0 && (
+          {mailThreads.length > 0 && (
             <div className="email-thread">
-              {inquiry.emailThreads.map((thread) =>
+              {mailThreads.map((thread) =>
                 thread.messages.map((msg) => {
                   let attachments: { filename: string; mimeType: string; size: number; attachmentId: string }[] = [];
                   if (msg.attachments) {
@@ -276,7 +367,7 @@ export default async function RFQDetailPage({
                     <div key={msg.id} className={`email-bubble ${msg.direction === "INBOUND" ? "email-inbound" : ""}`}>
                       <div className="email-bubble-header">
                         <div>
-                          <div className="email-bubble-from">{msg.fromName ?? msg.fromEmail}</div>
+                          <div className="email-bubble-from">{displayParty(msg.fromEmail, msg.fromName)}</div>
                           <div className="email-bubble-meta">{msg.fromEmail} · {msg.direction}</div>
                         </div>
                         <div className="record-message-time">
@@ -572,7 +663,7 @@ export default async function RFQDetailPage({
             <div className="card-body">
               <div className="record-row-list">
                 {[
-                  { label: "From",        value: inquiry.fromEmail ?? inquiry.fromCompany ?? "—" },
+                  { label: "From",        value: displayParty(inquiry.fromEmail) || inquiry.fromCompany || "—" },
                   { label: "Received",    value: fmt(inquiry.receivedAt) },
                   { label: "Cargo Ready", value: inquiry.cargoReadyDate ? fmt(inquiry.cargoReadyDate) : "—" },
                   { label: "Container",   value: inquiry.containerType ?? "—" },
