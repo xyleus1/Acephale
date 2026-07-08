@@ -1,24 +1,37 @@
 "use client";
 
+// ⌘K global search palette: one input over loads, RFQs, companies, contacts
+// and email threads (src/lib/global-search.ts). Picking a result navigates to
+// it — a load opens its detail page, which also updates the workbench focus
+// via the focus-job middleware cookie, so the old "find job" behavior is a
+// side effect of the new one. The .cmdk-* classnames are load-bearing: later
+// theme layers in globals.css restyle them, so keep them stable.
+
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { searchJobs, focusJobAction, type JobSearchResult } from "@/lib/job-search";
+import { globalSearch, type GlobalSearchGroup, type GlobalSearchResult } from "@/lib/global-search";
 import { Icon } from "@/components/icon";
 
-const STATUS_LABEL: Record<string, string> = {
-  INQUIRY: "RFQ", QUOTED: "Pricing", BOOKED: "Booked / Waiting Cargo",
-  IN_TRANSIT: "En Route", CUSTOMS: "En Route", DELIVERED: "Delivered", CANCELLED: "Cancelled",
+const GROUP_LABEL: Record<GlobalSearchGroup, string> = {
+  loads: "Loads",
+  rfqs: "RFQs",
+  companies: "Companies",
+  contacts: "Contacts",
+  threads: "Email",
 };
+
+const GROUP_ORDER: GlobalSearchGroup[] = ["loads", "rfqs", "companies", "contacts", "threads"];
 
 export function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<JobSearchResult[]>([]);
+  const [results, setResults] = useState<GlobalSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const debouncedQuery = useDebounced(query, 100);
+  const debouncedQuery = useDebounced(query, 150);
 
   // Global hotkey
   useEffect(() => {
@@ -34,46 +47,60 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // Run search whenever opened or query changes
+  // Run search whenever opened or query changes. The query!==debounced guard
+  // skips the window where the input was externally reset (reopen) but the
+  // debounced value still holds the previous session's text.
   useEffect(() => {
     if (!open) return;
+    if (query !== debouncedQuery) return;
     let cancelled = false;
-    searchJobs(debouncedQuery).then((rs) => {
-      if (!cancelled) {
-        setResults(rs);
-        setActiveIdx(0);
-      }
-    });
+    setSearching(true);
+    globalSearch(debouncedQuery)
+      .then((rs) => {
+        if (!cancelled) {
+          setResults(rs);
+          setActiveIdx(0);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSearching(false);
+      });
     return () => { cancelled = true; };
-  }, [open, debouncedQuery]);
+  }, [open, query, debouncedQuery]);
 
   useEffect(() => {
     if (open) {
       setQuery("");
+      setResults([]);
       setActiveIdx(0);
       setTimeout(() => inputRef.current?.focus(), 10);
     }
   }, [open]);
 
-  function pick(r: JobSearchResult) {
-    startTransition(async () => {
-      await focusJobAction(r.id);
+  // Results ordered by group so the flat index used for keyboard navigation
+  // matches the rendered order exactly.
+  const ordered = GROUP_ORDER.flatMap((g) => results.filter((r) => r.group === g));
+
+  function pick(r: GlobalSearchResult) {
+    startTransition(() => {
       setOpen(false);
-      router.push("/dashboard");
-      router.refresh();
+      router.push(r.href as never);
     });
   }
 
   function onKey(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIdx((i) => Math.min(i + 1, Math.max(results.length - 1, 0)));
+      setActiveIdx((i) => Math.min(i + 1, Math.max(ordered.length - 1, 0)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (results[activeIdx]) pick(results[activeIdx]);
+      if (ordered[activeIdx]) pick(ordered[activeIdx]);
     }
   }
 
@@ -81,14 +108,16 @@ export function CommandPalette() {
     <button
       className="cmdk-hint"
       onClick={() => setOpen(true)}
-      title="Open command palette (⌘K)"
-      aria-label="Open command palette"
+      title="Search the app (⌘K)"
+      aria-label="Search the app"
     >
       <Icon name="search" size={12} strokeWidth={2} />
-      <span>Find job</span>
+      <span>Search</span>
       <kbd>⌘K</kbd>
     </button>
   );
+
+  let flatIdx = -1;
 
   return (
     <div className="cmdk-backdrop" onClick={() => setOpen(false)}>
@@ -100,37 +129,50 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Search jobs by ref, customer, route, mode…"
+            placeholder="Search loads, RFQs, companies, contacts, email…"
           />
           <kbd>ESC</kbd>
         </div>
-        <div className="cmdk-results">
-          {results.length === 0 ? (
+        <div className="cmdk-results" role="listbox" aria-label="Search results">
+          {ordered.length === 0 ? (
             <div style={{ padding: "20px 16px", fontSize: 13, color: "var(--text-3)", textAlign: "center" }}>
-              {query ? "No matches" : "Start typing to search"}
+              {searching ? "Searching…" : query ? "No matches" : "Start typing to search"}
             </div>
           ) : (
-            results.map((r, i) => (
-              <button
-                key={r.id}
-                className={`cmdk-row${i === activeIdx ? " active" : ""}`}
-                onClick={() => pick(r)}
-                onMouseEnter={() => setActiveIdx(i)}
-              >
-                <span className="cmdk-ref">{r.reference}</span>
-                <span className="cmdk-customer">{r.customer ?? "no customer"}</span>
-                <span className="cmdk-route">
-                  {r.origin && r.destination ? `${r.origin} → ${r.destination}` : "—"}
-                  {r.mode ? ` · ${r.mode}` : ""}
-                </span>
-                <span className="cmdk-status">{STATUS_LABEL[r.status] ?? r.status}</span>
-              </button>
-            ))
+            GROUP_ORDER.map((g) => {
+              const group = ordered.filter((r) => r.group === g);
+              if (group.length === 0) return null;
+              return (
+                <div key={g}>
+                  <div className="cmdk-group-label">{GROUP_LABEL[g]}</div>
+                  {group.map((r) => {
+                    flatIdx += 1;
+                    const idx = flatIdx;
+                    const active = idx === activeIdx;
+                    return (
+                      <button
+                        key={`${r.group}:${r.id}`}
+                        className={`cmdk-row${active ? " active" : ""}`}
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => pick(r)}
+                        onMouseEnter={() => setActiveIdx(idx)}
+                      >
+                        <span className="cmdk-ref">{r.ref ?? ""}</span>
+                        <span className="cmdk-customer">{r.title}</span>
+                        <span className="cmdk-route">{r.detail ?? "—"}</span>
+                        <span className="cmdk-status">{r.status ?? GROUP_LABEL[r.group]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })
           )}
         </div>
         <div className="cmdk-footer">
           <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-          <span><kbd>↵</kbd> open in workbench</span>
+          <span><kbd>↵</kbd> open</span>
           <span><kbd>esc</kbd> close</span>
         </div>
       </div>

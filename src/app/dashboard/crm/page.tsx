@@ -7,7 +7,8 @@ type SearchParams = Promise<{ q?: string }>;
 
 export default async function CrmPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSession();
-  const { q } = await searchParams;
+  const { q: rawQ } = await searchParams;
+  const q = typeof rawQ === "string" ? rawQ : "";
 
   const [contacts, companies] = await Promise.all([
     prisma.contact.findMany({
@@ -40,10 +41,14 @@ export default async function CrmPage({ searchParams }: { searchParams: SearchPa
   const rows = contacts.map(toContactRow);
 
   return (
+    // Keyed by the query: ContactSheet seeds its filter from initialQuery once,
+    // so a same-route ?q= navigation (⌘K company/contact pick while already on
+    // the CRM) must remount it to actually apply the new search.
     <ContactSheet
+      key={q}
       initialRows={rows}
       companies={companies.map((c) => c.name)}
-      initialQuery={q ?? ""}
+      initialQuery={q}
     />
   );
 }

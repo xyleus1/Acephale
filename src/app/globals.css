@@ -2840,6 +2840,16 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
   padding: 4px;
 }
 
+/* Section headers between result groups (Loads / RFQs / Companies / …) */
+.cmdk-group-label {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
 .cmdk-row {
   display: grid;
   grid-template-columns: 110px 1fr 1.2fr auto;
@@ -33159,6 +33169,65 @@ html.agent-dock-open .page-container {
 /* Read-only cells keep the roomy data-table padding the inputs provide themselves. */
 .rfq-sheet td.rfq-ro {
   padding: 8px 8px;
+}
+
+/* Toolbar above the sheet: search on the left, Columns picker on the right */
+.table-toolbar.rfq-sheet-toolbar {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rfq-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 300px;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-3);
+}
+
+.rfq-search:focus-within {
+  border-color: var(--brand);
+}
+
+.rfq-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.rfq-search-busy {
+  opacity: 0.7;
+}
+
+.rfq-search button.rfq-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none !important;
+  border-radius: 4px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-3) !important;
+  cursor: pointer;
+}
+
+.rfq-search button.rfq-search-clear:hover {
+  color: var(--text) !important;
 }
 
 /* Leading multi-select column (Gmail-style bulk status changes) */

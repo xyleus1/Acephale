@@ -4,6 +4,83 @@
 
 ## Date
 
+2026-07-07 (second update this date)
+
+## Branch
+
+rfq-bulk-select-status (Conductor workspace walla-walla, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+Three features: Trash as a closed RFQ status, ⌘K app-wide search, RFQ page
+search bar.
+
+- **Trash status**: promoted from ad-hoc custom status to canonical TRASH in
+  `src/lib/inquiry-status.ts` (INQUIRY_STATUSES + badge). Stored case variants
+  "Trash"/"trash" alias via LEGACY_TO_CANONICAL (no backfill);
+  CLOSED_INQUIRY_STATUSES gained TRASH/Trash/trash, so trashed rows leave the
+  Open tab, the topbar pending count, Send-all-to-desk (which previously still
+  emailed trashed meta-leads), agent tools, decision queue, merge/dedup and
+  stale-RFQ nags — while keeping their own Trash tab. The incoming ?status=
+  param is canonicalized on /dashboard/rfq so pre-promotion ?status=Trash links
+  still land on the Trash tab. Pricing page STATUS_META + status select gained
+  TRASH.
+- **⌘K global search**: `src/components/command-palette.tsx` rewritten from
+  jobs-only to grouped app-wide search backed by new server action
+  `src/lib/global-search.ts` (loads, RFQs, companies, contacts, email threads;
+  officeId-scoped; companies/contacts respect the same ownership scoping as
+  /dashboard/search; Prisma `mode: "insensitive"`). Picking navigates: loads →
+  /dashboard/jobs/[id] (middleware still sets the focus-job cookie, replacing
+  the old focusJobAction flow), RFQs → /dashboard/rfq/[id],
+  companies/contacts → /dashboard/crm?q= (no detail routes exist), threads →
+  /dashboard/inbox?q=. `src/lib/job-search.ts` deleted (dead after the
+  rewrite; removing it retires two now-unused live server-action endpoints).
+  CRM page keys ContactSheet by q so a same-route ?q= navigation applies.
+  The .cmdk-* classnames are load-bearing for later theme layers and were kept.
+- **RFQ search bar**: /dashboard/rfq accepts ?q= (server-side insensitive OR
+  over reference/subject/fromCompany/fromEmail/origin/destination/commodity,
+  composed with the status tab; tabs carry q). Debounced RfqSearchBar in the
+  sheet toolbar rewrites the URL, reading the rest of the query string at fire
+  time; it re-syncs from the URL on external navigations unless focused. The
+  empty state moved into RfqSheet so the bar stays visible at 0 results.
+  Repeated ?q= params degrade instead of crashing (.trim on array).
+
+## Files changed
+
+`src/lib/inquiry-status.ts`, `src/lib/global-search.ts` (new),
+`src/lib/job-search.ts` (deleted), `src/lib/job-focus.ts` (comment),
+`src/components/command-palette.tsx`, `src/components/rfq-expandable-rows.tsx`,
+`src/app/dashboard/rfq/page.tsx`, `src/app/dashboard/crm/page.tsx`,
+`src/app/dashboard/pricing/page.tsx`, `src/app/dashboard/page.tsx` (⌘K hint),
+`src/app/globals.css`.
+
+## Verification passed
+
+tsc clean; next build clean; test:rfq-whatsapp, test:strategy,
+test:email-labels, test:rfq-load-draft pass; adversarial multi-agent review
+over the diff — 11 confirmed findings all fixed (stale ?status=Trash links,
+pricing TRASH label/option, CRM same-route pick no-op, palette reopen flash,
+search-bar URL desync incl. back button and stale-status race, duplicate ?q=
+crash, stale workbench ⌘K hint, dead job-search endpoints). DB-backed tests
+skipped (no local DATABASE_URL).
+
+## Caveats
+
+Company/contact ⌘K picks deep-link into the CRM sheet's filter (no detail
+routes exist). Email-thread picks land on inbox search by subject. The
+/dashboard/search page itself was not touched (still companies/contacts/
+activities only, case-sensitive) — the palette supersedes it. Trash rows on
+the kanban: previously auto-created PROPOSED shell loads are not retracted
+when an RFQ is trashed (pre-existing behavior, same as Ignored).
+
+## Previous Update
+
+## Date
+
 2026-07-07
 
 ## Branch

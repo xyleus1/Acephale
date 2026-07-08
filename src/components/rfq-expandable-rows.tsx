@@ -592,11 +592,82 @@ function RfqBulkBar({ ids, statusOptions, onDone }: {
   );
 }
 
-export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
+// Debounced URL search: typing rewrites ?q= (keeping whatever else is in the
+// URL, like the status tab) so the server re-queries all RFQs, not just the
+// 200 rendered rows.
+function RfqSearchBar({ initialQuery }: { initialQuery: string }) {
+  const router = useRouter();
+  const [value, setValue] = useState(initialQuery);
+  const [busy, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  // The query this component last navigated to (or adopted from the URL) —
+  // guards against re-navigating when the prop changes underneath.
+  const applied = useRef(initialQuery);
+  const debounced = useDebouncedValue(value, 350);
+
+  // An external navigation (tab link, sidebar link, back button) changed the
+  // URL's q — adopt it, unless the user is mid-typing in this input.
+  useEffect(() => {
+    if (document.activeElement === inputRef.current) return;
+    applied.current = initialQuery;
+    setValue(initialQuery);
+  }, [initialQuery]);
+
+  useEffect(() => {
+    const next = debounced.trim().slice(0, 120);
+    if (next === applied.current) return;
+    applied.current = next;
+    // Read the rest of the query string at fire time — props can lag a
+    // just-clicked tab whose server render hasn't committed yet.
+    const params = new URLSearchParams(window.location.search);
+    if (next) params.set("q", next);
+    else params.delete("q");
+    const qs = params.toString();
+    startTransition(() => {
+      router.replace(`/dashboard/rfq${qs ? `?${qs}` : ""}` as "/dashboard/rfq", { scroll: false });
+    });
+  }, [debounced, router]);
+
+  return (
+    <div className={`rfq-search${busy ? " rfq-search-busy" : ""}`}>
+      <Icon name="search" size={13} strokeWidth={2} />
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") setValue(""); }}
+        placeholder="Search RFQs — subject, ref, company, lane…"
+        aria-label="Search RFQs"
+      />
+      {value && (
+        <button
+          type="button"
+          className="rfq-search-clear"
+          aria-label="Clear search"
+          onClick={() => setValue("")}
+        >
+          <Icon name="x" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function useDebouncedValue<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery }: {
   rows: RfqRowData[];
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
   userId: string;
+  searchQuery: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -750,7 +821,8 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
           onDone={() => setSelected(new Set())}
         />
       )}
-      <div className="table-toolbar">
+      <div className="table-toolbar rfq-sheet-toolbar">
+        <RfqSearchBar initialQuery={searchQuery} />
         <div ref={pickerRef} className="table-picker">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickerOpen((o) => !o)}>
             <Icon name="grid" size={12} />
@@ -784,6 +856,22 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
           )}
         </div>
       </div>
+      {rows.length === 0 ? (
+        <div className="card empty-state-card">
+          <Icon name={searchQuery ? "search" : "inbox"} size={36} className="empty-state-graphic" />
+          <div className="empty-state-title">No RFQs match</div>
+          <p className="empty-state-copy">
+            {searchQuery
+              ? `Nothing in this view matches “${searchQuery}”. Try another term, or clear the search.`
+              : "RFQs arrive from linked email threads or manual entry. Try another status filter, or add one manually."}
+          </p>
+          {!searchQuery && (
+            <Link href="/dashboard/rfq/new" className="btn">
+              New RFQ
+            </Link>
+          )}
+        </div>
+      ) : (
       <div className="card table-shell">
         <table className="data-table sheet-table rfq-sheet" style={tableWidth != null ? { width: tableWidth, minWidth: tableWidth } : undefined}>
           <colgroup>
@@ -875,6 +963,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
           </tbody>
         </table>
       </div>
+      )}
     </>
   );
 }

@@ -75,10 +75,13 @@ function choice(value: string | null, map: Record<string, string>): string | nul
 export default async function RFQPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
   const session = await requireSession();
-  const { status } = await searchParams;
+  const { status, q: rawQuery } = await searchParams;
+  // Next delivers repeated params as arrays despite the annotation — degrade
+  // to no filter rather than crashing on a hand-crafted ?q=a&q=b URL.
+  const searchQuery = (typeof rawQuery === "string" ? rawQuery : "").trim().slice(0, 120);
 
   // Custom statuses/modes added on the fly live as plain strings on rows —
   // whatever is in use in this office becomes a tab and a dropdown option.
@@ -115,8 +118,12 @@ export default async function RFQPage({
     ...customStatuses.map((s) => ({ key: s, label: s })),
   ];
 
-  const filter = filterTabs.some((t) => t.key === status) ? (status as string) : "";
+  // Canonicalize the incoming param so pre-promotion links (?status=Trash from
+  // when Trash was a custom status) still land on the right tab.
+  const statusParam = typeof status === "string" ? canonicalInquiryStatus(status) : "";
+  const filter = filterTabs.some((t) => t.key === statusParam) ? statusParam : "";
 
+  const contains = { contains: searchQuery, mode: "insensitive" as const };
   const inquiriesRaw = await prisma.inquiry.findMany({
     where: {
       officeId: session.officeId,
@@ -127,6 +134,19 @@ export default async function RFQPage({
           : INQUIRY_STATUS_VALUES.includes(filter)
             ? { status: { in: inquiryStatusValuesFor(filter) } }
             : { status: filter }),
+      ...(searchQuery
+        ? {
+            OR: [
+              { reference: contains },
+              { subject: contains },
+              { fromCompany: contains },
+              { fromEmail: contains },
+              { origin: contains },
+              { destination: contains },
+              { commodity: contains },
+            ],
+          }
+        : {}),
     },
     include: {
       company: { select: { id: true, name: true } },
@@ -274,7 +294,7 @@ export default async function RFQPage({
         <div>
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
-            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
+            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown{searchQuery ? ` · matching “${searchQuery}”` : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
           </p>
         </div>
         <div className="page-actions">
@@ -291,36 +311,31 @@ export default async function RFQPage({
       </div>
 
       <div className="mode-tabs" style={{ marginBottom: 16 }}>
-        {filterTabs.map((t) => (
-          <Link
-            key={t.key || "open"}
-            href={`/dashboard/rfq${t.key ? `?status=${encodeURIComponent(t.key)}` : ""}` as "/dashboard/rfq"}
-            className={`mode-tab${filter === t.key ? " active" : ""}`}
-          >
-            {t.label}
-          </Link>
-        ))}
+        {filterTabs.map((t) => {
+          // Tabs keep the search query so filtering and searching compose.
+          const params = new URLSearchParams();
+          if (t.key) params.set("status", t.key);
+          if (searchQuery) params.set("q", searchQuery);
+          const qs = params.toString();
+          return (
+            <Link
+              key={t.key || "open"}
+              href={`/dashboard/rfq${qs ? `?${qs}` : ""}` as "/dashboard/rfq"}
+              className={`mode-tab${filter === t.key ? " active" : ""}`}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
       </div>
 
-      {rows.length === 0 ? (
-        <div className="card empty-state-card">
-          <Icon name="inbox" size={36} className="empty-state-graphic" />
-          <div className="empty-state-title">No RFQs match</div>
-          <p className="empty-state-copy">
-            RFQs arrive from linked email threads or manual entry. Try another status filter, or add one manually.
-          </p>
-          <a href="/dashboard/rfq/new" className="btn">
-            New RFQ
-          </a>
-        </div>
-      ) : (
-        <RfqSheet
-          rows={rows}
-          statusOptions={statusOptions}
-          modeOptions={modeOptions}
-          userId={session.userId}
-        />
-      )}
+      <RfqSheet
+        rows={rows}
+        statusOptions={statusOptions}
+        modeOptions={modeOptions}
+        userId={session.userId}
+        searchQuery={searchQuery}
+      />
     </div>
   );
 }

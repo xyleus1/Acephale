@@ -44,6 +44,7 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   MISSED: { label: "Missed ($)", className: "status-needs-info" },
   RECEIVED: { label: "Received", className: "status-ingested" },
   IGNORED: { label: "Ignored", className: "status-needs-info" },
+  TRASH: { label: "Trash", className: "status-needs-info" },
   // Legacy values still on old rows.
   INGESTED: { label: "Received", className: "status-ingested" },
   PARSED: { label: "Received", className: "status-parsed" },
@@ -2348,7 +2349,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                       name="status"
                       defaultValue={canonicalInquiryStatus(selectedInquiry.status)}
                       className="pricing-status-select"
-                      options={[...new Set([canonicalInquiryStatus(selectedInquiry.status), "BOOKED", "PRICING", "MISSED", "RECEIVED", "IGNORED"])].map((s) => ({ value: s, label: statusMeta(s).label }))}
+                      options={[...new Set([canonicalInquiryStatus(selectedInquiry.status), "BOOKED", "PRICING", "MISSED", "RECEIVED", "IGNORED", "TRASH"])].map((s) => ({ value: s, label: statusMeta(s).label }))}
                     />
                   </form>
                   <form action={deleteInquiryAction}>
