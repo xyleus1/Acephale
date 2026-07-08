@@ -31,6 +31,42 @@ WHATSAPP_AUTO_READ_ENABLED="true"
 
 `WHATSAPP_APP_SECRET` is optional for local testing but should be set in production so webhook POST bodies are checked against `X-Hub-Signature-256`.
 
+## Provider mode: Green API (no Meta account required)
+
+Until Meta Cloud API credentials exist, the same pipeline can run through
+[Green API](https://green-api.com) — a hosted WhatsApp gateway paired to the
+business number by QR scan (unofficial WhatsApp Web protocol; keep sending
+volumes human-ish). Everything downstream (inbox, classification, auto-RFQ,
+RFQ-sheet send, inbox AI replies, auto-read) is identical; moving to the
+official API later is an env-var swap.
+
+```bash
+WHATSAPP_PROVIDER="greenapi"
+GREEN_API_ID_INSTANCE="7103xxxxxx"          # from console.green-api.com
+GREEN_API_TOKEN="instance-api-token"
+GREEN_API_BASE_URL="https://7103.api.greenapi.com"  # instance apiUrl; defaults to api.green-api.com
+GREEN_API_WEBHOOK_TOKEN="a-random-shared-secret"
+WHATSAPP_PHONE_NUMBER_ID="905xxxxxxxxx"     # the business number's digits — keys threads/accounts
+WHATSAPP_SEND_ENABLED="true"
+WHATSAPP_AUTO_READ_ENABLED="true"
+# WHATSAPP_ACCESS_TOKEN / WHATSAPP_APP_SECRET / WHATSAPP_VERIFY_TOKEN not used in this mode
+```
+
+Inbound arrives on the adapter route `/api/webhooks/whatsapp/greenapi`
+(authenticated by `GREEN_API_WEBHOOK_TOKEN` in the `Authorization` header and
+translated into the Meta webhook shape). Point the instance at it once with:
+
+```bash
+GREEN_API_ID_INSTANCE=... GREEN_API_TOKEN=... GREEN_API_WEBHOOK_TOKEN=... \
+WEBHOOK_URL=https://YOUR_DOMAIN/api/webhooks/whatsapp/greenapi \
+npm run setup:green-api
+```
+
+Notes: Green API's free Developer plan covers 3 chats (enough to test
+end-to-end); the Business plan lifts limits on the same instance with no code
+change. Group chats are ignored by the adapter. The number can stay paired to
+the phone app and other linked devices at the same time.
+
 ## Meta callback
 
 Use this callback URL in Meta after the app is public:

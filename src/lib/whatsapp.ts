@@ -88,26 +88,65 @@ function whatsappAddress(phone: string) {
   return `whatsapp:${phone.replace(/[^\d]/g, "")}`;
 }
 
-// True when outbound sending through the Cloud API is operationally enabled.
-// Mirrors the /api/whatsapp/send gate (F5/EXT): sending is opt-in via env.
+// Which gateway carries WhatsApp traffic. "meta" is the official Cloud API;
+// "greenapi" is the hosted WhatsApp-Web gateway used until Meta creds exist.
+// Inbound arrives on a provider-specific webhook route; outbound and read
+// receipts branch here. Everything downstream is provider-agnostic.
+export function whatsAppProvider(): "meta" | "greenapi" {
+  return process.env.WHATSAPP_PROVIDER === "greenapi" ? "greenapi" : "meta";
+}
+
+function greenApiConfig(): { baseUrl: string; idInstance: string; token: string } | null {
+  const idInstance = process.env.GREEN_API_ID_INSTANCE;
+  const token = process.env.GREEN_API_TOKEN;
+  if (!idInstance || !token) return null;
+  const baseUrl = (process.env.GREEN_API_BASE_URL ?? "https://api.green-api.com").replace(/\/+$/, "");
+  return { baseUrl, idInstance, token };
+}
+
+// True when outbound sending through the active provider is operationally
+// enabled. Mirrors the /api/whatsapp/send gate (F5/EXT): sending is opt-in.
 export function whatsAppSendConfigured(): boolean {
-  return (
-    process.env.WHATSAPP_SEND_ENABLED === "true" &&
-    Boolean(process.env.WHATSAPP_ACCESS_TOKEN) &&
-    Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID)
-  );
+  if (process.env.WHATSAPP_SEND_ENABLED !== "true") return false;
+  if (whatsAppProvider() === "greenapi") {
+    // WHATSAPP_PHONE_NUMBER_ID doubles as the thread key for outbound logging.
+    return Boolean(greenApiConfig()) && Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID);
+  }
+  return Boolean(process.env.WHATSAPP_ACCESS_TOKEN) && Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID);
 }
 
 function whatsAppAutoReadEnabled(): boolean {
   return process.env.WHATSAPP_AUTO_READ_ENABLED === "true";
 }
 
-// Mark an inbound message as read (blue ticks) via the Cloud API. Best-effort:
-// a failure must never break webhook ingest, so callers wrap or ignore errors.
+// Mark an inbound message as read (blue ticks) via the active provider.
+// Best-effort: a failure must never break webhook ingest, so callers wrap
+// or ignore errors. `senderDigits` is required in greenapi mode (readChat
+// is chat-addressed there), unused on the Meta path.
 export async function markWhatsAppMessageRead(args: {
   messageId: string;
   phoneNumberId?: string;
+  senderDigits?: string;
 }): Promise<{ ok: true } | { error: string }> {
+  if (whatsAppProvider() === "greenapi") {
+    const green = greenApiConfig();
+    if (!green) return { error: "Green API credentials are not configured." };
+    if (!args.senderDigits) return { error: "senderDigits is required for Green API mark-read." };
+    const res = await fetch(
+      `${green.baseUrl}/waInstance${green.idInstance}/readChat/${green.token}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: `${args.senderDigits}@c.us`, idMessage: args.messageId }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return { error: `WhatsApp mark-read failed: ${res.status} ${body.slice(0, 200)}` };
+    }
+    return { ok: true };
+  }
+
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = args.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
   const graphVersion = process.env.WHATSAPP_GRAPH_API_VERSION ?? "v23.0";
@@ -382,9 +421,13 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
         created++;
 
         // Auto-read (blue ticks) — opt-in via WHATSAPP_AUTO_READ_ENABLED.
-        // Best-effort: a Graph API hiccup must not fail webhook ingest.
+        // Best-effort: a provider hiccup must not fail webhook ingest.
         if (whatsAppAutoReadEnabled()) {
-          await markWhatsAppMessageRead({ messageId: message.id, phoneNumberId }).catch(() => null);
+          await markWhatsAppMessageRead({
+            messageId: message.id,
+            phoneNumberId,
+            senderDigits: message.from.replace(/\D/g, ""),
+          }).catch(() => null);
         }
       }
     }
@@ -433,6 +476,39 @@ export async function sendWhatsAppText(args: {
   body: string;
   phoneNumberId?: string;
 }): Promise<{ ok: true; providerMessageId: string | null } | { error: string }> {
+  const toDigits = args.to.replace(/[^\d]/g, "");
+  if (!toDigits) return { error: "A recipient phone number is required." };
+  if (!args.body.trim()) return { error: "Message body is required." };
+
+  if (whatsAppProvider() === "greenapi") {
+    const green = greenApiConfig();
+    if (!green) return { error: "GREEN_API_ID_INSTANCE / GREEN_API_TOKEN are not configured." };
+
+    const res = await fetch(
+      `${green.baseUrl}/waInstance${green.idInstance}/sendMessage/${green.token}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: `${toDigits}@c.us`, message: args.body }),
+      },
+    );
+    const responseBody = await res.text();
+    if (!res.ok) {
+      return { error: `WhatsApp send failed: ${res.status} ${responseBody.slice(0, 300)}` };
+    }
+    let parsedGreen: unknown = null;
+    try {
+      parsedGreen = JSON.parse(responseBody);
+    } catch {
+      // Green API returned 2xx; keep going without a provider id.
+    }
+    const idMessage =
+      parsedGreen && typeof parsedGreen === "object" && "idMessage" in parsedGreen
+        ? String((parsedGreen as { idMessage: unknown }).idMessage ?? "")
+        : "";
+    return { ok: true, providerMessageId: idMessage || null };
+  }
+
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = args.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
   const graphVersion = process.env.WHATSAPP_GRAPH_API_VERSION ?? "v23.0";
@@ -440,9 +516,7 @@ export async function sendWhatsAppText(args: {
   if (!accessToken) return { error: "WHATSAPP_ACCESS_TOKEN is not configured." };
   if (!phoneNumberId) return { error: "WHATSAPP_PHONE_NUMBER_ID is not configured." };
 
-  const to = args.to.replace(/[^\d]/g, "");
-  if (!to) return { error: "A recipient phone number is required." };
-  if (!args.body.trim()) return { error: "Message body is required." };
+  const to = toDigits;
 
   const res = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
     method: "POST",

@@ -26,6 +26,8 @@
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
     "test:rfq-load-draft": "tsx scripts/rfq-load-draft.test.ts",
     "test:rfq-whatsapp": "tsx scripts/rfq-whatsapp.test.ts",
+    "test:whatsapp-greenapi": "tsx scripts/whatsapp-greenapi.test.ts",
+    "setup:green-api": "tsx scripts/setup-green-api.ts",
     "test:crm": "tsx scripts/crm-sheet.test.ts && tsx scripts/crm-email-touch.test.ts && tsx scripts/login-code.test.ts",
     "backfill:crm-email": "tsx scripts/backfill-crm-email-touch.ts",
     "backfill:rfq-references": "tsx scripts/backfill-rfq-references.ts",
