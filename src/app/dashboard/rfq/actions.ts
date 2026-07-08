@@ -14,6 +14,8 @@ import {
   sendRfqMail,
   type SendStampKey,
 } from "@/lib/rfq-mail";
+import { buildWhatsAppInquiry, waDigitsFromWhatsAppAddress, waPhoneDigits } from "@/lib/rfq-whatsapp";
+import { logOutboundWhatsAppMessage, sendWhatsAppText, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { normalizeInquiryStatusInput } from "@/lib/inquiry-status";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
@@ -96,6 +98,49 @@ export async function sendLeadConfirmationAction(
 
   await stampAfterSend(inquiry.id, "confirmationSentAt");
   revalidatePath("/dashboard/rfq");
+  return { ok: true };
+}
+
+// Send the Turkish WhatsApp inquiry draft to the lead through the CRM's
+// WhatsApp Cloud API number, and log it into the matching inbox thread.
+// The draft is rebuilt server-side — same text the sheet previews.
+export async function sendWhatsAppInquiryAction(
+  inquiryId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const { session, inquiry } = await loadInquiry(inquiryId);
+  if (!inquiry) return { error: "RFQ not found." };
+  if (!whatsAppSendConfigured()) {
+    return { error: "CRM WhatsApp sending is not configured — set WHATSAPP_SEND_ENABLED and the Cloud API credentials." };
+  }
+
+  let parsedPhone: string | null = null;
+  try {
+    const parsed = inquiry.parsedData ? JSON.parse(inquiry.parsedData) : {};
+    parsedPhone = parsed && typeof parsed === "object" && typeof parsed.phone === "string" ? parsed.phone : null;
+  } catch {
+    parsedPhone = null;
+  }
+  const digits = waPhoneDigits(parsedPhone) ?? waDigitsFromWhatsAppAddress(inquiry.fromEmail);
+  if (!digits) return { error: "No usable phone number on this RFQ — add one to the lead first." };
+
+  const draft = buildWhatsAppInquiry(inquiry);
+  const sent = await sendWhatsAppText({ to: digits, body: draft.text });
+  if ("error" in sent) return sent;
+
+  try {
+    await logOutboundWhatsAppMessage({
+      officeId: session.officeId,
+      to: digits,
+      body: draft.text,
+      providerMessageId: sent.providerMessageId,
+    });
+  } catch {
+    // The message already left our hands; a logging failure must not
+    // surface as "not sent" or the operator would send a duplicate.
+  }
+  await stampAfterSend(inquiry.id, "whatsappSentAt");
+  revalidatePath("/dashboard/rfq");
+  revalidatePath("/dashboard/inbox");
   return { ok: true };
 }
 

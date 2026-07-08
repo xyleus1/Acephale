@@ -52,7 +52,7 @@ Last updated: 2026-06-21
    - Decision on where webhook logs/errors should be visible.
 
 3. Review policy
-   - Can WhatsApp replies be sent directly from the inbox, or should all be saved as drafts first?
+   - Decided + implemented: drafts-first. AI drafts a WhatsApp-shaped reply in the inbox modal (and the RFQ sheet previews the Turkish inquiry draft); nothing sends until the operator clicks Send, and every send path is fail-closed behind `WHATSAPP_SEND_ENABLED`. Auto-read receipts are a separate opt-in (`WHATSAPP_AUTO_READ_ENABLED`).
 
 ## P1 - Document Upload Production
 

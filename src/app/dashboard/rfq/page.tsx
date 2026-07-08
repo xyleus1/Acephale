@@ -23,6 +23,7 @@ import {
   rfqMailConfigured,
 } from "@/lib/rfq-mail";
 import { buildWhatsAppInquiry } from "@/lib/rfq-whatsapp";
+import { whatsAppSendConfigured } from "@/lib/whatsapp";
 
 // Send-all pushes up to 60 sequential SMTP sends through a server action on
 // this segment; the default function timeout would cut the batch short.
@@ -166,6 +167,7 @@ export default async function RFQPage({
   });
 
   const mailConfigured = rfqMailConfigured();
+  const waConfigured = whatsAppSendConfigured();
 
   const rows: RfqRowData[] = inquiriesRaw.map((inq) => {
     const source = deriveInquirySource(inq);
@@ -280,7 +282,11 @@ export default async function RFQPage({
         text: confirmationEmail.text,
         sentAtLabel: sentLabel(parsed.confirmationSentAt),
       },
-      whatsapp: buildWhatsAppInquiry(inq),
+      whatsapp: {
+        ...buildWhatsAppInquiry(inq),
+        sentAtLabel: sentLabel(parsed.whatsappSentAt),
+        configured: waConfigured,
+      },
     };
   });
 

@@ -11,6 +11,7 @@ import {
   deleteInquiryRowAction,
   sendDeskForwardAction,
   sendLeadConfirmationAction,
+  sendWhatsAppInquiryAction,
   updateInquiryRowAction,
   type InquiryRowPatch,
 } from "@/app/dashboard/rfq/actions";
@@ -29,6 +30,8 @@ export type RfqWhatsAppPreview = {
   waUrl: string | null;
   text: string;
   missing: string[];
+  sentAtLabel: string | null;
+  configured: boolean;
 };
 
 export type RfqRowData = {
@@ -171,10 +174,24 @@ function DraftsDrawer({ title, hint, badges, open, onToggle, children }: {
   );
 }
 
-function WhatsAppPreviewCard({ preview }: { preview: RfqWhatsAppPreview }) {
+function WhatsAppPreviewCard({ preview, onSend }: {
+  preview: RfqWhatsAppPreview;
+  onSend: () => Promise<{ ok: true } | { error: string }>;
+}) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [busy, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [justSent, setJustSent] = useState(false);
+
+  const sent = Boolean(preview.sentAtLabel) || justSent;
+  const sendDisabledReason = !preview.configured
+    ? "CRM WhatsApp sending is not configured (WHATSAPP_SEND_ENABLED + Cloud API credentials)."
+    : !preview.phoneDisplay
+      ? "No usable phone number on this RFQ."
+      : null;
 
   function copy() {
     navigator.clipboard.writeText(preview.text).then(
@@ -188,29 +205,68 @@ function WhatsAppPreviewCard({ preview }: { preview: RfqWhatsAppPreview }) {
     );
   }
 
+  function send() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await onSend();
+        if ("error" in res) {
+          setError(res.error);
+        } else {
+          setJustSent(true);
+          router.refresh();
+        }
+      } catch {
+        // A rejected action (network drop, server crash) leaves delivery
+        // unknown — say so instead of crashing to the error boundary.
+        setError("Send failed or was interrupted — check the WhatsApp thread before retrying.");
+      }
+    });
+  }
+
   return (
     <div className="rfq-mail-card">
       <div className="rfq-mail-card-head">
         <div>
           <div className="rfq-expand-block-title">WhatsApp inquiry</div>
-          <div className="rfq-mail-hint">Sent from your own phone — copy it, or open the chat prefilled</div>
+          <div className="rfq-mail-hint">
+            {preview.configured
+              ? "Send from the CRM number, or copy it / open the chat on your own phone"
+              : "Sent from your own phone — copy it, or open the chat prefilled"}
+          </div>
         </div>
         <div className="rfq-mail-card-actions">
+          {sent && (
+            <span className="rfq-mail-sent">
+              <Icon name="check" size={11} strokeWidth={2.5} />
+              Sent{preview.sentAtLabel ? ` ${preview.sentAtLabel}` : ""}
+            </span>
+          )}
           <button type="button" className="btn btn-secondary btn-sm" onClick={copy}>
             <Icon name={copied ? "check" : "copy"} size={12} strokeWidth={2.25} />
             {copied ? "Copied" : "Copy"}
           </button>
           {preview.waUrl ? (
-            <a className="btn btn-sm" href={preview.waUrl} target="_blank" rel="noopener noreferrer">
+            <a className="btn btn-secondary btn-sm" href={preview.waUrl} target="_blank" rel="noopener noreferrer">
               <Icon name="message-circle" size={12} strokeWidth={2.25} />
               Open WhatsApp
             </a>
           ) : (
-            <button type="button" className="btn btn-sm" disabled title="No usable phone number on this RFQ.">
+            <button type="button" className="btn btn-secondary btn-sm" disabled title="No usable phone number on this RFQ.">
               <Icon name="message-circle" size={12} strokeWidth={2.25} />
               Open WhatsApp
             </button>
           )}
+          <button
+            type="button"
+            className={`btn btn-sm${sent ? " btn-secondary" : ""}`}
+            disabled={busy || Boolean(sendDisabledReason)}
+            title={sendDisabledReason ?? undefined}
+            onClick={send}
+          >
+            <Icon name="message-circle" size={12} strokeWidth={2.25} />
+            {busy ? "Sending…" : sent ? "Send again" : "Send"}
+          </button>
         </div>
       </div>
       <div className="rfq-mail-meta">
@@ -219,6 +275,7 @@ function WhatsAppPreviewCard({ preview }: { preview: RfqWhatsAppPreview }) {
       </div>
       <pre className="rfq-mail-body">{preview.text}</pre>
       {copyError && <div className="rfq-mail-error">Could not copy — select the message text manually.</div>}
+      {error && <div className="rfq-mail-error">{error}</div>}
     </div>
   );
 }
@@ -357,7 +414,7 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
         onToggle={() => setWaOpen((v) => !v)}
       >
         <div className="rfq-mail-grid">
-          <WhatsAppPreviewCard preview={row.whatsapp} />
+          <WhatsAppPreviewCard preview={row.whatsapp} onSend={() => sendWhatsAppInquiryAction(row.id)} />
         </div>
       </DraftsDrawer>
 
