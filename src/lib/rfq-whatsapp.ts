@@ -196,6 +196,27 @@ export function waPhoneDigits(raw: string | null | undefined): string | null {
   return digits.length >= 10 ? digits : null;
 }
 
+// "whatsapp:905301234567" (thread/message address form) → wa-ready digits.
+export function waDigitsFromWhatsAppAddress(address: string | null | undefined): string | null {
+  if (!address || !address.startsWith("whatsapp:")) return null;
+  return waPhoneDigits(`+${address.slice("whatsapp:".length).replace(/\D/g, "")}`);
+}
+
+// Inquiries born from a WhatsApp thread know their counterparty from the
+// sender address — seed parsedData.phone/fullName so the RFQ sheet's WhatsApp
+// draft (and the send action) has a recipient without re-asking the AI.
+export function seedWhatsAppLeadFields(
+  parsed: Record<string, unknown>,
+  sender: { fromEmail: string | null; fromName: string | null },
+): Record<string, unknown> {
+  const digits = waDigitsFromWhatsAppAddress(sender.fromEmail);
+  if (!digits) return parsed;
+  const next = { ...parsed };
+  if (!s(next.phone)) next.phone = `+${digits}`;
+  if (!s(next.fullName) && sender.fromName?.trim()) next.fullName = sender.fromName.trim();
+  return next;
+}
+
 function equipmentPhrase(inq: InquiryForWhatsApp): string | null {
   const type = s(inq.containerType);
   if (!type) return null;

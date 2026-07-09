@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { buildWhatsAppInquiry, waPhoneDigits } from "../src/lib/rfq-whatsapp";
+import {
+  buildWhatsAppInquiry,
+  seedWhatsAppLeadFields,
+  waDigitsFromWhatsAppAddress,
+  waPhoneDigits,
+} from "../src/lib/rfq-whatsapp";
 
 const base = {
   origin: null,
@@ -87,5 +92,42 @@ assert.equal(waPhoneDigits("532 123 45 67"), "905321234567");
 assert.equal(waPhoneDigits("0049 170 1234567"), "491701234567");
 assert.equal(waPhoneDigits("1234"), null);
 assert.equal(waPhoneDigits(null), null);
+
+// WhatsApp thread/message addresses ("whatsapp:<digits>") resolve to wa digits.
+assert.equal(waDigitsFromWhatsAppAddress("whatsapp:905301743170"), "905301743170");
+assert.equal(waDigitsFromWhatsAppAddress("whatsapp:962798185729"), "962798185729");
+assert.equal(waDigitsFromWhatsAppAddress("lead@example.com"), null);
+assert.equal(waDigitsFromWhatsAppAddress("whatsapp:1234"), null);
+assert.equal(waDigitsFromWhatsAppAddress(null), null);
+
+// WhatsApp-born inquiries get parsedData.phone/fullName seeded from the sender…
+{
+  const seeded = seedWhatsAppLeadFields({}, { fromEmail: "whatsapp:905301743170", fromName: "Hikmet Aydın" });
+  assert.equal(seeded.phone, "+905301743170");
+  assert.equal(seeded.fullName, "Hikmet Aydın");
+}
+// …without clobbering values that are already there…
+{
+  const seeded = seedWhatsAppLeadFields(
+    { phone: "+90 532 000 00 00", fullName: "Existing Name" },
+    { fromEmail: "whatsapp:905301743170", fromName: "Hikmet Aydın" },
+  );
+  assert.equal(seeded.phone, "+90 532 000 00 00");
+  assert.equal(seeded.fullName, "Existing Name");
+}
+// …and leaving email senders untouched.
+{
+  const parsed = { subject: "x" };
+  const seeded = seedWhatsAppLeadFields(parsed, { fromEmail: "lead@example.com", fromName: "Someone" });
+  assert.deepEqual(seeded, parsed);
+}
+
+// The seeded phone round-trips into a wa.me link on the RFQ sheet draft.
+{
+  const seeded = seedWhatsAppLeadFields({}, { fromEmail: "whatsapp:905301743170", fromName: "hikmet aydın" });
+  const d = buildWhatsAppInquiry({ ...base, parsedData: JSON.stringify(seeded) });
+  assert(d.waUrl?.startsWith("https://wa.me/905301743170?text="), String(d.waUrl));
+  assert(d.text.startsWith("Hikmet Bey merhaba"), d.text);
+}
 
 console.log("rfq-whatsapp tests passed");

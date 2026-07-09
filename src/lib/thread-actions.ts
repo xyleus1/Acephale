@@ -10,6 +10,7 @@ import { createPendingBulkHideThreadsProposal } from "./agent-proposals";
 import { recordMemoryEvent } from "./memory/record-event";
 import { DERYA_RFQ_SOURCE_EMAILS, isDeryaRfqSourceSender } from "./derya-inboxes";
 import { relinkThreadTouches } from "./crm/email-touch";
+import { seedWhatsAppLeadFields } from "./rfq-whatsapp";
 
 function deryaRfqSourceSignal(messages: { direction: string; fromEmail: string }[]) {
   const hasDeryaRfqSourceSender = messages.some((m) =>
@@ -18,6 +19,26 @@ function deryaRfqSourceSignal(messages: { direction: string; fromEmail: string }
   return hasDeryaRfqSourceSender
     ? `\nSource signal: at least one inbound message came from configured Derya RFQ source address ${DERYA_RFQ_SOURCE_EMAILS.join(", ")}. Treat this as strong freight/RFQ evidence. Prefer LINK or CREATE; only SKIP if the content is obviously not a freight request.\n`
     : "";
+}
+
+// WhatsApp RFQs read differently from email ones: short Turkish messages,
+// no subject line, sender identified by phone. Tell the extractor so it stops
+// treating them like thin emails and applies the right defaults.
+function whatsAppSourceSignal(messages: { direction: string; fromEmail: string }[]) {
+  const wa = messages.find((m) => m.direction === "INBOUND" && m.fromEmail.startsWith("whatsapp:"));
+  return wa
+    ? `\nSource signal: this is a WhatsApp conversation (counterparty ${wa.fromEmail}), not email. WhatsApp inquiries are usually short Turkish messages about trucking; for Turkish domestic city-to-city loads prefer mode "ROAD", and prices mentioned in lira mean targetCurrency "TRY". Treat as strong freight/RFQ evidence: prefer LINK or CREATE; only SKIP when clearly not freight (bare greetings, spam).\n`
+    : "";
+}
+
+// Inquiries created from a WhatsApp thread get parsedData.phone/fullName from
+// the sender address, so the RFQ sheet's WhatsApp draft has a recipient.
+function seedIfWhatsApp(
+  parsed: Record<string, unknown>,
+  messages: Array<{ direction: string; fromEmail: string; fromName: string | null }>,
+): Record<string, unknown> {
+  const wa = messages.find((m) => m.direction === "INBOUND" && m.fromEmail.startsWith("whatsapp:"));
+  return wa ? seedWhatsAppLeadFields(parsed, wa) : parsed;
 }
 
 export async function createInquiryFromThread(threadId: string): Promise<{ ok: true; inquiryId: string } | { error: string }> {
@@ -38,7 +59,7 @@ export async function createInquiryFromThread(threadId: string): Promise<{ ok: t
     const dir = m.direction === "OUTBOUND" ? "[US OUT]" : "[INBOUND]";
     return `${dir} ${m.sentAt.toISOString().split("T")[0]} · ${m.fromName ?? m.fromEmail}\nSubject: ${m.subject ?? "(none)"}\n\n${m.bodyText ?? ""}`.trim();
   }).join("\n\n────\n\n");
-  const sourceSignal = deryaRfqSourceSignal(thread.messages);
+  const sourceSignal = deryaRfqSourceSignal(thread.messages) + whatsAppSourceSignal(thread.messages);
 
   const client = new Anthropic({ apiKey });
   const result = await client.messages.create({
@@ -105,7 +126,7 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
       type: parsed.type === "SOURCING" ? "SOURCING" : "FORWARDING",
       status: "PARSED",
       rawEmailBody: rawBody,
-      parsedData: JSON.stringify({ ...parsed, source: "thread", threadId }),
+      parsedData: JSON.stringify({ ...seedIfWhatsApp(parsed, thread.messages), source: "thread", threadId }),
       origin: parsed.origin ?? null,
       destination: parsed.destination ?? null,
       mode: parsed.mode ?? null,
@@ -249,7 +270,7 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
     const dir = m.direction === "OUTBOUND" ? "[US OUT]" : "[INBOUND]";
     return `${dir} ${m.sentAt.toISOString().split("T")[0]} · ${m.fromName ?? m.fromEmail}\nSubject: ${m.subject ?? "(none)"}\n\n${m.bodyText ?? ""}`.trim();
   }).join("\n\n────\n\n");
-  const sourceSignal = deryaRfqSourceSignal(thread.messages);
+  const sourceSignal = deryaRfqSourceSignal(thread.messages) + whatsAppSourceSignal(thread.messages);
 
   const client = new Anthropic({ apiKey });
   const result = await client.messages.create({
@@ -396,7 +417,7 @@ ${jobHints || "(none)"}`,
       type: parsed.type === "SOURCING" ? "SOURCING" : "FORWARDING",
       status: "PARSED",
       rawEmailBody: rawBody,
-      parsedData: JSON.stringify({ ...parsed, source: "thread-auto", threadId }),
+      parsedData: JSON.stringify({ ...seedIfWhatsApp(parsed, thread.messages), source: "thread-auto", threadId }),
       origin: parsed.origin ?? null,
       destination: parsed.destination ?? null,
       mode: parsed.mode ?? null,

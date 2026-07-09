@@ -241,7 +241,10 @@ export async function draftReplyToMessage(args: {
   messageId?: string;
   threadId?: string;
   intent?: string;  // optional operator hint: "counter at $X", "ask for sample", "accept"
-}): Promise<{ ok: true; draft: string; replyTo: string | null } | { error: string }> {
+}): Promise<
+  | { ok: true; draft: string; replyTo: string | null; channel: "email" | "whatsapp" }
+  | { error: string }
+> {
   const session = await requireSession();
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
@@ -275,18 +278,32 @@ export async function draftReplyToMessage(args: {
     ? `Linked inquiry: type=${thread.inquiry.type}, commodity=${thread.inquiry.commodity ?? "—"}, route=${thread.inquiry.origin ?? "?"}→${thread.inquiry.destination ?? "?"}, incoterms=${thread.inquiry.incoterms ?? "—"}.`
     : "Not linked to a job/inquiry yet.";
 
+  // WhatsApp threads get a WhatsApp-shaped draft: short, no subject/signature,
+  // in the conversation's language (usually Turkish for Derya's lanes).
+  const isWhatsApp =
+    Boolean(thread.externalThreadId?.startsWith("whatsapp:")) ||
+    thread.messages.some((m) => m.fromEmail.startsWith("whatsapp:"));
+
+  const emailSystem = `You draft short, professional email replies for a freight forwarding & procurement office (Derya Maritime Inc., Istanbul-based). Keep under 150 words. No emojis, no markdown headers, no preamble like "Here's the draft:" — output ONLY the email body, ready to send. Sign as the user (don't add a placeholder name — the user has their own signature). Match the tone of the most recent inbound message.`;
+  const whatsAppSystem = `You draft WhatsApp replies for a freight forwarding & procurement office (Derya Lojistik, Istanbul-based). Reply in the language of the conversation (usually Turkish). Keep it short — under 80 words, like a real WhatsApp message: no subject line, no formal letter opening, no signature block, no markdown. Warm but professional; no emojis unless the counterparty uses them. Output ONLY the message text, ready to send.`;
+
   const client = new Anthropic({ apiKey });
   const result = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 500,
-    system: `You draft short, professional email replies for a freight forwarding & procurement office (Derya Maritime Inc., Istanbul-based). Keep under 150 words. No emojis, no markdown headers, no preamble like "Here's the draft:" — output ONLY the email body, ready to send. Sign as the user (don't add a placeholder name — the user has their own signature). Match the tone of the most recent inbound message.`,
+    system: isWhatsApp ? whatsAppSystem : emailSystem,
     messages: [{
       role: "user",
-      content: `${inquiryCtx}\n\n${args.intent ? `OPERATOR INTENT FOR THIS REPLY: ${args.intent}\n\n` : ""}THREAD:\n\n${transcript}\n\n----\nDraft a reply to: ${target.fromName ?? target.fromEmail}`,
+      content: `${inquiryCtx}\n\n${args.intent ? `OPERATOR INTENT FOR THIS REPLY: ${args.intent}\n\n` : ""}${isWhatsApp ? "WHATSAPP CONVERSATION" : "THREAD"}:\n\n${transcript}\n\n----\nDraft a reply to: ${target.fromName ?? target.fromEmail}`,
     }],
   });
   const text = result.content[0].type === "text" ? result.content[0].text : "";
   if (!text.trim()) return { error: "AI returned empty draft" };
 
-  return { ok: true, draft: text.trim(), replyTo: target.fromEmail };
+  return {
+    ok: true,
+    draft: text.trim(),
+    replyTo: target.fromEmail,
+    channel: isWhatsApp ? "whatsapp" : "email",
+  };
 }

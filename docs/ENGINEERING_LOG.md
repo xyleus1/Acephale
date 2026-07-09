@@ -1758,6 +1758,29 @@ Use this file for chronological implementation notes that future agents should s
 - Files changed: src/components/rfq-expandable-rows.tsx.
 - Verification: tsc clean; next build clean.
 
+### 2026-07-07 - Trash closed status, ⌘K global search, RFQ search bar
+
+- Branch: rfq-bulk-select-status → main
+- Task: (1) Trash promoted to canonical closed RFQ status TRASH — case
+  variants alias like legacy values, CLOSED_INQUIRY_STATUSES covers
+  TRASH/Trash/trash, ?status= param canonicalized for old links; trashed rows
+  leave Open, topbar count, Send-all-to-desk, agent surfaces. (2) ⌘K palette
+  rewritten to app-wide grouped search (loads/RFQs/companies/contacts/email
+  threads) via new src/lib/global-search.ts; picks navigate (loads → detail
+  page; middleware keeps the focus-job cookie flow); src/lib/job-search.ts
+  deleted. (3) /dashboard/rfq gained server-side ?q= search composed with
+  status tabs; debounced toolbar search bar; empty state moved into RfqSheet.
+- Verification: tsc clean; next build clean; test:rfq-whatsapp/strategy/
+  email-labels/rfq-load-draft pass; adversarial review workflow (4 dimensions,
+  refute-style verify) — 11 confirmed findings fixed before commit, including
+  ContactSheet remount key for same-route ?q= picks, RfqSearchBar URL resync,
+  duplicate-?q= crash guard, pricing STATUS_META TRASH entry.
+- Failed/skipped checks: DB-backed tests skipped — no local DATABASE_URL.
+- Caveats: /dashboard/search page untouched (palette supersedes it); no
+  company/contact detail routes so picks land on the CRM sheet filter.
+- Follow-up: consider retiring /dashboard/search or upgrading it to reuse
+  globalSearch; keyboard-accessible column reorder still open.
+
 ### 2026-07-08 - Runbook for moving production Neon billing onto YC credits
 
 - Branch: neon-credits-migration

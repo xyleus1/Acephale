@@ -1097,7 +1097,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
               companies={companies}
             />
             <span className="job-command-shortcut">
-              <kbd>⌘K</kbd> switch
+              <kbd>⌘K</kbd> search
             </span>
         </div>
 

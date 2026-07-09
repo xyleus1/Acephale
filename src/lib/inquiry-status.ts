@@ -1,11 +1,12 @@
 // Shared vocabulary for RFQ (Inquiry) statuses — client + server safe, no runtime deps.
 //
-// Canonical set (mert's control-sheet lingo): BOOKED / PRICING / MISSED / RECEIVED / IGNORED.
-// Inquiry.status is a free string, so offices can also add custom statuses on the fly
-// from the RFQ sheet; those simply live as their raw value. Legacy pipeline values
-// (INGESTED/PARSED/PRICED/QUOTED/WON/LOST) are still written by older flows and old
-// rows — they alias onto the canonical set for display and filtering, so nothing
-// needs a data backfill.
+// Canonical set (mert's control-sheet lingo): BOOKED / PRICING / MISSED / RECEIVED /
+// IGNORED / TRASH. Inquiry.status is a free string, so offices can also add custom
+// statuses on the fly from the RFQ sheet; those simply live as their raw value.
+// Legacy pipeline values (INGESTED/PARSED/PRICED/QUOTED/WON/LOST) are still written
+// by older flows and old rows — they alias onto the canonical set for display and
+// filtering, so nothing needs a data backfill. TRASH started life as an ad-hoc
+// custom status typed as "Trash"; those case-variant rows alias the same way.
 
 export const INQUIRY_STATUSES = [
   ["BOOKED", "Booked"],
@@ -13,11 +14,13 @@ export const INQUIRY_STATUSES = [
   ["MISSED", "Missed ($)"],
   ["RECEIVED", "Received"],
   ["IGNORED", "Ignored"],
+  ["TRASH", "Trash"],
 ] as const;
 
 export const INQUIRY_STATUS_VALUES = INQUIRY_STATUSES.map(([value]) => value) as string[];
 
-// Legacy stored values → canonical value.
+// Legacy stored values → canonical value. Keys are exact raw values as stored;
+// custom statuses were saved case-preserved, hence the Trash case variants.
 const LEGACY_TO_CANONICAL: Record<string, string> = {
   INGESTED: "RECEIVED",
   PARSED: "RECEIVED",
@@ -25,6 +28,8 @@ const LEGACY_TO_CANONICAL: Record<string, string> = {
   QUOTED: "PRICING",
   WON: "BOOKED",
   LOST: "MISSED",
+  Trash: "TRASH",
+  trash: "TRASH",
 };
 
 export function canonicalInquiryStatus(raw: string): string {
@@ -39,12 +44,17 @@ export function inquiryStatusValuesFor(canonical: string): string[] {
   ];
 }
 
-// A closed RFQ has an outcome (booked/missed) or was deliberately archived (ignored).
-// Everything else — canonical, legacy or custom — counts as open.
+// A closed RFQ has an outcome (booked/missed) or was deliberately archived
+// (ignored/trashed). Everything else — canonical, legacy or custom — counts as
+// open. This is a raw-stored-value list for Prisma notIn (case-sensitive), so
+// the Trash case variants that predate TRASH going canonical are listed too.
 export const CLOSED_INQUIRY_STATUSES = [
   "BOOKED",
   "MISSED",
   "IGNORED",
+  "TRASH",
+  "Trash",
+  "trash",
   "WON",
   "LOST",
 ];
@@ -66,6 +76,7 @@ const STATUS_BADGE_CLS: Record<string, string> = {
   MISSED: "badge-danger",
   RECEIVED: "badge-info",
   IGNORED: "badge-neutral",
+  TRASH: "badge-neutral",
 };
 
 export function inquiryStatusBadgeCls(raw: string): string {

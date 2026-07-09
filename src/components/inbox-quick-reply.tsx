@@ -9,7 +9,7 @@ export function InboxQuickReply({ threadId, threadSubject }: { threadId: string;
   const [busy, start] = useTransition();
   const [intent, setIntent] = useState("");
   const [showIntent, setShowIntent] = useState(false);
-  const [draft, setDraft] = useState<{ draft: string; replyTo: string | null } | null>(null);
+  const [draft, setDraft] = useState<{ draft: string; replyTo: string | null; channel: "email" | "whatsapp" } | null>(null);
 
   function go(useIntent: boolean) {
     start(async () => {
@@ -18,7 +18,7 @@ export function InboxQuickReply({ threadId, threadSubject }: { threadId: string;
         intent: useIntent ? intent : undefined,
       });
       if ("error" in r) { alert(r.error); return; }
-      setDraft({ draft: r.draft, replyTo: r.replyTo });
+      setDraft({ draft: r.draft, replyTo: r.replyTo, channel: r.channel });
       setShowIntent(false);
       setIntent("");
     });
@@ -84,10 +84,15 @@ export function InboxQuickReply({ threadId, threadSubject }: { threadId: string;
       {draft && (
         <DraftModal
           title={`Reply draft — ${threadSubject}`}
-          subtitle={draft.replyTo ? `To: ${draft.replyTo}` : ""}
+          subtitle={
+            draft.channel === "whatsapp"
+              ? `WhatsApp to ${draft.replyTo ? `+${draft.replyTo.replace(/^whatsapp:/, "").replace(/\D/g, "")}` : "counterparty"}`
+              : draft.replyTo ? `To: ${draft.replyTo}` : ""
+          }
           draft={draft.draft}
           threadDbId={threadId}
           replyTo={draft.replyTo}
+          channel={draft.channel}
           onClose={() => setDraft(null)}
         />
       )}

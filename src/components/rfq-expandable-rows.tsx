@@ -11,6 +11,7 @@ import {
   deleteInquiryRowAction,
   sendDeskForwardAction,
   sendLeadConfirmationAction,
+  sendWhatsAppInquiryAction,
   updateInquiryRowAction,
   type InquiryRowPatch,
 } from "@/app/dashboard/rfq/actions";
@@ -29,6 +30,8 @@ export type RfqWhatsAppPreview = {
   waUrl: string | null;
   text: string;
   missing: string[];
+  sentAtLabel: string | null;
+  configured: boolean;
 };
 
 export type RfqRowData = {
@@ -171,10 +174,24 @@ function DraftsDrawer({ title, hint, badges, open, onToggle, children }: {
   );
 }
 
-function WhatsAppPreviewCard({ preview }: { preview: RfqWhatsAppPreview }) {
+function WhatsAppPreviewCard({ preview, onSend }: {
+  preview: RfqWhatsAppPreview;
+  onSend: () => Promise<{ ok: true } | { error: string }>;
+}) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [busy, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [justSent, setJustSent] = useState(false);
+
+  const sent = Boolean(preview.sentAtLabel) || justSent;
+  const sendDisabledReason = !preview.configured
+    ? "CRM WhatsApp sending is not configured (WHATSAPP_SEND_ENABLED + Cloud API credentials)."
+    : !preview.phoneDisplay
+      ? "No usable phone number on this RFQ."
+      : null;
 
   function copy() {
     navigator.clipboard.writeText(preview.text).then(
@@ -188,29 +205,68 @@ function WhatsAppPreviewCard({ preview }: { preview: RfqWhatsAppPreview }) {
     );
   }
 
+  function send() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await onSend();
+        if ("error" in res) {
+          setError(res.error);
+        } else {
+          setJustSent(true);
+          router.refresh();
+        }
+      } catch {
+        // A rejected action (network drop, server crash) leaves delivery
+        // unknown — say so instead of crashing to the error boundary.
+        setError("Send failed or was interrupted — check the WhatsApp thread before retrying.");
+      }
+    });
+  }
+
   return (
     <div className="rfq-mail-card">
       <div className="rfq-mail-card-head">
         <div>
           <div className="rfq-expand-block-title">WhatsApp inquiry</div>
-          <div className="rfq-mail-hint">Sent from your own phone — copy it, or open the chat prefilled</div>
+          <div className="rfq-mail-hint">
+            {preview.configured
+              ? "Send from the CRM number, or copy it / open the chat on your own phone"
+              : "Sent from your own phone — copy it, or open the chat prefilled"}
+          </div>
         </div>
         <div className="rfq-mail-card-actions">
+          {sent && (
+            <span className="rfq-mail-sent">
+              <Icon name="check" size={11} strokeWidth={2.5} />
+              Sent{preview.sentAtLabel ? ` ${preview.sentAtLabel}` : ""}
+            </span>
+          )}
           <button type="button" className="btn btn-secondary btn-sm" onClick={copy}>
             <Icon name={copied ? "check" : "copy"} size={12} strokeWidth={2.25} />
             {copied ? "Copied" : "Copy"}
           </button>
           {preview.waUrl ? (
-            <a className="btn btn-sm" href={preview.waUrl} target="_blank" rel="noopener noreferrer">
+            <a className="btn btn-secondary btn-sm" href={preview.waUrl} target="_blank" rel="noopener noreferrer">
               <Icon name="message-circle" size={12} strokeWidth={2.25} />
               Open WhatsApp
             </a>
           ) : (
-            <button type="button" className="btn btn-sm" disabled title="No usable phone number on this RFQ.">
+            <button type="button" className="btn btn-secondary btn-sm" disabled title="No usable phone number on this RFQ.">
               <Icon name="message-circle" size={12} strokeWidth={2.25} />
               Open WhatsApp
             </button>
           )}
+          <button
+            type="button"
+            className={`btn btn-sm${sent ? " btn-secondary" : ""}`}
+            disabled={busy || Boolean(sendDisabledReason)}
+            title={sendDisabledReason ?? undefined}
+            onClick={send}
+          >
+            <Icon name="message-circle" size={12} strokeWidth={2.25} />
+            {busy ? "Sending…" : sent ? "Send again" : "Send"}
+          </button>
         </div>
       </div>
       <div className="rfq-mail-meta">
@@ -219,6 +275,7 @@ function WhatsAppPreviewCard({ preview }: { preview: RfqWhatsAppPreview }) {
       </div>
       <pre className="rfq-mail-body">{preview.text}</pre>
       {copyError && <div className="rfq-mail-error">Could not copy — select the message text manually.</div>}
+      {error && <div className="rfq-mail-error">{error}</div>}
     </div>
   );
 }
@@ -357,7 +414,7 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
         onToggle={() => setWaOpen((v) => !v)}
       >
         <div className="rfq-mail-grid">
-          <WhatsAppPreviewCard preview={row.whatsapp} />
+          <WhatsAppPreviewCard preview={row.whatsapp} onSend={() => sendWhatsAppInquiryAction(row.id)} />
         </div>
       </DraftsDrawer>
 
@@ -592,11 +649,82 @@ function RfqBulkBar({ ids, statusOptions, onDone }: {
   );
 }
 
-export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
+// Debounced URL search: typing rewrites ?q= (keeping whatever else is in the
+// URL, like the status tab) so the server re-queries all RFQs, not just the
+// 200 rendered rows.
+function RfqSearchBar({ initialQuery }: { initialQuery: string }) {
+  const router = useRouter();
+  const [value, setValue] = useState(initialQuery);
+  const [busy, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  // The query this component last navigated to (or adopted from the URL) —
+  // guards against re-navigating when the prop changes underneath.
+  const applied = useRef(initialQuery);
+  const debounced = useDebouncedValue(value, 350);
+
+  // An external navigation (tab link, sidebar link, back button) changed the
+  // URL's q — adopt it, unless the user is mid-typing in this input.
+  useEffect(() => {
+    if (document.activeElement === inputRef.current) return;
+    applied.current = initialQuery;
+    setValue(initialQuery);
+  }, [initialQuery]);
+
+  useEffect(() => {
+    const next = debounced.trim().slice(0, 120);
+    if (next === applied.current) return;
+    applied.current = next;
+    // Read the rest of the query string at fire time — props can lag a
+    // just-clicked tab whose server render hasn't committed yet.
+    const params = new URLSearchParams(window.location.search);
+    if (next) params.set("q", next);
+    else params.delete("q");
+    const qs = params.toString();
+    startTransition(() => {
+      router.replace(`/dashboard/rfq${qs ? `?${qs}` : ""}` as "/dashboard/rfq", { scroll: false });
+    });
+  }, [debounced, router]);
+
+  return (
+    <div className={`rfq-search${busy ? " rfq-search-busy" : ""}`}>
+      <Icon name="search" size={13} strokeWidth={2} />
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") setValue(""); }}
+        placeholder="Search RFQs — subject, ref, company, lane…"
+        aria-label="Search RFQs"
+      />
+      {value && (
+        <button
+          type="button"
+          className="rfq-search-clear"
+          aria-label="Clear search"
+          onClick={() => setValue("")}
+        >
+          <Icon name="x" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function useDebouncedValue<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery }: {
   rows: RfqRowData[];
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
   userId: string;
+  searchQuery: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -750,7 +878,8 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
           onDone={() => setSelected(new Set())}
         />
       )}
-      <div className="table-toolbar">
+      <div className="table-toolbar rfq-sheet-toolbar">
+        <RfqSearchBar initialQuery={searchQuery} />
         <div ref={pickerRef} className="table-picker">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickerOpen((o) => !o)}>
             <Icon name="grid" size={12} />
@@ -784,6 +913,22 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
           )}
         </div>
       </div>
+      {rows.length === 0 ? (
+        <div className="card empty-state-card">
+          <Icon name={searchQuery ? "search" : "inbox"} size={36} className="empty-state-graphic" />
+          <div className="empty-state-title">No RFQs match</div>
+          <p className="empty-state-copy">
+            {searchQuery
+              ? `Nothing in this view matches “${searchQuery}”. Try another term, or clear the search.`
+              : "RFQs arrive from linked email threads or manual entry. Try another status filter, or add one manually."}
+          </p>
+          {!searchQuery && (
+            <Link href="/dashboard/rfq/new" className="btn">
+              New RFQ
+            </Link>
+          )}
+        </div>
+      ) : (
       <div className="card table-shell">
         <table className="data-table sheet-table rfq-sheet" style={tableWidth != null ? { width: tableWidth, minWidth: tableWidth } : undefined}>
           <colgroup>
@@ -875,6 +1020,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId }: {
           </tbody>
         </table>
       </div>
+      )}
     </>
   );
 }
