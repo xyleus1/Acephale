@@ -21,6 +21,10 @@ assert.equal(phoneMatchesWaDigits("0532 111 22 34", "905321112233"), false, "dif
 assert.equal(phoneMatchesWaDigits("+962 79 818 5729", "905321112233"), false);
 assert.equal(phoneMatchesWaDigits(null, "905321112233"), false);
 assert.equal(phoneMatchesWaDigits("0532 111 22 33", "12345"), false, "short digits never match");
+// Full international numbers must match exactly — no suffix shortcut that
+// could cross country codes or swallow extension junk.
+assert.equal(phoneMatchesWaDigits("+44 532 111 22 33", "905321112233"), false, "same national suffix, different country");
+assert.equal(phoneMatchesWaDigits("+90 532 111 22 33 dahili 99", "905321112233"), false, "extension digits break the number");
 
 // Counterparty selection passes WhatsApp addresses through and still
 // excludes the office's own channel account.

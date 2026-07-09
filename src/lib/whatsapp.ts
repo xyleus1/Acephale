@@ -480,10 +480,14 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
     }
   }
 
-  await prisma.emailAccount.updateMany({
-    where: { officeId, provider: "WHATSAPP" },
-    data: { lastSyncAt: new Date() },
-  });
+  // Only actual inbound messages count as channel activity — status/receipt
+  // webhooks must not refresh the "last inbound" stamp.
+  if (processed > 0) {
+    await prisma.emailAccount.updateMany({
+      where: { officeId, provider: "WHATSAPP" },
+      data: { lastSyncAt: new Date() },
+    });
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/inbox");

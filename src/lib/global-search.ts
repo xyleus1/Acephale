@@ -196,6 +196,7 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
       ? prisma.contact.findMany({
           where: { company: companyScope, phone: { not: null } },
           select: { id: true, fullName: true, email: true, phone: true, company: { select: { name: true } } },
+          orderBy: { createdAt: "asc" },
           take: 500,
         })
       : Promise.resolve([]),

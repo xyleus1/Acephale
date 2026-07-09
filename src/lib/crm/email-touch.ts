@@ -113,14 +113,18 @@ export function normalizeWhatsAppCounterparty(raw: string | null | undefined): s
 }
 
 // Does a free-text CRM phone ("0532 111 22 33", "+90 532…") denote the same
-// number as WhatsApp counterparty digits? Exact match after normalization,
-// with a last-10-digit fallback for differing country-code assumptions.
+// number as WhatsApp counterparty digits? Exact match after normalization; a
+// suffix fallback exists ONLY for bare national formats (10 digits, or 11
+// with a leading 0) whose country code the operator omitted. Full-length
+// international numbers must match exactly — a loose last-10 suffix on those
+// could attribute a sender to a different country's contact.
 export function phoneMatchesWaDigits(contactPhone: string | null | undefined, waDigits: string): boolean {
   if (!contactPhone || waDigits.length < 10) return false;
   const normalized = waPhoneDigits(contactPhone);
   if (normalized && normalized === waDigits) return true;
   const rawDigits = contactPhone.replace(/\D/g, "");
-  return rawDigits.length >= 10 && waDigits.endsWith(rawDigits.slice(-10));
+  const national = rawDigits.length === 11 && rawDigits.startsWith("0") ? rawDigits.slice(1) : rawDigits;
+  return national.length === 10 && waDigits.endsWith(national);
 }
 
 // The addresses on the other side of a message. INBOUND → the sender;
@@ -191,6 +195,7 @@ export async function resolveEmailCounterparty(
     const contacts = await prisma.contact.findMany({
       where: { phone: { not: null }, company: { officeId } },
       select: { id: true, companyId: true, phone: true },
+      orderBy: { createdAt: "asc" },
       take: 2000,
     });
     for (const digits of waDigits) {
@@ -293,6 +298,7 @@ async function logEmailTouchWithContext(
             const contacts = await prisma.contact.findMany({
               where: { companyId, phone: { not: null } },
               select: { id: true, phone: true },
+              orderBy: { createdAt: "asc" },
               take: 200,
             });
             const match = contacts.find((c) => phoneMatchesWaDigits(c.phone, digits));

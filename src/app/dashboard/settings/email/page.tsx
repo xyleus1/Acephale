@@ -79,7 +79,9 @@ export default async function EmailSettingsPage({
     ? [
         ["GREEN_API_ID_INSTANCE", !!process.env.GREEN_API_ID_INSTANCE],
         ["GREEN_API_TOKEN", !!process.env.GREEN_API_TOKEN],
-        ["GREEN_API_BASE_URL", !!process.env.GREEN_API_BASE_URL],
+        // GREEN_API_BASE_URL is optional (defaults to api.green-api.com) —
+        // only worth surfacing when it's actually set.
+        ...(process.env.GREEN_API_BASE_URL ? [["GREEN_API_BASE_URL", true] as [string, boolean]] : []),
         ["GREEN_API_WEBHOOK_TOKEN", !!process.env.GREEN_API_WEBHOOK_TOKEN],
         ["WHATSAPP_PHONE_NUMBER_ID", !!process.env.WHATSAPP_PHONE_NUMBER_ID],
         ["WHATSAPP_SEND_ENABLED", process.env.WHATSAPP_SEND_ENABLED === "true"],

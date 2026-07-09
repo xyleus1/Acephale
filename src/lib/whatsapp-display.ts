@@ -50,10 +50,14 @@ export function displayParty(fromEmail: string | null | undefined, fromName?: st
 }
 
 // Label for the receiving WhatsApp account ("whatsapp:<phoneNumberId>").
-// Green API instance ids aren't dialable numbers, so prefer a plain label
-// over pretending it's a phone.
+// Meta phone_number_ids and some Green API instance ids are opaque tokens,
+// not dialable numbers — never render those as a fake phone. MSISDNs are at
+// most 15 digits but opaque ids typically run longer or fail formatting;
+// anything beyond 13 digits is treated as opaque here.
 export function whatsAppAccountLabel(accountEmail: string | null | undefined): string {
   if (!isWhatsAppAddress(accountEmail)) return accountEmail ?? "";
-  const formatted = formatPhoneDigits(whatsAppAddressDigits(accountEmail));
+  const digits = whatsAppAddressDigits(accountEmail);
+  if (!digits || digits.length > 13) return "WhatsApp Business";
+  const formatted = formatPhoneDigits(digits);
   return formatted ? `WhatsApp · ${formatted}` : "WhatsApp Business";
 }

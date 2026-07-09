@@ -9,7 +9,14 @@ export const maxDuration = 30;
 // Live WhatsApp channel health for the settings page's "Check status" button:
 // provider, gateway instance state (Green API), and the last inbound stamp.
 export async function GET() {
-  const session = await requireSession();
+  // requireSession redirects on missing auth, which breaks the JSON contract
+  // for fetch() callers — surface a clean 401 instead.
+  let session;
+  try {
+    session = await requireSession();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const provider = whatsAppProvider();
 
   const account = await prisma.emailAccount.findFirst({

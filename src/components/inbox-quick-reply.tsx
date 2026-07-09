@@ -7,11 +7,13 @@ import { draftReplyToMessage } from "@/lib/sourcing-award";
 import { sendWhatsAppReplyToThread } from "@/lib/whatsapp-reply";
 import { DraftModal } from "@/components/draft-modal";
 
-export function InboxQuickReply({ threadId, threadSubject, channel = "email" }: {
+export function InboxQuickReply({ threadId, threadSubject, channel = "email", composerEnabled = true }: {
   threadId: string;
   threadSubject: string;
   /** "whatsapp" adds a plain-text quick composer next to the AI reply. */
   channel?: "email" | "whatsapp";
+  /** Hide the composer when CRM WhatsApp sending isn't configured. */
+  composerEnabled?: boolean;
 }) {
   const router = useRouter();
   const [busy, start] = useTransition();
@@ -56,7 +58,7 @@ export function InboxQuickReply({ threadId, threadSubject, channel = "email" }: 
   return (
     <>
       <div className="inbox-action-group" onClick={(e) => e.stopPropagation()}>
-        {channel === "whatsapp" && !showIntent && (
+        {channel === "whatsapp" && composerEnabled && !showIntent && (
           <span className="wa-composer wa-composer-inline" style={{ display: "inline-flex" }}>
             <input
               type="text"

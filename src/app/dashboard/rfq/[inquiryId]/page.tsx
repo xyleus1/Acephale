@@ -157,10 +157,12 @@ export default async function RFQDetailPage({
   ];
   const domesticPricing = assessDomesticTruckingPricing(inquiry);
   const source = deriveInquirySource(inquiry);
-  const isWaSource = source.kind === "whatsapp";
   const waThreads = inquiry.emailThreads.filter((t) =>
     t.messages.some((m) => m.account?.provider === "WHATSAPP"),
   );
+  // deriveInquirySource samples the first thread, whose DB order is
+  // unspecified — any attached WhatsApp thread makes this a WhatsApp deal.
+  const isWaSource = source.kind === "whatsapp" || waThreads.length > 0;
   const mailThreads = inquiry.emailThreads.filter((t) => !waThreads.includes(t));
   let parsedJson: Record<string, unknown> = {};
   if (inquiry.parsedData) {
@@ -267,8 +269,9 @@ export default async function RFQDetailPage({
         {/* Left: email body + parsed fields */}
         <div className="record-side-stack">
 
-          {/* Raw source message(s) — a WhatsApp transcript is not an email */}
-          {inquiry.rawEmailBody && (
+          {/* Raw source message(s) — a WhatsApp transcript is not an email.
+              Hidden when the live conversation renders below (same content). */}
+          {inquiry.rawEmailBody && !(isWaSource && waThreads.length > 0) && (
             <div className="record-panel">
               <div className="record-card-header">
                 <div className="record-card-title">

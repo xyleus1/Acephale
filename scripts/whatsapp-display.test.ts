@@ -39,5 +39,7 @@ assert.equal(displayParty(null), "");
 assert.equal(whatsAppAccountLabel("whatsapp:905301743170"), "WhatsApp · +90 530 174 31 70");
 assert.equal(whatsAppAccountLabel("mert@usederya.com"), "mert@usederya.com");
 assert.equal(whatsAppAccountLabel("whatsapp:71"), "WhatsApp Business");
+// Meta phone_number_ids are opaque tokens — never a fake formatted phone.
+assert.equal(whatsAppAccountLabel("whatsapp:106540352242922"), "WhatsApp Business");
 
 console.log("whatsapp-display tests passed");

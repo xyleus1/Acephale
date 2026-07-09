@@ -37,7 +37,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         messages: { some: { account: { isActive: true, provider: "WHATSAPP" } } },
       },
       select: { messages: { orderBy: { sentAt: "desc" }, take: 1, select: { direction: true } } },
-      take: 100,
+      // Newest-first + same cap as the inbox's own Awaiting-reply heuristic,
+      // so the chip and the click-through count agree.
+      orderBy: { lastMessageAt: "desc" },
+      take: 500,
     }),
   ]);
   const waAwaitingReply = waCandidateThreads.filter((t) => t.messages[0]?.direction === "INBOUND").length;

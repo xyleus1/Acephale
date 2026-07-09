@@ -18,6 +18,7 @@ import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/l
 import { inquiryStatusBadgeCls, inquiryStatusLabel, openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
 import { displayParty, whatsAppAccountLabel } from "@/lib/whatsapp-display";
+import { whatsAppSendConfigured } from "@/lib/whatsapp";
 
 const FILTERS = [
   { key: "",                  label: "Active"          },  // default — excludes hidden + snoozed
@@ -218,6 +219,7 @@ export default async function InboxPage({
       take: 500,
     }),
   ]);
+  const waComposerEnabled = whatsAppSendConfigured();
   const approvedContactEmails = [...new Set(approvedContacts
     .map((c) => c.email?.trim().toLowerCase())
     .filter((email): email is string => !!email))];
@@ -959,7 +961,7 @@ export default async function InboxPage({
                         </div>
                       </div>
                       <div className="inbox-row-actions">
-                        <InboxQuickReply threadId={t.id} threadSubject={t.subject} channel={source.cls === "whatsapp" ? "whatsapp" : "email"} />
+                        <InboxQuickReply threadId={t.id} threadSubject={t.subject} channel={source.cls === "whatsapp" ? "whatsapp" : "email"} composerEnabled={waComposerEnabled} />
                         <SnoozeThreadButton threadId={t.id} snoozedUntil={t.snoozedUntil ? t.snoozedUntil.toISOString() : null} />
                         <HideThreadButton threadId={t.id} hidden={!!t.hiddenAt} />
                       </div>
@@ -985,7 +987,10 @@ export default async function InboxPage({
             const priority = threadCriticality(t);
             const source = threadSourceMeta(t.messages);
             const threadChannel = source.cls === "whatsapp" ? ("whatsapp" as const) : ("email" as const);
-            const hasUnread = t.messages.some((m) => m.direction === "INBOUND" && !m.isRead);
+            // Unread is WhatsApp-only: isRead was never written for historical
+            // Gmail messages and email reply paths don't clear it, so an
+            // unscoped dot would flood every email thread on rollout.
+            const hasUnread = threadChannel === "whatsapp" && t.messages.some((m) => m.direction === "INBOUND" && !m.isRead);
             const inboundCount = t.messages.filter((m) => m.direction === "INBOUND").length;
             const outboundCount = t.messages.length - inboundCount;
             const lastReason = [...t.messages].reverse().find((m) => m.classificationReason)?.classificationReason;
@@ -1049,7 +1054,7 @@ export default async function InboxPage({
                       )}
                     </div>
                     <div className="inbox-row-actions">
-                      <InboxQuickReply threadId={t.id} threadSubject={t.subject} channel={threadChannel} />
+                      <InboxQuickReply threadId={t.id} threadSubject={t.subject} channel={threadChannel} composerEnabled={waComposerEnabled} />
                       {!linked && (
                         <CreateInquiryButton threadId={t.id} />
                       )}

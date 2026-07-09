@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { displayParty, isWhatsAppAddress } from "@/lib/whatsapp-display";
@@ -79,7 +79,6 @@ export function ThreadAccordion({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [expandedBodies, setExpandedBodies] = useState<Set<string>>(new Set());
-  const markedRead = useRef(false);
 
   function toggleBody(id: string) {
     setExpandedBodies((prev) => {
@@ -92,10 +91,11 @@ export function ThreadAccordion({
   function toggleOpen() {
     const next = !open;
     setOpen(next);
-    // Opening the conversation clears the unread dot — once per mount,
-    // best-effort (a failure just leaves the dot until next visit).
-    if (next && hasUnread && !markedRead.current) {
-      markedRead.current = true;
+    // Opening the conversation clears the unread dot. Gated on the server-fed
+    // hasUnread prop (refresh flips it off), so a thread that goes unread
+    // again while mounted clears correctly on the next open; the action is
+    // idempotent, so a rare double-fire is harmless.
+    if (next && hasUnread) {
       markThreadReadAction(threadId)
         .then(() => router.refresh())
         .catch(() => null);
