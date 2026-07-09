@@ -1757,3 +1757,76 @@ Use this file for chronological implementation notes that future agents should s
   snapshot time.
 - Files changed: src/components/rfq-expandable-rows.tsx.
 - Verification: tsc clean; next build clean.
+
+### 2026-07-08 - Runbook for moving production Neon billing onto YC credits
+
+- Branch: neon-credits-migration
+- Task: $100k Neon YC credits were granted into a new Neon organization,
+  separate from the org holding the live production project. Documented how
+  to move production billing onto the credits.
+- Docs-only change: added `docs/RUNBOOKS/NEON_CREDITS_MIGRATION.md`.
+- Confirmed state (console screenshots): credits are in Neon org `Derya`
+  (Launch plan, empty). Production is project `neon-champagne-cable`
+  (AWS US East 1, ~191 MB, 4 branches, no project integrations) in org
+  `Vercel: mert's projects` — Vercel-managed, Free plan. Neon's self-serve
+  transfer does not support Vercel-managed orgs, so the zero-downtime
+  console transfer is expected to be blocked.
+- Urgency: the console warns the project is over 80% of the monthly
+  Free-plan compute limit, with database downtime at 100%; July burn rate
+  points at suspension before month end. Cutover promoted to primary path.
+- Runbook paths, in order: 30-second check for a Transfer button anyway;
+  full `pg_dump`/`pg_restore` into a new same-region project in `Derya`
+  plus Vercel env-var swap and redeploy in a short quiet window (primary);
+  Neon support ticket in parallel; emergency paid upgrade of the old org
+  as a stopgap. Decommissioning the old Vercel Marketplace resource is
+  gated behind a >= 1 week rollback window because deleting the resource
+  deletes the database.
+- EXECUTED 2026-07-08 ~11:40-11:50 Europe/Istanbul, driven by agent via Neon
+  API + Vercel CLI (user authed `vercel login`/`link` locally):
+  - Console/API transfer confirmed hard-blocked: API returned
+    `action restricted; reason:"organization is managed by Vercel"`.
+  - Live production located: project `hidden-heart-85646173`, branch
+    `preview-company-brain` (`br-ancient-leaf-amr0er44`), database
+    `derya_preview_staging` (NOT the `production-company-brain` name the
+    cutover runbook planned; `main`/`neondb` are stale/empty pre-cutover).
+  - New project `derya-production` (`broad-cloud-67682012`) created in org
+    `Derya` (`org-broad-boat-22503588`): PG17, aws-us-east-1, autoscaling
+    0.25-2 CU, suspend disabled, 7-day history retention, database
+    `derya_production`.
+  - Fresh `pg_dump -Fc` at 11:41:57 restored by 11:44:01; all 49 tables
+    identical row counts, all 11 migrations applied and in sync with
+    `prisma/migrations`.
+  - Vercel env vars `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` and
+    `DIRECT_URL` (direct) replaced for Production and Preview via CLI;
+    production redeployed and aliased to `www.derya.ai` (Ready in 2m).
+  - Verification: `/login` 200, `/dashboard` 307, unauth cron 401; new Neon
+    endpoint went active at the exact second of the health request (app is
+    on the new DB). `/api/health` returns `ok:false` on BOTH old and new
+    databases for the same pre-existing reason: 1 FAILED
+    `ANALYZE_JOB_DOCUMENT` job (3/3 attempts, `NEXT_REDIRECT`) and 4 stale
+    RUNNING background jobs — copied state, not a migration regression.
+  - Writes to the old DB between 11:41:57 and go-live (~11:50) were not
+    carried over (announced; quiet window).
+- Independent verification (~09:50-10:00Z, 5 read-only verifier agents +
+  critic): all hourly crons (09:00 gmail, 09:05 background, 09:25 sheets)
+  wrote to the NEW db and nothing to the old; a 20-request health burst
+  moved the new db's commit counter +167 while the old stayed flat; the
+  serving deployment was built 08:46:18Z, 30-50s after the env vars were
+  set; 49-table parity holds (33 equal, 14 grew live on new). Exactly 2
+  orphaned rows exist only on the old db from the dump-to-flip gap
+  (AgentProposal cmrbtz0cr..., Event cmrbtz3ub..., both ~08:43Z) — decide
+  before decommission. Old-endpoint wake at 09:23-09:56Z was attributed to
+  the verification's own psql traffic plus one transient write-free
+  connection burst; old db data-frozen throughout. Neon console usage tiles
+  read 0 because billing counters aggregate with lag (cpu_used_sec=0 in API
+  while compute demonstrably ran 2.4h) — recheck within 24h, escalate to
+  Neon if still 0. Legacy integration vars (POSTGRES_*, PGHOST,
+  NEON_PROJECT_ID) still point at the old project in all Vercel scopes:
+  unused by code, clean up at decommission. Pre-08:46Z Vercel deployments
+  (prod and preview URLs) still carry the old DATABASE_URL baked in.
+- Follow-ups: old project untouched as rollback — decommission the Vercel
+  Marketplace Neon resource no earlier than 2026-07-15 after a clean week
+  (that deletion destroys the old database); clean up the 5 stuck
+  BackgroundJob rows so health returns ok=true; rotate the two Neon API
+  keys pasted into chat during the migration; Neon startup credits expire
+  ~2027-07 — see runbook section G for deliberate spend-down.
