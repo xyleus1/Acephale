@@ -9,6 +9,8 @@
 // Never call it from client components.
 
 import { prisma } from "@/lib/prisma";
+import { waPhoneDigits } from "@/lib/rfq-whatsapp";
+import { whatsAppPartyLabel } from "@/lib/whatsapp-display";
 
 // Personal/free mailbox providers — a shared domain never identifies a
 // company, so domain-based resolution must skip these.
@@ -54,7 +56,7 @@ export type EmailTouchDirection = "INBOUND" | "OUTBOUND";
 export type CounterpartyResolution = {
   companyId: string;
   contactId: string | null;
-  method: "contact_email" | "inquiry_link" | "job_link" | "company_domain";
+  method: "contact_email" | "contact_phone" | "inquiry_link" | "job_link" | "company_domain";
 };
 
 export type LogEmailTouchInput = {
@@ -102,9 +104,29 @@ export function isFreemailDomain(domain: string): boolean {
   return FREEMAIL_DOMAINS.has(domain.trim().toLowerCase());
 }
 
-// The emails on the other side of a message. INBOUND → the sender; OUTBOUND →
-// the recipients. Our own inbox addresses are excluded in both directions so
-// self/internal mail never counts as a relationship touch.
+// "whatsapp:905321112233" (any formatting noise stripped) or null.
+export function normalizeWhatsAppCounterparty(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim().toLowerCase() ?? "";
+  if (!trimmed.startsWith("whatsapp:")) return null;
+  const digits = trimmed.slice("whatsapp:".length).replace(/\D/g, "");
+  return digits.length >= 8 ? `whatsapp:${digits}` : null;
+}
+
+// Does a free-text CRM phone ("0532 111 22 33", "+90 532…") denote the same
+// number as WhatsApp counterparty digits? Exact match after normalization,
+// with a last-10-digit fallback for differing country-code assumptions.
+export function phoneMatchesWaDigits(contactPhone: string | null | undefined, waDigits: string): boolean {
+  if (!contactPhone || waDigits.length < 10) return false;
+  const normalized = waPhoneDigits(contactPhone);
+  if (normalized && normalized === waDigits) return true;
+  const rawDigits = contactPhone.replace(/\D/g, "");
+  return rawDigits.length >= 10 && waDigits.endsWith(rawDigits.slice(-10));
+}
+
+// The addresses on the other side of a message. INBOUND → the sender;
+// OUTBOUND → the recipients. Our own inbox/channel addresses are excluded in
+// both directions so self/internal mail never counts as a relationship touch.
+// WhatsApp counterparties come through as "whatsapp:<digits>" entries.
 export function selectCounterpartyEmails(input: {
   direction: EmailTouchDirection;
   fromEmail: string;
@@ -117,6 +139,11 @@ export function selectCounterpartyEmails(input: {
   const rawEntries = input.direction === "INBOUND" ? [input.fromEmail] : input.toEmails;
   const out: string[] = [];
   for (const entry of rawEntries) {
+    const wa = normalizeWhatsAppCounterparty(entry);
+    if (wa) {
+      if (!own.has(wa) && !out.includes(wa)) out.push(wa);
+      continue;
+    }
     for (const email of extractEmailAddresses(entry ?? "")) {
       if (own.has(email)) continue;
       if (!out.includes(email)) out.push(email);
@@ -138,19 +165,38 @@ export function parseStoredEmailList(raw: string | null | undefined): string[] {
 
 // ── Resolution ───────────────────────────────────────────────────────────────
 
-// Resolve who a set of counterparty emails belongs to inside one office.
-// Order: exact contact email → inquiry's company → job's company → company
-// domain (non-freemail only). Returns null when nothing matches.
+// Resolve who a set of counterparty addresses belongs to inside one office.
+// Order: exact contact email → contact phone (WhatsApp) → inquiry's company →
+// job's company → company domain (non-freemail only). Null when nothing matches.
 export async function resolveEmailCounterparty(
   officeId: string,
   opts: { counterpartyEmails: string[]; inquiryId?: string | null; jobId?: string | null },
 ): Promise<CounterpartyResolution | null> {
   for (const email of opts.counterpartyEmails) {
+    if (email.startsWith("whatsapp:")) continue;
     const contact = await prisma.contact.findFirst({
       where: { email: { equals: email, mode: "insensitive" }, company: { officeId } },
       select: { id: true, companyId: true },
     });
     if (contact) return { companyId: contact.companyId, contactId: contact.id, method: "contact_email" };
+  }
+
+  // WhatsApp senders resolve by phone. Contact.phone is free text in every
+  // format operators type, so match in JS over the office's contacts.
+  const waDigits = opts.counterpartyEmails
+    .filter((e) => e.startsWith("whatsapp:"))
+    .map((e) => e.slice("whatsapp:".length))
+    .filter((d) => d.length >= 10);
+  if (waDigits.length > 0) {
+    const contacts = await prisma.contact.findMany({
+      where: { phone: { not: null }, company: { officeId } },
+      select: { id: true, companyId: true, phone: true },
+      take: 2000,
+    });
+    for (const digits of waDigits) {
+      const match = contacts.find((c) => phoneMatchesWaDigits(c.phone, digits));
+      if (match) return { companyId: match.companyId, contactId: match.id, method: "contact_phone" };
+    }
   }
 
   if (opts.inquiryId) {
@@ -213,7 +259,7 @@ async function logEmailTouchWithContext(
     const existing = await prisma.activity.findFirst({
       where: {
         officeId: input.officeId,
-        type: "EMAIL",
+        type: { in: ["EMAIL", "WHATSAPP"] },
         sourceRefs: { path: ["emailMessageId"], equals: input.messageId },
       },
       select: { id: true },
@@ -241,6 +287,21 @@ async function logEmailTouchWithContext(
       // Thread already resolved — reuse, but still try to pin down the contact.
       if (!contactId) {
         for (const email of counterpartyEmails) {
+          if (email.startsWith("whatsapp:")) {
+            const digits = email.slice("whatsapp:".length);
+            if (digits.length < 10) continue;
+            const contacts = await prisma.contact.findMany({
+              where: { companyId, phone: { not: null } },
+              select: { id: true, phone: true },
+              take: 200,
+            });
+            const match = contacts.find((c) => phoneMatchesWaDigits(c.phone, digits));
+            if (match) {
+              contactId = match.id;
+              break;
+            }
+            continue;
+          }
           const contact = await prisma.contact.findFirst({
             where: { companyId, email: { equals: email, mode: "insensitive" } },
             select: { id: true },
@@ -277,16 +338,19 @@ async function logEmailTouchWithContext(
       });
     }
 
+    const isWhatsApp = counterpartyEmails.some((e) => e.startsWith("whatsapp:")) ||
+      input.fromEmail.trim().toLowerCase().startsWith("whatsapp:");
+    const channelNoun = isWhatsApp ? "WhatsApp" : "email";
     const snippet = input.snippet?.replace(/\s+/g, " ").trim() ?? "";
     const counterpartyLabel =
-      counterpartyEmails.join(", ") ||
+      counterpartyEmails.map((e) => (e.startsWith("whatsapp:") ? whatsAppPartyLabel(e) : e)).join(", ") ||
       (input.direction === "INBOUND" ? input.fromEmail : input.toEmails.join(", ")) ||
       "unknown";
     const body = snippet
       ? snippet.slice(0, ACTIVITY_BODY_MAX)
       : input.direction === "INBOUND"
-        ? `Inbound email from ${counterpartyLabel}`
-        : `Outbound email to ${counterpartyLabel}`;
+        ? `Inbound ${channelNoun} from ${counterpartyLabel}`
+        : `Outbound ${channelNoun} to ${counterpartyLabel}`;
 
     await prisma.activity.create({
       data: {
@@ -294,11 +358,11 @@ async function logEmailTouchWithContext(
         companyId,
         contactId,
         inquiryId: thread.inquiryId ?? null,
-        type: "EMAIL",
+        type: isWhatsApp ? "WHATSAPP" : "EMAIL",
         occurredAt: input.sentAt,
-        subject: input.subject?.trim() || "Email",
+        subject: input.subject?.trim() || (isWhatsApp ? "WhatsApp" : "Email"),
         body,
-        source: "gmail",
+        source: isWhatsApp ? "whatsapp" : "gmail",
         sourceRefs: {
           emailMessageId: input.messageId,
           emailThreadId: input.threadId,
@@ -331,7 +395,7 @@ async function logEmailTouchWithContext(
 
     // Strong (contact-level) match on a linked inquiry that has no company yet
     // → adopt it. Never for domain-only matches; too weak to claim an inquiry.
-    if (thread.inquiryId && method === "contact_email") {
+    if (thread.inquiryId && (method === "contact_email" || method === "contact_phone")) {
       await prisma.inquiry.updateMany({
         where: { id: thread.inquiryId, officeId: input.officeId, companyId: null },
         data: { companyId },

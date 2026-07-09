@@ -118,7 +118,7 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
   const queryDigits = q.replace(/\D/g, "");
   const digitsContains = queryDigits.length >= 7 ? { contains: queryDigits } : null;
 
-  const [jobs, inquiries, companies, contacts, threads] = await Promise.all([
+  const [jobs, inquiries, companies, contacts, threads, phoneContactCandidates] = await Promise.all([
     prisma.job.findMany({
       where: {
         officeId,
@@ -190,7 +190,21 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
       orderBy: { lastMessageAt: "desc" },
       take: 4,
     }),
+    // Contact.phone is free text in operator formats — digit-match in JS when
+    // the query looks like a phone number.
+    digitsContains
+      ? prisma.contact.findMany({
+          where: { company: companyScope, phone: { not: null } },
+          select: { id: true, fullName: true, email: true, phone: true, company: { select: { name: true } } },
+          take: 500,
+        })
+      : Promise.resolve([]),
   ]);
+
+  const phoneContacts = phoneContactCandidates
+    .filter((c) => (c.phone ?? "").replace(/\D/g, "").includes(queryDigits))
+    .filter((c) => !contacts.some((existing) => existing.id === c.id))
+    .slice(0, 4);
 
   return [
     ...jobs.map(jobResult),
@@ -212,6 +226,15 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
       ref: null,
       title: c.fullName,
       detail: c.email ?? c.company?.name ?? null,
+      status: null,
+      href: `/dashboard/crm?q=${encodeURIComponent(c.fullName)}`,
+    })),
+    ...phoneContacts.map((c) => ({
+      group: "contacts" as const,
+      id: c.id,
+      ref: null,
+      title: c.fullName,
+      detail: c.phone ?? c.company?.name ?? null,
       status: null,
       href: `/dashboard/crm?q=${encodeURIComponent(c.fullName)}`,
     })),

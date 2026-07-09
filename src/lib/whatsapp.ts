@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { whatsAppPartyLabel } from "./whatsapp-display";
+import { logEmailTouch } from "./crm/email-touch";
 import { classifyInboundEmail } from "./email-classifier";
 import { autoCreateInquiryFromThread } from "./thread-actions";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
@@ -212,7 +213,7 @@ export async function logOutboundWhatsAppMessage(args: {
     }
   }
 
-  await prisma.emailMessage.create({
+  const outboundMessage = await prisma.emailMessage.create({
     data: {
       threadId: thread.id,
       accountId: account.id,
@@ -228,6 +229,19 @@ export async function logOutboundWhatsAppMessage(args: {
   await prisma.emailThread.updateMany({
     where: { id: thread.id, officeId: args.officeId },
     data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+  });
+
+  // Outbound WhatsApp counts as a relationship touch too (never throws).
+  await logEmailTouch({
+    officeId: args.officeId,
+    threadId: thread.id,
+    messageId: outboundMessage.id,
+    direction: "OUTBOUND",
+    fromEmail: fromAddress,
+    toEmails: [toAddress],
+    subject: thread.subject,
+    snippet: args.body.slice(0, 2000),
+    sentAt: outboundMessage.sentAt,
   });
 
   return { threadId: thread.id };
@@ -416,6 +430,21 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
         await prisma.emailThread.update({
           where: { id: localThread.id },
           data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
+        });
+
+        // CRM touch: resolve the sender to a contact/company by phone and log
+        // a WHATSAPP activity, keeping "Last contacted" truthful for
+        // WhatsApp-first customers. Never blocks ingest.
+        await logEmailTouch({
+          officeId,
+          threadId: localThread.id,
+          messageId: createdMessage.id,
+          direction: "INBOUND",
+          fromEmail: senderAddress,
+          toEmails: [businessNumber],
+          subject,
+          snippet: bodyText.slice(0, 2000),
+          sentAt,
         });
 
         touchedThreadIds.add(localThread.id);
