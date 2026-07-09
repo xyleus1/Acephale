@@ -248,7 +248,10 @@ export default async function RFQPage({
       companyId: inq.company?.id ?? null,
       companyName: inq.company?.name ?? inq.fromCompany,
       sourceLabel: source.label,
-      sourceDetail: source.detail,
+      // The whatsapp detail is the receiving account address ("whatsapp:<id>")
+      // — machine noise next to a label that already says WhatsApp.
+      sourceDetail: source.kind === "whatsapp" ? null : source.detail,
+      sourceKind: source.kind,
       origin: inq.origin,
       destination: inq.destination,
       mode: inq.mode,

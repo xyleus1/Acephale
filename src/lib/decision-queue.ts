@@ -14,6 +14,7 @@ import {
 import { buildDocumentReadiness, type DocumentReadinessDoc } from "./document-readiness";
 import { getReferenceDealDecisions } from "./reference-deals";
 import { operatorMaturityLabel, operatorMetricLabel } from "./operator-action-labels";
+import { displayParty } from "./whatsapp-display";
 
 export type DecisionQueueTone = "critical" | "high" | "normal";
 
@@ -1164,7 +1165,7 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       entityType: "thread",
       entityId: thread.id,
       title: `Reply needed: ${thread.subject}`,
-      meta: `${thread.job?.reference ?? thread.inquiry?.subject ?? "Unlinked"} · latest from ${last.fromName ?? last.fromEmail}`,
+      meta: `${thread.job?.reference ?? thread.inquiry?.subject ?? "Unlinked"} · latest from ${displayParty(last.fromEmail, last.fromName)}`,
       reason: "The latest message is inbound. If this deal matters, the next move belongs to the operator.",
       actionLabel: "Open inbox",
       href: thread.job ? `/dashboard/inbox?job=${thread.job.id}` : thread.inquiry ? `/dashboard/inbox?inquiry=${thread.inquiry.id}` : "/dashboard/inbox?filter=_NEEDS_REPLY",

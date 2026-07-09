@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
+import { whatsAppPartyLabel } from "./whatsapp-display";
+import { logEmailTouch } from "./crm/email-touch";
 import { classifyInboundEmail } from "./email-classifier";
 import { autoCreateInquiryFromThread } from "./thread-actions";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
@@ -211,7 +213,7 @@ export async function logOutboundWhatsAppMessage(args: {
     }
   }
 
-  await prisma.emailMessage.create({
+  const outboundMessage = await prisma.emailMessage.create({
     data: {
       threadId: thread.id,
       accountId: account.id,
@@ -227,6 +229,19 @@ export async function logOutboundWhatsAppMessage(args: {
   await prisma.emailThread.updateMany({
     where: { id: thread.id, officeId: args.officeId },
     data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+  });
+
+  // Outbound WhatsApp counts as a relationship touch too (never throws).
+  await logEmailTouch({
+    officeId: args.officeId,
+    threadId: thread.id,
+    messageId: outboundMessage.id,
+    direction: "OUTBOUND",
+    fromEmail: fromAddress,
+    toEmails: [toAddress],
+    subject: thread.subject,
+    snippet: args.body.slice(0, 2000),
+    sentAt: outboundMessage.sentAt,
   });
 
   return { threadId: thread.id };
@@ -282,7 +297,7 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
         const contact = value.contacts?.find((c) => c.wa_id === message.from) ?? value.contacts?.[0];
         const contactName = contact?.profile?.name ?? null;
         const externalThreadId = `whatsapp:${phoneNumberId}:${message.from}`;
-        const subject = `WhatsApp · ${contactName ?? message.from}`;
+        const subject = `WhatsApp · ${whatsAppPartyLabel(senderAddress, contactName)}`;
         const bodyText = messageBody(message);
         const sentAt = sentAtFromWhatsApp(message.timestamp);
 
@@ -417,6 +432,21 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
           data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
         });
 
+        // CRM touch: resolve the sender to a contact/company by phone and log
+        // a WHATSAPP activity, keeping "Last contacted" truthful for
+        // WhatsApp-first customers. Never blocks ingest.
+        await logEmailTouch({
+          officeId,
+          threadId: localThread.id,
+          messageId: createdMessage.id,
+          direction: "INBOUND",
+          fromEmail: senderAddress,
+          toEmails: [businessNumber],
+          subject,
+          snippet: bodyText.slice(0, 2000),
+          sentAt,
+        });
+
         touchedThreadIds.add(localThread.id);
         created++;
 
@@ -450,10 +480,14 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
     }
   }
 
-  await prisma.emailAccount.updateMany({
-    where: { officeId, provider: "WHATSAPP" },
-    data: { lastSyncAt: new Date() },
-  });
+  // Only actual inbound messages count as channel activity — status/receipt
+  // webhooks must not refresh the "last inbound" stamp.
+  if (processed > 0) {
+    await prisma.emailAccount.updateMany({
+      where: { officeId, provider: "WHATSAPP" },
+      data: { lastSyncAt: new Date() },
+    });
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/inbox");

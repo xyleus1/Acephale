@@ -17,6 +17,8 @@ import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefF
 import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/lib/email-workflow-labels";
 import { inquiryStatusBadgeCls, inquiryStatusLabel, openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "./actions";
+import { displayParty, whatsAppAccountLabel } from "@/lib/whatsapp-display";
+import { whatsAppSendConfigured } from "@/lib/whatsapp";
 
 const FILTERS = [
   { key: "",                  label: "Active"          },  // default — excludes hidden + snoozed
@@ -145,7 +147,7 @@ function threadSourceMeta(messages: { account?: { provider: string; email: strin
   const badge = channelBadge(account);
   return {
     ...badge,
-    accountLabel: account?.email ?? "unknown source",
+    accountLabel: account ? whatsAppAccountLabel(account.email) : "unknown source",
   };
 }
 
@@ -155,7 +157,7 @@ function threadCriticality(thread: {
   jobId?: string | null;
   inquiryId?: string | null;
   lastMessageAt: Date;
-  messages: { direction: string; classification: string | null; sentAt: Date }[];
+  messages: { direction: string; classification: string | null; sentAt: Date; account?: { provider: string } | null }[];
 }) {
   const last = thread.messages[thread.messages.length - 1];
   const kind = dominantKind(thread.messages);
@@ -170,9 +172,13 @@ function threadCriticality(thread: {
   if (thread.hiddenAt) score -= 80;
   if (thread.snoozedUntil && thread.snoozedUntil > new Date()) score -= 60;
 
+  // Chat latency expectations differ from email: an unanswered WhatsApp goes
+  // stale in hours, not days.
+  const isWhatsAppThread = thread.messages.some((m) => m.account?.provider === "WHATSAPP");
+  const [staleSoon, staleBad] = isWhatsAppThread ? [2, 12] : [24, 72];
   const hoursOld = (Date.now() - thread.lastMessageAt.getTime()) / 3_600_000;
-  if (last?.direction === "INBOUND" && hoursOld >= 24) score += 12;
-  if (last?.direction === "INBOUND" && hoursOld >= 72) score += 10;
+  if (last?.direction === "INBOUND" && hoursOld >= staleSoon) score += 12;
+  if (last?.direction === "INBOUND" && hoursOld >= staleBad) score += 10;
 
   if (score >= 80) return { label: "Critical", cls: "critical", score };
   if (score >= 58) return { label: "High", cls: "high", score };
@@ -213,6 +219,7 @@ export default async function InboxPage({
       take: 500,
     }),
   ]);
+  const waComposerEnabled = whatsAppSendConfigured();
   const approvedContactEmails = [...new Set(approvedContacts
     .map((c) => c.email?.trim().toLowerCase())
     .filter((email): email is string => !!email))];
@@ -712,7 +719,7 @@ export default async function InboxPage({
                   <span className="today-inbox-subject">{t.subject || "(no subject)"}</span>
                   <span className="today-inbox-meta">
                     {timeAgo(t.lastMessageAt)}
-                    {last ? ` · ${last.fromName ?? last.fromEmail}` : ""}
+                    {last ? ` · ${displayParty(last.fromEmail, last.fromName)}` : ""}
                   </span>
                 </a>
               );
@@ -744,7 +751,7 @@ export default async function InboxPage({
                 className={`filter-chip source-chip ${badge.cls}${accountFilter === a.id ? " active" : ""}`}
               >
                 <span className={`inbox-channel-dot ${badge.cls}`} />
-                {a.email}
+                {whatsAppAccountLabel(a.email)}
               </a>
             );
           })}
@@ -908,7 +915,7 @@ export default async function InboxPage({
               <p className="empty-state-copy">
                 {totalSnoozed > 0 ? `${totalSnoozed} thread${totalSnoozed === 1 ? "" : "s"} snoozed. ` : ""}
                 {totalHidden > 0 ? `${totalHidden} hidden as not freight-related. ` : ""}
-                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" className="data-link">Email Settings</a> to pull fresh mail manually, or wait — the platform auto-syncs every 15 minutes.
+                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" className="data-link">Channel Settings</a> to pull fresh mail manually, or wait — mail auto-syncs every 15 minutes and WhatsApp arrives instantly.
               </p>
             </>
           )}
@@ -950,11 +957,11 @@ export default async function InboxPage({
                           <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
                           <span className={`inbox-workflow-label ${workflow.className}`}>{workflow.label}</span>
                           <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
-                          {t.messages.length} msg · {timeAgo(t.lastMessageAt)}{last ? ` · last from ${last.fromName ?? last.fromEmail}` : ""}
+                          {t.messages.length} msg · {timeAgo(t.lastMessageAt)}{last ? ` · last from ${displayParty(last.fromEmail, last.fromName)}` : ""}
                         </div>
                       </div>
                       <div className="inbox-row-actions">
-                        <InboxQuickReply threadId={t.id} threadSubject={t.subject} />
+                        <InboxQuickReply threadId={t.id} threadSubject={t.subject} channel={source.cls === "whatsapp" ? "whatsapp" : "email"} composerEnabled={waComposerEnabled} />
                         <SnoozeThreadButton threadId={t.id} snoozedUntil={t.snoozedUntil ? t.snoozedUntil.toISOString() : null} />
                         <HideThreadButton threadId={t.id} hidden={!!t.hiddenAt} />
                       </div>
@@ -979,6 +986,11 @@ export default async function InboxPage({
             const last = t.messages[t.messages.length - 1];
             const priority = threadCriticality(t);
             const source = threadSourceMeta(t.messages);
+            const threadChannel = source.cls === "whatsapp" ? ("whatsapp" as const) : ("email" as const);
+            // Unread is WhatsApp-only: isRead was never written for historical
+            // Gmail messages and email reply paths don't clear it, so an
+            // unscoped dot would flood every email thread on rollout.
+            const hasUnread = threadChannel === "whatsapp" && t.messages.some((m) => m.direction === "INBOUND" && !m.isRead);
             const inboundCount = t.messages.filter((m) => m.direction === "INBOUND").length;
             const outboundCount = t.messages.length - inboundCount;
             const lastReason = [...t.messages].reverse().find((m) => m.classificationReason)?.classificationReason;
@@ -992,7 +1004,8 @@ export default async function InboxPage({
                     <span className={`inbox-workflow-label ${workflow.className}`}>{workflow.label}</span>
                     <span className={`inbox-priority-badge ${priority.cls}`}>{priority.label}</span>
                     <span className={`inbox-source-badge ${source.cls}`} title={source.accountLabel}>{source.label}</span>
-                    <span className="inbox-thread-subject">
+                    {hasUnread && <span className="inbox-unread-dot" title="Unread messages" />}
+                    <span className={`inbox-thread-subject${hasUnread ? " inbox-thread-subject-unread" : ""}`}>
                       {t.subject || "(no subject)"}
                     </span>
                     <span className="inbox-thread-counts">
@@ -1041,7 +1054,7 @@ export default async function InboxPage({
                       )}
                     </div>
                     <div className="inbox-row-actions">
-                      <InboxQuickReply threadId={t.id} threadSubject={t.subject} />
+                      <InboxQuickReply threadId={t.id} threadSubject={t.subject} channel={threadChannel} composerEnabled={waComposerEnabled} />
                       {!linked && (
                         <CreateInquiryButton threadId={t.id} />
                       )}
@@ -1054,7 +1067,7 @@ export default async function InboxPage({
                   {last && (
                     <div className="inbox-preview">
                       <div className="inbox-preview-meta">
-                        Latest: {last.fromName ?? last.fromEmail} · {source.accountLabel} · {timeAgo(last.sentAt)}
+                        Latest: {displayParty(last.fromEmail, last.fromName)} · {source.accountLabel} · {timeAgo(last.sentAt)}
                       </div>
                       {last.bodyText && (
                         <div className="inbox-preview-body">
@@ -1071,7 +1084,7 @@ export default async function InboxPage({
                 </div>
 
                 {/* Expandable messages */}
-                <ThreadAccordion threadId={t.id} messageCount={t.messages.length} messages={t.messages.map((m) => {
+                <ThreadAccordion threadId={t.id} channel={threadChannel} hasUnread={hasUnread} messageCount={t.messages.length} messages={t.messages.map((m) => {
                   let attachments: { filename: string; mimeType: string; size: number; attachmentId: string }[] = [];
                   if (m.attachments) {
                     try { attachments = JSON.parse(m.attachments); } catch { attachments = []; }
@@ -1294,7 +1307,7 @@ function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: s
                 </td>
                 <td>
                   <div>{r.company?.name ?? r.fromCompany ?? "—"}</div>
-                  {r.fromEmail && <div className="data-subline">{r.fromEmail}</div>}
+                  {r.fromEmail && <div className="data-subline">{displayParty(r.fromEmail)}</div>}
                 </td>
                 <td>
                   {r.origin || r.destination ? (

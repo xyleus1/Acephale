@@ -13,6 +13,7 @@ import { createPendingBulkHideThreadsProposal, createPendingJobActionProposal, c
 import { qualifyRfq } from "./rfq-qualification";
 import { openInquiryStatusFilter } from "./inquiry-status";
 import { buildMissingInfoDraft } from "./missing-info-draft";
+import { displayParty } from "./whatsapp-display";
 import { parsePipeLines } from "./quote-lines";
 import { assessInquiryStrategy, assessJobStrategy, compactStrategyForAgent, loadInquiryStrategyInput, loadJobStrategyInput } from "./commercial-strategy-persistence";
 import { listDecisionQueueItems, type DecisionQueueItem } from "./decision-queue";
@@ -2294,11 +2295,21 @@ export async function dispatchTool(
               ] } } },
             ],
           },
-          select: { id: true, subject: true, messageCount: true, lastMessageAt: true, jobId: true, inquiryId: true },
+          select: {
+            id: true, subject: true, messageCount: true, lastMessageAt: true, jobId: true, inquiryId: true,
+            messages: { orderBy: { sentAt: "desc" as const }, take: 1, select: { account: { select: { provider: true } } } },
+          },
           take: Math.min(30, Number(input.limit ?? 10)),
           orderBy: { lastMessageAt: "desc" },
         });
-        return { ok: true, result: rows };
+        // channel lets the model adapt register (chat vs email) when drafting.
+        return {
+          ok: true,
+          result: rows.map(({ messages, ...t }) => ({
+            ...t,
+            channel: messages[0]?.account?.provider === "WHATSAPP" ? "whatsapp" : "email",
+          })),
+        };
       }
       case "get_customer_dossier": {
         const companyId = typeof input.company_id === "string" ? input.company_id.trim() : ctx.scopeCompanyId ?? "";
@@ -2605,7 +2616,7 @@ export async function dispatchTool(
         const cands = await prisma.emailThread.findMany({
           where: { officeId: ctx.officeId, hiddenAt: null },
           include: {
-            messages: { orderBy: { sentAt: "desc" }, take: 1 },
+            messages: { orderBy: { sentAt: "desc" }, take: 1, include: { account: { select: { provider: true } } } },
             job: { select: { reference: true } },
             inquiry: { select: { reference: true, subject: true } },
           },
@@ -2616,8 +2627,9 @@ export async function dispatchTool(
           .slice(0, Math.min(20, Number(input.limit ?? 10)))
           .map((t) => ({
             thread_id: t.id, subject: t.subject,
-            last_from: t.messages[0].fromName ?? t.messages[0].fromEmail,
+            last_from: displayParty(t.messages[0].fromEmail, t.messages[0].fromName),
             last_at: t.messages[0].sentAt,
+            channel: t.messages[0].account?.provider === "WHATSAPP" ? "whatsapp" : "email",
             linked_to: t.job?.reference ?? t.inquiry?.reference ?? t.inquiry?.subject ?? null,
           }));
         return { ok: true, result: awaiting };

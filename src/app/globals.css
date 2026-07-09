@@ -34141,3 +34141,156 @@ tr.rfq-row-selected td,
 .rfq-drafts .rfq-mail-grid {
   margin-top: 10px;
 }
+
+/* ============================================================
+   WHATSAPP CHANNEL — tokens + primitives
+   (appended last so these win over earlier per-surface greens)
+   ============================================================ */
+
+:root {
+  --whatsapp: var(--derya-green, #1f5d43);
+  --whatsapp-bg: #e7f1ea;
+  --whatsapp-border: #bdd6c6;
+  --whatsapp-soft: #f0f7f2;
+}
+
+/* Re-skin the pre-existing hardcoded greens onto the shared tokens. */
+.inbox-channel-dot.whatsapp {
+  background: var(--whatsapp-bg);
+  border-color: var(--whatsapp-border);
+  color: var(--whatsapp);
+}
+.inbox-source-badge.whatsapp {
+  background: var(--whatsapp-bg);
+  border-color: var(--whatsapp-border);
+  color: var(--whatsapp);
+}
+.activity-chip-whatsapp {
+  background: var(--whatsapp-bg);
+  color: var(--whatsapp);
+}
+
+/* Topbar "N WhatsApp awaiting reply" chip — green variant of .topbar-stat. */
+.topbar-stat.topbar-stat-wa {
+  background: var(--whatsapp-bg);
+  border-color: var(--whatsapp-border);
+  color: var(--whatsapp);
+}
+.topbar-stat.topbar-stat-wa strong { color: var(--whatsapp); }
+
+/* Unread signal on inbox thread cards. */
+.inbox-unread-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--whatsapp);
+  flex-shrink: 0;
+}
+.inbox-thread-subject-unread { font-weight: 700; }
+
+/* Chat-style conversation view (WhatsApp threads). */
+.wa-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+}
+.wa-day-sep {
+  align-self: center;
+  margin: 8px 0 4px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2, #f2f5f8);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+.wa-bubble {
+  position: relative;
+  max-width: 72%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wa-bubble.inbound {
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+.wa-bubble.outbound {
+  align-self: flex-end;
+  background: var(--whatsapp-soft);
+  border-color: var(--whatsapp-border);
+  border-bottom-right-radius: 4px;
+}
+.wa-bubble-sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--whatsapp);
+  margin-bottom: 2px;
+}
+.wa-bubble-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  float: right;
+  margin: 6px 0 0 10px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.wa-bubble-meta .wa-tick { color: var(--whatsapp); }
+.wa-media-note { font-style: italic; color: var(--text-3); }
+
+/* Composer under a WhatsApp conversation, and the inline card variant. */
+.wa-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+.wa-composer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.wa-composer-input:focus {
+  outline: none;
+  border-color: var(--whatsapp-border);
+  box-shadow: 0 0 0 3px var(--whatsapp-bg);
+}
+.wa-composer-inline {
+  border-top: none;
+  padding: 6px 0 0;
+}
+.wa-composer-inline .wa-composer-input {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+/* Settings: connected-account avatar for the WhatsApp row. */
+.wa-account-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--whatsapp-bg);
+  border: 1px solid var(--whatsapp-border);
+  color: var(--whatsapp);
+  flex-shrink: 0;
+}

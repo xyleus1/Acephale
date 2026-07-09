@@ -49,6 +49,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
     OR: [
       { fullName: { contains: query } },
       { email: { contains: query } },
+      { phone: { contains: query } },
     ],
   };
   const activityWhere = {

@@ -2,10 +2,11 @@
 
 import { requireSession } from "./auth";
 import { prisma } from "./prisma";
+import { displayParty } from "./whatsapp-display";
 
 export type LatestEvent = {
   at: string; // ISO
-  kind: "rfq" | "carrier-reply" | "milestone" | "doc" | "job";
+  kind: "rfq" | "carrier-reply" | "milestone" | "doc" | "job" | "whatsapp";
   title: string;
   sub?: string;
   href: string;
@@ -16,7 +17,7 @@ export async function getLatestEvent(): Promise<LatestEvent | null> {
   const officeId = session.officeId;
 
   // Pull a few candidates and pick the newest
-  const [inq, cq, ms, doc, job] = await Promise.all([
+  const [inq, cq, ms, doc, job, wa] = await Promise.all([
     prisma.inquiry.findFirst({
       where: { officeId },
       orderBy: { receivedAt: "desc" },
@@ -41,6 +42,14 @@ export async function getLatestEvent(): Promise<LatestEvent | null> {
       where: { officeId },
       orderBy: { createdAt: "desc" },
       select: { id: true, reference: true, createdAt: true, company: { select: { name: true } } },
+    }),
+    prisma.emailMessage.findFirst({
+      where: {
+        direction: "INBOUND",
+        account: { officeId, provider: "WHATSAPP" },
+      },
+      orderBy: { sentAt: "desc" },
+      select: { sentAt: true, fromEmail: true, fromName: true, bodyText: true },
     }),
   ]);
 
@@ -76,6 +85,13 @@ export async function getLatestEvent(): Promise<LatestEvent | null> {
     title: `New job ${job.reference}`,
     sub: job.company?.name ?? undefined,
     href: `/dashboard/jobs/${job.id}`,
+  });
+
+  if (wa) candidates.push({
+    at: wa.sentAt.toISOString(), kind: "whatsapp",
+    title: `WhatsApp from ${displayParty(wa.fromEmail, wa.fromName)}`,
+    sub: wa.bodyText ? wa.bodyText.slice(0, 90).replace(/\s+/g, " ").trim() : undefined,
+    href: "/dashboard/inbox?channel=whatsapp",
   });
 
   candidates.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());

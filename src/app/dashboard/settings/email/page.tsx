@@ -7,7 +7,10 @@ import { ResumeAccountButton } from "@/components/resume-account-button";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 import { AppearanceToggle } from "@/components/appearance-toggle";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
+import { CheckWhatsAppStatusButton } from "@/components/check-whatsapp-status-button";
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
+import { whatsAppProvider, whatsAppSendConfigured } from "@/lib/whatsapp";
+import { whatsAppAccountLabel } from "@/lib/whatsapp-display";
 
 function timeAgo(d: Date | null | undefined) {
   if (!d) return "Never";
@@ -60,8 +63,38 @@ export default async function EmailSettingsPage({
     };
   });
   const oauthConfigured = !!process.env.GOOGLE_CLIENT_ID;
-  const whatsAppConfigured = !!(process.env.WHATSAPP_VERIFY_TOKEN && process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
-  const whatsAppWebhookConfigured = !!process.env.WHATSAPP_VERIFY_TOKEN;
+  // WhatsApp health is provider-aware: Green API mode has its own credentials
+  // and webhook path; the Meta env vars only matter in meta mode.
+  const waProvider = whatsAppProvider();
+  const waSendReady = whatsAppSendConfigured();
+  const waInboundReady = waProvider === "greenapi"
+    ? !!(process.env.GREEN_API_ID_INSTANCE && process.env.GREEN_API_TOKEN && process.env.GREEN_API_WEBHOOK_TOKEN)
+    : !!(process.env.WHATSAPP_VERIFY_TOKEN && process.env.WHATSAPP_APP_SECRET);
+  const whatsAppConfigured = waSendReady && waInboundReady;
+  const whatsAppWebhookConfigured = waInboundReady;
+  const waProviderLabel = waProvider === "greenapi" ? "Green API" : "Meta Cloud API";
+  const waCallbackPath = waProvider === "greenapi" ? "/api/webhooks/whatsapp/greenapi" : "/api/webhooks/whatsapp";
+  const waAccount = accounts.find((a) => a.provider === "WHATSAPP") ?? null;
+  const waEnvRows: Array<[string, boolean]> = waProvider === "greenapi"
+    ? [
+        ["GREEN_API_ID_INSTANCE", !!process.env.GREEN_API_ID_INSTANCE],
+        ["GREEN_API_TOKEN", !!process.env.GREEN_API_TOKEN],
+        // GREEN_API_BASE_URL is optional (defaults to api.green-api.com) —
+        // only worth surfacing when it's actually set.
+        ...(process.env.GREEN_API_BASE_URL ? [["GREEN_API_BASE_URL", true] as [string, boolean]] : []),
+        ["GREEN_API_WEBHOOK_TOKEN", !!process.env.GREEN_API_WEBHOOK_TOKEN],
+        ["WHATSAPP_PHONE_NUMBER_ID", !!process.env.WHATSAPP_PHONE_NUMBER_ID],
+        ["WHATSAPP_SEND_ENABLED", process.env.WHATSAPP_SEND_ENABLED === "true"],
+        ["WHATSAPP_AUTO_READ_ENABLED", process.env.WHATSAPP_AUTO_READ_ENABLED === "true"],
+      ]
+    : [
+        ["WHATSAPP_VERIFY_TOKEN", !!process.env.WHATSAPP_VERIFY_TOKEN],
+        ["WHATSAPP_APP_SECRET", !!process.env.WHATSAPP_APP_SECRET],
+        ["WHATSAPP_ACCESS_TOKEN", !!process.env.WHATSAPP_ACCESS_TOKEN],
+        ["WHATSAPP_PHONE_NUMBER_ID", !!process.env.WHATSAPP_PHONE_NUMBER_ID],
+        ["WHATSAPP_SEND_ENABLED", process.env.WHATSAPP_SEND_ENABLED === "true"],
+        ["WHATSAPP_AUTO_READ_ENABLED", process.env.WHATSAPP_AUTO_READ_ENABLED === "true"],
+      ];
   const sheetId = process.env.DERYA_GOOGLE_SHEET_ID ?? "1CFmfSdFJKOCThss5xzglHb5GihPRlK3pRxLCmpuFUHg";
   const sheetsAuthConfigured = !!process.env.GOOGLE_SHEETS_API_KEY || !!(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
   const documentStorageDriver = (process.env.DOCUMENT_STORAGE_DRIVER ?? "local").toLowerCase();
@@ -95,8 +128,10 @@ export default async function EmailSettingsPage({
       label: "WhatsApp",
       status: whatsAppConfigured ? "ready" : whatsAppWebhookConfigured ? "setup required" : "blocked",
       detail: whatsAppConfigured
-        ? "Webhook and outbound Cloud API credentials are configured."
-        : "Meta verify token, app secret, access token, phone number ID, and public callback URL are still required.",
+        ? `Inbound webhook and outbound sending are configured through ${waProviderLabel}.`
+        : waProvider === "greenapi"
+          ? "Green API instance credentials, webhook token, and WHATSAPP_SEND_ENABLED are required."
+          : "Meta verify token, app secret, access token, phone number ID, and public callback URL are still required.",
     },
     {
       label: "Document storage",
@@ -111,7 +146,8 @@ export default async function EmailSettingsPage({
   // the DB alone, so show a soft prompt for any account whose lastSyncAt
   // predates the scope rollout.
   const SCOPE_ROLLOUT = new Date("2026-05-02T22:00:00Z");
-  const needsReauth = active.filter((a) => !a.lastSyncAt || new Date(a.lastSyncAt) < SCOPE_ROLLOUT);
+  // Gmail-scope prompt only — a quiet WhatsApp line is not a reauth problem.
+  const needsReauth = active.filter((a) => a.provider !== "WHATSAPP" && (!a.lastSyncAt || new Date(a.lastSyncAt) < SCOPE_ROLLOUT));
 
   return (
     <div style={{ maxWidth: 760 }}>
@@ -242,7 +278,13 @@ export default async function EmailSettingsPage({
 
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body">
-          <div className="section-title" style={{ marginBottom: 12 }}>WhatsApp Cloud API</div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div className="section-title" style={{ marginBottom: 0 }}>WhatsApp</div>
+              <span className="badge badge-info">Provider: {waProviderLabel}</span>
+            </div>
+            <CheckWhatsAppStatusButton />
+          </div>
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{
               padding: "12px 14px",
@@ -254,19 +296,18 @@ export default async function EmailSettingsPage({
               lineHeight: 1.5,
             }}>
               <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
-                Status: {whatsAppConfigured ? "ready for inbound and outbound messages" : whatsAppWebhookConfigured ? "webhook can verify; outbound credentials missing" : "not configured"}
+                Status: {whatsAppConfigured
+                  ? `ready for inbound and outbound messages${waAccount?.lastSyncAt ? ` · last inbound ${timeAgo(waAccount.lastSyncAt)}` : " · no inbound yet"}`
+                  : whatsAppWebhookConfigured ? "inbound webhook ready; outbound sending not enabled" : "not configured"}
               </div>
               <div>
-                Callback path: <code>/api/webhooks/whatsapp</code>. Meta will verify this path with <code>hub.challenge</code>, then POST inbound messages into the same inbox/RFQ workflow as email.
+                Callback path: <code>{waCallbackPath}</code>. {waProvider === "greenapi"
+                  ? "Green API POSTs inbound messages into the same inbox/RFQ workflow as email — no Meta app review required."
+                  : <>Meta will verify this path with <code>hub.challenge</code>, then POST inbound messages into the same inbox/RFQ workflow as email.</>}
               </div>
             </div>
             <div className="settings-env-grid">
-              {[
-                ["WHATSAPP_VERIFY_TOKEN", !!process.env.WHATSAPP_VERIFY_TOKEN],
-                ["WHATSAPP_APP_SECRET", !!process.env.WHATSAPP_APP_SECRET],
-                ["WHATSAPP_ACCESS_TOKEN", !!process.env.WHATSAPP_ACCESS_TOKEN],
-                ["WHATSAPP_PHONE_NUMBER_ID", !!process.env.WHATSAPP_PHONE_NUMBER_ID],
-              ].map(([key, present]) => (
+              {waEnvRows.map(([key, present]) => (
                 <div key={String(key)} className="settings-env-row" style={{
                   padding: "9px 10px",
                   border: "1px solid var(--border)",
@@ -404,18 +445,26 @@ export default async function EmailSettingsPage({
             <div key={account.id} style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 8,
-                    background: "var(--surface-3)", border: "1px solid var(--border)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 12, fontWeight: 700, color: "var(--text-2)",
-                  }}>
-                    {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : account.provider === "WHATSAPP" ? "W" : "M"}
-                  </div>
+                  {account.provider === "WHATSAPP" ? (
+                    <div className="wa-account-avatar">
+                      <Icon name="whatsapp" size={16} strokeWidth={1.9} />
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 8,
+                      background: "var(--surface-3)", border: "1px solid var(--border)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12, fontWeight: 700, color: "var(--text-2)",
+                    }}>
+                      {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
+                    </div>
+                  )}
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{account.email}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{whatsAppAccountLabel(account.email)}</div>
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      {account.provider} · {countByAccount[account.id] ?? 0} message{(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} synced · last sync {timeAgo(account.lastSyncAt)}
+                      {account.provider === "WHATSAPP"
+                        ? `${waProviderLabel} · ${countByAccount[account.id] ?? 0} message${(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} · last inbound ${timeAgo(account.lastSyncAt)}`
+                        : `${account.provider} · ${countByAccount[account.id] ?? 0} message${(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} synced · last sync ${timeAgo(account.lastSyncAt)}`}
                     </div>
                   </div>
                 </div>
@@ -449,16 +498,22 @@ export default async function EmailSettingsPage({
             <div key={account.id} style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", opacity: 0.75 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 8,
-                    background: "var(--surface-3)", border: "1px solid var(--border)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 12, fontWeight: 700, color: "var(--text-2)",
-                  }}>
-                    {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : account.provider === "WHATSAPP" ? "W" : "M"}
-                  </div>
+                  {account.provider === "WHATSAPP" ? (
+                    <div className="wa-account-avatar">
+                      <Icon name="whatsapp" size={16} strokeWidth={1.9} />
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 8,
+                      background: "var(--surface-3)", border: "1px solid var(--border)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12, fontWeight: 700, color: "var(--text-2)",
+                    }}>
+                      {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
+                    </div>
+                  )}
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{account.email}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{whatsAppAccountLabel(account.email)}</div>
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>
                       {account.provider} · {countByAccount[account.id] ?? 0} message{(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} kept · last sync {timeAgo(account.lastSyncAt)}
                     </div>

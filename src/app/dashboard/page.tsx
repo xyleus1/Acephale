@@ -27,6 +27,7 @@ import { operatorToolLabel } from "@/lib/operator-action-labels";
 import { buildRouteViewport, routeZoomPanels } from "@/lib/route-map-viewport";
 import { flagEmoji, modeSummary, routeLegPoints, routeMapPoint, transitSummary } from "@/lib/workbench-route-map";
 import { parseQuoteLines } from "@/lib/quote-lines";
+import { displayParty, isWhatsAppAddress } from "@/lib/whatsapp-display";
 import { createRfqFromReferenceDeal } from "./reference-deal-actions";
 import { Fragment } from "react";
 import {
@@ -528,12 +529,13 @@ function LoadPlaybookPanel({
   statusLabel: string;
 }) {
   const customerLabel = customerName ?? "Unassigned customer";
-  const sourceLabel = inquiryFrom ?? "inbound RFQ source";
+  const isWaSource = isWhatsAppAddress(inquiryFrom);
+  const sourceLabel = inquiryFrom ? displayParty(inquiryFrom) : "inbound RFQ source";
   const steps = [
     {
       label: "Inbox capture",
-      title: `${reference} comes in from ${sourceLabel}`,
-      detail: `${modeLabel} on ${routeLabel}; operator starts from the email, not from spreadsheet cleanup.`,
+      title: `${reference} comes in from ${sourceLabel}${isWaSource ? " on WhatsApp" : ""}`,
+      detail: `${modeLabel} on ${routeLabel}; operator starts from the ${isWaSource ? "conversation" : "email"}, not from spreadsheet cleanup.`,
     },
     {
       label: "Agent qualification",
@@ -741,7 +743,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
       at: new Date(job.inquiry.receivedAt).toISOString(),
       iconName: "inbox", who: "auto",
       title: "RFQ captured from inbox",
-      sub: `"${job.inquiry.subject}" — ${job.inquiry.fromEmail ?? job.inquiry.fromCompany ?? "Unknown sender"}`,
+      sub: `"${job.inquiry.subject}" — ${displayParty(job.inquiry.fromEmail) || job.inquiry.fromCompany || "Unknown sender"}`,
     });
     if (job.inquiry.parsedData) {
       feed.push({
@@ -806,14 +808,17 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
   }
   for (const thread of job.emailThreads) {
     for (const msg of thread.messages) {
+      const isWa = isWhatsAppAddress(msg.fromEmail);
       feed.push({
         kind: "event",
         id: `em-${msg.id}`,
         at: new Date(msg.sentAt).toISOString(),
-        iconName: msg.direction === "INBOUND" ? "mail-in" : "mail-out",
+        iconName: isWa ? "whatsapp" : msg.direction === "INBOUND" ? "mail-in" : "mail-out",
         who: msg.direction === "INBOUND" ? "auto" : "manual",
-        title: msg.direction === "INBOUND" ? "Inbound email" : "Outbound email",
-        sub: msg.fromEmail ?? thread.subject,
+        title: msg.direction === "INBOUND"
+          ? (isWa ? "Inbound WhatsApp" : "Inbound email")
+          : (isWa ? "Outbound WhatsApp" : "Outbound email"),
+        sub: isWa ? displayParty(msg.fromEmail, msg.fromName) : (msg.fromEmail ?? thread.subject),
       });
     }
   }
@@ -850,8 +855,13 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
     })),
   }));
 
-  const defaultEmailRecipient = job.inquiry?.fromEmail
-    ? { email: job.inquiry.fromEmail, label: job.company?.name ?? "Customer" }
+  // A WhatsApp-born inquiry stores "whatsapp:<digits>" in fromEmail — that
+  // must never be prefilled into an email To field.
+  const inquiryEmailRecipient = job.inquiry?.fromEmail && job.inquiry.fromEmail.includes("@")
+    ? job.inquiry.fromEmail
+    : null;
+  const defaultEmailRecipient = inquiryEmailRecipient
+    ? { email: inquiryEmailRecipient, label: job.company?.name ?? "Customer" }
     : (job.company ? { email: "", label: job.company.name } : null);
 
   const companies = await prisma.company.findMany({
