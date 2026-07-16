@@ -359,7 +359,7 @@ export async function selectCarrierBidAction(bidId: string): Promise<BidActionRe
       data: { status: "RECEIVED" },
     });
   }
-  await prisma.carrierBid.update({ where: { id: bid.id }, data: { status: "SELECTED" } });
+  await prisma.carrierBid.update({ where: { id: bid.id, officeId: session.officeId }, data: { status: "SELECTED" } });
 
   if (bid.jobId && bid.totalAmount != null) {
     await prisma.job.updateMany({
@@ -376,8 +376,8 @@ export async function selectCarrierBidAction(bidId: string): Promise<BidActionRe
     await Promise.allSettled(
       pending.map((quote) => {
         const economics = quoteEconomics({ buyAmount: bid.totalAmount, sellAmount: quote.sellAmount, miles: quote.miles });
-        return prisma.truckloadQuote.update({
-          where: { id: quote.id },
+        return prisma.truckloadQuote.updateMany({
+          where: { id: quote.id, officeId: session.officeId },
           data: {
             buyAmount: bid.totalAmount,
             buySource: "carrier_bid",
@@ -391,7 +391,7 @@ export async function selectCarrierBidAction(bidId: string): Promise<BidActionRe
     );
   }
 
-  const fresh = await prisma.carrierBid.findFirst({ where: { id: bid.id }, select: BID_SELECT });
+  const fresh = await prisma.carrierBid.findFirst({ where: { id: bid.id, officeId: session.officeId }, select: BID_SELECT });
   if (!fresh) return { error: "Bid not found." };
   if (bid.inquiryId) revalidatePath(`/dashboard/rfq/${bid.inquiryId}`);
   if (bid.jobId) revalidatePath(`/dashboard/jobs/${bid.jobId}`);

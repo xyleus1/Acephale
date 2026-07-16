@@ -647,3 +647,87 @@ Use this log for durable product and engineering decisions. Do not put every imp
   the pentest sandbox needs login again (add it via LOGIN_ALLOWED_EMAILS —
   note its .invalid domain cannot receive codes, so it would need the
   password fallback).
+
+### 2026-07-16 - Carrier bench is a first-class operational entity
+
+- Status: accepted
+- Owner: engineering
+- Context: The CA tech-freight niche (high-value, security-sensitive loads
+  for hardware companies) is the US wedge, and its core moat asset is a
+  hand-vetted carrier bench. Carriers were previously only representable as
+  `Forwarder` rows (intl supplier email directory) or CRM Companies —
+  neither carries MC/DOT, insurance limits, equipment capability, or fraud
+  checks.
+- Decision: New `Carrier` + `CarrierChecklistItem` models
+  (migration `20260716000100_carrier_bench`) hold the vetted bench:
+  deceptive-pickup defenses (verified callback phone, expected email domain,
+  factoring, authority age), insurance limits/expiries with `nextReviewAt`,
+  capability flags, and reserved scorecard columns. `vettingStatus` can only
+  reach `approved` through the deterministic `carrierVettingGate()` over the
+  checklist (`src/lib/carrier-vetting.ts`); the COI check requires
+  producer-direct verification, never a carrier-supplied attachment.
+  Carriers are separate from `Forwarder` and from CRM Companies (optional
+  `companyId` link, never auto-created). UI at `/dashboard/carriers`.
+- Rationale: In a deceptive-pickup fraud wave, the vetting process is the
+  product; encoding it as data + a gate makes it consistent and auditable.
+- Consequences: Scorecards are manual columns until the flywheel computes
+  them from load history. FMCSA/RMIS API verification stays manual-with-
+  evidence-URL in V1.
+- Revisit when: bid volume justifies Highway/RMIS-style API vetting, or
+  carriers need portal access.
+
+### 2026-07-16 - Truckload quotes, bids, and outcomes persist (the flywheel)
+
+- Status: accepted
+- Owner: engineering
+- Context: The 2026-06-30 "draft-only mock/manual pricing" decision and the
+  2026-07-01 "RFQ Brain Context is read-only" no-persistence clause predate
+  the niche strategy, whose data moat requires every quote, buy rate, and
+  win/loss to accrue.
+- Decision: New `CarrierBid` (buy side, per-load $) and `TruckloadQuote`
+  (sell side + outcome, normalized lane states, economics, quote-speed
+  stamps) persist office-scoped (migration `20260716000300_truckload_quotes`).
+  RFQ status changes settle outcomes (BOOKED=>WON, MISSED=>LOST) as
+  best-effort hooks that never block sheet edits. Buy rates also accrue
+  `LaneRate` history under domestic mode strings (FTL/LTL/PARTIAL/DRAYAGE),
+  deliberately distinct from intl `ROAD` so intl lane matching never
+  cross-contaminates. `CarrierQuote` stays ocean-shaped for the intl stack;
+  the dormant `Quote` model stays untouched. This partially supersedes the
+  two decisions above: persistence exists now, but live rate providers,
+  booking/tender, and customer sends remain out — those still require the
+  env-gated provider adapter + `DomesticRateAudit` slice.
+- Rationale: A niche this narrow makes small data dense — 6-12 months of
+  outcomes on CA tech corridors out-prices anyone without the book.
+- Consequences: Quote rows are versions (one per Record press); outcome
+  reasons are operator-set on lost quotes. Reports/lane-index aggregation is
+  a later slice.
+- Revisit when: DAT RateView (or equivalent) credentials land — add the
+  provider adapter behind `DomesticRateProvider` with audit persistence.
+
+### 2026-07-16 - Security tiers + SOP checklists gate high-value tech loads
+
+- Status: accepted
+- Owner: engineering
+- Context: CA is the national cargo-theft epicenter and electronics the top
+  target; the niche sells security as the wedge. Loads had no notion of
+  declared value, security handling, or first-class truck equipment.
+- Decision: `Inquiry`+`Job` carry declaredValue(+currency), securityTier,
+  commodityCategory (tech taxonomy incl. UN3480/3481 batteries),
+  trackingType, equipmentType, teamDriversRequired (migration
+  `20260716000200_high_value_security_fields`). `deriveSecurityTier()`
+  (value ladder x category floor, deterministic) writes a visible,
+  overridable suggestion — operator choice always wins. Tiered loads seed
+  `LoadSecurityCheck` rows from `securityChecklistTemplate(tier)`
+  (anti-deceptive-pickup playbook; standard tier seeds nothing). The
+  domestic pricing engine prefers first-class equipment over
+  containerType/parsedData guesses and returns `needs_human_review` for
+  high_value/critical tiers — they never auto-rate. Prior-load carry
+  includes equipment/tier but never declaredValue (same principle as target
+  price).
+- Rationale: SOP-as-checklist makes small-team execution consistent and is
+  the artifact a customer-facing security one-pager renders from later.
+- Consequences: The portal rendering, rate-con clauses, and COI-per-load
+  artifacts are Phase 2. Checklist rows are never auto-deleted on tier
+  downgrade — completed checks stay part of the record.
+- Revisit when: the portal one-pager ships or an insurer requires a
+  different checklist shape.
