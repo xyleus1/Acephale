@@ -17,6 +17,8 @@ import { DocumentViewer } from "@/components/document-viewer";
 import { DocumentReadinessBoard } from "@/components/document-readiness-board";
 import { SubmitButton } from "@/components/submit-button";
 import { JobNote } from "@/components/job-note";
+import { LoadSecurityCard } from "@/components/load-security-card";
+import { LOAD_SECURITY_CHECKLIST } from "@/lib/security-sop";
 import { CustomerQuoteDraftButton } from "@/components/customer-quote-draft-button";
 import { CommercialDecisionCockpit } from "@/components/commercial-decision-cockpit";
 import { AgentAuditRerunButton } from "@/components/agent-audit-rerun-button";
@@ -100,6 +102,9 @@ function asRecord(value: unknown): Record<string, unknown> {
 function asRecordList(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.map(asRecord).filter((item) => Object.keys(item).length > 0) : [];
 }
+
+// Security checks render in SOP template order (unknown keys sink last).
+const SECURITY_CHECK_ORDER = new Map(LOAD_SECURITY_CHECKLIST.map((item, index) => [item.key, index]));
 
 const DRAFT_EVENT_TYPES = [
   "missing_info_draft.created",
@@ -432,6 +437,7 @@ export default async function JobDetailPage({
       inquiry: { include: { carrierQuotes: { orderBy: { createdAt: "asc" } } } },
       documents: { orderBy: { createdAt: "asc" } },
       milestones: { orderBy: { createdAt: "asc" } },
+      securityChecks: { orderBy: { createdAt: "asc" } },
       parent:   { select: { id: true, reference: true, type: true } },
       children: { select: { id: true, reference: true, type: true, status: true } },
       targetPriceHistory: { orderBy: { createdAt: "desc" }, take: 8 },
@@ -872,6 +878,26 @@ export default async function JobDetailPage({
               </div>
             </div>
           )}
+
+          {/* Security SOP — rendered for tiered loads (or when checks exist) */}
+          <LoadSecurityCard
+            securityTier={job.securityTier}
+            declaredValue={job.declaredValue}
+            declaredValueCurrency={job.declaredValueCurrency}
+            initialChecks={[...job.securityChecks]
+              .sort(
+                (a, b) =>
+                  (SECURITY_CHECK_ORDER.get(a.key) ?? 99) - (SECURITY_CHECK_ORDER.get(b.key) ?? 99)
+              )
+              .map((check) => ({
+                id: check.id,
+                key: check.key,
+                label: check.label,
+                status: check.status,
+                note: check.note,
+                completedAt: check.completedAt ? check.completedAt.toISOString() : null,
+              }))}
+          />
 
           {/* Personal note */}
           <div className="card">

@@ -110,6 +110,7 @@ model Office {
   forwarderDrafts      ForwarderRequestDraft[]
   carriers             Carrier[]
   carrierChecklist     CarrierChecklistItem[]
+  loadSecurityChecks   LoadSecurityCheck[]
   strategyAssessments  StrategyAssessment[]
   routeOptions         RouteOption[]
   priceRecommendations PriceRecommendation[]
@@ -919,6 +920,14 @@ model Inquiry {
   targetPriceStatus String? // UNKNOWN / PROVIDED / NO_TARGET
   targetPriceSource String?
   cargoReadyDate    DateTime?
+  // High-value tech-freight fields (vocab in src/lib/security-sop.ts)
+  declaredValue         Float?
+  declaredValueCurrency String?
+  securityTier          String? // standard / elevated / high_value / critical
+  commodityCategory     String? // tech commodity taxonomy, e.g. servers_gpu
+  trackingType          String? // none / phone_check / eld_app / gps_device / escort
+  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … — first-class truck equipment
+  teamDriversRequired   String? // YES / NO / UNKNOWN
   type              String    @default("FORWARDING") // FORWARDING (move customer's cargo) | SOURCING (find + buy a commodity for customer)
   status            String    @default("INGESTED") // INGESTED / PARSED / PRICED / QUOTED / WON / LOST
   rawEmailBody      String?
@@ -1040,6 +1049,30 @@ model ForwarderRequestDraft {
 
   @@index([officeId, inquiryId, status])
   @@index([officeId, forwarderId])
+}
+
+// Per-load security SOP checklist, seeded from the load's securityTier
+// (template + tier logic in src/lib/security-sop.ts). The checklist is the
+// operator-facing half of the trust artifact; a customer-safe rendering
+// lands on the portal later.
+model LoadSecurityCheck {
+  id                String    @id @default(cuid())
+  officeId          String
+  jobId             String
+  key               String // securityChecklistTemplate key
+  label             String
+  status            String    @default("pending") // pending / done / na / flagged
+  note              String?
+  completedByUserId String?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, key])
+  @@index([officeId, jobId, status])
 }
 
 // The vetted trucking-carrier bench for US domestic (CA tech-freight niche).
@@ -1209,6 +1242,14 @@ model Job {
   targetPriceStatus String? // UNKNOWN / PROVIDED / NO_TARGET
   targetPriceSource String?
   quoteLines        String? // pipe-delimited quote line items (desc|amount|currency per line)
+  // High-value tech-freight fields (vocab in src/lib/security-sop.ts)
+  declaredValue         Float?
+  declaredValueCurrency String?
+  securityTier          String? // standard / elevated / high_value / critical
+  commodityCategory     String? // tech commodity taxonomy, e.g. servers_gpu
+  trackingType          String? // none / phone_check / eld_app / gps_device / escort
+  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … — first-class truck equipment
+  teamDriversRequired   String? // YES / NO / UNKNOWN
 
   etd DateTime?
   eta DateTime?
@@ -1236,6 +1277,7 @@ model Job {
   targetPriceHistory  TargetPriceHistory[]
   agentProposals      AgentProposal[]
   strategyAssessments StrategyAssessment[]
+  securityChecks      LoadSecurityCheck[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, createdAt])

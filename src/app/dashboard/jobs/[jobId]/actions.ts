@@ -18,6 +18,8 @@ import { simulatePricingScenario } from "@/lib/pricing-scenario";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { draftFreshnessKey } from "@/lib/draft-freshness";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
+import { ensureLoadSecurityChecklist } from "@/lib/load-security";
+import { LOAD_SECURITY_CHECK_STATUS_VALUES, deriveSecurityTier } from "@/lib/security-sop";
 
 async function recordJobDraftEvent(args: {
   officeId: string;
@@ -195,6 +197,26 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
       containerCount: isFcl ? num("containerCount") : null,
       containerType: isFcl ? (get("containerType") || null) : null,
       packages: num("packages") as number | null,
+      // Security spine — has() guards so partial forms posting to this action
+      // never blank fields they don't render.
+      ...(formData.has("equipmentType") ? { equipmentType: get("equipmentType").trim().toUpperCase() || null } : {}),
+      ...(formData.has("commodityCategory") ? { commodityCategory: get("commodityCategory") || null } : {}),
+      ...(formData.has("declaredValue")
+        ? {
+            declaredValue: num("declaredValue"),
+            declaredValueCurrency: num("declaredValue") != null ? get("declaredValueCurrency") || "USD" : null,
+          }
+        : {}),
+      ...(formData.has("securityTier")
+        ? {
+            securityTier:
+              get("securityTier")
+              || deriveSecurityTier({ declaredValue: num("declaredValue"), commodityCategory: get("commodityCategory") || null })
+              || null,
+          }
+        : {}),
+      ...(formData.has("trackingType") ? { trackingType: get("trackingType") || null } : {}),
+      ...(formData.has("teamDriversRequired") ? { teamDriversRequired: get("teamDriversRequired") || "UNKNOWN" } : {}),
       targetPrice: num("targetPrice"),
       targetCurrency: get("targetCurrency") || get("currency") || "USD",
       targetPriceStatus: num("targetPrice") != null ? "PROVIDED" : (get("targetPriceStatus") || "UNKNOWN"),
@@ -211,6 +233,11 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
     where: { id: jobId, officeId: session.officeId },
     data,
   });
+  // Seed the SOP checklist for tiered loads — additive, never destructive.
+  const nextSecurityTier = "securityTier" in data ? (data.securityTier as string | null) : null;
+  if (nextSecurityTier) {
+    await ensureLoadSecurityChecklist(session.officeId, jobId, nextSecurityTier).catch(() => null);
+  }
   if (targetPriceChanged(existing, data)) {
     await recordTargetPriceHistory({
       officeId: session.officeId,
@@ -227,6 +254,43 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath(`/dashboard/jobs/${jobId}`);
   revalidatePath("/dashboard/jobs");
+}
+
+// Per-load security SOP checklist updates (rows seeded from the tier).
+export async function updateLoadSecurityCheckAction(
+  checkId: string,
+  patch: { status?: string; note?: string },
+): Promise<{ ok: true; status: string; note: string | null; completedAt: string | null } | { error: string }> {
+  const session = await requireSession();
+
+  const data: Partial<{ status: string; note: string | null; completedAt: Date | null; completedByUserId: string | null }> = {};
+  if (patch.status !== undefined) {
+    const status = patch.status.trim();
+    if (!LOAD_SECURITY_CHECK_STATUS_VALUES.includes(status as never)) return { error: "Unknown check status." };
+    data.status = status;
+    data.completedAt = status === "pending" ? null : new Date();
+    data.completedByUserId = status === "pending" ? null : session.userId;
+  }
+  if (patch.note !== undefined) data.note = patch.note.trim() || null;
+
+  const updated = await prisma.loadSecurityCheck.updateMany({
+    where: { id: checkId, officeId: session.officeId },
+    data,
+  });
+  if (updated.count === 0) return { error: "Security check not found." };
+
+  const item = await prisma.loadSecurityCheck.findFirst({
+    where: { id: checkId, officeId: session.officeId },
+    select: { jobId: true, status: true, note: true, completedAt: true },
+  });
+  if (!item) return { error: "Security check not found." };
+  revalidatePath(`/dashboard/jobs/${item.jobId}`);
+  return {
+    ok: true,
+    status: item.status,
+    note: item.note,
+    completedAt: item.completedAt ? item.completedAt.toISOString() : null,
+  };
 }
 
 // Update just the personal note. Migrates any legacy pipe-delimited quote

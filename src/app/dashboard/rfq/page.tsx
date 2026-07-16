@@ -258,6 +258,8 @@ export default async function RFQPage({
       // Canonicalized so legacy rows (INGESTED, WON, …) read and edit as
       // their canonical status; a re-pick writes the canonical value.
       status: canonicalInquiryStatus(inq.status),
+      securityTier: inq.securityTier,
+      declaredValueInput: inq.declaredValue != null ? String(inq.declaredValue) : "",
       target,
       targetInput: inq.targetPrice != null
         ? `${inq.targetCurrency ?? "USD"} ${inq.targetPrice}`

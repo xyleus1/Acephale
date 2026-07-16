@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { updateJobAllFields, updateJobStatus } from "@/app/dashboard/jobs/[jobId]/actions";
 import { CargoFields } from "./cargo-fields";
 import { cleanNotes } from "@/lib/quote-lines";
+import { COMMODITY_CATEGORIES, SECURITY_TIERS, TRACKING_TYPES } from "@/lib/security-sop";
+import { CARRIER_EQUIPMENT_TYPES } from "@/lib/carrier-vetting";
 import { Icon } from "@/components/icon";
 
 type JobShape = {
@@ -31,6 +33,13 @@ type JobShape = {
   customsBy: string | null;
   containerCount: number | null;
   containerType: string | null;
+  equipmentType: string | null;
+  commodityCategory: string | null;
+  declaredValue: number | null;
+  declaredValueCurrency: string | null;
+  securityTier: string | null;
+  trackingType: string | null;
+  teamDriversRequired: string | null;
   etd: Date | null;
   eta: Date | null;
   revenue: number | null;
@@ -269,6 +278,68 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   <span>Packages</span>
                   <input name="packages" type="number" defaultValue={job.packages ?? ""} />
                 </label>
+              </div>
+
+              <div className="edit-panel-section">
+                <div className="edit-panel-section-title">Security & equipment</div>
+                <div className="form-grid-2">
+                  <label className="field">
+                    <span>Equipment</span>
+                    <select name="equipmentType" defaultValue={job.equipmentType ?? ""}>
+                      <option value="">—</option>
+                      {CARRIER_EQUIPMENT_TYPES.map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Commodity category</span>
+                    <select name="commodityCategory" defaultValue={job.commodityCategory ?? ""}>
+                      <option value="">—</option>
+                      {COMMODITY_CATEGORIES.map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="form-grid-2 form-row-gap">
+                  <label className="field">
+                    <span>Declared value</span>
+                    <input name="declaredValue" type="number" step="any" defaultValue={job.declaredValue ?? ""} placeholder="Cargo value" />
+                  </label>
+                  <label className="field">
+                    <span>Security tier</span>
+                    <select name="securityTier" defaultValue={job.securityTier ?? ""}>
+                      <option value="">Auto (from value + commodity)</option>
+                      {SECURITY_TIERS.map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="form-grid-2 form-row-gap">
+                  <label className="field">
+                    <span>Tracking</span>
+                    <select name="trackingType" defaultValue={job.trackingType ?? ""}>
+                      <option value="">—</option>
+                      {TRACKING_TYPES.map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Team drivers</span>
+                    <select name="teamDriversRequired" defaultValue={job.teamDriversRequired ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Unknown</option>
+                      <option value="YES">Required</option>
+                      <option value="NO">Not required</option>
+                    </select>
+                  </label>
+                </div>
+                <input type="hidden" name="declaredValueCurrency" value={job.declaredValueCurrency ?? "USD"} />
+                <p className="edit-panel-help">
+                  Setting a tier seeds the security SOP checklist on this load.
+                </p>
               </div>
 
               <div className="edit-panel-section">

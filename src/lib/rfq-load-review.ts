@@ -8,6 +8,8 @@ import { resolveCompanyIdByName } from "./company-resolve";
 import { qualifyRfq } from "./rfq-qualification";
 import { recordTargetPriceHistory } from "./target-price-history";
 import { recordMemoryEvent } from "./memory/record-event";
+import { ensureLoadSecurityChecklist } from "./load-security";
+import { deriveSecurityTier } from "./security-sop";
 import {
   RFQ_LOAD_FIELD_LABELS,
   type RfqLoadDraftRecord,
@@ -101,6 +103,13 @@ function inquiryRecord(inquiry: any): RfqLoadDraftRecord {
     topLoad: inquiry.topLoad,
     dangerousGoods: inquiry.dangerousGoods,
     customsBy: inquiry.customsBy,
+    equipmentType: inquiry.equipmentType,
+    commodityCategory: inquiry.commodityCategory,
+    declaredValue: inquiry.declaredValue,
+    declaredValueCurrency: inquiry.declaredValueCurrency,
+    securityTier: inquiry.securityTier,
+    trackingType: inquiry.trackingType,
+    teamDriversRequired: inquiry.teamDriversRequired,
     targetPrice: inquiry.targetPrice,
     targetCurrency: inquiry.targetCurrency,
     targetPriceStatus: inquiry.targetPriceStatus,
@@ -136,6 +145,13 @@ function jobRecord(job: any): RfqLoadDraftRecord {
     topLoad: job.topLoad,
     dangerousGoods: job.dangerousGoods,
     customsBy: job.customsBy,
+    equipmentType: job.equipmentType,
+    commodityCategory: job.commodityCategory,
+    declaredValue: job.declaredValue,
+    declaredValueCurrency: job.declaredValueCurrency,
+    securityTier: job.securityTier,
+    trackingType: job.trackingType,
+    teamDriversRequired: job.teamDriversRequired,
     targetPrice: job.targetPrice,
     targetCurrency: job.targetCurrency,
     targetPriceStatus: job.targetPriceStatus,
@@ -161,6 +177,12 @@ function normalizeReviewValues(input: RfqLoadReviewInput): RfqLoadReviewValues {
   const mode = text(input.mode);
   const isFcl = mode === "SEA-FCL";
   const targetPrice = num(input.targetPrice);
+  const declaredValue = num(input.declaredValue);
+  const commodityCategory = text(input.commodityCategory);
+  // Operator choice wins; otherwise write the deterministic suggestion so the
+  // tier (and its SOP checklist) is never silently absent on a valuable load.
+  const securityTier =
+    text(input.securityTier) || (deriveSecurityTier({ declaredValue, commodityCategory }) ?? "");
   return {
     companyId: nullableText(input.companyId),
     companyName: text(input.companyName),
@@ -184,6 +206,13 @@ function normalizeReviewValues(input: RfqLoadReviewInput): RfqLoadReviewValues {
     topLoad: isFcl ? "" : (text(input.topLoad) || "UNKNOWN"),
     dangerousGoods: text(input.dangerousGoods) || "UNKNOWN",
     customsBy: text(input.customsBy) || "UNKNOWN",
+    equipmentType: text(input.equipmentType).toUpperCase(),
+    commodityCategory,
+    declaredValue,
+    declaredValueCurrency: text(input.declaredValueCurrency).toUpperCase() || "USD",
+    securityTier,
+    trackingType: text(input.trackingType),
+    teamDriversRequired: text(input.teamDriversRequired).toUpperCase() || "UNKNOWN",
     targetPrice,
     targetCurrency: text(input.targetCurrency) || text(input.currency) || "USD",
     targetPriceStatus: targetPrice != null ? "PROVIDED" : (text(input.targetPriceStatus) || "UNKNOWN"),
@@ -404,6 +433,13 @@ export async function createLoadFromRfqReview(
       topLoad: values.topLoad || null,
       dangerousGoods: values.dangerousGoods || "UNKNOWN",
       customsBy: values.customsBy || "UNKNOWN",
+      equipmentType: values.equipmentType || null,
+      commodityCategory: values.commodityCategory || null,
+      declaredValue: values.declaredValue,
+      declaredValueCurrency: values.declaredValue != null ? values.declaredValueCurrency || "USD" : null,
+      securityTier: values.securityTier || null,
+      trackingType: values.trackingType || null,
+      teamDriversRequired: values.teamDriversRequired || "UNKNOWN",
       targetPrice: values.targetPrice,
       targetCurrency: values.targetCurrency || "USD",
       targetPriceStatus: values.targetPriceStatus || "UNKNOWN",
@@ -414,6 +450,9 @@ export async function createLoadFromRfqReview(
     },
     select: { id: true, reference: true, updatedAt: true },
   });
+
+  // Seed the SOP checklist for tiered loads — additive, never destructive.
+  await ensureLoadSecurityChecklist(session.officeId, updatedJob.id, values.securityTier).catch(() => null);
 
   const updatedInquiry = await prisma.inquiry.update({
     where: { id: inquiryId, officeId: session.officeId },
@@ -435,6 +474,13 @@ export async function createLoadFromRfqReview(
       topLoad: values.topLoad || null,
       dangerousGoods: values.dangerousGoods || "UNKNOWN",
       customsBy: values.customsBy || "UNKNOWN",
+      equipmentType: values.equipmentType || null,
+      commodityCategory: values.commodityCategory || null,
+      declaredValue: values.declaredValue,
+      declaredValueCurrency: values.declaredValue != null ? values.declaredValueCurrency || "USD" : null,
+      securityTier: values.securityTier || null,
+      trackingType: values.trackingType || null,
+      teamDriversRequired: values.teamDriversRequired || "UNKNOWN",
       targetPrice: values.targetPrice,
       targetCurrency: values.targetCurrency || "USD",
       targetPriceStatus: values.targetPriceStatus || "UNKNOWN",

@@ -20,6 +20,13 @@ export const RFQ_LOAD_FIELD_LABELS = {
   topLoad: "Top load",
   dangerousGoods: "Dangerous goods",
   customsBy: "Customs by",
+  equipmentType: "Equipment",
+  commodityCategory: "Commodity category",
+  declaredValue: "Declared value",
+  declaredValueCurrency: "Declared currency",
+  securityTier: "Security tier",
+  trackingType: "Tracking",
+  teamDriversRequired: "Team drivers",
   targetPrice: "Target price",
   targetCurrency: "Target currency",
   targetPriceStatus: "Target status",
@@ -62,6 +69,13 @@ export type RfqLoadReviewValues = {
   topLoad: string;
   dangerousGoods: string;
   customsBy: string;
+  equipmentType: string;
+  commodityCategory: string;
+  declaredValue: number | null;
+  declaredValueCurrency: string;
+  securityTier: string;
+  trackingType: string;
+  teamDriversRequired: string;
   targetPrice: number | null;
   targetCurrency: string;
   targetPriceStatus: string;
@@ -90,6 +104,7 @@ const UNKNOWN_FIELDS = new Set<RfqLoadFieldKey>([
   "dangerousGoods",
   "customsBy",
   "targetPriceStatus",
+  "teamDriversRequired",
 ]);
 
 const PRIOR_CARRY_FIELDS = new Set<RfqLoadFieldKey>([
@@ -113,11 +128,28 @@ const PRIOR_CARRY_FIELDS = new Set<RfqLoadFieldKey>([
   "dangerousGoods",
   "customsBy",
   "currency",
+  // Security/equipment carry from prior loads; declaredValue deliberately
+  // does NOT (same principle as target price — never silently assume value).
+  "equipmentType",
+  "commodityCategory",
+  "securityTier",
+  "trackingType",
+  "teamDriversRequired",
 ]);
 
 const DEFAULTS: Pick<
   RfqLoadReviewValues,
-  "cadence" | "type" | "targetCurrency" | "targetPriceStatus" | "currency" | "stackable" | "topLoad" | "dangerousGoods" | "customsBy"
+  | "cadence"
+  | "type"
+  | "targetCurrency"
+  | "targetPriceStatus"
+  | "currency"
+  | "stackable"
+  | "topLoad"
+  | "dangerousGoods"
+  | "customsBy"
+  | "declaredValueCurrency"
+  | "teamDriversRequired"
 > = {
   cadence: "",
   type: "FORWARDING",
@@ -128,6 +160,8 @@ const DEFAULTS: Pick<
   topLoad: "UNKNOWN",
   dangerousGoods: "UNKNOWN",
   customsBy: "UNKNOWN",
+  declaredValueCurrency: "USD",
+  teamDriversRequired: "UNKNOWN",
 };
 
 function normalizeString(value: unknown): string {
@@ -248,6 +282,13 @@ export function mergeRfqLoadDraftValues(input: RfqLoadDraftMergeInput): {
     topLoad: stringField("topLoad") || "UNKNOWN",
     dangerousGoods: stringField("dangerousGoods") || "UNKNOWN",
     customsBy: stringField("customsBy") || "UNKNOWN",
+    equipmentType: stringField("equipmentType"),
+    commodityCategory: stringField("commodityCategory"),
+    declaredValue: numberField("declaredValue"),
+    declaredValueCurrency: stringField("declaredValueCurrency") || "USD",
+    securityTier: stringField("securityTier"),
+    trackingType: stringField("trackingType"),
+    teamDriversRequired: stringField("teamDriversRequired") || "UNKNOWN",
     targetPrice: numberField("targetPrice"),
     targetCurrency: stringField("targetCurrency") || "USD",
     targetPriceStatus: stringField("targetPriceStatus") || "UNKNOWN",
