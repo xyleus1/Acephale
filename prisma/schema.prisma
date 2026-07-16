@@ -111,6 +111,8 @@ model Office {
   carriers             Carrier[]
   carrierChecklist     CarrierChecklistItem[]
   loadSecurityChecks   LoadSecurityCheck[]
+  carrierBids          CarrierBid[]
+  truckloadQuotes      TruckloadQuote[]
   strategyAssessments  StrategyAssessment[]
   routeOptions         RouteOption[]
   priceRecommendations PriceRecommendation[]
@@ -235,6 +237,7 @@ model Company {
   inquiries         Inquiry[]
   emailThreads      EmailThread[]
   carriers          Carrier[]
+  truckloadQuotes   TruckloadQuote[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -955,6 +958,8 @@ model Inquiry {
   crmOpportunities    CrmOpportunity[]
   activities          Activity[]
   tasks               Task[]
+  carrierBids         CarrierBid[]
+  truckloadQuotes     TruckloadQuote[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, receivedAt])
@@ -1148,6 +1153,7 @@ model Carrier {
   office    Office                 @relation(fields: [officeId], references: [id], onDelete: Cascade)
   company   Company?               @relation(fields: [companyId], references: [id], onDelete: SetNull)
   checklist CarrierChecklistItem[]
+  bids      CarrierBid[]
 
   @@unique([officeId, mcNumber])
   @@unique([officeId, dotNumber])
@@ -1177,6 +1183,99 @@ model CarrierChecklistItem {
 
   @@unique([carrierId, key])
   @@index([officeId, carrierId, status])
+}
+
+// Truckload buy-side quote from a carrier (per-load $, not ocean totals —
+// CarrierQuote stays ocean-shaped for the intl stack). Bids link to the
+// vetted bench when the carrier is onboarded; carrierName covers the rest.
+model CarrierBid {
+  id            String    @id @default(cuid())
+  officeId      String
+  inquiryId     String?
+  jobId         String?
+  carrierId     String?
+  carrierName   String
+  equipmentType String? // DRY_VAN / REEFER / … (pricing-engine strings)
+  linehaulAmount    Float?
+  fscAmount         Float? // fuel surcharge
+  accessorialAmount Float?
+  totalAmount       Float? // all-in per-load buy
+  currency      String    @default("USD")
+  miles         Float?
+  ratePerMile   Float? // stored, not derived — operator-entered all-in rates survive
+  transitDays   Int?
+  validUntil    DateTime?
+  source        String    @default("MANUAL") // MANUAL / EMAIL / WHATSAPP / PHONE / LOADBOARD / API
+  status        String    @default("RECEIVED") // REQUESTED / RECEIVED / DECLINED / SELECTED / EXPIRED
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  office  Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  inquiry Inquiry? @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  carrier Carrier? @relation(fields: [carrierId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, inquiryId])
+  @@index([officeId, jobId])
+  @@index([officeId, carrierId, createdAt])
+}
+
+// Sell-side truckload quote + outcome — one row per issued quote version.
+// This is the data flywheel: normalized lane x equipment x tier with buy/sell
+// economics, quote speed, and win/loss. Vocab in src/lib/truckload-quote-fields.ts.
+model TruckloadQuote {
+  id        String  @id @default(cuid())
+  officeId  String
+  inquiryId String?
+  jobId     String?
+  companyId String?
+
+  // Normalized lane — corridor keys for aggregation
+  origin            String?
+  destination       String?
+  originState       String? // classifyDomesticLocation().stateCode
+  destState         String?
+  miles             Float?
+  mode              String? // FTL / LTL / PARTIAL / DRAYAGE
+  equipmentType     String?
+  commodityCategory String?
+  securityTier      String?
+  declaredValue     Float?
+
+  // Economics
+  buyAmount    Float?
+  buySource    String? // mock / manual / carrier_bid / live:<provider>
+  carrierBidId String?
+  carrierId    String? // winning/selected carrier once known
+  sellAmount   Float?
+  currency     String  @default("USD")
+  marginPct    Float?
+  grossProfit  Float?
+  ratePerMile  Float?
+
+  // Quote speed + outcome
+  sentVia       String? // EMAIL / WHATSAPP / PORTAL / NONE
+  sentAt        DateTime?
+  rfqReceivedAt DateTime? // copied from inquiry.receivedAt — quote-speed KPI
+  outcome       String    @default("PENDING") // PENDING / WON / LOST / EXPIRED / NO_QUOTE
+  outcomeReason String? // price_too_high / no_capacity / too_slow / …
+  outcomeNote   String?
+  outcomeAt     DateTime?
+  decidedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office  Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  inquiry Inquiry? @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, outcome, createdAt])
+  @@index([officeId, originState, destState, equipmentType])
+  @@index([officeId, inquiryId])
+  @@index([officeId, companyId, createdAt])
 }
 
 // Shipment history — populated from Siber in Phase 2, or manually entered
@@ -1278,6 +1377,8 @@ model Job {
   agentProposals      AgentProposal[]
   strategyAssessments StrategyAssessment[]
   securityChecks      LoadSecurityCheck[]
+  carrierBids         CarrierBid[]
+  truckloadQuotes     TruckloadQuote[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, createdAt])

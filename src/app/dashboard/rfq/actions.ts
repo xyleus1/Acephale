@@ -18,6 +18,7 @@ import { buildWhatsAppInquiry, waDigitsFromWhatsAppAddress, waPhoneDigits } from
 import { logOutboundWhatsAppMessage, sendWhatsAppText, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { normalizeInquiryStatusInput } from "@/lib/inquiry-status";
 import { deriveSecurityTier } from "@/lib/security-sop";
+import { applyQuoteOutcome } from "@/lib/truckload-quotes";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 
@@ -379,6 +380,20 @@ export async function updateInquiryRowAction(
     }).catch(() => null);
   }
 
+  // Settle pending truckload quotes on terminal statuses — best-effort, the
+  // flywheel must never block a sheet edit.
+  if (typeof data.status === "string" && data.status !== inquiry.status) {
+    const outcome = data.status === "BOOKED" ? "WON" : data.status === "MISSED" ? "LOST" : null;
+    if (outcome) {
+      await applyQuoteOutcome({
+        officeId: session.officeId,
+        inquiryId,
+        outcome,
+        userId: session.userId,
+      }).catch(() => null);
+    }
+  }
+
   revalidatePath("/dashboard/rfq");
   return { ok: true };
 }
@@ -410,6 +425,16 @@ export async function bulkUpdateInquiryStatusAction(
     data: { status },
   });
   if (result.count === 0) return { error: "No matching RFQs found." };
+
+  // Settle pending truckload quotes on terminal statuses — best-effort.
+  const bulkOutcome = status === "BOOKED" ? "WON" : status === "MISSED" ? "LOST" : null;
+  if (bulkOutcome) {
+    await Promise.allSettled(
+      ids.map((id) =>
+        applyQuoteOutcome({ officeId: session.officeId, inquiryId: id, outcome: bulkOutcome, userId: session.userId })
+      ),
+    );
+  }
 
   const updatedRows = await prisma.inquiry.findMany({
     where: { id: { in: ids }, officeId: session.officeId },

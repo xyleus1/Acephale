@@ -313,7 +313,7 @@ export default async function DomesticPricingPage({
                       { title: "US-only lane quality", detail: "Need pickup and delivery as US city/state/ZIP. Country-only USA and international lanes are not rateable." },
                       { title: "Provider contracts", detail: "Truckstop, DAT, or broker/loadboard API credentials are not configured. V1 does not read secrets or call providers." },
                       { title: "Shipment facts", detail: "Equipment, pickup window, commodity, weight, hazmat, temperature, and accessorials must be explicit before a provider request." },
-                      { title: "Approval and audit", detail: "Before live rates become customer-facing, rate requests/options/approvals need persistence and source/audit records." },
+                      { title: "Quote memory", detail: "Recorded quotes, carrier bids, and win/loss outcomes persist office-scoped (RFQ page → Truckload desk) and feed the lane memory. Live provider calls still need their own audit records." },
                     ].map((item) => (
                       <div key={item.title}>
                         <strong>{item.title}</strong>

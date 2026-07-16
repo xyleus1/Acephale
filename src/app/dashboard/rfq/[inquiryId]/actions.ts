@@ -10,6 +10,17 @@ import { buildMissingInfoDraft } from "@/lib/missing-info-draft";
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { createLoadFromRfqReview } from "@/lib/rfq-load-review";
+import { canonicalInquiryStatus } from "@/lib/inquiry-status";
+import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
+import { applyQuoteOutcome, recordTruckloadQuote } from "@/lib/truckload-quotes";
+import {
+  CARRIER_BID_SOURCE_VALUES,
+  CARRIER_BID_STATUS_VALUES,
+  QUOTE_OUTCOME_REASON_VALUES,
+  quoteEconomics,
+  toCarrierBidRow,
+  type CarrierBidRow,
+} from "@/lib/truckload-quote-fields";
 import Anthropic from "@anthropic-ai/sdk";
 
 function emptyToNull(value: FormDataEntryValue | null) {
@@ -174,8 +185,300 @@ export async function updateInquiryStatus(inquiryId: string, status: string) {
     },
     idempotencyKey: `inquiry:${inquiryId}:status:${status}:${updated.updatedAt.toISOString()}`,
   }).catch(() => null);
+
+  // Settle pending truckload quotes on terminal statuses — best-effort.
+  const canonical = canonicalInquiryStatus(status);
+  const outcome = canonical === "BOOKED" ? "WON" : canonical === "MISSED" ? "LOST" : null;
+  if (outcome) {
+    await applyQuoteOutcome({ officeId: session.officeId, inquiryId, outcome, userId: session.userId }).catch(() => null);
+  }
+
   revalidatePath(`/dashboard/rfq/${inquiryId}`);
   revalidatePath("/dashboard/rfq");
+}
+
+// ── Truckload desk: carrier bids + quote flywheel ───────────────────────────
+
+export type CarrierBidPatch = {
+  carrierName?: string;
+  carrierId?: string; // "" clears the bench link
+  equipmentType?: string;
+  totalAmount?: string; // free text amount
+  ratePerMile?: string;
+  transitDays?: string;
+  source?: string;
+  status?: string;
+  notes?: string;
+};
+
+type BidActionResult = { bid: CarrierBidRow } | { error: string };
+
+function bidAmount(value: string | undefined): number | null | "invalid" {
+  const trimmed = value?.trim().replace(/^\$\s*/, "");
+  if (!trimmed) return null;
+  const parsed = Number(trimmed.replace(/[,\s]/g, ""));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : "invalid";
+}
+
+const BID_SELECT = {
+  id: true,
+  inquiryId: true,
+  carrierId: true,
+  carrierName: true,
+  equipmentType: true,
+  totalAmount: true,
+  ratePerMile: true,
+  transitDays: true,
+  source: true,
+  status: true,
+  notes: true,
+  createdAt: true,
+  carrier: { select: { vettingStatus: true } },
+} as const;
+
+// Prisma-compatible shape for the writable bid columns.
+type BidData = Partial<{
+  carrierName: string;
+  equipmentType: string | null;
+  totalAmount: number | null;
+  ratePerMile: number | null;
+  transitDays: number | null;
+  source: string;
+  status: string;
+  notes: string | null;
+}>;
+
+function buildBidData(patch: CarrierBidPatch): BidData | { error: string } {
+  const data: BidData = {};
+  if (patch.carrierName !== undefined) {
+    const name = patch.carrierName.trim();
+    if (!name) return { error: "Carrier name is required." };
+    data.carrierName = name.slice(0, 160);
+  }
+  if (patch.equipmentType !== undefined) data.equipmentType = patch.equipmentType.trim().toUpperCase() || null;
+  if (patch.totalAmount !== undefined) {
+    const amount = bidAmount(patch.totalAmount);
+    if (amount === "invalid") return { error: "Bid amount must be a number." };
+    data.totalAmount = amount;
+  }
+  if (patch.ratePerMile !== undefined) {
+    const rate = bidAmount(patch.ratePerMile);
+    if (rate === "invalid") return { error: "Rate per mile must be a number." };
+    data.ratePerMile = rate;
+  }
+  if (patch.transitDays !== undefined) {
+    const days = patch.transitDays.trim() ? Number(patch.transitDays.trim()) : null;
+    if (days !== null && (!Number.isInteger(days) || days < 0)) return { error: "Transit days must be a whole number." };
+    data.transitDays = days;
+  }
+  if (patch.source !== undefined) {
+    const source = patch.source.trim().toUpperCase();
+    if (!CARRIER_BID_SOURCE_VALUES.includes(source as never)) return { error: "Unknown bid source." };
+    data.source = source;
+  }
+  if (patch.status !== undefined) {
+    const status = patch.status.trim().toUpperCase();
+    if (!CARRIER_BID_STATUS_VALUES.includes(status as never)) return { error: "Unknown bid status." };
+    data.status = status;
+  }
+  if (patch.notes !== undefined) data.notes = patch.notes.trim() || null;
+  return data;
+}
+
+export async function createCarrierBidAction(inquiryId: string, patch: CarrierBidPatch): Promise<BidActionResult> {
+  const session = await requireSession();
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: inquiryId, officeId: session.officeId },
+    select: { id: true, job: { select: { id: true } } },
+  });
+  if (!inquiry) return { error: "RFQ not found." };
+
+  const data = buildBidData(patch);
+  if ("error" in data) return data;
+  const carrierName = data.carrierName;
+  if (!carrierName) return { error: "Carrier name is required." };
+
+  // Bench link: exact office-scoped name match keeps the vetting badge honest.
+  const bench = await prisma.carrier.findFirst({
+    where: { officeId: session.officeId, name: { equals: carrierName, mode: "insensitive" } },
+    select: { id: true },
+  });
+
+  const bid = await prisma.carrierBid.create({
+    data: {
+      ...data,
+      carrierName,
+      officeId: session.officeId,
+      inquiryId,
+      jobId: inquiry.job?.id ?? null,
+      carrierId: bench?.id ?? null,
+    },
+    select: BID_SELECT,
+  });
+  revalidatePath(`/dashboard/rfq/${inquiryId}`);
+  return { bid: toCarrierBidRow(bid) };
+}
+
+export async function updateCarrierBidAction(bidId: string, patch: CarrierBidPatch): Promise<BidActionResult> {
+  const session = await requireSession();
+  const data = buildBidData(patch);
+  if ("error" in data) return data;
+
+  const updated = await prisma.carrierBid.updateMany({
+    where: { id: bidId, officeId: session.officeId },
+    data,
+  });
+  if (updated.count === 0) return { error: "Bid not found." };
+
+  const bid = await prisma.carrierBid.findFirst({ where: { id: bidId, officeId: session.officeId }, select: BID_SELECT });
+  if (!bid) return { error: "Bid not found." };
+  if (bid.inquiryId) revalidatePath(`/dashboard/rfq/${bid.inquiryId}`);
+  return { bid: toCarrierBidRow(bid) };
+}
+
+export async function deleteCarrierBidAction(bidId: string): Promise<{ ok: true } | { error: string }> {
+  const session = await requireSession();
+  const deleted = await prisma.carrierBid.deleteMany({ where: { id: bidId, officeId: session.officeId } });
+  if (deleted.count === 0) return { error: "Bid not found." };
+  return { ok: true };
+}
+
+// Selecting a bid: single SELECTED per inquiry, buy side lands on the linked
+// job's cost, and pending flywheel quotes pick up the carrier + buy.
+export async function selectCarrierBidAction(bidId: string): Promise<BidActionResult> {
+  const session = await requireSession();
+  const bid = await prisma.carrierBid.findFirst({
+    where: { id: bidId, officeId: session.officeId },
+    select: { id: true, inquiryId: true, jobId: true, carrierId: true, totalAmount: true },
+  });
+  if (!bid) return { error: "Bid not found." };
+
+  if (bid.inquiryId) {
+    await prisma.carrierBid.updateMany({
+      where: { officeId: session.officeId, inquiryId: bid.inquiryId, status: "SELECTED", id: { not: bid.id } },
+      data: { status: "RECEIVED" },
+    });
+  }
+  await prisma.carrierBid.update({ where: { id: bid.id }, data: { status: "SELECTED" } });
+
+  if (bid.jobId && bid.totalAmount != null) {
+    await prisma.job.updateMany({
+      where: { id: bid.jobId, officeId: session.officeId },
+      data: { cost: bid.totalAmount },
+    });
+  }
+
+  if (bid.inquiryId) {
+    const pending = await prisma.truckloadQuote.findMany({
+      where: { officeId: session.officeId, inquiryId: bid.inquiryId, outcome: "PENDING" },
+      select: { id: true, sellAmount: true, miles: true },
+    });
+    await Promise.allSettled(
+      pending.map((quote) => {
+        const economics = quoteEconomics({ buyAmount: bid.totalAmount, sellAmount: quote.sellAmount, miles: quote.miles });
+        return prisma.truckloadQuote.update({
+          where: { id: quote.id },
+          data: {
+            buyAmount: bid.totalAmount,
+            buySource: "carrier_bid",
+            carrierBidId: bid.id,
+            carrierId: bid.carrierId,
+            grossProfit: economics.grossProfit,
+            marginPct: economics.marginPct,
+          },
+        });
+      }),
+    );
+  }
+
+  const fresh = await prisma.carrierBid.findFirst({ where: { id: bid.id }, select: BID_SELECT });
+  if (!fresh) return { error: "Bid not found." };
+  if (bid.inquiryId) revalidatePath(`/dashboard/rfq/${bid.inquiryId}`);
+  if (bid.jobId) revalidatePath(`/dashboard/jobs/${bid.jobId}`);
+  return { bid: toCarrierBidRow(fresh) };
+}
+
+export type RecordedQuoteRow = {
+  id: string;
+  createdAt: string;
+  sellAmount: number | null;
+  buyAmount: number | null;
+  grossProfit: number | null;
+  marginPct: number | null;
+  outcome: string;
+  outcomeReason: string | null;
+  sentVia: string | null;
+};
+
+// Snapshot the current domestic draft economics into the flywheel. One row
+// per press — each is a quote version; outcomes settle via RFQ status.
+export async function recordTruckloadQuoteAction(
+  inquiryId: string,
+): Promise<{ quote: RecordedQuoteRow } | { error: string }> {
+  const session = await requireSession();
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: inquiryId, officeId: session.officeId },
+    include: { company: { select: { id: true, name: true } }, job: { select: { id: true } } },
+  });
+  if (!inquiry) return { error: "RFQ not found." };
+
+  const assessment = assessDomesticTruckingPricing(inquiry);
+  if (!assessment.eligible) return { error: "Not a US domestic trucking RFQ — nothing to record." };
+  const draft = assessment.quoteDraft;
+  const selectedBid = await prisma.carrierBid.findFirst({
+    where: { officeId: session.officeId, inquiryId, status: "SELECTED" },
+    select: { id: true, carrierId: true, totalAmount: true },
+  });
+  const buyAmount = selectedBid?.totalAmount ?? draft.buyPrice?.amount ?? null;
+  const buySource = selectedBid ? "carrier_bid" : draft.selectedOptionProvenance ?? (draft.buyPrice ? "mock" : null);
+
+  const created = await recordTruckloadQuote({
+    officeId: session.officeId,
+    inquiryId,
+    jobId: inquiry.job?.id ?? null,
+    companyId: inquiry.company?.id ?? null,
+    origin: inquiry.origin,
+    destination: inquiry.destination,
+    mode: assessment.rateRequest.mode,
+    equipmentType: assessment.rateRequest.equipmentType,
+    commodityCategory: inquiry.commodityCategory,
+    securityTier: inquiry.securityTier,
+    declaredValue: inquiry.declaredValue,
+    buyAmount,
+    buySource,
+    carrierBidId: selectedBid?.id ?? null,
+    carrierId: selectedBid?.carrierId ?? null,
+    sellAmount: draft.sellPrice?.amount ?? null,
+    currency: draft.sellPrice?.currency ?? "USD",
+    sentVia: "NONE",
+    rfqReceivedAt: inquiry.receivedAt,
+  });
+
+  const quote = await prisma.truckloadQuote.findFirst({
+    where: { id: created.id, officeId: session.officeId },
+    select: {
+      id: true, createdAt: true, sellAmount: true, buyAmount: true, grossProfit: true,
+      marginPct: true, outcome: true, outcomeReason: true, sentVia: true,
+    },
+  });
+  if (!quote) return { error: "Quote not recorded." };
+  revalidatePath(`/dashboard/rfq/${inquiryId}`);
+  return { quote: { ...quote, createdAt: quote.createdAt.toISOString() } };
+}
+
+export async function updateQuoteOutcomeReasonAction(
+  quoteId: string,
+  reason: string,
+): Promise<{ ok: true } | { error: string }> {
+  const session = await requireSession();
+  const value = reason.trim() || null;
+  if (value && !QUOTE_OUTCOME_REASON_VALUES.includes(value as never)) return { error: "Unknown outcome reason." };
+  const updated = await prisma.truckloadQuote.updateMany({
+    where: { id: quoteId, officeId: session.officeId },
+    data: { outcomeReason: value },
+  });
+  if (updated.count === 0) return { error: "Quote not found." };
+  return { ok: true };
 }
 
 export async function parseRFQWithAI(inquiryId: string): Promise<void> {

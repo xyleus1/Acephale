@@ -419,7 +419,7 @@ function locationFromState(stateCode: string, input: string, confidence: Domesti
   };
 }
 
-function classifyDomesticLocation(value: string | null | undefined): DomesticLocation {
+export function classifyDomesticLocation(value: string | null | undefined): DomesticLocation {
   const input = cleanString(value);
   const normalized = normalizeLocationText(value);
   if (!input || !normalized) {

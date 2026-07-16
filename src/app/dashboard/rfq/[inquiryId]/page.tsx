@@ -11,6 +11,8 @@ import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-panel";
 import { assessDomesticTruckingPricing } from "@/lib/domestic-trucking-pricing";
+import { CarrierBidPanel } from "@/components/carrier-bid-panel";
+import { toCarrierBidRow } from "@/lib/truckload-quote-fields";
 import { getBrainBridgeContext } from "@/lib/brain-bridge";
 import { BrainBridgePanel } from "@/components/brain-bridge-panel";
 import { deriveInquirySource } from "@/lib/inquiry-source";
@@ -137,6 +139,35 @@ export default async function RFQDetailPage({
   });
 
   if (!inquiry) notFound();
+
+  // Truckload desk data: buy-side bids, recorded flywheel quotes, bench names.
+  const [carrierBids, truckloadQuotes, benchCarriers] = await Promise.all([
+    prisma.carrierBid.findMany({
+      where: { officeId: session.officeId, inquiryId: inquiry.id },
+      select: {
+        id: true, carrierId: true, carrierName: true, equipmentType: true, totalAmount: true,
+        ratePerMile: true, transitDays: true, source: true, status: true, notes: true, createdAt: true,
+        carrier: { select: { vettingStatus: true } },
+      },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: 50,
+    }),
+    prisma.truckloadQuote.findMany({
+      where: { officeId: session.officeId, inquiryId: inquiry.id },
+      select: {
+        id: true, createdAt: true, sellAmount: true, buyAmount: true, grossProfit: true,
+        marginPct: true, outcome: true, outcomeReason: true, sentVia: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+    prisma.carrier.findMany({
+      where: { officeId: session.officeId, active: true },
+      select: { name: true },
+      orderBy: { name: "asc" },
+      take: 500,
+    }),
+  ]);
 
   const sm = { label: inquiryStatusLabel(inquiry.status), cls: inquiryStatusBadgeCls(inquiry.status) };
   const canConvert = (!inquiry.job || inquiry.job.status === "PROPOSED") && !CLOSED_INQUIRY_STATUSES.includes(inquiry.status);
@@ -588,6 +619,13 @@ export default async function RFQDetailPage({
           </div>
 
           <DomesticTruckingRatePanel assessment={domesticPricing} compact />
+
+          <CarrierBidPanel
+            inquiryId={inquiry.id}
+            initialBids={carrierBids.map(toCarrierBidRow)}
+            initialQuotes={truckloadQuotes.map((quote) => ({ ...quote, createdAt: quote.createdAt.toISOString() }))}
+            benchCarrierNames={benchCarriers.map((c) => c.name)}
+          />
 
           {/* Convert to Load */}
           {canConvert ? (
