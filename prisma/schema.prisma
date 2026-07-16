@@ -108,6 +108,8 @@ model Office {
   agentProposals       AgentProposal[]
   forwarders           Forwarder[]
   forwarderDrafts      ForwarderRequestDraft[]
+  carriers             Carrier[]
+  carrierChecklist     CarrierChecklistItem[]
   strategyAssessments  StrategyAssessment[]
   routeOptions         RouteOption[]
   priceRecommendations PriceRecommendation[]
@@ -231,6 +233,7 @@ model Company {
   jobs              Job[]
   inquiries         Inquiry[]
   emailThreads      EmailThread[]
+  carriers          Carrier[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -1037,6 +1040,110 @@ model ForwarderRequestDraft {
 
   @@index([officeId, inquiryId, status])
   @@index([officeId, forwarderId])
+}
+
+// The vetted trucking-carrier bench for US domestic (CA tech-freight niche).
+// Operational entity, deliberately separate from Forwarder (intl supplier
+// directory) and from CRM Company (relationship layer; optional link only).
+// Vocabulary lives in src/lib/carrier-vetting.ts.
+model Carrier {
+  id        String  @id @default(cuid())
+  officeId  String
+  companyId String? // optional link to a CRM Company; never auto-created
+  name      String
+  legalName String?
+  mcNumber  String? // FMCSA MC number
+  dotNumber String? // USDOT number
+  scac      String?
+
+  // Contact + deceptive-pickup (carrier impersonation) defense
+  dispatchEmail        String?
+  dispatchPhone        String?
+  verifiedPhone        String? // callback number verified against FMCSA/insurance producer records
+  emailDomain          String? // expected corporate mail domain (freemail dispatch = flag)
+  emailDomainVerified  Boolean   @default(false)
+  factoringCompany     String?
+  authorityFirstActive DateTime? // young authority is a fraud signal
+  fraudFlags           Json? // [{flag, note, at, byUserId}]
+  identityVerifiedAt   DateTime?
+  identityVerifiedBy   String?
+
+  // Authority + insurance (manual V1 — no FMCSA/RMIS API)
+  authorityStatus        String? // active / inactive / revoked / unknown
+  insuranceProducer      String? // agency the COI was verified with, direct
+  autoLiabilityLimit     Float?
+  cargoLimit             Float?
+  autoInsuranceExpiry    DateTime?
+  cargoInsuranceExpiry   DateTime?
+  coiUrl                 String?
+  highValueApprovedLimit Float? // max declared value we give them without a special rider
+
+  // Equipment + capability
+  equipmentTypes   Json? // ["DRY_VAN","REEFER",...] — DomesticEquipmentType strings
+  airRide          Boolean @default(false)
+  liftgate         Boolean @default(false)
+  blanketWrap      Boolean @default(false)
+  teamDrivers      Boolean @default(false)
+  hazmatCertified  Boolean @default(false)
+  lithiumCapable   Boolean @default(false) // UN3480/3481 experience
+  reeferCapable    Boolean @default(false)
+  securityFeatures Json? // ["high_security_locks","covert_gps","geofencing",...]
+  serviceStates    Json? // ["CA","NV","AZ",...]
+  homeBase         String? // e.g. "Fremont, CA"
+
+  // Vetting workflow — gate logic in carrierVettingGate()
+  vettingStatus  String    @default("prospect")
+  vettingNotes   String?
+  vettedAt       DateTime?
+  vettedByUserId String?
+  nextReviewAt   DateTime? // driven by the nearest insurance expiry
+
+  // Scorecard — columns reserved now, auto-computed from load history later
+  loadsCompleted    Int       @default(0)
+  onTimePickupPct   Float?
+  onTimeDeliveryPct Float?
+  claimCount        Int       @default(0)
+  incidentCount     Int       @default(0)
+  scorecardScore    Float?
+  scorecardAt       DateTime?
+
+  active    Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office    Office                 @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company   Company?               @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  checklist CarrierChecklistItem[]
+
+  @@unique([officeId, mcNumber])
+  @@unique([officeId, dotNumber])
+  @@index([officeId, vettingStatus, active])
+  @@index([officeId, name])
+  @@index([officeId, cargoInsuranceExpiry])
+}
+
+// One row per vetting-checklist item per carrier; template + gate logic in
+// src/lib/carrier-vetting.ts. Evidence is a paste-URL in V1.
+model CarrierChecklistItem {
+  id              String    @id @default(cuid())
+  officeId        String
+  carrierId       String
+  key             String // CARRIER_VETTING_CHECKLIST key
+  label           String
+  status          String    @default("pending") // pending / passed / failed / waived
+  note            String?
+  evidenceUrl     String?
+  checkedByUserId String?
+  checkedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  carrier Carrier @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+
+  @@unique([carrierId, key])
+  @@index([officeId, carrierId, status])
 }
 
 // Shipment history — populated from Siber in Phase 2, or manually entered

@@ -67,6 +67,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
           <NavLink href="/dashboard/loads" icon={<Icon name="truck" />}>Loads</NavLink>
 
+          <NavLink href="/dashboard/carriers" icon={<Icon name="shield" />}>Carriers</NavLink>
+
           <NavLink href="/dashboard/crm" icon={<Icon name="building" />}>CRM</NavLink>
 
           <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
