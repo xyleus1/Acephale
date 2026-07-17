@@ -1,8 +1,11 @@
 // Open-data market baseline for the US domestic trucking wedge.
-// Keyless public feeds only: FRED (diesel, trucking PPI, freight TSI) and the
-// FMCSA company census on Socrata (CA carrier-supply counts). Fetchers lean on
-// Next's data cache with generous revalidate windows; every fetch fails soft so
-// the pricing page never blocks on a third-party feed. Pure parsing/summary
+// Keyless public feeds: FRED (diesel, trucking PPI, freight TSI) and the FMCSA
+// company census on Socrata (CA carrier-supply counts). Key-gated free feeds
+// (skipped silently when the env var is absent): EIA (California diesel,
+// EIA_API_KEY) and US Census international trade (tech imports by HS code
+// through the CA customs districts, CENSUS_API_KEY). Fetchers lean on Next's
+// data cache with generous revalidate windows; every fetch fails soft so the
+// pricing page never blocks on a third-party feed. Pure parsing/summary
 // helpers are exported for DB-free tests. Full source catalog + raw pulls:
 // .context/intelligence/ (workspace).
 
@@ -79,6 +82,116 @@ export function formatIndicatorValue(value: number, unit: "usd_gal" | "index" | 
   return value.toFixed(decimals);
 }
 
+// $543,839,378 -> "$544M"; $1,240,000,000 -> "$1.24B"
+export function formatUsdCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+  if (abs >= 1e8) return `$${Math.round(value / 1e6)}M`;
+  if (abs >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `$${Math.round(value / 1e3)}k`;
+  return `$${Math.round(value)}`;
+}
+
+// EIA API v2 JSON -> chronological series. Rows arrive newest-first with
+// string values; non-finite rows are dropped.
+export function parseEiaSeries(text: string): SeriesPoint[] {
+  const parsed = JSON.parse(text) as { response?: { data?: Array<{ period?: string; value?: unknown }> } };
+  const rows = parsed.response?.data ?? [];
+  const out: SeriesPoint[] = [];
+  for (const row of rows) {
+    if (!row.period || !/^\d{4}-\d{2}-\d{2}$/.test(row.period)) continue;
+    if (row.value == null || row.value === "") continue; // Number(null) is 0 — a null print is missing, not free fuel
+    const value = Number(row.value);
+    if (!Number.isFinite(value)) continue;
+    out.push([row.period, value]);
+  }
+  out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  return out;
+}
+
+export type CensusPoint = {
+  district: string;
+  commodity: string;
+  time: string; // "2026-03"
+  value: number;
+};
+
+// Census trade API returns an array-of-arrays with a header row; columns are
+// resolved by name so `get=` ordering never matters.
+export function parseCensusTable(text: string): CensusPoint[] {
+  const parsed = JSON.parse(text) as string[][];
+  if (!Array.isArray(parsed) || parsed.length < 2) return [];
+  const header = parsed[0];
+  const districtIdx = header.indexOf("DISTRICT");
+  const valueIdx = header.indexOf("GEN_VAL_MO");
+  const commodityIdx = header.indexOf("I_COMMODITY");
+  const timeIdx = header.indexOf("time");
+  if (districtIdx < 0 || valueIdx < 0 || commodityIdx < 0 || timeIdx < 0) return [];
+  const out: CensusPoint[] = [];
+  for (const row of parsed.slice(1)) {
+    const value = Number(row[valueIdx]);
+    if (!Number.isFinite(value)) continue;
+    out.push({ district: row[districtIdx], commodity: row[commodityIdx], time: row[timeIdx], value });
+  }
+  return out;
+}
+
+export const TECH_HS_CODES = [
+  ["8471", "Computers & servers"],
+  ["8542", "Semiconductors"],
+  ["8517", "Networking gear"],
+  ["8507", "Batteries"],
+  ["8486", "Semicap equipment"],
+  ["9027", "Instruments"],
+] as const;
+
+// CA customs districts: San Diego (25), Los Angeles (27), San Francisco (28).
+export const CA_CUSTOMS_DISTRICTS = ["25", "27", "28"];
+
+export type TechImportsSummary = {
+  latestMonth: string;
+  totalValue: number;
+  totalYoyPct: number | null;
+  byCommodity: Array<{ code: string; label: string; value: number; yoyPct: number | null }>;
+};
+
+// Aggregate CA-district tech imports for the newest month present, with YoY
+// against the same month a year earlier. Pure — feed it parseCensusTable rows.
+export function summarizeTechImports(points: CensusPoint[]): TechImportsSummary | null {
+  const ca = points.filter((p) => CA_CUSTOMS_DISTRICTS.includes(p.district));
+  if (ca.length === 0) return null;
+  const latestMonth = ca.reduce((max, p) => (p.time > max ? p.time : max), ca[0].time);
+  const priorMonth = `${Number(latestMonth.slice(0, 4)) - 1}${latestMonth.slice(4)}`;
+
+  const sumBy = (month: string, code?: string) =>
+    ca.reduce((sum, p) => (p.time === month && (!code || p.commodity === code) ? sum + p.value : sum), 0);
+  const hasMonth = (month: string) => ca.some((p) => p.time === month);
+
+  const total = sumBy(latestMonth);
+  const priorTotal = hasMonth(priorMonth) ? sumBy(priorMonth) : null;
+
+  const byCommodity = TECH_HS_CODES
+    .map(([code, label]) => {
+      const value = sumBy(latestMonth, code);
+      const prior = priorTotal != null ? sumBy(priorMonth, code) : null;
+      return {
+        code,
+        label,
+        value,
+        yoyPct: prior != null && prior > 0 ? 100 * (value / prior - 1) : null,
+      };
+    })
+    .filter((entry) => entry.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  return {
+    latestMonth,
+    totalValue: total,
+    totalYoyPct: priorTotal != null && priorTotal > 0 ? 100 * (total / priorTotal - 1) : null,
+    byCommodity,
+  };
+}
+
 const FRED_INDICATORS = [
   { id: "GASDESW", key: "diesel_us", label: "US diesel", unit: "usd_gal", decimals: 2 },
   { id: "PCU4841214841212", key: "ppi_tl", label: "PPI · TL long-distance", unit: "index", decimals: 1 },
@@ -129,6 +242,45 @@ async function fetchFredIndicator(spec: (typeof FRED_INDICATORS)[number]): Promi
   };
 }
 
+// ~2.5 years of weekly prints — enough history for YoY + YTD.
+const EIA_SERIES_LENGTH = 130;
+
+async function fetchEiaCaDiesel(apiKey: string): Promise<MarketIndicator | null> {
+  const url =
+    "https://api.eia.gov/v2/petroleum/pri/gnd/data/?" +
+    `api_key=${encodeURIComponent(apiKey)}&frequency=weekly&data[0]=value` +
+    "&facets[series][]=EMD_EPD2D_PTE_SCA_DPG" +
+    `&sort[0][column]=period&sort[0][direction]=desc&length=${EIA_SERIES_LENGTH}`;
+  const text = await fetchText(url, FRED_REVALIDATE_SECONDS);
+  const summary = summarizeSeries(parseEiaSeries(text));
+  if (!summary) return null;
+  return {
+    key: "diesel_ca",
+    label: "CA diesel",
+    display: formatIndicatorValue(summary.value, "usd_gal", 2),
+    asOf: summary.asOf,
+    yoyPct: summary.yoyPct,
+    ytdPct: summary.ytdPct,
+    source: "EIA EMD_EPD2D_PTE_SCA_DPG",
+  };
+}
+
+const CENSUS_REVALIDATE_SECONDS = 24 * 60 * 60; // monthly stats, ~2-month publication lag
+
+async function fetchCensusTechImports(apiKey: string): Promise<TechImportsSummary | null> {
+  const from = `${new Date().getFullYear() - 1}-01`;
+  const tables = await Promise.all(
+    TECH_HS_CODES.map(([code]) => {
+      const url =
+        "https://api.census.gov/data/timeseries/intltrade/imports/hs?" +
+        `get=DISTRICT,GEN_VAL_MO&I_COMMODITY=${code}` +
+        `&time=${encodeURIComponent(`from ${from}`)}&key=${encodeURIComponent(apiKey)}`;
+      return fetchText(url, CENSUS_REVALIDATE_SECONDS);
+    })
+  );
+  return summarizeTechImports(tables.flatMap(parseCensusTable));
+}
+
 async function fetchFmcsaCount(spec: (typeof FMCSA_COUNTS)[number]): Promise<MarketIndicator | null> {
   const url = `${FMCSA_BASE}?$select=count(1) as n&$where=${encodeURIComponent(spec.where)}`;
   const text = await fetchText(url, FMCSA_REVALIDATE_SECONDS);
@@ -148,21 +300,44 @@ async function fetchFmcsaCount(spec: (typeof FMCSA_COUNTS)[number]): Promise<Mar
 
 export type MarketBaselineResult = {
   indicators: MarketIndicator[];
+  customs: TechImportsSummary | null;
   failures: string[];
 };
 
 // Never throws — failed feeds are reported by name and simply omitted.
+// Key-gated feeds are skipped (not failed) when the env var is missing.
 export async function fetchMarketBaseline(): Promise<MarketBaselineResult> {
+  const eiaKey = process.env.EIA_API_KEY;
+  const censusKey = process.env.CENSUS_API_KEY;
+
   const jobs: Array<{ name: string; run: () => Promise<MarketIndicator | null> }> = [
     ...FRED_INDICATORS.map((spec) => ({ name: spec.label, run: () => fetchFredIndicator(spec) })),
+    ...(eiaKey ? [{ name: "CA diesel (EIA)", run: () => fetchEiaCaDiesel(eiaKey) }] : []),
     ...FMCSA_COUNTS.map((spec) => ({ name: spec.label, run: () => fetchFmcsaCount(spec) })),
   ];
-  const settled = await Promise.allSettled(jobs.map((job) => job.run()));
+
+  const [settled, customsResult] = await Promise.all([
+    Promise.allSettled(jobs.map((job) => job.run())),
+    censusKey
+      ? fetchCensusTechImports(censusKey).then(
+          (summary) => ({ summary, failed: false }),
+          () => ({ summary: null, failed: true })
+        )
+      : Promise.resolve({ summary: null, failed: false }),
+  ]);
+
   const indicators: MarketIndicator[] = [];
   const failures: string[] = [];
   settled.forEach((result, index) => {
     if (result.status === "fulfilled" && result.value) indicators.push(result.value);
     else failures.push(jobs[index].name);
   });
-  return { indicators, failures };
+  if (customsResult.failed) failures.push("CA tech imports (Census)");
+
+  // CA diesel reads better next to US diesel — keep the fuel pair adjacent.
+  indicators.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
+
+  return { indicators, customs: customsResult.summary, failures };
 }
+
+const ORDER = ["diesel_us", "diesel_ca", "ppi_tl", "tsi_freight", "ca_midsize", "ca_hazmat_midsize"];

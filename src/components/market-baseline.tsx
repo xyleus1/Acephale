@@ -1,4 +1,4 @@
-import { fetchMarketBaseline } from "@/lib/market-indicators";
+import { fetchMarketBaseline, formatUsdCompact } from "@/lib/market-indicators";
 import { Icon } from "@/components/icon";
 
 function pct(value: number | null): string | null {
@@ -6,11 +6,17 @@ function pct(value: number | null): string | null {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
+function monthLabel(month: string): string {
+  const [year, m] = month.split("-");
+  const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${names[Number(m) - 1] ?? m} ${year}`;
+}
+
 // Async server component — streams in behind Suspense and disappears entirely
 // if every open feed is down, so the pricing page never depends on it.
 export async function MarketBaseline() {
-  const { indicators, failures } = await fetchMarketBaseline();
-  if (indicators.length === 0) return null;
+  const { indicators, customs, failures } = await fetchMarketBaseline();
+  if (indicators.length === 0 && !customs) return null;
 
   return (
     <div className="record-panel" style={{ marginBottom: 16 }}>
@@ -36,8 +42,32 @@ export async function MarketBaseline() {
             );
           })}
         </div>
+        {customs && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border, rgba(128,128,128,0.25))" }}>
+            <div style={{ fontSize: 12, marginBottom: 8 }}>
+              <strong>CA tech imports (customs)</strong> · {monthLabel(customs.latestMonth)}:{" "}
+              <strong>{formatUsdCompact(customs.totalValue)}</strong>
+              {customs.totalYoyPct != null && <span style={{ opacity: 0.75 }}> · {pct(customs.totalYoyPct)} YoY</span>}
+              <span style={{ opacity: 0.5 }}> · LA + SF + San Diego districts</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+              {customs.byCommodity.map((entry) => (
+                <div key={entry.code} title={`HS ${entry.code}`}>
+                  <div style={{ fontSize: 11, opacity: 0.6 }}>{entry.label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>
+                    {formatUsdCompact(entry.value)}
+                    {entry.yoyPct != null && (
+                      <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.7 }}> {pct(entry.yoyPct)}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{ fontSize: 11, opacity: 0.5, marginTop: 10 }}>
-          FRED + FMCSA census, keyless, cached 6–24 h. Carrier counts = active CA for-hire carriers (bench recruiting pool).
+          FRED + FMCSA census{customs ? " + US Census customs + EIA" : ""}, cached 6–24 h. Carrier counts = active CA
+          for-hire carriers (bench recruiting pool).
           {failures.length > 0 && ` Feeds unavailable right now: ${failures.join(", ")}.`}
         </div>
       </div>

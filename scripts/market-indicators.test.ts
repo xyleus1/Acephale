@@ -3,8 +3,13 @@
 
 import {
   formatIndicatorValue,
+  formatUsdCompact,
+  parseCensusTable,
+  parseEiaSeries,
   parseFredCsv,
   summarizeSeries,
+  summarizeTechImports,
+  type CensusPoint,
   type SeriesPoint,
 } from "../src/lib/market-indicators";
 
@@ -69,6 +74,62 @@ check("monthly yoy exact month match", Math.abs(monthly!.yoyPct! - (100 * (207.2
 check("usd/gal format", formatIndicatorValue(4.796, "usd_gal", 2) === "$4.80/gal");
 check("index format", formatIndicatorValue(207.237, "index", 1) === "207.2");
 check("count format", formatIndicatorValue(12074, "count", 0) === "12,074");
+check("compact billions", formatUsdCompact(1_240_000_000) === "$1.24B");
+check("compact hundreds of millions", formatUsdCompact(543_839_378) === "$544M");
+check("compact single millions", formatUsdCompact(9_400_000) === "$9.4M");
+check("compact thousands", formatUsdCompact(87_400) === "$87k");
+
+// parseEiaSeries: newest-first strings -> chronological numeric series.
+const eiaJson = JSON.stringify({
+  response: {
+    data: [
+      { period: "2026-07-13", value: "6.126" },
+      { period: "2026-07-06", value: "6.101" },
+      { period: "bad", value: "1" },
+      { period: "2026-06-29", value: null },
+    ],
+  },
+});
+const eia = parseEiaSeries(eiaJson);
+check("eia parses valid rows chronologically", eia.length === 2 && eia[0][0] === "2026-07-06" && eia[1][1] === 6.126);
+check("eia tolerates empty payload", parseEiaSeries("{}").length === 0);
+
+// parseCensusTable: header-row table resolved by column name.
+const censusJson = JSON.stringify([
+  ["DIST_NAME", "GEN_VAL_MO", "DISTRICT", "I_COMMODITY", "time"],
+  ["LOS ANGELES, CA", "543839378", "27", "8542", "2026-03"],
+  ["SAN FRANCISCO, CA", "100000000", "28", "8542", "2026-03"],
+  ["HOUSTON, TX", "999", "53", "8542", "2026-03"],
+  ["LOS ANGELES, CA", "not-a-number", "27", "8471", "2026-03"],
+]);
+const censusPoints = parseCensusTable(censusJson);
+check("census parses numeric rows", censusPoints.length === 3);
+check("census keeps district + commodity", censusPoints[0].district === "27" && censusPoints[0].commodity === "8542");
+check("census tolerates missing header", parseCensusTable(JSON.stringify([["A", "B"]])).length === 0);
+
+// summarizeTechImports: CA-district filter, latest month, YoY per code + total.
+const importPoints: CensusPoint[] = [
+  { district: "27", commodity: "8542", time: "2025-03", value: 400 },
+  { district: "28", commodity: "8542", time: "2025-03", value: 100 },
+  { district: "27", commodity: "8471", time: "2025-03", value: 200 },
+  { district: "27", commodity: "8542", time: "2026-03", value: 550 },
+  { district: "28", commodity: "8542", time: "2026-03", value: 110 },
+  { district: "27", commodity: "8471", time: "2026-03", value: 300 },
+  { district: "53", commodity: "8542", time: "2026-03", value: 99999 }, // non-CA, ignored
+  { district: "27", commodity: "8542", time: "2026-02", value: 1 }, // older month, ignored in latest
+];
+const imports = summarizeTechImports(importPoints);
+check("imports latest month detected", imports!.latestMonth === "2026-03");
+check("imports total sums CA districts only", imports!.totalValue === 960);
+check("imports total yoy", Math.abs(imports!.totalYoyPct! - (100 * (960 / 700 - 1))) < 0.001);
+check(
+  "imports sorted by value with per-code yoy",
+  imports!.byCommodity[0].code === "8542" &&
+    Math.abs(imports!.byCommodity[0].yoyPct! - 32) < 0.001 &&
+    imports!.byCommodity[1].code === "8471" &&
+    Math.abs(imports!.byCommodity[1].yoyPct! - 50) < 0.001
+);
+check("imports empty when no CA rows", summarizeTechImports([{ district: "53", commodity: "8542", time: "2026-03", value: 5 }]) === null);
 
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`);
