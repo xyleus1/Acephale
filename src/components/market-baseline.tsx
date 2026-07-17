@@ -81,9 +81,8 @@ export async function MarketBaseline() {
           </div>
         )}
         <div style={{ fontSize: 11, opacity: 0.5, marginTop: 10 }}>
-          FRED + FMCSA census{customs ? " + US Census customs + EIA" : ""}, cached 6–24 h. Carrier counts = active CA
-          for-hire carriers (bench recruiting pool).
-          {failures.length > 0 && ` Feeds unavailable right now: ${failures.join(", ")}.`}
+          EIA · BLS · FMCSA · US Census, auto-refreshed (6–24 h cache). Carrier counts = active CA for-hire carriers.
+          {failures.length > 0 && ` Unavailable right now: ${failures.join(", ")}.`}
         </div>
       </div>
     </div>

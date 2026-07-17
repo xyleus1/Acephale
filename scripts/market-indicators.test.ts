@@ -4,9 +4,9 @@
 import {
   formatIndicatorValue,
   formatUsdCompact,
+  parseBlsSeries,
   parseCensusTable,
   parseEiaSeries,
-  parseFredCsv,
   summarizeSeries,
   summarizeTechImports,
   type CensusPoint,
@@ -24,19 +24,31 @@ function check(name: string, ok: boolean) {
   }
 }
 
-// parseFredCsv: header skipped, "." missing values dropped, garbage ignored.
-const csv = [
-  "observation_date,GASDESW",
-  "2025-07-14,3.807",
-  "2025-08-11,.",
-  "not-a-date,9.99",
-  "2026-01-05,3.477",
-  "2026-07-13,4.796",
-].join("\n");
-const parsed = parseFredCsv(csv);
-check("parses valid rows only", parsed.length === 3);
-check("keeps chronological values", parsed[0][0] === "2025-07-14" && parsed[2][1] === 4.796);
-check("empty input parses to empty", parseFredCsv("observation_date,X\n").length === 0);
+// parseBlsSeries: newest-first monthly rows -> chronological; M13 (annual avg) skipped.
+const blsJson = JSON.stringify({
+  Results: {
+    series: [
+      {
+        data: [
+          { year: "2026", period: "M06", value: "204.622" },
+          { year: "2026", period: "M05", value: "203.944" },
+          { year: "2025", period: "M13", value: "999" },
+          { year: "2025", period: "M06", value: "168.4" },
+          { year: "2025", period: "M07", value: "not-a-number" },
+        ],
+      },
+    ],
+  },
+});
+const bls = parseBlsSeries(blsJson);
+check("bls parses monthly rows only", bls.length === 3);
+check("bls skips the M13 annual average", !bls.some(([, v]) => v === 999));
+check("bls sorts chronologically with month-first dates", bls[0][0] === "2025-06-01" && bls[2][1] === 204.622);
+check("bls tolerates empty payload", parseBlsSeries("{}").length === 0);
+check(
+  "bls series yoy works through summarizeSeries",
+  Math.abs(summarizeSeries(bls)!.yoyPct! - (100 * (204.622 / 168.4 - 1))) < 0.001
+);
 
 // summarizeSeries: YoY matches same calendar month a year back; YTD vs first point of the year.
 const series: SeriesPoint[] = [

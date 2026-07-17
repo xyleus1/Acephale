@@ -13,12 +13,6 @@ import { Icon } from "@/components/icon";
 const EXAMPLE =
   "e.g. 8 pallets of lithium-ion battery modules from our CM in Fremont, CA to a pilot site in Austin, TX — about $180k, 12,000 lbs, needs to deliver in 2 days, pickup Friday";
 
-const SEVERITY_META: Record<CheckFinding["severity"], { label: string; border: string }> = {
-  blocker: { label: "Blockers — will break", border: "var(--danger)" },
-  risk: { label: "Risks — breaks without action", border: "var(--warning)" },
-  watch: { label: "Watch", border: "var(--border, rgba(128,128,128,0.4))" },
-};
-
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
@@ -225,105 +219,109 @@ export function LoadCheckPanel() {
               {chip("Damaged/recalled batteries", fields.batteriesDamagedOrRecalled, () => patch({ batteriesDamagedOrRecalled: !fields.batteriesDamagedOrRecalled }))}
             </div>
 
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, opacity: 0.8 }}>
-              {result.securityTier && (
-                <span>
-                  Security tier: <strong>{securityTierLabel(result.securityTier)}</strong>
-                </span>
-              )}
-              {result.originState && result.destState && (
-                <span>
-                  Lane: <strong>{result.originState} → {result.destState}</strong>
-                  {result.estimatedMiles != null && <span> (~{result.estimatedMiles} mi)</span>}
-                </span>
-              )}
-              <span>
-                Findings: <strong>{result.findings.filter((f) => f.severity === "blocker").length}</strong> blocker(s),{" "}
-                <strong>{result.findings.filter((f) => f.severity === "risk").length}</strong> risk(s)
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                style={{ marginLeft: "auto" }}
-                disabled={creating || pending}
-                title="Creates an RFQ with these fields; the pre-flight report lands in its notes and content panel"
-                onClick={createRfq}
-              >
-                <Icon name="mail-in" size={13} /> {creating ? "Creating…" : "Create RFQ from this check"}
-              </button>
-            </div>
-
-            {(["blocker", "risk", "watch"] as const).map((severity) => {
-              const group = result.findings.filter((f) => f.severity === severity);
-              if (group.length === 0) return null;
-              return (
-                <div key={severity}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6, marginBottom: 6 }}>
-                    {SEVERITY_META[severity].label} ({group.length})
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {group.map((finding) => (
-                      <div
-                        key={finding.id}
-                        className="card"
-                        style={{ padding: "10px 12px", borderLeft: `3px solid ${SEVERITY_META[severity].border}` }}
-                      >
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{finding.title}</div>
-                        <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{finding.detail}</div>
-                        <div style={{ fontSize: 12, marginTop: 6 }}>
-                          <strong>→ {finding.action}</strong>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            {(() => {
+              const blockers = result.findings.filter((f) => f.severity === "blocker");
+              const risks = result.findings.filter((f) => f.severity === "risk");
+              const watch = result.findings.filter((f) => f.severity === "watch");
+              const verdictColor =
+                blockers.length > 0 ? "var(--danger)" : risks.length > 0 ? "var(--warning)" : "var(--success, #2e7d32)";
+              const verdict =
+                blockers.length > 0
+                  ? `NO-GO — clear ${blockers.length} blocker${blockers.length === 1 ? "" : "s"} first`
+                  : risks.length > 0
+                    ? `GO, with ${risks.length} action${risks.length === 1 ? "" : "s"}`
+                    : "GO — nothing breaks";
+              const row = (finding: CheckFinding, color: string) => (
+                <details
+                  key={finding.id}
+                  style={{ padding: "8px 12px", borderLeft: `2px solid ${color}` }}
+                >
+                  <summary style={{ cursor: "pointer", fontSize: 13, lineHeight: 1.5 }}>
+                    <strong>{finding.title}</strong>
+                    <span style={{ opacity: 0.85 }}> → {finding.action}</span>
+                  </summary>
+                  <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4, paddingLeft: 2 }}>{finding.detail}</div>
+                </details>
               );
-            })}
-
-            <div className="card" style={{ padding: "10px 12px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6, marginBottom: 6 }}>
-                Carrier bench fit
-              </div>
-              {result.carrierMatch.requirements.length > 0 ? (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                  {result.carrierMatch.requirements.map((req) => (
-                    <span key={req.key} className="mode-tab" style={{ cursor: "default" }}>
-                      {req.label}
+              const bench = result.carrierMatch;
+              return (
+                <>
+                  <div
+                    className="card"
+                    style={{
+                      padding: "10px 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      flexWrap: "wrap",
+                      borderLeft: `3px solid ${verdictColor}`,
+                    }}
+                  >
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>{verdict}</span>
+                    <span style={{ fontSize: 12, opacity: 0.65 }}>
+                      {[
+                        result.securityTier && `${securityTierLabel(result.securityTier)} tier`,
+                        result.originState &&
+                          result.destState &&
+                          `${result.originState} → ${result.destState}${result.estimatedMiles != null ? ` · ~${result.estimatedMiles} mi` : ""}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>No special carrier requirements detected yet.</div>
-              )}
-              <div style={{ fontSize: 12 }}>
-                {result.carrierMatch.matched.length > 0 ? (
-                  <>
-                    Matching approved carriers:{" "}
-                    {result.carrierMatch.matched.map((c, i) => (
-                      <span key={c.id}>
-                        {i > 0 && ", "}
-                        <Link href={`/dashboard/carriers/${c.id}`} style={{ textDecoration: "underline" }}>
-                          {c.name}
-                        </Link>
-                      </span>
-                    ))}
-                  </>
-                ) : (
-                  <>
-                    No matching approved carrier ({result.carrierMatch.approvedOnBench} approved on the bench).{" "}
-                    <Link href="/dashboard/carriers" style={{ textDecoration: "underline" }}>
-                      Open the bench
-                    </Link>{" "}
-                    to vet one.
-                  </>
-                )}
-              </div>
-            </div>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ marginLeft: "auto" }}
+                      disabled={creating || pending}
+                      title="Creates an RFQ with these fields; the full report lands in its notes"
+                      onClick={createRfq}
+                    >
+                      <Icon name="mail-in" size={13} /> {creating ? "Creating…" : "Create RFQ"}
+                    </button>
+                  </div>
 
-            <div style={{ fontSize: 11, opacity: 0.5 }}>
-              Deterministic rules + your live carrier bench; AI only parses the text (edit any field to re-check).
-              Decision aid, not legal advice — verify actions with the broker/authority that owns each rule.
-            </div>
+                  {(blockers.length > 0 || risks.length > 0) && (
+                    <div className="card" style={{ padding: "2px 0", display: "flex", flexDirection: "column" }}>
+                      {blockers.map((f) => row(f, "var(--danger)"))}
+                      {risks.map((f) => row(f, "var(--warning)"))}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
+                    <span style={{ opacity: 0.85 }}>
+                      <strong>Bench:</strong>{" "}
+                      {bench.matched.length > 0 ? (
+                        bench.matched.map((c, i) => (
+                          <span key={c.id}>
+                            {i > 0 && ", "}
+                            <Link href={`/dashboard/carriers/${c.id}`} style={{ textDecoration: "underline" }}>
+                              {c.name}
+                            </Link>
+                          </span>
+                        ))
+                      ) : (
+                        <>
+                          no approved match ({bench.approvedOnBench} on bench)
+                          {bench.requirements.length > 0 && ` — needs ${bench.requirements.map((r) => r.label.toLowerCase()).join(", ")}`}
+                          {" · "}
+                          <Link href="/dashboard/carriers" style={{ textDecoration: "underline" }}>
+                            vet a carrier
+                          </Link>
+                        </>
+                      )}
+                    </span>
+                    {watch.length > 0 && (
+                      <details style={{ marginLeft: "auto" }}>
+                        <summary style={{ cursor: "pointer", opacity: 0.55 }}>Watch items ({watch.length})</summary>
+                        <div className="card" style={{ marginTop: 6, padding: "2px 0" }}>
+                          {watch.map((f) => row(f, "var(--border, rgba(128,128,128,0.4))"))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </>
         )}
       </div>
