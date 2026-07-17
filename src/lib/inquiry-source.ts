@@ -47,6 +47,10 @@ export function deriveInquirySource(inq: InquirySourceInput): InquirySourceInfo 
     return { kind: "lead", label, detail: campaign };
   }
 
+  if (parsed.source === "load-preflight") {
+    return { kind: "manual", label: "Pre-flight", detail: null };
+  }
+
   const account = inq.emailThreads?.[0]?.messages?.[0]?.account ?? null;
   if (account?.provider === "WHATSAPP") {
     return { kind: "whatsapp", label: "WhatsApp", detail: account.email };

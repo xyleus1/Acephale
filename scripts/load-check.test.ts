@@ -6,6 +6,7 @@ import {
   coerceLoadIdea,
   EMPTY_LOAD_IDEA,
   estimateMiles,
+  formatPreflightReport,
   type BenchCarrier,
   type LoadIdea,
 } from "../src/lib/load-check";
@@ -147,6 +148,20 @@ check(
   "July 4th pickup raises the holiday theft window",
   severityOf(run({ declaredValue: 150_000, pickupDate: "2026-07-03" }), "holiday_theft_window") === "risk"
 );
+check(
+  "Dec 30 pickup falls in the New Year window (month boundary)",
+  severityOf(run({ declaredValue: 150_000, pickupDate: "2026-12-30" }), "holiday_theft_window") === "risk"
+);
+check(
+  "mid-November pickup is outside every window",
+  !ids(run({ declaredValue: 150_000, pickupDate: "2026-11-10" })).includes("holiday_theft_window")
+);
+
+// isChina must not catch Taiwan.
+check(
+  "Taiwan-origin inbound does not raise the China finding",
+  !ids(run({ inboundInternational: true, originCountry: "Taiwan, Province of China", commodityCategory: "networking" })).includes("china_301_uflpa")
+);
 
 // CARB TRU.
 check(
@@ -183,10 +198,34 @@ const coerced = coerceLoadIdea(
   ["DRY_VAN"]
 );
 check("coerce keeps valid commodity", coerced.commodityCategory === "servers_gpu");
+check(
+  "coerce treats empty/junk money strings as missing, not zero",
+  coerceLoadIdea({ declaredValue: "" }, COMMODITY_CATEGORY_VALUES, []).declaredValue === null &&
+    coerceLoadIdea({ declaredValue: "$ ," }, COMMODITY_CATEGORY_VALUES, []).declaredValue === null
+);
 check("coerce nulls unknown equipment", coerced.equipmentType === null);
 check("coerce parses money strings", coerced.declaredValue === 180_000);
 check("coerce accepts boolean strings", coerced.temperatureSensitive === true);
 check("coerce rejects negative numbers", coerced.transitDays === null);
+
+// formatPreflightReport: notes carry blockers+risks with actions; report has sections.
+const reportIdea: LoadIdea = {
+  ...EMPTY_LOAD_IDEA,
+  description: "Battery modules Fremont to Austin",
+  commodityCategory: "batteries_un3480",
+  origin: "Fremont, CA",
+  destination: "Austin, TX",
+  declaredValue: 180_000,
+  weightLbs: 12_000,
+};
+const reportResult = checkLoadIdea(reportIdea, { carriers: [], now: NOW });
+const { notes, report } = formatPreflightReport(reportIdea, reportResult);
+check("notes lead with counts and tier", notes.startsWith("Pre-flight:") && notes.includes("high_value"));
+check("notes include blocker titles with actions", notes.includes("✗") && notes.includes("→"));
+check("notes exclude watch items", !notes.includes("Booking as broker of record"));
+check("report has section headers", report.includes("BLOCKERS (") && report.includes("CARRIER BENCH"));
+check("report carries the facts line", report.includes("Declared value: $180,000") && report.includes("Weight: 12,000 lbs"));
+check("report names the empty-bench state", report.includes("0 approved on the bench"));
 
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`);

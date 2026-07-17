@@ -132,7 +132,9 @@ export function estimateMiles(
 function isChina(country: string | null): boolean {
   if (!country) return false;
   const c = country.toLowerCase();
-  return c.includes("china") || c.includes("prc") || c === "cn";
+  // "Taiwan, Province of China" and similar must NOT trigger the China rules.
+  if (c.includes("taiwan")) return false;
+  return c.includes("china") || /\bprc\b/.test(c) || /\bcn\b/.test(c);
 }
 
 // Fixed-date holiday windows when organized theft spikes (long unattended
@@ -148,6 +150,21 @@ function parsePickup(pickupDate: string | null): Date | null {
   if (!pickupDate || !/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) return null;
   const date = new Date(`${pickupDate}T12:00:00Z`);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// Windows must survive month/year boundaries (Dec 30 is inside the New Year
+// window), so compare against anchor dates in adjacent years, not day-of-month
+// arithmetic. Anchors sit at 12:00Z to match parsePickup.
+function theftWindowLabel(pickup: Date): string | null {
+  const t = pickup.getTime();
+  const year = pickup.getUTCFullYear();
+  for (const w of THEFT_WINDOWS) {
+    for (const y of [year - 1, year, year + 1]) {
+      const anchor = Date.UTC(y, w.month - 1, w.day, 12);
+      if (Math.abs(t - anchor) <= w.span * 86_400_000) return w.label;
+    }
+  }
+  return null;
 }
 
 export function checkLoadIdea(
@@ -182,8 +199,8 @@ export function checkLoadIdea(
       domain: "hazmat",
       title: "Damaged/recalled lithium batteries are forbidden in normal transport",
       detail:
-        "DOT treats damaged, defective, or recalled lithium cells as forbidden hazmat outside special-permit packaging and handlers.",
-      action: "Refuse a standard booking. This needs a specialist DDR-battery handler with the DOT special permit — quote only through one.",
+        "DOT forbids damaged, defective, or recalled lithium cells aboard aircraft entirely; ground moves are legal only under 49 CFR 173.185(f) enhanced packaging and handling, and cells at risk of fire or rapid disassembly additionally need PHMSA approval or a special permit.",
+      action: "Refuse a standard booking. This needs a specialist DDR-battery handler set up for 173.185(f) packaging — quote only through one.",
     });
   }
   if (category === "batteries_un3480") {
@@ -191,11 +208,11 @@ export function checkLoadIdea(
       id: "un3480_fully_regulated",
       severity: "blocker",
       domain: "hazmat",
-      title: "UN3480 standalone lithium-ion = fully regulated Class 9 ground move",
+      title: "UN3480 standalone lithium-ion — fully regulated Class 9 unless small-cell excepted",
       detail:
-        "Standalone lithium-ion batteries ship as UN3480, Class 9: UN-spec packaging, lithium battery mark + Class 9 label, shipping papers with emergency contact, hazmat-trained carrier and driver (49 CFR 173.185).",
+        "Cells over 20 Wh or batteries over 100 Wh ship fully regulated Class 9 by ground: UN-spec packaging, Class 9 label + lithium battery mark, shipping papers with emergency contact, hazmat-trained carrier and driver (49 CFR 173.185). At or under those limits, highway moves can use the excepted lithium-battery provisions.",
       action:
-        "Book only a hazmat-certified, lithium-experienced carrier from the bench. Get Wh rating, cell/battery count per package, and packaging spec from the shipper before quoting.",
+        "Get the Wh rating and cell/battery count per package from the shipper first; unless everything is under the excepted limits, book only a hazmat-certified, lithium-experienced carrier from the bench.",
     });
   }
   if (category === "batteries_un3481") {
@@ -229,7 +246,7 @@ export function checkLoadIdea(
       domain: "export",
       title: "Possible ITAR/USML article — outside current scope",
       detail:
-        "Defense/space hardware can be a USML defense article: handling requires ITAR registration and foreign-person access controls even on domestic moves. Getting this wrong is criminal exposure, not a fine.",
+        "Defense/space hardware can be a USML defense article: even on a domestic move, unlicensed foreign-person access to the article or its technical data is a deemed export — criminal exposure, not a fine. Defense shippers demand ITAR-compliant handling (US-person drivers, access controls) and typically ITAR-registered logistics partners.",
       action: "Don't quote. Keep Tier C parked until a specialist ITAR-registered forwarder partner is signed, then co-broker through them.",
     });
   }
@@ -347,22 +364,18 @@ export function checkLoadIdea(
     });
   }
   if (pickup && tier && tierRank(tier) >= tierRank("high_value")) {
-    const month = pickup.getUTCMonth() + 1;
-    const day = pickup.getUTCDate();
-    const window = THEFT_WINDOWS.find(
-      (w) => month === w.month && Math.abs(day - w.day) <= w.span
-    );
-    if (window) {
+    const windowLabel = theftWindowLabel(pickup);
+    if (windowLabel) {
       add({
         id: "holiday_theft_window",
         severity: "risk",
         domain: "security",
-        title: `Pickup lands in the ${window.label} theft window`,
+        title: `Pickup lands in the ${windowLabel} theft window`,
         detail: "Organized cargo theft spikes around long holiday weekends when freight sits unattended.",
         action: "Move pickup outside the window, or guarantee a live unload with no overnight dwell and active tracking.",
       });
     }
-    if (pickup.getUTCDay() === 5 && !window) {
+    if (pickup.getUTCDay() === 5 && !windowLabel) {
       add({
         id: "friday_pickup_dwell",
         severity: "watch",
@@ -580,13 +593,73 @@ export function checkLoadIdea(
   };
 }
 
+// Render a pre-flight result as text: `notes` is the compact form for
+// Inquiry.notes; `report` is the full form for the RFQ content panel
+// (rawEmailBody). Pure — the caller stamps dates/references.
+export function formatPreflightReport(idea: LoadIdea, result: LoadCheckResult): { notes: string; report: string } {
+  const blockers = result.findings.filter((f) => f.severity === "blocker");
+  const risks = result.findings.filter((f) => f.severity === "risk");
+  const watch = result.findings.filter((f) => f.severity === "watch");
+  const tierText = result.securityTier ?? "unset";
+  const laneText =
+    result.originState && result.destState
+      ? `${result.originState} → ${result.destState}${result.estimatedMiles != null ? ` (~${result.estimatedMiles} mi)` : ""}`
+      : null;
+
+  const notes = [
+    `Pre-flight: ${blockers.length} blocker(s), ${risks.length} risk(s), ${watch.length} watch — security tier ${tierText}.`,
+    ...blockers.map((f) => `✗ ${f.title} → ${f.action}`),
+    ...risks.map((f) => `! ${f.title} → ${f.action}`),
+  ].join("\n");
+
+  const section = (label: string, group: CheckFinding[]): string[] =>
+    group.length === 0
+      ? []
+      : [label, ...group.map((f, i) => `${i + 1}. ${f.title}\n   ${f.detail}\n   → ${f.action}`), ""];
+
+  const facts = [
+    idea.description ? `Idea: ${idea.description}` : null,
+    laneText ? `Lane: ${laneText}` : null,
+    idea.declaredValue != null ? `Declared value: $${idea.declaredValue.toLocaleString("en-US")}` : null,
+    idea.weightLbs != null ? `Weight: ${idea.weightLbs.toLocaleString("en-US")} lbs` : null,
+    idea.equipmentType ? `Equipment: ${idea.equipmentType}` : null,
+    idea.pickupDate ? `Pickup: ${idea.pickupDate}` : null,
+    idea.transitDays != null ? `Transit promise: ${idea.transitDays} day(s)` : null,
+    `Security tier: ${tierText}`,
+  ].filter((line): line is string => line != null);
+
+  const bench =
+    result.carrierMatch.matched.length > 0
+      ? `Matching approved carriers: ${result.carrierMatch.matched.map((c) => c.name).join(", ")}`
+      : `No matching approved carrier (${result.carrierMatch.approvedOnBench} approved on the bench). Requirements: ${
+          result.carrierMatch.requirements.map((r) => r.label).join(", ") || "none"
+        }`;
+
+  const report = [
+    "LOAD PRE-FLIGHT REPORT",
+    ...facts,
+    "",
+    ...section(`BLOCKERS (${blockers.length})`, blockers),
+    ...section(`RISKS (${risks.length})`, risks),
+    ...section(`WATCH (${watch.length})`, watch),
+    "CARRIER BENCH",
+    bench,
+  ].join("\n");
+
+  return { notes, report };
+}
+
 // Coerce whatever the AI extractor (or a client form) produced into a safe
 // LoadIdea. Unknown enum values become null; numbers are sanitized.
 export function coerceLoadIdea(raw: unknown, commodityValues: readonly string[], equipmentValues: readonly string[]): LoadIdea {
   const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
   const num = (v: unknown): number | null => {
-    const n = typeof v === "string" ? Number(v.replace(/[$,\s]/g, "")) : typeof v === "number" ? v : NaN;
+    if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
+    if (typeof v !== "string") return null;
+    const cleaned = v.replace(/[$,\s]/g, "");
+    if (!cleaned) return null; // Number("") === 0 — an empty string is missing, not zero
+    const n = Number(cleaned);
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
   const bool = (v: unknown): boolean => v === true || v === "true";

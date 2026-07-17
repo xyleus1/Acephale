@@ -2,7 +2,8 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { analyzeLoadIdeaAction } from "@/app/dashboard/market/actions";
+import { useRouter } from "next/navigation";
+import { analyzeLoadIdeaAction, createRfqFromLoadIdeaAction } from "@/app/dashboard/market/actions";
 import type { CheckFinding, LoadCheckResult, LoadIdea } from "@/lib/load-check";
 import { COMMODITY_CATEGORIES, securityTierLabel } from "@/lib/security-sop";
 import { CARRIER_EQUIPMENT_TYPES } from "@/lib/carrier-vetting";
@@ -54,7 +55,9 @@ export function LoadCheckPanel() {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [creating, setCreating] = useState(false);
   const [rev, setRev] = useState(0);
+  const router = useRouter();
 
   function runAnalyze() {
     if (!text.trim() || pending) return;
@@ -69,7 +72,6 @@ export function LoadCheckPanel() {
         setFields(res.fields);
         setResult(res.result);
         setNote(res.note);
-        setRev((r) => r + 1);
       } catch {
         setError("Could not analyze — check your connection and try again.");
       }
@@ -84,20 +86,44 @@ export function LoadCheckPanel() {
         const res = await analyzeLoadIdeaAction({ idea: next });
         if ("error" in res) {
           setError(res.error);
+          setRev((r) => r + 1); // remount cells back to the last good server state
           return;
         }
+        // No rev bump on success: cell keys carry the server value, so only
+        // cells whose value actually changed remount — in-progress typing in
+        // OTHER cells survives a resolving re-check.
         setFields(res.fields);
         setResult(res.result);
         setNote(null);
-        setRev((r) => r + 1);
       } catch {
         setError("Could not re-check — try again.");
+        setRev((r) => r + 1);
       }
     });
   }
 
   function patch(partial: Partial<LoadIdea>) {
     recheck({ ...(fields ?? EMPTY_FIELDS), ...partial });
+  }
+
+  function createRfq() {
+    if (!fields || creating) return;
+    setCreating(true);
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await createRfqFromLoadIdeaAction({ idea: fields });
+        if ("error" in res) {
+          setError(res.error);
+          return;
+        }
+        router.push(`/dashboard/rfq/${res.inquiryId}`);
+      } catch {
+        setError("Could not create the RFQ — try again.");
+      } finally {
+        setCreating(false);
+      }
+    });
   }
 
   function chip(label: string, on: boolean, toggle: () => void, title?: string) {
@@ -150,7 +176,7 @@ export function LoadCheckPanel() {
             >
               <Field label="Commodity">
                 <CellSelect
-                  key={`cc:${rev}`}
+                  key={`cc:${rev}:${fields.commodityCategory ?? ""}`}
                   value={fields.commodityCategory}
                   options={COMMODITY_CATEGORIES}
                   allowEmpty
@@ -158,20 +184,20 @@ export function LoadCheckPanel() {
                 />
               </Field>
               <Field label="Origin">
-                <CellInput key={`o:${rev}`} value={fields.origin} placeholder="City, ST" onCommit={(v) => patch({ origin: v || null })} />
+                <CellInput key={`o:${rev}:${fields.origin ?? ""}`} value={fields.origin} placeholder="City, ST" onCommit={(v) => patch({ origin: v || null })} />
               </Field>
               <Field label="Destination">
-                <CellInput key={`d:${rev}`} value={fields.destination} placeholder="City, ST" onCommit={(v) => patch({ destination: v || null })} />
+                <CellInput key={`d:${rev}:${fields.destination ?? ""}`} value={fields.destination} placeholder="City, ST" onCommit={(v) => patch({ destination: v || null })} />
               </Field>
               <Field label="Declared value (USD)">
-                <CellInput key={`v:${rev}`} value={numText(fields.declaredValue)} placeholder="180000" onCommit={(v) => patch({ declaredValue: v ? Number(v.replace(/[$,\s]/g, "")) || null : null })} />
+                <CellInput key={`v:${rev}:${fields.declaredValue ?? ""}`} value={numText(fields.declaredValue)} placeholder="180000" onCommit={(v) => patch({ declaredValue: v ? Number(v.replace(/[$,\s]/g, "")) || null : null })} />
               </Field>
               <Field label="Weight (lbs)">
-                <CellInput key={`w:${rev}`} value={numText(fields.weightLbs)} placeholder="12000" onCommit={(v) => patch({ weightLbs: v ? Number(v.replace(/[,\s]/g, "")) || null : null })} />
+                <CellInput key={`w:${rev}:${fields.weightLbs ?? ""}`} value={numText(fields.weightLbs)} placeholder="12000" onCommit={(v) => patch({ weightLbs: v ? Number(v.replace(/[,\s]/g, "")) || null : null })} />
               </Field>
               <Field label="Equipment">
                 <CellSelect
-                  key={`e:${rev}`}
+                  key={`e:${rev}:${fields.equipmentType ?? ""}`}
                   value={fields.equipmentType}
                   options={CARRIER_EQUIPMENT_TYPES}
                   allowEmpty
@@ -179,14 +205,14 @@ export function LoadCheckPanel() {
                 />
               </Field>
               <Field label="Pickup date">
-                <CellInput key={`p:${rev}`} value={fields.pickupDate} placeholder="YYYY-MM-DD" onCommit={(v) => patch({ pickupDate: v || null })} />
+                <CellInput key={`p:${rev}:${fields.pickupDate ?? ""}`} value={fields.pickupDate} placeholder="YYYY-MM-DD" onCommit={(v) => patch({ pickupDate: v || null })} />
               </Field>
               <Field label="Transit promise (days)">
-                <CellInput key={`t:${rev}`} value={numText(fields.transitDays)} placeholder="2" onCommit={(v) => patch({ transitDays: v ? Number(v) || null : null })} />
+                <CellInput key={`t:${rev}:${fields.transitDays ?? ""}`} value={numText(fields.transitDays)} placeholder="2" onCommit={(v) => patch({ transitDays: v ? Number(v) || null : null })} />
               </Field>
               {fields.inboundInternational && (
                 <Field label="Inbound from (country)">
-                  <CellInput key={`ic:${rev}`} value={fields.originCountry} placeholder="China" onCommit={(v) => patch({ originCountry: v || null })} />
+                  <CellInput key={`ic:${rev}:${fields.originCountry ?? ""}`} value={fields.originCountry} placeholder="China" onCommit={(v) => patch({ originCountry: v || null })} />
                 </Field>
               )}
             </div>
@@ -215,6 +241,16 @@ export function LoadCheckPanel() {
                 Findings: <strong>{result.findings.filter((f) => f.severity === "blocker").length}</strong> blocker(s),{" "}
                 <strong>{result.findings.filter((f) => f.severity === "risk").length}</strong> risk(s)
               </span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ marginLeft: "auto" }}
+                disabled={creating || pending}
+                title="Creates an RFQ with these fields; the pre-flight report lands in its notes and content panel"
+                onClick={createRfq}
+              >
+                <Icon name="mail-in" size={13} /> {creating ? "Creating…" : "Create RFQ from this check"}
+              </button>
             </div>
 
             {(["blocker", "risk", "watch"] as const).map((severity) => {

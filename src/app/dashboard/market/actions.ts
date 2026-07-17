@@ -1,16 +1,20 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { qualifyRfq } from "@/lib/rfq-qualification";
+import { createWithFileReference } from "@/lib/references";
 import {
   checkLoadIdea,
   coerceLoadIdea,
+  formatPreflightReport,
   type BenchCarrier,
   type LoadCheckResult,
   type LoadIdea,
 } from "@/lib/load-check";
 import { extractLoadIdea } from "@/lib/load-check-extract";
-import { COMMODITY_CATEGORY_VALUES } from "@/lib/security-sop";
+import { commodityCategoryLabel, COMMODITY_CATEGORY_VALUES } from "@/lib/security-sop";
 import { CARRIER_EQUIPMENT_TYPES } from "@/lib/carrier-vetting";
 
 const EQUIPMENT_VALUES = CARRIER_EQUIPMENT_TYPES.map(([value]) => value);
@@ -44,8 +48,13 @@ export async function analyzeLoadIdeaAction(input: {
     note = extracted.note;
   }
 
+  const result = checkLoadIdea(fields, { carriers: await approvedBench(session.officeId), now: new Date() });
+  return { fields, result, note };
+}
+
+async function approvedBench(officeId: string): Promise<BenchCarrier[]> {
   const carriers = await prisma.carrier.findMany({
-    where: { officeId: session.officeId, active: true, vettingStatus: "approved" },
+    where: { officeId, active: true, vettingStatus: "approved" },
     select: {
       id: true,
       name: true,
@@ -61,8 +70,7 @@ export async function analyzeLoadIdeaAction(input: {
     },
     take: 500,
   });
-
-  const bench: BenchCarrier[] = carriers.map((carrier) => ({
+  return carriers.map((carrier) => ({
     id: carrier.id,
     name: carrier.name,
     hazmatCertified: carrier.hazmatCertified,
@@ -75,7 +83,95 @@ export async function analyzeLoadIdeaAction(input: {
     cargoLimit: carrier.cargoLimit,
     cargoInsuranceExpiry: carrier.cargoInsuranceExpiry ? carrier.cargoInsuranceExpiry.toISOString() : null,
   }));
+}
 
-  const result = checkLoadIdea(fields, { carriers: bench, now: new Date() });
-  return { fields, result, note };
+const LBS_TO_KG = 0.453592;
+
+// Promote a checked load idea into a real RFQ: the pre-flight re-runs
+// server-side (never trust the client's copy of the findings), the report
+// lands in notes + the content panel, and the security-spine fields carry
+// over so pricing and the load review start pre-filled.
+export async function createRfqFromLoadIdeaAction(input: {
+  idea: Partial<LoadIdea>;
+}): Promise<{ inquiryId: string; reference: string | null } | { error: string }> {
+  const session = await requireSession();
+  const fields = coerceLoadIdea(input.idea, COMMODITY_CATEGORY_VALUES, EQUIPMENT_VALUES);
+  if (!fields.origin && !fields.destination && !fields.description && !fields.commodityCategory) {
+    return { error: "The idea needs at least a lane, commodity, or description before it becomes an RFQ." };
+  }
+
+  const result = checkLoadIdea(fields, { carriers: await approvedBench(session.officeId), now: new Date() });
+  const { notes, report } = formatPreflightReport(fields, result);
+
+  const isBattery = fields.commodityCategory === "batteries_un3480" || fields.commodityCategory === "batteries_un3481";
+  const commodity = fields.commodityCategory ? commodityCategoryLabel(fields.commodityCategory) : null;
+  const weightKg = fields.weightLbs != null ? Math.round(fields.weightLbs * LBS_TO_KG) : null;
+  const subject =
+    fields.description ??
+    [commodity ?? "Load idea", fields.origin && fields.destination ? `${fields.origin} → ${fields.destination}` : null]
+      .filter(Boolean)
+      .join(" — ");
+
+  const qualificationInput = {
+    origin: fields.origin,
+    destination: fields.destination,
+    mode: "ROAD",
+    commodity,
+    containerCount: null,
+    containerType: null,
+    dimensions: null,
+    stackable: null,
+    topLoad: null,
+    dangerousGoods: isBattery ? "YES" : "UNKNOWN",
+    customsBy: "UNKNOWN",
+    weight: weightKg,
+    volume: null,
+    targetPrice: null,
+    targetPriceStatus: "UNKNOWN",
+  };
+  const qualification = qualifyRfq(qualificationInput);
+
+  const inquiry = await createWithFileReference(session.officeId, (reference) =>
+    prisma.inquiry.create({
+      data: {
+        officeId: session.officeId,
+        reference,
+        subject: subject.slice(0, 200),
+        origin: fields.origin,
+        destination: fields.destination,
+        mode: "ROAD",
+        commodity,
+        weight: weightKg,
+        dangerousGoods: qualificationInput.dangerousGoods,
+        customsBy: qualificationInput.customsBy,
+        targetPriceStatus: "UNKNOWN",
+        cargoReadyDate: fields.pickupDate ? new Date(`${fields.pickupDate}T00:00:00Z`) : null,
+        declaredValue: fields.declaredValue,
+        declaredValueCurrency: fields.declaredValue != null ? "USD" : null,
+        securityTier: result.securityTier,
+        commodityCategory: fields.commodityCategory,
+        equipmentType: fields.equipmentType,
+        notes,
+        rawEmailBody: report,
+        parsedData: JSON.stringify({
+          source: "load-preflight",
+          preflight: {
+            idea: fields,
+            securityTier: result.securityTier,
+            blockers: result.findings.filter((f) => f.severity === "blocker").length,
+            risks: result.findings.filter((f) => f.severity === "risk").length,
+            generatedAt: new Date().toISOString(),
+          },
+          qualification,
+        }),
+        status: qualification.isMature ? "PARSED" : "INGESTED",
+        receivedAt: new Date(),
+      },
+      select: { id: true, reference: true },
+    })
+  );
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/rfq");
+  return { inquiryId: inquiry.id, reference: inquiry.reference };
 }
