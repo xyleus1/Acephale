@@ -15,6 +15,7 @@ import {
   type SendStampKey,
 } from "@/lib/rfq-mail";
 import { buildWhatsAppInquiry, waDigitsFromWhatsAppAddress, waPhoneDigits } from "@/lib/rfq-whatsapp";
+import { metaLeadMarketOf, type MetaLeadMarket } from "@/lib/meta-leads";
 import { logOutboundWhatsAppMessage, sendWhatsAppText, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { normalizeInquiryStatusInput } from "@/lib/inquiry-status";
 import { deriveSecurityTier } from "@/lib/security-sop";
@@ -103,9 +104,10 @@ export async function sendLeadConfirmationAction(
   return { ok: true };
 }
 
-// Send the Turkish WhatsApp inquiry draft to the lead through the CRM's
-// WhatsApp Cloud API number, and log it into the matching inbox thread.
-// The draft is rebuilt server-side — same text the sheet previews.
+// Send the WhatsApp inquiry draft (Turkish for TR leads, English for US
+// ones) to the lead through the CRM's WhatsApp Cloud API number, and log it
+// into the matching inbox thread. The draft is rebuilt server-side — same
+// text the sheet previews.
 export async function sendWhatsAppInquiryAction(
   inquiryId: string,
 ): Promise<{ ok: true } | { error: string }> {
@@ -116,13 +118,17 @@ export async function sendWhatsAppInquiryAction(
   }
 
   let parsedPhone: string | null = null;
+  let market: MetaLeadMarket = "TR";
   try {
     const parsed = inquiry.parsedData ? JSON.parse(inquiry.parsedData) : {};
     parsedPhone = parsed && typeof parsed === "object" && typeof parsed.phone === "string" ? parsed.phone : null;
+    if (parsed && typeof parsed === "object") market = metaLeadMarketOf(parsed);
   } catch {
     parsedPhone = null;
   }
-  const digits = waPhoneDigits(parsedPhone) ?? waDigitsFromWhatsAppAddress(inquiry.fromEmail);
+  // Same market rules as the preview's wa.me link — the number the operator
+  // saw is the number the Cloud API send goes to.
+  const digits = waPhoneDigits(parsedPhone, market) ?? waDigitsFromWhatsAppAddress(inquiry.fromEmail);
   if (!digits) return { error: "No usable phone number on this RFQ — add one to the lead first." };
 
   const draft = buildWhatsAppInquiry(inquiry);

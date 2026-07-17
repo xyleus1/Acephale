@@ -630,12 +630,16 @@ function useDebouncedValue<T>(value: T, ms: number): T {
   return v;
 }
 
-export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery }: {
+export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery, hideToolbar }: {
   rows: RfqRowData[];
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
   userId: string;
   searchQuery: string;
+  // With two sheets on /dashboard/rfq, only the primary one renders the
+  // search bar + column picker; the layout (same per-user storage key) still
+  // applies to both.
+  hideToolbar?: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -789,6 +793,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           onDone={() => setSelected(new Set())}
         />
       )}
+      {!hideToolbar && (
       <div className="table-toolbar rfq-sheet-toolbar">
         <RfqSearchBar initialQuery={searchQuery} />
         <div ref={pickerRef} className="table-picker">
@@ -824,6 +829,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           )}
         </div>
       </div>
+      )}
       {rows.length === 0 ? (
         <div className="card empty-state-card">
           <Icon name={searchQuery ? "search" : "inbox"} size={36} className="empty-state-graphic" />

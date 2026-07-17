@@ -18,7 +18,8 @@ export function SyncGoogleSheetButton() {
       } else {
         setMsg(
           `${res.requests.created + res.requests.updated} RFQs · ` +
-          `${res.leads.created + res.leads.updated} leads · ` +
+          `${res.leads.created + res.leads.updated} TR leads · ` +
+          `${res.leadsUs.created + res.leadsUs.updated} US leads · ` +
           `${res.operations.created + res.operations.updated} jobs · ` +
           `${res.operations.companiesCreated} companies` +
           (res.warnings.length > 0 ? ` · ${res.warnings[0]}` : "")

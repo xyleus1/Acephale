@@ -24,6 +24,7 @@ import {
 } from "@/lib/rfq-mail";
 import { buildWhatsAppInquiry } from "@/lib/rfq-whatsapp";
 import { whatsAppSendConfigured } from "@/lib/whatsapp";
+import { metaLeadsSource, metaLeadsSheetUrl, US_LEAD_PARSED_MARKER } from "@/lib/meta-leads";
 
 // Send-all pushes up to 60 sequential SMTP sends through a server action on
 // this segment; the default function timeout would cut the batch short.
@@ -125,51 +126,79 @@ export default async function RFQPage({
   const filter = filterTabs.some((t) => t.key === statusParam) ? statusParam : "";
 
   const contains = { contains: searchQuery, mode: "insensitive" as const };
-  const inquiriesRaw = await prisma.inquiry.findMany({
-    where: {
-      officeId: session.officeId,
-      ...(filter === ""
-        ? { status: openInquiryStatusFilter() }
-        : filter === "all"
-          ? {}
-          : INQUIRY_STATUS_VALUES.includes(filter)
-            ? { status: { in: inquiryStatusValuesFor(filter) } }
-            : { status: filter }),
-      ...(searchQuery
-        ? {
-            OR: [
-              { reference: contains },
-              { subject: contains },
-              { fromCompany: contains },
-              { fromEmail: contains },
-              { origin: contains },
-              { destination: contains },
-              { commodity: contains },
-            ],
-          }
-        : {}),
-    },
-    include: {
-      company: { select: { id: true, name: true } },
-      job: { select: { id: true, reference: true } },
-      emailThreads: {
-        take: 1,
-        select: {
-          messages: {
-            take: 1,
-            select: { account: { select: { email: true, provider: true } } },
-          },
+  const whereBase = {
+    officeId: session.officeId,
+    ...(filter === ""
+      ? { status: openInquiryStatusFilter() }
+      : filter === "all"
+        ? {}
+        : INQUIRY_STATUS_VALUES.includes(filter)
+          ? { status: { in: inquiryStatusValuesFor(filter) } }
+          : { status: filter }),
+    ...(searchQuery
+      ? {
+          OR: [
+            { reference: contains },
+            { subject: contains },
+            { fromCompany: contains },
+            { fromEmail: contains },
+            { origin: contains },
+            { destination: contains },
+            { commodity: contains },
+          ],
+        }
+      : {}),
+  };
+  const includeRelations = {
+    company: { select: { id: true, name: true } },
+    job: { select: { id: true, reference: true } },
+    emailThreads: {
+      take: 1,
+      select: {
+        messages: {
+          take: 1,
+          select: { account: { select: { email: true, provider: true } } },
         },
       },
     },
-    orderBy: { receivedAt: "desc" },
-    take: 200,
-  });
+  } as const;
+
+  // US-market leads render in their own panel; everything else stays in the
+  // main sheet. Both honor the same status tab and search query. officeId is
+  // already in whereBase; restated so the scope survives refactors (and the
+  // tenant-scope audit can see it).
+  const [inquiriesRaw, usInquiriesRaw] = await Promise.all([
+    prisma.inquiry.findMany({
+      where: {
+        ...whereBase,
+        officeId: session.officeId,
+        // NOT-contains alone would also drop rows with NULL parsedData
+        // (SQL LIKE on NULL is unknown) — manual RFQs must stay visible.
+        AND: [{ OR: [
+          { parsedData: null },
+          { NOT: { parsedData: { contains: US_LEAD_PARSED_MARKER } } },
+        ] }],
+      },
+      include: includeRelations,
+      orderBy: { receivedAt: "desc" },
+      take: 200,
+    }),
+    prisma.inquiry.findMany({
+      where: {
+        ...whereBase,
+        officeId: session.officeId,
+        parsedData: { contains: US_LEAD_PARSED_MARKER },
+      },
+      include: includeRelations,
+      orderBy: { receivedAt: "desc" },
+      take: 200,
+    }),
+  ]);
 
   const mailConfigured = rfqMailConfigured();
   const waConfigured = whatsAppSendConfigured();
 
-  const rows: RfqRowData[] = inquiriesRaw.map((inq) => {
+  const toRow = (inq: (typeof inquiriesRaw)[number]): RfqRowData => {
     const source = deriveInquirySource(inq);
     const parsed = safeParse(inq.parsedData);
     const isLead = parsed.source === "meta-leads";
@@ -293,7 +322,14 @@ export default async function RFQPage({
         configured: waConfigured,
       },
     };
-  });
+  };
+
+  const rows = inquiriesRaw.map(toRow);
+  const usRows = usInquiriesRaw.map(toRow);
+  const totalShown = rows.length + usRows.length;
+
+  const usSource = metaLeadsSource("US");
+  const usSheetUrl = metaLeadsSheetUrl(usSource);
 
   // Office-wide count with the same predicate the Send-all action uses —
   // never the filtered view's count, or the confirm dialog lies.
@@ -305,7 +341,7 @@ export default async function RFQPage({
         <div>
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
-            {rows.length} {filter === "" ? "open " : ""}RFQ{rows.length === 1 ? "" : "s"} shown{searchQuery ? ` · matching “${searchQuery}”` : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
+            {totalShown} {filter === "" ? "open " : ""}RFQ{totalShown === 1 ? "" : "s"} shown{usRows.length > 0 ? ` (${usRows.length} US)` : ""}{searchQuery ? ` · matching “${searchQuery}”` : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
           </p>
         </div>
         <div className="page-actions">
@@ -340,13 +376,48 @@ export default async function RFQPage({
         })}
       </div>
 
-      <RfqSheet
-        rows={rows}
-        statusOptions={statusOptions}
-        modeOptions={modeOptions}
-        userId={session.userId}
-        searchQuery={searchQuery}
-      />
+      <section style={{ marginBottom: 28 }}>
+        <div className="section-header">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div className="section-title">US — Meta lead ads</div>
+            <span style={{ fontSize: 12, color: "var(--text-3)" }}>{usRows.length}</span>
+          </div>
+          <a href={usSheetUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+            <Icon name="external" size={12} />
+            Lead sheet
+          </a>
+        </div>
+        {usRows.length === 0 ? (
+          <div className="card" style={{ padding: "12px 16px", fontSize: 12.5, color: "var(--text-3)" }}>
+            No US leads in this view. New rows from the California lead sheet sync in hourly — or press “Sync Google Sheet” above.
+          </div>
+        ) : (
+          <RfqSheet
+            rows={usRows}
+            statusOptions={statusOptions}
+            modeOptions={modeOptions}
+            userId={session.userId}
+            searchQuery={searchQuery}
+            hideToolbar
+          />
+        )}
+      </section>
+
+      <section>
+        <div className="section-header">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div className="section-title">All other incoming</div>
+            <span style={{ fontSize: 12, color: "var(--text-3)" }}>{rows.length}</span>
+          </div>
+        </div>
+        <RfqSheet
+          rows={rows}
+          statusOptions={statusOptions}
+          modeOptions={modeOptions}
+          userId={session.userId}
+          searchQuery={searchQuery}
+        />
+      </section>
     </div>
   );
 }

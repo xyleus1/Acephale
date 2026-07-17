@@ -1,8 +1,11 @@
-// Draft WhatsApp inquiry for an RFQ, in Turkish, asking only for what the
-// load is still missing. Built next to the email drafts on the RFQ sheet;
-// the operator sends it manually (copy, or the wa.me deep link) — nothing
-// sends automatically. Tone and question set follow Oğuzhan's real outreach
-// messages.
+// Draft WhatsApp inquiry for an RFQ, asking only for what the load is still
+// missing — Turkish for TR-market leads, English for US-market ones (the
+// lead's ad market lives in parsedData). Built next to the email drafts on
+// the RFQ sheet; the operator sends it manually (copy, or the wa.me deep
+// link) — nothing sends automatically. Tone and question set follow
+// Oğuzhan's real outreach messages.
+
+import { metaLeadMarketOf, type MetaLeadMarket } from "./meta-leads";
 
 export type InquiryForWhatsApp = {
   origin: string | null;
@@ -46,13 +49,15 @@ function capTr(value: string): string {
 }
 
 // "emre yılmaz" → "Emre"; initials and single letters fall back to the
-// generic greeting rather than producing "M. Bey".
-function firstNameOf(fullName: string | null): string | null {
+// generic greeting rather than producing "M. Bey". Capitalization follows
+// the market's locale — tr-TR would turn "igor" into "İgor".
+function firstNameOf(fullName: string | null, market: MetaLeadMarket): string | null {
   if (!fullName) return null;
+  const locale = market === "US" ? "en-US" : "tr-TR";
   const first = fullName.trim().split(/\s+/)[0] ?? "";
   if (first.replace(/[^\p{L}]/gu, "").length < 2) return null;
-  const lower = first.toLocaleLowerCase("tr-TR");
-  return lower.charAt(0).toLocaleUpperCase("tr-TR") + lower.slice(1);
+  const lower = first.toLocaleLowerCase(locale);
+  return lower.charAt(0).toLocaleUpperCase(locale) + lower.slice(1);
 }
 
 function hasDimensions(json: string | null): boolean {
@@ -69,6 +74,12 @@ function hasDimensions(json: string | null): boolean {
 function joinTr(parts: string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
   return `${parts.slice(0, -1).join(", ")} ve ${parts[parts.length - 1]}`;
+}
+
+// "a", "a and b", "a, b and c".
+function joinEn(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
 // Leads often type a bare country ("Almanya", "ürdün") as origin/destination.
@@ -181,15 +192,22 @@ function isCountryOnly(value: string | null): boolean {
   return COUNTRY_ONLY.has(norm);
 }
 
-// wa.me wants the full international number, digits only. Lead phones arrive
-// as +962…, 0532…, or bare 5XX… — the last two are treated as Turkish.
-export function waPhoneDigits(raw: string | null | undefined): string | null {
+// wa.me wants the full international number, digits only. Local formats are
+// promoted per the lead's market: TR leads arrive as +962…, 0532…, or bare
+// 5XX… (the last two are Turkish); US leads as +1… or bare 10-digit NANP.
+export function waPhoneDigits(
+  raw: string | null | undefined,
+  market: MetaLeadMarket = "TR",
+): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   const international = trimmed.startsWith("+");
   let digits = trimmed.replace(/\D/g, "");
   if (!international) {
     if (digits.startsWith("00")) digits = digits.slice(2);
+    else if (market === "US") {
+      if (digits.length === 10) digits = `1${digits}`;
+    }
     else if (digits.length === 11 && digits.startsWith("0")) digits = `9${digits}`;
     else if (digits.length === 10 && digits.startsWith("5")) digits = `90${digits}`;
   }
@@ -217,18 +235,20 @@ export function seedWhatsAppLeadFields(
   return next;
 }
 
-function equipmentPhrase(inq: InquiryForWhatsApp): string | null {
+function equipmentPhrase(inq: InquiryForWhatsApp, en: boolean): string | null {
   const type = s(inq.containerType);
   if (!type) return null;
   const count = inq.containerCount ?? 1;
   const label = count > 1 ? `${count}×${type}` : type;
-  return /konteyner|container/i.test(type) ? label : `${label} konteyner`;
+  return /konteyner|container/i.test(type) ? label : `${label} ${en ? "container" : "konteyner"}`;
 }
 
 export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
   const parsed = parsedOf(inq);
+  const market = metaLeadMarketOf(parsed);
+  const en = market === "US";
   const phone = s(parsed.phone);
-  const firstName = firstNameOf(s(parsed.fullName));
+  const firstName = firstNameOf(s(parsed.fullName), market);
 
   const isFcl = Boolean(s(inq.containerType));
   const dims = hasDimensions(inq.dimensions);
@@ -239,7 +259,7 @@ export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
   const missing: string[] = [];
 
   if (!s(inq.commodity)) {
-    questions.push("Taşınacak ürün nedir?");
+    questions.push(en ? "What is the product to be shipped?" : "Taşınacak ürün nedir?");
     missing.push("commodity");
   }
 
@@ -248,65 +268,89 @@ export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
   if (!isFcl) {
     const bits: string[] = [];
     if (!dims && inq.volume == null) {
-      bits.push("ölçülerini (en, boy, yükseklik)");
+      bits.push(en ? "dimensions (L × W × H)" : "ölçülerini (en, boy, yükseklik)");
       missing.push("dimensions");
     }
     if (inq.weight == null) {
-      bits.push("toplam ağırlığını");
+      bits.push(en ? "total weight" : "toplam ağırlığını");
       missing.push("weight");
     }
     if (!dims && inq.packages == null) {
-      bits.push("parça sayısını");
+      bits.push(en ? "piece count" : "parça sayısını");
       missing.push("piece count");
     }
-    if (bits.length > 0) questions.push(`Yükün ${joinTr(bits)} iletebilir misiniz?`);
+    if (bits.length > 0) {
+      questions.push(en
+        ? `Could you share the load's ${joinEn(bits)}?`
+        : `Yükün ${joinTr(bits)} iletebilir misiniz?`);
+    }
   }
 
   if (!origin && !destination) {
-    questions.push("Alım ve teslim adreslerini tam adres olarak iletebilir misiniz?");
+    questions.push(en
+      ? "Could you share the exact pickup and delivery addresses?"
+      : "Alım ve teslim adreslerini tam adres olarak iletebilir misiniz?");
     missing.push("pickup address", "delivery address");
   } else {
     if (!origin) {
-      questions.push("Yükün alınacağı tam adresi iletebilir misiniz?");
+      questions.push(en
+        ? "Could you share the exact pickup address?"
+        : "Yükün alınacağı tam adresi iletebilir misiniz?");
       missing.push("pickup address");
     } else if (isCountryOnly(origin)) {
-      questions.push("Yükün tam çıkış noktası neresi olacak?");
+      questions.push(en
+        ? "What will be the exact pickup point?"
+        : "Yükün tam çıkış noktası neresi olacak?");
       missing.push("exact origin");
     }
     if (!destination) {
-      questions.push("Teslimat yapılacak tam adresi iletebilir misiniz?");
+      questions.push(en
+        ? "Could you share the exact delivery address?"
+        : "Teslimat yapılacak tam adresi iletebilir misiniz?");
       missing.push("delivery address");
     } else if (isCountryOnly(destination)) {
-      questions.push("Yükün tam varış noktası neresi olacak?");
+      questions.push(en
+        ? "What will be the exact delivery point?"
+        : "Yükün tam varış noktası neresi olacak?");
       missing.push("exact destination");
     }
   }
 
   if (!inq.cargoReadyDate) {
-    questions.push("Yük ne zaman hazır olacak?");
+    questions.push(en ? "When will the cargo be ready?" : "Yük ne zaman hazır olacak?");
     missing.push("cargo ready date");
   }
 
-  const greeting = firstName
-    ? `${firstName} Bey merhaba, ben Derya Lojistik'ten Oğuzhan.`
-    : "Merhaba, ben Derya Lojistik'ten Oğuzhan.";
+  const greeting = en
+    ? (firstName
+        ? `Hi ${firstName}, this is Oğuzhan from Derya Logistics.`
+        : "Hi, this is Oğuzhan from Derya Logistics.")
+    : (firstName
+        ? `${firstName} Bey merhaba, ben Derya Lojistik'ten Oğuzhan.`
+        : "Merhaba, ben Derya Lojistik'ten Oğuzhan.");
 
   const lane = [origin, destination].filter(Boolean).join(" - ");
-  const equip = equipmentPhrase(inq);
+  const equip = equipmentPhrase(inq, en);
   const commodity = s(inq.commodity);
   const subjectPhrase = lane
-    ? `${lane}${equip ? ` ${equip}` : ""} ${inq.mode === "AIR" ? "havayolu gönderiniz" : "yükünüz"}`
+    ? `${lane}${equip ? ` ${equip}` : ""} ${en ? (inq.mode === "AIR" ? "air shipment" : "shipment") : (inq.mode === "AIR" ? "havayolu gönderiniz" : "yükünüz")}`
     : commodity
-      ? `${commodity} gönderiniz`
-      : "taşıma talebiniz";
+      ? `${commodity} ${en ? "shipment" : "gönderiniz"}`
+      : en ? "shipping request" : "taşıma talebiniz";
 
-  const intro = questions.length > 0
-    ? `${capTr(subjectPhrase)} için yazıyorum, eksik birkaç detayı iletebilirseniz hemen fiyat çalışacağım.`
-    : `${capTr(subjectPhrase)} için yazıyorum. Bilgileriniz elimizde, en kısa sürede fiyatı ileteceğim.`;
+  // The English subject phrase sits mid-sentence ("about your …"), so it
+  // never goes through capTr — tr-TR casing would mangle "if"/"igor".
+  const intro = en
+    ? (questions.length > 0
+        ? `I'm reaching out about your ${subjectPhrase} — if you can share a few missing details, I'll work up a quote right away.`
+        : `I'm reaching out about your ${subjectPhrase}. We have your details — I'll send the quote shortly.`)
+    : (questions.length > 0
+        ? `${capTr(subjectPhrase)} için yazıyorum, eksik birkaç detayı iletebilirseniz hemen fiyat çalışacağım.`
+        : `${capTr(subjectPhrase)} için yazıyorum. Bilgileriniz elimizde, en kısa sürede fiyatı ileteceğim.`);
 
   const text = [`${greeting} ${intro}`, ...(questions.length > 0 ? [questions.join("\n")] : [])].join("\n\n");
 
-  const digits = waPhoneDigits(phone);
+  const digits = waPhoneDigits(phone, market);
   return {
     phoneDisplay: phone,
     waUrl: digits ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : null,

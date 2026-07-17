@@ -1853,3 +1853,41 @@ Use this file for chronological implementation notes that future agents should s
   BackgroundJob rows so health returns ok=true; rotate the two Neon API
   keys pasted into chat during the migration; Neon startup credits expire
   ~2027-07 — see runbook section G for deliberate spend-down.
+
+### 2026-07-17 - US lead sheet panel on Incoming RFQs
+
+- Branch: cody (Conductor workspace, targets main)
+- Commit: not committed at time of writing
+- Task: Add a US section to /dashboard/rfq and connect the US Meta lead sheet
+  ("DERYA LEAD - USA CALIFORNIA", `1wSZBm5iNbDWjml5ddMebULb7iLBKjs5vuX3U_5oC_Ic`)
+  as a separate panel.
+- Files changed: `src/lib/meta-leads.ts` (new), `src/lib/google-sheets-sync.ts`,
+  `src/lib/inquiry-source.ts`, `src/lib/rfq-mail.ts`, `src/lib/rfq-whatsapp.ts`,
+  `src/app/dashboard/rfq/page.tsx`, `src/app/dashboard/rfq/actions.ts`,
+  `src/components/rfq-expandable-rows.tsx`,
+  `src/components/sync-google-sheet-button.tsx`, `scripts/rfq-whatsapp.test.ts`,
+  `docs/AI_HANDOFF.md`.
+- Behavior added: Meta-lead sync loops over TR + US sheets (env overrides
+  `DERYA_META_LEADS_US_SHEET_ID/_TAB/_GID`), stamping `market` into parsedData;
+  the RFQ page splits US-market leads into their own panel above the main
+  sheet (shared status tabs/search, `hideToolbar` on the secondary RfqSheet);
+  US leads get English confirmation email and English WhatsApp draft with
+  NANP phone promotion; source chips show "· US"; sync summary/button gained
+  US counts; resync now preserves `whatsappSentAt` (bug fix).
+- Verification: `npm run build`, `npm run test:rfq-whatsapp` (extended),
+  `npm run test:crm`, `npm run check:docs`, `npm run audit:tenant-scope`
+  (baseline 9, none new) pass; lint on touched files only shows the two
+  pre-existing baseline findings. End-to-end against a scratch local Postgres
+  + the real sheets (`.context/e2e-us-leads.ts`): 34 US / 63 TR leads,
+  correct tags/subjects/references, partition queries split 98 rows with no
+  leakage and keep NULL-parsedData rows visible (naive NOT-contains drops
+  them on Prisma 6 — the OR-null guard is required), resync idempotent and
+  preserves operator status + whatsappSentAt. The e2e caught that the US
+  spreadsheet's gid-0 "Sayfa1" tab is header-only; real data is tab
+  "ca leads" gid 86480056 (now the default, plus a zero-rows warning).
+- Failed/skipped checks: none beyond the report-only tenant-scope baseline.
+- Caveats: leads appear in the US panel after the next sheet sync writes the
+  market tag; the sheet must remain link-viewable (or configure a Google
+  service account / API key).
+- Follow-up: none required; optional — English variants for other
+  customer-facing copy if US leads start flowing through portal/pricing flows.
