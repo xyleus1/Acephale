@@ -17,6 +17,8 @@ import {
 import { buildWhatsAppInquiry, waDigitsFromWhatsAppAddress, waPhoneDigits } from "@/lib/rfq-whatsapp";
 import { logOutboundWhatsAppMessage, sendWhatsAppText, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { normalizeInquiryStatusInput } from "@/lib/inquiry-status";
+import { deriveSecurityTier } from "@/lib/security-sop";
+import { applyQuoteOutcome } from "@/lib/truckload-quotes";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 
@@ -216,6 +218,10 @@ export type InquiryRowPatch = {
   status?: string;
   // Free text like "USD 1200", "1200", "no target" or "" (= ask).
   target?: string;
+  // Security tier value from src/lib/security-sop.ts (or "" to clear).
+  securityTier?: string;
+  // Free-text amount like "250000" or "$250,000"; "" clears.
+  declaredValue?: string;
 };
 
 type RowActionResult = { ok: true } | { error: string };
@@ -307,6 +313,29 @@ export async function updateInquiryRowAction(
     if ("error" in target) return target;
     Object.assign(data, target);
   }
+  if (patch.securityTier !== undefined) {
+    data.securityTier = trimmedOrNull(patch.securityTier, 24)?.toLowerCase() ?? null;
+  }
+  if (patch.declaredValue !== undefined) {
+    const raw = patch.declaredValue.trim().replace(/^\$\s*/, "");
+    if (!raw) {
+      data.declaredValue = null;
+    } else {
+      const amount = parseAmount(raw);
+      if (amount == null) return { error: 'Declared value should be a number like "250000" — or empty.' };
+      data.declaredValue = amount;
+      if (!inquiry.declaredValueCurrency) data.declaredValueCurrency = "USD";
+    }
+    // Suggest a tier when the operator hasn't set one — visible in the sheet
+    // and overridable; an explicit tier (even in this same patch) wins.
+    if (patch.securityTier === undefined && !inquiry.securityTier) {
+      const suggested = deriveSecurityTier({
+        declaredValue: typeof data.declaredValue === "number" ? data.declaredValue : null,
+        commodityCategory: inquiry.commodityCategory,
+      });
+      if (suggested) data.securityTier = suggested;
+    }
+  }
   if (Object.keys(data).length === 0) return { ok: true };
 
   const updated = await prisma.inquiry.update({
@@ -351,6 +380,20 @@ export async function updateInquiryRowAction(
     }).catch(() => null);
   }
 
+  // Settle pending truckload quotes on terminal statuses — best-effort, the
+  // flywheel must never block a sheet edit.
+  if (typeof data.status === "string" && data.status !== inquiry.status) {
+    const outcome = data.status === "BOOKED" ? "WON" : data.status === "MISSED" ? "LOST" : null;
+    if (outcome) {
+      await applyQuoteOutcome({
+        officeId: session.officeId,
+        inquiryId,
+        outcome,
+        userId: session.userId,
+      }).catch(() => null);
+    }
+  }
+
   revalidatePath("/dashboard/rfq");
   return { ok: true };
 }
@@ -382,6 +425,16 @@ export async function bulkUpdateInquiryStatusAction(
     data: { status },
   });
   if (result.count === 0) return { error: "No matching RFQs found." };
+
+  // Settle pending truckload quotes on terminal statuses — best-effort.
+  const bulkOutcome = status === "BOOKED" ? "WON" : status === "MISSED" ? "LOST" : null;
+  if (bulkOutcome) {
+    await Promise.allSettled(
+      ids.map((id) =>
+        applyQuoteOutcome({ officeId: session.officeId, inquiryId: id, outcome: bulkOutcome, userId: session.userId })
+      ),
+    );
+  }
 
   const updatedRows = await prisma.inquiry.findMany({
     where: { id: { in: ids }, officeId: session.officeId },

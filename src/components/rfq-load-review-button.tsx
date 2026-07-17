@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { createLoadFromRfqReview, getRfqLoadDraft } from "@/lib/rfq-load-review";
 import type { RfqLoadDraft } from "@/lib/rfq-load-review";
 import type { RfqLoadFieldSource } from "@/lib/rfq-load-draft-core";
+import { COMMODITY_CATEGORIES, SECURITY_TIERS, TRACKING_TYPES } from "@/lib/security-sop";
+import { CARRIER_EQUIPMENT_TYPES } from "@/lib/carrier-vetting";
 import { Icon } from "@/components/icon";
 
 export function RfqLoadReviewButton({
@@ -290,6 +292,57 @@ export function RfqLoadReviewButton({
                         </select>
                       </Field>
                     </div>
+                  </section>
+
+                  <section className="rfq-load-section">
+                    <div className="rfq-load-section-title">Security & equipment</div>
+                    <div className="form-grid-3">
+                      <Field label="Equipment" source={draft.sources.equipmentType}>
+                        <select name="equipmentType" defaultValue={draft.values.equipmentType}>
+                          <option value="">Select</option>
+                          {CARRIER_EQUIPMENT_TYPES.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Commodity category" source={draft.sources.commodityCategory}>
+                        <select name="commodityCategory" defaultValue={draft.values.commodityCategory}>
+                          <option value="">Select</option>
+                          {COMMODITY_CATEGORIES.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Team drivers" source={draft.sources.teamDriversRequired}>
+                        <select name="teamDriversRequired" defaultValue={draft.values.teamDriversRequired || "UNKNOWN"}>
+                          <option value="UNKNOWN">Unknown</option>
+                          <option value="YES">Required</option>
+                          <option value="NO">Not required</option>
+                        </select>
+                      </Field>
+                    </div>
+                    <div className="form-grid-3 form-row-gap">
+                      <Field label="Declared value" source={draft.sources.declaredValue}>
+                        <input name="declaredValue" type="number" step="any" defaultValue={draft.values.declaredValue ?? ""} placeholder="Cargo value" />
+                      </Field>
+                      <Field label="Security tier" source={draft.sources.securityTier}>
+                        <select name="securityTier" defaultValue={draft.values.securityTier}>
+                          <option value="">Auto (from value + commodity)</option>
+                          {SECURITY_TIERS.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Tracking" source={draft.sources.trackingType}>
+                        <select name="trackingType" defaultValue={draft.values.trackingType}>
+                          <option value="">Select</option>
+                          {TRACKING_TYPES.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
+                    <input type="hidden" name="declaredValueCurrency" value={draft.values.declaredValueCurrency || "USD"} />
                   </section>
 
                   <section className="rfq-load-section">

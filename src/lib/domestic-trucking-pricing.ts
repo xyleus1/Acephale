@@ -1,3 +1,5 @@
+import { tierRank } from "./security-sop";
+
 export type DomesticMode = "FTL" | "LTL" | "PARTIAL" | "DRAYAGE";
 export type EquipmentType = "DRY_VAN" | "REEFER" | "FLATBED" | "STEP_DECK" | "BOX_TRUCK" | "CONTAINER_DRAYAGE" | "UNKNOWN";
 export type YesNoUnknown = "YES" | "NO" | "UNKNOWN";
@@ -62,6 +64,9 @@ export type DomesticRateRequest = {
   urgency: "asap" | "normal" | "flexible";
   specialInstructions: string | null;
   source: DomesticRateSource;
+  // High-value tech-freight context (src/lib/security-sop.ts vocabulary).
+  securityTier?: string | null;
+  declaredValue?: number | null;
 };
 
 export type RequiredRateField = {
@@ -185,6 +190,11 @@ export type DomesticPricingInquiry = {
   packages?: number | null;
   dimensions?: string | null;
   dangerousGoods?: string | null;
+  // First-class truck fields (preferred over containerType/parsedData guesses).
+  equipmentType?: string | null;
+  securityTier?: string | null;
+  declaredValue?: number | null;
+  commodityCategory?: string | null;
   commodity?: string | null;
   weight?: number | null;
   volume?: number | null;
@@ -409,7 +419,7 @@ function locationFromState(stateCode: string, input: string, confidence: Domesti
   };
 }
 
-function classifyDomesticLocation(value: string | null | undefined): DomesticLocation {
+export function classifyDomesticLocation(value: string | null | undefined): DomesticLocation {
   const input = cleanString(value);
   const normalized = normalizeLocationText(value);
   if (!input || !normalized) {
@@ -578,7 +588,10 @@ function extractAccessorials(parsed: Record<string, unknown>, notes: string | nu
 function buildRateRequest(inquiry: DomesticPricingInquiry): DomesticRateRequest {
   const parsed = safeParsedData(inquiry.parsedData);
   const mode = normalizeMode(inquiry.mode, inquiry.containerType);
-  const equipmentType = normalizeEquipment(inquiry.containerType, parsed);
+  // The first-class equipment column wins over containerType/parsedData guesses.
+  const equipmentType =
+    (inquiry.equipmentType ? normalizeEquipment(inquiry.equipmentType, {}) : null)
+    ?? normalizeEquipment(inquiry.containerType, parsed);
   const origin = cleanString(inquiry.origin);
   const destination = cleanString(inquiry.destination);
   const originLocation = classifyDomesticLocation(origin);
@@ -625,6 +638,8 @@ function buildRateRequest(inquiry: DomesticPricingInquiry): DomesticRateRequest 
     references,
     urgency: extractUrgency(inquiry.subject, inquiry.notes, parsed),
     specialInstructions: cleanString(readParsedString(parsed, "specialInstructions", "special_instructions") ?? inquiry.notes) ?? "None stated",
+    securityTier: cleanString(inquiry.securityTier),
+    declaredValue: cleanNumber(inquiry.declaredValue),
     source: {
       type: "inquiry",
       inquiryId: inquiry.id,
@@ -1094,6 +1109,8 @@ function deriveEligibilityStatus(
     request.hazmat === "YES"
     || request.temperatureControl === "YES"
     || request.accessorials.length > 0
+    // High-value security tiers never auto-rate: SOP + carrier fit come first.
+    || tierRank(request.securityTier) >= tierRank("high_value")
   ) {
     return "needs_human_review";
   }
@@ -1247,6 +1264,11 @@ export function assessDomesticTruckingPricing(inquiry: DomesticPricingInquiry): 
     quoteDraft,
     brainContext: buildBrainContext(),
     approvalWarnings: [
+      ...(tierRank(request.securityTier) >= tierRank("high_value")
+        ? [
+            `Security tier "${request.securityTier}": high-value SOP applies — vetted carrier + security checklist before any quote or dispatch.`,
+          ]
+        : []),
       "Draft only: no customer email is sent.",
       "No booking, carrier tender, or provider side effect exists in V1.",
       "Human approval is required before customer-facing use.",

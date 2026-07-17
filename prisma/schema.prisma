@@ -108,6 +108,11 @@ model Office {
   agentProposals       AgentProposal[]
   forwarders           Forwarder[]
   forwarderDrafts      ForwarderRequestDraft[]
+  carriers             Carrier[]
+  carrierChecklist     CarrierChecklistItem[]
+  loadSecurityChecks   LoadSecurityCheck[]
+  carrierBids          CarrierBid[]
+  truckloadQuotes      TruckloadQuote[]
   strategyAssessments  StrategyAssessment[]
   routeOptions         RouteOption[]
   priceRecommendations PriceRecommendation[]
@@ -231,6 +236,8 @@ model Company {
   jobs              Job[]
   inquiries         Inquiry[]
   emailThreads      EmailThread[]
+  carriers          Carrier[]
+  truckloadQuotes   TruckloadQuote[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -916,6 +923,14 @@ model Inquiry {
   targetPriceStatus String? // UNKNOWN / PROVIDED / NO_TARGET
   targetPriceSource String?
   cargoReadyDate    DateTime?
+  // High-value tech-freight fields (vocab in src/lib/security-sop.ts)
+  declaredValue         Float?
+  declaredValueCurrency String?
+  securityTier          String? // standard / elevated / high_value / critical
+  commodityCategory     String? // tech commodity taxonomy, e.g. servers_gpu
+  trackingType          String? // none / phone_check / eld_app / gps_device / escort
+  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … — first-class truck equipment
+  teamDriversRequired   String? // YES / NO / UNKNOWN
   type              String    @default("FORWARDING") // FORWARDING (move customer's cargo) | SOURCING (find + buy a commodity for customer)
   status            String    @default("INGESTED") // INGESTED / PARSED / PRICED / QUOTED / WON / LOST
   rawEmailBody      String?
@@ -943,6 +958,8 @@ model Inquiry {
   crmOpportunities    CrmOpportunity[]
   activities          Activity[]
   tasks               Task[]
+  carrierBids         CarrierBid[]
+  truckloadQuotes     TruckloadQuote[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, receivedAt])
@@ -1039,6 +1056,228 @@ model ForwarderRequestDraft {
   @@index([officeId, forwarderId])
 }
 
+// Per-load security SOP checklist, seeded from the load's securityTier
+// (template + tier logic in src/lib/security-sop.ts). The checklist is the
+// operator-facing half of the trust artifact; a customer-safe rendering
+// lands on the portal later.
+model LoadSecurityCheck {
+  id                String    @id @default(cuid())
+  officeId          String
+  jobId             String
+  key               String // securityChecklistTemplate key
+  label             String
+  status            String    @default("pending") // pending / done / na / flagged
+  note              String?
+  completedByUserId String?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, key])
+  @@index([officeId, jobId, status])
+}
+
+// The vetted trucking-carrier bench for US domestic (CA tech-freight niche).
+// Operational entity, deliberately separate from Forwarder (intl supplier
+// directory) and from CRM Company (relationship layer; optional link only).
+// Vocabulary lives in src/lib/carrier-vetting.ts.
+model Carrier {
+  id        String  @id @default(cuid())
+  officeId  String
+  companyId String? // optional link to a CRM Company; never auto-created
+  name      String
+  legalName String?
+  mcNumber  String? // FMCSA MC number
+  dotNumber String? // USDOT number
+  scac      String?
+
+  // Contact + deceptive-pickup (carrier impersonation) defense
+  dispatchEmail        String?
+  dispatchPhone        String?
+  verifiedPhone        String? // callback number verified against FMCSA/insurance producer records
+  emailDomain          String? // expected corporate mail domain (freemail dispatch = flag)
+  emailDomainVerified  Boolean   @default(false)
+  factoringCompany     String?
+  authorityFirstActive DateTime? // young authority is a fraud signal
+  fraudFlags           Json? // [{flag, note, at, byUserId}]
+  identityVerifiedAt   DateTime?
+  identityVerifiedBy   String?
+
+  // Authority + insurance (manual V1 — no FMCSA/RMIS API)
+  authorityStatus        String? // active / inactive / revoked / unknown
+  insuranceProducer      String? // agency the COI was verified with, direct
+  autoLiabilityLimit     Float?
+  cargoLimit             Float?
+  autoInsuranceExpiry    DateTime?
+  cargoInsuranceExpiry   DateTime?
+  coiUrl                 String?
+  highValueApprovedLimit Float? // max declared value we give them without a special rider
+
+  // Equipment + capability
+  equipmentTypes   Json? // ["DRY_VAN","REEFER",...] — DomesticEquipmentType strings
+  airRide          Boolean @default(false)
+  liftgate         Boolean @default(false)
+  blanketWrap      Boolean @default(false)
+  teamDrivers      Boolean @default(false)
+  hazmatCertified  Boolean @default(false)
+  lithiumCapable   Boolean @default(false) // UN3480/3481 experience
+  reeferCapable    Boolean @default(false)
+  securityFeatures Json? // ["high_security_locks","covert_gps","geofencing",...]
+  serviceStates    Json? // ["CA","NV","AZ",...]
+  homeBase         String? // e.g. "Fremont, CA"
+
+  // Vetting workflow — gate logic in carrierVettingGate()
+  vettingStatus  String    @default("prospect")
+  vettingNotes   String?
+  vettedAt       DateTime?
+  vettedByUserId String?
+  nextReviewAt   DateTime? // driven by the nearest insurance expiry
+
+  // Scorecard — columns reserved now, auto-computed from load history later
+  loadsCompleted    Int       @default(0)
+  onTimePickupPct   Float?
+  onTimeDeliveryPct Float?
+  claimCount        Int       @default(0)
+  incidentCount     Int       @default(0)
+  scorecardScore    Float?
+  scorecardAt       DateTime?
+
+  active    Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office    Office                 @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company   Company?               @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  checklist CarrierChecklistItem[]
+  bids      CarrierBid[]
+
+  @@unique([officeId, mcNumber])
+  @@unique([officeId, dotNumber])
+  @@index([officeId, vettingStatus, active])
+  @@index([officeId, name])
+  @@index([officeId, cargoInsuranceExpiry])
+}
+
+// One row per vetting-checklist item per carrier; template + gate logic in
+// src/lib/carrier-vetting.ts. Evidence is a paste-URL in V1.
+model CarrierChecklistItem {
+  id              String    @id @default(cuid())
+  officeId        String
+  carrierId       String
+  key             String // CARRIER_VETTING_CHECKLIST key
+  label           String
+  status          String    @default("pending") // pending / passed / failed / waived
+  note            String?
+  evidenceUrl     String?
+  checkedByUserId String?
+  checkedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  carrier Carrier @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+
+  @@unique([carrierId, key])
+  @@index([officeId, carrierId, status])
+}
+
+// Truckload buy-side quote from a carrier (per-load $, not ocean totals —
+// CarrierQuote stays ocean-shaped for the intl stack). Bids link to the
+// vetted bench when the carrier is onboarded; carrierName covers the rest.
+model CarrierBid {
+  id            String    @id @default(cuid())
+  officeId      String
+  inquiryId     String?
+  jobId         String?
+  carrierId     String?
+  carrierName   String
+  equipmentType String? // DRY_VAN / REEFER / … (pricing-engine strings)
+  linehaulAmount    Float?
+  fscAmount         Float? // fuel surcharge
+  accessorialAmount Float?
+  totalAmount       Float? // all-in per-load buy
+  currency      String    @default("USD")
+  miles         Float?
+  ratePerMile   Float? // stored, not derived — operator-entered all-in rates survive
+  transitDays   Int?
+  validUntil    DateTime?
+  source        String    @default("MANUAL") // MANUAL / EMAIL / WHATSAPP / PHONE / LOADBOARD / API
+  status        String    @default("RECEIVED") // REQUESTED / RECEIVED / DECLINED / SELECTED / EXPIRED
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  office  Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  inquiry Inquiry? @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  carrier Carrier? @relation(fields: [carrierId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, inquiryId])
+  @@index([officeId, jobId])
+  @@index([officeId, carrierId, createdAt])
+}
+
+// Sell-side truckload quote + outcome — one row per issued quote version.
+// This is the data flywheel: normalized lane x equipment x tier with buy/sell
+// economics, quote speed, and win/loss. Vocab in src/lib/truckload-quote-fields.ts.
+model TruckloadQuote {
+  id        String  @id @default(cuid())
+  officeId  String
+  inquiryId String?
+  jobId     String?
+  companyId String?
+
+  // Normalized lane — corridor keys for aggregation
+  origin            String?
+  destination       String?
+  originState       String? // classifyDomesticLocation().stateCode
+  destState         String?
+  miles             Float?
+  mode              String? // FTL / LTL / PARTIAL / DRAYAGE
+  equipmentType     String?
+  commodityCategory String?
+  securityTier      String?
+  declaredValue     Float?
+
+  // Economics
+  buyAmount    Float?
+  buySource    String? // mock / manual / carrier_bid / live:<provider>
+  carrierBidId String?
+  carrierId    String? // winning/selected carrier once known
+  sellAmount   Float?
+  currency     String  @default("USD")
+  marginPct    Float?
+  grossProfit  Float?
+  ratePerMile  Float?
+
+  // Quote speed + outcome
+  sentVia       String? // EMAIL / WHATSAPP / PORTAL / NONE
+  sentAt        DateTime?
+  rfqReceivedAt DateTime? // copied from inquiry.receivedAt — quote-speed KPI
+  outcome       String    @default("PENDING") // PENDING / WON / LOST / EXPIRED / NO_QUOTE
+  outcomeReason String? // price_too_high / no_capacity / too_slow / …
+  outcomeNote   String?
+  outcomeAt     DateTime?
+  decidedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office  Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  inquiry Inquiry? @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([officeId, outcome, createdAt])
+  @@index([officeId, originState, destState, equipmentType])
+  @@index([officeId, inquiryId])
+  @@index([officeId, companyId, createdAt])
+}
+
 // Shipment history — populated from Siber in Phase 2, or manually entered
 model ShipmentRecord {
   id           String   @id @default(cuid())
@@ -1102,6 +1341,14 @@ model Job {
   targetPriceStatus String? // UNKNOWN / PROVIDED / NO_TARGET
   targetPriceSource String?
   quoteLines        String? // pipe-delimited quote line items (desc|amount|currency per line)
+  // High-value tech-freight fields (vocab in src/lib/security-sop.ts)
+  declaredValue         Float?
+  declaredValueCurrency String?
+  securityTier          String? // standard / elevated / high_value / critical
+  commodityCategory     String? // tech commodity taxonomy, e.g. servers_gpu
+  trackingType          String? // none / phone_check / eld_app / gps_device / escort
+  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … — first-class truck equipment
+  teamDriversRequired   String? // YES / NO / UNKNOWN
 
   etd DateTime?
   eta DateTime?
@@ -1129,6 +1376,9 @@ model Job {
   targetPriceHistory  TargetPriceHistory[]
   agentProposals      AgentProposal[]
   strategyAssessments StrategyAssessment[]
+  securityChecks      LoadSecurityCheck[]
+  carrierBids         CarrierBid[]
+  truckloadQuotes     TruckloadQuote[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, createdAt])

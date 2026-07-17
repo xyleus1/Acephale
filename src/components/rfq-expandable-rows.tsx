@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { CellInput, CellSelect } from "@/components/sheet-cells";
+import { SECURITY_TIERS } from "@/lib/security-sop";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { WhatsAppPreviewCard, type RfqWhatsAppPreview } from "@/components/whatsapp-preview-card";
 import {
@@ -50,6 +51,8 @@ export type RfqRowData = {
   destination: string | null;
   mode: string | null;
   status: string;
+  securityTier: string | null;
+  declaredValueInput: string;
   target: string;
   targetInput: string;
   targetPlaceholder: string;
@@ -412,14 +415,14 @@ function RowSendCell({ row, onExpand, onError }: {
 // ── Column layout (hide / reorder / resize, saved per user) ─────────────────
 //
 // The select-checkbox column and the row-actions (delete) column are fixed
-// chrome; the 10 data columns between them are customizable. The layout is
+// chrome; the 12 data columns between them are customizable. The layout is
 // persisted to localStorage keyed by user id — same device-level persistence
 // the Loads table uses, but scoped per account so shared machines don't leak
 // layouts between users.
 
 type SheetColumnKey =
   | "received" | "ref" | "subject" | "from" | "source"
-  | "lane" | "mode" | "status" | "target" | "send";
+  | "lane" | "mode" | "status" | "security" | "declared" | "target" | "send";
 
 type SheetColumn = {
   key: SheetColumnKey;
@@ -438,6 +441,8 @@ const SHEET_COLUMNS: ReadonlyArray<SheetColumn> = [
   { key: "lane", label: "Lane", width: 190 },
   { key: "mode", label: "Mode", width: 104 },
   { key: "status", label: "Status", width: 116 },
+  { key: "security", label: "Security", width: 104 },
+  { key: "declared", label: "Declared Value", width: 112, numeric: true },
   { key: "target", label: "Target Price", width: 112, numeric: true },
   { key: "send", label: "Send", width: 120, numeric: true },
 ];
@@ -1112,6 +1117,30 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
               allowCreate
               createLabel="Add status…"
               onCommit={(v) => commit({ status: v })}
+            />
+          </td>
+        );
+      case "security":
+        return (
+          <td key="security">
+            <CellSelect
+              key={`se${rev("securityTier")}:${row.securityTier ?? ""}`}
+              value={row.securityTier}
+              options={SECURITY_TIERS}
+              allowEmpty
+              onCommit={(v) => commit({ securityTier: v })}
+            />
+          </td>
+        );
+      case "declared":
+        return (
+          <td key="declared" className="numeric">
+            <CellInput
+              key={`dv${rev("declaredValue")}:${row.declaredValueInput}`}
+              value={row.declaredValueInput}
+              placeholder="USD"
+              title="Declared cargo value — drives the security tier suggestion"
+              onCommit={(v) => commit({ declaredValue: v })}
             />
           </td>
         );
