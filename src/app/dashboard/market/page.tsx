@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { MarketBaseline } from "@/components/market-baseline";
+import { LoadCheckPanel } from "@/components/load-check-panel";
 import { Icon } from "@/components/icon";
 import { requireSession } from "@/lib/auth";
 
@@ -16,11 +17,13 @@ export default async function MarketPage() {
           <div className="eyebrow">CA tech freight</div>
           <h1>Market</h1>
           <p>
-            Live baseline from open public data: fuel and truckload rates, California carrier supply, and customs
-            flows of tech goods through the LA, SF, and San Diego districts. Refreshes itself — no operator input.
+            Run a load idea through the pre-flight to see what breaks — customs, hazmat, export control, insurance,
+            security, equipment, carrier fit — plus the live market baseline from open public data.
           </p>
         </div>
       </div>
+
+      <LoadCheckPanel />
 
       <Suspense fallback={null}>
         <MarketBaseline />
