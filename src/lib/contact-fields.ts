@@ -3,6 +3,8 @@
 export const CONTACT_TYPES = [
   ["customer", "Customer"],
   ["potential_customer", "Potential customer"],
+  ["potential_partner", "Potential partner"],
+  ["forwarder", "Forwarder"],
   ["logistics_contact", "Logistics contact"],
   ["high_value", "High value"],
   ["other", "Other"],

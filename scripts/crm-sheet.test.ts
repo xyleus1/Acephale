@@ -33,7 +33,7 @@ check("relationship levels are unique", unique(RELATIONSHIP_LEVEL_VALUES));
 check(
   "types match the agreed sheet vocabulary",
   JSON.stringify(CONTACT_TYPE_VALUES) ===
-    JSON.stringify(["customer", "potential_customer", "logistics_contact", "high_value", "other"])
+    JSON.stringify(["customer", "potential_customer", "potential_partner", "forwarder", "logistics_contact", "high_value", "other"])
 );
 check(
   "statuses match the agreed sheet vocabulary",
