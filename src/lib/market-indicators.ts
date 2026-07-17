@@ -1,28 +1,32 @@
 // Open-data market baseline for the US domestic trucking wedge.
-// Keyless public feeds: FRED (diesel, trucking PPI, freight TSI) and the FMCSA
+// Keyless public feeds: BLS (long-distance truckload PPI) and the FMCSA
 // company census on Socrata (CA carrier-supply counts). Key-gated free feeds
 // (skipped silently when the env var is absent): EIA (California diesel,
 // EIA_API_KEY) and US Census international trade (tech imports by HS code
-// through the CA customs districts, CENSUS_API_KEY). Fetchers lean on Next's
-// data cache with generous revalidate windows; every fetch fails soft so the
-// pricing page never blocks on a third-party feed. Pure parsing/summary
+// through the CA customs districts, CENSUS_API_KEY). FRED was dropped —
+// fredgraph.csv rejects requests from Vercel's datacenter IPs. Fetchers lean
+// on Next's data cache with generous revalidate windows; every fetch fails
+// soft so the page never blocks on a third-party feed. Pure parsing/summary
 // helpers are exported for DB-free tests. Full source catalog + raw pulls:
 // .context/intelligence/ (workspace).
 
 export type SeriesPoint = [date: string, value: number];
 
-// FRED keyless CSV: "observation_date,SERIES\n1994-03-21,1.106\n…" ("." = missing).
-export function parseFredCsv(text: string): SeriesPoint[] {
+// BLS public API v1 (keyless, ~last 3 years, monthly). Rows arrive
+// newest-first; period "M13" is the annual average, not a month.
+export function parseBlsSeries(text: string): SeriesPoint[] {
+  const parsed = JSON.parse(text) as {
+    Results?: { series?: Array<{ data?: Array<{ year?: string; period?: string; value?: string }> }> };
+  };
+  const rows = parsed.Results?.series?.[0]?.data ?? [];
   const out: SeriesPoint[] = [];
-  for (const line of text.trim().split("\n").slice(1)) {
-    const comma = line.indexOf(",");
-    if (comma < 0) continue;
-    const date = line.slice(0, comma).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    const value = Number(line.slice(comma + 1).trim());
+  for (const row of rows) {
+    if (!row.year || !row.period || !/^M(0[1-9]|1[0-2])$/.test(row.period)) continue;
+    const value = Number(row.value);
     if (!Number.isFinite(value)) continue;
-    out.push([date, value]);
+    out.push([`${row.year}-${row.period.slice(1)}-01`, value]);
   }
+  out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
   return out;
 }
 
@@ -192,12 +196,6 @@ export function summarizeTechImports(points: CensusPoint[]): TechImportsSummary 
   };
 }
 
-const FRED_INDICATORS = [
-  { id: "GASDESW", key: "diesel_us", label: "US diesel", unit: "usd_gal", decimals: 2 },
-  { id: "PCU4841214841212", key: "ppi_tl", label: "PPI · TL long-distance", unit: "index", decimals: 1 },
-  { id: "TSIFRGHT", key: "tsi_freight", label: "Freight volume (TSI)", unit: "index", decimals: 1 },
-] as const;
-
 const FMCSA_BASE = "https://data.transportation.gov/resource/az4n-8mr2.json";
 const CA_FORHIRE = "phy_state='CA' AND status_code='A' AND classdef like '%AUTHORIZED FOR HIRE%'";
 
@@ -214,31 +212,38 @@ const FMCSA_COUNTS = [
   },
 ] as const;
 
-const FRED_REVALIDATE_SECONDS = 6 * 60 * 60; // weekly/monthly series — 6h is plenty
+const SERIES_REVALIDATE_SECONDS = 6 * 60 * 60; // weekly/monthly series — 6h is plenty
 const FMCSA_REVALIDATE_SECONDS = 24 * 60 * 60; // census refreshes ~monthly
 const FETCH_TIMEOUT_MS = 8000;
 
-async function fetchText(url: string, revalidate: number): Promise<string> {
+async function fetchText(url: string, revalidate: number, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<string> {
   const res = await fetch(url, {
     next: { revalidate },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   } as RequestInit);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
 
-async function fetchFredIndicator(spec: (typeof FRED_INDICATORS)[number]): Promise<MarketIndicator | null> {
-  const text = await fetchText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${spec.id}`, FRED_REVALIDATE_SECONDS);
-  const summary = summarizeSeries(parseFredCsv(text));
+// BLS keyless v1 allows ~25 requests/day per IP — trivially within budget at
+// one cached call per 6h.
+const BLS_PPI_SERIES = "PCU484121484121"; // PPI, general freight trucking long-distance TL
+
+async function fetchBlsPpi(): Promise<MarketIndicator | null> {
+  const text = await fetchText(
+    `https://api.bls.gov/publicAPI/v1/timeseries/data/${BLS_PPI_SERIES}`,
+    SERIES_REVALIDATE_SECONDS
+  );
+  const summary = summarizeSeries(parseBlsSeries(text));
   if (!summary) return null;
   return {
-    key: spec.key,
-    label: spec.label,
-    display: formatIndicatorValue(summary.value, spec.unit, spec.decimals),
-    asOf: summary.asOf,
+    key: "ppi_tl",
+    label: "TL rate index (PPI)",
+    display: formatIndicatorValue(summary.value, "index", 1),
+    asOf: summary.asOf.slice(0, 7),
     yoyPct: summary.yoyPct,
-    ytdPct: spec.key === "diesel_us" ? summary.ytdPct : null,
-    source: `FRED ${spec.id}`,
+    ytdPct: null,
+    source: `BLS ${BLS_PPI_SERIES}`,
   };
 }
 
@@ -251,7 +256,7 @@ async function fetchEiaCaDiesel(apiKey: string): Promise<MarketIndicator | null>
     `api_key=${encodeURIComponent(apiKey)}&frequency=weekly&data[0]=value` +
     "&facets[series][]=EMD_EPD2D_PTE_SCA_DPG" +
     `&sort[0][column]=period&sort[0][direction]=desc&length=${EIA_SERIES_LENGTH}`;
-  const text = await fetchText(url, FRED_REVALIDATE_SECONDS);
+  const text = await fetchText(url, SERIES_REVALIDATE_SECONDS);
   const summary = summarizeSeries(parseEiaSeries(text));
   if (!summary) return null;
   return {
@@ -266,18 +271,33 @@ async function fetchEiaCaDiesel(apiKey: string): Promise<MarketIndicator | null>
 }
 
 const CENSUS_REVALIDATE_SECONDS = 24 * 60 * 60; // monthly stats, ~2-month publication lag
+// Census range queries run 5-10s each — the default 8s timeout was exactly
+// why the customs section died on Vercel while everything else rendered.
+const CENSUS_TIMEOUT_MS = 25_000;
+
+// Firing all six commodity queries at once gets throttled (silent failures);
+// two at a time stays reliable. Cold total ~20s, then cached for 24h.
+const CENSUS_CONCURRENCY = 2;
 
 async function fetchCensusTechImports(apiKey: string): Promise<TechImportsSummary | null> {
-  const from = `${new Date().getFullYear() - 1}-01`;
-  const tables = await Promise.all(
-    TECH_HS_CODES.map(([code]) => {
-      const url =
-        "https://api.census.gov/data/timeseries/intltrade/imports/hs?" +
-        `get=DISTRICT,GEN_VAL_MO&I_COMMODITY=${code}` +
-        `&time=${encodeURIComponent(`from ${from}`)}&key=${encodeURIComponent(apiKey)}`;
-      return fetchText(url, CENSUS_REVALIDATE_SECONDS);
-    })
-  );
+  // Need latest published month + the same month a year earlier (~2-month
+  // lag), so ~13 months back is enough — a narrower range keeps queries fast.
+  const now = new Date();
+  const from = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const codes = TECH_HS_CODES.map(([code]) => code);
+  const tables: string[] = [];
+  for (let i = 0; i < codes.length; i += CENSUS_CONCURRENCY) {
+    const batch = await Promise.all(
+      codes.slice(i, i + CENSUS_CONCURRENCY).map((code) => {
+        const url =
+          "https://api.census.gov/data/timeseries/intltrade/imports/hs?" +
+          `get=DISTRICT,GEN_VAL_MO&I_COMMODITY=${code}` +
+          `&time=${encodeURIComponent(`from ${from}`)}&key=${encodeURIComponent(apiKey)}`;
+        return fetchText(url, CENSUS_REVALIDATE_SECONDS, CENSUS_TIMEOUT_MS);
+      })
+    );
+    tables.push(...batch);
+  }
   return summarizeTechImports(tables.flatMap(parseCensusTable));
 }
 
@@ -311,8 +331,8 @@ export async function fetchMarketBaseline(): Promise<MarketBaselineResult> {
   const censusKey = process.env.CENSUS_API_KEY;
 
   const jobs: Array<{ name: string; run: () => Promise<MarketIndicator | null> }> = [
-    ...FRED_INDICATORS.map((spec) => ({ name: spec.label, run: () => fetchFredIndicator(spec) })),
     ...(eiaKey ? [{ name: "CA diesel (EIA)", run: () => fetchEiaCaDiesel(eiaKey) }] : []),
+    { name: "TL rate index (BLS)", run: fetchBlsPpi },
     ...FMCSA_COUNTS.map((spec) => ({ name: spec.label, run: () => fetchFmcsaCount(spec) })),
   ];
 
@@ -340,4 +360,4 @@ export async function fetchMarketBaseline(): Promise<MarketBaselineResult> {
   return { indicators, customs: customsResult.summary, failures };
 }
 
-const ORDER = ["diesel_us", "diesel_ca", "ppi_tl", "tsi_freight", "ca_midsize", "ca_hazmat_midsize"];
+const ORDER = ["diesel_ca", "ppi_tl", "ca_midsize", "ca_hazmat_midsize"];
