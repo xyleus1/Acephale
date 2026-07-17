@@ -73,6 +73,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
           <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
 
+          <NavLink href="/dashboard/market" icon={<Icon name="trending-up" />}>Market</NavLink>
+
           {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing and /dashboard/intelligence stay reachable directly. */}
 
           {/* ─── SETUP ───────────────────────────────────────────────────── */}
