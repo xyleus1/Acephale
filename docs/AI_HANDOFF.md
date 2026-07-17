@@ -38,13 +38,18 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
   `whatsappSentAt` stamp (pre-existing bug: it preserved only
   deskForwardedAt/confirmationSentAt, so the hourly sync wiped the WA sent
   indicator).
-- **/dashboard/rfq panels**: the page renders two RfqSheets — a "US — Meta
-  lead ads" panel (count, external link to the lead sheet, slim empty state)
-  above "All other incoming". Both honor the same status tabs and ?q= search;
-  the US panel hides the duplicate toolbar via a new `hideToolbar` prop
-  (column layout still shared through the per-user storage key). The main
-  panel's exclusion filter is null-safe (`parsedData: null` OR NOT contains)
-  so manual RFQs with NULL parsedData stay visible.
+- **/dashboard/rfq US view** (iterated same day per Mert's feedback — a
+  chosen tab, not a default on-screen panel): the default view is the
+  original single sheet minus US leads; a right-aligned `view-switcher`
+  ("All RFQs" | "US leads (n)", same pattern as the inbox) swaps to
+  `?view=us`, which shows only US-market leads plus a "Lead sheet" external
+  link in the page actions. Status tabs and ?q= search compose within either
+  view (tab links carry `view`; the search bar preserves it by reading the
+  query string at fire time). The default view's exclusion filter is
+  null-safe (`parsedData: null` OR NOT contains) so manual RFQs with NULL
+  parsedData stay visible. RfqSheet gained `emptyHint` (US view's
+  empty-state copy + hides the New RFQ button); the interim `hideToolbar`
+  prop was removed with the two-panel layout.
 - **Market-aware outreach**: `buildLeadConfirmationEmail` sends English
   subject/body to US-market leads (Turkish copy unchanged for TR).
   `buildWhatsAppInquiry` drafts the whole message in English for US leads

@@ -1891,3 +1891,22 @@ Use this file for chronological implementation notes that future agents should s
   service account / API key).
 - Follow-up: none required; optional — English variants for other
   customer-facing copy if US leads start flowing through portal/pricing flows.
+
+### 2026-07-17 - US leads: panel -> chosen tab (view switcher)
+
+- Branch: us-rfq-sheet-panel (follow-up to PR #16, merged earlier today)
+- Task: Per Mert's feedback, the US section must be a tab you choose, not a
+  default on-screen panel.
+- Files changed: `src/app/dashboard/rfq/page.tsx`,
+  `src/components/rfq-expandable-rows.tsx`, docs.
+- Behavior: default /dashboard/rfq view = original sheet excluding US leads;
+  right-aligned view-switcher ("All RFQs" | "US leads (n)") toggles ?view=us
+  showing only US leads + a "Lead sheet" link in page actions. Status tabs
+  and search compose within the view. RfqSheet: `hideToolbar` removed,
+  `emptyHint` added (US empty-state copy, hides New RFQ button).
+- Verification: `npm run build`, `test:rfq-whatsapp`, `check:docs`,
+  `audit:tenant-scope` (baseline 9) pass. Partition semantics unchanged from
+  the e2e-proven filters; prod confirmed post-cron at 19:25Z: 34 US leads
+  tagged, 63 TR re-tagged, 97 meta-leads total.
+- Caveats: prod cron populated the data already, so the tab shows leads
+  immediately after this deploys.

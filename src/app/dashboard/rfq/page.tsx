@@ -77,13 +77,16 @@ function choice(value: string | null, map: Record<string, string>): string | nul
 export default async function RFQPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; view?: string }>;
 }) {
   const session = await requireSession();
-  const { status, q: rawQuery } = await searchParams;
+  const { status, q: rawQuery, view } = await searchParams;
   // Next delivers repeated params as arrays despite the annotation — degrade
   // to no filter rather than crashing on a hand-crafted ?q=a&q=b URL.
   const searchQuery = (typeof rawQuery === "string" ? rawQuery : "").trim().slice(0, 120);
+  // ?view=us swaps the sheet to US-market Meta leads; the default view is
+  // everything else. Status tabs and search apply within either view.
+  const usView = view === "us";
 
   // Custom statuses/modes added on the fly live as plain strings on rows —
   // whatever is in use in this office becomes a tab and a dropdown option.
@@ -163,36 +166,32 @@ export default async function RFQPage({
     },
   } as const;
 
-  // US-market leads render in their own panel; everything else stays in the
-  // main sheet. Both honor the same status tab and search query. officeId is
-  // already in whereBase; restated so the scope survives refactors (and the
-  // tenant-scope audit can see it).
-  const [inquiriesRaw, usInquiriesRaw] = await Promise.all([
+  // The default view is everything except US-market leads; ?view=us shows
+  // only those. NOT-contains alone would also drop rows with NULL parsedData
+  // (SQL LIKE on NULL is unknown) — manual RFQs must stay visible.
+  const usLeadsFilter = { parsedData: { contains: US_LEAD_PARSED_MARKER } };
+  const mainFilter = {
+    AND: [{ OR: [
+      { parsedData: null },
+      { NOT: { parsedData: { contains: US_LEAD_PARSED_MARKER } } },
+    ] }],
+  };
+
+  // officeId is already in whereBase; restated so the scope survives
+  // refactors (and the tenant-scope audit can see it). The other view's
+  // count feeds the view-switcher badge.
+  const [inquiriesRaw, usTabCount] = await Promise.all([
     prisma.inquiry.findMany({
-      where: {
-        ...whereBase,
-        officeId: session.officeId,
-        // NOT-contains alone would also drop rows with NULL parsedData
-        // (SQL LIKE on NULL is unknown) — manual RFQs must stay visible.
-        AND: [{ OR: [
-          { parsedData: null },
-          { NOT: { parsedData: { contains: US_LEAD_PARSED_MARKER } } },
-        ] }],
-      },
+      where: { ...whereBase, ...(usView ? usLeadsFilter : mainFilter), officeId: session.officeId },
       include: includeRelations,
       orderBy: { receivedAt: "desc" },
       take: 200,
     }),
-    prisma.inquiry.findMany({
-      where: {
-        ...whereBase,
-        officeId: session.officeId,
-        parsedData: { contains: US_LEAD_PARSED_MARKER },
-      },
-      include: includeRelations,
-      orderBy: { receivedAt: "desc" },
-      take: 200,
-    }),
+    usView
+      ? Promise.resolve(0)
+      : prisma.inquiry.count({
+          where: { ...whereBase, ...usLeadsFilter, officeId: session.officeId },
+        }),
   ]);
 
   const mailConfigured = rfqMailConfigured();
@@ -325,11 +324,9 @@ export default async function RFQPage({
   };
 
   const rows = inquiriesRaw.map(toRow);
-  const usRows = usInquiriesRaw.map(toRow);
-  const totalShown = rows.length + usRows.length;
+  const usCount = usView ? rows.length : usTabCount;
 
-  const usSource = metaLeadsSource("US");
-  const usSheetUrl = metaLeadsSheetUrl(usSource);
+  const usSheetUrl = metaLeadsSheetUrl(metaLeadsSource("US"));
 
   // Office-wide count with the same predicate the Send-all action uses —
   // never the filtered view's count, or the confirm dialog lies.
@@ -341,10 +338,16 @@ export default async function RFQPage({
         <div>
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
-            {totalShown} {filter === "" ? "open " : ""}RFQ{totalShown === 1 ? "" : "s"} shown{usRows.length > 0 ? ` (${usRows.length} US)` : ""}{searchQuery ? ` · matching “${searchQuery}”` : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
+            {rows.length} {filter === "" ? "open " : ""}{usView ? "US lead" : "RFQ"}{rows.length === 1 ? "" : "s"} shown{searchQuery ? ` · matching “${searchQuery}”` : ""}{usView ? " · synced hourly from the California lead sheet" : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
           </p>
         </div>
         <div className="page-actions">
+          {usView && (
+            <a href={usSheetUrl} target="_blank" rel="noreferrer" className="btn btn-secondary">
+              <Icon name="external" size={13} />
+              Lead sheet
+            </a>
+          )}
           <RfqSendAllButton pending={pendingForwards} disabled={!mailConfigured} />
           <SyncGoogleSheetButton />
           <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
@@ -357,67 +360,59 @@ export default async function RFQPage({
         </div>
       </div>
 
-      <div className="mode-tabs" style={{ marginBottom: 16 }}>
-        {filterTabs.map((t) => {
-          // Tabs keep the search query so filtering and searching compose.
-          const params = new URLSearchParams();
-          if (t.key) params.set("status", t.key);
-          if (searchQuery) params.set("q", searchQuery);
-          const qs = params.toString();
-          return (
-            <Link
-              key={t.key || "open"}
-              href={`/dashboard/rfq${qs ? `?${qs}` : ""}` as "/dashboard/rfq"}
-              className={`mode-tab${filter === t.key ? " active" : ""}`}
-            >
-              {t.label}
-            </Link>
-          );
-        })}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <div className="mode-tabs">
+          {filterTabs.map((t) => {
+            // Tabs keep the search query and the view so everything composes.
+            const params = new URLSearchParams();
+            if (t.key) params.set("status", t.key);
+            if (searchQuery) params.set("q", searchQuery);
+            if (usView) params.set("view", "us");
+            const qs = params.toString();
+            return (
+              <Link
+                key={t.key || "open"}
+                href={`/dashboard/rfq${qs ? `?${qs}` : ""}` as "/dashboard/rfq"}
+                className={`mode-tab${filter === t.key ? " active" : ""}`}
+              >
+                {t.label}
+              </Link>
+            );
+          })}
+        </div>
+        <div className="view-switcher">
+          {[
+            { key: "", label: "All RFQs" },
+            { key: "us", label: `US leads${!usView && usCount > 0 ? ` (${usCount})` : ""}` },
+          ].map((v) => {
+            const params = new URLSearchParams();
+            if (filter) params.set("status", filter);
+            if (searchQuery) params.set("q", searchQuery);
+            if (v.key) params.set("view", v.key);
+            const qs = params.toString();
+            return (
+              <Link
+                key={v.key || "all"}
+                href={`/dashboard/rfq${qs ? `?${qs}` : ""}` as "/dashboard/rfq"}
+                className={`view-switcher-tab${usView === (v.key === "us") ? " active" : ""}`}
+              >
+                {v.label}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
-      <section style={{ marginBottom: 28 }}>
-        <div className="section-header">
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <div className="section-title">US — Meta lead ads</div>
-            <span style={{ fontSize: 12, color: "var(--text-3)" }}>{usRows.length}</span>
-          </div>
-          <a href={usSheetUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-            <Icon name="external" size={12} />
-            Lead sheet
-          </a>
-        </div>
-        {usRows.length === 0 ? (
-          <div className="card" style={{ padding: "12px 16px", fontSize: 12.5, color: "var(--text-3)" }}>
-            No US leads in this view. New rows from the California lead sheet sync in hourly — or press “Sync Google Sheet” above.
-          </div>
-        ) : (
-          <RfqSheet
-            rows={usRows}
-            statusOptions={statusOptions}
-            modeOptions={modeOptions}
-            userId={session.userId}
-            searchQuery={searchQuery}
-            hideToolbar
-          />
-        )}
-      </section>
-
-      <section>
-        <div className="section-header">
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <div className="section-title">All other incoming</div>
-            <span style={{ fontSize: 12, color: "var(--text-3)" }}>{rows.length}</span>
-          </div>
-        </div>
-        <RfqSheet
-          rows={rows}
-          statusOptions={statusOptions}
-          modeOptions={modeOptions}
-          userId={session.userId}
-          searchQuery={searchQuery}
-        />
-      </section>
+      <RfqSheet
+        rows={rows}
+        statusOptions={statusOptions}
+        modeOptions={modeOptions}
+        userId={session.userId}
+        searchQuery={searchQuery}
+        emptyHint={usView
+          ? "US leads sync in hourly from the California lead sheet — press “Sync Google Sheet” to pull now, or try another status filter."
+          : undefined}
+      />
     </div>
   );
 }

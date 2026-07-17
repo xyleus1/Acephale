@@ -630,16 +630,16 @@ function useDebouncedValue<T>(value: T, ms: number): T {
   return v;
 }
 
-export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery, hideToolbar }: {
+export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery, emptyHint }: {
   rows: RfqRowData[];
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
   userId: string;
   searchQuery: string;
-  // With two sheets on /dashboard/rfq, only the primary one renders the
-  // search bar + column picker; the layout (same per-user storage key) still
-  // applies to both.
-  hideToolbar?: boolean;
+  // Replaces the default "RFQs arrive from linked email threads…" empty-state
+  // copy (and its New RFQ button) — the US-leads view has its own story for
+  // where rows come from. Search-empty copy is unaffected.
+  emptyHint?: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -793,7 +793,6 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           onDone={() => setSelected(new Set())}
         />
       )}
-      {!hideToolbar && (
       <div className="table-toolbar rfq-sheet-toolbar">
         <RfqSearchBar initialQuery={searchQuery} />
         <div ref={pickerRef} className="table-picker">
@@ -829,7 +828,6 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           )}
         </div>
       </div>
-      )}
       {rows.length === 0 ? (
         <div className="card empty-state-card">
           <Icon name={searchQuery ? "search" : "inbox"} size={36} className="empty-state-graphic" />
@@ -837,9 +835,9 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           <p className="empty-state-copy">
             {searchQuery
               ? `Nothing in this view matches “${searchQuery}”. Try another term, or clear the search.`
-              : "RFQs arrive from linked email threads or manual entry. Try another status filter, or add one manually."}
+              : emptyHint ?? "RFQs arrive from linked email threads or manual entry. Try another status filter, or add one manually."}
           </p>
-          {!searchQuery && (
+          {!searchQuery && !emptyHint && (
             <Link href="/dashboard/rfq/new" className="btn">
               New RFQ
             </Link>
