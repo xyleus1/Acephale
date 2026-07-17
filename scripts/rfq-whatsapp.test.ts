@@ -85,6 +85,61 @@ const base = {
   assert(d.text.includes("İstanbul - Londra havayolu gönderiniz için yazıyorum"), d.text);
 }
 
+// US-market lead → English draft, en-US name casing ("igor" must not become
+// "İgor"), country-only destination asks for the exact point, bare 10-digit
+// NANP number promoted to +1.
+{
+  const d = buildWhatsAppInquiry({
+    ...base,
+    origin: "Savannah",
+    destination: "india",
+    commodity: "machine parts",
+    containerType: "40ft",
+    parsedData: JSON.stringify({ market: "US", fullName: "igor mogilatov", phone: "6105707011" }),
+  });
+  assert(d.text.startsWith("Hi Igor, this is Oğuzhan from Derya Logistics."), d.text);
+  assert(d.text.includes("Savannah - india 40ft container shipment"), d.text);
+  assert(!d.text.includes("ağırlığını"), "US draft must not contain Turkish");
+  assert(d.text.includes("What will be the exact delivery point?"), d.text);
+  assert(d.text.includes("When will the cargo be ready?"), d.text);
+  assert(d.missing.includes("exact destination"));
+  assert(d.waUrl?.startsWith("https://wa.me/16105707011?text="), String(d.waUrl));
+}
+
+// US loose cargo merges dims/weight/pieces into one English question.
+{
+  const d = buildWhatsAppInquiry({
+    ...base,
+    origin: "Los Angeles",
+    destination: "Accra, Ghana",
+    commodity: "furniture",
+    parsedData: JSON.stringify({ market: "US" }),
+  });
+  assert(
+    d.text.includes("Could you share the load's dimensions (L × W × H), total weight and piece count?"),
+    d.text,
+  );
+}
+
+// Complete US load → no questions, quote-underway note in English.
+{
+  const d = buildWhatsAppInquiry({
+    ...base,
+    origin: "Oakland, CA",
+    destination: "San Salvador, El Salvador",
+    commodity: "household goods",
+    packages: 10,
+    weight: 900,
+    dimensions: JSON.stringify([{ qty: 10, length: 100, width: 80, height: 90 }]),
+    cargoReadyDate: new Date("2026-08-01"),
+    parsedData: JSON.stringify({ market: "US", fullName: "george quizz", phone: "+19254005097" }),
+  });
+  assert.equal(d.missing.length, 0, d.missing.join(", "));
+  assert(d.text.includes("We have your details"), d.text);
+  assert(!d.text.includes("?"));
+  assert(d.waUrl?.startsWith("https://wa.me/19254005097?text="), String(d.waUrl));
+}
+
 // Phone normalization: international kept, TR local formats promoted, junk dropped.
 assert.equal(waPhoneDigits("+962 79 818 5729"), "962798185729");
 assert.equal(waPhoneDigits("0532 123 45 67"), "905321234567");
@@ -92,6 +147,13 @@ assert.equal(waPhoneDigits("532 123 45 67"), "905321234567");
 assert.equal(waPhoneDigits("0049 170 1234567"), "491701234567");
 assert.equal(waPhoneDigits("1234"), null);
 assert.equal(waPhoneDigits(null), null);
+
+// US market: bare NANP numbers get the +1; internationals stay untouched.
+assert.equal(waPhoneDigits("6105707011", "US"), "16105707011");
+assert.equal(waPhoneDigits("(424) 450-5023", "US"), "14244505023");
+assert.equal(waPhoneDigits("+1 424 450 5023", "US"), "14244505023");
+assert.equal(waPhoneDigits("12013759950", "US"), "12013759950");
+assert.equal(waPhoneDigits("+962 79 818 5729", "US"), "962798185729");
 
 // WhatsApp thread/message addresses ("whatsapp:<digits>") resolve to wa digits.
 assert.equal(waDigitsFromWhatsAppAddress("whatsapp:905301743170"), "905301743170");

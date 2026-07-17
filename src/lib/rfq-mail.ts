@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { prisma } from "./prisma";
 import { deriveInquirySource } from "./inquiry-source";
 import { openInquiryStatusFilter } from "./inquiry-status";
+import { metaLeadMarketOf } from "./meta-leads";
 
 // Outbound RFQ mail from the rfq@usederya.com desk address. This account is
 // not OAuth-connected (no refresh token), so delivery goes over Gmail SMTP
@@ -14,13 +15,19 @@ const DEFAULT_FORWARD_TO = "oguzhan@usederya.com";
 const DEFAULT_FORWARD_CC = "gozde.sen@andelog.com,nazli.bagcicek@andelog.com";
 const DEFAULT_REPLY_TO = "oguzhan@usederya.com";
 
-// Customer-facing copy is Turkish (the leads come from TR campaigns);
-// the internal desk forward stays English.
-const CONFIRMATION_SUBJECT = "Talebiniz alındı — Derya";
-const CONFIRMATION_BODY = `Talebiniz Derya fiyatlandırma ekibi tarafından alınmıştır. Bilgileriniz doğru ve eksiksizse talebiniz önümüzdeki 6 saat içinde işleme alınacaktır. Ekibimiz ek detaylar için sizinle iletişime geçebilir.
+// Customer-facing copy follows the lead's ad market: Turkish for the TR
+// campaigns, English for the US ones. The internal desk forward stays English.
+const CONFIRMATION_SUBJECT_TR = "Talebiniz alındı — Derya";
+const CONFIRMATION_BODY_TR = `Talebiniz Derya fiyatlandırma ekibi tarafından alınmıştır. Bilgileriniz doğru ve eksiksizse talebiniz önümüzdeki 6 saat içinde işleme alınacaktır. Ekibimiz ek detaylar için sizinle iletişime geçebilir.
 —
 Oğuzhan Karaca
 Kurucu Ortak & CEO, Derya
+https://usederya.com/`;
+const CONFIRMATION_SUBJECT_US = "Your request has been received — Derya";
+const CONFIRMATION_BODY_US = `Your request has been received by the Derya pricing team. If your details are correct and complete, your request will be processed within the next 6 hours. Our team may reach out for additional details.
+—
+Oğuzhan Karaca
+Co-founder & CEO, Derya
 https://usederya.com/`;
 
 export function rfqMailConfig() {
@@ -127,6 +134,7 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
   sections.push(
     ["— Contact —",
       line("Name", s(parsed.fullName)),
+      line("Job title", s(parsed.jobTitle)),
       line("Company", inq.fromCompany ?? inq.company?.name ?? null),
       line("Email", inq.fromEmail),
       line("Phone", s(parsed.phone)),
@@ -179,13 +187,14 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
 
 export function buildLeadConfirmationEmail(inq: InquiryForMail) {
   const config = rfqMailConfig();
+  const isUs = metaLeadMarketOf(parsedOf(inq)) === "US";
   return {
     from: config.user,
     to: inq.fromEmail,
     cc: [] as string[],
     replyTo: config.replyTo,
-    subject: CONFIRMATION_SUBJECT,
-    text: CONFIRMATION_BODY,
+    subject: isUs ? CONFIRMATION_SUBJECT_US : CONFIRMATION_SUBJECT_TR,
+    text: isUs ? CONFIRMATION_BODY_US : CONFIRMATION_BODY_TR,
   };
 }
 

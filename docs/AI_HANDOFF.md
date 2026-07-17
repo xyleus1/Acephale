@@ -4,6 +4,96 @@
 
 ## Date
 
+2026-07-17
+
+## Branch
+
+cody (Conductor workspace, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+US section on Incoming RFQs, fed by the new US Meta lead sheet
+("DERYA LEAD - USA CALIFORNIA", spreadsheet
+`1wSZBm5iNbDWjml5ddMebULb7iLBKjs5vuX3U_5oC_Ic`).
+
+- **Shared lead-sheet config**: new `src/lib/meta-leads.ts` declares both Meta
+  Lead Ads sources (TR + US; same Meta export column layout) with env
+  overrides `DERYA_META_LEADS_US_SHEET_ID/_TAB/_GID` (defaults: the sheet
+  above, tab `ca leads`, gid 86480056 — the spreadsheet's gid-0 tab "Sayfa1"
+  is header-only, and the sync now warns when a lead sheet reads zero data
+  rows so a wrong tab/gid is never silent). Exports `US_LEAD_PARSED_MARKER`
+  (`"market":"US"`) and `metaLeadMarketOf()` — nothing else writes a `market`
+  key into inquiry parsedData.
+- **Sync**: `syncMetaLeadRows` is parameterized by source and now loops over
+  both sheets independently (one failing must not block the other; warnings
+  are per-sheet). Rows gain `market` in parsedData, `Market`/`Job title` in
+  the lead notes body, and US subjects read `US lead: …` (TR subjects
+  unchanged). Sync summary gains `leadsUs`; the sync button reports
+  "N TR leads · M US leads". The hourly `/api/google-sheets/sync` cron picks
+  the US sheet up with no config change. Resync now also preserves the
+  `whatsappSentAt` stamp (pre-existing bug: it preserved only
+  deskForwardedAt/confirmationSentAt, so the hourly sync wiped the WA sent
+  indicator).
+- **/dashboard/rfq panels**: the page renders two RfqSheets — a "US — Meta
+  lead ads" panel (count, external link to the lead sheet, slim empty state)
+  above "All other incoming". Both honor the same status tabs and ?q= search;
+  the US panel hides the duplicate toolbar via a new `hideToolbar` prop
+  (column layout still shared through the per-user storage key). The main
+  panel's exclusion filter is null-safe (`parsedData: null` OR NOT contains)
+  so manual RFQs with NULL parsedData stay visible.
+- **Market-aware outreach**: `buildLeadConfirmationEmail` sends English
+  subject/body to US-market leads (Turkish copy unchanged for TR).
+  `buildWhatsAppInquiry` drafts the whole message in English for US leads
+  (greeting, missing-detail questions, subject phrase; en-US name casing so
+  "igor" ≠ "İgor"). `waPhoneDigits` takes an optional market: US promotes
+  bare 10-digit NANP numbers to `1…`; TR behavior is byte-identical.
+  `sendWhatsAppInquiryAction` resolves digits with the same market so the
+  Cloud API send matches the previewed wa.me link. Source chips read
+  "Facebook lead · US" outside the panel.
+
+## Files changed
+
+`src/lib/meta-leads.ts` (new), `src/lib/google-sheets-sync.ts`,
+`src/lib/inquiry-source.ts`, `src/lib/rfq-mail.ts`, `src/lib/rfq-whatsapp.ts`,
+`src/app/dashboard/rfq/page.tsx`, `src/app/dashboard/rfq/actions.ts`,
+`src/components/rfq-expandable-rows.tsx`,
+`src/components/sync-google-sheet-button.tsx`,
+`scripts/rfq-whatsapp.test.ts`, docs.
+
+## Verification passed
+
+next build clean; `test:rfq-whatsapp` (extended with US cases: English draft,
+en-US casing, NANP phone promotion, country-only destination), `test:crm`,
+`check:docs`, `audit:tenant-scope` (baseline 9 findings, none new) pass. Lint
+on touched files shows only the two pre-existing baseline findings (rfq/new
+`<a>`, `_removed` unused). Full end-to-end run against a scratch local
+Postgres and the REAL sheets (`.context/e2e-us-leads.ts`): 34 US + 63 TR
+leads created, market tags/subjects/DRY references/budget bounds correct,
+spot-checked contact row incl. jobTitle and `+1` phone; the page's two
+partition queries split 98 rows with no leakage and keep a NULL-parsedData
+manual RFQ visible (confirmed naive NOT-contains DOES drop NULL rows on
+Prisma 6 — the OR-null guard is load-bearing); resync created no duplicates
+and preserved operator status + whatsappSentAt. The e2e is also what caught
+the header-only gid-0 tab (hence the `ca leads`/86480056 default).
+
+## Caveats
+
+US leads only appear in the panel after the next sync stamps `market` into
+parsedData (button or hourly cron; sourceKey dedupe means no duplicates if
+rows were ever imported before). TR rows adopt the market tag on their next
+resync — until then they are simply not in the US panel (correct either way).
+Send-all-to-desk intentionally covers both markets (desk forward is internal
+English). The lead sheet must stay link-viewable (or a service account /
+`GOOGLE_SHEETS_API_KEY` configured) for the sync to read it.
+
+## Previous Update
+
+## Date
+
 2026-07-07 (second update this date)
 
 ## Branch
