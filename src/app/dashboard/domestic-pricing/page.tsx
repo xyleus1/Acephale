@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { DomesticTruckingRatePanel } from "@/components/domestic-trucking-rate-panel";
 import { Icon } from "@/components/icon";
+import { MarketBaseline } from "@/components/market-baseline";
 import { requireSession } from "@/lib/auth";
 import { assessDomesticTruckingPricing, type DomesticPricingAssessment, type DomesticPricingInquiry, type Money } from "@/lib/domestic-trucking-pricing";
 import { prisma } from "@/lib/prisma";
@@ -243,6 +245,10 @@ export default async function DomesticPricingPage({
           </div>
         </div>
       </div>
+
+      <Suspense fallback={null}>
+        <MarketBaseline />
+      </Suspense>
 
       <DomesticLoadBoard
         assessments={assessments}
