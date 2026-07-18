@@ -33319,6 +33319,16 @@ html.agent-dock-open .page-container {
   font-weight: 600;
 }
 
+/* Lead-quality pill in the subject cell — compact so the subject keeps room. */
+.rfq-sheet .rfq-quality-badge {
+  flex: none;
+  padding: 1px 7px;
+  margin-right: 4px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  cursor: default;
+}
+
 .rfq-sheet button.rfq-row-caret {
   flex: none;
   align-items: center;

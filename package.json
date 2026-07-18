@@ -26,6 +26,8 @@
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
     "test:rfq-load-draft": "tsx scripts/rfq-load-draft.test.ts",
     "test:rfq-whatsapp": "tsx scripts/rfq-whatsapp.test.ts",
+    "test:lead-quality": "tsx scripts/lead-quality.test.ts",
+    "test:lead-emails": "tsx scripts/lead-emails.test.ts",
     "test:whatsapp-greenapi": "tsx scripts/whatsapp-greenapi.test.ts",
     "test:whatsapp-display": "tsx scripts/whatsapp-display.test.ts",
     "test:whatsapp-crm-touch": "tsx scripts/whatsapp-crm-touch.test.ts",

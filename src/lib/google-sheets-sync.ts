@@ -621,6 +621,7 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
         if (prev && typeof prev === "object") {
           if (prev.deskForwardedAt) existingStamps.deskForwardedAt = prev.deskForwardedAt;
           if (prev.confirmationSentAt) existingStamps.confirmationSentAt = prev.confirmationSentAt;
+          if (prev.infoRequestSentAt) existingStamps.infoRequestSentAt = prev.infoRequestSentAt;
           if (prev.whatsappSentAt) existingStamps.whatsappSentAt = prev.whatsappSentAt;
         }
       } catch {

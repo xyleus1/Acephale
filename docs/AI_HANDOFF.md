@@ -41,15 +41,38 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
 - **/dashboard/rfq US view** (iterated same day per Mert's feedback — a
   chosen tab, not a default on-screen panel): the default view is the
   original single sheet minus US leads; a right-aligned `view-switcher`
-  ("All RFQs" | "US leads (n)", same pattern as the inbox) swaps to
-  `?view=us`, which shows only US-market leads plus a "Lead sheet" external
-  link in the page actions. Status tabs and ?q= search compose within either
-  view (tab links carry `view`; the search bar preserves it by reading the
-  query string at fire time). The default view's exclusion filter is
-  null-safe (`parsedData: null` OR NOT contains) so manual RFQs with NULL
-  parsedData stay visible. RfqSheet gained `emptyHint` (US view's
-  empty-state copy + hides the New RFQ button); the interim `hideToolbar`
-  prop was removed with the two-panel layout.
+  flag toggle ("🇹🇷 Türkiye" | "🇺🇸 US (n)") swaps to `?view=us`, which shows
+  only US-market leads plus a "Lead sheet" external link in the page
+  actions. Status tabs and ?q= search compose within either view (tab links
+  carry `view`; the search bar preserves it by reading the query string at
+  fire time). The default view's exclusion filter is null-safe
+  (`parsedData: null` OR NOT contains) so manual RFQs with NULL parsedData
+  stay visible. RfqSheet gained `emptyHint` (US view's empty-state copy +
+  hides the New RFQ button); the interim `hideToolbar` prop was removed
+  with the two-panel layout.
+- **Lead quality triage** (`src/lib/lead-quality.ts`): deterministic score
+  over what the lead form actually gives (contact channel and lane are
+  gates; commercial intent, load size, timing, budget, company, commodity
+  are points) → GOOD / REVIEW / WEAK with human-readable reasons. The US
+  view defaults to Good only, with Good/Review/All chips (`?quality=`)
+  showing counts; each lead row carries a colored quality pill (tooltip =
+  score + reasons) and the expanded row lists "Lead quality" among the lead
+  answers. Thresholds: GOOD ≥ 8, REVIEW ≥ 4. Dry-run over the 42 real prod
+  leads: 18 GOOD / 21 REVIEW / 3 WEAK, with junk ("Isk → Idk", "national
+  and international") correctly gated to WEAK.
+- **Smart lead email** (`src/lib/lead-emails.ts`, pure/testable; rfq-mail
+  wraps it with SMTP config as `buildLeadCustomerEmail`, replacing
+  `buildLeadConfirmationEmail`): when the lead's details are complete the
+  email is the received-confirmation; when not, it asks for exactly the
+  missing details — the question list comes from the same
+  `leadMissingQuestions()` the WhatsApp draft uses (extracted from
+  `buildWhatsAppInquiry`), EN for US leads / TR for TR leads. Each kind has
+  its own send stamp (`confirmationSentAt` / new `infoRequestSentAt`, both
+  resync-preserved), so sending the info-request doesn't mark the later
+  confirmation as sent — once the lead's data is filled in, the card and
+  button flip to the confirmation automatically. The sheet's Send column
+  gained a per-row "Confirm" / "Ask info" button for lead rows (send column
+  default width 120 → 176); the expanded card's title/hint follow the kind.
 - **Market-aware outreach**: `buildLeadConfirmationEmail` sends English
   subject/body to US-market leads (Turkish copy unchanged for TR).
   `buildWhatsAppInquiry` drafts the whole message in English for US leads
@@ -72,18 +95,23 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
 ## Verification passed
 
 next build clean; `test:rfq-whatsapp` (extended with US cases: English draft,
-en-US casing, NANP phone promotion, country-only destination), `test:crm`,
-`check:docs`, `audit:tenant-scope` (baseline 9 findings, none new) pass. Lint
-on touched files shows only the two pre-existing baseline findings (rfq/new
-`<a>`, `_removed` unused). Full end-to-end run against a scratch local
-Postgres and the REAL sheets (`.context/e2e-us-leads.ts`): 34 US + 63 TR
-leads created, market tags/subjects/DRY references/budget bounds correct,
-spot-checked contact row incl. jobTitle and `+1` phone; the page's two
-partition queries split 98 rows with no leakage and keep a NULL-parsedData
-manual RFQ visible (confirmed naive NOT-contains DOES drop NULL rows on
-Prisma 6 — the OR-null guard is load-bearing); resync created no duplicates
-and preserved operator status + whatsappSentAt. The e2e is also what caught
-the header-only gid-0 tab (hence the `ca leads`/86480056 default).
+en-US casing, NANP phone promotion, country-only destination), new
+`test:lead-quality` (gates, tier calibration on real-shaped fixtures,
+company-fallback handling) and `test:lead-emails` (confirmation vs
+info-request, EN/TR copy, email questions === WhatsApp questions),
+`test:crm`, `check:docs`, `audit:tenant-scope` (baseline 9 findings, none
+new) pass. Lint on touched files shows only the two pre-existing baseline
+findings (rfq/new `<a>`, `_removed` unused). Full end-to-end run against a
+scratch local Postgres and the REAL sheets (`.context/e2e-us-leads.ts`):
+34 US + 63 TR leads created, market tags/subjects/DRY references/budget
+bounds correct, spot-checked contact row incl. jobTitle and `+1` phone; the
+page's two partition queries split 98 rows with no leakage and keep a
+NULL-parsedData manual RFQ visible (confirmed naive NOT-contains DOES drop
+NULL rows on Prisma 6 — the OR-null guard is load-bearing); resync created
+no duplicates and preserved operator status + whatsappSentAt. The e2e is
+also what caught the header-only gid-0 tab (hence the `ca leads`/86480056
+default). Quality scorer dry-run against the live prod leads (read-only,
+`.context/quality-dry-run.ts`): 42 leads → 18 GOOD / 21 REVIEW / 3 WEAK.
 
 ## Caveats
 

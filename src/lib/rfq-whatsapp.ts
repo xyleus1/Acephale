@@ -51,7 +51,8 @@ function capTr(value: string): string {
 // "emre yılmaz" → "Emre"; initials and single letters fall back to the
 // generic greeting rather than producing "M. Bey". Capitalization follows
 // the market's locale — tr-TR would turn "igor" into "İgor".
-function firstNameOf(fullName: string | null, market: MetaLeadMarket): string | null {
+// Exported for the lead emails, which greet the same way.
+export function leadFirstName(fullName: string | null, market: MetaLeadMarket): string | null {
   if (!fullName) return null;
   const locale = market === "US" ? "en-US" : "tr-TR";
   const first = fullName.trim().split(/\s+/)[0] ?? "";
@@ -243,12 +244,17 @@ function equipmentPhrase(inq: InquiryForWhatsApp, en: boolean): string | null {
   return /konteyner|container/i.test(type) ? label : `${label} ${en ? "container" : "konteyner"}`;
 }
 
-export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
+// The missing-detail questions for a lead, phrased in the lead's market
+// language — shared by the WhatsApp draft and the missing-info email so both
+// channels ask for exactly the same things.
+export function leadMissingQuestions(inq: InquiryForWhatsApp): {
+  market: MetaLeadMarket;
+  questions: string[];
+  missing: string[];
+} {
   const parsed = parsedOf(inq);
   const market = metaLeadMarketOf(parsed);
   const en = market === "US";
-  const phone = s(parsed.phone);
-  const firstName = firstNameOf(s(parsed.fullName), market);
 
   const isFcl = Boolean(s(inq.containerType));
   const dims = hasDimensions(inq.dimensions);
@@ -320,6 +326,19 @@ export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
     questions.push(en ? "When will the cargo be ready?" : "Yük ne zaman hazır olacak?");
     missing.push("cargo ready date");
   }
+
+  return { market, questions, missing };
+}
+
+export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
+  const parsed = parsedOf(inq);
+  const { market, questions, missing } = leadMissingQuestions(inq);
+  const en = market === "US";
+  const phone = s(parsed.phone);
+  const firstName = leadFirstName(s(parsed.fullName), market);
+
+  const origin = s(inq.origin);
+  const destination = s(inq.destination);
 
   const greeting = en
     ? (firstName

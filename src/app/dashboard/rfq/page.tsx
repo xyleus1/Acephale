@@ -17,7 +17,7 @@ import {
 } from "@/lib/inquiry-status";
 import {
   buildDeskForwardEmail,
-  buildLeadConfirmationEmail,
+  buildLeadCustomerEmail,
   countPendingDeskForwards,
   isSingleEmailAddress,
   rfqMailConfigured,
@@ -25,6 +25,7 @@ import {
 import { buildWhatsAppInquiry } from "@/lib/rfq-whatsapp";
 import { whatsAppSendConfigured } from "@/lib/whatsapp";
 import { metaLeadsSource, metaLeadsSheetUrl, US_LEAD_PARSED_MARKER } from "@/lib/meta-leads";
+import { assessLeadQuality, leadQualitySummary, type LeadQualityTier } from "@/lib/lead-quality";
 
 // Send-all pushes up to 60 sequential SMTP sends through a server action on
 // this segment; the default function timeout would cut the batch short.
@@ -77,16 +78,20 @@ function choice(value: string | null, map: Record<string, string>): string | nul
 export default async function RFQPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; view?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; view?: string; quality?: string }>;
 }) {
   const session = await requireSession();
-  const { status, q: rawQuery, view } = await searchParams;
+  const { status, q: rawQuery, view, quality } = await searchParams;
   // Next delivers repeated params as arrays despite the annotation — degrade
   // to no filter rather than crashing on a hand-crafted ?q=a&q=b URL.
   const searchQuery = (typeof rawQuery === "string" ? rawQuery : "").trim().slice(0, 120);
   // ?view=us swaps the sheet to US-market Meta leads; the default view is
   // everything else. Status tabs and search apply within either view.
   const usView = view === "us";
+  // In the US view, leads are triaged by quality and only Good ones show by
+  // default; ?quality=review / ?quality=all widen the lens.
+  const qualityFilter: "good" | "review" | "all" =
+    usView && (quality === "review" || quality === "all") ? quality : usView ? "good" : "all";
 
   // Custom statuses/modes added on the fly live as plain strings on rows —
   // whatever is in use in this office becomes a tab and a dropdown option.
@@ -204,7 +209,8 @@ export default async function RFQPage({
     const answers = isLead ? safeParse(JSON.stringify(parsed.answers ?? {})) : {};
 
     const forwardEmail = buildDeskForwardEmail(inq);
-    const confirmationEmail = buildLeadConfirmationEmail(inq);
+    const confirmationEmail = buildLeadCustomerEmail(inq);
+    const leadQuality = isLead ? assessLeadQuality(inq) : null;
     const sentLabel = (value: unknown) => {
       const date = typeof value === "string" ? new Date(value) : null;
       return date && !Number.isNaN(date.getTime())
@@ -243,6 +249,7 @@ export default async function RFQPage({
 
     const leadAnswers = isLead
       ? [
+          { label: "Lead quality", value: leadQuality ? leadQualitySummary(leadQuality) : null },
           { label: "Commercial shipment", value: str(answers.commercial) },
           { label: "Shipment type", value: str(answers.shipmentType) },
           { label: "Load info", value: str(answers.loadInfo) },
@@ -305,6 +312,8 @@ export default async function RFQPage({
         text: forwardEmail.text,
         sentAtLabel: sentLabel(parsed.deskForwardedAt),
       },
+      confirmationKind: confirmationEmail.kind,
+      leadQuality,
       confirmation: {
         // A non-single address (or a comma-smuggled list) must never become
         // an SMTP recipient — surface it as unsendable instead.
@@ -313,7 +322,11 @@ export default async function RFQPage({
         replyTo: confirmationEmail.replyTo,
         subject: confirmationEmail.subject,
         text: confirmationEmail.text,
-        sentAtLabel: sentLabel(parsed.confirmationSentAt),
+        // Each kind has its own stamp — sending the info-request must not
+        // show the (future) confirmation as already sent.
+        sentAtLabel: sentLabel(confirmationEmail.kind === "info-request"
+          ? parsed.infoRequestSentAt
+          : parsed.confirmationSentAt),
       },
       whatsapp: {
         ...buildWhatsAppInquiry(inq),
@@ -323,8 +336,19 @@ export default async function RFQPage({
     };
   };
 
-  const rows = inquiriesRaw.map(toRow);
-  const usCount = usView ? rows.length : usTabCount;
+  const allRows = inquiriesRaw.map(toRow);
+  const usCount = usView ? allRows.length : usTabCount;
+
+  // Quality triage only makes sense over leads, i.e. in the US view; the
+  // counts drive the Good/Review/All chips.
+  const tierCount = (tier: LeadQualityTier) =>
+    allRows.filter((r) => r.leadQuality?.tier === tier).length;
+  const qualityCounts = usView
+    ? { good: tierCount("GOOD"), review: tierCount("REVIEW"), all: allRows.length }
+    : null;
+  const rows = !usView || qualityFilter === "all"
+    ? allRows
+    : allRows.filter((r) => r.leadQuality?.tier === (qualityFilter === "good" ? "GOOD" : "REVIEW"));
 
   const usSheetUrl = metaLeadsSheetUrl(metaLeadsSource("US"));
 
@@ -338,7 +362,7 @@ export default async function RFQPage({
         <div>
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
-            {rows.length} {filter === "" ? "open " : ""}{usView ? "US lead" : "RFQ"}{rows.length === 1 ? "" : "s"} shown{searchQuery ? ` · matching “${searchQuery}”` : ""}{usView ? " · synced hourly from the California lead sheet" : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
+            {rows.length} {filter === "" ? "open " : ""}{usView ? "US lead" : "RFQ"}{rows.length === 1 ? "" : "s"} shown{usView && qualityFilter !== "all" ? ` · ${qualityFilter === "good" ? "Good" : "Review"} quality only` : ""}{searchQuery ? ` · matching “${searchQuery}”` : ""}{usView ? " · synced hourly from the California lead sheet" : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns
           </p>
         </div>
         <div className="page-actions">
@@ -363,11 +387,13 @@ export default async function RFQPage({
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         <div className="mode-tabs">
           {filterTabs.map((t) => {
-            // Tabs keep the search query and the view so everything composes.
+            // Tabs keep the search query, the view and the quality lens so
+            // everything composes.
             const params = new URLSearchParams();
             if (t.key) params.set("status", t.key);
             if (searchQuery) params.set("q", searchQuery);
             if (usView) params.set("view", "us");
+            if (usView && qualityFilter !== "good") params.set("quality", qualityFilter);
             const qs = params.toString();
             return (
               <Link
@@ -380,10 +406,34 @@ export default async function RFQPage({
             );
           })}
         </div>
+        {usView && qualityCounts && (
+          <div className="view-switcher" style={{ marginLeft: 0 }}>
+            {([
+              ["good", `Good (${qualityCounts.good})`],
+              ["review", `Review (${qualityCounts.review})`],
+              ["all", `All (${qualityCounts.all})`],
+            ] as const).map(([key, label]) => {
+              const params = new URLSearchParams();
+              if (filter) params.set("status", filter);
+              if (searchQuery) params.set("q", searchQuery);
+              params.set("view", "us");
+              if (key !== "good") params.set("quality", key);
+              return (
+                <Link
+                  key={key}
+                  href={`/dashboard/rfq?${params.toString()}` as "/dashboard/rfq"}
+                  className={`view-switcher-tab${qualityFilter === key ? " active" : ""}`}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
         <div className="view-switcher">
           {[
-            { key: "", label: "All RFQs" },
-            { key: "us", label: `US leads${!usView && usCount > 0 ? ` (${usCount})` : ""}` },
+            { key: "", label: "🇹🇷 Türkiye" },
+            { key: "us", label: `🇺🇸 US${!usView && usCount > 0 ? ` (${usCount})` : ""}` },
           ].map((v) => {
             const params = new URLSearchParams();
             if (filter) params.set("status", filter);
@@ -410,7 +460,9 @@ export default async function RFQPage({
         userId={session.userId}
         searchQuery={searchQuery}
         emptyHint={usView
-          ? "US leads sync in hourly from the California lead sheet — press “Sync Google Sheet” to pull now, or try another status filter."
+          ? qualityFilter !== "all" && (qualityCounts?.all ?? 0) > 0
+            ? `No ${qualityFilter === "good" ? "Good" : "Review"}-quality US leads in this view — ${qualityCounts!.all} lead${qualityCounts!.all === 1 ? "" : "s"} total under “All”.`
+            : "US leads sync in hourly from the California lead sheet — press “Sync Google Sheet” to pull now, or try another status filter."
           : undefined}
       />
     </div>
