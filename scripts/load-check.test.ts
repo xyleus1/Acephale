@@ -40,6 +40,7 @@ function severityOf(result: ReturnType<typeof run>, id: string) {
 const LITHIUM_CARRIER: BenchCarrier = {
   id: "c1",
   name: "Golden State Secure",
+  dotNumber: "3722188",
   hazmatCertified: true,
   lithiumCapable: true,
   teamDrivers: true,
@@ -224,6 +225,12 @@ check("notes lead with counts and tier", notes.startsWith("Pre-flight:") && note
 check("notes include blocker titles with actions", notes.includes("✗") && notes.includes("→"));
 check("notes exclude watch items", !notes.includes("Booking as broker of record"));
 check("report has section headers", report.includes("BLOCKERS (") && report.includes("CARRIER BENCH"));
+check("facts default to empty and stay out of the report", reportResult.facts.length === 0 && !report.includes("CITED FACTS"));
+const withFacts = formatPreflightReport(reportIdea, {
+  ...reportResult,
+  facts: ["Duty, HTS 8507: MFN 3.4% (USITC HTS)"],
+});
+check("cited facts render as a report section", withFacts.report.includes("CITED FACTS (1)") && withFacts.report.includes("• Duty, HTS 8507"));
 check("report carries the facts line", report.includes("Declared value: $180,000") && report.includes("Weight: 12,000 lbs"));
 check("report names the empty-bench state", report.includes("0 approved on the bench"));
 
