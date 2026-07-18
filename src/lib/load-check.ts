@@ -75,6 +75,7 @@ export type CheckFinding = {
 export type BenchCarrier = {
   id: string;
   name: string;
+  dotNumber: string | null;
   hazmatCertified: boolean;
   lithiumCapable: boolean;
   teamDrivers: boolean;
@@ -90,7 +91,7 @@ export type CarrierRequirement = { key: string; label: string };
 
 export type CarrierMatchResult = {
   requirements: CarrierRequirement[];
-  matched: Array<{ id: string; name: string }>;
+  matched: Array<{ id: string; name: string; dotNumber: string | null }>;
   approvedOnBench: number;
 };
 
@@ -101,6 +102,9 @@ export type LoadCheckResult = {
   estimatedMiles: number | null;
   findings: CheckFinding[];
   carrierMatch: CarrierMatchResult;
+  // Cited numbers from live sources (duty rates, rulings, insurance filings) —
+  // filled by src/lib/load-check-enrich.ts after the pure check runs.
+  facts: string[];
 };
 
 const BATTERY_CATEGORIES = ["batteries_un3480", "batteries_un3481"];
@@ -587,9 +591,10 @@ export function checkLoadIdea(
     findings,
     carrierMatch: {
       requirements,
-      matched: matched.slice(0, 5).map((c) => ({ id: c.id, name: c.name })),
+      matched: matched.slice(0, 5).map((c) => ({ id: c.id, name: c.name, dotNumber: c.dotNumber })),
       approvedOnBench: context.carriers.length,
     },
+    facts: [],
   };
 }
 
@@ -639,6 +644,7 @@ export function formatPreflightReport(idea: LoadIdea, result: LoadCheckResult): 
     "LOAD PRE-FLIGHT REPORT",
     ...facts,
     "",
+    ...(result.facts.length > 0 ? [`CITED FACTS (${result.facts.length})`, ...result.facts.map((line) => `• ${line}`), ""] : []),
     ...section(`BLOCKERS (${blockers.length})`, blockers),
     ...section(`RISKS (${risks.length})`, risks),
     ...section(`WATCH (${watch.length})`, watch),

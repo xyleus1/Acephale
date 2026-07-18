@@ -14,6 +14,7 @@ import {
   type LoadIdea,
 } from "@/lib/load-check";
 import { extractLoadIdea } from "@/lib/load-check-extract";
+import { enrichLoadCheck } from "@/lib/load-check-enrich";
 import { commodityCategoryLabel, COMMODITY_CATEGORY_VALUES } from "@/lib/security-sop";
 import { CARRIER_EQUIPMENT_TYPES } from "@/lib/carrier-vetting";
 
@@ -48,7 +49,10 @@ export async function analyzeLoadIdeaAction(input: {
     note = extracted.note;
   }
 
-  const result = checkLoadIdea(fields, { carriers: await approvedBench(session.officeId), now: new Date() });
+  const now = new Date();
+  const bench = await approvedBench(session.officeId);
+  const result = checkLoadIdea(fields, { carriers: bench, now });
+  result.facts = await enrichLoadCheck(fields, result, result.carrierMatch.matched, now);
   return { fields, result, note };
 }
 
@@ -58,6 +62,7 @@ async function approvedBench(officeId: string): Promise<BenchCarrier[]> {
     select: {
       id: true,
       name: true,
+      dotNumber: true,
       hazmatCertified: true,
       lithiumCapable: true,
       teamDrivers: true,
@@ -73,6 +78,7 @@ async function approvedBench(officeId: string): Promise<BenchCarrier[]> {
   return carriers.map((carrier) => ({
     id: carrier.id,
     name: carrier.name,
+    dotNumber: carrier.dotNumber,
     hazmatCertified: carrier.hazmatCertified,
     lithiumCapable: carrier.lithiumCapable,
     teamDrivers: carrier.teamDrivers,
@@ -100,7 +106,10 @@ export async function createRfqFromLoadIdeaAction(input: {
     return { error: "The idea needs at least a lane, commodity, or description before it becomes an RFQ." };
   }
 
-  const result = checkLoadIdea(fields, { carriers: await approvedBench(session.officeId), now: new Date() });
+  const now = new Date();
+  const bench = await approvedBench(session.officeId);
+  const result = checkLoadIdea(fields, { carriers: bench, now });
+  result.facts = await enrichLoadCheck(fields, result, result.carrierMatch.matched, now);
   const { notes, report } = formatPreflightReport(fields, result);
 
   const isBattery = fields.commodityCategory === "batteries_un3480" || fields.commodityCategory === "batteries_un3481";

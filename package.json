@@ -34,6 +34,7 @@
     "test:carrier-vetting": "tsx scripts/carrier-vetting.test.ts",
     "test:market-indicators": "tsx scripts/market-indicators.test.ts",
     "test:load-check": "tsx scripts/load-check.test.ts",
+    "test:load-check-enrich": "tsx scripts/load-check-enrich.test.ts",
     "test:security-sop": "tsx scripts/security-sop.test.ts",
     "test:truckload-quotes": "tsx scripts/truckload-quotes.test.ts",
     "backfill:crm-email": "tsx scripts/backfill-crm-email-touch.ts",

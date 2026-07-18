@@ -280,6 +280,19 @@ export function LoadCheckPanel() {
                     </button>
                   </div>
 
+                  {result.facts.length > 0 && (
+                    <div className="card" style={{ padding: "10px 14px" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55, marginBottom: 4 }}>
+                        Cited facts — USITC · CBP · FMCSA, live
+                      </div>
+                      {result.facts.map((line, index) => (
+                        <div key={index} style={{ fontSize: 12, padding: "2px 0", lineHeight: 1.5 }}>
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {(blockers.length > 0 || risks.length > 0) && (
                     <div className="card" style={{ padding: "2px 0", display: "flex", flexDirection: "column" }}>
                       {blockers.map((f) => row(f, "var(--danger)"))}
