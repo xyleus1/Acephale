@@ -1891,3 +1891,62 @@ Use this file for chronological implementation notes that future agents should s
   service account / API key).
 - Follow-up: none required; optional — English variants for other
   customer-facing copy if US leads start flowing through portal/pricing flows.
+
+### 2026-07-17 - US leads: panel -> chosen tab (view switcher)
+
+- Branch: us-rfq-sheet-panel (follow-up to PR #16, merged earlier today)
+- Task: Per Mert's feedback, the US section must be a tab you choose, not a
+  default on-screen panel.
+- Files changed: `src/app/dashboard/rfq/page.tsx`,
+  `src/components/rfq-expandable-rows.tsx`, docs.
+- Behavior: default /dashboard/rfq view = original sheet excluding US leads;
+  right-aligned view-switcher ("All RFQs" | "US leads (n)") toggles ?view=us
+  showing only US leads + a "Lead sheet" link in page actions. Status tabs
+  and search compose within the view. RfqSheet: `hideToolbar` removed,
+  `emptyHint` added (US empty-state copy, hides New RFQ button).
+- Verification: `npm run build`, `test:rfq-whatsapp`, `check:docs`,
+  `audit:tenant-scope` (baseline 9) pass. Partition semantics unchanged from
+  the e2e-proven filters; prod confirmed post-cron at 19:25Z: 34 US leads
+  tagged, 63 TR re-tagged, 97 meta-leads total.
+- Caveats: prod cron populated the data already, so the tab shows leads
+  immediately after this deploys.
+
+### 2026-07-17 - US flag toggle, lead quality triage, smart lead email
+
+- Branch: us-rfq-sheet-panel (Conductor workspace cody, targets main)
+- Commit: see git log (follow-up to PR #16, same branch)
+- Task: Mert's iteration on the US leads flow: (1) US leads behind a
+  Türkiye/US flag toggle instead of a stacked panel, (2) show only good
+  leads by default, (3) one click emails the lead — confirmation when their
+  details are complete, a missing-info request otherwise.
+- Files changed: `src/lib/lead-quality.ts` (new), `src/lib/lead-emails.ts`
+  (new), `src/lib/rfq-whatsapp.ts` (leadMissingQuestions/leadFirstName
+  extracted), `src/lib/rfq-mail.ts` (buildLeadCustomerEmail replaces
+  buildLeadConfirmationEmail; infoRequestSentAt stamp),
+  `src/lib/google-sheets-sync.ts` (preserve infoRequestSentAt),
+  `src/app/dashboard/rfq/page.tsx` (flag toggle labels, ?quality= chips,
+  quality per row, smart confirmation preview),
+  `src/app/dashboard/rfq/actions.ts` (kind-aware stamp),
+  `src/components/rfq-expandable-rows.tsx` (quality pill, kind-aware card,
+  per-row Confirm/Ask-info button, send column 176px),
+  `src/app/globals.css`, `scripts/lead-quality.test.ts` (new),
+  `scripts/lead-emails.test.ts` (new), `package.json`, docs.
+- Behavior: US view defaults to Good-quality leads with Good/Review/All
+  chips; deterministic scorer (contact + lane gates; commercial/size/timing/
+  budget/company/commodity points; GOOD ≥ 8, REVIEW ≥ 4) with reasons shown
+  on the row pill and expanded answers. Lead customer email picks
+  confirmation vs info-request from the same missing-details source as the
+  WhatsApp draft, in the lead's language; separate send stamps per kind,
+  resync-preserved; sendable from the row or the expanded preview card.
+  Nothing sends automatically.
+- Verification: build clean; test:lead-quality, test:lead-emails,
+  test:rfq-whatsapp, test:crm, check:docs pass; tenant-scope audit at
+  baseline; prod read-only dry run of the scorer: 42 leads → 18 GOOD /
+  21 REVIEW / 3 WEAK (junk lanes gated to WEAK).
+- Failed/skipped checks: none.
+- Caveats: quality thresholds are v1 heuristics — tune GOOD_MIN/REVIEW_MIN
+  and the junk-token sets in `src/lib/lead-quality.ts` as the desk gives
+  feedback. TR view intentionally has no quality chips (mixed with email/
+  manual RFQs); lead rows there still show the quality pill.
+- Follow-up: possible auto-suggest "Ignored" for WEAK leads; batch "email
+  all good leads" action if the desk wants it.

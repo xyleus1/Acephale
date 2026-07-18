@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import {
   buildDeskForwardEmail,
-  buildLeadConfirmationEmail,
+  buildLeadCustomerEmail,
   claimInquirySendStamp,
   clearInquirySendStamp,
   isSingleEmailAddress,
@@ -78,6 +78,10 @@ export async function sendDeskForwardAction(
   return { ok: true };
 }
 
+// Sends the lead's customer email, rebuilt server-side: a confirmation when
+// the lead's details are complete, a missing-info request otherwise — the
+// same email the sheet previews. Each kind carries its own sent-stamp, so
+// an info-request send doesn't mark the (later) confirmation as sent.
 export async function sendLeadConfirmationAction(
   inquiryId: string,
 ): Promise<{ ok: true } | { error: string }> {
@@ -87,7 +91,7 @@ export async function sendLeadConfirmationAction(
     return { error: "Sender email is missing or not a single valid address — fix it on the RFQ first." };
   }
 
-  const email = buildLeadConfirmationEmail(inquiry);
+  const email = buildLeadCustomerEmail(inquiry);
   const result = await sendRfqMail({
     officeId: session.officeId,
     inquiryId: inquiry.id,
@@ -99,7 +103,7 @@ export async function sendLeadConfirmationAction(
   });
   if ("error" in result) return result;
 
-  await stampAfterSend(inquiry.id, "confirmationSentAt");
+  await stampAfterSend(inquiry.id, email.kind === "info-request" ? "infoRequestSentAt" : "confirmationSentAt");
   revalidatePath("/dashboard/rfq");
   return { ok: true };
 }

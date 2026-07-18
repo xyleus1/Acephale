@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 import { prisma } from "./prisma";
 import { deriveInquirySource } from "./inquiry-source";
 import { openInquiryStatusFilter } from "./inquiry-status";
-import { metaLeadMarketOf } from "./meta-leads";
+import { buildLeadCustomerEmailContent } from "./lead-emails";
 
 // Outbound RFQ mail from the rfq@usederya.com desk address. This account is
 // not OAuth-connected (no refresh token), so delivery goes over Gmail SMTP
@@ -15,20 +15,9 @@ const DEFAULT_FORWARD_TO = "oguzhan@usederya.com";
 const DEFAULT_FORWARD_CC = "gozde.sen@andelog.com,nazli.bagcicek@andelog.com";
 const DEFAULT_REPLY_TO = "oguzhan@usederya.com";
 
-// Customer-facing copy follows the lead's ad market: Turkish for the TR
-// campaigns, English for the US ones. The internal desk forward stays English.
-const CONFIRMATION_SUBJECT_TR = "Talebiniz alındı — Derya";
-const CONFIRMATION_BODY_TR = `Talebiniz Derya fiyatlandırma ekibi tarafından alınmıştır. Bilgileriniz doğru ve eksiksizse talebiniz önümüzdeki 6 saat içinde işleme alınacaktır. Ekibimiz ek detaylar için sizinle iletişime geçebilir.
-—
-Oğuzhan Karaca
-Kurucu Ortak & CEO, Derya
-https://usederya.com/`;
-const CONFIRMATION_SUBJECT_US = "Your request has been received — Derya";
-const CONFIRMATION_BODY_US = `Your request has been received by the Derya pricing team. If your details are correct and complete, your request will be processed within the next 6 hours. Our team may reach out for additional details.
-—
-Oğuzhan Karaca
-Co-founder & CEO, Derya
-https://usederya.com/`;
+// Customer-facing lead copy (confirmation / missing-info request, per the
+// lead's ad market language) lives in src/lib/lead-emails.ts so it stays
+// unit-testable; this module wraps it with the SMTP desk config.
 
 export function rfqMailConfig() {
   return {
@@ -185,16 +174,21 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
   };
 }
 
-export function buildLeadConfirmationEmail(inq: InquiryForMail) {
+// The one customer email a lead row sends: a confirmation when the form gave
+// the desk everything, a missing-info request (listing the exact questions,
+// same set as the WhatsApp draft) when it didn't.
+export function buildLeadCustomerEmail(inq: InquiryForMail) {
   const config = rfqMailConfig();
-  const isUs = metaLeadMarketOf(parsedOf(inq)) === "US";
+  const content = buildLeadCustomerEmailContent(inq);
   return {
+    kind: content.kind,
+    missing: content.missing,
     from: config.user,
     to: inq.fromEmail,
     cc: [] as string[],
     replyTo: config.replyTo,
-    subject: isUs ? CONFIRMATION_SUBJECT_US : CONFIRMATION_SUBJECT_TR,
-    text: isUs ? CONFIRMATION_BODY_US : CONFIRMATION_BODY_TR,
+    subject: content.subject,
+    text: content.text,
   };
 }
 
@@ -270,7 +264,7 @@ export async function sendRfqMail(args: {
   return { ok: true };
 }
 
-export type SendStampKey = "deskForwardedAt" | "confirmationSentAt" | "whatsappSentAt";
+export type SendStampKey = "deskForwardedAt" | "confirmationSentAt" | "infoRequestSentAt" | "whatsappSentAt";
 
 // Legacy rows can hold non-JSON (or JSON-array) parsedData. Stamping those
 // would replace the stored parser output with just the stamp, so we refuse

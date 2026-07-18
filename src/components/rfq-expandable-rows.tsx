@@ -61,7 +61,12 @@ export type RfqRowData = {
   notesExcerpt: string | null;
   mailConfigured: boolean;
   forward: RfqEmailPreview;
+  // The lead's customer email: a received-confirmation when the form gave
+  // everything, a missing-info request otherwise.
+  confirmationKind: "confirmation" | "info-request";
   confirmation: RfqEmailPreview;
+  // Deterministic triage for lead rows (null for non-lead RFQs).
+  leadQuality: { tier: "GOOD" | "REVIEW" | "WEAK"; score: number; reasons: string[] } | null;
   whatsapp: RfqWhatsAppPreview;
 };
 
@@ -289,8 +294,10 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
             onSend={() => sendDeskForwardAction(row.id)}
           />
           <EmailPreviewCard
-            title="Confirmation to lead"
-            hint="Booking-received note, replies go to oguzhan@"
+            title={row.confirmationKind === "info-request" ? "Ask lead for missing info" : "Confirmation to lead"}
+            hint={row.confirmationKind === "info-request"
+              ? `Asks for ${row.whatsapp.missing.join(", ")} — replies go to oguzhan@`
+              : "Request-received note, replies go to oguzhan@"}
             preview={row.confirmation}
             disabledReason={mailDisabled ?? (row.confirmation.to ? null : "No valid single sender email address on this RFQ.")}
             onSend={() => sendLeadConfirmationAction(row.id)}
@@ -353,9 +360,13 @@ function RowSendCell({ row, onExpand, onError }: {
   const [busy, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
   const [justSent, setJustSent] = useState(false);
+  const [leadBusy, startLeadTransition] = useTransition();
+  const [leadFailed, setLeadFailed] = useState(false);
+  const [leadJustSent, setLeadJustSent] = useState(false);
 
   const sent = Boolean(row.forward.sentAtLabel) || justSent;
-  const confirmed = Boolean(row.confirmation.sentAtLabel);
+  const confirmed = Boolean(row.confirmation.sentAtLabel) || leadJustSent;
+  const askInfo = row.confirmationKind === "info-request";
 
   function send() {
     startTransition(async () => {
@@ -373,6 +384,27 @@ function RowSendCell({ row, onExpand, onError }: {
       } catch {
         setFailed(true);
         onError("Send failed or was interrupted — check with the recipient before retrying.");
+        onExpand();
+      }
+    });
+  }
+
+  // The customer email (confirmation or missing-info ask), sendable straight
+  // from the row — same email the expanded card previews.
+  function sendLead() {
+    startLeadTransition(async () => {
+      setLeadFailed(false);
+      try {
+        const res = await sendLeadConfirmationAction(row.id);
+        if ("error" in res) {
+          setLeadFailed(true);
+          onExpand(); // the expanded card is where the preview + retry live
+        } else {
+          setLeadJustSent(true);
+          router.refresh();
+        }
+      } catch {
+        setLeadFailed(true);
         onExpand();
       }
     });
@@ -396,8 +428,30 @@ function RowSendCell({ row, onExpand, onError }: {
           {busy ? "…" : failed ? "Retry" : "Desk"}
         </button>
       )}
-      {confirmed && (
-        <span className="rfq-mail-sent" title={`Confirmation sent to lead · ${row.confirmation.sentAtLabel}`}>
+      {row.sourceKind === "lead" && (confirmed ? (
+        <span className="rfq-mail-sent" title={`${askInfo ? "Missing-info request" : "Confirmation"} sent to lead${row.confirmation.sentAtLabel ? ` · ${row.confirmation.sentAtLabel}` : ""}`}>
+          <Icon name="check" size={11} strokeWidth={2.5} />
+          Lead
+        </span>
+      ) : (
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={leadBusy || !row.mailConfigured || !row.confirmation.to}
+          title={!row.mailConfigured
+            ? "RFQ mail is not configured"
+            : !row.confirmation.to
+              ? "No valid single email address on this lead"
+              : askInfo
+                ? `Email the lead asking for: ${row.whatsapp.missing.join(", ")} (expand row to preview)`
+                : "Email the lead that the request is received and being priced (expand row to preview)"}
+          onClick={sendLead}
+        >
+          <Icon name="mail-out" size={12} strokeWidth={2.25} />
+          {leadBusy ? "…" : leadFailed ? "Retry" : askInfo ? "Ask info" : "Confirm"}
+        </button>
+      ))}
+      {row.sourceKind !== "lead" && confirmed && (
+        <span className="rfq-mail-sent" title={`Confirmation sent · ${row.confirmation.sentAtLabel ?? ""}`}>
           <Icon name="check" size={11} strokeWidth={2.5} />
           Lead
         </span>
@@ -444,7 +498,8 @@ const SHEET_COLUMNS: ReadonlyArray<SheetColumn> = [
   { key: "security", label: "Security", width: 104 },
   { key: "declared", label: "Declared Value", width: 112, numeric: true },
   { key: "target", label: "Target Price", width: 112, numeric: true },
-  { key: "send", label: "Send", width: 120, numeric: true },
+  // Wide enough for the two per-row send buttons ("Desk" + "Ask info").
+  { key: "send", label: "Send", width: 176, numeric: true },
 ];
 
 const COLUMN_KEYS = SHEET_COLUMNS.map((c) => c.key);
@@ -630,16 +685,16 @@ function useDebouncedValue<T>(value: T, ms: number): T {
   return v;
 }
 
-export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery, hideToolbar }: {
+export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery, emptyHint }: {
   rows: RfqRowData[];
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
   userId: string;
   searchQuery: string;
-  // With two sheets on /dashboard/rfq, only the primary one renders the
-  // search bar + column picker; the layout (same per-user storage key) still
-  // applies to both.
-  hideToolbar?: boolean;
+  // Replaces the default "RFQs arrive from linked email threads…" empty-state
+  // copy (and its New RFQ button) — the US-leads view has its own story for
+  // where rows come from. Search-empty copy is unaffected.
+  emptyHint?: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -793,7 +848,6 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           onDone={() => setSelected(new Set())}
         />
       )}
-      {!hideToolbar && (
       <div className="table-toolbar rfq-sheet-toolbar">
         <RfqSearchBar initialQuery={searchQuery} />
         <div ref={pickerRef} className="table-picker">
@@ -829,7 +883,6 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           )}
         </div>
       </div>
-      )}
       {rows.length === 0 ? (
         <div className="card empty-state-card">
           <Icon name={searchQuery ? "search" : "inbox"} size={36} className="empty-state-graphic" />
@@ -837,9 +890,9 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
           <p className="empty-state-copy">
             {searchQuery
               ? `Nothing in this view matches “${searchQuery}”. Try another term, or clear the search.`
-              : "RFQs arrive from linked email threads or manual entry. Try another status filter, or add one manually."}
+              : emptyHint ?? "RFQs arrive from linked email threads or manual entry. Try another status filter, or add one manually."}
           </p>
-          {!searchQuery && (
+          {!searchQuery && !emptyHint && (
             <Link href="/dashboard/rfq/new" className="btn">
               New RFQ
             </Link>
@@ -1037,6 +1090,18 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
               >
                 <Icon name="chevron-right" size={12} strokeWidth={2.5} />
               </button>
+              {row.leadQuality && (
+                <span
+                  className={`badge rfq-quality-badge ${
+                    row.leadQuality.tier === "GOOD" ? "badge-good"
+                      : row.leadQuality.tier === "REVIEW" ? "badge-warn"
+                      : "badge-neutral"
+                  }`}
+                  title={`Lead quality: ${row.leadQuality.tier === "GOOD" ? "Good" : row.leadQuality.tier === "REVIEW" ? "Review" : "Weak"} (score ${row.leadQuality.score})${row.leadQuality.reasons.length ? ` — ${row.leadQuality.reasons.join(", ")}` : ""}`}
+                >
+                  {row.leadQuality.tier === "GOOD" ? "Good" : row.leadQuality.tier === "REVIEW" ? "Review" : "Weak"}
+                </span>
+              )}
               <CellInput
                 key={`su${rev("subject")}:${row.subject}`}
                 value={row.subject}
