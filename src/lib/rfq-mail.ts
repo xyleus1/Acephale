@@ -264,7 +264,7 @@ export async function sendRfqMail(args: {
   return { ok: true };
 }
 
-export type SendStampKey = "deskForwardedAt" | "confirmationSentAt" | "infoRequestSentAt" | "whatsappSentAt";
+export type SendStampKey = "deskForwardedAt" | "confirmationSentAt" | "infoRequestSentAt" | "whatsappSentAt" | "autoRepliedAt";
 
 // Legacy rows can hold non-JSON (or JSON-array) parsedData. Stamping those
 // would replace the stored parser output with just the stamp, so we refuse

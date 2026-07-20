@@ -7,6 +7,7 @@ import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { createWithFileReference } from "./references";
 import { metaLeadsSources, type MetaLeadsSource } from "./meta-leads";
+import { autoReplyToUsLeads } from "./lead-auto-reply";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
 
@@ -25,6 +26,7 @@ type SyncSummary = {
   operations: { created: number; updated: number; skipped: number; companiesCreated: number };
   leads: LeadCounts;
   leadsUs: LeadCounts;
+  autoReplies: { sent: number; skipped: number; failed: number };
   warnings: string[];
 };
 
@@ -596,6 +598,13 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
     const jobTitle = clean(row[26]);
     const leadStatus = clean(row[28]);
 
+    // The size answers tell us when a lead is container freight — mark it so
+    // downstream drafts price it as FCL instead of asking for box dimensions.
+    const sizeText = `${shipmentType ?? ""} ${loadInfo ?? ""}`.toLocaleLowerCase("en-US");
+    const containerType = /container|konteyner/.test(sizeText)
+      ? /40/.test(sizeText) ? "40FT" : /20/.test(sizeText) ? "20FT" : "CONTAINER"
+      : null;
+
     // Lead forms are free text; people paste phone numbers into the budget
     // field. Anything outside a sane freight budget is noise, not a price.
     const budgetParsed = parseMoney(budgetRaw, "USD");
@@ -623,6 +632,7 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
           if (prev.confirmationSentAt) existingStamps.confirmationSentAt = prev.confirmationSentAt;
           if (prev.infoRequestSentAt) existingStamps.infoRequestSentAt = prev.infoRequestSentAt;
           if (prev.whatsappSentAt) existingStamps.whatsappSentAt = prev.whatsappSentAt;
+          if (prev.autoRepliedAt) existingStamps.autoRepliedAt = prev.autoRepliedAt;
         }
       } catch {
         existingStamps = {};
@@ -678,6 +688,8 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
       origin,
       destination,
       commodity,
+      containerType,
+      containerCount: containerType ? 1 : null,
       type: "FORWARDING",
       status: "INGESTED",
       targetPrice: budget.amount,
@@ -839,6 +851,17 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
     return { error: warnings.join(" | ") };
   }
 
+  // First-touch automation for freshly-synced US leads (GOOD tier only) —
+  // never allowed to fail the sync itself.
+  let autoReplies = { sent: 0, skipped: 0, failed: 0 };
+  try {
+    const auto = await autoReplyToUsLeads(officeId);
+    autoReplies = { sent: auto.sent, skipped: auto.skipped, failed: auto.failed };
+    warnings.push(...auto.warnings);
+  } catch (e) {
+    warnings.push(`Auto-reply: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/inbox");
   revalidatePath("/dashboard/rfq");
@@ -853,6 +876,7 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
     operations,
     leads: leadCounts.TR,
     leadsUs: leadCounts.US,
+    autoReplies,
     warnings,
   };
 }
