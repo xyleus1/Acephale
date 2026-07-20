@@ -7,6 +7,7 @@ import { resolveCompanyIdByName } from "@/lib/company-resolve";
 import { NewJobForm } from "@/components/new-job-form";
 import { Icon } from "@/components/icon";
 import { recordTargetPriceHistory } from "@/lib/target-price-history";
+import { recordAuditLog } from "@/lib/audit";
 
 const VALID_STATUSES = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"];
 
@@ -62,9 +63,19 @@ async function createJob(formData: FormData) {
       currency:    "USD",
       etd,
       eta,
-      assignedToUserId: session.userId,
+      // Loads start unassigned: people take them from the board (or an admin
+      // assigns them) — creation is not ownership.
     },
   }));
+  await recordAuditLog({
+    officeId: session.officeId,
+    actorUserId: session.userId,
+    actorEmail: session.email,
+    action: "load.created",
+    entityId: job.id,
+    entityRef: job.reference,
+    summary: "Created this load manually",
+  });
   if (targetPrice != null || targetPriceStatus === "NO_TARGET") {
     await recordTargetPriceHistory({
       officeId: session.officeId,

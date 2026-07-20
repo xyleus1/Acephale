@@ -16,6 +16,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await requireSession();
   const initials = session.email.slice(0, 2).toUpperCase();
   const lang = await getLang();
+  // Loadboard-only accounts: nav shows just the loads surfaces, and the
+  // RFQ/WhatsApp/agent chrome stays hidden. Route access is enforced in
+  // src/middleware.ts; this only shapes what renders.
+  const isEmployee = session.role === "EMPLOYEE";
+  const homeHref = isEmployee ? "/dashboard/loads" : "/dashboard";
 
   // Live pipeline status for the topbar
   const now = new Date();
@@ -23,13 +28,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     prisma.job.count({
       where: { officeId: session.officeId, status: { notIn: ["DELIVERED", "CANCELLED"] } },
     }),
-    prisma.inquiry.count({
+    isEmployee ? 0 : prisma.inquiry.count({
       // Matches the default "Open" tab on /dashboard/rfq, where the topbar chip lands.
       where: { officeId: session.officeId, status: openInquiryStatusFilter() },
     }),
     // WhatsApp threads awaiting a reply (same heuristic as the inbox's
     // "Awaiting reply" chip: latest message is inbound).
-    prisma.emailThread.findMany({
+    isEmployee ? [] : prisma.emailThread.findMany({
       where: {
         officeId: session.officeId,
         hiddenAt: null,
@@ -59,34 +64,46 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section-label with-rule">Commercial Workflow</div>
+          {isEmployee ? (
+            <>
+              <div className="nav-section-label with-rule">Loadboard</div>
 
-          <NavLink href="/dashboard" icon={<Icon name="grid" />}>Deal Desk</NavLink>
+              <NavLink href="/dashboard/loads" icon={<Icon name="truck" />}>Loads</NavLink>
 
-          <NavLink href="/dashboard/rfq" icon={<Icon name="mail-in" />}>Incoming RFQs</NavLink>
+              <NavLink href="/dashboard/jobs" icon={<Icon name="box" />}>Pipeline</NavLink>
+            </>
+          ) : (
+            <>
+              <div className="nav-section-label with-rule">Commercial Workflow</div>
 
-          <NavLink href="/dashboard/loads" icon={<Icon name="truck" />}>Loads</NavLink>
+              <NavLink href="/dashboard" icon={<Icon name="grid" />}>Deal Desk</NavLink>
 
-          <NavLink href="/dashboard/carriers" icon={<Icon name="shield" />}>Carriers</NavLink>
+              <NavLink href="/dashboard/rfq" icon={<Icon name="mail-in" />}>Incoming RFQs</NavLink>
 
-          <NavLink href="/dashboard/crm" icon={<Icon name="building" />}>CRM</NavLink>
+              <NavLink href="/dashboard/loads" icon={<Icon name="truck" />}>Loads</NavLink>
 
-          <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
+              <NavLink href="/dashboard/carriers" icon={<Icon name="shield" />}>Carriers</NavLink>
 
-          <NavLink href="/dashboard/market" icon={<Icon name="trending-up" />}>Market</NavLink>
+              <NavLink href="/dashboard/crm" icon={<Icon name="building" />}>CRM</NavLink>
 
-          {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing and /dashboard/intelligence stay reachable directly. */}
+              <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
 
-          {/* ─── SETUP ───────────────────────────────────────────────────── */}
-          <div className="nav-section-label with-rule">Setup</div>
+              <NavLink href="/dashboard/market" icon={<Icon name="trending-up" />}>Market</NavLink>
 
-          <NavLink href="/dashboard/settings/email" icon={<Icon name="settings" />}>Channels</NavLink>
+              {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing and /dashboard/intelligence stay reachable directly. */}
 
-          {(session.role === "ADMIN" || session.role === "MANAGER") && (
-            <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
+              {/* ─── SETUP ───────────────────────────────────────────────────── */}
+              <div className="nav-section-label with-rule">Setup</div>
+
+              <NavLink href="/dashboard/settings/email" icon={<Icon name="settings" />}>Channels</NavLink>
+
+              {(session.role === "ADMIN" || session.role === "MANAGER") && (
+                <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
+              )}
+
+              <NavLink href="/dashboard/inbox" icon={<Icon name="mail" />}>Inbox</NavLink>
+            </>
           )}
-
-          <NavLink href="/dashboard/inbox" icon={<Icon name="mail" />}>Inbox</NavLink>
         </nav>
 
         <div className="sidebar-footer">
@@ -106,7 +123,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <section className="content">
         <header className="topbar">
           <div className="topbar-left">
-            <a href="/dashboard" className="topbar-brand">
+            <a href={homeHref} className="topbar-brand">
               <LogoMark mini />
               <span className="topbar-brand-text">
                 <strong>Derya Deal Desk</strong>
@@ -115,7 +132,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </a>
           </div>
           <div className="topbar-center">
-            <CommandPalette />
+            {!isEmployee && <CommandPalette />}
           </div>
           <div className="topbar-right">
             <a href="/dashboard/loads" className="topbar-stat" title="Active jobs">
@@ -145,7 +162,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
                   <div className="topbar-menu-user">{session.email.split("@")[0]}</div>
                   <div className="topbar-menu-email">{session.email}</div>
                 </div>
-                <a href="/dashboard/settings/email" className="topbar-menu-item">Email &amp; WhatsApp</a>
+                {!isEmployee && (
+                  <a href="/dashboard/settings/email" className="topbar-menu-item">Email &amp; WhatsApp</a>
+                )}
                 {(session.role === "ADMIN" || session.role === "MANAGER") && (
                   <a href="/dashboard/admin" className="topbar-menu-item">Admin</a>
                 )}
@@ -169,10 +188,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </section>
 
       {/* Suspense: the widget reads useSearchParams to stay hidden only on the brain chat view. */}
-      <Suspense fallback={null}>
-        <AgentChatWidget />
-      </Suspense>
-      <LiveEventToast />
+      {!isEmployee && (
+        <Suspense fallback={null}>
+          <AgentChatWidget />
+        </Suspense>
+      )}
+      {!isEmployee && <LiveEventToast />}
     </div>
   );
 }

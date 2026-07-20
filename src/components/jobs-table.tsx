@@ -37,6 +37,7 @@ export type TableJob = {
   targetPriceSource: string | null;
   fromEmail: string | null;
   fromCompany: string | null;
+  assignedToName: string | null;
   carrierQuotes: OpportunityCarrierQuote[];
   etd: string | null;
   eta: string | null;
@@ -78,6 +79,8 @@ const COLUMNS: Col[] = [
   { key: "opportunity", label: "Opportunity", default: true,  value: (j) => calculateOpportunity(j).score, numeric: true,
     render: (j) => <OpportunityScorePill score={calculateOpportunity(j)} /> },
   { key: "customer",    label: "Customer",    default: true,  value: (j) => j.companyName },
+  { key: "assignee",    label: "Assigned",    default: true,  value: (j) => j.assignedToName,
+    render: (j) => j.assignedToName ?? <span className="data-muted">—</span> },
   { key: "route",       label: "Route",       default: true,  value: (j) => `${j.origin ?? ""} ${j.destination ?? ""}`.trim() || null,
     render: (j) => j.origin || j.destination ? <>{j.origin ?? "?"} → {j.destination ?? "?"}</> : "—" },
   { key: "mode",        label: "Mode",        default: true,  value: (j) => j.mode },

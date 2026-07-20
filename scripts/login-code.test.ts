@@ -8,12 +8,19 @@ import {
 
 process.env.AUTH_SECRET = process.env.AUTH_SECRET || "test-secret";
 
-// Default allowlist: exactly the two founder accounts.
+// Default allowlist: the two founders plus the loadboard operators.
 delete process.env.LOGIN_ALLOWED_EMAILS;
-assert.deepStrictEqual(allowedLoginEmails(), ["mert@usederya.com", "oguzhan@usederya.com"]);
+assert.deepStrictEqual(allowedLoginEmails(), [
+  "mert@usederya.com",
+  "oguzhan@usederya.com",
+  "atahan@usederya.com",
+  "merve@usederya.com",
+]);
 assert.ok(isLoginEmailAllowed("mert@usederya.com"));
 assert.ok(isLoginEmailAllowed("  MERT@USEDERYA.COM  "));
 assert.ok(isLoginEmailAllowed("oguzhan@usederya.com"));
+assert.ok(isLoginEmailAllowed("atahan@usederya.com"));
+assert.ok(isLoginEmailAllowed("merve@usederya.com"));
 assert.ok(!isLoginEmailAllowed("pentest@derya-pentest.invalid"));
 assert.ok(!isLoginEmailAllowed("manager@demo.local"));
 assert.ok(!isLoginEmailAllowed("attacker@usederya.com"));
@@ -27,7 +34,12 @@ assert.ok(!isLoginEmailAllowed("mert@usederya.com"));
 
 // Empty override falls back to defaults rather than allowing everyone/no one.
 process.env.LOGIN_ALLOWED_EMAILS = " , ";
-assert.deepStrictEqual(allowedLoginEmails(), ["mert@usederya.com", "oguzhan@usederya.com"]);
+assert.deepStrictEqual(allowedLoginEmails(), [
+  "mert@usederya.com",
+  "oguzhan@usederya.com",
+  "atahan@usederya.com",
+  "merve@usederya.com",
+]);
 delete process.env.LOGIN_ALLOWED_EMAILS;
 
 // Normalization.

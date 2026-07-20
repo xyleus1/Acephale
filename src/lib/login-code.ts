@@ -7,9 +7,14 @@ const MAX_REQUESTS_PER_WINDOW = 3;
 const REQUEST_WINDOW_MS = 15 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 
-// Internal deployment: only the founders can sign in. Extend via the
+// Internal deployment: founders + loadboard operators. Extend via the
 // LOGIN_ALLOWED_EMAILS env var (comma-separated) without a code change.
-const DEFAULT_ALLOWED_LOGIN_EMAILS = ["mert@usederya.com", "oguzhan@usederya.com"];
+const DEFAULT_ALLOWED_LOGIN_EMAILS = [
+  "mert@usederya.com",
+  "oguzhan@usederya.com",
+  "atahan@usederya.com",
+  "merve@usederya.com",
+];
 
 export function allowedLoginEmails(): string[] {
   const raw = process.env.LOGIN_ALLOWED_EMAILS;

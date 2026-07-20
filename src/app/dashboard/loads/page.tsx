@@ -17,13 +17,25 @@ function fmtNum(n: number | null): string {
   return n != null ? n.toLocaleString("en-GB") : "—";
 }
 
-export default async function LoadsPage() {
+export default async function LoadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scope?: string }>;
+}) {
   const session = await requireSession();
+  const { scope } = await searchParams;
+  const mine = scope === "mine";
+  const isEmployee = session.role === "EMPLOYEE";
 
   const jobs = await prisma.job.findMany({
-    where: { officeId: session.officeId },
+    where: {
+      officeId: session.officeId,
+      // "My loads": the personal board — only what's assigned to me.
+      ...(mine ? { assignedToUserId: session.userId } : {}),
+    },
     include: {
       company: { select: { id: true, name: true } },
+      assignedTo: { select: { id: true, fullName: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 500,
@@ -35,27 +47,47 @@ export default async function LoadsPage() {
         <div>
           <h1 className="page-title">Loads</h1>
           <p className="page-subtitle">
-            All loads, newest first — spreadsheet view. {jobs.length} row{jobs.length === 1 ? "" : "s"} shown.
+            {mine ? "Loads assigned to you" : "All loads"}, newest first — spreadsheet view. {jobs.length} row{jobs.length === 1 ? "" : "s"} shown.
           </p>
         </div>
         <div className="page-actions">
-          <a href="/dashboard/rfq" className="btn">
-            <Icon name="inbox" size={13} />
-            Move RFQ into loads
-          </a>
+          <div className="mode-tabs">
+            <a href="/dashboard/loads" className={`mode-tab${!mine ? " active" : ""}`}>
+              <Icon name="grid" size={13} />
+              All loads
+            </a>
+            <a href="/dashboard/loads?scope=mine" className={`mode-tab${mine ? " active" : ""}`}>
+              <Icon name="user" size={13} />
+              My loads
+            </a>
+          </div>
+          {!isEmployee && (
+            <a href="/dashboard/rfq" className="btn">
+              <Icon name="inbox" size={13} />
+              Move RFQ into loads
+            </a>
+          )}
         </div>
       </div>
 
       {jobs.length === 0 ? (
         <div className="card empty-state-card">
           <Icon name="box" size={36} className="empty-state-graphic" />
-          <div className="empty-state-title">No loads yet</div>
+          <div className="empty-state-title">{mine ? "No loads assigned to you" : "No loads yet"}</div>
           <p className="empty-state-copy">
-            Loads only appear here when you move an incoming RFQ into loads — open an RFQ and use “Move to loads”.
+            {mine
+              ? "Open a load from the general board and take it, or ask an admin to assign one to you."
+              : "Loads only appear here when you move an incoming RFQ into loads — open an RFQ and use “Move to loads”."}
           </p>
-          <a href="/dashboard/rfq" className="btn">
-            Open incoming RFQs
-          </a>
+          {mine ? (
+            <a href="/dashboard/loads" className="btn">
+              Open all loads
+            </a>
+          ) : !isEmployee ? (
+            <a href="/dashboard/rfq" className="btn">
+              Open incoming RFQs
+            </a>
+          ) : null}
         </div>
       ) : (
         <div className="card table-shell" style={{ maxHeight: "75vh" }}>
@@ -69,6 +101,7 @@ export default async function LoadsPage() {
                 <th style={{ cursor: "default" }}>Destination</th>
                 <th style={{ cursor: "default" }}>Mode</th>
                 <th style={{ cursor: "default" }}>Status</th>
+                <th style={{ cursor: "default" }}>Assigned</th>
                 <th style={{ cursor: "default" }}>ETD</th>
                 <th style={{ cursor: "default" }}>ETA</th>
                 <th style={{ cursor: "default" }} className="numeric">Revenue</th>
@@ -90,6 +123,13 @@ export default async function LoadsPage() {
                   <td>{j.destination ?? <span className="data-muted">—</span>}</td>
                   <td>{j.mode ?? <span className="data-muted">—</span>}</td>
                   <td>{STATUS_LABEL[j.status] ?? j.status}</td>
+                  <td>
+                    {j.assignedTo
+                      ? j.assignedToUserId === session.userId
+                        ? <span className="data-cell-strong">You</span>
+                        : j.assignedTo.fullName
+                      : <span className="data-muted">—</span>}
+                  </td>
                   <td>{fmtDate(j.etd)}</td>
                   <td>{fmtDate(j.eta)}</td>
                   <td className="numeric">{fmtNum(j.revenue)}</td>

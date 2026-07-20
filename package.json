@@ -44,6 +44,7 @@
     "cleanup:loads-keep-demo": "tsx scripts/cleanup-loads-keep-demo.ts",
     "demo:video-loads": "tsx scripts/reset-video-demo-loads.ts",
     "seed:giresun-workflow": "tsx scripts/seed-giresun-workflow-load.ts",
+    "create:employee": "tsx scripts/create-employee-user.ts",
     "seed:pentest-demo": "tsx scripts/create-pentest-demo-account.ts",
     "test:pentest-demo": "tsx scripts/create-pentest-demo-account.ts --verify-only",
     "cleanup:demo-admin": "tsx scripts/remove-demo-admin-account.ts",

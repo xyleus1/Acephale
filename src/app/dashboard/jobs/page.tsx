@@ -21,19 +21,24 @@ type StatusKey = typeof STATUSES[number]["key"];
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; scope?: string }>;
 }) {
   const session = await requireSession();
-  const { view } = await searchParams;
+  const { view, scope } = await searchParams;
   const focusedId = await getFocusedJobId();
   const isTable = view === "table";
+  const mine = scope === "mine";
+  const isEmployee = session.role === "EMPLOYEE";
 
   const jobs = await prisma.job.findMany({
     where: {
       officeId: session.officeId,
+      // "Mine": the personal board — only loads assigned to me.
+      ...(mine ? { assignedToUserId: session.userId } : {}),
     },
     include: {
       company: { select: { id: true, name: true } },
+      assignedTo: { select: { id: true, fullName: true } },
       inquiry: {
         select: {
           fromEmail: true,
@@ -72,6 +77,9 @@ export default async function JobsPage({
     id: j.id,
     reference: j.reference,
     title: j.title,
+    assignedToName: j.assignedTo
+      ? j.assignedTo.id === session.userId ? "You" : j.assignedTo.fullName
+      : null,
     cadence: j.cadence,
     quantity: j.quantity,
     quantityUnit: j.quantityUnit,
@@ -109,11 +117,13 @@ export default async function JobsPage({
     createdAt: j.createdAt.toISOString(),
   }));
 
-  const qs = (v?: string) => {
+  const qs = (v?: string, scopeArg: "mine" | null = mine ? "mine" : null) => {
     const parts: string[] = [];
     if (v) parts.push(`view=${v}`);
+    if (scopeArg) parts.push(`scope=${scopeArg}`);
     return parts.length ? `?${parts.join("&")}` : "";
   };
+  const viewArg = isTable ? "table" : undefined;
 
   return (
     <div className="jobs-page">
@@ -127,6 +137,15 @@ export default async function JobsPage({
         </div>
         <div className="page-actions">
           <div className="mode-tabs">
+            <Link href={`/dashboard/jobs${qs(viewArg, null)}` as "/dashboard/jobs"} className={`mode-tab${!mine ? " active" : ""}`}>
+              General board
+            </Link>
+            <Link href={`/dashboard/jobs${qs(viewArg, "mine")}` as "/dashboard/jobs"} className={`mode-tab${mine ? " active" : ""}`}>
+              <Icon name="user" size={13} />
+              My board
+            </Link>
+          </div>
+          <div className="mode-tabs">
             <Link href={`/dashboard/jobs${qs()}` as "/dashboard/jobs"} className={`mode-tab${!isTable ? " active" : ""}`}>
               <Icon name="box" size={13} />
               Board
@@ -136,12 +155,16 @@ export default async function JobsPage({
               Table
             </Link>
           </div>
-          <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
-            From RFQ
-          </Link>
-          <a href="/dashboard/jobs/new" className="btn">
-            <Icon name="plus" size={13} strokeWidth={2.5} /> New Job
-          </a>
+          {!isEmployee && (
+            <>
+              <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
+                From RFQ
+              </Link>
+              <a href="/dashboard/jobs/new" className="btn">
+                <Icon name="plus" size={13} strokeWidth={2.5} /> New Job
+              </a>
+            </>
+          )}
         </div>
       </div>
 
@@ -164,13 +187,21 @@ export default async function JobsPage({
       {jobs.length === 0 && (
         <div className="card empty-state-card">
           <Icon name="box" size={36} className="empty-state-graphic" />
-          <div className="empty-state-title">No jobs yet</div>
+          <div className="empty-state-title">{mine ? "Nothing on your board yet" : "No jobs yet"}</div>
           <p className="empty-state-copy">
-            Jobs are created when an RFQ is converted, or manually added.
+            {mine
+              ? "Take a load from the general board, or ask an admin to assign one to you."
+              : "Jobs are created when an RFQ is converted, or manually added."}
           </p>
-          <Link href="/dashboard/inbox?view=rfqs" className="btn">
-            Go to RFQ Inbox
-          </Link>
+          {mine ? (
+            <Link href={`/dashboard/jobs${qs(viewArg, null)}` as "/dashboard/jobs"} className="btn">
+              Open the general board
+            </Link>
+          ) : !isEmployee ? (
+            <Link href="/dashboard/inbox?view=rfqs" className="btn">
+              Go to RFQ Inbox
+            </Link>
+          ) : null}
         </div>
       )}
     </div>
