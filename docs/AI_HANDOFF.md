@@ -57,9 +57,12 @@ US section on Incoming RFQs, fed by the new US Meta lead sheet
   view defaults to Good only, with Good/Review/All chips (`?quality=`)
   showing counts; each lead row carries a colored quality pill (tooltip =
   score + reasons) and the expanded row lists "Lead quality" among the lead
-  answers. Thresholds: GOOD ≥ 8, REVIEW ≥ 4. Dry-run over the 42 real prod
-  leads: 18 GOOD / 21 REVIEW / 3 WEAK, with junk ("Isk → Idk", "national
-  and international") correctly gated to WEAK.
+  answers. Thresholds: GOOD ≥ 8, REVIEW ≥ 4 — plus the desk rule (Mert,
+  2026-07-18): an explicitly commercial shipment ("yes, commercial…" /
+  "evet, ticari…") is ALWAYS GOOD; only the contact/lane gates outrank it.
+  Dry-run over the real prod leads after the rule: 71 leads → 38 GOOD /
+  30 REVIEW / 3 WEAK, with junk ("Isk → Idk", "national and international")
+  correctly gated to WEAK.
 - **Smart lead email** (`src/lib/lead-emails.ts`, pure/testable; rfq-mail
   wraps it with SMTP config as `buildLeadCustomerEmail`, replacing
   `buildLeadConfirmationEmail`): when the lead's details are complete the

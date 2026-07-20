@@ -1946,7 +1946,9 @@ Use this file for chronological implementation notes that future agents should s
 - Failed/skipped checks: none.
 - Caveats: quality thresholds are v1 heuristics — tune GOOD_MIN/REVIEW_MIN
   and the junk-token sets in `src/lib/lead-quality.ts` as the desk gives
-  feedback. TR view intentionally has no quality chips (mixed with email/
+  feedback. First tuning applied 2026-07-18 per Mert: explicitly commercial
+  shipments (EN "yes, commercial…" / TR "evet, ticari…") are always GOOD
+  (gates still apply); prod dry-run after: 71 leads → 38/30/3. TR view intentionally has no quality chips (mixed with email/
   manual RFQs); lead rows there still show the quality pill.
 - Follow-up: possible auto-suggest "Ignored" for WEAK leads; batch "email
   all good leads" action if the desk wants it.
