@@ -13,6 +13,7 @@ enum UserRole {
   ADMIN
   MANAGER
   SALES
+  EMPLOYEE // loadboard-only operator: sees loads/pipeline, nothing else
 }
 
 enum CustomerStatus {
@@ -130,6 +131,7 @@ model Office {
   marketImpactReviews  MarketImpactReview[]
   marketSignalFeedback MarketSignalFeedback[]
   marketIngestionRuns  MarketIngestionRun[]
+  auditLogs            AuditLog[]
 
   @@unique([name])
 }
@@ -182,6 +184,7 @@ model User {
   ownedCompanies        CompanyOwner[]
   activitiesCreated     Activity[]         @relation("ActivityCreatedBy")
   assignmentChangesMade AssignmentChange[] @relation("AssignmentChangedBy")
+  assignedJobs          Job[]              @relation("JobAssignee")
 
   @@unique([officeId, email])
   @@index([officeId, role])
@@ -383,6 +386,31 @@ model AssignmentChange {
   changedBy User?   @relation("AssignmentChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
 
   @@index([officeId, companyId, createdAt])
+}
+
+// Who changed what, where — the admin-facing activity log. One row per user
+// action on a load (status change, claim, assignment, field edit, creation).
+// actorEmail is denormalized so the log stays readable even if a user row
+// is deactivated or removed.
+model AuditLog {
+  id          String  @id @default(cuid())
+  officeId    String
+  actorUserId String?
+  actorEmail  String
+  action      String // load.status_changed | load.claimed | load.assigned | load.updated | load.created
+  entityType  String  @default("job")
+  entityId    String?
+  entityRef   String? // human ref for display, e.g. JOB-2025-001
+  summary     String // one-line human-readable description
+  changes     Json? // [{ field, from, to }]
+
+  createdAt DateTime @default(now())
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, createdAt])
+  @@index([officeId, entityType, entityId, createdAt])
+  @@index([officeId, actorUserId, createdAt])
 }
 
 // Generic event table for future risk signals / phase2 integrations
@@ -1368,6 +1396,7 @@ model Job {
   office              Office               @relation(fields: [officeId], references: [id], onDelete: Cascade)
   company             Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
   inquiry             Inquiry?             @relation(fields: [inquiryId], references: [id])
+  assignedTo          User?                @relation("JobAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   parent              Job?                 @relation("JobParent", fields: [parentJobId], references: [id], onDelete: SetNull)
   children            Job[]                @relation("JobParent")
   documents           JobDocument[]
@@ -1383,6 +1412,7 @@ model Job {
   @@unique([officeId, reference])
   @@index([officeId, status, createdAt])
   @@index([officeId, companyId])
+  @@index([officeId, assignedToUserId])
 }
 
 model AgentProposal {

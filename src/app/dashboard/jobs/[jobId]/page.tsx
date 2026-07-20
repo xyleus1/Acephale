@@ -8,6 +8,7 @@ import {
   addCarrierQuote, selectCarrierQuote, updateJobStatus,
   addQuoteLine, uploadJobDocument,
   applyAgentProposalAction, discardAgentProposalAction,
+  claimJobAction, assignJobAction,
 } from "./actions";
 import { Icon } from "@/components/icon";
 import { PopulateJobButton } from "@/components/populate-job-button";
@@ -434,6 +435,7 @@ export default async function JobDetailPage({
     where: { id: jobId, officeId: session.officeId },
     include: {
       company: { select: { id: true, name: true } },
+      assignedTo: { select: { id: true, fullName: true, email: true } },
       inquiry: { include: { carrierQuotes: { orderBy: { createdAt: "asc" } } } },
       documents: { orderBy: { createdAt: "asc" } },
       milestones: { orderBy: { createdAt: "asc" } },
@@ -452,6 +454,17 @@ export default async function JobDetailPage({
     },
   });
   if (!job) notFound();
+
+  // Load assignment: admins/managers pick anyone; everyone else can take an
+  // unassigned load for themselves.
+  const canAssign = session.role === "ADMIN" || session.role === "MANAGER";
+  const officeUsers = canAssign
+    ? await prisma.user.findMany({
+        where: { officeId: session.officeId, isActive: true },
+        select: { id: true, fullName: true },
+        orderBy: { fullName: "asc" },
+      })
+    : [];
 
   const agentRunEvents = await prisma.event.findMany({
     where: {
@@ -709,6 +722,9 @@ export default async function JobDetailPage({
     job.incoterms,
     equipment,
     job.volume != null && job.mode !== "SEA-FCL" ? `${job.volume.toLocaleString()} cbm` : null,
+    job.assignedTo
+      ? `Assigned: ${job.assignedTo.id === session.userId ? "you" : job.assignedTo.fullName}`
+      : "Unassigned",
   ].filter(Boolean);
 
   return (
@@ -757,6 +773,27 @@ export default async function JobDetailPage({
             </a>
             <PortalLinkButton jobId={jobId} hasToken={!!job.portalToken} notifyCustomer={job.notifyCustomer} />
             <PopulateJobButton jobId={jobId} />
+            {canAssign ? (
+              <form action={async (fd: FormData) => {
+                "use server";
+                await assignJobAction(jobId, fd);
+              }} className="record-status-form" title="Who works this load">
+                <select name="userId" defaultValue={job.assignedToUserId ?? ""} className="record-status-select">
+                  <option value="">Unassigned</option>
+                  {officeUsers.map((u) => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  ))}
+                </select>
+                <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="Assigning…">Assign</SubmitButton>
+              </form>
+            ) : !job.assignedToUserId ? (
+              <form action={async () => {
+                "use server";
+                await claimJobAction(jobId);
+              }}>
+                <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="Taking…">Take this load</SubmitButton>
+              </form>
+            ) : null}
             <form action={async (fd: FormData) => {
               "use server";
               await updateJobStatus(jobId, String(fd.get("status")));

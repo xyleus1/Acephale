@@ -8,6 +8,7 @@ import { resolveCompanyIdByName } from "./company-resolve";
 import { qualifyRfq } from "./rfq-qualification";
 import { recordTargetPriceHistory } from "./target-price-history";
 import { recordMemoryEvent } from "./memory/record-event";
+import { recordAuditLog } from "./audit";
 import { ensureLoadSecurityChecklist } from "./load-security";
 import { deriveSecurityTier } from "./security-sop";
 import {
@@ -446,9 +447,18 @@ export async function createLoadFromRfqReview(
       targetPriceSource: values.targetPriceSource || null,
       currency: values.currency || values.targetCurrency || "USD",
       notes: values.notes || null,
-      assignedToUserId: session.userId,
+      // Loads start unassigned: taken from the board or assigned by an admin.
     },
     select: { id: true, reference: true, updatedAt: true },
+  });
+  await recordAuditLog({
+    officeId: session.officeId,
+    actorUserId: session.userId,
+    actorEmail: session.email,
+    action: "load.created",
+    entityId: updatedJob.id,
+    entityRef: updatedJob.reference,
+    summary: "Moved an RFQ into loads",
   });
 
   // Seed the SOP checklist for tiered loads — additive, never destructive.

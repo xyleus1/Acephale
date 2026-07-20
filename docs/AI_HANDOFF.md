@@ -4,6 +4,84 @@
 
 ## Date
 
+2026-07-20
+
+## Branch
+
+edmonton (Conductor workspace, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+Loadboard employee accounts + load assignment + admin activity log.
+
+- **EMPLOYEE role** (`UserRole.EMPLOYEE`): loadboard-only operators. Route
+  gating lives in `src/middleware.ts` (verifies the `crm_session` HMAC with
+  WebCrypto on the edge runtime, mirrors `decodeSession`); employees may open
+  only `/dashboard/loads` and `/dashboard/jobs*` (not `/dashboard/jobs/new`),
+  everything else redirects to `/dashboard/loads`. The dashboard layout hides
+  all non-loads nav/chrome for employees (CommandPalette, agent chat widget,
+  live toast, RFQ/WhatsApp chips, channels/admin links). Sign-in allowlist
+  defaults now include atahan@ and merve@usederya.com
+  (`src/lib/login-code.ts`).
+- **Load assignment**: `Job.assignedToUserId` is now a real relation
+  (`Job.assignedTo`, `User.assignedJobs`, FK + index in migration
+  `20260720000100_employee_role_assignee_audit_log`). Every load surface has
+  a **General board / My board** scope (loads page tabs `?scope=mine`, deal
+  pipeline scope tabs preserved across Board/Table). Loads table + jobs table
+  show an Assigned column; board cards show an assignee chip. Job detail
+  header: admins/managers get an assign dropdown (`assignJobAction`,
+  role-gated), everyone else gets **Take this load** (`claimJobAction`,
+  atomic claim of unassigned loads only). Creation paths no longer
+  auto-assign the creator (jobs/new, queue convert, RFQ load review) — loads
+  start unassigned so the personal-board/claim flow works.
+- **Activity log**: new `AuditLog` model (officeId, actorUserId/actorEmail,
+  action, entityRef, summary, changes JSON) + `src/lib/audit.ts`
+  (`recordAuditLog`, `diffAuditChanges`). Hooked into `updateJobStatus`,
+  `updateJobAllFields` (field-level diff), `updateJobField`, `updateJobNote`,
+  `selectCarrierQuote`, claim/assign, and the three load-creation paths.
+  Admin → **Activity log** tab renders the last 200 entries (who, action,
+  load link, per-field from → to).
+- **Employee provisioning**: `scripts/create-employee-user.ts`
+  (`npm run create:employee`, env-driven, guarded by
+  `ALLOW_EMPLOYEE_USER_CREATE=1`).
+
+## Files changed
+
+- `prisma/schema.prisma`, `prisma/migrations/20260720000100_employee_role_assignee_audit_log/migration.sql`
+- `src/lib/audit.ts` (new), `src/lib/login-code.ts`, `src/middleware.ts`
+- `src/app/dashboard/layout.tsx`, `src/app/dashboard/loads/page.tsx`, `src/app/dashboard/jobs/page.tsx`
+- `src/app/dashboard/jobs/[jobId]/page.tsx`, `src/app/dashboard/jobs/[jobId]/actions.ts`, `src/app/dashboard/jobs/new/page.tsx`
+- `src/app/dashboard/queue-actions.ts`, `src/lib/rfq-load-review.ts`
+- `src/components/jobs-board.tsx`, `src/components/jobs-table.tsx`
+- `src/app/dashboard/admin/page.tsx`
+- `scripts/create-employee-user.ts` (new), `scripts/login-code.test.ts`, `package.json`
+
+## Verification passed
+
+- `npm run build` (dummy DATABASE_URL) — types + build clean.
+- `npx tsx scripts/login-code.test.ts` — updated for the new default allowlist.
+- `next lint` on changed files — only pre-existing `<a>`-vs-`Link` errors and
+  unused-var warnings that predate this change.
+
+## Caveats
+
+- Middleware gating is defense-in-depth for routing; server actions outside
+  the loads surfaces are still importable by an authenticated employee who
+  crafts requests (internal-trust deployment; assign action is role-gated).
+- Employees see full load details incl. revenue/cost and the customer-portal
+  button; restrict later if needed.
+- Migration must run on prod before deploy (`prisma migrate deploy`) — the
+  new FK cleans orphan `assignedToUserId` pointers first, and the enum value
+  is additive.
+
+## Previous Update
+
+## Date
+
 2026-07-17
 
 ## Branch

@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth";
 import { createJobWithReference } from "@/lib/job-actions";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
+import { recordAuditLog } from "@/lib/audit";
 import Anthropic from "@anthropic-ai/sdk";
 
 // Decision: parse an inbound RFQ with Claude
@@ -214,10 +215,19 @@ export async function approveConvertWithBestRate(inquiryId: string): Promise<voi
       cost: cost ?? null,
       revenue: cost ? Math.round(cost * 1.18) : null, // suggested 18% margin
       currency: "USD",
-      assignedToUserId: session.userId,
+      // Loads start unassigned: taken from the board or assigned by an admin.
       quoteLines: best ? `Ocean Freight (${best.carrier})|${cost}|USD` : null,
     },
   }));
+  await recordAuditLog({
+    officeId: session.officeId,
+    actorUserId: session.userId,
+    actorEmail: session.email,
+    action: "load.created",
+    entityId: job.id,
+    entityRef: job.reference,
+    summary: "Created this load from an RFQ (best-rate conversion)",
+  });
 
   await prisma.inquiry.update({
     where: { id: inquiryId },

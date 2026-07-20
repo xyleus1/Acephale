@@ -20,6 +20,7 @@ import { draftFreshnessKey } from "@/lib/draft-freshness";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { ensureLoadSecurityChecklist } from "@/lib/load-security";
 import { LOAD_SECURITY_CHECK_STATUS_VALUES, deriveSecurityTier } from "@/lib/security-sop";
+import { recordAuditLog, diffAuditChanges, auditValueOf, type AuditChange } from "@/lib/audit";
 
 async function recordJobDraftEvent(args: {
   officeId: string;
@@ -83,12 +84,24 @@ export async function updateJobStatus(jobId: string, status: string) {
   const session = await requireSession();
   const before = await prisma.job.findFirst({
     where: { id: jobId, officeId: session.officeId },
-    select: { status: true },
+    select: { status: true, reference: true },
   });
   const updated = await prisma.job.update({
     where: { id: jobId, officeId: session.officeId },
     data: { status: status as never },
   });
+  if (before && before.status !== status) {
+    await recordAuditLog({
+      officeId: session.officeId,
+      actorUserId: session.userId,
+      actorEmail: session.email,
+      action: "load.status_changed",
+      entityId: jobId,
+      entityRef: before.reference,
+      summary: `Status ${before.status} → ${status}`,
+      changes: [{ field: "status", from: before.status, to: status }],
+    });
+  }
   await recordMemoryEvent({
     officeId: session.officeId,
     sourceType: "JOB",
@@ -125,6 +138,90 @@ export async function updateJobStatus(jobId: string, status: string) {
   revalidatePath("/dashboard");
 }
 
+// ── Load assignment ───────────────────────────────────────────────────────────
+
+// "Take this load": any signed-in user can claim an unassigned load for
+// themselves. Atomic update so two people can't both take it.
+export async function claimJobAction(jobId: string) {
+  const session = await requireSession();
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, officeId: session.officeId },
+    select: { reference: true, assignedToUserId: true },
+  });
+  if (!job) return { error: "Load not found." };
+  if (job.assignedToUserId === session.userId) return { ok: true as const };
+
+  const claimed = await prisma.job.updateMany({
+    where: { id: jobId, officeId: session.officeId, assignedToUserId: null },
+    data: { assignedToUserId: session.userId },
+  });
+  if (claimed.count === 0) return { error: "This load is already assigned to someone else." };
+
+  await recordAuditLog({
+    officeId: session.officeId,
+    actorUserId: session.userId,
+    actorEmail: session.email,
+    action: "load.claimed",
+    entityId: jobId,
+    entityRef: job.reference,
+    summary: "Took this load",
+    changes: [{ field: "assigned to", from: null, to: session.email }],
+  });
+  revalidatePath(`/dashboard/jobs/${jobId}`);
+  revalidatePath("/dashboard/jobs");
+  revalidatePath("/dashboard/loads");
+  return { ok: true as const };
+}
+
+// Admin/manager: assign a load to a specific person (or clear it with "").
+export async function assignJobAction(jobId: string, formData: FormData) {
+  const session = await requireSession();
+  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
+    return { error: "Only admins can assign loads." };
+  }
+  const userId = String(formData.get("userId") ?? "").trim() || null;
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, officeId: session.officeId },
+    select: {
+      reference: true,
+      assignedToUserId: true,
+      assignedTo: { select: { email: true } },
+    },
+  });
+  if (!job) return { error: "Load not found." };
+
+  let target: { id: string; email: string } | null = null;
+  if (userId) {
+    target = await prisma.user.findFirst({
+      where: { id: userId, officeId: session.officeId, isActive: true },
+      select: { id: true, email: true },
+    });
+    if (!target) return { error: "User not found." };
+  }
+  if ((job.assignedToUserId ?? null) === (target?.id ?? null)) return { ok: true as const };
+
+  await prisma.job.update({
+    where: { id: jobId, officeId: session.officeId },
+    data: { assignedToUserId: target?.id ?? null },
+  });
+  await recordAuditLog({
+    officeId: session.officeId,
+    actorUserId: session.userId,
+    actorEmail: session.email,
+    action: "load.assigned",
+    entityId: jobId,
+    entityRef: job.reference,
+    summary: target
+      ? `Assigned to ${target.email}`
+      : `Unassigned (was ${job.assignedTo?.email ?? "—"})`,
+    changes: [{ field: "assigned to", from: job.assignedTo?.email ?? null, to: target?.email ?? null }],
+  });
+  revalidatePath(`/dashboard/jobs/${jobId}`);
+  revalidatePath("/dashboard/jobs");
+  revalidatePath("/dashboard/loads");
+  return { ok: true as const };
+}
+
 // Update all editable fields on a job in one go.
 export async function updateJobAllFields(jobId: string, formData: FormData) {
   const session = await requireSession();
@@ -148,17 +245,10 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
     : (get("companyId") || null);
   const mode = get("mode") || null;
   const isFcl = mode === "SEA-FCL";
+  // Full row: the audit diff below compares every field the form can touch.
   const existing = await prisma.job.findFirst({
     where: { id: jobId, officeId: session.officeId },
-    select: {
-      notes: true,
-      quoteLines: true,
-      inquiryId: true,
-      targetPrice: true,
-      targetCurrency: true,
-      targetPriceStatus: true,
-      targetPriceSource: true,
-    },
+    include: { company: { select: { name: true } } },
   });
   if (!existing) return;
 
@@ -233,6 +323,39 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
     where: { id: jobId, officeId: session.officeId },
     data,
   });
+  // Activity log: record which fields actually changed. companyId is diffed
+  // separately (names read better than ids); quoteLines folding is internal.
+  {
+    const diffable: Record<string, unknown> = { ...data };
+    delete diffable.companyId;
+    delete diffable.quoteLines;
+    const auditChanges = diffAuditChanges(
+      existing as unknown as Record<string, unknown>,
+      diffable,
+      // Forms post UNKNOWN for tri-state fields they render; a stored null is
+      // the same answer, so don't log that normalization as a user edit.
+    ).filter((c) => !(c.from == null && c.to === "UNKNOWN"));
+    if ((data.companyId ?? null) !== (existing.companyId ?? null)) {
+      auditChanges.push({
+        field: "customer",
+        from: existing.company?.name ?? existing.companyId,
+        to: companyName || data.companyId,
+      });
+    }
+    if (auditChanges.length > 0) {
+      const fields = auditChanges.map((c) => c.field);
+      await recordAuditLog({
+        officeId: session.officeId,
+        actorUserId: session.userId,
+        actorEmail: session.email,
+        action: "load.updated",
+        entityId: jobId,
+        entityRef: existing.reference,
+        summary: `Updated ${fields.slice(0, 6).join(", ")}${fields.length > 6 ? ` +${fields.length - 6} more` : ""}`,
+        changes: auditChanges,
+      });
+    }
+  }
   // Seed the SOP checklist for tiered loads — additive, never destructive.
   const nextSecurityTier = "securityTier" in data ? (data.securityTier as string | null) : null;
   if (nextSecurityTier) {
@@ -299,7 +422,7 @@ export async function updateJobNote(jobId: string, note: string) {
   const session = await requireSession();
   const job = await prisma.job.findFirst({
     where: { id: jobId, officeId: session.officeId },
-    select: { notes: true, quoteLines: true },
+    select: { notes: true, quoteLines: true, reference: true },
   });
   if (!job) return;
   const legacyLines = parsePipeLines(job.notes);
@@ -310,6 +433,20 @@ export async function updateJobNote(jobId: string, note: string) {
     where: { id: jobId },
     data: { notes: note.trim() || null, quoteLines },
   });
+  const from = auditValueOf(job.notes);
+  const to = auditValueOf(note);
+  if (from !== to) {
+    await recordAuditLog({
+      officeId: session.officeId,
+      actorUserId: session.userId,
+      actorEmail: session.email,
+      action: "load.updated",
+      entityId: jobId,
+      entityRef: job.reference,
+      summary: "Updated notes",
+      changes: [{ field: "notes", from, to }],
+    });
+  }
   revalidatePath(`/dashboard/jobs/${jobId}`);
   revalidatePath("/dashboard/jobs");
   revalidatePath("/dashboard");
@@ -329,16 +466,44 @@ export async function updateJobField(jobId: string, data: {
   packages?: number;
 }) {
   const session = await requireSession();
-  await prisma.job.update({
+  const before = await prisma.job.findFirst({
     where: { id: jobId, officeId: session.officeId },
-    data: {
-      ...data,
-      etd: data.etd ? new Date(data.etd) : undefined,
-      eta: data.eta ? new Date(data.eta) : undefined,
-      revenue: data.revenue ?? undefined,
-      cost: data.cost ?? undefined,
+    select: {
+      reference: true, notes: true, revenue: true, cost: true, currency: true,
+      etd: true, eta: true, incoterms: true, commodity: true, weight: true,
+      volume: true, packages: true,
     },
   });
+  const patch = {
+    ...data,
+    etd: data.etd ? new Date(data.etd) : undefined,
+    eta: data.eta ? new Date(data.eta) : undefined,
+    revenue: data.revenue ?? undefined,
+    cost: data.cost ?? undefined,
+  };
+  await prisma.job.update({
+    where: { id: jobId, officeId: session.officeId },
+    data: patch,
+  });
+  if (before) {
+    const provided: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(patch)) {
+      if (value !== undefined) provided[key] = value;
+    }
+    const changes = diffAuditChanges(before as unknown as Record<string, unknown>, provided);
+    if (changes.length > 0) {
+      await recordAuditLog({
+        officeId: session.officeId,
+        actorUserId: session.userId,
+        actorEmail: session.email,
+        action: "load.updated",
+        entityId: jobId,
+        entityRef: before.reference,
+        summary: `Updated ${changes.map((c) => c.field).join(", ")}`,
+        changes,
+      });
+    }
+  }
   revalidatePath(`/dashboard/jobs/${jobId}`);
 }
 
@@ -654,6 +819,22 @@ export async function selectCarrierQuote(jobId: string, quoteId: string) {
     where: { id: jobId },
     data: { cost, status: "BOOKED" },
   });
+  const changes: AuditChange[] = [
+    { field: "status", from: job.status, to: "BOOKED" },
+    { field: "cost", from: auditValueOf(job.cost), to: auditValueOf(cost) },
+  ].filter((c) => c.from !== c.to);
+  if (changes.length > 0) {
+    await recordAuditLog({
+      officeId: session.officeId,
+      actorUserId: session.userId,
+      actorEmail: session.email,
+      action: "load.status_changed",
+      entityId: jobId,
+      entityRef: job.reference,
+      summary: `Selected carrier quote (${quote.carrier}) — booked`,
+      changes,
+    });
+  }
   revalidatePath(`/dashboard/jobs/${jobId}`);
 }
 

@@ -17,6 +17,7 @@ export type BoardJob = {
   mode: string | null;
   eta: string | null;
   notes: string | null;
+  assignedToName: string | null;
 };
 
 const STATUSES = [
@@ -136,6 +137,11 @@ export function JobsBoard({
                     )}
                     <div className="job-card-footer">
                       {job.mode && <span className="job-mode-chip">{job.mode}</span>}
+                      {job.assignedToName && (
+                        <span className="job-mode-chip" title={`Assigned to ${job.assignedToName}`}>
+                          {job.assignedToName}
+                        </span>
+                      )}
                     </div>
                     {statusOf(job) === "PROPOSED" && <JobConfirmActions jobId={job.id} />}
                   </a>

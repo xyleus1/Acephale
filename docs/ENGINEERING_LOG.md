@@ -1992,3 +1992,29 @@ Use this file for chronological implementation notes that future agents should s
   as an idea, not code.
 - Follow-up: possible auto-decline template for personal moves if Mert
   wants it; extend automation to TR leads.
+
+### 2026-07-20 - Loadboard employee accounts, load assignment, admin activity log
+
+- Branch: edmonton
+- Commit: see git log (PR from edmonton → main)
+- Task: Loadboard-only EMPLOYEE role (atahan@/merve@usederya.com), personal
+  ("My board") vs general board tabs driven by Job.assignedToUserId, claim +
+  admin-assign actions, and an AuditLog table + admin Activity-log tab that
+  records who changed what on every load (status, fields, notes, claim,
+  assign, create).
+- Files changed: prisma/schema.prisma, prisma/migrations/20260720000100_employee_role_assignee_audit_log/,
+  src/lib/audit.ts (new), src/lib/login-code.ts, src/middleware.ts,
+  src/app/dashboard/{layout,loads/page,jobs/page}.tsx,
+  src/app/dashboard/jobs/[jobId]/{page,actions}.tsx?ts,
+  src/app/dashboard/jobs/new/page.tsx, src/app/dashboard/queue-actions.ts,
+  src/lib/rfq-load-review.ts, src/components/jobs-{board,table}.tsx,
+  src/app/dashboard/admin/page.tsx, scripts/create-employee-user.ts (new),
+  scripts/login-code.test.ts, package.json.
+- Verification: npm run build clean; scripts/login-code.test.ts passes; next
+  lint on changed files shows only pre-existing issues.
+- Failed/skipped checks: full lint baseline untouched (pre-existing errors).
+- Caveats: creation paths no longer auto-assign the creator; middleware gates
+  routes for EMPLOYEE role only (other roles unchanged); migration must run
+  on prod before deploy.
+- Follow-up: optionally hide financial columns from employees; audit
+  coverage for decision-queue cost/revenue overrides if needed.

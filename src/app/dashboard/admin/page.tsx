@@ -34,6 +34,14 @@ const CATEGORY_TYPE_LABELS: Record<string, string> = {
   LANE: "Lane"
 };
 
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  "load.created": "Created",
+  "load.status_changed": "Status",
+  "load.claimed": "Took load",
+  "load.assigned": "Assigned",
+  "load.updated": "Edited",
+};
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -124,7 +132,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const staleBackgroundJobCutoff = new Date(Date.now() - 30 * 60 * 1000);
 
-  const [users, companyOwners, recentActivities, openTasks, pendingQuotes, categories, agentRunEvents, backgroundJobs, backgroundJobCounts, staleRunningBackgroundJobs, brainJobs, activeBrainAssessments] = await Promise.all([
+  const [users, companyOwners, recentActivities, openTasks, pendingQuotes, categories, agentRunEvents, backgroundJobs, backgroundJobCounts, staleRunningBackgroundJobs, brainJobs, activeBrainAssessments, auditLogs] = await Promise.all([
     prisma.user.findMany({
       where: { officeId: session.officeId, isActive: true },
       orderBy: { fullName: "asc" }
@@ -207,6 +215,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       },
       orderBy: { createdAt: "desc" },
       take: 12,
+    }),
+    prisma.auditLog.findMany({
+      where: { officeId: session.officeId },
+      orderBy: { createdAt: "desc" },
+      take: 200,
     }),
   ]);
 
@@ -427,8 +440,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const queuedJobs = backgroundCount("QUEUED");
   const runningJobs = backgroundCount("RUNNING");
   const failedJobs = backgroundCount("FAILED");
-  const pageTitle = tab === "brain" ? "Commercial Brain" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : "Team";
-  const pageSubtitle = tab === "agent"
+  const pageTitle = tab === "brain" ? "Commercial Brain" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : tab === "audit" ? "Activity Log" : "Team";
+  const pageSubtitle = tab === "audit"
+    ? `${auditLogs.length} recent changes · who did what on which load`
+    : tab === "agent"
     ? `${agentRunEvents.length} recent agent events · runs, reviews, tools, and errors`
     : tab === "brain"
       ? brainStrategy
@@ -450,6 +465,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <Link href="/dashboard/admin?tab=team">
               <button type="button" className={tab === "team" ? "btn-sm" : "secondary btn-sm"}>Team overview</button>
             </Link>
+            {canSeeAgentAudit && (
+              <Link href="/dashboard/admin?tab=audit">
+                <button type="button" className={tab === "audit" ? "btn-sm" : "secondary btn-sm"}>Activity log</button>
+              </Link>
+            )}
             {canSeeAgentAudit && (
               <Link href="/dashboard/admin?tab=brain">
                 <button type="button" className={tab === "brain" ? "btn-sm" : "secondary btn-sm"}>Brain lab</button>
@@ -745,6 +765,77 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       )}
 
       {/* ── AGENT AUDIT TAB ───────────────────────────────────────── */}
+      {/* ── ACTIVITY LOG TAB ─────────────────────────────────────── */}
+      {tab === "audit" && canSeeAgentAudit && (
+        <div className="card agent-audit-card">
+          <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="section-title">Team activity log</div>
+            <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+              Every manual change on loads — created, taken, assigned, status moves, and field edits — with who did it and when.
+            </p>
+          </div>
+          {auditLogs.length === 0 ? (
+            <div className="card-body" style={{ color: "var(--text-3)", fontSize: 13 }}>
+              Nothing logged yet. Entries appear as soon as someone touches a load.
+            </div>
+          ) : (
+            <div className="table-shell" style={{ maxHeight: "72vh" }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ cursor: "default" }}>When</th>
+                    <th style={{ cursor: "default" }}>Who</th>
+                    <th style={{ cursor: "default" }}>Action</th>
+                    <th style={{ cursor: "default" }}>Load</th>
+                    <th style={{ cursor: "default" }}>What changed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs.map((log) => {
+                    const changes = Array.isArray(log.changes)
+                      ? (log.changes as { field?: string; from?: string | null; to?: string | null }[])
+                      : [];
+                    return (
+                      <tr key={log.id}>
+                        <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(log.createdAt)}</td>
+                        <td>{log.actorEmail.split("@")[0]}</td>
+                        <td>
+                          <span className="data-status-badge">
+                            {AUDIT_ACTION_LABEL[log.action] ?? log.action}
+                          </span>
+                        </td>
+                        <td className="data-cell-mono">
+                          {log.entityId ? (
+                            <Link href={`/dashboard/jobs/${log.entityId}`} className="data-link">
+                              {log.entityRef ?? log.entityId.slice(0, 8)}
+                            </Link>
+                          ) : (
+                            log.entityRef ?? "—"
+                          )}
+                        </td>
+                        <td>
+                          <div>{log.summary}</div>
+                          {changes.length > 0 && (
+                            <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                              {changes.slice(0, 6).map((c, i) => (
+                                <div key={`${log.id}-${i}`}>
+                                  {c.field}: {c.from ?? "—"} → {c.to ?? "—"}
+                                </div>
+                              ))}
+                              {changes.length > 6 && <div>+{changes.length - 6} more</div>}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "agent" && canSeeAgentAudit && (
         <div className="card agent-audit-card">
           <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
