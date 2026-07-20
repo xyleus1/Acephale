@@ -55,6 +55,46 @@ function parsedOf(raw: string | null): Record<string, unknown> {
   }
 }
 
+// Short follow-up for leads that were emailed before scope/customs became
+// part of the standard question set: asks ONLY the two quoting essentials
+// (port-to-port vs door, duties basis) without repeating earlier questions.
+export function buildLeadScopeFollowUpContent(inq: InquiryForWhatsApp): {
+  subject: string;
+  text: string;
+} {
+  const { market } = leadMissingQuestions(inq);
+  const en = market === "US";
+  const parsed = parsedOf(inq.parsedData);
+  const firstName = leadFirstName(s(parsed.fullName), market);
+  const commodity = s(inq.commodity);
+
+  return en
+    ? {
+        subject: "Two quick details to finalize your quote — Derya",
+        text: `Hi${firstName ? ` ${firstName}` : ""},
+
+Quick follow-up on your ${commodity ? `${commodity} shipment` : "shipping request"} — two details decide the final price:
+
+- Should we quote port-to-port, or include pickup and/or delivery at your door? If door service is needed, please share the exact address(es).
+- If you'd like customs duties included (DDP): the country where the goods were manufactured, and the HTS code if you have it.
+
+Just reply to this email and we'll finalize your quote.
+${SIGNATURE_US}`,
+      }
+    : {
+        subject: "Teklifinizi netleştirmek için iki kısa bilgi — Derya",
+        text: `Merhaba,
+
+Talebinizle ilgili kısa bir ek: fiyatı netleştirmek için iki bilgiye ihtiyacımız var:
+
+- Fiyatı liman-liman mı çalışalım, yoksa adresten alım / adrese teslim dahil mi? Kapıdan hizmet gerekiyorsa tam adres(ler)i paylaşabilir misiniz?
+- Gümrük vergileri dahil (DDP) fiyat isterseniz: ürünün üretildiği ülke ve varsa GTİP/HTS kodu.
+
+Bu e-postayı yanıtlamanız yeterli — teklifinizi hemen netleştirelim.
+${SIGNATURE_TR}`,
+      };
+}
+
 export function buildLeadCustomerEmailContent(inq: InquiryForWhatsApp): LeadCustomerEmailContent {
   const { market, questions, missing } = leadMissingQuestions(inq);
   const en = market === "US";

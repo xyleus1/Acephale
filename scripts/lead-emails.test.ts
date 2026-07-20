@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildLeadCustomerEmailContent } from "../src/lib/lead-emails";
+import { buildLeadCustomerEmailContent, buildLeadScopeFollowUpContent } from "../src/lib/lead-emails";
 import { buildWhatsAppInquiry } from "../src/lib/rfq-whatsapp";
 
 const base = {
@@ -57,9 +57,34 @@ const base = {
   assert(!email.text.includes("ağırlığını"), "US email must not contain Turkish");
 }
 
-// Container lead with a timing-range answer counts as complete: the form's
-// "within 2-4 weeks" satisfies the ready-date, and FCL needs no dims/weight
-// — this is the "pass directly to pricing" shape.
+// Meta-lead rows always get the two quoting essentials (scope + customs) —
+// forwarder requirement 2026-07-20 — so even a complete container lead is an
+// info-request asking exactly those two, nothing else.
+{
+  const email = buildLeadCustomerEmailContent({
+    ...base,
+    origin: "Foshan",
+    destination: "DDP Philadelphia, Pennsylvania",
+    commodity: "Kitchen cabinets",
+    containerType: "40FT",
+    containerCount: 1,
+    parsedData: JSON.stringify({
+      source: "meta-leads",
+      market: "US",
+      fullName: "adam rifi",
+      answers: { timing: "within 2-4 weeks" },
+    }),
+  });
+  assert.equal(email.kind, "info-request");
+  assert(email.text.includes("port-to-port, or include pickup"), email.text);
+  assert(email.text.includes("HTS code"), email.text);
+  assert(!email.text.includes("dimensions"), "FCL must not be asked for dims");
+  assert(!email.text.includes("cargo be ready"), "timing range satisfies ready date");
+  assert.deepEqual(email.missing, ["port-to-port vs door", "country of origin / HTS"]);
+}
+
+// The same shape WITHOUT the meta-leads source marker (email/manual RFQs)
+// gets no scope/customs questions — those carry incoterms already.
 {
   const email = buildLeadCustomerEmailContent({
     ...base,
@@ -75,6 +100,28 @@ const base = {
     }),
   });
   assert.equal(email.kind, "confirmation", email.text);
+}
+
+// The scope follow-up (for leads emailed before these questions existed)
+// asks only the two essentials, in the lead's language.
+{
+  const followUp = buildLeadScopeFollowUpContent({
+    ...base,
+    commodity: "roof panels",
+    parsedData: JSON.stringify({ source: "meta-leads", market: "US", fullName: "erin p paige" }),
+  });
+  assert.equal(followUp.subject, "Two quick details to finalize your quote — Derya");
+  assert(followUp.text.startsWith("Hi Erin,"), followUp.text);
+  assert(followUp.text.includes("roof panels shipment"), followUp.text);
+  assert(followUp.text.includes("port-to-port"), followUp.text);
+  assert(followUp.text.includes("HTS code"), followUp.text);
+  const tr = buildLeadScopeFollowUpContent({
+    ...base,
+    commodity: "mermer",
+    parsedData: JSON.stringify({ source: "meta-leads", fullName: "emre yılmaz" }),
+  });
+  assert(tr.subject.includes("iki kısa bilgi"), tr.subject);
+  assert(tr.text.includes("GTİP/HTS"), tr.text);
 }
 
 // …but a researcher's "timing" is not a date — still asked.

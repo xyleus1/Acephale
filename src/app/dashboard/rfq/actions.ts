@@ -104,6 +104,9 @@ export async function sendLeadConfirmationAction(
   if ("error" in result) return result;
 
   await stampAfterSend(inquiry.id, email.kind === "info-request" ? "infoRequestSentAt" : "confirmationSentAt");
+  // Lead info-requests include the scope/customs questions, so the auto
+  // follow-up must not re-ask them.
+  if (email.kind === "info-request") await stampAfterSend(inquiry.id, "scopeAskedAt");
   revalidatePath("/dashboard/rfq");
   return { ok: true };
 }

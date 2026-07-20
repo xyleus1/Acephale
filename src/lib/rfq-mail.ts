@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 import { prisma } from "./prisma";
 import { deriveInquirySource } from "./inquiry-source";
 import { openInquiryStatusFilter } from "./inquiry-status";
-import { buildLeadCustomerEmailContent } from "./lead-emails";
+import { buildLeadCustomerEmailContent, buildLeadScopeFollowUpContent } from "./lead-emails";
 
 // Outbound RFQ mail from the rfq@usederya.com desk address. This account is
 // not OAuth-connected (no refresh token), so delivery goes over Gmail SMTP
@@ -199,6 +199,20 @@ export function buildLeadCustomerEmail(inq: InquiryForMail) {
   };
 }
 
+// Scope/customs follow-up for leads emailed before those questions existed.
+export function buildLeadScopeFollowUpEmail(inq: InquiryForMail) {
+  const config = rfqMailConfig();
+  const content = buildLeadScopeFollowUpContent(inq);
+  return {
+    from: config.user,
+    to: inq.fromEmail,
+    cc: config.leadCc,
+    replyTo: config.replyTo,
+    subject: content.subject,
+    text: content.text,
+  };
+}
+
 export async function sendRfqMail(args: {
   officeId: string;
   inquiryId: string;
@@ -271,7 +285,7 @@ export async function sendRfqMail(args: {
   return { ok: true };
 }
 
-export type SendStampKey = "deskForwardedAt" | "confirmationSentAt" | "infoRequestSentAt" | "whatsappSentAt" | "autoRepliedAt";
+export type SendStampKey = "deskForwardedAt" | "confirmationSentAt" | "infoRequestSentAt" | "whatsappSentAt" | "autoRepliedAt" | "scopeAskedAt";
 
 // Legacy rows can hold non-JSON (or JSON-array) parsedData. Stamping those
 // would replace the stored parser output with just the stamp, so we refuse
