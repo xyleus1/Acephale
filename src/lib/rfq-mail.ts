@@ -14,6 +14,7 @@ const DEFAULT_MAIL_USER = "rfq@usederya.com";
 const DEFAULT_FORWARD_TO = "oguzhan@usederya.com";
 const DEFAULT_FORWARD_CC = "gozde.sen@andelog.com,nazli.bagcicek@andelog.com";
 const DEFAULT_REPLY_TO = "oguzhan@usederya.com";
+const DEFAULT_LEAD_CC = "mert@usederya.com";
 
 // Customer-facing lead copy (confirmation / missing-info request, per the
 // lead's ad market language) lives in src/lib/lead-emails.ts so it stays
@@ -29,6 +30,12 @@ export function rfqMailConfig() {
       .map((s) => s.trim())
       .filter(Boolean),
     replyTo: process.env.RFQ_MAIL_REPLY_TO ?? DEFAULT_REPLY_TO,
+    // Every customer-facing lead email (auto or one-click) cc's Mert so the
+    // outbound side of the funnel is visible without opening the CRM.
+    leadCc: (process.env.RFQ_LEAD_CC ?? DEFAULT_LEAD_CC)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   };
 }
 
@@ -185,7 +192,7 @@ export function buildLeadCustomerEmail(inq: InquiryForMail) {
     missing: content.missing,
     from: config.user,
     to: inq.fromEmail,
-    cc: [] as string[],
+    cc: config.leadCc,
     replyTo: config.replyTo,
     subject: content.subject,
     text: content.text,

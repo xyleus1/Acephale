@@ -318,7 +318,7 @@ export default async function RFQPage({
         // A non-single address (or a comma-smuggled list) must never become
         // an SMTP recipient — surface it as unsendable instead.
         to: isSingleEmailAddress(inq.fromEmail) ? confirmationEmail.to : null,
-        cc: [],
+        cc: confirmationEmail.cc,
         replyTo: confirmationEmail.replyTo,
         subject: confirmationEmail.subject,
         text: confirmationEmail.text,
