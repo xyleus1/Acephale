@@ -1948,7 +1948,9 @@ Use this file for chronological implementation notes that future agents should s
   and the junk-token sets in `src/lib/lead-quality.ts` as the desk gives
   feedback. First tuning applied 2026-07-18 per Mert: explicitly commercial
   shipments (EN "yes, commercial…" / TR "evet, ticari…") are always GOOD
-  (gates still apply); prod dry-run after: 71 leads → 38/30/3. TR view intentionally has no quality chips (mixed with email/
+  (gates still apply). Second tuning same day ("not all are business
+  significant"): declared-individual shipments and personal-effects moves
+  cap at REVIEW; prod dry-run after both: 71 leads → 16/52/3. TR view intentionally has no quality chips (mixed with email/
   manual RFQs); lead rows there still show the quality pill.
 - Follow-up: possible auto-suggest "Ignored" for WEAK leads; batch "email
   all good leads" action if the desk wants it.

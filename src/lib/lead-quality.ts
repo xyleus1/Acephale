@@ -8,10 +8,16 @@
 //        REVIEW — plausible but thin; skim before spending time
 //        WEAK  — junk or unreachable; only visible under "All"
 //
-// Desk rule (Mert, 2026-07-18): an explicitly commercial shipment is always
-// GOOD — timing/size/budget can't demote it. The contact/lane gates still
-// apply: a "commercial" row with no way to reach the lead or no usable lane
-// isn't a workable load at all.
+// Desk rules (Mert, 2026-07-18): GOOD means business-significant.
+//  - An explicitly commercial shipment is always GOOD — timing/size/budget
+//    can't demote it. The contact/lane gates still apply: a "commercial" row
+//    with no way to reach the lead or no usable lane isn't a workable load.
+//  - An explicitly individual shipment ("no, individual…" / "hayır,
+//    bireysel…") or a personal-effects move (household goods, belongings)
+//    caps at REVIEW no matter how big the container is — relocations are not
+//    the business the desk is hunting with these ads.
+//  - "Not sure" / unanswered leads rank on points, so an importer who
+//    skipped the question can still reach GOOD on load shape.
 
 export type LeadQualityTier = "GOOD" | "REVIEW" | "WEAK";
 
@@ -51,6 +57,15 @@ const JUNK_COMPANY = new Set([
   "self-employed.", "home", "me", "my home", "personal", "individual", "retired",
   "unemployed", "not yet", "nobe", "yes",
 ]);
+
+// Commodity phrasings that read as a personal relocation, not freight a
+// business is buying. Deliberately narrow — bare "furniture"/"clothes" can
+// be a reseller's stock, and explicit movers are already caught by the
+// "no, individual shipment" answer.
+const PERSONAL_EFFECTS = [
+  "personal", "household", "house hold", "housegoods", "home goods",
+  "belongings", "house stuff", "my house", "kişisel", "ev eşya",
+];
 
 function s(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -118,12 +133,15 @@ export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
   // ── Commercial intent ("yes, commercial shipment." / "evet, ticari …") ──
   const commercial = norm(s(answers.commercial) ?? "");
   const commercialYes = commercial.startsWith("yes") || commercial.startsWith("evet");
+  const commercialNo = commercial.startsWith("no") || commercial.startsWith("hayır") || commercial.startsWith("hayir");
   if (commercialYes) {
     score += 3;
     reasons.push("commercial shipment");
   } else if (commercial.includes("not sure") || commercial.includes("emin değil")) {
     score += 1;
   }
+  const commodityText = norm(s(inq.commodity) ?? "");
+  const personalMove = PERSONAL_EFFECTS.some((token) => commodityText.includes(token));
 
   // ── Load size (best signal across the two size answers) ──
   const sizeText = norm([s(answers.shipmentType), s(answers.loadInfo)].filter(Boolean).join(" · "));
@@ -177,11 +195,16 @@ export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
   if (company && company !== s(parsed.fullName) && !JUNK_COMPANY.has(norm(company))) score += 1;
   if (s(inq.commodity)) score += 1;
 
-  // Commercial shipments are always worth working (desk rule) — the score
-  // still orders them and feeds the tooltip.
-  const tier: LeadQualityTier = commercialYes
-    ? "GOOD"
-    : score >= GOOD_MIN ? "GOOD" : score >= REVIEW_MIN ? "REVIEW" : "WEAK";
+  // Desk rules: commercial shipments are always worth working; declared
+  // individual shipments and personal-effects moves are never GOOD — the
+  // score still orders them and feeds the tooltip.
+  let tier: LeadQualityTier = score >= GOOD_MIN ? "GOOD" : score >= REVIEW_MIN ? "REVIEW" : "WEAK";
+  if (commercialYes) {
+    tier = "GOOD";
+  } else if (tier === "GOOD" && (commercialNo || personalMove)) {
+    tier = "REVIEW";
+    reasons.push(commercialNo ? "individual shipment" : "personal effects move");
+  }
   if (tier === "WEAK" && reasons.length === 0) reasons.push("too little to price");
   return { tier, score, reasons };
 }

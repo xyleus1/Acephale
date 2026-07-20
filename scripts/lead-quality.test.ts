@@ -72,7 +72,8 @@ const lead = (over: {
   assert(q.reasons.includes("container-sized load"));
 }
 
-// Individual 40ft container move, decent budget, 1-3 months → GOOD.
+// Declared-individual shipment caps at REVIEW no matter the container size
+// (desk rule: GOOD = business-significant).
 {
   const q = assessLeadQuality(lead({
     origin: "savanna", destination: "Germany", commodity: "cars",
@@ -84,6 +85,32 @@ const lead = (over: {
       loadInfo: "40 ft container",
       timing: "within 1-3 months",
     },
+  }));
+  assert.equal(q.tier, "REVIEW", leadQualitySummary(q));
+  assert(q.reasons.includes("individual shipment"), q.reasons.join());
+}
+
+// Personal-effects move (household goods) caps at REVIEW even when the
+// commercial answer is missing and the load is container-sized.
+{
+  const q = assessLeadQuality(lead({
+    origin: "Oakland ca", destination: "El Salvador", commodity: "Household goods",
+    fromEmail: "gman2587@gmail.com", phone: "+19254005097", fromCompany: "CDLTS TRUCKING",
+    fullName: "George Quizz", targetPrice: 1800,
+    answers: { shipmentType: "container", loadInfo: "20 ft container", timing: "within 2-4 weeks" },
+  }));
+  assert.equal(q.tier, "REVIEW", leadQualitySummary(q));
+  assert(q.reasons.includes("personal effects move"), q.reasons.join());
+}
+
+// An importer who skipped/fudged the commercial question still ranks GOOD on
+// load shape (business-looking commodity, pallets, near-term).
+{
+  const q = assessLeadQuality(lead({
+    origin: "China", destination: "San Diego, California", commodity: "small copper statues",
+    fromEmail: "importer@example.com", phone: "+16195550100", fromCompany: "Coastal Imports LLC",
+    targetPrice: 2500,
+    answers: { commercial: "i am not sure", shipmentType: "1–3 pallets", loadInfo: "1–3 pallets", timing: "within 0-2 weeks" },
   }));
   assert.equal(q.tier, "GOOD", leadQualitySummary(q));
 }
