@@ -7,6 +7,11 @@
 // Tiers: GOOD  — work it now (real load shape + a way to contact them)
 //        REVIEW — plausible but thin; skim before spending time
 //        WEAK  — junk or unreachable; only visible under "All"
+//
+// Desk rule (Mert, 2026-07-18): an explicitly commercial shipment is always
+// GOOD — timing/size/budget can't demote it. The contact/lane gates still
+// apply: a "commercial" row with no way to reach the lead or no usable lane
+// isn't a workable load at all.
 
 export type LeadQualityTier = "GOOD" | "REVIEW" | "WEAK";
 
@@ -110,12 +115,13 @@ export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
     reasons.push("full lane");
   }
 
-  // ── Commercial intent ──
+  // ── Commercial intent ("yes, commercial shipment." / "evet, ticari …") ──
   const commercial = norm(s(answers.commercial) ?? "");
-  if (commercial.startsWith("yes")) {
+  const commercialYes = commercial.startsWith("yes") || commercial.startsWith("evet");
+  if (commercialYes) {
     score += 3;
     reasons.push("commercial shipment");
-  } else if (commercial.includes("not sure")) {
+  } else if (commercial.includes("not sure") || commercial.includes("emin değil")) {
     score += 1;
   }
 
@@ -171,7 +177,11 @@ export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
   if (company && company !== s(parsed.fullName) && !JUNK_COMPANY.has(norm(company))) score += 1;
   if (s(inq.commodity)) score += 1;
 
-  const tier: LeadQualityTier = score >= GOOD_MIN ? "GOOD" : score >= REVIEW_MIN ? "REVIEW" : "WEAK";
+  // Commercial shipments are always worth working (desk rule) — the score
+  // still orders them and feeds the tooltip.
+  const tier: LeadQualityTier = commercialYes
+    ? "GOOD"
+    : score >= GOOD_MIN ? "GOOD" : score >= REVIEW_MIN ? "REVIEW" : "WEAK";
   if (tier === "WEAK" && reasons.length === 0) reasons.push("too little to price");
   return { tier, score, reasons };
 }

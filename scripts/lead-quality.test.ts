@@ -105,6 +105,42 @@ const lead = (over: {
   assert(q.reasons.includes("single box / sample"));
 }
 
+// Desk rule: an explicitly commercial shipment is ALWAYS Good — even a
+// price-researcher with no budget (the "Teas Vietnam → Virginia" shape).
+{
+  const q = assessLeadQuality(lead({
+    origin: "From Vitenam", destination: "Virginia", commodity: "Teas",
+    fromEmail: "tea@example.com",
+    answers: {
+      commercial: "yes, commercial shipment.",
+      shipmentType: "container",
+      timing: "i'm just researching prices right now.",
+    },
+  }));
+  assert.equal(q.tier, "GOOD", leadQualitySummary(q));
+  assert(q.reasons.includes("commercial shipment"));
+}
+
+// …but the contact/lane gates still outrank it: an unreachable "commercial"
+// lead is not a workable load.
+{
+  const q = assessLeadQuality(lead({
+    origin: "Isk", destination: "Idk", fromEmail: "a@b.co",
+    answers: { commercial: "yes, commercial shipment." },
+  }));
+  assert.equal(q.tier, "WEAK");
+}
+
+// The Turkish form's wording counts as commercial too.
+{
+  const q = assessLeadQuality(lead({
+    origin: "Kayseri", destination: "Almanya", commodity: "mobilya",
+    fromEmail: "emre@example.com", phone: "0532 123 45 67",
+    answers: { commercial: "evet, ticari gönderi.", timing: "i'm just researching prices right now." },
+  }));
+  assert.equal(q.tier, "GOOD", leadQualitySummary(q));
+}
+
 // Price-researcher with an unclear load → not GOOD.
 {
   const q = assessLeadQuality(lead({
