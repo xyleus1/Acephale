@@ -192,7 +192,10 @@ function parseMoney(value: unknown, fallbackCurrency?: string | null): Money {
     normalized = parts[1]?.length === 3 ? normalized.replace(/,/g, "") : normalized.replace(",", ".");
   }
 
-  const amount = Number(normalized);
+  let amount = Number(normalized);
+  // "3k" / "8-14k" style budgets: apply the thousands suffix (to the range's
+  // low end — the first number is what got matched).
+  if (Number.isFinite(amount) && /\d\s*k\b/i.test(raw)) amount *= 1000;
   return {
     amount: Number.isFinite(amount) ? amount : null,
     currency: normalizeCurrency(currencyMatch?.[0] ?? fallbackCurrency ?? null),
