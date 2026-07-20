@@ -244,6 +244,10 @@ function equipmentPhrase(inq: InquiryForWhatsApp, en: boolean): string | null {
   return /konteyner|container/i.test(type) ? label : `${label} ${en ? "container" : "konteyner"}`;
 }
 
+// Battery/solar/hazmat cargo ships as dangerous goods — the probe has to go
+// out before anything can be priced, whatever else the lead answered.
+const DG_TERMS = /lithium|batter|solar panel|solar equipment|hazmat|flammable|aerosol|dangerous good|un ?38|akü|batarya|\bpil\b/i;
+
 // The missing-detail questions for a lead, phrased in the lead's market
 // language — shared by the WhatsApp draft and the missing-info email so both
 // channels ask for exactly the same things.
@@ -260,6 +264,15 @@ export function leadMissingQuestions(inq: InquiryForWhatsApp): {
   const dims = hasDimensions(inq.dimensions);
   const origin = s(inq.origin);
   const destination = s(inq.destination);
+
+  // Lead forms answer timing as a range ("within 2-4 weeks"), not a date —
+  // that's enough to price, so don't re-ask; researchers still get asked.
+  const answers = (parsed.answers && typeof parsed.answers === "object" && !Array.isArray(parsed.answers)
+    ? parsed.answers
+    : {}) as Record<string, unknown>;
+  const timingAnswer = s(answers.timing) ?? "";
+  const timingGiven = /within|hafta|ay içinde/i.test(timingAnswer)
+    && !/research|araştır/i.test(timingAnswer);
 
   const questions: string[] = [];
   const missing: string[] = [];
@@ -322,9 +335,16 @@ export function leadMissingQuestions(inq: InquiryForWhatsApp): {
     }
   }
 
-  if (!inq.cargoReadyDate) {
+  if (!inq.cargoReadyDate && !timingGiven) {
     questions.push(en ? "When will the cargo be ready?" : "Yük ne zaman hazır olacak?");
     missing.push("cargo ready date");
+  }
+
+  if (s(inq.commodity) && DG_TERMS.test(inq.commodity!)) {
+    questions.push(en
+      ? "Batteries/solar equipment ship as dangerous goods — are they installed in a device or shipped loose, and do you have the UN38.3 test report (or MSDS) from the manufacturer?"
+      : "Akü/batarya ve güneş paneli içeren yükler tehlikeli madde (DG) kapsamındadır — bataryalar cihaza takılı mı yoksa ayrı mı, ve üreticiden UN38.3 test raporu (veya MSDS) mevcut mu?");
+    missing.push("dangerous goods details");
   }
 
   return { market, questions, missing };

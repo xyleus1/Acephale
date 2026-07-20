@@ -57,6 +57,63 @@ const base = {
   assert(!email.text.includes("ağırlığını"), "US email must not contain Turkish");
 }
 
+// Container lead with a timing-range answer counts as complete: the form's
+// "within 2-4 weeks" satisfies the ready-date, and FCL needs no dims/weight
+// — this is the "pass directly to pricing" shape.
+{
+  const email = buildLeadCustomerEmailContent({
+    ...base,
+    origin: "Foshan",
+    destination: "DDP Philadelphia, Pennsylvania",
+    commodity: "Kitchen cabinets",
+    containerType: "40FT",
+    containerCount: 1,
+    parsedData: JSON.stringify({
+      market: "US",
+      fullName: "adam rifi",
+      answers: { timing: "within 2-4 weeks" },
+    }),
+  });
+  assert.equal(email.kind, "confirmation", email.text);
+}
+
+// …but a researcher's "timing" is not a date — still asked.
+{
+  const email = buildLeadCustomerEmailContent({
+    ...base,
+    origin: "Foshan",
+    destination: "Philadelphia",
+    commodity: "Kitchen cabinets",
+    containerType: "40FT",
+    parsedData: JSON.stringify({
+      market: "US",
+      answers: { timing: "i'm just researching prices right now." },
+    }),
+  });
+  assert.equal(email.kind, "info-request");
+  assert(email.text.includes("- When will the cargo be ready?"), email.text);
+}
+
+// Battery/solar cargo always gets the DG probe (UN38.3), even when the load
+// is otherwise complete.
+{
+  const email = buildLeadCustomerEmailContent({
+    ...base,
+    origin: "Port-au-Prince Haiti",
+    destination: "Jeremie",
+    commodity: "Solar panels and battery",
+    containerType: "20FT",
+    parsedData: JSON.stringify({
+      market: "US",
+      fullName: "max baptiste",
+      answers: { timing: "within 2-4 weeks" },
+    }),
+  });
+  assert.equal(email.kind, "info-request");
+  assert(email.text.includes("UN38.3"), email.text);
+  assert(email.missing.includes("dangerous goods details"));
+}
+
 // Incomplete TR lead → Turkish info-request.
 {
   const email = buildLeadCustomerEmailContent({

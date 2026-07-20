@@ -1954,3 +1954,41 @@ Use this file for chronological implementation notes that future agents should s
   manual RFQs); lead rows there still show the quality pill.
 - Follow-up: possible auto-suggest "Ignored" for WEAK leads; batch "email
   all good leads" action if the desk wants it.
+
+### 2026-07-20 - Auto-reply to Good US leads on every sheet sync
+
+- Branch: us-rfq-sheet-panel (Conductor workspace cody, targets main)
+- Commit: see git log
+- Task: Mert asked to automate the lead replies ("send the emails for good
+  vs bad ones; if in doubt send only the good ones and ignore the bad").
+  Policy implemented: GOOD-tier US leads get the smart customer email
+  automatically after every lead sync (hourly cron + button); Review/Weak
+  leads are left untouched — no auto-declines (a wrong decline to a
+  mislabeled real customer costs more than silence).
+- Files changed: `src/lib/lead-auto-reply.ts` (new),
+  `src/lib/google-sheets-sync.ts` (containerType derived from the size
+  answers; auto-reply pass wired in after lead sync; autoReplies in the
+  summary; autoRepliedAt stamp preserved on resync),
+  `src/lib/rfq-whatsapp.ts` (leadMissingQuestions: timing-range answers
+  satisfy the ready-date question; DG probe — UN38.3/MSDS — appended for
+  battery/solar/hazmat commodities, EN+TR),
+  `src/lib/rfq-mail.ts` (autoRepliedAt stamp key),
+  `src/components/sync-google-sheet-button.tsx` (auto-reply count),
+  `scripts/lead-emails.test.ts` (timing-complete container → confirmation,
+  researcher still asked, DG probe), docs.
+- Safety rails: per-kind CAS send stamps (no double sends; manual sends
+  block auto), open-status only, strict single-address recipient, 25 sends
+  per run (hourly cron drains backlog), DERYA_LEAD_AUTO_REPLY=off kill
+  switch, failures logged to sync warnings and never fail the sync.
+- Verification: build clean; test:lead-emails/-quality/rfq-whatsapp/crm
+  pass; tenant-scope at baseline (9). Read-only prod dry run
+  (.context/auto-reply-dry-run.ts): 16 sends queued — 3 confirmations
+  (Erin/roof panels, Adam Rifi/kitchen cabinets, Saygin/furniture→Mersin:
+  complete, pass straight to pricing) + 13 info-requests with per-lead
+  missing lists; 55 leads untouched.
+- Failed/skipped checks: none.
+- Caveats: confirmation copy still promises "processed within 6 hours"
+  (Mert to confirm or soften); TR leads not automated; declines exist only
+  as an idea, not code.
+- Follow-up: possible auto-decline template for personal moves if Mert
+  wants it; extend automation to TR leads.
