@@ -636,6 +636,7 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
           if (prev.infoRequestSentAt) existingStamps.infoRequestSentAt = prev.infoRequestSentAt;
           if (prev.whatsappSentAt) existingStamps.whatsappSentAt = prev.whatsappSentAt;
           if (prev.autoRepliedAt) existingStamps.autoRepliedAt = prev.autoRepliedAt;
+          if (prev.scopeAskedAt) existingStamps.scopeAskedAt = prev.scopeAskedAt;
         }
       } catch {
         existingStamps = {};

@@ -16,6 +16,7 @@ import { US_LEAD_PARSED_MARKER } from "./meta-leads";
 import { assessLeadQuality } from "./lead-quality";
 import {
   buildLeadCustomerEmail,
+  buildLeadScopeFollowUpEmail,
   claimInquirySendStamp,
   clearInquirySendStamp,
   isSingleEmailAddress,
@@ -71,16 +72,27 @@ export async function autoReplyToUsLeads(officeId: string): Promise<AutoReplySum
     if (summary.sent >= AUTO_REPLY_CAP) break;
 
     const parsed = parsedOf(inquiry.parsedData);
-    // Anything already emailed — by the desk or a previous run — is done.
-    if (parsed.confirmationSentAt || parsed.infoRequestSentAt || parsed.autoRepliedAt) continue;
+    const alreadyEmailed = Boolean(parsed.confirmationSentAt || parsed.infoRequestSentAt || parsed.autoRepliedAt);
+    // Leads emailed before scope/customs became part of the standard question
+    // set get one short follow-up asking just those two; fully-covered leads
+    // are done.
+    const needsScopeFollowUp = alreadyEmailed && !parsed.scopeAskedAt;
+    if (alreadyEmailed && !needsScopeFollowUp) continue;
     if (!isSingleEmailAddress(inquiry.fromEmail)) {
       summary.skipped++;
       continue;
     }
     if (assessLeadQuality(inquiry).tier !== "GOOD") continue;
 
-    const email = buildLeadCustomerEmail(inquiry);
-    const stampKey = email.kind === "info-request" ? "infoRequestSentAt" : "confirmationSentAt";
+    const email = needsScopeFollowUp
+      ? { kind: "scope-follow-up" as const, ...buildLeadScopeFollowUpEmail(inquiry) }
+      : buildLeadCustomerEmail(inquiry);
+    // The first-touch email now always covers scope/customs too, so both
+    // paths settle the scopeAskedAt stamp; the follow-up claims it directly
+    // (its only stamp), the first touch claims its kind stamp first.
+    const stampKey = needsScopeFollowUp
+      ? "scopeAskedAt" as const
+      : email.kind === "info-request" ? "infoRequestSentAt" as const : "confirmationSentAt" as const;
     const claim = await claimInquirySendStamp(inquiry.id, stampKey);
     if (claim !== "claimed") {
       summary.skipped++;
@@ -105,8 +117,12 @@ export async function autoReplyToUsLeads(officeId: string): Promise<AutoReplySum
 
     summary.sent++;
     // Mark the send as automated (audit + "don't retry" marker even if the
-    // kind stamp were ever cleared by hand).
+    // kind stamp were ever cleared by hand). First-touch emails include the
+    // scope/customs questions, so they settle scopeAskedAt as well.
     await claimInquirySendStamp(inquiry.id, "autoRepliedAt").catch(() => null);
+    if (!needsScopeFollowUp) {
+      await claimInquirySendStamp(inquiry.id, "scopeAskedAt").catch(() => null);
+    }
     await recordMemoryEvent({
       officeId,
       sourceType: "GOOGLE_SHEETS",

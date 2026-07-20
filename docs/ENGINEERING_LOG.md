@@ -2018,3 +2018,35 @@ Use this file for chronological implementation notes that future agents should s
   on prod before deploy.
 - Follow-up: optionally hide financial columns from employees; audit
   coverage for decision-queue cost/revenue overrides if needed.
+
+
+### 2026-07-20 - Scope/customs questions in lead emails + one-time follow-up
+
+- Branch: us-rfq-sheet-panel (Conductor workspace cody, targets main)
+- Commit: see git log
+- Task: Forwarder requirement via Mert: quotes need (1) port-to-port vs
+  door + exact addresses, (2) HTS code, commodity, country of origin for
+  duty calculation. Ask these automatically the moment a Good lead lands,
+  and follow up with every Good lead already emailed without them.
+- Files changed: `src/lib/rfq-whatsapp.ts` (scope + customs questions in
+  leadMissingQuestions, meta-leads rows only), `src/lib/lead-emails.ts`
+  (buildLeadScopeFollowUpContent EN/TR), `src/lib/rfq-mail.ts`
+  (buildLeadScopeFollowUpEmail, scopeAskedAt stamp key),
+  `src/lib/lead-auto-reply.ts` (follow-up pass for already-emailed Good
+  leads lacking scopeAskedAt; first-touch settles scopeAskedAt),
+  `src/lib/google-sheets-sync.ts` (preserve scopeAskedAt),
+  `src/app/dashboard/rfq/actions.ts` (manual info-request send settles
+  scopeAskedAt), `scripts/lead-emails.test.ts`.
+- Behavior: every lead info-request (email + WhatsApp draft) now ends with
+  the two quoting essentials; "confirmation" kind no longer occurs for
+  fresh ad leads (scope is always unknown), so first-touch is always an
+  ask. Previously-emailed Good leads get one short follow-up asking only
+  the two questions (subject "Two quick details to finalize your quote"),
+  sent by the same hourly auto-reply pass, CAS-stamped via scopeAskedAt.
+- Verification: build clean; lead-emails (rewritten cases incl. follow-up
+  EN/TR, meta-leads gating), rfq-whatsapp, lead-quality suites pass; lint
+  baseline only.
+- Caveats: scope/customs questions are gated on parsedData source
+  "meta-leads" so email/manual RFQs (which carry incoterms) are unaffected.
+- Follow-up: parse lead replies into inquiry fields (currently the desk
+  reads replies at oguzhan@/mert@ and edits the row).

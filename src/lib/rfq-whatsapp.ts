@@ -347,6 +347,21 @@ export function leadMissingQuestions(inq: InquiryForWhatsApp): {
     missing.push("dangerous goods details");
   }
 
+  // Ad leads never specify quote scope or customs basis, and the forwarder
+  // can't price without them (desk requirement, 2026-07-20): port-to-port vs
+  // door decides the legs, and duty calculation needs HTS + country of
+  // origin. Only lead rows get these — email/manual RFQs carry incoterms.
+  if (parsed.source === "meta-leads") {
+    questions.push(en
+      ? "Should we quote port-to-port, or include pickup and/or delivery at your door? If door service is needed, please share the exact address(es)."
+      : "Fiyatı liman-liman mı çalışalım, yoksa adresten alım / adrese teslim dahil mi? Kapıdan hizmet gerekiyorsa tam adres(ler)i paylaşabilir misiniz?");
+    missing.push("port-to-port vs door");
+    questions.push(en
+      ? "If you'd like customs duties included (DDP): the country where the goods were manufactured, and the HTS code if you have it."
+      : "Gümrük vergileri dahil (DDP) fiyat isterseniz: ürünün üretildiği ülke ve varsa GTİP/HTS kodu.");
+    missing.push("country of origin / HTS");
+  }
+
   return { market, questions, missing };
 }
 
