@@ -129,7 +129,7 @@ const PRIOR_CARRY_FIELDS = new Set<RfqLoadFieldKey>([
   "customsBy",
   "currency",
   // Security/equipment carry from prior loads; declaredValue deliberately
-  // does NOT (same principle as target price — never silently assume value).
+  // does NOT (same principle as target price - never silently assume value).
   "equipmentType",
   "commodityCategory",
   "securityTier",

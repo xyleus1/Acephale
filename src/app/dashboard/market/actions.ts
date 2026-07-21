@@ -119,7 +119,7 @@ export async function createRfqFromLoadIdeaAction(input: {
     fields.description ??
     [commodity ?? "Load idea", fields.origin && fields.destination ? `${fields.origin} → ${fields.destination}` : null]
       .filter(Boolean)
-      .join(" — ");
+      .join(" - ");
 
   const qualificationInput = {
     origin: fields.origin,

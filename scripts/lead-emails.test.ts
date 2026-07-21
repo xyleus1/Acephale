@@ -30,7 +30,7 @@ const base = {
   });
   assert.equal(email.kind, "confirmation");
   assert.equal(email.missing.length, 0);
-  assert.equal(email.subject, "Your request has been received — Derya");
+  assert.equal(email.subject, "Your request has been received - Derya");
   assert(email.text.includes("within the next 6 hours"), email.text);
   assert(email.text.includes("Co-founder & CEO"), email.text);
 }
@@ -48,7 +48,7 @@ const base = {
   const email = buildLeadCustomerEmailContent(inq);
   const wa = buildWhatsAppInquiry(inq);
   assert.equal(email.kind, "info-request");
-  assert.equal(email.subject, "A few details for your shipping quote — Derya");
+  assert.equal(email.subject, "A few details for your shipping quote - Derya");
   assert(email.text.startsWith("Hi Igor,"), email.text);
   assert(email.text.includes("about your machine parts shipment (Savannah → india)"), email.text);
   assert(email.text.includes("- What will be the exact delivery point?"), email.text);
@@ -57,8 +57,8 @@ const base = {
   assert(!email.text.includes("ağırlığını"), "US email must not contain Turkish");
 }
 
-// Meta-lead rows always get the two quoting essentials (scope + customs) —
-// forwarder requirement 2026-07-20 — so even a complete container lead is an
+// Meta-lead rows always get the two quoting essentials (scope + customs) -
+// forwarder requirement 2026-07-20 - so even a complete container lead is an
 // info-request asking exactly those two, nothing else.
 {
   const email = buildLeadCustomerEmailContent({
@@ -84,7 +84,7 @@ const base = {
 }
 
 // The same shape WITHOUT the meta-leads source marker (email/manual RFQs)
-// gets no scope/customs questions — those carry incoterms already.
+// gets no scope/customs questions - those carry incoterms already.
 {
   const email = buildLeadCustomerEmailContent({
     ...base,
@@ -110,7 +110,7 @@ const base = {
     commodity: "roof panels",
     parsedData: JSON.stringify({ source: "meta-leads", market: "US", fullName: "erin p paige" }),
   });
-  assert.equal(followUp.subject, "Two quick details to finalize your quote — Derya");
+  assert.equal(followUp.subject, "Two quick details to finalize your quote - Derya");
   assert(followUp.text.startsWith("Hi Erin,"), followUp.text);
   assert(followUp.text.includes("roof panels shipment"), followUp.text);
   assert(followUp.text.includes("port-to-port"), followUp.text);
@@ -124,7 +124,7 @@ const base = {
   assert(tr.text.includes("GTİP/HTS"), tr.text);
 }
 
-// …but a researcher's "timing" is not a date — still asked.
+// …but a researcher's "timing" is not a date - still asked.
 {
   const email = buildLeadCustomerEmailContent({
     ...base,
@@ -171,7 +171,7 @@ const base = {
     parsedData: JSON.stringify({ fullName: "emre yılmaz" }),
   });
   assert.equal(email.kind, "info-request");
-  assert.equal(email.subject, "Fiyat teklifiniz için birkaç bilgi rica ederiz — Derya");
+  assert.equal(email.subject, "Fiyat teklifiniz için birkaç bilgi rica ederiz - Derya");
   assert(email.text.startsWith("Merhaba,"), email.text);
   assert(email.text.includes("- Yükün tam varış noktası neresi olacak?"), email.text);
   assert(email.text.includes("Kurucu Ortak & CEO"), email.text);
@@ -191,7 +191,7 @@ const base = {
     parsedData: JSON.stringify({ fullName: "emre yılmaz" }),
   });
   assert.equal(email.kind, "confirmation");
-  assert.equal(email.subject, "Talebiniz alındı — Derya");
+  assert.equal(email.subject, "Talebiniz alındı - Derya");
   assert(email.text.includes("önümüzdeki 6 saat içinde"), email.text);
 }
 

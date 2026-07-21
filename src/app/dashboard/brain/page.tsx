@@ -172,7 +172,7 @@ export default async function CompanyBrainPage({ searchParams }: { searchParams:
             <p className="brain-placeholder-copy">
               This view will visualize the company&apos;s internal brain: memory objects,
               entities, and decisions, connected the way the agents read them. It is
-              not configured yet — the substrate below is already collecting.
+              not configured yet - the substrate below is already collecting.
             </p>
             <div className="brain-count-row" aria-label="Memory substrate counts">
               <div className="brain-count">

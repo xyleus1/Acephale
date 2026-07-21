@@ -26,7 +26,7 @@ const CHECKLIST_HINTS = new Map(CARRIER_VETTING_CHECKLIST.map((item) => [item.ke
 const REQUIRED_KEYS = new Set(CARRIER_VETTING_CHECKLIST.filter((item) => item.required).map((item) => item.key));
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -87,7 +87,7 @@ export function CarrierDetailView({
         setDetail(res.detail);
         setGate(res.gate);
       } catch {
-        flash("Could not save — check your connection and try again.");
+        flash("Could not save - check your connection and try again.");
         setRev((r) => r + 1);
       }
     });
@@ -108,13 +108,13 @@ export function CarrierDetailView({
         }));
         setGate(res.gate);
       } catch {
-        flash("Could not save — check your connection and try again.");
+        flash("Could not save - check your connection and try again.");
         setRev((r) => r + 1);
       }
     });
   }
 
-  // Text/date/money helper — remounts to server truth on failed saves via rev.
+  // Text/date/money helper - remounts to server truth on failed saves via rev.
   function input(field: keyof CarrierPatch & keyof CarrierDetail, opts?: { placeholder?: string; date?: boolean }) {
     const raw = detail[field];
     const value =
@@ -144,7 +144,7 @@ export function CarrierDetailView({
   }
 
   const gateSummary = gate.canApprove
-    ? "All required checks passed — this carrier can be approved."
+    ? "All required checks passed - this carrier can be approved."
     : `${gate.missing.length} required check(s) outstanding${gate.failed.length > 0 ? `, ${gate.failed.length} failed` : ""}.`;
 
   const cargoExpiry = insuranceExpiryState(detail.cargoInsuranceExpiry, new Date());
@@ -183,7 +183,7 @@ export function CarrierDetailView({
           <span style={{ opacity: 0.6 }}> Approved {fmtDate(detail.vettedAt)}.</span>
         )}
         {detail.vettingStatus === "approved" && !gate.canApprove && (
-          <span style={{ color: "var(--danger)" }}> Checklist regressed since approval — review below.</span>
+          <span style={{ color: "var(--danger)" }}> Checklist regressed since approval - review below.</span>
         )}
       </div>
 
@@ -251,7 +251,7 @@ export function CarrierDetailView({
 
       <Section
         title="Fraud defense"
-        hint="Verify against FMCSA and the insurance producer directly — never against details the carrier supplied."
+        hint="Verify against FMCSA and the insurance producer directly - never against details the carrier supplied."
       >
         <div style={grid()}>
           <Field label="Dispatch email">{input("dispatchEmail")}</Field>
@@ -307,8 +307,8 @@ export function CarrierDetailView({
         </div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>
           Next review: {fmtDate(detail.nextReviewAt)}
-          {cargoExpiry === "expired" && <span style={{ color: "var(--danger)", fontWeight: 600 }}> — cargo insurance EXPIRED</span>}
-          {cargoExpiry === "expiring_soon" && <span style={{ color: "var(--warning)", fontWeight: 600 }}> — cargo insurance expires within 30 days</span>}
+          {cargoExpiry === "expired" && <span style={{ color: "var(--danger)", fontWeight: 600 }}> - cargo insurance EXPIRED</span>}
+          {cargoExpiry === "expiring_soon" && <span style={{ color: "var(--warning)", fontWeight: 600 }}> - cargo insurance expires within 30 days</span>}
         </div>
       </Section>
 
@@ -353,20 +353,20 @@ export function CarrierDetailView({
         </div>
       </Section>
 
-      <Section title="Scorecard" hint="Computed from completed loads once the quote flywheel is live — manual for now.">
+      <Section title="Scorecard" hint="Computed from completed loads once the quote flywheel is live - manual for now.">
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13 }}>
           <div><strong>{detail.loadsCompleted}</strong> loads</div>
-          <div>On-time pickup: <strong>{detail.onTimePickupPct != null ? `${detail.onTimePickupPct}%` : "—"}</strong></div>
-          <div>On-time delivery: <strong>{detail.onTimeDeliveryPct != null ? `${detail.onTimeDeliveryPct}%` : "—"}</strong></div>
+          <div>On-time pickup: <strong>{detail.onTimePickupPct != null ? `${detail.onTimePickupPct}%` : "-"}</strong></div>
+          <div>On-time delivery: <strong>{detail.onTimeDeliveryPct != null ? `${detail.onTimeDeliveryPct}%` : "-"}</strong></div>
           <div>Claims: <strong>{detail.claimCount}</strong></div>
           <div>Incidents: <strong>{detail.incidentCount}</strong></div>
-          <div>Score: <strong>{detail.scorecardScore != null ? detail.scorecardScore.toFixed(0) : "—"}</strong></div>
+          <div>Score: <strong>{detail.scorecardScore != null ? detail.scorecardScore.toFixed(0) : "-"}</strong></div>
         </div>
         <Field label="Notes">{input("notes", { placeholder: "Anything the next person booking this carrier should know" })}</Field>
       </Section>
 
       <p style={{ fontSize: 12, opacity: 0.5 }}>
-        {vettingStatusLabel(detail.vettingStatus)} · MC {detail.mcNumber ?? "—"} · DOT {detail.dotNumber ?? "—"} · Changes save automatically.
+        {vettingStatusLabel(detail.vettingStatus)} · MC {detail.mcNumber ?? "-"} · DOT {detail.dotNumber ?? "-"} · Changes save automatically.
       </p>
     </div>
   );

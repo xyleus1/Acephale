@@ -2,7 +2,7 @@
 
 // ⌘K global search palette: one input over loads, RFQs, companies, contacts
 // and email threads (src/lib/global-search.ts). Picking a result navigates to
-// it — a load opens its detail page, which also updates the workbench focus
+// it - a load opens its detail page, which also updates the workbench focus
 // via the focus-job middleware cookie, so the old "find job" behavior is a
 // side effect of the new one. The .cmdk-* classnames are load-bearing: later
 // theme layers in globals.css restyle them, so keep them stable.
@@ -160,7 +160,7 @@ export function CommandPalette() {
                       >
                         <span className="cmdk-ref">{r.ref ?? ""}</span>
                         <span className="cmdk-customer">{r.title}</span>
-                        <span className="cmdk-route">{r.detail ?? "—"}</span>
+                        <span className="cmdk-route">{r.detail ?? "-"}</span>
                         <span className="cmdk-status">{r.status ?? GROUP_LABEL[r.group]}</span>
                       </button>
                     );

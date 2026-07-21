@@ -85,7 +85,7 @@ const translations = {
       actionRequired: "Action Required",
       actionRequiredDesc: "Overdue tasks and tasks due today",
       pendingQuotes: "Pending Quotes",
-      pendingQuotesDesc: "Quotes sent but not yet resolved — follow up if overdue",
+      pendingQuotesDesc: "Quotes sent but not yet resolved - follow up if overdue",
       staleAccounts: "Stale Accounts",
       staleDesc: "Accounts with no activity in the last 14 days",
       openTasks: "All Open Tasks",

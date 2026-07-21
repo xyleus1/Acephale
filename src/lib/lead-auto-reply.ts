@@ -1,6 +1,6 @@
 // Automated first-touch for US Meta leads, run after every lead-sheet sync
 // (hourly cron and the manual button). Policy per Mert (2026-07-20): only
-// GOOD-tier leads get an automatic email — the smart customer email
+// GOOD-tier leads get an automatic email - the smart customer email
 // (received-confirmation when complete, missing-info request otherwise).
 // Review/Weak leads are deliberately left untouched: a wrong auto-decline
 // to a mislabeled real customer costs more than silence.

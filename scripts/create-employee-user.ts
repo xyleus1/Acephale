@@ -11,7 +11,7 @@ import { hashPassword } from "../src/lib/password";
 //   DATABASE_URL=... npx tsx scripts/create-employee-user.ts
 //
 // Optional: EMPLOYEE_ROLE (default EMPLOYEE), EMPLOYEE_OFFICE_NAME (default:
-// the only office in the database — errors if there are several).
+// the only office in the database - errors if there are several).
 // Remember: sign-in is also allowlist-gated (LOGIN_ALLOWED_EMAILS /
 // DEFAULT_ALLOWED_LOGIN_EMAILS in src/lib/login-code.ts).
 

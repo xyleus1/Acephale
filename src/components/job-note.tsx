@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateJobNote } from "@/app/dashboard/jobs/[jobId]/actions";
 
-// Quick personal note on a job — saved on blur or via the Save button.
+// Quick personal note on a job - saved on blur or via the Save button.
 export function JobNote({ jobId, initial }: { jobId: string; initial: string }) {
   const router = useRouter();
   const [value, setValue] = useState(initial);

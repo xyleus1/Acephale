@@ -1,4 +1,4 @@
-// Server-only module (NOT a "use server" file — that directive only allows
+// Server-only module (NOT a "use server" file - that directive only allows
 // async-function exports, but we also export the TOOLS array constant).
 // The functions here are called from within other server actions, so they
 // run server-side regardless.
@@ -95,7 +95,7 @@ export const TOOLS = [
   },
   {
     name: "search_email_threads",
-    description: "Full-text search across email threads — subjects, bodies, sender names/emails.",
+    description: "Full-text search across email threads - subjects, bodies, sender names/emails.",
     input_schema: {
       type: "object",
       properties: {
@@ -366,7 +366,7 @@ export const TOOLS = [
   },
   {
     name: "list_threads_awaiting_reply",
-    description: "List email threads where the latest message is INBOUND (no outbound reply yet) — i.e. waiting on the operator.",
+    description: "List email threads where the latest message is INBOUND (no outbound reply yet) - i.e. waiting on the operator.",
     input_schema: { type: "object", properties: { limit: { type: "number" } } },
   },
   {
@@ -753,7 +753,7 @@ export const TOOLS = [
   },
   {
     name: "rename_job",
-    description: "Create a human-review proposal to rename / re-title a job. The job's reference (e.g. JOB-2026-003) is the immutable ID — you cannot change it — but you CAN propose changing the displayed deal name by updating the linked Inquiry's subject. Does not mutate immediately.",
+    description: "Create a human-review proposal to rename / re-title a job. The job's reference (e.g. JOB-2026-003) is the immutable ID - you cannot change it - but you CAN propose changing the displayed deal name by updating the linked Inquiry's subject. Does not mutate immediately.",
     input_schema: {
       type: "object",
       properties: {
@@ -833,7 +833,7 @@ export const TOOLS = [
       properties: {
         q: { type: "string", description: "Optional override search query. Leave empty to auto-derive from the job's commodity/route/customer." },
         job_id: { type: "string", description: "Defaults to focused job" },
-        only_unlinked: { type: "boolean", description: "Default true — skip threads already linked elsewhere" },
+        only_unlinked: { type: "boolean", description: "Default true - skip threads already linked elsewhere" },
         limit: { type: "number", description: "Max threads to link, default 50" },
       },
     },
@@ -2135,7 +2135,7 @@ async function listPricingCommandsForAgent(officeId: string, args: { limit?: unk
   const topAction = top?.operator_playbook.exact_ask ?? top?.operator_playbook.first_move ?? top?.decision.command ?? null;
   const topQuality = top?.decision_quality ?? null;
   const topQualityLine = topQuality && topQuality.tone !== "ready"
-    ? ` Decision quality: ${topQuality.metric} — ${topQuality.detail}`
+    ? ` Decision quality: ${topQuality.metric} - ${topQuality.detail}`
     : "";
 
   return {
@@ -3456,7 +3456,7 @@ export async function dispatchTool(
       }
       case "summarize_supplier_offers": {
         // If no job in scope, find the most recent open SOURCING job in this
-        // office automatically — operator usually means "the current
+        // office automatically - operator usually means "the current
         // procurement deal" without typing the JOB-ref.
         let resolvedJobId = jobId;
         if (!resolvedJobId) {
@@ -3494,7 +3494,7 @@ export async function dispatchTool(
         // Re-extract if either (a) fewer than half of threads have any
         // supplierOffer parsed, OR (b) no thread has an actual extracted
         // PRICE. The previous logic only checked (a), which made subsequent
-        // calls skip after the first all-null parse — even though no prices
+        // calls skip after the first all-null parse - even though no prices
         // had ever been pulled.
         const withAnyParse = job.inquiry.emailThreads.filter((t) => !!t.supplierOffer);
         const withPrice = withAnyParse.filter((t) => {
@@ -3765,7 +3765,7 @@ export async function dispatchTool(
           select: { id: true, reference: true, inquiryId: true, inquiry: { select: { subject: true } } },
         });
         if (!job) return { ok: false, error: "Job not found" };
-        if (!job.inquiryId) return { ok: false, error: "Job has no linked inquiry — title is stored on the inquiry's subject. Set a customer/inquiry first." };
+        if (!job.inquiryId) return { ok: false, error: "Job has no linked inquiry - title is stored on the inquiry's subject. Set a customer/inquiry first." };
         const oldTitle = job.inquiry?.subject ?? "(untitled)";
         return createToolUpdateProposal({
           ctx,
@@ -3916,7 +3916,7 @@ export async function dispatchTool(
           }
           if (job.inquiry?.fromCompany) terms.push(job.inquiry.fromCompany);
         }
-        if (terms.length === 0) return { ok: false, error: "No commodity/route/customer set on this job — pass q explicitly or run populate_job_from_emails first." };
+        if (terms.length === 0) return { ok: false, error: "No commodity/route/customer set on this job - pass q explicitly or run populate_job_from_emails first." };
 
         const onlyUnlinked = input.only_unlinked !== false;
         const limit = Math.min(100, Number(input.limit ?? 50));

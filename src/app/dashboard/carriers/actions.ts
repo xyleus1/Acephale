@@ -254,7 +254,7 @@ function revalidateCarriers(carrierId?: string) {
 }
 
 // Ensure conditional checklist rows exist once a capability is claimed.
-// Rows are never auto-deleted when a flag turns off — history stays visible.
+// Rows are never auto-deleted when a flag turns off - history stays visible.
 async function ensureConditionalChecklist(officeId: string, carrierId: string, flags: { lithiumCapable: boolean; hazmatCertified: boolean }) {
   const template = checklistTemplateForCarrier(flags).filter((item) => item.appliesWhen);
   if (template.length === 0) return;
@@ -316,7 +316,7 @@ export async function updateCarrierAction(carrierId: string, patch: CarrierPatch
     data.identityVerifiedBy = patch.identityVerified ? session.userId : null;
   }
 
-  // Approval is gated on the checklist — deterministic, no override in the UI.
+  // Approval is gated on the checklist - deterministic, no override in the UI.
   if (data.vettingStatus === "approved" && current.vettingStatus !== "approved") {
     const flags = {
       lithiumCapable: patch.lithiumCapable ?? current.lithiumCapable,
@@ -325,7 +325,7 @@ export async function updateCarrierAction(carrierId: string, patch: CarrierPatch
     const gate = carrierVettingGate(flags, current.checklist);
     if (!gate.canApprove) {
       const blockers = [...gate.failed, ...gate.missing].map((key) => CHECKLIST_LABELS.get(key) ?? key);
-      return { error: `Cannot approve yet — checklist blockers: ${blockers.join("; ")}` };
+      return { error: `Cannot approve yet - checklist blockers: ${blockers.join("; ")}` };
     }
     data.vettedAt = new Date();
     data.vettedByUserId = session.userId;

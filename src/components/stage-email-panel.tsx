@@ -162,7 +162,7 @@ export function StageEmailPanel({
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Write your email — or click 'AI Draft' to generate a draft from job context."
+              placeholder="Write your email - or click 'AI Draft' to generate a draft from job context."
               rows={8}
             />
           </div>

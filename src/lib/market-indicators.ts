@@ -3,7 +3,7 @@
 // company census on Socrata (CA carrier-supply counts). Key-gated free feeds
 // (skipped silently when the env var is absent): EIA (California diesel,
 // EIA_API_KEY) and US Census international trade (tech imports by HS code
-// through the CA customs districts, CENSUS_API_KEY). FRED was dropped —
+// through the CA customs districts, CENSUS_API_KEY). FRED was dropped -
 // fredgraph.csv rejects requests from Vercel's datacenter IPs. Fetchers lean
 // on Next's data cache with generous revalidate windows; every fetch fails
 // soft so the page never blocks on a third-party feed. Pure parsing/summary
@@ -42,7 +42,7 @@ function pctChange(now: number, then: number): number | null {
   return 100 * (now / then - 1);
 }
 
-// Latest value + YoY (latest point in the same calendar month one year back —
+// Latest value + YoY (latest point in the same calendar month one year back -
 // works for weekly and monthly series alike) + YTD (vs the year's first point).
 export function summarizeSeries(series: SeriesPoint[]): IndicatorSummary | null {
   if (series.length === 0) return null;
@@ -104,7 +104,7 @@ export function parseEiaSeries(text: string): SeriesPoint[] {
   const out: SeriesPoint[] = [];
   for (const row of rows) {
     if (!row.period || !/^\d{4}-\d{2}-\d{2}$/.test(row.period)) continue;
-    if (row.value == null || row.value === "") continue; // Number(null) is 0 — a null print is missing, not free fuel
+    if (row.value == null || row.value === "") continue; // Number(null) is 0 - a null print is missing, not free fuel
     const value = Number(row.value);
     if (!Number.isFinite(value)) continue;
     out.push([row.period, value]);
@@ -160,7 +160,7 @@ export type TechImportsSummary = {
 };
 
 // Aggregate CA-district tech imports for the newest month present, with YoY
-// against the same month a year earlier. Pure — feed it parseCensusTable rows.
+// against the same month a year earlier. Pure - feed it parseCensusTable rows.
 export function summarizeTechImports(points: CensusPoint[]): TechImportsSummary | null {
   const ca = points.filter((p) => CA_CUSTOMS_DISTRICTS.includes(p.district));
   if (ca.length === 0) return null;
@@ -212,7 +212,7 @@ const FMCSA_COUNTS = [
   },
 ] as const;
 
-const SERIES_REVALIDATE_SECONDS = 6 * 60 * 60; // weekly/monthly series — 6h is plenty
+const SERIES_REVALIDATE_SECONDS = 6 * 60 * 60; // weekly/monthly series - 6h is plenty
 const FMCSA_REVALIDATE_SECONDS = 24 * 60 * 60; // census refreshes ~monthly
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -225,7 +225,7 @@ async function fetchText(url: string, revalidate: number, timeoutMs: number = FE
   return res.text();
 }
 
-// BLS keyless v1 allows ~25 requests/day per IP — trivially within budget at
+// BLS keyless v1 allows ~25 requests/day per IP - trivially within budget at
 // one cached call per 6h.
 const BLS_PPI_SERIES = "PCU484121484121"; // PPI, general freight trucking long-distance TL
 
@@ -247,7 +247,7 @@ async function fetchBlsPpi(): Promise<MarketIndicator | null> {
   };
 }
 
-// ~2.5 years of weekly prints — enough history for YoY + YTD.
+// ~2.5 years of weekly prints - enough history for YoY + YTD.
 const EIA_SERIES_LENGTH = 130;
 
 async function fetchEiaCaDiesel(apiKey: string): Promise<MarketIndicator | null> {
@@ -271,7 +271,7 @@ async function fetchEiaCaDiesel(apiKey: string): Promise<MarketIndicator | null>
 }
 
 const CENSUS_REVALIDATE_SECONDS = 24 * 60 * 60; // monthly stats, ~2-month publication lag
-// Census range queries run 5-10s each — the default 8s timeout was exactly
+// Census range queries run 5-10s each - the default 8s timeout was exactly
 // why the customs section died on Vercel while everything else rendered.
 const CENSUS_TIMEOUT_MS = 25_000;
 
@@ -281,7 +281,7 @@ const CENSUS_CONCURRENCY = 2;
 
 async function fetchCensusTechImports(apiKey: string): Promise<TechImportsSummary | null> {
   // Need latest published month + the same month a year earlier (~2-month
-  // lag), so ~13 months back is enough — a narrower range keeps queries fast.
+  // lag), so ~13 months back is enough - a narrower range keeps queries fast.
   const now = new Date();
   const from = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const codes = TECH_HS_CODES.map(([code]) => code);
@@ -311,7 +311,7 @@ async function fetchFmcsaCount(spec: (typeof FMCSA_COUNTS)[number]): Promise<Mar
     key: spec.key,
     label: spec.label,
     display: formatIndicatorValue(value, "count", 0),
-    asOf: null, // census snapshot — the portal does not date the extract
+    asOf: null, // census snapshot - the portal does not date the extract
     yoyPct: null,
     ytdPct: null,
     source: "FMCSA census",
@@ -324,7 +324,7 @@ export type MarketBaselineResult = {
   failures: string[];
 };
 
-// Never throws — failed feeds are reported by name and simply omitted.
+// Never throws - failed feeds are reported by name and simply omitted.
 // Key-gated feeds are skipped (not failed) when the env var is missing.
 export async function fetchMarketBaseline(): Promise<MarketBaselineResult> {
   const eiaKey = process.env.EIA_API_KEY;
@@ -354,7 +354,7 @@ export async function fetchMarketBaseline(): Promise<MarketBaselineResult> {
   });
   if (customsResult.failed) failures.push("CA tech imports (Census)");
 
-  // CA diesel reads better next to US diesel — keep the fuel pair adjacent.
+  // CA diesel reads better next to US diesel - keep the fuel pair adjacent.
   indicators.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
 
   return { indicators, customs: customsResult.summary, failures };

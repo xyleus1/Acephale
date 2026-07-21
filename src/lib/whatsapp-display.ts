@@ -1,7 +1,7 @@
 // Human-readable rendering of WhatsApp protocol addresses. The pipeline
 // stores counterparties as "whatsapp:<digits>" in EmailMessage.fromEmail /
 // EmailAccount.email; these helpers keep those machine strings out of the UI.
-// Pure module — safe to import from client components and test scripts.
+// Pure module - safe to import from client components and test scripts.
 
 export function isWhatsAppAddress(address: string | null | undefined): boolean {
   return Boolean(address?.startsWith("whatsapp:"));
@@ -51,7 +51,7 @@ export function displayParty(fromEmail: string | null | undefined, fromName?: st
 
 // Label for the receiving WhatsApp account ("whatsapp:<phoneNumberId>").
 // Meta phone_number_ids and some Green API instance ids are opaque tokens,
-// not dialable numbers — never render those as a fake phone. MSISDNs are at
+// not dialable numbers - never render those as a fake phone. MSISDNs are at
 // most 15 digits but opaque ids typically run longer or fail formatting;
 // anything beyond 13 digits is treated as opaque here.
 export function whatsAppAccountLabel(accountEmail: string | null | undefined): string {

@@ -47,7 +47,7 @@ export function JobsBoard({
   const statusOf = (j: BoardJob) => {
     const o = overrides[j.id];
     if (o && o === j.status) {
-      // server caught up — override no longer needed (cleared lazily)
+      // server caught up - override no longer needed (cleared lazily)
       return j.status;
     }
     const status = o ?? j.status;
@@ -99,7 +99,7 @@ export function JobsBoard({
             </div>
             <div className="job-col-body">
               {colJobs.length === 0 ? (
-                <div className="job-col-empty">—</div>
+                <div className="job-col-empty">-</div>
               ) : (
                 colJobs.map((job) => (
                   <a
@@ -124,7 +124,7 @@ export function JobsBoard({
                     {job.title && (
                       <div className="job-card-title">{job.title}</div>
                     )}
-                    <div className="job-card-company">{job.companyName ?? "—"}</div>
+                    <div className="job-card-company">{job.companyName ?? "-"}</div>
                     <div className="job-card-route">
                       {job.origin && job.destination ? (
                         <>{job.origin} → {job.destination}</>

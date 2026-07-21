@@ -14,7 +14,7 @@ export type RfqWhatsAppPreview = {
 };
 
 // The Turkish WhatsApp inquiry draft with Copy / wa.me / Send-through-CRM.
-// Shared by the RFQ sheet's expanded row and the RFQ detail page — onSend is
+// Shared by the RFQ sheet's expanded row and the RFQ detail page - onSend is
 // a (bound) server action so both server and client parents can mount it.
 export function WhatsAppPreviewCard({ preview, onSend }: {
   preview: RfqWhatsAppPreview;
@@ -60,8 +60,8 @@ export function WhatsAppPreviewCard({ preview, onSend }: {
         }
       } catch {
         // A rejected action (network drop, server crash) leaves delivery
-        // unknown — say so instead of crashing to the error boundary.
-        setError("Send failed or was interrupted — check the WhatsApp thread before retrying.");
+        // unknown - say so instead of crashing to the error boundary.
+        setError("Send failed or was interrupted - check the WhatsApp thread before retrying.");
       }
     });
   }
@@ -74,7 +74,7 @@ export function WhatsAppPreviewCard({ preview, onSend }: {
           <div className="rfq-mail-hint">
             {preview.configured
               ? "Send from the CRM number, or copy it / open the chat on your own phone"
-              : "Sent from your own phone — copy it, or open the chat prefilled"}
+              : "Sent from your own phone - copy it, or open the chat prefilled"}
           </div>
         </div>
         <div className="rfq-mail-card-actions">
@@ -116,7 +116,7 @@ export function WhatsAppPreviewCard({ preview, onSend }: {
         {preview.missing.length > 0 && <div><span>Asks</span><strong>{preview.missing.join(", ")}</strong></div>}
       </div>
       <pre className="rfq-mail-body">{preview.text}</pre>
-      {copyError && <div className="rfq-mail-error">Could not copy — select the message text manually.</div>}
+      {copyError && <div className="rfq-mail-error">Could not copy - select the message text manually.</div>}
       {error && <div className="rfq-mail-error">{error}</div>}
     </div>
   );

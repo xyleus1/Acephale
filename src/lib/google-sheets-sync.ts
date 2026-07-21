@@ -194,7 +194,7 @@ function parseMoney(value: unknown, fallbackCurrency?: string | null): Money {
 
   let amount = Number(normalized);
   // "3k" / "8-14k" style budgets: apply the thousands suffix (to the range's
-  // low end — the first number is what got matched).
+  // low end - the first number is what got matched).
   if (Number.isFinite(amount) && /\d\s*k\b/i.test(raw)) amount *= 1000;
   return {
     amount: Number.isFinite(amount) ? amount : null,
@@ -601,7 +601,7 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
     const jobTitle = clean(row[26]);
     const leadStatus = clean(row[28]);
 
-    // The size answers tell us when a lead is container freight — mark it so
+    // The size answers tell us when a lead is container freight - mark it so
     // downstream drafts price it as FCL instead of asking for box dimensions.
     const sizeText = `${shipmentType ?? ""} ${loadInfo ?? ""}`.toLocaleLowerCase("en-US");
     const containerType = /container|konteyner/.test(sizeText)
@@ -617,7 +617,7 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
     const platformLabel = platform === "ig" ? "Instagram" : platform === "fb" ? "Facebook" : platform ?? "Meta";
     const route = [origin, destination].filter(Boolean).join(" → ");
     const subject = (
-      `${source.subjectPrefix}: ${commodity ?? shipmentType ?? "shipment"}${route ? ` — ${route}` : ""}`
+      `${source.subjectPrefix}: ${commodity ?? shipmentType ?? "shipment"}${route ? ` - ${route}` : ""}`
     ).slice(0, 160);
 
     const existing = await prisma.inquiry.findFirst({
@@ -840,10 +840,10 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
       });
       leadCounts[source.market] = await syncMetaLeadRows(officeId, leadRows, source);
       // An empty read is indistinguishable from a wrong tab/gid (a header-only
-      // tab reads "successfully" as zero rows) — say so instead of silence.
+      // tab reads "successfully" as zero rows) - say so instead of silence.
       const counts = leadCounts[source.market];
       if (counts.created + counts.updated + counts.skipped === 0) {
-        warnings.push(`${source.market} lead sheet: no data rows found — check the tab/gid configuration.`);
+        warnings.push(`${source.market} lead sheet: no data rows found - check the tab/gid configuration.`);
       }
       anySucceeded = true;
     } catch (e) {
@@ -855,7 +855,7 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
     return { error: warnings.join(" | ") };
   }
 
-  // First-touch automation for freshly-synced US leads (GOOD tier only) —
+  // First-touch automation for freshly-synced US leads (GOOD tier only) -
   // never allowed to fail the sync itself.
   let autoReplies = { sent: 0, skipped: 0, failed: 0 };
   try {

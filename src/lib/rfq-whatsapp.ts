@@ -1,8 +1,8 @@
 // Draft WhatsApp inquiry for an RFQ, asking only for what the load is still
-// missing — Turkish for TR-market leads, English for US-market ones (the
+// missing - Turkish for TR-market leads, English for US-market ones (the
 // lead's ad market lives in parsedData). Built next to the email drafts on
 // the RFQ sheet; the operator sends it manually (copy, or the wa.me deep
-// link) — nothing sends automatically. Tone and question set follow
+// link) - nothing sends automatically. Tone and question set follow
 // Oğuzhan's real outreach messages.
 
 import { metaLeadMarketOf, type MetaLeadMarket } from "./meta-leads";
@@ -50,7 +50,7 @@ function capTr(value: string): string {
 
 // "emre yılmaz" → "Emre"; initials and single letters fall back to the
 // generic greeting rather than producing "M. Bey". Capitalization follows
-// the market's locale — tr-TR would turn "igor" into "İgor".
+// the market's locale - tr-TR would turn "igor" into "İgor".
 // Exported for the lead emails, which greet the same way.
 export function leadFirstName(fullName: string | null, market: MetaLeadMarket): string | null {
   if (!fullName) return null;
@@ -71,7 +71,7 @@ function hasDimensions(json: string | null): boolean {
   }
 }
 
-// "a", "a ve b", "a, b ve c" — natural Turkish list join.
+// "a", "a ve b", "a, b ve c" - natural Turkish list join.
 function joinTr(parts: string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
   return `${parts.slice(0, -1).join(", ")} ve ${parts[parts.length - 1]}`;
@@ -85,7 +85,7 @@ function joinEn(parts: string[]): string {
 
 // Leads often type a bare country ("Almanya", "ürdün") as origin/destination.
 // A country-only endpoint can't be priced, so the draft asks for the exact
-// point — mirroring the desk's real follow-up questions. Keys are lowercased
+// point - mirroring the desk's real follow-up questions. Keys are lowercased
 // with the tr locale and dotless-ı folded to i; common ASCII spellings are
 // listed alongside the Turkish ones.
 const COUNTRY_ONLY = new Set([
@@ -222,7 +222,7 @@ export function waDigitsFromWhatsAppAddress(address: string | null | undefined):
 }
 
 // Inquiries born from a WhatsApp thread know their counterparty from the
-// sender address — seed parsedData.phone/fullName so the RFQ sheet's WhatsApp
+// sender address - seed parsedData.phone/fullName so the RFQ sheet's WhatsApp
 // draft (and the send action) has a recipient without re-asking the AI.
 export function seedWhatsAppLeadFields(
   parsed: Record<string, unknown>,
@@ -244,12 +244,12 @@ function equipmentPhrase(inq: InquiryForWhatsApp, en: boolean): string | null {
   return /konteyner|container/i.test(type) ? label : `${label} ${en ? "container" : "konteyner"}`;
 }
 
-// Battery/solar/hazmat cargo ships as dangerous goods — the probe has to go
+// Battery/solar/hazmat cargo ships as dangerous goods - the probe has to go
 // out before anything can be priced, whatever else the lead answered.
 const DG_TERMS = /lithium|batter|solar panel|solar equipment|hazmat|flammable|aerosol|dangerous good|un ?38|akü|batarya|\bpil\b/i;
 
 // The missing-detail questions for a lead, phrased in the lead's market
-// language — shared by the WhatsApp draft and the missing-info email so both
+// language - shared by the WhatsApp draft and the missing-info email so both
 // channels ask for exactly the same things.
 export function leadMissingQuestions(inq: InquiryForWhatsApp): {
   market: MetaLeadMarket;
@@ -265,7 +265,7 @@ export function leadMissingQuestions(inq: InquiryForWhatsApp): {
   const origin = s(inq.origin);
   const destination = s(inq.destination);
 
-  // Lead forms answer timing as a range ("within 2-4 weeks"), not a date —
+  // Lead forms answer timing as a range ("within 2-4 weeks"), not a date -
   // that's enough to price, so don't re-ask; researchers still get asked.
   const answers = (parsed.answers && typeof parsed.answers === "object" && !Array.isArray(parsed.answers)
     ? parsed.answers
@@ -283,7 +283,7 @@ export function leadMissingQuestions(inq: InquiryForWhatsApp): {
   }
 
   // A booked container prices without piece-level measurements; loose cargo
-  // doesn't — this is the desk's most common WhatsApp follow-up.
+  // doesn't - this is the desk's most common WhatsApp follow-up.
   if (!isFcl) {
     const bits: string[] = [];
     if (!dims && inq.volume == null) {
@@ -342,15 +342,15 @@ export function leadMissingQuestions(inq: InquiryForWhatsApp): {
 
   if (s(inq.commodity) && DG_TERMS.test(inq.commodity!)) {
     questions.push(en
-      ? "Batteries/solar equipment ship as dangerous goods — are they installed in a device or shipped loose, and do you have the UN38.3 test report (or MSDS) from the manufacturer?"
-      : "Akü/batarya ve güneş paneli içeren yükler tehlikeli madde (DG) kapsamındadır — bataryalar cihaza takılı mı yoksa ayrı mı, ve üreticiden UN38.3 test raporu (veya MSDS) mevcut mu?");
+      ? "Batteries/solar equipment ship as dangerous goods - are they installed in a device or shipped loose, and do you have the UN38.3 test report (or MSDS) from the manufacturer?"
+      : "Akü/batarya ve güneş paneli içeren yükler tehlikeli madde (DG) kapsamındadır - bataryalar cihaza takılı mı yoksa ayrı mı, ve üreticiden UN38.3 test raporu (veya MSDS) mevcut mu?");
     missing.push("dangerous goods details");
   }
 
   // Ad leads never specify quote scope or customs basis, and the forwarder
   // can't price without them (desk requirement, 2026-07-20): port-to-port vs
   // door decides the legs, and duty calculation needs HTS + country of
-  // origin. Only lead rows get these — email/manual RFQs carry incoterms.
+  // origin. Only lead rows get these - email/manual RFQs carry incoterms.
   if (parsed.source === "meta-leads") {
     questions.push(en
       ? "Should we quote port-to-port, or include pickup and/or delivery at your door? If door service is needed, please share the exact address(es)."
@@ -393,11 +393,11 @@ export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
       : en ? "shipping request" : "taşıma talebiniz";
 
   // The English subject phrase sits mid-sentence ("about your …"), so it
-  // never goes through capTr — tr-TR casing would mangle "if"/"igor".
+  // never goes through capTr - tr-TR casing would mangle "if"/"igor".
   const intro = en
     ? (questions.length > 0
-        ? `I'm reaching out about your ${subjectPhrase} — if you can share a few missing details, I'll work up a quote right away.`
-        : `I'm reaching out about your ${subjectPhrase}. We have your details — I'll send the quote shortly.`)
+        ? `I'm reaching out about your ${subjectPhrase} - if you can share a few missing details, I'll work up a quote right away.`
+        : `I'm reaching out about your ${subjectPhrase}. We have your details - I'll send the quote shortly.`)
     : (questions.length > 0
         ? `${capTr(subjectPhrase)} için yazıyorum, eksik birkaç detayı iletebilirseniz hemen fiyat çalışacağım.`
         : `${capTr(subjectPhrase)} için yazıyorum. Bilgileriniz elimizde, en kısa sürede fiyatı ileteceğim.`);

@@ -101,12 +101,12 @@ const activityBodies = [
   "Reviewed last 6 months shipment data. Customer satisfied with transit times but flagged documentation delays.",
   "Agreed on Q3 rate lock for Sea FCL movements. Volume commitment of 40 TEU/month.",
   "Customer raising concerns about rising surcharges. Need to present revised cost breakdown.",
-  "Strong meeting — customer ready to sign LOI for Air freight segment. Involve pricing team.",
+  "Strong meeting - customer ready to sign LOI for Air freight segment. Involve pricing team.",
   "Touched base on pending invoice. Payment processing delay on their end, expected next week.",
   "Presented new Ro-Ro solution for Turkey-Germany corridor. Customer requested detailed proposal.",
   "Discussed customs compliance requirements for new product category. Will loop in compliance team.",
   "Customer confirmed they are evaluating 3 providers. We're shortlisted. Differentiator: transit speed.",
-  "Shipment documentation reviewed — all clear. Cargo estimated to arrive within 72 hours.",
+  "Shipment documentation reviewed - all clear. Cargo estimated to arrive within 72 hours.",
   "Addressed service failure from last month. Customer accepted our recovery plan and credit note.",
   "Positive conversation about opening a new import lane from China. Volume TBD pending sourcing plans.",
   "Customer shared upcoming tender for annual contract. Worth ~$2M. Deadline for submission: 30 days.",
@@ -124,15 +124,15 @@ const taskTitles = [
 ];
 
 const riskReasons = [
-  "No contact logged in 21+ days — account going cold",
-  "3 consecutive lost quotes — pricing misalignment likely",
-  "Previous meeting flagged as unresponsive — follow-up overdue",
+  "No contact logged in 21+ days - account going cold",
+  "3 consecutive lost quotes - pricing misalignment likely",
+  "Previous meeting flagged as unresponsive - follow-up overdue",
   "Volume dropped 60% vs same period last year",
   "Customer mentioned competitor evaluation in last activity",
   "Invoice dispute unresolved for 30+ days",
-  "Key contact changed — relationship reset needed",
-  "No activity logged after onboarding — engagement not established",
-  "Last quote rejected without counter — sentiment unknown"
+  "Key contact changed - relationship reset needed",
+  "No activity logged after onboarding - engagement not established",
+  "Last quote rejected without counter - sentiment unknown"
 ];
 
 function pick<T>(arr: T[], i: number): T {
@@ -282,7 +282,7 @@ async function main() {
       });
     }
 
-    // 2–7 activities — stale for some companies to trigger risk
+    // 2–7 activities - stale for some companies to trigger risk
     const isStale = i % 6 === 0;
     const activityCount = 2 + (i % 6);
     for (let a = 0; a < activityCount; a++) {
@@ -302,7 +302,7 @@ async function main() {
       });
     }
 
-    // 0–3 quotes — mix of WON, LOST, and PENDING
+    // 0–3 quotes - mix of WON, LOST, and PENDING
     const quoteCount = i % 4;
     for (let q = 0; q < quoteCount; q++) {
       const mod = (i + q) % 5;
@@ -322,16 +322,16 @@ async function main() {
           value: moneyFor(i + q),
           currency: pick(currencies, q + i),
           notes: result === "WON"
-            ? "Competitive offer accepted — rate lock confirmed."
+            ? "Competitive offer accepted - rate lock confirmed."
             : result === "LOST"
             ? "Lost to lower-cost competitor. Customer cited pricing as primary factor."
-            : "Quote submitted — awaiting customer decision.",
+            : "Quote submitted - awaiting customer decision.",
           quotedAt: dateDaysAgo((q + 1) * 4 + (i % 3))
         }
       });
     }
 
-    // 0–2 tasks per company — spread dates: some overdue, some upcoming
+    // 0–2 tasks per company - spread dates: some overdue, some upcoming
     const taskCount = i % 3;
     const dueDateOffsets = [-7, -3, -1, 2, 5, 8, 14]; // negative = overdue, positive = future
     const taskStatuses = ["OPEN", "OPEN", "OPEN", "DONE", "CANCELLED"] as const;
@@ -369,7 +369,7 @@ async function main() {
           officeId: office.id,
           companyId: company.id,
           level: "HIGH",
-          reason: "Repeated quote losses in recent cycle — pricing review required",
+          reason: "Repeated quote losses in recent cycle - pricing review required",
           isOpen: false,
           resolvedAt: dateDaysAgo(3)
         }
@@ -395,7 +395,7 @@ async function main() {
       {
         officeId: office.id,
         userId: manager.id,
-        name: "Risk Watchlist — Stale",
+        name: "Risk Watchlist - Stale",
         filters: { status: "UNTOUCHED", sortBy: "updatedAt", sortDir: "asc", q: "", class1: "", class2: "", product: "", lane: "" }
       },
       {
@@ -407,7 +407,7 @@ async function main() {
     ]
   });
 
-  console.log("✓ Seed complete — Istanbul Office");
+  console.log("✓ Seed complete - Istanbul Office");
   console.log(`  Companies: ${companyList.length}`);
   console.log("  Admin:    seed-admin@derya.internal / SeedAdmin!2026");
   console.log("  Manager:  manager@demo.local / manager1234");

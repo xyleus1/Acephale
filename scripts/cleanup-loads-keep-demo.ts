@@ -2,7 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 
 // One-off: delete every load in an office EXCEPT the one kept as a demo.
-// The RFQs (Inquiries) behind the deleted loads are kept — only the Job rows
+// The RFQs (Inquiries) behind the deleted loads are kept - only the Job rows
 // go. Email threads survive: EmailThread.jobId is onDelete: SetNull, and
 // documents/milestones/price history/proposals/assessments cascade with the
 // job. If the kept job's RFQ carries a DRY file number, the job is renamed to

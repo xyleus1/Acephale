@@ -14,7 +14,7 @@ import { openInquiryStatusFilter } from "./inquiry-status";
 //    Inquiry.summaryCache + summaryCacheAt.
 //
 // Designed to be called fire-and-forget after Gmail sync, link_threads_to_job,
-// or merge — anywhere that adds/changes threads on an inquiry. Per-inquiry
+// or merge - anywhere that adds/changes threads on an inquiry. Per-inquiry
 // failures are swallowed so one bad inquiry doesn't block the rest.
 export async function prewarmInquirySummary(inquiryId: string): Promise<void> {
   try {

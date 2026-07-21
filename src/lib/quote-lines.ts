@@ -21,7 +21,7 @@ export function parseQuoteLines(job: { quoteLines: string | null; notes: string 
   return parsePipeLines(job.notes); // legacy: lines stored in notes
 }
 
-// Notes with legacy quote lines stripped out — what the user should see as "their note".
+// Notes with legacy quote lines stripped out - what the user should see as "their note".
 export function cleanNotes(notes: string | null | undefined): string {
   return (notes ?? "")
     .split("\n")

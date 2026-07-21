@@ -33,7 +33,7 @@ export function RfqSendAllButton({ pending, disabled }: { pending: number; disab
           setTimeout(() => setMsg(null), 8000);
         }
       } catch {
-        setMsg("Send-all failed or was interrupted — refresh to see what was actually sent before retrying.");
+        setMsg("Send-all failed or was interrupted - refresh to see what was actually sent before retrying.");
         router.refresh();
       }
     });

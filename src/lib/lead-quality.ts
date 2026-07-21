@@ -1,20 +1,20 @@
 // Deterministic quality triage for Meta ad leads: is this lead worth the
 // desk's time? Scores only what the lead form actually gives us (contact,
-// lane, commercial intent, load size, timing, budget) — no LLM, so the sheet
+// lane, commercial intent, load size, timing, budget) - no LLM, so the sheet
 // can explain exactly why a lead ranked where it did and the desk can argue
 // with the rules instead of a vibe.
 //
-// Tiers: GOOD  — work it now (real load shape + a way to contact them)
-//        REVIEW — plausible but thin; skim before spending time
-//        WEAK  — junk or unreachable; only visible under "All"
+// Tiers: GOOD  - work it now (real load shape + a way to contact them)
+//        REVIEW - plausible but thin; skim before spending time
+//        WEAK  - junk or unreachable; only visible under "All"
 //
 // Desk rules (Mert, 2026-07-18): GOOD means business-significant.
-//  - An explicitly commercial shipment is always GOOD — timing/size/budget
+//  - An explicitly commercial shipment is always GOOD - timing/size/budget
 //    can't demote it. The contact/lane gates still apply: a "commercial" row
 //    with no way to reach the lead or no usable lane isn't a workable load.
 //  - An explicitly individual shipment ("no, individual…" / "hayır,
 //    bireysel…") or a personal-effects move (household goods, belongings)
-//    caps at REVIEW no matter how big the container is — relocations are not
+//    caps at REVIEW no matter how big the container is - relocations are not
 //    the business the desk is hunting with these ads.
 //  - "Not sure" / unanswered leads rank on points, so an importer who
 //    skipped the question can still reach GOOD on load shape.
@@ -59,7 +59,7 @@ const JUNK_COMPANY = new Set([
 ]);
 
 // Commodity phrasings that read as a personal relocation, not freight a
-// business is buying. Deliberately narrow — bare "furniture"/"clothes" can
+// business is buying. Deliberately narrow - bare "furniture"/"clothes" can
 // be a reseller's stock, and explicit movers are already caught by the
 // "no, individual shipment" answer.
 const PERSONAL_EFFECTS = [
@@ -190,13 +190,13 @@ export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
 
   // ── Softer signals ──
   // fromCompany falls back to the person's name when the form had no company
-  // — that fallback is not a company signal.
+  // - that fallback is not a company signal.
   const company = s(inq.fromCompany);
   if (company && company !== s(parsed.fullName) && !JUNK_COMPANY.has(norm(company))) score += 1;
   if (s(inq.commodity)) score += 1;
 
   // Desk rules: commercial shipments are always worth working; declared
-  // individual shipments and personal-effects moves are never GOOD — the
+  // individual shipments and personal-effects moves are never GOOD - the
   // score still orders them and feeds the tooltip.
   let tier: LeadQualityTier = score >= GOOD_MIN ? "GOOD" : score >= REVIEW_MIN ? "REVIEW" : "WEAK";
   if (commercialYes) {
@@ -215,8 +215,8 @@ export const LEAD_QUALITY_LABELS: Record<LeadQualityTier, string> = {
   WEAK: "Weak",
 };
 
-// "Good (9) — commercial shipment, container-sized load, ships in 0-2 weeks"
+// "Good (9) - commercial shipment, container-sized load, ships in 0-2 weeks"
 export function leadQualitySummary(q: LeadQuality): string {
   const base = `${LEAD_QUALITY_LABELS[q.tier]} (${q.score})`;
-  return q.reasons.length > 0 ? `${base} — ${q.reasons.join(", ")}` : base;
+  return q.reasons.length > 0 ? `${base} - ${q.reasons.join(", ")}` : base;
 }

@@ -139,7 +139,7 @@ export function InboxQuickReply({ threadId, threadSubject, channel = "email", co
       </div>
       {draft && (
         <DraftModal
-          title={`Reply draft — ${threadSubject}`}
+          title={`Reply draft - ${threadSubject}`}
           subtitle={
             draft.channel === "whatsapp"
               ? `WhatsApp to ${draft.replyTo ? `+${draft.replyTo.replace(/^whatsapp:/, "").replace(/\D/g, "")}` : "counterparty"}`

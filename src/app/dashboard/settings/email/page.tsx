@@ -79,7 +79,7 @@ export default async function EmailSettingsPage({
     ? [
         ["GREEN_API_ID_INSTANCE", !!process.env.GREEN_API_ID_INSTANCE],
         ["GREEN_API_TOKEN", !!process.env.GREEN_API_TOKEN],
-        // GREEN_API_BASE_URL is optional (defaults to api.green-api.com) —
+        // GREEN_API_BASE_URL is optional (defaults to api.green-api.com) -
         // only worth surfacing when it's actually set.
         ...(process.env.GREEN_API_BASE_URL ? [["GREEN_API_BASE_URL", true] as [string, boolean]] : []),
         ["GREEN_API_WEBHOOK_TOKEN", !!process.env.GREEN_API_WEBHOOK_TOKEN],
@@ -146,7 +146,7 @@ export default async function EmailSettingsPage({
   // the DB alone, so show a soft prompt for any account whose lastSyncAt
   // predates the scope rollout.
   const SCOPE_ROLLOUT = new Date("2026-05-02T22:00:00Z");
-  // Gmail-scope prompt only — a quiet WhatsApp line is not a reauth problem.
+  // Gmail-scope prompt only - a quiet WhatsApp line is not a reauth problem.
   const needsReauth = active.filter((a) => a.provider !== "WHATSAPP" && (!a.lastSyncAt || new Date(a.lastSyncAt) < SCOPE_ROLLOUT));
 
   return (
@@ -231,7 +231,7 @@ export default async function EmailSettingsPage({
         }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Reconnect to enable Send</div>
           <p style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 8 }}>
-            We added a Gmail Send permission for AI-drafted replies. Reconnect each inbox below to grant it. Read-only sync still works without this — but the Send button in draft modals will fail until you reconnect.
+            We added a Gmail Send permission for AI-drafted replies. Reconnect each inbox below to grant it. Read-only sync still works without this - but the Send button in draft modals will fail until you reconnect.
           </p>
           <div style={{ fontSize: 11, color: "var(--text-3)" }}>
             {needsReauth.map((a) => a.email).join(", ")}
@@ -302,7 +302,7 @@ export default async function EmailSettingsPage({
               </div>
               <div>
                 Callback path: <code>{waCallbackPath}</code>. {waProvider === "greenapi"
-                  ? "Green API POSTs inbound messages into the same inbox/RFQ workflow as email — no Meta app review required."
+                  ? "Green API POSTs inbound messages into the same inbox/RFQ workflow as email - no Meta app review required."
                   : <>Meta will verify this path with <code>hub.challenge</code>, then POST inbound messages into the same inbox/RFQ workflow as email.</>}
               </div>
             </div>
@@ -430,7 +430,7 @@ export default async function EmailSettingsPage({
             )}
           </div>
           <p style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 10, marginBottom: 0 }}>
-            You can connect as many inboxes as you want — each one gets its own account record. Google will ask you to choose an account in the consent flow; use the targeted Derya inbox rows above for Mert and Oguzhan.
+            You can connect as many inboxes as you want - each one gets its own account record. Google will ask you to choose an account in the consent flow; use the targeted Derya inbox rows above for Mert and Oguzhan.
           </p>
         </div>
       </div>
@@ -491,7 +491,7 @@ export default async function EmailSettingsPage({
           <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
             <div className="section-title">Paused ({paused.length})</div>
             <p style={{ fontSize: 11.5, color: "var(--text-3)", margin: "4px 0 0" }}>
-              Sync is stopped and these inboxes&apos; emails are hidden from the Inbox. Nothing was deleted — resume any time.
+              Sync is stopped and these inboxes&apos; emails are hidden from the Inbox. Nothing was deleted - resume any time.
             </p>
           </div>
           {paused.map((account) => (

@@ -3,7 +3,7 @@
 import { useFormStatus } from "react-dom";
 
 // Drop-in replacement for a form submit <button> that disables itself while
-// the server action is pending — prevents double/triple submits on slow
+// the server action is pending - prevents double/triple submits on slow
 // actions (Vercel cold starts made every unprotected form fire repeatedly).
 export function SubmitButton({
   children,

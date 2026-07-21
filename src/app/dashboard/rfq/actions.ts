@@ -45,7 +45,7 @@ async function loadInquiry(inquiryId: string) {
   return { session, inquiry };
 }
 
-// A stamp failure after a delivered email must NOT surface as an error —
+// A stamp failure after a delivered email must NOT surface as an error -
 // the operator would retry and the recipient would get a duplicate.
 async function stampAfterSend(inquiryId: string, key: SendStampKey): Promise<void> {
   try {
@@ -79,7 +79,7 @@ export async function sendDeskForwardAction(
 }
 
 // Sends the lead's customer email, rebuilt server-side: a confirmation when
-// the lead's details are complete, a missing-info request otherwise — the
+// the lead's details are complete, a missing-info request otherwise - the
 // same email the sheet previews. Each kind carries its own sent-stamp, so
 // an info-request send doesn't mark the (later) confirmation as sent.
 export async function sendLeadConfirmationAction(
@@ -88,7 +88,7 @@ export async function sendLeadConfirmationAction(
   const { session, inquiry } = await loadInquiry(inquiryId);
   if (!inquiry) return { error: "RFQ not found." };
   if (!isSingleEmailAddress(inquiry.fromEmail)) {
-    return { error: "Sender email is missing or not a single valid address — fix it on the RFQ first." };
+    return { error: "Sender email is missing or not a single valid address - fix it on the RFQ first." };
   }
 
   const email = buildLeadCustomerEmail(inquiry);
@@ -113,7 +113,7 @@ export async function sendLeadConfirmationAction(
 
 // Send the WhatsApp inquiry draft (Turkish for TR leads, English for US
 // ones) to the lead through the CRM's WhatsApp Cloud API number, and log it
-// into the matching inbox thread. The draft is rebuilt server-side — same
+// into the matching inbox thread. The draft is rebuilt server-side - same
 // text the sheet previews.
 export async function sendWhatsAppInquiryAction(
   inquiryId: string,
@@ -121,7 +121,7 @@ export async function sendWhatsAppInquiryAction(
   const { session, inquiry } = await loadInquiry(inquiryId);
   if (!inquiry) return { error: "RFQ not found." };
   if (!whatsAppSendConfigured()) {
-    return { error: "CRM WhatsApp sending is not configured — set WHATSAPP_SEND_ENABLED and the Cloud API credentials." };
+    return { error: "CRM WhatsApp sending is not configured - set WHATSAPP_SEND_ENABLED and the Cloud API credentials." };
   }
 
   let parsedPhone: string | null = null;
@@ -133,10 +133,10 @@ export async function sendWhatsAppInquiryAction(
   } catch {
     parsedPhone = null;
   }
-  // Same market rules as the preview's wa.me link — the number the operator
+  // Same market rules as the preview's wa.me link - the number the operator
   // saw is the number the Cloud API send goes to.
   const digits = waPhoneDigits(parsedPhone, market) ?? waDigitsFromWhatsAppAddress(inquiry.fromEmail);
-  if (!digits) return { error: "No usable phone number on this RFQ — add one to the lead first." };
+  if (!digits) return { error: "No usable phone number on this RFQ - add one to the lead first." };
 
   const draft = buildWhatsAppInquiry(inquiry);
   const sent = await sendWhatsAppText({ to: digits, body: draft.text });
@@ -279,7 +279,7 @@ function parseTargetInput(input: string, fallbackCurrency: string | null):
   }
   const match = text.match(/^(?:([A-Za-z]{3})\s*|\$\s*)?([\d][\d,.\s]*)$/);
   const amount = match ? parseAmount(match[2]) : null;
-  if (amount == null) return { error: 'Target price should look like "USD 1200", "1200", "no target" — or be empty.' };
+  if (amount == null) return { error: 'Target price should look like "USD 1200", "1200", "no target" - or be empty.' };
   const currency = match![1] ? match![1].toUpperCase() : text.startsWith("$") ? "USD" : fallbackCurrency ?? "USD";
   return { targetPrice: amount, targetCurrency: currency, targetPriceStatus: "PROVIDED", targetPriceSource: "manual" };
 }
@@ -317,7 +317,7 @@ export async function updateInquiryRowAction(
     if (!status) return { error: "Status is required." };
     // These would collide with the filter-tab keys on /dashboard/rfq.
     if (["ALL", "OPEN"].includes(status.toUpperCase())) {
-      return { error: `“${status}” is a reserved name — pick another status.` };
+      return { error: `“${status}” is a reserved name - pick another status.` };
     }
     data.status = status;
   }
@@ -335,11 +335,11 @@ export async function updateInquiryRowAction(
       data.declaredValue = null;
     } else {
       const amount = parseAmount(raw);
-      if (amount == null) return { error: 'Declared value should be a number like "250000" — or empty.' };
+      if (amount == null) return { error: 'Declared value should be a number like "250000" - or empty.' };
       data.declaredValue = amount;
       if (!inquiry.declaredValueCurrency) data.declaredValueCurrency = "USD";
     }
-    // Suggest a tier when the operator hasn't set one — visible in the sheet
+    // Suggest a tier when the operator hasn't set one - visible in the sheet
     // and overridable; an explicit tier (even in this same patch) wins.
     if (patch.securityTier === undefined && !inquiry.securityTier) {
       const suggested = deriveSecurityTier({
@@ -393,7 +393,7 @@ export async function updateInquiryRowAction(
     }).catch(() => null);
   }
 
-  // Settle pending truckload quotes on terminal statuses — best-effort, the
+  // Settle pending truckload quotes on terminal statuses - best-effort, the
   // flywheel must never block a sheet edit.
   if (typeof data.status === "string" && data.status !== inquiry.status) {
     const outcome = data.status === "BOOKED" ? "WON" : data.status === "MISSED" ? "LOST" : null;
@@ -411,7 +411,7 @@ export async function updateInquiryRowAction(
   return { ok: true };
 }
 
-// Bulk status change from the sheet's multi-select — one office-scoped
+// Bulk status change from the sheet's multi-select - one office-scoped
 // updateMany, then the same memory event the single-row edit records, per row.
 // Capped at the sheet's page size; ids beyond it are silently impossible to
 // select in the UI anyway.
@@ -430,7 +430,7 @@ export async function bulkUpdateInquiryStatusAction(
   if (!status) return { error: "Status is required." };
   // These would collide with the filter-tab keys on /dashboard/rfq.
   if (["ALL", "OPEN"].includes(status.toUpperCase())) {
-    return { error: `“${status}” is a reserved name — pick another status.` };
+    return { error: `“${status}” is a reserved name - pick another status.` };
   }
 
   const result = await prisma.inquiry.updateMany({
@@ -439,7 +439,7 @@ export async function bulkUpdateInquiryStatusAction(
   });
   if (result.count === 0) return { error: "No matching RFQs found." };
 
-  // Settle pending truckload quotes on terminal statuses — best-effort.
+  // Settle pending truckload quotes on terminal statuses - best-effort.
   const bulkOutcome = status === "BOOKED" ? "WON" : status === "MISSED" ? "LOST" : null;
   if (bulkOutcome) {
     await Promise.allSettled(
@@ -499,7 +499,7 @@ export async function deleteInquiryRowAction(inquiryId: string): Promise<RowActi
   });
   if (!inquiry) return { error: "RFQ not found." };
   if (inquiry.job && inquiry.job.status !== "PROPOSED") {
-    return { error: `This RFQ is linked to load ${inquiry.job.reference} — delete the load first, or set the RFQ to Ignored instead.` };
+    return { error: `This RFQ is linked to load ${inquiry.job.reference} - delete the load first, or set the RFQ to Ignored instead.` };
   }
   // An auto-created PROPOSED shell load goes with its RFQ.
   if (inquiry.job) {

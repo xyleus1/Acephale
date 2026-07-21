@@ -163,7 +163,7 @@ export async function buildCompactJobMemoryContext(input: {
     const when = result.occurredAt.toISOString().slice(0, 10);
     const label = result.title ?? result.canonicalType ?? result.eventId ?? "memory";
     const source = [result.sourceType, result.canonicalType].filter(Boolean).join("/");
-    return `- ${when} ${source}: ${label}${result.excerpt ? ` — ${result.excerpt.slice(0, 180)}` : ""}`;
+    return `- ${when} ${source}: ${label}${result.excerpt ? ` - ${result.excerpt.slice(0, 180)}` : ""}`;
   });
   return `\n\nCOMPACT JOB MEMORY (source-linked; call search_job_memory or explain_strategy_decision for details):\n${rows.join("\n")}\n`;
 }

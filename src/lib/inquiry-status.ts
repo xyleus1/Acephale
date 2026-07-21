@@ -1,10 +1,10 @@
-// Shared vocabulary for RFQ (Inquiry) statuses — client + server safe, no runtime deps.
+// Shared vocabulary for RFQ (Inquiry) statuses - client + server safe, no runtime deps.
 //
 // Canonical set (mert's control-sheet lingo): BOOKED / PRICING / MISSED / RECEIVED /
 // IGNORED / TRASH. Inquiry.status is a free string, so offices can also add custom
 // statuses on the fly from the RFQ sheet; those simply live as their raw value.
 // Legacy pipeline values (INGESTED/PARSED/PRICED/QUOTED/WON/LOST) are still written
-// by older flows and old rows — they alias onto the canonical set for display and
+// by older flows and old rows - they alias onto the canonical set for display and
 // filtering, so nothing needs a data backfill. TRASH started life as an ad-hoc
 // custom status typed as "Trash"; those case-variant rows alias the same way.
 
@@ -45,7 +45,7 @@ export function inquiryStatusValuesFor(canonical: string): string[] {
 }
 
 // A closed RFQ has an outcome (booked/missed) or was deliberately archived
-// (ignored/trashed). Everything else — canonical, legacy or custom — counts as
+// (ignored/trashed). Everything else - canonical, legacy or custom - counts as
 // open. This is a raw-stored-value list for Prisma notIn (case-sensitive), so
 // the Trash case variants that predate TRASH going canonical are listed too.
 export const CLOSED_INQUIRY_STATUSES = [

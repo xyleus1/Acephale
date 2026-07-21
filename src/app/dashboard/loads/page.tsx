@@ -9,12 +9,12 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function fmtDate(d: Date | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function fmtNum(n: number | null): string {
-  return n != null ? n.toLocaleString("en-GB") : "—";
+  return n != null ? n.toLocaleString("en-GB") : "-";
 }
 
 export default async function LoadsPage({
@@ -30,7 +30,7 @@ export default async function LoadsPage({
   const jobs = await prisma.job.findMany({
     where: {
       officeId: session.officeId,
-      // "My loads": the personal board — only what's assigned to me.
+      // "My loads": the personal board - only what's assigned to me.
       ...(mine ? { assignedToUserId: session.userId } : {}),
     },
     include: {
@@ -47,7 +47,7 @@ export default async function LoadsPage({
         <div>
           <h1 className="page-title">Loads</h1>
           <p className="page-subtitle">
-            {mine ? "Loads assigned to you" : "All loads"}, newest first — spreadsheet view. {jobs.length} row{jobs.length === 1 ? "" : "s"} shown.
+            {mine ? "Loads assigned to you" : "All loads"}, newest first - spreadsheet view. {jobs.length} row{jobs.length === 1 ? "" : "s"} shown.
           </p>
         </div>
         <div className="page-actions">
@@ -77,7 +77,7 @@ export default async function LoadsPage({
           <p className="empty-state-copy">
             {mine
               ? "Open a load from the general board and take it, or ask an admin to assign one to you."
-              : "Loads only appear here when you move an incoming RFQ into loads — open an RFQ and use “Move to loads”."}
+              : "Loads only appear here when you move an incoming RFQ into loads - open an RFQ and use “Move to loads”."}
           </p>
           {mine ? (
             <a href="/dashboard/loads" className="btn">
@@ -117,18 +117,18 @@ export default async function LoadsPage({
                       {j.reference}
                     </a>
                   </td>
-                  <td>{j.title ?? j.commodity ?? <span className="data-muted">—</span>}</td>
-                  <td>{j.company?.name ?? <span className="data-muted">—</span>}</td>
-                  <td>{j.origin ?? <span className="data-muted">—</span>}</td>
-                  <td>{j.destination ?? <span className="data-muted">—</span>}</td>
-                  <td>{j.mode ?? <span className="data-muted">—</span>}</td>
+                  <td>{j.title ?? j.commodity ?? <span className="data-muted">-</span>}</td>
+                  <td>{j.company?.name ?? <span className="data-muted">-</span>}</td>
+                  <td>{j.origin ?? <span className="data-muted">-</span>}</td>
+                  <td>{j.destination ?? <span className="data-muted">-</span>}</td>
+                  <td>{j.mode ?? <span className="data-muted">-</span>}</td>
                   <td>{STATUS_LABEL[j.status] ?? j.status}</td>
                   <td>
                     {j.assignedTo
                       ? j.assignedToUserId === session.userId
                         ? <span className="data-cell-strong">You</span>
                         : j.assignedTo.fullName
-                      : <span className="data-muted">—</span>}
+                      : <span className="data-muted">-</span>}
                   </td>
                   <td>{fmtDate(j.etd)}</td>
                   <td>{fmtDate(j.eta)}</td>

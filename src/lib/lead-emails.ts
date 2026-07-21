@@ -1,7 +1,7 @@
 // Customer-facing lead email copy, in the lead's market language. One smart
 // email per lead: if the lead form already gave everything the desk needs,
 // it's a confirmation ("received, being processed"); if details are missing,
-// it asks for exactly the same things the WhatsApp draft would — one source
+// it asks for exactly the same things the WhatsApp draft would - one source
 // of truth for "what is missing" (leadMissingQuestions). Pure module (no
 // server-only import) so the copy is unit-testable; rfq-mail wraps it with
 // the SMTP config.
@@ -22,24 +22,24 @@ export type LeadCustomerEmailContent = {
   missing: string[];
 };
 
-const SIGNATURE_TR = `—
+const SIGNATURE_TR = `--
 Oğuzhan Karaca
 Kurucu Ortak & CEO, Derya
 https://usederya.com/`;
-const SIGNATURE_US = `—
+const SIGNATURE_US = `--
 Oğuzhan Karaca
 Co-founder & CEO, Derya
 https://usederya.com/`;
 
-const CONFIRMATION_SUBJECT_TR = "Talebiniz alındı — Derya";
+const CONFIRMATION_SUBJECT_TR = "Talebiniz alındı - Derya";
 const CONFIRMATION_BODY_TR = `Talebiniz Derya fiyatlandırma ekibi tarafından alınmıştır. Bilgileriniz doğru ve eksiksizse talebiniz önümüzdeki 6 saat içinde işleme alınacaktır. Ekibimiz ek detaylar için sizinle iletişime geçebilir.
 ${SIGNATURE_TR}`;
-const CONFIRMATION_SUBJECT_US = "Your request has been received — Derya";
+const CONFIRMATION_SUBJECT_US = "Your request has been received - Derya";
 const CONFIRMATION_BODY_US = `Your request has been received by the Derya pricing team. If your details are correct and complete, your request will be processed within the next 6 hours. Our team may reach out for additional details.
 ${SIGNATURE_US}`;
 
-const INFO_SUBJECT_TR = "Fiyat teklifiniz için birkaç bilgi rica ederiz — Derya";
-const INFO_SUBJECT_US = "A few details for your shipping quote — Derya";
+const INFO_SUBJECT_TR = "Fiyat teklifiniz için birkaç bilgi rica ederiz - Derya";
+const INFO_SUBJECT_US = "A few details for your shipping quote - Derya";
 
 function s(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -70,10 +70,10 @@ export function buildLeadScopeFollowUpContent(inq: InquiryForWhatsApp): {
 
   return en
     ? {
-        subject: "Two quick details to finalize your quote — Derya",
+        subject: "Two quick details to finalize your quote - Derya",
         text: `Hi${firstName ? ` ${firstName}` : ""},
 
-Quick follow-up on your ${commodity ? `${commodity} shipment` : "shipping request"} — two details decide the final price:
+Quick follow-up on your ${commodity ? `${commodity} shipment` : "shipping request"} - two details decide the final price:
 
 - Should we quote port-to-port, or include pickup and/or delivery at your door? If door service is needed, please share the exact address(es).
 - If you'd like customs duties included (DDP): the country where the goods were manufactured, and the HTS code if you have it.
@@ -82,7 +82,7 @@ Just reply to this email and we'll finalize your quote.
 ${SIGNATURE_US}`,
       }
     : {
-        subject: "Teklifinizi netleştirmek için iki kısa bilgi — Derya",
+        subject: "Teklifinizi netleştirmek için iki kısa bilgi - Derya",
         text: `Merhaba,
 
 Talebinizle ilgili kısa bir ek: fiyatı netleştirmek için iki bilgiye ihtiyacımız var:
@@ -90,7 +90,7 @@ Talebinizle ilgili kısa bir ek: fiyatı netleştirmek için iki bilgiye ihtiyac
 - Fiyatı liman-liman mı çalışalım, yoksa adresten alım / adrese teslim dahil mi? Kapıdan hizmet gerekiyorsa tam adres(ler)i paylaşabilir misiniz?
 - Gümrük vergileri dahil (DDP) fiyat isterseniz: ürünün üretildiği ülke ve varsa GTİP/HTS kodu.
 
-Bu e-postayı yanıtlamanız yeterli — teklifinizi hemen netleştirelim.
+Bu e-postayı yanıtlamanız yeterli - teklifinizi hemen netleştirelim.
 ${SIGNATURE_TR}`,
       };
 }
@@ -133,7 +133,7 @@ Talebiniz için teşekkürler. Doğru bir fiyat çalışabilmemiz için birkaç 
 
 ${bullets}
 
-Bu e-postayı yanıtlamanız yeterli — ekibimiz fiyat çalışmasına hemen başlayacaktır.
+Bu e-postayı yanıtlamanız yeterli - ekibimiz fiyat çalışmasına hemen başlayacaktır.
 ${SIGNATURE_TR}`;
 
   return {

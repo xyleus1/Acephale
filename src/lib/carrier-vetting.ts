@@ -28,7 +28,7 @@ export const CARRIER_AUTHORITY_STATUSES = [
   ["unknown", "Unknown"],
 ] as const;
 
-// Mirrors DomesticEquipmentType in src/lib/domestic-trucking-pricing.ts —
+// Mirrors DomesticEquipmentType in src/lib/domestic-trucking-pricing.ts -
 // kept as a local list so client components don't import the pricing engine.
 export const CARRIER_EQUIPMENT_TYPES = [
   ["DRY_VAN", "Dry van"],
@@ -71,7 +71,7 @@ export type ChecklistTemplateItem = {
   required: boolean;
   // Conditional items only apply when the carrier claims the capability.
   appliesWhen?: keyof CarrierCapabilityFlags;
-  // Why the item exists — shown as the row hint in the vetting UI.
+  // Why the item exists - shown as the row hint in the vetting UI.
   hint?: string;
 };
 
@@ -80,7 +80,7 @@ export const CARRIER_VETTING_CHECKLIST: ChecklistTemplateItem[] = [
     key: "authority_verified",
     label: "FMCSA authority active (checked on SAFER)",
     required: true,
-    hint: "Look up the MC/DOT on safer.fmcsa.dot.gov yourself — active, not revoked, names match.",
+    hint: "Look up the MC/DOT on safer.fmcsa.dot.gov yourself - active, not revoked, names match.",
   },
   {
     key: "authority_age",
@@ -153,12 +153,12 @@ export type VettingGateResult = {
   canApprove: boolean;
   // Required items that are not passed/waived yet (includes items with no row).
   missing: string[];
-  // Items recorded as failed — any failed item blocks approval, required or not.
+  // Items recorded as failed - any failed item blocks approval, required or not.
   failed: string[];
 };
 
 // Deterministic approval gate: vettingStatus may only move to "approved" when
-// this returns canApprove. Pure domain logic — no LLM, no DB.
+// this returns canApprove. Pure domain logic - no LLM, no DB.
 export function carrierVettingGate(
   carrier: CarrierCapabilityFlags,
   items: ChecklistItemState[],

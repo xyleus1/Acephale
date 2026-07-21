@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
 // Admin-facing activity log: one row per user action on a load. Deliberately
-// separate from MemoryEvent (agent memory) and Event (system/agent audit) —
+// separate from MemoryEvent (agent memory) and Event (system/agent audit) -
 // this table answers "who changed what, where" for humans.
 
 export type AuditChange = { field: string; from: string | null; to: string | null };

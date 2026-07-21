@@ -41,7 +41,7 @@ export async function analyzeJobDocument(args: {
   let pdfText = "";
   try {
     if (doc.url.startsWith("/api/gmail/attachment")) {
-      // Internal Gmail proxy — we have to call the Gmail API directly here
+      // Internal Gmail proxy - we have to call the Gmail API directly here
       // because the proxy expects a session and we already validated above.
       const u = new URL(doc.url, "http://localhost");
       const messageDbId = u.searchParams.get("messageDbId");
@@ -52,7 +52,7 @@ export async function analyzeJobDocument(args: {
         select: { gmailMessageId: true, account: { select: { id: true, provider: true } } },
       });
       if (!msg?.account || msg.account.provider !== "GMAIL" || !msg.gmailMessageId) {
-        return { error: "Cannot fetch attachment — provider mismatch" };
+        return { error: "Cannot fetch attachment - provider mismatch" };
       }
       const token = await getValidAccessToken(msg.account.id);
       const apiUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.gmailMessageId}/attachments/${attachmentId}`;
@@ -80,7 +80,7 @@ export async function analyzeJobDocument(args: {
   }
 
   if (!pdfText.trim()) {
-    return { error: "Couldn't extract any text from the document — may be a scanned image (OCR not yet supported)" };
+    return { error: "Couldn't extract any text from the document - may be a scanned image (OCR not yet supported)" };
   }
 
   const client = new Anthropic({ apiKey });
@@ -90,12 +90,12 @@ export async function analyzeJobDocument(args: {
     system: `You are a freight forwarding office assistant analyzing a single shipment document.
 
 Doc type: ${doc.docType}
-Job context: ${doc.job?.reference ?? "?"} | commodity ${doc.job?.inquiry?.commodity ?? "—"} | ${doc.job?.origin ?? "?"} → ${doc.job?.destination ?? "?"}
+Job context: ${doc.job?.reference ?? "?"} | commodity ${doc.job?.inquiry?.commodity ?? "-"} | ${doc.job?.origin ?? "?"} → ${doc.job?.destination ?? "?"}
 
 Output ONLY this JSON (no markdown):
 {
   "summary": "1-3 sentences describing what's in this document",
-  "flags": ["short bullet of any red flag, discrepancy, or unusual item — empty array if all normal"],
+  "flags": ["short bullet of any red flag, discrepancy, or unusual item - empty array if all normal"],
   "key_fields": { /* object of structured fields specific to the doc type */ }
 }
 
@@ -109,7 +109,7 @@ For OTHER: free-form key_fields with whatever is most useful.
 
 Flags should call out: weights that don't match, dates inconsistent with job ETD/ETA, missing signatures noted in the doc, expired validity, unusual currency, anything that should make the operator look closer. If nothing's wrong, return [].
 
-Be conservative with flags — false alarms erode trust.`,
+Be conservative with flags - false alarms erode trust.`,
     messages: [{
       role: "user",
       content: `Document text (first 12000 chars):\n\n${pdfText.slice(0, 12000)}`,
@@ -199,7 +199,7 @@ export async function askAboutDocument(args: {
   } else if (doc.aiSummary || doc.aiKeyFields) {
     let keyFields: Record<string, unknown> = {};
     try { keyFields = JSON.parse(doc.aiKeyFields ?? "{}"); } catch {}
-    context = `(PDF text unavailable — answering from cached AI summary + extracted fields.)\n\nSummary: ${doc.aiSummary ?? "—"}\n\nExtracted fields:\n${Object.entries(keyFields).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")}`;
+    context = `(PDF text unavailable - answering from cached AI summary + extracted fields.)\n\nSummary: ${doc.aiSummary ?? "-"}\n\nExtracted fields:\n${Object.entries(keyFields).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")}`;
   } else {
     return { error: "Couldn't read the document and no cached analysis exists. Approve the doc first to trigger analysis." };
   }
@@ -208,9 +208,9 @@ export async function askAboutDocument(args: {
   const result = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 600,
-    system: `You answer the operator's question about a single freight document. Be concise (<120 words). Quote specific numbers/dates from the doc when relevant. If the answer isn't in the document, say so plainly — don't speculate. No emojis, no markdown headers.
+    system: `You answer the operator's question about a single freight document. Be concise (<120 words). Quote specific numbers/dates from the doc when relevant. If the answer isn't in the document, say so plainly - don't speculate. No emojis, no markdown headers.
 
-Doc type: ${doc.docType}. Filename: ${doc.name}. Job: ${doc.job?.reference ?? "?"} (${doc.job?.inquiry?.commodity ?? "—"}, ${doc.job?.origin ?? "?"} → ${doc.job?.destination ?? "?"}).`,
+Doc type: ${doc.docType}. Filename: ${doc.name}. Job: ${doc.job?.reference ?? "?"} (${doc.job?.inquiry?.commodity ?? "-"}, ${doc.job?.origin ?? "?"} → ${doc.job?.destination ?? "?"}).`,
     messages: [{
       role: "user",
       content: `${context}\n\n────\n\nOperator question: ${args.question}`,
@@ -222,7 +222,7 @@ Doc type: ${doc.docType}. Filename: ${doc.name}. Job: ${doc.job?.reference ?? "?
 }
 
 async function extractPdfText(buf: Buffer): Promise<string> {
-  // Lazy import — pdf-parse pulls in node fs at import time which makes
+  // Lazy import - pdf-parse pulls in node fs at import time which makes
   // unrelated server actions trip on cold start.
   // @ts-expect-error pdf-parse has no types
   const pdfParse = (await import("pdf-parse")).default;

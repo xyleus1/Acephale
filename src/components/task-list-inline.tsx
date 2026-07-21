@@ -82,7 +82,7 @@ export function TaskListInline({
                   </Link>
                 </td>
                 <td style={{ fontSize: 12, color: isOverdue ? "var(--danger)" : "var(--warning)", fontWeight: 600 }}>
-                  {task.dueAt ? new Date(task.dueAt).toLocaleDateString() : "—"}
+                  {task.dueAt ? new Date(task.dueAt).toLocaleDateString() : "-"}
                   {isOverdue && (
                     <span style={{ marginLeft: 6, fontSize: 10, background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger-border)", borderRadius: 4, padding: "1px 5px" }}>
                       overdue

@@ -35,7 +35,7 @@ export async function nextFileReference(officeId: string, date: Date = new Date(
   let max = 0;
   for (const row of [...inquiries, ...jobs]) {
     const tail = (row.reference ?? "").slice(prefix.length);
-    // Only well-formed all-digit tails count — a malformed ref (sheet import
+    // Only well-formed all-digit tails count - a malformed ref (sheet import
     // typo like "DRY26070001-A") must not be able to jump the sequence.
     if (!/^\d{4,}$/.test(tail)) continue;
     const n = parseInt(tail, 10);

@@ -253,7 +253,7 @@ export default async function ActivityPage() {
                     <div className="control-row-main">
                       <div className="control-row-kicker">{m.job.reference}</div>
                       <div className="control-row-title">
-                        {MILESTONE_LABEL[m.type] ?? m.type} · {m.job.company?.name ?? "—"}
+                        {MILESTONE_LABEL[m.type] ?? m.type} · {m.job.company?.name ?? "-"}
                       </div>
                     </div>
                     <div className={["control-row-side", isClose ? "urgent" : ""].filter(Boolean).join(" ")}>
@@ -296,7 +296,7 @@ export default async function ActivityPage() {
                   <div className="control-row-main">
                     <div className="control-row-kicker">{job.reference}</div>
                     <div className="control-row-title">
-                      {job.company?.name ?? "—"} ·{" "}
+                      {job.company?.name ?? "-"} ·{" "}
                       {job.origin && job.destination ? `${job.origin} → ${job.destination}` : "Route TBD"}
                     </div>
                   </div>

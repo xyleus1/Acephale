@@ -11,7 +11,7 @@ import { prewarmInquirySummary } from "./prewarm-summary";
 import { seedDemoLoad } from "./seed-demo-load";
 
 // Consolidate every open SOURCING-type inquiry in this office into ONE
-// real (non-PROPOSED) Job titled the way the user expects: "Soybean meal —
+// real (non-PROPOSED) Job titled the way the user expects: "Soybean meal -
 // 300 MT to Ashgabat". After consolidation:
 //  - Title/commodity/destination/weight set
 //  - All linked email threads moved onto the keeper inquiry
@@ -19,7 +19,7 @@ import { seedDemoLoad } from "./seed-demo-load";
 //  - Supplier offers re-extracted so the comparison table populates
 //
 // Uses mergeAllOpenInquiriesIntoOne(type=SOURCING, ...overrides) under the
-// hood. Idempotent — running it twice on a single-inquiry office does nothing.
+// hood. Idempotent - running it twice on a single-inquiry office does nothing.
 // Operator-specified consolidation: customer = Hyzmettaslar, destination =
 // Ashgabat, Turkmenistan, sourcing 300MT soybean meal. Plus duplicate-demo
 // cleanup: keep the most-progressed demo job, delete the rest.
@@ -32,7 +32,7 @@ export async function fullDemoCleanup(): Promise<{
   const session = await requireSession();
   const officeId = session.officeId;
 
-  // Step 1: Consolidate soybean — same as before, but with customer set to
+  // Step 1: Consolidate soybean - same as before, but with customer set to
   // "Hyzmettaslar" (Turkmenistan-side buyer).
   const soybean = await consolidateAshgabatSoybeanLoad({
     customerName: "Hyzmettaslar",
@@ -40,7 +40,7 @@ export async function fullDemoCleanup(): Promise<{
   if ("error" in soybean) return { error: `Soybean consolidate failed: ${soybean.error}` };
 
   // Step 2: Find every DEMO job. We can't rely on the [DEMO_LOAD_SEED]
-  // marker alone — earlier partial runs created demos without it. Broader
+  // marker alone - earlier partial runs created demos without it. Broader
   // detection: notes contain the marker, OR the linked Company name starts
   // with "DEMO ·", OR the linked Inquiry subject starts with "DEMO ·".
   const demos = await prisma.job.findMany({
@@ -93,7 +93,7 @@ export async function consolidateAshgabatSoybeanLoad(opts: {
   // Pre-pass: any SOURCING inquiry currently linked to a JOB whose status is
   // NOT a real load (i.e. PROPOSED, or no job at all) gets demoted so the
   // merge below can pick it up. Also un-confirms any PROPOSED job that
-  // was set as "active" by accident — only the keeper should remain a real
+  // was set as "active" by accident - only the keeper should remain a real
   // load. We treat anything in INGESTED/PARSED/PRICED/QUOTED as fair game.
   const presentInquiries = await prisma.inquiry.findMany({
     where: {
@@ -113,7 +113,7 @@ export async function consolidateAshgabatSoybeanLoad(opts: {
   // First, run the AI-driven merge with explicit specs.
   const merge = await mergeAllOpenInquiriesIntoOne({
     type: "SOURCING",
-    subject: "Soybean meal — 300 MT to Ashgabat",
+    subject: "Soybean meal - 300 MT to Ashgabat",
     commodity: "Soybean meal",
     destination: "Ashgabat, TM",
     weightKg: 300_000,
@@ -130,7 +130,7 @@ export async function consolidateAshgabatSoybeanLoad(opts: {
       select: { id: true },
     });
     if (candidates.length === 0) {
-      // Nothing to consolidate — bail with the original error.
+      // Nothing to consolidate - bail with the original error.
       return { error: merge.error };
     }
     // If there's exactly one we can still upgrade it.
@@ -139,7 +139,7 @@ export async function consolidateAshgabatSoybeanLoad(opts: {
       await prisma.inquiry.update({
         where: { id: inq.id },
         data: {
-          subject: "Soybean meal — 300 MT to Ashgabat",
+          subject: "Soybean meal - 300 MT to Ashgabat",
           commodity: "Soybean meal",
           destination: "Ashgabat, TM",
           weight: 300_000,
@@ -200,7 +200,7 @@ export async function consolidateAshgabatSoybeanLoad(opts: {
           select: { id: true, name: true },
         });
       } catch {
-        // unique race — re-fetch
+        // unique race - re-fetch
         company = await prisma.company.findFirst({
           where: { officeId: session.officeId, name: opts.customerName },
           select: { id: true, name: true },

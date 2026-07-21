@@ -59,7 +59,7 @@ async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; f
   const recipientThread = job.emailThreads.find((t) =>
     t.messages.some((m) => m.fromEmail.toLowerCase() === recipient.toLowerCase())
   );
-  if (!recipientThread) return; // no customer thread yet — skip silent send
+  if (!recipientThread) return; // no customer thread yet - skip silent send
 
   // Generate portal link.
   let portalUrl: string | null = null;
@@ -95,10 +95,10 @@ async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; f
   const result = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 350,
-    system: `You write a short customer-facing shipment-update email from a freight forwarding & procurement office to their CUSTOMER (not a supplier). Tone: professional, calm, factual. No emojis, no markdown. Under 110 words. Sign as "Your forwarder at Derya Maritime" (do not invent a name). Always include the portal link if provided so the customer can self-serve future updates.`,
+    system: `You write a short customer-facing shipment-update email from a freight forwarding & procurement office to their CUSTOMER (not a supplier). Tone: professional, calm, factual. No emojis, no markdown. Under 110 words. Sign as "Your forwarder at Derya Maritime" (do not invent a name). Always include the portal link if provided so the customer can self-serve future updates. Never use the em dash character in your output; use a comma, colon, period, or plain hyphen instead.`,
     messages: [{
       role: "user",
-      content: `Job ${job.reference} for ${job.company?.name ?? "the customer"}.\nCommodity: ${job.inquiry?.commodity ?? "—"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMilestones: ${milestonesSummary}\nUpdate: ${ctxLine}\n${portalUrl ? `Live portal link to include: ${portalUrl}` : ""}\n\nDraft the email body.`,
+      content: `Job ${job.reference} for ${job.company?.name ?? "the customer"}.\nCommodity: ${job.inquiry?.commodity ?? "-"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMilestones: ${milestonesSummary}\nUpdate: ${ctxLine}\n${portalUrl ? `Live portal link to include: ${portalUrl}` : ""}\n\nDraft the email body.`,
     }],
   });
   const text = result.content[0].type === "text" ? result.content[0].text : "";

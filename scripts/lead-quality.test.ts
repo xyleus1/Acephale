@@ -132,7 +132,7 @@ const lead = (over: {
   assert(q.reasons.includes("single box / sample"));
 }
 
-// Desk rule: an explicitly commercial shipment is ALWAYS Good — even a
+// Desk rule: an explicitly commercial shipment is ALWAYS Good - even a
 // price-researcher with no budget (the "Teas Vietnam → Virginia" shape).
 {
   const q = assessLeadQuality(lead({

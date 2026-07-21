@@ -3,7 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 // Single Haiku call that maps a user message to one of the agent's
-// executable verbs. Used as a SAFETY NET — fast regex layer runs first; if
+// executable verbs. Used as a SAFETY NET - fast regex layer runs first; if
 // regex says "no action" but the user clearly meant one, this catches it.
 //
 // Returns "chat" when the message is a question/statement, not a command.
@@ -40,24 +40,24 @@ Schema:
 { "intent": "<one of below>", ...optional intent-specific fields }
 
 Action verbs (intents):
-- "merge-all-into-one" — operator wants to consolidate multiple inquiries/jobs/RFQs into ONE umbrella job. Triggers: "merge them all", "consolidate", "they're all the same", "categorize under one", "group these", "bundle these procurement deals", "the X jobs are duplicates so combine". Optional fields:
+- "merge-all-into-one" - operator wants to consolidate multiple inquiries/jobs/RFQs into ONE umbrella job. Triggers: "merge them all", "consolidate", "they're all the same", "categorize under one", "group these", "bundle these procurement deals", "the X jobs are duplicates so combine". Optional fields:
     "type": "SOURCING" if they say procurement/sourcing/buying, "FORWARDING" if they say forwarding/shipping.
-    "subject": short headline string if operator describes the consolidated deal (e.g. "Soybean meal — 300 MT to Ashgabat" → "Soybean meal procurement, 300 MT to Ashgabat").
+    "subject": short headline string if operator describes the consolidated deal (e.g. "Soybean meal - 300 MT to Ashgabat" → "Soybean meal procurement, 300 MT to Ashgabat").
     "commodity": commodity name if mentioned (e.g. "soybean meal", "corn gluten", "wheat").
     "destination": destination city/country if mentioned (e.g. "Ashgabat", "Hamburg, DE").
     "origin": origin if mentioned.
     "weightKg": weight in KILOGRAMS if mentioned. Convert MT/tons → kg by ×1000. "300 MT" → 300000.
-- "dedup" — find and remove DUPLICATE inquiries (same exact deal duplicated). "find duplicates", "dedupe".
-- "populate-load" — scoped only: extract job fields from linked emails. "create load details", "populate from emails", "fill in the job". Requires scopeJobId.
-- "award-supplier" — scoped to SOURCING job: pick a winning supplier. "award the cheapest", "go with X", "select best offer". Optional field: "supplierHint": short name fragment if mentioned.
-- "draft-reply" — scoped: write an email reply. "draft a reply", "write back", "compose response". Optional field: "target": stance hint like "counter at $480", "ask for sample".
-- "needs-reply" — list threads awaiting reply. "what needs reply", "what's pending", "who's waiting on me".
-- "stuck-jobs" — list stale jobs. "what's stuck", "stale jobs", "what needs attention".
-- "morning-brief" — pipeline snapshot. "morning briefing", "what's on my plate", "state of pipeline", "daily digest".
-- "hide-unrelated" — bulk hide noise threads. "hide unrelated", "dismiss the noise", "clean up the inbox".
-- "summarize-offers" — scoped to a SOURCING job: list all supplier offers ranked by price/landed cost. Triggers: "summary of the best rates", "what are the supplier offers", "what's the cheapest offer", "best price for this load", "compare supplier prices", "show me what suppliers quoted", "how much are they asking". Optional field "sortBy": "price" (default) | "landed" | "lead-time".
-- "summarize-rates" — scoped to a FORWARDING job: list carrier rate replies. Triggers: same as above but on a forwarding/shipping job.
-- "chat" — anything else. Questions, statements, ambiguous messages, or commands the agent can't execute.
+- "dedup" - find and remove DUPLICATE inquiries (same exact deal duplicated). "find duplicates", "dedupe".
+- "populate-load" - scoped only: extract job fields from linked emails. "create load details", "populate from emails", "fill in the job". Requires scopeJobId.
+- "award-supplier" - scoped to SOURCING job: pick a winning supplier. "award the cheapest", "go with X", "select best offer". Optional field: "supplierHint": short name fragment if mentioned.
+- "draft-reply" - scoped: write an email reply. "draft a reply", "write back", "compose response". Optional field: "target": stance hint like "counter at $480", "ask for sample".
+- "needs-reply" - list threads awaiting reply. "what needs reply", "what's pending", "who's waiting on me".
+- "stuck-jobs" - list stale jobs. "what's stuck", "stale jobs", "what needs attention".
+- "morning-brief" - pipeline snapshot. "morning briefing", "what's on my plate", "state of pipeline", "daily digest".
+- "hide-unrelated" - bulk hide noise threads. "hide unrelated", "dismiss the noise", "clean up the inbox".
+- "summarize-offers" - scoped to a SOURCING job: list all supplier offers ranked by price/landed cost. Triggers: "summary of the best rates", "what are the supplier offers", "what's the cheapest offer", "best price for this load", "compare supplier prices", "show me what suppliers quoted", "how much are they asking". Optional field "sortBy": "price" (default) | "landed" | "lead-time".
+- "summarize-rates" - scoped to a FORWARDING job: list carrier rate replies. Triggers: same as above but on a forwarding/shipping job.
+- "chat" - anything else. Questions, statements, ambiguous messages, or commands the agent can't execute.
 
 Rules:
 - If unsure between an action and chat, choose chat. False action triggers are worse than false chats.
@@ -96,7 +96,7 @@ Context:
     return { intent: "chat" };
   }
   if (parsed.intent === "summarize-offers" && args.scopeJobType !== "SOURCING") {
-    // Operator asked for offers but the job is forwarding — re-route.
+    // Operator asked for offers but the job is forwarding - re-route.
     return { intent: "summarize-rates" };
   }
   if (parsed.intent === "summarize-rates" && args.scopeJobType === "SOURCING") {

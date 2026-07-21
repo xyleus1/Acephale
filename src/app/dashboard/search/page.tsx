@@ -87,7 +87,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
         <div>
           <h1 className="page-title">{t.search.pageTitle}</h1>
           <p className="page-subtitle">
-            {t.search.resultsFor} &ldquo;{query}&rdquo; — {total} results
+            {t.search.resultsFor} &ldquo;{query}&rdquo; - {total} results
           </p>
         </div>
       </div>
@@ -132,7 +132,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
                     </td>
                     <td style={{ fontSize: 12 }}>{t.statuses[c.status as keyof typeof t.statuses] ?? c.status}</td>
                     <td style={{ fontSize: 12, color: "var(--text-2)" }}>
-                      {c.owners.map((o) => o.user.fullName).join(", ") || "—"}
+                      {c.owners.map((o) => o.user.fullName).join(", ") || "-"}
                     </td>
                   </tr>
                 ))}
@@ -169,8 +169,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
                         {c.company.name}
                       </Link>
                     </td>
-                    <td style={{ fontSize: 12, color: "var(--text-2)" }}>{c.email ?? "—"}</td>
-                    <td style={{ fontSize: 12, color: "var(--text-2)" }}>{c.phone ?? "—"}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-2)" }}>{c.email ?? "-"}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-2)" }}>{c.phone ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -208,7 +208,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
                         {a.type}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 500 }}>{a.subject ?? "—"}</td>
+                    <td style={{ fontWeight: 500 }}>{a.subject ?? "-"}</td>
                     <td>
                       <Link href={`/dashboard/crm?q=${encodeURIComponent(a.company.name)}`} style={{ color: "var(--brand)" }}>
                         {a.company.name}

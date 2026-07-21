@@ -3,7 +3,7 @@
 // timeline, and bump Company/Contact lastTouchAt so the "stale relationships"
 // panel reflects reality.
 //
-// NOTE: intentionally no "server-only" import — this module is also consumed
+// NOTE: intentionally no "server-only" import - this module is also consumed
 // by tsx scripts (scripts/backfill-crm-email-touch.ts), mirroring how
 // gmail-sync.ts style libs stay importable outside the Next.js server graph.
 // Never call it from client components.
@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { waPhoneDigits } from "@/lib/rfq-whatsapp";
 import { whatsAppPartyLabel } from "@/lib/whatsapp-display";
 
-// Personal/free mailbox providers — a shared domain never identifies a
+// Personal/free mailbox providers - a shared domain never identifies a
 // company, so domain-based resolution must skip these.
 export const FREEMAIL_DOMAINS = new Set<string>([
   "gmail.com",
@@ -116,7 +116,7 @@ export function normalizeWhatsAppCounterparty(raw: string | null | undefined): s
 // number as WhatsApp counterparty digits? Exact match after normalization; a
 // suffix fallback exists ONLY for bare national formats (10 digits, or 11
 // with a leading 0) whose country code the operator omitted. Full-length
-// international numbers must match exactly — a loose last-10 suffix on those
+// international numbers must match exactly - a loose last-10 suffix on those
 // could attribute a sender to a different country's contact.
 export function phoneMatchesWaDigits(contactPhone: string | null | undefined, waDigits: string): boolean {
   if (!contactPhone || waDigits.length < 10) return false;
@@ -244,7 +244,7 @@ async function getOfficeEmailSet(officeId: string): Promise<Set<string>> {
 // ── Touch logging ────────────────────────────────────────────────────────────
 
 // Log one email message as a CRM touch. Safe to call from sync/send paths:
-// it never throws — CRM logging must not break email flows.
+// it never throws - CRM logging must not break email flows.
 export async function logEmailTouch(input: LogEmailTouchInput): Promise<EmailTouchResult> {
   try {
     const officeEmails = await getOfficeEmailSet(input.officeId);
@@ -289,7 +289,7 @@ async function logEmailTouchWithContext(
     let method: string = "thread_link";
 
     if (companyId) {
-      // Thread already resolved — reuse, but still try to pin down the contact.
+      // Thread already resolved - reuse, but still try to pin down the contact.
       if (!contactId) {
         for (const email of counterpartyEmails) {
           if (email.startsWith("whatsapp:")) {
@@ -378,7 +378,7 @@ async function logEmailTouchWithContext(
       },
     });
 
-    // Bump lastTouchAt forward only — a backfilled old message must never
+    // Bump lastTouchAt forward only - a backfilled old message must never
     // overwrite a newer touch. Conditional update = atomic max().
     await prisma.company.updateMany({
       where: {

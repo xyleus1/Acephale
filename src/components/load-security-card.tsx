@@ -65,7 +65,7 @@ export function LoadSecurityCard({
           )
         );
       } catch {
-        flash("Could not save — check your connection and try again.");
+        flash("Could not save - check your connection and try again.");
         setRev((r) => r + 1);
       }
     });
@@ -88,7 +88,7 @@ export function LoadSecurityCard({
       {error && <span className="sheet-error">{error}</span>}
       {checks.length === 0 ? (
         <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
-          No checklist for this tier — raise the security tier in Edit to seed the SOP.
+          No checklist for this tier - raise the security tier in Edit to seed the SOP.
         </p>
       ) : (
         <div className="table-shell">

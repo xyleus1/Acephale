@@ -1,6 +1,6 @@
 // Pre-flight fact enrichment: after the deterministic rule engine runs, pull
 // REAL numbers from free government sources so the report cites data a generic
-// chatbot can't — actual MFN duty rates + Section 301 markers (USITC HTS),
+// chatbot can't - actual MFN duty rates + Section 301 markers (USITC HTS),
 // citable classification precedent (CBP CROSS rulings), and the matched
 // carriers' actual insurance filings (FMCSA L&I). Every fetch is cached and
 // fail-soft: enrichment can only ADD facts, never block or break a check.
@@ -53,7 +53,7 @@ export function parseHtsEntries(text: string, hts4: string): HtsDutySummary | nu
     if (!row.htsno || !row.htsno.startsWith(hts4)) continue;
     const general = row.general?.trim();
     if (general) rates.add(general);
-    // Footnote shape is undocumented — scan its JSON for chapter-99 headings.
+    // Footnote shape is undocumented - scan its JSON for chapter-99 headings.
     const footnoteText = row.footnotes ? JSON.stringify(row.footnotes) : "";
     for (const [pattern, label] of S301_HEADINGS) {
       if (pattern.test(footnoteText)) s301.add(label);
@@ -70,7 +70,7 @@ export type CrossRuling = {
 };
 
 // mustMatch: DATE_DESC search matches full ruling text, so the newest hit can
-// be about a seed spreader that merely mentions a battery — require at least
+// be about a seed spreader that merely mentions a battery - require at least
 // one term token in the SUBJECT before citing a ruling as precedent.
 export function parseCrossRulings(text: string, mustMatch?: string[]): CrossRuling | null {
   let parsed: { rulings?: Array<Record<string, unknown>> };
@@ -121,7 +121,7 @@ export function parseLiFilings(text: string): LiFiling[] {
   });
 }
 
-// A cancellation only warrants a warning when it lands soon — L&I rows carry
+// A cancellation only warrants a warning when it lands soon - L&I rows carry
 // far-future term dates in the same column.
 export function cancellationWarning(filing: LiFiling, now: Date): string | null {
   if (!filing.cancelEffective) return null;
@@ -130,7 +130,7 @@ export function cancellationWarning(filing: LiFiling, now: Date): string | null 
   const at = Date.UTC(Number(match[3]), Number(match[1]) - 1, Number(match[2]));
   const days = Math.round((at - now.getTime()) / 86_400_000);
   if (days < 0 || days > 60) return null;
-  return `⚠ cancellation effective ${filing.cancelEffective} (${days}d) filed — re-verify before dispatch`;
+  return `⚠ cancellation effective ${filing.cancelEffective} (${days}d) filed - re-verify before dispatch`;
 }
 
 // ── Cached fetchers ─────────────────────────────────────────────────────────
@@ -155,14 +155,14 @@ async function htsDutyFact(hts4: string, chinaOrigin: boolean): Promise<string |
   let line = `Duty, HTS ${hts4}: MFN ${rates} (USITC HTS)`;
   if (chinaOrigin) {
     if (summary.s301.length > 2) {
-      // Heading-level scan hits several lists across subheadings — the exact
+      // Heading-level scan hits several lists across subheadings - the exact
       // one depends on the 8/10-digit classification.
       const pcts = [...new Set(summary.s301.map((label) => label.match(/\(([^)]+)\)/)?.[1]).filter(Boolean))];
-      line += `; China origin → Section 301 exposure across subheadings (${pcts.join(" / ")}) — the exact list depends on the full classification, verify current rate`;
+      line += `; China origin → Section 301 exposure across subheadings (${pcts.join(" / ")}) - the exact list depends on the full classification, verify current rate`;
     } else if (summary.s301.length > 0) {
-      line += `; China origin → Section 301 ${summary.s301.join(", ")} — verify current rate, several changed in the 2024-25 review`;
+      line += `; China origin → Section 301 ${summary.s301.join(", ")} - verify current rate, several changed in the 2024-25 review`;
     } else {
-      line += `; no Section 301 marker in the HTS footnotes for this heading — verify with the broker of record`;
+      line += `; no Section 301 marker in the HTS footnotes for this heading - verify with the broker of record`;
     }
   }
   return line;
@@ -173,7 +173,7 @@ async function crossRulingFact(term: string): Promise<string | null> {
   const tokens = term.split(/\s+/).filter((word) => word.length >= 3);
   const ruling = parseCrossRulings(await fetchText(url, WEEK), tokens);
   if (!ruling) return null;
-  return `Classification precedent: CBP ruling ${ruling.number} (${ruling.date}) — “${ruling.subject}” — rulings.cbp.gov/ruling/${ruling.number}`;
+  return `Classification precedent: CBP ruling ${ruling.number} (${ruling.date}) - “${ruling.subject}” - rulings.cbp.gov/ruling/${ruling.number}`;
 }
 
 async function liInsuranceFact(carrier: { name: string; dotNumber: string }, now: Date): Promise<string | null> {
@@ -181,7 +181,7 @@ async function liInsuranceFact(carrier: { name: string; dotNumber: string }, now
   if (!/^\d{8}$/.test(dot)) return null;
   const url = `https://data.transportation.gov/resource/qh9u-swkp.json?dot_number=${dot}&$limit=10`;
   const filings = parseLiFilings(await fetchText(url, DAY));
-  if (filings.length === 0) return `${carrier.name}: no insurance filings found under DOT ${carrier.dotNumber} in FMCSA L&I — verify with the producer`;
+  if (filings.length === 0) return `${carrier.name}: no insurance filings found under DOT ${carrier.dotNumber} in FMCSA L&I - verify with the producer`;
   const parts = filings.slice(0, 3).map((filing) => {
     const amount = filing.coverageUsd != null ? `$${Math.round(filing.coverageUsd / 1000)}k` : "amount n/a";
     const warn = cancellationWarning(filing, now);

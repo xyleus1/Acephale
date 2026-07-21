@@ -23,7 +23,7 @@ import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { Icon } from "@/components/icon";
 
 function money(value: number | null): string {
-  return value != null ? `$${value.toLocaleString("en-US")}` : "—";
+  return value != null ? `$${value.toLocaleString("en-US")}` : "-";
 }
 
 // The truckload desk on an RFQ: capture carrier bids (buy side), pick the
@@ -53,7 +53,7 @@ export function CarrierBidPanel({
   }
 
   function fail(message?: string) {
-    flash(message ?? "Could not save — check your connection and try again.");
+    flash(message ?? "Could not save - check your connection and try again.");
     setRev((r) => r + 1);
   }
 
@@ -248,7 +248,7 @@ export function CarrierBidPanel({
                         <button
                           type="button"
                           className="sheet-del"
-                          title="Select this bid — wins the buy side, sets load cost"
+                          title="Select this bid - wins the buy side, sets load cost"
                           disabled={busy || bid.status === "SELECTED"}
                           onClick={() => selectBid(bid)}
                         >
@@ -292,7 +292,7 @@ export function CarrierBidPanel({
                       <td className="numeric">{money(quote.sellAmount)}</td>
                       <td className="numeric">{money(quote.buyAmount)}</td>
                       <td className="numeric">{money(quote.grossProfit)}</td>
-                      <td className="numeric">{quote.marginPct != null ? `${quote.marginPct}%` : "—"}</td>
+                      <td className="numeric">{quote.marginPct != null ? `${quote.marginPct}%` : "-"}</td>
                       <td>{outcomeLabel.get(quote.outcome) ?? quote.outcome}</td>
                       <td>
                         {quote.outcome === "LOST" || quote.outcome === "NO_QUOTE" ? (
@@ -304,7 +304,7 @@ export function CarrierBidPanel({
                             onCommit={(v) => commitReason(quote, v)}
                           />
                         ) : (
-                          <span style={{ opacity: 0.4 }}>—</span>
+                          <span style={{ opacity: 0.4 }}>-</span>
                         )}
                       </td>
                     </tr>

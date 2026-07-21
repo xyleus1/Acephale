@@ -1266,7 +1266,7 @@ export function assessDomesticTruckingPricing(inquiry: DomesticPricingInquiry): 
     approvalWarnings: [
       ...(tierRank(request.securityTier) >= tierRank("high_value")
         ? [
-            `Security tier "${request.securityTier}": high-value SOP applies — vetted carrier + security checklist before any quote or dispatch.`,
+            `Security tier "${request.securityTier}": high-value SOP applies - vetted carrier + security checklist before any quote or dispatch.`,
           ]
         : []),
       "Draft only: no customer email is sent.",

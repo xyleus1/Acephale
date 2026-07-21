@@ -5,7 +5,7 @@ import { securityChecklistTemplate } from "./security-sop";
 
 // Seed the per-load security SOP checklist for the job's tier. Additive and
 // idempotent: raising the tier adds the new items, existing rows (and their
-// completion state) are never touched, and nothing is deleted on downgrade —
+// completion state) are never touched, and nothing is deleted on downgrade -
 // completed checks remain part of the load's record.
 export async function ensureLoadSecurityChecklist(
   officeId: string,

@@ -45,7 +45,7 @@ export function DimensionsInput({
             <input className="dimension-input" type="number" min="0" placeholder="80" value={r.width} onChange={(e) => update(i, "width", e.target.value)} />
             <input className="dimension-input" type="number" min="0" placeholder="100" value={r.height} onChange={(e) => update(i, "height", e.target.value)} />
             <span className="dimension-cbm">
-              {rowCbm(r) > 0 ? rowCbm(r).toFixed(2) : "—"}
+              {rowCbm(r) > 0 ? rowCbm(r).toFixed(2) : "-"}
             </span>
             <button
               type="button"

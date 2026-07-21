@@ -42,7 +42,7 @@ export const CARRIER_BID_SOURCE_VALUES = CARRIER_BID_SOURCES.map(([value]) => va
 export const QUOTE_OUTCOME_VALUES = QUOTE_OUTCOMES.map(([value]) => value);
 export const QUOTE_OUTCOME_REASON_VALUES = QUOTE_OUTCOME_REASONS.map(([value]) => value);
 
-// Pure quote economics — shared by persistence and tests (DB-free).
+// Pure quote economics - shared by persistence and tests (DB-free).
 export function quoteEconomics(input: {
   buyAmount?: number | null;
   sellAmount?: number | null;

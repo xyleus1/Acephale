@@ -7,7 +7,7 @@ import { prisma } from "./prisma";
 // JobDocument on the linked job. Idempotent: skips attachments already
 // converted to a JobDocument (matched by URL pointing back to this attachment).
 //
-// We don't store the file bytes — JobDocument.url points to the streaming
+// We don't store the file bytes - JobDocument.url points to the streaming
 // /api/gmail/attachment endpoint which fetches on demand.
 const VALID_DOC_TYPES = ["BOOKING", "INVOICE", "PACKING_LIST", "BL", "COO", "CUSTOMS", "OTHER"];
 
@@ -63,13 +63,13 @@ export async function classifyEmailAttachments(args: {
 Output ONLY this JSON: { "docType": "BOOKING"|"INVOICE"|"PACKING_LIST"|"BL"|"COO"|"CUSTOMS"|"OTHER", "confidence": 0-100 }
 
 Doc types:
-- BOOKING — booking confirmation from carrier/freight forwarder
-- INVOICE — commercial invoice (CI), pro forma invoice (PI), proforma
-- PACKING_LIST — packing list, PL
-- BL — Bill of Lading, B/L, master/house BL, sea waybill
-- COO — Certificate of Origin
-- CUSTOMS — customs declaration / entry / clearance papers
-- OTHER — anything that doesn't clearly match (contracts, photos, generic PDFs)
+- BOOKING - booking confirmation from carrier/freight forwarder
+- INVOICE - commercial invoice (CI), pro forma invoice (PI), proforma
+- PACKING_LIST - packing list, PL
+- BL - Bill of Lading, B/L, master/house BL, sea waybill
+- COO - Certificate of Origin
+- CUSTOMS - customs declaration / entry / clearance papers
+- OTHER - anything that doesn't clearly match (contracts, photos, generic PDFs)
 
 Match common filename patterns: "BL_..." / "B_L_..." / "COO_..." / "Invoice_..." / "Packing-List_..." / "Booking_Confirmation_...".`,
           messages: [{

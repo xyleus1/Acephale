@@ -388,7 +388,7 @@ model AssignmentChange {
   @@index([officeId, companyId, createdAt])
 }
 
-// Who changed what, where — the admin-facing activity log. One row per user
+// Who changed what, where - the admin-facing activity log. One row per user
 // action on a load (status change, claim, assignment, field edit, creation).
 // actorEmail is denormalized so the log stays readable even if a user row
 // is deactivated or removed.
@@ -927,7 +927,7 @@ model Inquiry {
   id                String    @id @default(cuid())
   officeId          String
   companyId         String?
-  reference         String? // freight file number, e.g. DRY26070001 — assigned at intake, carried onto the converted load
+  reference         String? // freight file number, e.g. DRY26070001 - assigned at intake, carried onto the converted load
   subject           String
   fromEmail         String?
   fromCompany       String?
@@ -957,7 +957,7 @@ model Inquiry {
   securityTier          String? // standard / elevated / high_value / critical
   commodityCategory     String? // tech commodity taxonomy, e.g. servers_gpu
   trackingType          String? // none / phone_check / eld_app / gps_device / escort
-  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … — first-class truck equipment
+  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … - first-class truck equipment
   teamDriversRequired   String? // YES / NO / UNKNOWN
   type              String    @default("FORWARDING") // FORWARDING (move customer's cargo) | SOURCING (find + buy a commodity for customer)
   status            String    @default("INGESTED") // INGESTED / PARSED / PRICED / QUOTED / WON / LOST
@@ -1134,7 +1134,7 @@ model Carrier {
   identityVerifiedAt   DateTime?
   identityVerifiedBy   String?
 
-  // Authority + insurance (manual V1 — no FMCSA/RMIS API)
+  // Authority + insurance (manual V1 - no FMCSA/RMIS API)
   authorityStatus        String? // active / inactive / revoked / unknown
   insuranceProducer      String? // agency the COI was verified with, direct
   autoLiabilityLimit     Float?
@@ -1145,7 +1145,7 @@ model Carrier {
   highValueApprovedLimit Float? // max declared value we give them without a special rider
 
   // Equipment + capability
-  equipmentTypes   Json? // ["DRY_VAN","REEFER",...] — DomesticEquipmentType strings
+  equipmentTypes   Json? // ["DRY_VAN","REEFER",...] - DomesticEquipmentType strings
   airRide          Boolean @default(false)
   liftgate         Boolean @default(false)
   blanketWrap      Boolean @default(false)
@@ -1157,14 +1157,14 @@ model Carrier {
   serviceStates    Json? // ["CA","NV","AZ",...]
   homeBase         String? // e.g. "Fremont, CA"
 
-  // Vetting workflow — gate logic in carrierVettingGate()
+  // Vetting workflow - gate logic in carrierVettingGate()
   vettingStatus  String    @default("prospect")
   vettingNotes   String?
   vettedAt       DateTime?
   vettedByUserId String?
   nextReviewAt   DateTime? // driven by the nearest insurance expiry
 
-  // Scorecard — columns reserved now, auto-computed from load history later
+  // Scorecard - columns reserved now, auto-computed from load history later
   loadsCompleted    Int       @default(0)
   onTimePickupPct   Float?
   onTimeDeliveryPct Float?
@@ -1213,7 +1213,7 @@ model CarrierChecklistItem {
   @@index([officeId, carrierId, status])
 }
 
-// Truckload buy-side quote from a carrier (per-load $, not ocean totals —
+// Truckload buy-side quote from a carrier (per-load $, not ocean totals -
 // CarrierQuote stays ocean-shaped for the intl stack). Bids link to the
 // vetted bench when the carrier is onboarded; carrierName covers the rest.
 model CarrierBid {
@@ -1230,7 +1230,7 @@ model CarrierBid {
   totalAmount       Float? // all-in per-load buy
   currency      String    @default("USD")
   miles         Float?
-  ratePerMile   Float? // stored, not derived — operator-entered all-in rates survive
+  ratePerMile   Float? // stored, not derived - operator-entered all-in rates survive
   transitDays   Int?
   validUntil    DateTime?
   source        String    @default("MANUAL") // MANUAL / EMAIL / WHATSAPP / PHONE / LOADBOARD / API
@@ -1249,7 +1249,7 @@ model CarrierBid {
   @@index([officeId, carrierId, createdAt])
 }
 
-// Sell-side truckload quote + outcome — one row per issued quote version.
+// Sell-side truckload quote + outcome - one row per issued quote version.
 // This is the data flywheel: normalized lane x equipment x tier with buy/sell
 // economics, quote speed, and win/loss. Vocab in src/lib/truckload-quote-fields.ts.
 model TruckloadQuote {
@@ -1259,7 +1259,7 @@ model TruckloadQuote {
   jobId     String?
   companyId String?
 
-  // Normalized lane — corridor keys for aggregation
+  // Normalized lane - corridor keys for aggregation
   origin            String?
   destination       String?
   originState       String? // classifyDomesticLocation().stateCode
@@ -1285,7 +1285,7 @@ model TruckloadQuote {
   // Quote speed + outcome
   sentVia       String? // EMAIL / WHATSAPP / PORTAL / NONE
   sentAt        DateTime?
-  rfqReceivedAt DateTime? // copied from inquiry.receivedAt — quote-speed KPI
+  rfqReceivedAt DateTime? // copied from inquiry.receivedAt - quote-speed KPI
   outcome       String    @default("PENDING") // PENDING / WON / LOST / EXPIRED / NO_QUOTE
   outcomeReason String? // price_too_high / no_capacity / too_slow / …
   outcomeNote   String?
@@ -1306,7 +1306,7 @@ model TruckloadQuote {
   @@index([officeId, companyId, createdAt])
 }
 
-// Shipment history — populated from Siber in Phase 2, or manually entered
+// Shipment history - populated from Siber in Phase 2, or manually entered
 model ShipmentRecord {
   id           String   @id @default(cuid())
   officeId     String
@@ -1343,8 +1343,8 @@ model Job {
   inquiryId        String? @unique // set when converted from an Inquiry
 
   reference         String // e.g. JOB-2025-001
-  title             String? // human deal name, e.g. "China Spare Parts" — how the user recalls the load
-  cadence           String? // ONE_OFF | MONTHLY — recurring business vs one-shot
+  title             String? // human deal name, e.g. "China Spare Parts" - how the user recalls the load
+  cadence           String? // ONE_OFF | MONTHLY - recurring business vs one-shot
   status            JobStatus @default(INQUIRY)
   type              String    @default("FORWARDING") // FORWARDING | SOURCING
   mode              String? // AIR / SEA-FCL / SEA-LCL / ROAD / COURIER
@@ -1353,9 +1353,9 @@ model Job {
   commodity         String?
   incoterms         String?
   weight            Float? // kg
-  volume            Float? // cbm — auto-computed from dimensions for non-FCL
+  volume            Float? // cbm - auto-computed from dimensions for non-FCL
   packages          Int?
-  dimensions        String? // JSON [{qty, length, width, height}] in cm — LCL/AIR/ROAD cargo
+  dimensions        String? // JSON [{qty, length, width, height}] in cm - LCL/AIR/ROAD cargo
   stackable         String? // YES / NO / UNKNOWN
   topLoad           String? // YES / NO / UNKNOWN, only relevant when stackable=NO
   dangerousGoods    String? // YES / NO / UNKNOWN
@@ -1363,7 +1363,7 @@ model Job {
   containerCount    Int? // FCL: number of containers
   containerType     String? // FCL: 20DC / 40DC / 40HC / 20RF / 40RF / OT-FR
   quantity          Float? // generic deal quantity, e.g. 350 (TONS), 3 (TRUCKS)
-  quantityUnit      String? // TONS / TRUCKS / PALLETS / UNITS / KG / CBM — free text
+  quantityUnit      String? // TONS / TRUCKS / PALLETS / UNITS / KG / CBM - free text
   targetPrice       Float?
   targetCurrency    String?
   targetPriceStatus String? // UNKNOWN / PROVIDED / NO_TARGET
@@ -1375,7 +1375,7 @@ model Job {
   securityTier          String? // standard / elevated / high_value / critical
   commodityCategory     String? // tech commodity taxonomy, e.g. servers_gpu
   trackingType          String? // none / phone_check / eld_app / gps_device / escort
-  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … — first-class truck equipment
+  equipmentType         String? // DRY_VAN / REEFER / FLATBED / … - first-class truck equipment
   teamDriversRequired   String? // YES / NO / UNKNOWN
 
   etd DateTime?
@@ -1681,7 +1681,7 @@ model EmailMessage {
   threadId             String
   accountId            String?
   externalId           String? // provider Message-ID header for dedup
-  gmailMessageId       String? // provider native message id (Gmail msg.id) — used to fetch attachments
+  gmailMessageId       String? // provider native message id (Gmail msg.id) - used to fetch attachments
   direction            EmailDirection
   fromEmail            String
   fromName             String?

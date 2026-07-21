@@ -130,7 +130,7 @@ export async function awardSupplier(threadId: string): Promise<
         system: `You draft a short, professional supplier-award email from a freight/procurement office to a supplier whose offer we just accepted. Keep it under 120 words. Reference the commodity, accept their terms, ask for pro forma invoice + draft contract. No emojis, no markdown. Sign as "Derya Maritime Inc."`,
         messages: [{
           role: "user",
-          content: `Commodity: ${thread.inquiry.commodity ?? "—"}\nSupplier: ${offer.supplierName ?? "(unknown)"}\nAgreed price: ${offer.pricePerUnit ?? "—"} ${offer.currency ?? ""}/${offer.unit ?? ""}\nIncoterms: ${offer.incoterms ?? "—"}\nPayment terms: ${offer.paymentTerms ?? "—"}\n\nLAST MESSAGES:\n${transcript}`,
+          content: `Commodity: ${thread.inquiry.commodity ?? "-"}\nSupplier: ${offer.supplierName ?? "(unknown)"}\nAgreed price: ${offer.pricePerUnit ?? "-"} ${offer.currency ?? ""}/${offer.unit ?? ""}\nIncoterms: ${offer.incoterms ?? "-"}\nPayment terms: ${offer.paymentTerms ?? "-"}\n\nLAST MESSAGES:\n${transcript}`,
         }],
       });
       const text = result.content[0].type === "text" ? result.content[0].text : "";
@@ -148,7 +148,7 @@ export async function awardSupplier(threadId: string): Promise<
 
 // Drafts an AI counter-offer reply to a supplier on a SOURCING thread.
 // Operator passes a target price (or "X% under best", or "match cheapest", etc).
-// Output goes into the same DraftModal — copy or send.
+// Output goes into the same DraftModal - copy or send.
 export async function draftCounterOffer(args: {
   threadId: string;
   target: string;  // free-form: "$480/MT", "5% under best", "match BEST", "ask for sample"
@@ -217,7 +217,7 @@ export async function draftCounterOffer(args: {
     system: `You draft a polite, professional COUNTER-OFFER email from a freight/procurement office to a supplier whose price is too high. Keep under 130 words. No emojis, no markdown headers. Tone: respectful, firm, value-anchored. Reference what they last quoted, state the target price clearly, hint that we have other offers but never name a competing supplier or expose another supplier's exact number. Ask them to come back with a revised offer by a specific date (today + 3 business days). End with "Looking forward to your revised pricing." or similar. Sign as "Derya Maritime Inc." (no specific person name). Output ONLY the email body, ready to send.`,
     messages: [{
       role: "user",
-      content: `Commodity: ${thread.inquiry.commodity ?? "—"}
+      content: `Commodity: ${thread.inquiry.commodity ?? "-"}
 This supplier (${mySupplier?.supplier ?? "?"}): last priced ${mySupplier?.price ?? "?"} ${mySupplier?.currency ?? ""}/${mySupplier?.unit ?? ""} ${mySupplier?.incoterms ?? ""}
 Best comparable offer in our basket: ${best?.price ?? "?"} ${best?.currency ?? ""}/${best?.unit ?? ""}
 Operator target: ${args.target}
@@ -275,7 +275,7 @@ export async function draftReplyToMessage(args: {
   }).join("\n\n────\n\n").slice(0, 8000);
 
   const inquiryCtx = thread.inquiry
-    ? `Linked inquiry: type=${thread.inquiry.type}, commodity=${thread.inquiry.commodity ?? "—"}, route=${thread.inquiry.origin ?? "?"}→${thread.inquiry.destination ?? "?"}, incoterms=${thread.inquiry.incoterms ?? "—"}.`
+    ? `Linked inquiry: type=${thread.inquiry.type}, commodity=${thread.inquiry.commodity ?? "-"}, route=${thread.inquiry.origin ?? "?"}→${thread.inquiry.destination ?? "?"}, incoterms=${thread.inquiry.incoterms ?? "-"}.`
     : "Not linked to a job/inquiry yet.";
 
   // WhatsApp threads get a WhatsApp-shaped draft: short, no subject/signature,
@@ -284,8 +284,8 @@ export async function draftReplyToMessage(args: {
     Boolean(thread.externalThreadId?.startsWith("whatsapp:")) ||
     thread.messages.some((m) => m.fromEmail.startsWith("whatsapp:"));
 
-  const emailSystem = `You draft short, professional email replies for a freight forwarding & procurement office (Derya Maritime Inc., Istanbul-based). Keep under 150 words. No emojis, no markdown headers, no preamble like "Here's the draft:" — output ONLY the email body, ready to send. Sign as the user (don't add a placeholder name — the user has their own signature). Match the tone of the most recent inbound message.`;
-  const whatsAppSystem = `You draft WhatsApp replies for a freight forwarding & procurement office (Derya Lojistik, Istanbul-based). Reply in the language of the conversation (usually Turkish). Keep it short — under 80 words, like a real WhatsApp message: no subject line, no formal letter opening, no signature block, no markdown. Warm but professional; no emojis unless the counterparty uses them. Output ONLY the message text, ready to send.`;
+  const emailSystem = `You draft short, professional email replies for a freight forwarding & procurement office (Derya Maritime Inc., Istanbul-based). Keep under 150 words. No emojis, no markdown headers, no preamble like "Here's the draft:" - output ONLY the email body, ready to send. Sign as the user (don't add a placeholder name - the user has their own signature). Match the tone of the most recent inbound message.`;
+  const whatsAppSystem = `You draft WhatsApp replies for a freight forwarding & procurement office (Derya Lojistik, Istanbul-based). Reply in the language of the conversation (usually Turkish). Keep it short - under 80 words, like a real WhatsApp message: no subject line, no formal letter opening, no signature block, no markdown. Warm but professional; no emojis unless the counterparty uses them. Output ONLY the message text, ready to send.`;
 
   const client = new Anthropic({ apiKey });
   const result = await client.messages.create({
