@@ -54,7 +54,7 @@ export async function findStuckJobs(officeId: string, opts: { daysThreshold?: nu
     const daysStuck = Math.floor((Date.now() - new Date(lastEmail).getTime()) / (24 * 3600 * 1000));
     const milestones = j.milestones.map((m) => `${m.type}=${m.actualAt ? "done" : m.plannedAt ? "planned" : "open"}`).join(", ");
 
-    let suggestion = "Follow up — last activity was over " + daysStuck + " days ago.";
+    let suggestion = "Follow up - last activity was over " + daysStuck + " days ago.";
     if (client) {
       try {
         const result = await client.messages.create({
@@ -63,7 +63,7 @@ export async function findStuckJobs(officeId: string, opts: { daysThreshold?: nu
           system: `You suggest the SINGLE next concrete action for a freight job that has been stagnant. Reply in one short sentence. No emojis. No preamble.`,
           messages: [{
             role: "user",
-            content: `Job ${j.reference} (${j.type}, status ${j.status}, ${j.company?.name ?? "no customer"}) — ${j.origin ?? "?"} → ${j.destination ?? "?"}, commodity ${j.inquiry?.commodity ?? "—"}. Milestones: ${milestones || "none"}. Last email ${daysStuck}d ago. What's the single most useful action to move it forward?`,
+            content: `Job ${j.reference} (${j.type}, status ${j.status}, ${j.company?.name ?? "no customer"}) - ${j.origin ?? "?"} → ${j.destination ?? "?"}, commodity ${j.inquiry?.commodity ?? "-"}. Milestones: ${milestones || "none"}. Last email ${daysStuck}d ago. What's the single most useful action to move it forward?`,
           }],
         });
         const text = result.content[0].type === "text" ? result.content[0].text : "";

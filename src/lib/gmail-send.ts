@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { stripEmDashes } from "./no-em-dash";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { getValidAccessToken } from "./gmail-oauth";
@@ -41,7 +42,7 @@ export async function sendNewEmailFromAccount(args: {
   }
 
   const toAddress = cleanHeader(args.to);
-  const subject = cleanHeader(args.subject || "(no subject)");
+  const subject = stripEmDashes(cleanHeader(args.subject || "(no subject)"));
   if (!toAddress) return { error: "Recipient is required." };
   if (!args.body.trim()) return { error: "Email body is required." };
 
@@ -52,7 +53,7 @@ export async function sendNewEmailFromAccount(args: {
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
-  const encoded = encodeGmailRaw(headers.join("\r\n") + "\r\n\r\n" + args.body);
+  const encoded = encodeGmailRaw(headers.join("\r\n") + "\r\n\r\n" + stripEmDashes(args.body));
 
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
@@ -128,7 +129,7 @@ export async function sendNewEmailFromAccount(args: {
 //
 // Scope required on the account: https://www.googleapis.com/auth/gmail.send.
 // If the user authorized the inbox before that scope was added, the send call
-// returns 403 — the UI catches this and prompts them to reconnect.
+// returns 403 - the UI catches this and prompts them to reconnect.
 export async function sendReplyToThread(args: {
   threadDbId: string;
   body: string;

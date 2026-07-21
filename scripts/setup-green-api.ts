@@ -8,7 +8,7 @@
 //   npx tsx scripts/setup-green-api.ts
 //
 // Optional: GREEN_API_BASE_URL (from the console's instance page, e.g.
-// https://7103.api.greenapi.com — defaults to https://api.green-api.com).
+// https://7103.api.greenapi.com - defaults to https://api.green-api.com).
 //
 // Note: Green API applies settings within ~5 minutes and reboots the instance.
 
@@ -42,7 +42,7 @@ async function main() {
   const state = await call("getStateInstance");
   console.log("Instance state:", JSON.stringify(state));
   if (state?.stateInstance !== "authorized") {
-    console.error("Instance is not authorized yet — scan the QR in the Green API console first.");
+    console.error("Instance is not authorized yet - scan the QR in the Green API console first.");
     process.exit(1);
   }
 

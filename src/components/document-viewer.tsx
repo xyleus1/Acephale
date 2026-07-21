@@ -103,7 +103,7 @@ export function DocumentViewer({
               <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
                 {history.length === 0 && !busy && (
                   <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.5 }}>
-                    Ask anything about this document — &quot;What&apos;s the BL number?&quot;, &quot;When does the LC expire?&quot;, &quot;Is the consignee right?&quot;.
+                    Ask anything about this document - &quot;What&apos;s the BL number?&quot;, &quot;When does the LC expire?&quot;, &quot;Is the consignee right?&quot;.
                   </div>
                 )}
                 {history.map((h, i) => (

@@ -33,7 +33,7 @@ export default async function JobsPage({
   const jobs = await prisma.job.findMany({
     where: {
       officeId: session.officeId,
-      // "Mine": the personal board — only loads assigned to me.
+      // "Mine": the personal board - only loads assigned to me.
       ...(mine ? { assignedToUserId: session.userId } : {}),
     },
     include: {

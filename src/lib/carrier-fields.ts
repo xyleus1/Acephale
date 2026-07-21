@@ -13,7 +13,7 @@ export type CarrierCapabilityBooleans = {
   reeferCapable: boolean;
 };
 
-// [field, short badge code, full label] — badge codes keep the sheet column compact.
+// [field, short badge code, full label] - badge codes keep the sheet column compact.
 export const CARRIER_CAPABILITY_BADGES: Array<[keyof CarrierCapabilityBooleans, string, string]> = [
   ["airRide", "AR", "Air ride"],
   ["liftgate", "LG", "Liftgate"],
@@ -89,7 +89,7 @@ export type CarrierChecklistRow = {
   checkedAt: string | null;
 };
 
-// Full detail for /dashboard/carriers/[carrierId] — dates as ISO strings,
+// Full detail for /dashboard/carriers/[carrierId] - dates as ISO strings,
 // Json columns as plain string arrays.
 export type CarrierDetail = CarrierCapabilityBooleans & {
   id: string;

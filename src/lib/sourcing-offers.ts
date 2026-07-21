@@ -45,7 +45,7 @@ export async function extractSourcingOffersForInquiry(
 
   // Skip threads that already have a recent extraction WITH a real price
   // (saves the round-trip). Re-parse threads that produced null/no-offer
-  // results — they may have been false negatives from a too-conservative
+  // results - they may have been false negatives from a too-conservative
   // earlier extraction, and prices might appear in threads we previously
   // dismissed.
   const STALE_AFTER_MS = 7 * 24 * 3600 * 1000;
@@ -53,7 +53,7 @@ export async function extractSourcingOffersForInquiry(
     if (t.messages.length === 0) return false;
     if (!t.supplierOfferAt) return true;
     if (Date.now() - t.supplierOfferAt.getTime() >= STALE_AFTER_MS) return true;
-    // Recent parse — re-parse only if the recent run produced no price.
+    // Recent parse - re-parse only if the recent run produced no price.
     if (!t.supplierOffer) return true;
     try {
       const o = JSON.parse(t.supplierOffer);
@@ -83,7 +83,7 @@ export async function extractSourcingOffersForInquiry(
 Output ONLY this JSON (no markdown):
 {
   "supplierName": string | null,           // company name from signature, "From:" or letterhead
-  "pricePerUnit": number | null,           // numeric — e.g. 480 (not "480 USD/MT")
+  "pricePerUnit": number | null,           // numeric - e.g. 480 (not "480 USD/MT")
   "currency": string | null,               // "USD", "EUR", "TRY"...
   "unit": string | null,                   // "MT", "kg", "container", "lb"
   "qtyAvailable": string | null,           // e.g. "2 containers/month", "100 MT"
@@ -102,8 +102,8 @@ Pricing extraction rules:
 - Common patterns: "$180/MT FOB", "USD 480 per ton", "180 USD/ton CFR", "EUR 195 per MT", "180\$/mt", "180 usd/ton".
 - If multiple prices appear, take the most recent inbound one (the supplier's latest quoted figure).
 - "$185 FOB Constanta" with no unit → infer /MT for grain commodities, /kg for samples, /piece for machinery.
-- Body might quote a range ("180-185 USD/ton") — take the lower bound.
-- Don't mark hasNoOffer=true just because you're unsure — extract whatever number you DO see.
+- Body might quote a range ("180-185 USD/ton") - take the lower bound.
+- Don't mark hasNoOffer=true just because you're unsure - extract whatever number you DO see.
 
 Set hasNoOffer=true ONLY when the thread genuinely has no price discussion (intro emails, sample requests, banter, "we received your inquiry").`,
           messages: [{

@@ -31,12 +31,12 @@ Output ONLY this JSON (no prose):
   "transitDays": number|null           // promised door-to-door days if stated
 }
 
-Rules: never invent values — null/false when the text doesn't say. "Batteries" alone = batteries_un3480; batteries inside devices/equipment = batteries_un3481. GPUs/servers/racks = servers_gpu. Weights like "20k lbs" = 20000.`;
+Rules: never invent values - null/false when the text doesn't say. "Batteries" alone = batteries_un3480; batteries inside devices/equipment = batteries_un3481. GPUs/servers/racks = servers_gpu. Weights like "20k lbs" = 20000.`;
 
 export async function extractLoadIdea(text: string): Promise<{ idea: LoadIdea; note: string | null }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return { idea: { ...EMPTY_LOAD_IDEA, description: text.slice(0, 200) }, note: "AI parse unavailable (no API key) — fill the fields manually." };
+    return { idea: { ...EMPTY_LOAD_IDEA, description: text.slice(0, 200) }, note: "AI parse unavailable (no API key) - fill the fields manually." };
   }
   try {
     const client = new Anthropic({ apiKey });
@@ -54,7 +54,7 @@ export async function extractLoadIdea(text: string): Promise<{ idea: LoadIdea; n
   } catch {
     return {
       idea: { ...EMPTY_LOAD_IDEA, description: text.slice(0, 200) },
-      note: "Couldn't auto-parse the idea — fill the fields manually and re-check.",
+      note: "Couldn't auto-parse the idea - fill the fields manually and re-check.",
     };
   }
 }

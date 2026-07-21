@@ -8,12 +8,12 @@ import { recordTargetPriceHistory, targetPriceChanged } from "./target-price-his
 
 // AI extracts a structured action from a free-form user message when scoped
 // to a job. Returns one of:
-//   { action: "edit-job", fields: {...} }     — update Job.* fields
-//   { action: "move-stage", status: "..." }   — change Job.status
+//   { action: "edit-job", fields: {...} }     - update Job.* fields
+//   { action: "move-stage", status: "..." }   - change Job.status
 //   { action: "add-milestone", type, plannedAt?, actualAt? }
-//   { action: "none" }                        — fall through to chat
+//   { action: "none" }                        - fall through to chat
 //
-// We avoid full tool-use plumbing here — single Haiku call returns JSON,
+// We avoid full tool-use plumbing here - single Haiku call returns JSON,
 // the caller validates and applies. Cheap and predictable.
 
 type ExtractedAction =
@@ -278,7 +278,7 @@ export async function applySetCustomer(jobId: string, officeId: string, args: { 
       });
       created = true;
     } catch {
-      // unique violation race — re-fetch
+      // unique violation race - re-fetch
       company = await prisma.company.findFirst({
         where: { officeId, name: args.companyName },
         select: { id: true, name: true },
@@ -302,7 +302,7 @@ export async function applyRenameCompany(jobId: string, officeId: string, newNam
     select: { id: true, company: { select: { id: true, name: true } } },
   });
   if (!job) return { error: "Job not found" };
-  if (!job.company) return { error: "This job has no customer linked yet — set one first" };
+  if (!job.company) return { error: "This job has no customer linked yet - set one first" };
   const from = job.company.name;
   // Avoid duplicate-name collision
   const existing = await prisma.company.findFirst({

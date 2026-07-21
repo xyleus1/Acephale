@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncEmailAccountInternal } from "@/lib/gmail-sync";
 
-export const maxDuration = 300; // 5 minutes — full sync of all active accounts
+export const maxDuration = 300; // 5 minutes - full sync of all active accounts
 
 export async function GET(req: NextRequest) {
   // Vercel cron requests include `Authorization: Bearer $CRON_SECRET` automatically.

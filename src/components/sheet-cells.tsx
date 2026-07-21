@@ -2,7 +2,7 @@
 
 // Inline-editable sheet cells shared by the CRM contact sheet and the RFQ sheet.
 // CellInput commits on blur/Enter and cancels on Escape; CellSelect is a
-// dropdown that keeps the picked value visible during the save round trip —
+// dropdown that keeps the picked value visible during the save round trip -
 // a failed save remounts the cell (key bump) back to the stored value.
 
 import { useEffect, useRef, useState } from "react";
@@ -73,9 +73,9 @@ export function CellSelect({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const items: Array<readonly [string, string]> = allowEmpty ? [["", "—"], ...options] : [...options];
-  // Custom values (created on the fly) have no options entry — show them raw.
-  const label = options.find(([v]) => v === local)?.[1] ?? (local || "—");
+  const items: Array<readonly [string, string]> = allowEmpty ? [["", "-"], ...options] : [...options];
+  // Custom values (created on the fly) have no options entry - show them raw.
+  const label = options.find(([v]) => v === local)?.[1] ?? (local || "-");
   const hasCustomCurrent = Boolean(local) && !items.some(([v]) => v === local);
 
   function openMenu() {

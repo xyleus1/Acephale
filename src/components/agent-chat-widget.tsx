@@ -145,7 +145,7 @@ export function AgentChatWidget() {
     if (next) window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  // The Company Brain chat view IS the chat — the floating dock would duplicate it.
+  // The Company Brain chat view IS the chat - the floating dock would duplicate it.
   if (isCompanyBrainPage) return null;
 
   // The dashboard root sometimes has a permanent embedded agent. Suppress the

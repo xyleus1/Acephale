@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "./auth";
 import { prisma } from "./prisma";
 
-// Operator opened the conversation — clear its unread state. isRead exists on
+// Operator opened the conversation - clear its unread state. isRead exists on
 // EmailMessage since the beginning but was never written; the inbox unread
 // dot (and the WhatsApp chat view) now depend on it.
 export async function markThreadReadAction(threadId: string): Promise<{ ok: true } | { error: string }> {

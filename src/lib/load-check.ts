@@ -1,12 +1,12 @@
 // Load pre-flight: run a load idea through deterministic customs / compliance /
 // insurance / security / equipment / capacity rules and get back what breaks
 // ("blocker"), what likely breaks without action ("risk"), and what to keep an
-// eye on ("watch") — each with the action to take. Pure domain logic, no LLM,
+// eye on ("watch") - each with the action to take. Pure domain logic, no LLM,
 // no DB: the AI is only used upstream to parse free text into a LoadIdea
 // (src/lib/load-check-extract.ts), and the carrier bench is passed in.
 //
 // Severity is honest, not alarmist: a finding must name the rule or failure
-// mode it comes from. These are operator decision aids, not legal advice —
+// mode it comes from. These are operator decision aids, not legal advice -
 // the "action" is always "verify with the authority that owns the rule".
 
 import { classifyDomesticLocation } from "@/lib/domestic-trucking-pricing";
@@ -71,7 +71,7 @@ export type CheckFinding = {
   action: string;
 };
 
-// Slimmed carrier shape the matcher needs — built from the bench in the action.
+// Slimmed carrier shape the matcher needs - built from the bench in the action.
 export type BenchCarrier = {
   id: string;
   name: string;
@@ -102,7 +102,7 @@ export type LoadCheckResult = {
   estimatedMiles: number | null;
   findings: CheckFinding[];
   carrierMatch: CarrierMatchResult;
-  // Cited numbers from live sources (duty rates, rulings, insurance filings) —
+  // Cited numbers from live sources (duty rates, rulings, insurance filings) -
   // filled by src/lib/load-check-enrich.ts after the pure check runs.
   facts: string[];
 };
@@ -204,7 +204,7 @@ export function checkLoadIdea(
       title: "Damaged/recalled lithium batteries are forbidden in normal transport",
       detail:
         "DOT forbids damaged, defective, or recalled lithium cells aboard aircraft entirely; ground moves are legal only under 49 CFR 173.185(f) enhanced packaging and handling, and cells at risk of fire or rapid disassembly additionally need PHMSA approval or a special permit.",
-      action: "Refuse a standard booking. This needs a specialist DDR-battery handler set up for 173.185(f) packaging — quote only through one.",
+      action: "Refuse a standard booking. This needs a specialist DDR-battery handler set up for 173.185(f) packaging - quote only through one.",
     });
   }
   if (category === "batteries_un3480") {
@@ -212,7 +212,7 @@ export function checkLoadIdea(
       id: "un3480_fully_regulated",
       severity: "blocker",
       domain: "hazmat",
-      title: "UN3480 standalone lithium-ion — fully regulated Class 9 unless small-cell excepted",
+      title: "UN3480 standalone lithium-ion - fully regulated Class 9 unless small-cell excepted",
       detail:
         "Cells over 20 Wh or batteries over 100 Wh ship fully regulated Class 9 by ground: UN-spec packaging, Class 9 label + lithium battery mark, shipping papers with emergency contact, hazmat-trained carrier and driver (49 CFR 173.185). At or under those limits, highway moves can use the excepted lithium-battery provisions.",
       action:
@@ -224,7 +224,7 @@ export function checkLoadIdea(
       id: "un3481_check_provisions",
       severity: "risk",
       domain: "hazmat",
-      title: "UN3481 (batteries in/with equipment) — regulation level depends on Wh",
+      title: "UN3481 (batteries in/with equipment) - regulation level depends on Wh",
       detail:
         "Batteries packed with or contained in equipment can move under lighter provisions when cells/batteries are under the Wh limits; above them the shipment is fully regulated Class 9.",
       action: "Get Wh per battery and batteries per package from the shipper to determine excepted vs fully regulated before pricing.",
@@ -248,9 +248,9 @@ export function checkLoadIdea(
       id: "itar_park",
       severity: "blocker",
       domain: "export",
-      title: "Possible ITAR/USML article — outside current scope",
+      title: "Possible ITAR/USML article - outside current scope",
       detail:
-        "Defense/space hardware can be a USML defense article: even on a domestic move, unlicensed foreign-person access to the article or its technical data is a deemed export — criminal exposure, not a fine. Defense shippers demand ITAR-compliant handling (US-person drivers, access controls) and typically ITAR-registered logistics partners.",
+        "Defense/space hardware can be a USML defense article: even on a domestic move, unlicensed foreign-person access to the article or its technical data is a deemed export - criminal exposure, not a fine. Defense shippers demand ITAR-compliant handling (US-person drivers, access controls) and typically ITAR-registered logistics partners.",
       action: "Don't quote. Keep Tier C parked until a specialist ITAR-registered forwarder partner is signed, then co-broker through them.",
     });
   }
@@ -261,7 +261,7 @@ export function checkLoadIdea(
       domain: "export",
       title: "AI accelerators/servers heading to export carry EAR license risk",
       detail:
-        "High-end GPUs and AI servers fall under advanced-computing export controls; many destinations require a BIS license. The domestic leg is fine — the export leg is where it breaks.",
+        "High-end GPUs and AI servers fall under advanced-computing export controls; many destinations require a BIS license. The domestic leg is fine - the export leg is where it breaks.",
       action:
         "Get the ECCN, end destination, and end user from the shipper before touching the export leg; screen the consignee against denied-party lists. Never assume EAR99.",
     });
@@ -272,7 +272,7 @@ export function checkLoadIdea(
       severity: "watch",
       domain: "export",
       title: "Export leg needs EEI/AES filing above $2,500 per Schedule B",
-      detail: "Routine, but someone must own it — usually the export forwarder.",
+      detail: "Routine, but someone must own it - usually the export forwarder.",
       action: "Confirm who files AES and that Schedule B / ECCN classification is done before the freight hits the port.",
     });
   }
@@ -283,7 +283,7 @@ export function checkLoadIdea(
       id: "cbp_exam_buffer",
       severity: "risk",
       domain: "customs",
-      title: "Inbound leg can catch a CBP exam — delivery promises off vessel ETA break",
+      title: "Inbound leg can catch a CBP exam - delivery promises off vessel ETA break",
       detail:
         "Any import container can be flagged for X-ray or intensive exam: days of delay plus exam, demurrage, and detention charges that land on someone.",
       action:
@@ -296,7 +296,7 @@ export function checkLoadIdea(
         domain: "customs",
         title: "China-origin electronics: Section 301 tariffs + UFLPA detention risk",
         detail:
-          "Most China-origin electronics carry Section 301 duties, and UFLPA makes electronics a top CBP detention category — cargo can sit for weeks while origin/traceability docs are reviewed.",
+          "Most China-origin electronics carry Section 301 duties, and UFLPA makes electronics a top CBP detention category - cargo can sit for weeks while origin/traceability docs are reviewed.",
         action:
           "Confirm HTS + duty math with the customs broker of record; ask the supplier for UFLPA supply-chain traceability docs up front; pad the delivery promise for detention risk.",
       });
@@ -327,7 +327,7 @@ export function checkLoadIdea(
       id: "declared_value_missing",
       severity: "risk",
       domain: "insurance",
-      title: "No declared value — can't set insurance or the security tier",
+      title: "No declared value - can't set insurance or the security tier",
       detail: "Every downstream decision (carrier cargo limit, rider, SOP tier, tracking) keys off the value.",
       action: "Get the commercial invoice value from the shipper before quoting.",
     });
@@ -337,7 +337,7 @@ export function checkLoadIdea(
       id: "value_over_250k",
       severity: "blocker",
       domain: "insurance",
-      title: `$${Math.round(idea.declaredValue / 1000)}k on one truck — do not book until insurance is verified in writing`,
+      title: `$${Math.round(idea.declaredValue / 1000)}k on one truck - do not book until insurance is verified in writing`,
       detail:
         "Standard motor-carrier cargo policies stop at $100k, and electronics theft exclusions are common. At this value a single stolen trailer is a company-ending claim.",
       action:
@@ -360,7 +360,7 @@ export function checkLoadIdea(
       id: "ca_theft_corridor",
       severity: "risk",
       domain: "security",
-      title: "High-value electronics on a CA lane — the national theft epicenter",
+      title: "High-value electronics on a CA lane - the national theft epicenter",
       detail:
         "California is ~36-38% of US cargo theft, electronics is the #1 target, and strategic (fake-carrier) theft concentrates around LA and the Inland Empire.",
       action:
@@ -385,7 +385,7 @@ export function checkLoadIdea(
         severity: "watch",
         domain: "security",
         title: "Friday pickup of high-value freight usually means weekend dwell",
-        detail: "Freight picked up Friday often sits in a yard until Monday — prime theft exposure.",
+        detail: "Freight picked up Friday often sits in a yard until Monday - prime theft exposure.",
         action: "Prefer Mon-Wed pickup, or confirm the carrier runs it straight through with team drivers.",
       });
     }
@@ -399,7 +399,7 @@ export function checkLoadIdea(
       domain: "california",
       title: "Reefer equipment operating in CA must be CARB TRU-compliant",
       detail: "Non-compliant transport refrigeration units are citable in California, and enforcement is real at ports and DCs.",
-      action: "Confirm the carrier's TRU registration/compliance before dispatch — it's a vetting checklist line for reefer carriers.",
+      action: "Confirm the carrier's TRU registration/compliance before dispatch - it's a vetting checklist line for reefer carriers.",
     });
   }
   if (intrastateCa) {
@@ -407,7 +407,7 @@ export function checkLoadIdea(
       id: "ab5_intrastate",
       severity: "watch",
       domain: "california",
-      title: "CA intrastate move — AB5 owner-operator exposure sits in the chain",
+      title: "CA intrastate move - AB5 owner-operator exposure sits in the chain",
       detail: "Misclassification liability lands mostly on carriers, but broker co-liability optics matter on pure-CA moves.",
       action: "Prefer carriers running employee drivers for CA intrastate freight; note the driver model during vetting.",
     });
@@ -451,7 +451,7 @@ export function checkLoadIdea(
       severity: "risk",
       domain: "equipment",
       title: "Open-deck equipment for sensitive electronics",
-      detail: "Flatbed/step-deck exposes electronics to weather, road shock, and eyes — usually the wrong tool unless it's crated machinery.",
+      detail: "Flatbed/step-deck exposes electronics to weather, road shock, and eyes - usually the wrong tool unless it's crated machinery.",
       action: "Move it enclosed air-ride unless the OEM crate spec explicitly allows open deck with tarping.",
     });
   }
@@ -480,7 +480,7 @@ export function checkLoadIdea(
       id: "desert_heat",
       severity: "risk",
       domain: "equipment",
-      title: "Summer desert crossing — trailer interiors hit 130-150°F",
+      title: "Summer desert crossing - trailer interiors hit 130-150°F",
       detail: "Servers, instruments, and batteries have storage temp ceilings well below a parked trailer in the Mojave in July.",
       action: "Check the product's storage temp spec; if it's under ~60°C, use temp-controlled equipment or a team running nights.",
     });
@@ -507,7 +507,7 @@ export function checkLoadIdea(
         domain: "capacity",
         title: `~${estimatedMiles} mi in ${idea.transitDays} day(s) needs team drivers`,
         detail: `A solo driver covers ~${SOLO_MILES_PER_DAY} mi/day under HOS; this lane needs ~${Math.round(milesPerDay)} mi/day.`,
-        action: "Quote with a team-driver carrier (also the right answer for high-value theft exposure) — price accordingly.",
+        action: "Quote with a team-driver carrier (also the right answer for high-value theft exposure) - price accordingly.",
       });
     }
   }
@@ -573,7 +573,7 @@ export function checkLoadIdea(
           : "No approved bench carrier meets this load's requirements",
       detail:
         context.carriers.length === 0
-          ? "The vetted bench is empty — every load currently depends on ad-hoc capacity, which is exactly the deceptive-pickup attack surface."
+          ? "The vetted bench is empty - every load currently depends on ad-hoc capacity, which is exactly the deceptive-pickup attack surface."
           : `None of the ${context.carriers.length} approved carrier(s) satisfy: ${requirements.map((r) => r.label).join(", ")}.`,
       action:
         "Vet a matching carrier before committing (the FMCSA pool has ~1,160 CA hazmat carriers in the 5-100 truck band), or co-broker this one to a trusted specialist.",
@@ -600,7 +600,7 @@ export function checkLoadIdea(
 
 // Render a pre-flight result as text: `notes` is the compact form for
 // Inquiry.notes; `report` is the full form for the RFQ content panel
-// (rawEmailBody). Pure — the caller stamps dates/references.
+// (rawEmailBody). Pure - the caller stamps dates/references.
 export function formatPreflightReport(idea: LoadIdea, result: LoadCheckResult): { notes: string; report: string } {
   const blockers = result.findings.filter((f) => f.severity === "blocker");
   const risks = result.findings.filter((f) => f.severity === "risk");
@@ -612,7 +612,7 @@ export function formatPreflightReport(idea: LoadIdea, result: LoadCheckResult): 
       : null;
 
   const notes = [
-    `Pre-flight: ${blockers.length} blocker(s), ${risks.length} risk(s), ${watch.length} watch — security tier ${tierText}.`,
+    `Pre-flight: ${blockers.length} blocker(s), ${risks.length} risk(s), ${watch.length} watch - security tier ${tierText}.`,
     ...blockers.map((f) => `✗ ${f.title} → ${f.action}`),
     ...risks.map((f) => `! ${f.title} → ${f.action}`),
   ].join("\n");
@@ -664,7 +664,7 @@ export function coerceLoadIdea(raw: unknown, commodityValues: readonly string[],
     if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
     if (typeof v !== "string") return null;
     const cleaned = v.replace(/[$,\s]/g, "");
-    if (!cleaned) return null; // Number("") === 0 — an empty string is missing, not zero
+    if (!cleaned) return null; // Number("") === 0 - an empty string is missing, not zero
     const n = Number(cleaned);
     return Number.isFinite(n) && n >= 0 ? n : null;
   };

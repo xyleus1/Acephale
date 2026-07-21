@@ -38,7 +38,7 @@ const COLUMNS: Array<{ key: SortKey | "badges"; label: string; width?: number }>
 const NUMERIC_KEYS: SortKey[] = ["cargoLimit", "scorecardScore"];
 
 function fmtExpiry(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -150,7 +150,7 @@ export function CarrierSheet({ initialRows }: { initialRows: CarrierRow[] }) {
         const nextRow = carrierRowFromDetail(res.detail);
         setRows((prev) => prev.map((r) => (r.id === row.id ? nextRow : r)));
       } catch {
-        flash("Could not save — check your connection and try again.");
+        flash("Could not save - check your connection and try again.");
         revertCells(row.id, Object.keys(patch));
       } finally {
         markBusy(row.id, false);
@@ -170,7 +170,7 @@ export function CarrierSheet({ initialRows }: { initialRows: CarrierRow[] }) {
         }
         setRows((prev) => prev.filter((r) => r.id !== row.id));
       } catch {
-        flash("Could not delete — check your connection and try again.");
+        flash("Could not delete - check your connection and try again.");
       } finally {
         markBusy(row.id, false);
       }
@@ -199,7 +199,7 @@ export function CarrierSheet({ initialRows }: { initialRows: CarrierRow[] }) {
         setRows((prev) => [carrierRowFromDetail(res.detail), ...prev]);
         setDraft(null);
       } catch {
-        flash("Could not add the carrier — check your connection and try again.");
+        flash("Could not add the carrier - check your connection and try again.");
       } finally {
         setSavingDraft(false);
       }
@@ -326,7 +326,7 @@ export function CarrierSheet({ initialRows }: { initialRows: CarrierRow[] }) {
               <tr>
                 <td colSpan={COLUMNS.length + 1} className="table-empty-cell">
                   {rows.length === 0
-                    ? "No carriers yet — hit “Add carrier” to start building the vetted bench."
+                    ? "No carriers yet - hit “Add carrier” to start building the vetted bench."
                     : "No carriers match."}
                 </td>
               </tr>
@@ -362,7 +362,7 @@ export function CarrierSheet({ initialRows }: { initialRows: CarrierRow[] }) {
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                      {row.badges.length === 0 && <span style={{ opacity: 0.4, fontSize: 12 }}>—</span>}
+                      {row.badges.length === 0 && <span style={{ opacity: 0.4, fontSize: 12 }}>-</span>}
                       {row.badges.map((badge) => (
                         <span
                           key={badge.code}
@@ -403,11 +403,11 @@ export function CarrierSheet({ initialRows }: { initialRows: CarrierRow[] }) {
                     <CellInput key={`h${rev("homeBase")}:${row.homeBase ?? ""}`} value={row.homeBase} onCommit={(v) => commit(row, { homeBase: v })} />
                   </td>
                   <td title={`${row.loadsCompleted} load(s) completed`}>
-                    {row.scorecardScore != null ? row.scorecardScore.toFixed(0) : "—"}
+                    {row.scorecardScore != null ? row.scorecardScore.toFixed(0) : "-"}
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 2 }}>
-                      <Link href={`/dashboard/carriers/${row.id}`} className="sheet-del" title={`Open ${row.name} — vetting checklist & insurance`}>
+                      <Link href={`/dashboard/carriers/${row.id}`} className="sheet-del" title={`Open ${row.name} - vetting checklist & insurance`}>
                         <Icon name="chevron-right" size={13} />
                       </Link>
                       <button type="button" className="sheet-del" title={`Delete ${row.name}`} onClick={() => remove(row)}>
@@ -422,7 +422,7 @@ export function CarrierSheet({ initialRows }: { initialRows: CarrierRow[] }) {
         </table>
       </div>
       <p className="sheet-count">
-        Showing {visible.length} of {rows.length} carriers. Click any cell to edit — approval is gated on the vetting checklist (open a row for the full picture).
+        Showing {visible.length} of {rows.length} carriers. Click any cell to edit - approval is gated on the vetting checklist (open a row for the full picture).
       </p>
     </div>
   );

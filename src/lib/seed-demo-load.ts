@@ -6,7 +6,7 @@ import { createPortalToken } from "./portal-token";
 
 // Build a minimal one-page PDF with the given title and body lines, returned
 // as a data: URL. Used to seed demo documents that the inline viewer can
-// render and the PDF text extractor can read. Pure ASCII, no fonts embedded —
+// render and the PDF text extractor can read. Pure ASCII, no fonts embedded -
 // uses the standard Helvetica that every PDF reader has built in.
 function makeDemoPdfDataUrl(title: string, lines: string[]): string {
   const escape = (s: string) => s.replace(/[\\()]/g, (c) => "\\" + c);
@@ -62,10 +62,10 @@ function makeDemoPdfDataUrl(title: string, lines: string[]): string {
 //   pre-baked AI analysis so the workbench shows "AI commented" right away
 // - Portal token populated
 //
-// Idempotent — returns the existing demo job if one already exists.
+// Idempotent - returns the existing demo job if one already exists.
 // Upgrade an already-seeded demo job to the richer state: IN_TRANSIT,
 // all 5 docs APPROVED with AI commentary, more milestones marked done.
-// Idempotent — safe to call repeatedly.
+// Idempotent - safe to call repeatedly.
 async function upgradeExistingDemoLoad(jobId: string, officeId: string): Promise<void> {
   // Bump status
   await prisma.job.update({
@@ -73,7 +73,7 @@ async function upgradeExistingDemoLoad(jobId: string, officeId: string): Promise
     data: { status: "IN_TRANSIT" },
   });
 
-  // Push milestones forward — BOOKING / CARGO_READY / ETD all done
+  // Push milestones forward - BOOKING / CARGO_READY / ETD all done
   const job = await prisma.job.findUnique({
     where: { id: jobId },
     select: { eta: true, milestones: { select: { id: true, type: true, actualAt: true } } },
@@ -124,7 +124,7 @@ async function upgradeExistingDemoLoad(jobId: string, officeId: string): Promise
       name: "COO_RO-2026-04781.pdf",
       docType: "COO",
       status: "APPROVED",
-      url: makeDemoPdfDataUrl("Certificate of Origin — RO-2026-04781", [
+      url: makeDemoPdfDataUrl("Certificate of Origin - RO-2026-04781", [
         "CERTIFICATE OF ORIGIN",
         "Certificate No: RO-2026-04781",
         "Issuing authority: Romanian Chamber of Commerce, Constanta",
@@ -162,7 +162,7 @@ async function upgradeExistingDemoLoad(jobId: string, officeId: string): Promise
       name: "Customs_Declaration_DE-IM-2026-91102.pdf",
       docType: "CUSTOMS",
       status: "APPROVED",
-      url: makeDemoPdfDataUrl("Customs Declaration — DE/IM/2026/91102", [
+      url: makeDemoPdfDataUrl("Customs Declaration - DE/IM/2026/91102", [
         "CUSTOMS DECLARATION (Import)",
         "Declaration No: DE/IM/2026/91102",
         "Filed by: Hamburg Customs Broker AG (broker code HB-2241)",
@@ -226,7 +226,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
     select: { id: true, companyId: true, mode: true, origin: true, destination: true, commodity: true, incoterms: true, weight: true, volume: true },
   });
 
-  // Customer — name starts with "DEMO" so it's visually obvious this is a
+  // Customer - name starts with "DEMO" so it's visually obvious this is a
   // staged record vs the operator's real customers.
   const demoCompanyName = "DEMO · Black Sea Trading Co";
   let company = await prisma.company.findFirst({
@@ -249,7 +249,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
     });
   }
 
-  // Inquiry (the source RFQ) — reuse orphan from previous failed run if found
+  // Inquiry (the source RFQ) - reuse orphan from previous failed run if found
   const { createWithFileReference } = await import("./references");
   let inquiry = orphanInquiry
     ? await prisma.inquiry.update({
@@ -261,7 +261,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
           officeId: args.officeId,
           companyId: company.id,
           reference,
-          subject: "DEMO · Steel coils — Constanta to Hamburg, 1x40HC",
+          subject: "DEMO · Steel coils - Constanta to Hamburg, 1x40HC",
           fromEmail: "ops@blackseatrading.example",
           fromCompany: "Black Sea Trading Co",
           type: "FORWARDING",
@@ -276,13 +276,13 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
           volume: 28,
           cargoReadyDate: new Date(Date.now() + 4 * 86400000),
           receivedAt: new Date(Date.now() - 6 * 86400000),
-          notes: "Customer is repeat shipper — 4 prior loads on this lane.",
+          notes: "Customer is repeat shipper - 4 prior loads on this lane.",
           rawEmailBody: "[Demo seed] Original RFQ from Black Sea Trading Co requesting rate Constanta → Hamburg, 1x40HC steel coils.",
         },
       }));
 
   // Orphan inquiries from runs before the numbering system may lack a file
-  // number — assign one so the RFQ and its load always share a reference.
+  // number - assign one so the RFQ and its load always share a reference.
   if (!inquiry.reference) {
     const inquiryId = inquiry.id;
     inquiry = await createWithFileReference(args.officeId, (reference) =>
@@ -290,7 +290,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
     );
   }
 
-  // Job — set up like a mid-pipeline shipment, carrying the RFQ's file number.
+  // Job - set up like a mid-pipeline shipment, carrying the RFQ's file number.
   const reference = inquiry.reference as string;
   const portalToken = createPortalToken();
   const etd = new Date(Date.now() + 6 * 86400000);
@@ -320,7 +320,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
       portalToken,
       notifyCustomer: true,
       customerEmail: "ops@blackseatrading.example",
-      notes: "Refrigerated trailer to port — operator handed off to carrier on day 2. [DEMO_LOAD_SEED]",
+      notes: "Refrigerated trailer to port - operator handed off to carrier on day 2. [DEMO_LOAD_SEED]",
     },
   });
 
@@ -335,7 +335,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
 
   // Milestones
   const ms = [
-    // Job is mid-shipment (IN_TRANSIT) — booking + cargo ready + ETD all hit;
+    // Job is mid-shipment (IN_TRANSIT) - booking + cargo ready + ETD all hit;
     // ETA still upcoming, customs + delivery pending.
     { type: "BOOKING",          plannedAt: new Date(Date.now() - 8 * 86400000), actualAt: new Date(Date.now() - 7 * 86400000) },
     { type: "CARGO_READY",      plannedAt: new Date(Date.now() - 5 * 86400000), actualAt: new Date(Date.now() - 5 * 86400000) },
@@ -349,14 +349,14 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
     await prisma.jobMilestone.create({ data: { jobId: job.id, type: m.type, plannedAt: m.plannedAt, actualAt: m.actualAt ?? undefined } });
   }
 
-  // Documents — 3 demo PDFs with pre-baked AI analysis (so the workbench
+  // Documents - 3 demo PDFs with pre-baked AI analysis (so the workbench
   // shows "AI commented" without needing real PDF bytes).
   const docs = [
     {
       name: "BL_HAMB-2026-04781.pdf",
       docType: "BL",
       status: "APPROVED",
-      url: makeDemoPdfDataUrl("BL — HAMB-2026-04781", [
+      url: makeDemoPdfDataUrl("BL - HAMB-2026-04781", [
         "BILL OF LADING (Master)",
         "BL Number: HAMB-2026-04781",
         "Vessel: MSC ARIADNE   Voyage: 21W",
@@ -369,18 +369,18 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
         "Freight: prepaid   Carrier: MSC",
       ]),
       aiSummary: "Master Bill of Lading from MSC for the Constanta → Hamburg leg. Container MEDU2891744 listed, 40HC, 18,000 kg gross. Shipper Black Sea Trading Co, consignee Hamburg Cold Storage GmbH.",
-      aiFlags: JSON.stringify(["Vessel ETD on BL (May 9) is one day later than the booked ETD — not blocking, but adjust customer comms if needed."]),
+      aiFlags: JSON.stringify(["Vessel ETD on BL (May 9) is one day later than the booked ETD - not blocking, but adjust customer comms if needed."]),
       aiKeyFields: JSON.stringify({ bl_number: "HAMB-2026-04781", vessel: "MSC ARIADNE", voyage: "21W", container_no: "MEDU2891744", gross_weight_kg: 18000, shipper: "Black Sea Trading Co", consignee: "Hamburg Cold Storage GmbH", port_of_loading: "Constanta", port_of_discharge: "Hamburg" }),
     },
     {
       name: "Commercial_Invoice_BST-2104.pdf",
       docType: "INVOICE",
       status: "APPROVED",
-      url: makeDemoPdfDataUrl("Commercial Invoice — BST-2104", [
+      url: makeDemoPdfDataUrl("Commercial Invoice - BST-2104", [
         "COMMERCIAL INVOICE",
         "Invoice No: BST-2104   Date: 01 May 2026",
-        "Seller: Black Sea Trading Co — Constanta, RO",
-        "Buyer:  Hamburg Cold Storage GmbH — Hamburg, DE",
+        "Seller: Black Sea Trading Co - Constanta, RO",
+        "Buyer:  Hamburg Cold Storage GmbH - Hamburg, DE",
         "Item: Cold-rolled steel coils",
         "Quantity: 18 MT × USD 1,150 / MT = USD 20,700",
         "Currency: USD   Incoterms: FOB Constanta",
@@ -395,7 +395,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
       name: "Packing_List_BST-2104.pdf",
       docType: "PACKING_LIST",
       status: "APPROVED",
-      url: makeDemoPdfDataUrl("Packing List — BST-2104", [
+      url: makeDemoPdfDataUrl("Packing List - BST-2104", [
         "PACKING LIST",
         "Reference: BST-2104",
         "Total packages: 12 wooden crates",
@@ -406,14 +406,14 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
         "Container: MEDU2891744 (40HC)",
       ]),
       aiSummary: "Packing list for invoice BST-2104. 12 wooden crates, gross 18,200 kg, net 18,000 kg. Crate dimensions averaging 120×80×60 cm.",
-      aiFlags: JSON.stringify(["Net weight (18,000 kg) matches the invoice but gross (18,200 kg) is 200 kg above what the BL records — confirm with shipper before customs entry."]),
+      aiFlags: JSON.stringify(["Net weight (18,000 kg) matches the invoice but gross (18,200 kg) is 200 kg above what the BL records - confirm with shipper before customs entry."]),
       aiKeyFields: JSON.stringify({ total_packages: 12, gross_weight_kg: 18200, net_weight_kg: 18000, dimensions: "120×80×60 cm avg", package_type: "Wooden crate" }),
     },
     {
       name: "COO_RO-2026-04781.pdf",
       docType: "COO",
       status: "APPROVED",
-      url: makeDemoPdfDataUrl("Certificate of Origin — RO-2026-04781", [
+      url: makeDemoPdfDataUrl("Certificate of Origin - RO-2026-04781", [
         "CERTIFICATE OF ORIGIN",
         "Certificate No: RO-2026-04781",
         "Issuing authority: Romanian Chamber of Commerce, Constanta",
@@ -442,7 +442,7 @@ export async function seedDemoLoad(args: { officeId: string }): Promise<{ ok: tr
       name: "Customs_Declaration_DE-IM-2026-91102.pdf",
       docType: "CUSTOMS",
       status: "APPROVED",
-      url: makeDemoPdfDataUrl("Customs Declaration — DE/IM/2026/91102", [
+      url: makeDemoPdfDataUrl("Customs Declaration - DE/IM/2026/91102", [
         "CUSTOMS DECLARATION (Import)",
         "Declaration No: DE/IM/2026/91102",
         "Filed by: Hamburg Customs Broker AG (broker code HB-2241)",

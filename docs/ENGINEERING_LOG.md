@@ -2050,3 +2050,28 @@ Use this file for chronological implementation notes that future agents should s
   "meta-leads" so email/manual RFQs (which carry incoterms) are unaffected.
 - Follow-up: parse lead replies into inquiry fields (currently the desk
   reads replies at oguzhan@/mert@ and edits the row).
+
+### 2026-07-21 - Repo-wide em dash ban
+
+- Branch: us-rfq-sheet-panel (Conductor workspace cody, targets main)
+- Commit: see git log
+- Task: Mert's absolute rule: never use em dashes anywhere (UI, emails,
+  WhatsApp, subjects, notes, prompts, comments).
+- Files changed: 123 files swept (src, scripts, prisma seeds, globals.css,
+  schema.prisma comments); new `src/lib/no-em-dash.ts` (stripEmDashes +
+  prompt rule constant); outbound guards in `src/lib/rfq-mail.ts`
+  (SMTP), `src/lib/gmail-send.ts`, `src/lib/whatsapp.ts` (covers Cloud API
+  and Green API); style rule appended to customer-facing LLM prompts
+  (job-email, customer-notify, agent-chat SYSTEM); rule added to AGENTS.md
+  Engineering Rules.
+- Behavior: spaced em dashes became " - ", others "-", email signatures use
+  "--". Dynamic text (LLM drafts, operator input, sheet data echoed into
+  messages) is sanitized at every send path, so nothing outbound can carry
+  an em dash regardless of source.
+- Verification: build clean; lead-emails, lead-quality, rfq-whatsapp, crm,
+  email-classifier, rfq-load-draft, strategy, email-labels,
+  whatsapp-display, truckload-quotes, security-sop, load-check,
+  carrier-vetting suites all pass.
+- Caveats: historical Prisma migration SQL untouched (checksummed). En
+  dashes in Meta form-data matchers are input parsing and remain.
+- Follow-up: none.

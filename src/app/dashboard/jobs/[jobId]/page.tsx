@@ -50,7 +50,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 function fmt(d: Date | null | undefined) {
-  if (!d) return "—";
+  if (!d) return "-";
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 function fmtInput(d: Date | null | undefined) {
@@ -215,8 +215,8 @@ function formatEnumLikeValue(value: unknown) {
 }
 
 function formatProposalValue(value: unknown, field?: string) {
-  if (value == null || value === "") return "—";
-  if (field === "dimensions") return formatDimensionValue(value) ?? "—";
+  if (value == null || value === "") return "-";
+  if (field === "dimensions") return formatDimensionValue(value) ?? "-";
   if (field === "weight" && typeof value === "number") return `${value.toLocaleString()} kg`;
   if (field === "volume" && typeof value === "number") return `${value.toLocaleString()} cbm`;
   if (field === "packages" && typeof value === "number") return `${value.toLocaleString()} package${value === 1 ? "" : "s"}`;
@@ -243,7 +243,7 @@ function auditInputPreview(value: unknown) {
 }
 
 function formatProposalCbm(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(3)} CBM` : "—";
+  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(3)} CBM` : "-";
 }
 
 function formatProposalFieldList(fields: string[]) {
@@ -517,14 +517,14 @@ export default async function JobDetailPage({
       at: new Date(job.inquiry.receivedAt),
       iconName: "inbox", kind: "auto",
       title: "RFQ captured from inbox",
-      sub: `"${job.inquiry.subject}" — ${displayParty(job.inquiry.fromEmail) || job.inquiry.fromCompany || "Unknown sender"}`,
+      sub: `"${job.inquiry.subject}" - ${displayParty(job.inquiry.fromEmail) || job.inquiry.fromCompany || "Unknown sender"}`,
     });
     if (job.inquiry.parsedData) {
       events.push({
         at: new Date(job.inquiry.updatedAt),
         iconName: "sparkles", kind: "auto",
         title: "AI parsed shipment fields",
-        sub: `${job.inquiry.origin ?? "?"} → ${job.inquiry.destination ?? "?"} · ${job.inquiry.mode ?? "—"}${job.inquiry.weight ? ` · ${job.inquiry.weight.toLocaleString()}kg` : ""}`,
+        sub: `${job.inquiry.origin ?? "?"} → ${job.inquiry.destination ?? "?"} · ${job.inquiry.mode ?? "-"}${job.inquiry.weight ? ` · ${job.inquiry.weight.toLocaleString()}kg` : ""}`,
       });
     }
     for (const cq of job.inquiry.carrierQuotes) {
@@ -916,7 +916,7 @@ export default async function JobDetailPage({
             </div>
           )}
 
-          {/* Security SOP — rendered for tiered loads (or when checks exist) */}
+          {/* Security SOP - rendered for tiered loads (or when checks exist) */}
           <LoadSecurityCard
             securityTier={job.securityTier}
             declaredValue={job.declaredValue}
@@ -1231,7 +1231,7 @@ export default async function JobDetailPage({
                               <div key={`${event.id}-${row.scope}-${row.field}`} className="agent-review-field-row">
                                 <span>{row.scope === "rfq" ? "RFQ" : "Job"}</span>
                                 <strong>{row.label}</strong>
-                                <em>{row.hasValues ? formatProposalValue(row.before, row.field) : "—"}</em>
+                                <em>{row.hasValues ? formatProposalValue(row.before, row.field) : "-"}</em>
                                 <em>{row.hasValues ? formatProposalValue(row.after, row.field) : formatProposalValue(row.after)}</em>
                               </div>
                             ))}

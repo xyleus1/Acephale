@@ -92,10 +92,10 @@ export async function classifyInboundEmail(args: {
   ]);
 
   const inquiryHints = inquiries.map((i) =>
-    `${i.id} | "${i.subject}" | ${i.fromEmail ?? i.fromCompany ?? "?"} | ${i.company?.name ?? "—"} | ${i.origin ?? "?"} → ${i.destination ?? "?"} | ${i.mode ?? "—"}`
+    `${i.id} | "${i.subject}" | ${i.fromEmail ?? i.fromCompany ?? "?"} | ${i.company?.name ?? "-"} | ${i.origin ?? "?"} → ${i.destination ?? "?"} | ${i.mode ?? "-"}`
   ).join("\n");
   const jobHints = jobs.map((j) =>
-    `${j.id} | ${j.reference} | ${j.company?.name ?? "—"} | ${j.inquiry?.fromEmail ?? "—"} | ${j.origin ?? "?"} → ${j.destination ?? "?"} | ${j.mode ?? "—"}`
+    `${j.id} | ${j.reference} | ${j.company?.name ?? "-"} | ${j.inquiry?.fromEmail ?? "-"} | ${j.origin ?? "?"} → ${j.destination ?? "?"} | ${j.mode ?? "-"}`
   ).join("\n");
   const customerEmailDomains = new Set<string>();
   for (const c of customers) {
@@ -112,9 +112,9 @@ export async function classifyInboundEmail(args: {
   const result = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 700,
-    system: `You analyze inbound emails for a freight forwarding office. You output ONLY one JSON object — no markdown, no commentary.
+    system: `You analyze inbound emails for a freight forwarding office. You output ONLY one JSON object - no markdown, no commentary.
 
-Important: even if an email isn't a clear-cut RFQ/quote/reply, look at the OPEN INQUIRIES and ACTIVE JOBS lists below. If the sender, subject keywords, or content (cities, container numbers, shipment refs, carrier names) suggests it relates to one of them, set matchJobId or matchInquiryId and use kind "RELATED_NOTE" with a brief reason. Never guess wildly — only relate when there's a real signal. If genuinely unrelated to any freight workflow, use "OTHER".
+Important: even if an email isn't a clear-cut RFQ/quote/reply, look at the OPEN INQUIRIES and ACTIVE JOBS lists below. If the sender, subject keywords, or content (cities, container numbers, shipment refs, carrier names) suggests it relates to one of them, set matchJobId or matchInquiryId and use kind "RELATED_NOTE" with a brief reason. Never guess wildly - only relate when there's a real signal. If genuinely unrelated to any freight workflow, use "OTHER".
 
 Output schema:
 {
@@ -129,11 +129,11 @@ Output schema:
 }
 
 Kinds:
-- RFQ — a brand new freight quote request from a customer (multi-paragraph, mentions origin/destination/cargo)
-- CARRIER_REPLY — a carrier replying to one of OUR rate requests with their offer (lists rates, transit, validity)
-- CUSTOMER_REPLY — a customer responding to one of our quotes (acceptance, rejection, clarification, status request)
-- RELATED_NOTE — anything else clearly related to one of the open jobs/inquiries (carrier ETA update, broker note, customs query, sender works for the customer, etc.)
-- OTHER — newsletters, receipts, account notifications, personal mail, anything not freight-related at all
+- RFQ - a brand new freight quote request from a customer (multi-paragraph, mentions origin/destination/cargo)
+- CARRIER_REPLY - a carrier replying to one of OUR rate requests with their offer (lists rates, transit, validity)
+- CUSTOMER_REPLY - a customer responding to one of our quotes (acceptance, rejection, clarification, status request)
+- RELATED_NOTE - anything else clearly related to one of the open jobs/inquiries (carrier ETA update, broker note, customs query, sender works for the customer, etc.)
+- OTHER - newsletters, receipts, account notifications, personal mail, anything not freight-related at all
 
 Hints:
 - The sender's email domain is "${senderDomain}". Known customer-contact domains in this office: ${customerEmailDomains.size > 0 ? [...customerEmailDomains].join(", ") : "(none)"}.

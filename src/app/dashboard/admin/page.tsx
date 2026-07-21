@@ -55,7 +55,7 @@ function asStringList(value: unknown): string[] {
 }
 
 function auditValue(value: unknown) {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   if (value instanceof Date) return fmtDateTime(value);
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -91,12 +91,12 @@ function parseMaybeNumber(value: string | undefined) {
 }
 
 function pct(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "-";
   return `${Math.round(value * 10) / 10}%`;
 }
 
 function signed(value: number | null | undefined, suffix = "") {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "-";
   const rounded = Math.round(value * 10) / 10;
   return `${rounded > 0 ? "+" : ""}${rounded}${suffix}`;
 }
@@ -530,7 +530,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             })}
           </div>
 
-          {/* Activity table — who did what this week */}
+          {/* Activity table - who did what this week */}
           <div className="card">
             <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
               <div className="section-title">Activity this week</div>
@@ -590,7 +590,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   <div className="section-title">Unassigned accounts</div>
                   <Badge tone="warn">{unassignedCompanies.length}</Badge>
                 </div>
-                <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>These companies have no owner — assign them to a rep.</p>
+                <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>These companies have no owner - assign them to a rep.</p>
               </div>
               <div className="table-wrap">
                 <table style={{ border: "none", borderRadius: 0 }}>
@@ -637,7 +637,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <div className="card">
               <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
                 <div className="section-title">Reassign accounts</div>
-                <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>Move all primary accounts from one rep to another — e.g. when someone leaves.</p>
+                <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>Move all primary accounts from one rep to another - e.g. when someone leaves.</p>
               </div>
               <div className="card-body">
                 <ReassignForm users={salesUsers} action={reassignCompaniesAction} companyOwners={companyOwners} />
@@ -771,7 +771,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="section-title">Team activity log</div>
             <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
-              Every manual change on loads — created, taken, assigned, status moves, and field edits — with who did it and when.
+              Every manual change on loads - created, taken, assigned, status moves, and field edits - with who did it and when.
             </p>
           </div>
           {auditLogs.length === 0 ? (
@@ -810,7 +810,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                               {log.entityRef ?? log.entityId.slice(0, 8)}
                             </Link>
                           ) : (
-                            log.entityRef ?? "—"
+                            log.entityRef ?? "-"
                           )}
                         </td>
                         <td>
@@ -819,7 +819,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                             <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
                               {changes.slice(0, 6).map((c, i) => (
                                 <div key={`${log.id}-${i}`}>
-                                  {c.field}: {c.from ?? "—"} → {c.to ?? "—"}
+                                  {c.field}: {c.from ?? "-"} → {c.to ?? "-"}
                                 </div>
                               ))}
                               {changes.length > 6 && <div>+{changes.length - 6} more</div>}
@@ -1226,12 +1226,12 @@ function BrainScenarioResult({ result }: { result: PricingScenarioResult }) {
         </div>
       </div>
       <div className="admin-brain-price-grid">
-        <span>Buy cost <strong>{result.economics.buy_cost ?? "—"}</strong></span>
-        <span>Floor <strong>{result.economics.floor_price ?? "—"}</strong></span>
-        <span>Recommended <strong>{result.economics.recommended_price ?? "—"}</strong></span>
-        <span>Stretch <strong>{result.economics.stretch_price ?? "—"}</strong></span>
+        <span>Buy cost <strong>{result.economics.buy_cost ?? "-"}</strong></span>
+        <span>Floor <strong>{result.economics.floor_price ?? "-"}</strong></span>
+        <span>Recommended <strong>{result.economics.recommended_price ?? "-"}</strong></span>
+        <span>Stretch <strong>{result.economics.stretch_price ?? "-"}</strong></span>
         <span>Target margin <strong>{pct(result.economics.margin_at_target_pct)}</strong></span>
-        <span>Target buy limit <strong>{result.economics.target_buy_limit_label ?? "—"}</strong></span>
+        <span>Target buy limit <strong>{result.economics.target_buy_limit_label ?? "-"}</strong></span>
       </div>
       <div className="admin-brain-scenario-change">
         <span>{result.changed_decision.from.quote_gate}</span>

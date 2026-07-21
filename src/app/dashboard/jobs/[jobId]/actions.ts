@@ -213,7 +213,7 @@ export async function assignJobAction(jobId: string, formData: FormData) {
     entityRef: job.reference,
     summary: target
       ? `Assigned to ${target.email}`
-      : `Unassigned (was ${job.assignedTo?.email ?? "—"})`,
+      : `Unassigned (was ${job.assignedTo?.email ?? "-"})`,
     changes: [{ field: "assigned to", from: job.assignedTo?.email ?? null, to: target?.email ?? null }],
   });
   revalidatePath(`/dashboard/jobs/${jobId}`);
@@ -287,7 +287,7 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
       containerCount: isFcl ? num("containerCount") : null,
       containerType: isFcl ? (get("containerType") || null) : null,
       packages: num("packages") as number | null,
-      // Security spine — has() guards so partial forms posting to this action
+      // Security spine - has() guards so partial forms posting to this action
       // never blank fields they don't render.
       ...(formData.has("equipmentType") ? { equipmentType: get("equipmentType").trim().toUpperCase() || null } : {}),
       ...(formData.has("commodityCategory") ? { commodityCategory: get("commodityCategory") || null } : {}),
@@ -356,7 +356,7 @@ export async function updateJobAllFields(jobId: string, formData: FormData) {
       });
     }
   }
-  // Seed the SOP checklist for tiered loads — additive, never destructive.
+  // Seed the SOP checklist for tiered loads - additive, never destructive.
   const nextSecurityTier = "securityTier" in data ? (data.securityTier as string | null) : null;
   if (nextSecurityTier) {
     await ensureLoadSecurityChecklist(session.officeId, jobId, nextSecurityTier).catch(() => null);
@@ -831,7 +831,7 @@ export async function selectCarrierQuote(jobId: string, quoteId: string) {
       action: "load.status_changed",
       entityId: jobId,
       entityRef: job.reference,
-      summary: `Selected carrier quote (${quote.carrier}) — booked`,
+      summary: `Selected carrier quote (${quote.carrier}) - booked`,
       changes,
     });
   }

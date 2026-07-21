@@ -64,7 +64,7 @@ async function createJob(formData: FormData) {
       etd,
       eta,
       // Loads start unassigned: people take them from the board (or an admin
-      // assigns them) — creation is not ownership.
+      // assigns them) - creation is not ownership.
     },
   }));
   await recordAuditLog({

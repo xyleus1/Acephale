@@ -34,7 +34,7 @@ export function CheckWhatsAppStatusButton() {
         setResult(parts.join(" · "));
       } catch {
         setIsError(true);
-        setResult("Status check failed — see server logs.");
+        setResult("Status check failed - see server logs.");
       }
     });
   }

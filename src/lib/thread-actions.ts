@@ -67,7 +67,7 @@ export async function createInquiryFromThread(threadId: string): Promise<{ ok: t
     max_tokens: 700,
     system: `You are a freight forwarding office assistant. The user wants to create a single Inquiry record from a thread of emails that are all related to one shipment. Read the entire thread (multiple sent + received messages) and extract a consolidated inquiry.
 
-CRITICAL — distinguish job type:
+CRITICAL - distinguish job type:
 - "SOURCING" = the office is helping the customer FIND/BUY a commodity from a supplier (negotiating with sellers, asking about price-per-ton, contract terms, payment, sample quality). The conversation is about purchasing the goods, not just moving them.
 - "FORWARDING" = the office is moving cargo the customer already owns from A to B (booking carriers, container quotes, BL, customs clearance, ETA tracking).
 
@@ -98,7 +98,7 @@ Output ONLY a JSON object, no markdown:
   "cargoReadyDate": string | null         // ISO date
 }
 
-Be conservative — null is better than guessing. If a thread has BOTH sourcing and forwarding aspects, choose the dominant one (whichever stage the conversation is currently in).`,
+Be conservative - null is better than guessing. If a thread has BOTH sourcing and forwarding aspects, choose the dominant one (whichever stage the conversation is currently in).`,
     messages: [{
       role: "user",
       content: `${sourceSignal}EMAIL THREAD (subject: "${thread.subject}", ${thread.messages.length} messages):\n\n${transcript.slice(0, 12000)}`,
@@ -213,7 +213,7 @@ Be conservative — null is better than guessing. If a thread has BOTH sourcing 
 // Auto-version: same as createInquiryFromThread, but lets the AI return
 // `{ skip: true, reason: "..." }` if the thread isn't freight-related, and
 // records an attempt so we don't keep re-asking on every sync. Used by the
-// post-sync auto-link pass — silent on failure, no redirects, no auth check
+// post-sync auto-link pass - silent on failure, no redirects, no auth check
 // (caller must have already verified office ownership of the thread).
 export async function autoCreateInquiryFromThread(threadId: string): Promise<
   | { ok: true; created: false; reason: string }
@@ -260,10 +260,10 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
     s ? ` | summary: ${s.replace(/\s+/g, " ").trim().slice(0, 240)}` : "";
 
   const inquiryHints = openInquiries.map((i) =>
-    `${i.id} | ${i.type} | "${i.subject}" | ${i.fromEmail ?? i.fromCompany ?? "?"} | ${i.company?.name ?? "—"} | commodity: ${i.commodity ?? "—"} | ${i.origin ?? "?"} → ${i.destination ?? "?"} | ${i.mode ?? "—"}${summarize(i.notes)}`
+    `${i.id} | ${i.type} | "${i.subject}" | ${i.fromEmail ?? i.fromCompany ?? "?"} | ${i.company?.name ?? "-"} | commodity: ${i.commodity ?? "-"} | ${i.origin ?? "?"} → ${i.destination ?? "?"} | ${i.mode ?? "-"}${summarize(i.notes)}`
   ).join("\n");
   const jobHints = activeJobs.map((j) =>
-    `${j.id} | ${j.reference} | ${j.type} | ${j.company?.name ?? "—"} | ${j.inquiry?.fromEmail ?? "—"} | commodity: ${j.inquiry?.commodity ?? "—"} | ${j.origin ?? "?"} → ${j.destination ?? "?"} | ${j.mode ?? "—"}${summarize(j.inquiry?.notes)}`
+    `${j.id} | ${j.reference} | ${j.type} | ${j.company?.name ?? "-"} | ${j.inquiry?.fromEmail ?? "-"} | commodity: ${j.inquiry?.commodity ?? "-"} | ${j.origin ?? "?"} → ${j.destination ?? "?"} | ${j.mode ?? "-"}${summarize(j.inquiry?.notes)}`
   ).join("\n");
 
   const transcript = thread.messages.map((m) => {
@@ -278,31 +278,31 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
     max_tokens: 800,
     system: `You are a freight forwarding office assistant. For an email thread, decide ONE of:
 
-(a) SKIP — thread is not freight-related (newsletter, security alert, calendar, banking, marketing, personal, generic platform notification):
+(a) SKIP - thread is not freight-related (newsletter, security alert, calendar, banking, marketing, personal, generic platform notification):
     { "action": "skip", "reason": "<short sentence>" }
 
-(b) LINK — thread is about a deal we ALREADY track. **STRONGLY prefer linking over creating.** Multiple suppliers / multiple negotiations / multiple email threads about the SAME commodity-and-buyer typically belong to ONE deal. Examples:
+(b) LINK - thread is about a deal we ALREADY track. **STRONGLY prefer linking over creating.** Multiple suppliers / multiple negotiations / multiple email threads about the SAME commodity-and-buyer typically belong to ONE deal. Examples:
     - Five different "Re: Soybean Meal" threads from five different suppliers → ALL link to the SAME existing soybean inquiry.
     - "Re: Quotation for Corn Gluten Meal" + "Corn Gluten Meal Sample" + "CGM lead time" → ALL link to one corn-gluten-meal sourcing inquiry.
     - Carrier reply threads about the same booking → link to the existing job.
 
   { "action": "link", "linkInquiryId": "<id>" | null, "linkJobId": "<id>" | null, "reason": "<short sentence>" }
 
-(c) CREATE — thread is freight-related and is genuinely a NEW commodity/route/buyer not represented in the lists. Only choose this when no candidate is plausible.
+(c) CREATE - thread is freight-related and is genuinely a NEW commodity/route/buyer not represented in the lists. Only choose this when no candidate is plausible.
     { "action": "create", "type": "SOURCING" | "FORWARDING", "subject": string, "fromEmail": string|null, "fromCompany": string|null, "summary": string, "origin": string|null, "destination": string|null, "mode": "SEA-FCL"|"SEA-LCL"|"AIR"|"ROAD"|"COURIER"|null, "containerCount": number|null, "containerType": "20GP"|"40GP"|"40HC"|"LCL"|null, "stackable": "YES"|"NO"|"UNKNOWN"|null, "topLoad": "YES"|"NO"|"UNKNOWN"|null, "dangerousGoods": "YES"|"NO"|"UNKNOWN"|null, "customsBy": "US"|"CUSTOMER"|"FORWARDER"|"UNKNOWN"|null, "incoterms": string|null, "commodity": string|null, "weight": number|null, "volume": number|null, "targetPrice": number|null, "targetCurrency": "USD"|"EUR"|"TRY"|"GBP"|null, "targetPriceStatus": "PROVIDED"|"NO_TARGET"|"UNKNOWN"|null, "targetPriceSource": string|null, "cargoReadyDate": string|null }
 
-SOURCING = office helps customer FIND/BUY a commodity (price-per-ton talk, contracts, samples). For SOURCING, ONE inquiry usually has MANY supplier-conversation threads — link, don't duplicate.
+SOURCING = office helps customer FIND/BUY a commodity (price-per-ton talk, contracts, samples). For SOURCING, ONE inquiry usually has MANY supplier-conversation threads - link, don't duplicate.
 FORWARDING = office moves cargo customer already owns (carriers, BL, customs, ETA).
 
-Strong LINK signals (ANY one is enough — be aggressive):
+Strong LINK signals (ANY one is enough - be aggressive):
 - The commodity keyword in the thread matches an existing inquiry's commodity field, even loosely (e.g. "soybean", "soybean meal", "SBM", "animal feed soybean" all match a "Soybean Meal" inquiry).
 - Sender email matches an inquiry's fromEmail OR sender domain matches the customer/contact domain on any open record.
 - Same origin or destination country combined with same commodity family.
 - Reply chains, Re:/Fwd: subject lines whose stem matches an existing subject.
 - Shared booking/BL/container reference number.
-- The candidate's "summary" field mentions the thread's commodity, origin, destination, or buyer — even if the top-level fields don't (e.g. a "multi-destination" inquiry whose summary lists Portugal will match a new Portugal-bound thread).
+- The candidate's "summary" field mentions the thread's commodity, origin, destination, or buyer - even if the top-level fields don't (e.g. a "multi-destination" inquiry whose summary lists Portugal will match a new Portugal-bound thread).
 
-When in doubt between LINK and CREATE: choose LINK. Duplicate inquiries are worse than over-linking — the operator can split later.
+When in doubt between LINK and CREATE: choose LINK. Duplicate inquiries are worse than over-linking - the operator can split later.
 
 Output ONLY the JSON object, no markdown.
 
@@ -394,7 +394,7 @@ ${jobHints || "(none)"}`,
         return { ok: true, created: false, linkedJobId: job.id };
       }
     }
-    // AI said link but didn't give a valid id — fall through to skip.
+    // AI said link but didn't give a valid id - fall through to skip.
     await prisma.emailThread.updateMany({
       where: { id: threadId, officeId: thread.officeId },
       data: { autoLinkedAt: new Date(), autoLinkSkipReason: "AI proposed link but id not found" },

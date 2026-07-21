@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { stripEmDashes } from "./no-em-dash";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { whatsAppPartyLabel } from "./whatsapp-display";
@@ -450,7 +451,7 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
         touchedThreadIds.add(localThread.id);
         created++;
 
-        // Auto-read (blue ticks) — opt-in via WHATSAPP_AUTO_READ_ENABLED.
+        // Auto-read (blue ticks) - opt-in via WHATSAPP_AUTO_READ_ENABLED.
         // Best-effort: a provider hiccup must not fail webhook ingest.
         if (whatsAppAutoReadEnabled()) {
           await markWhatsAppMessageRead({
@@ -480,7 +481,7 @@ export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Pr
     }
   }
 
-  // Only actual inbound messages count as channel activity — status/receipt
+  // Only actual inbound messages count as channel activity - status/receipt
   // webhooks must not refresh the "last inbound" stamp.
   if (processed > 0) {
     await prisma.emailAccount.updateMany({
@@ -513,6 +514,7 @@ export async function sendWhatsAppText(args: {
   const toDigits = args.to.replace(/[^\d]/g, "");
   if (!toDigits) return { error: "A recipient phone number is required." };
   if (!args.body.trim()) return { error: "Message body is required." };
+  args = { ...args, body: stripEmDashes(args.body) };
 
   if (whatsAppProvider() === "greenapi") {
     const green = greenApiConfig();

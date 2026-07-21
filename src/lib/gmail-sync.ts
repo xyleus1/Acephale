@@ -265,7 +265,7 @@ async function _syncEmailAccountInternal({
           if (cls.matchJobId) classifiedMatchJobId = cls.matchJobId;
           if (cls.matchInquiryId) classifiedMatchInquiryId = cls.matchInquiryId;
         } catch {
-          // ignore — message still gets stored
+          // ignore - message still gets stored
         }
       }
 
@@ -389,7 +389,7 @@ async function _syncEmailAccountInternal({
         data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
       });
       // CRM touch: resolve the counterparty and log an EMAIL activity.
-      // Never throws — CRM logging must not break sync.
+      // Never throws - CRM logging must not break sync.
       await logEmailTouch({
         officeId: account.officeId,
         threadId: localThread.id,
@@ -409,7 +409,7 @@ async function _syncEmailAccountInternal({
     }
   }
 
-  // Mail is ingested and classified only — it never auto-creates RFQs. Both
+  // Mail is ingested and classified only - it never auto-creates RFQs. Both
   // the mail funnel and the Meta lead funnel land in Google Sheets, and the
   // sheet sync is the single automated source of new Inquiries. Operators can
   // still promote a thread manually from the inbox ("Create RFQ from thread").
@@ -662,7 +662,7 @@ export async function reclassifyMessages(args: { onlyUnclassified?: boolean; lim
   }
 
   // Reclassification only relabels messages and links threads to EXISTING
-  // inquiries/jobs — it never creates new RFQs from mail.
+  // inquiries/jobs - it never creates new RFQs from mail.
   revalidatePath("/dashboard/inbox");
   revalidatePath("/dashboard/rfq");
   revalidatePath("/dashboard");

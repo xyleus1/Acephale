@@ -21,7 +21,7 @@ import { displayParty, whatsAppAccountLabel } from "@/lib/whatsapp-display";
 import { whatsAppSendConfigured } from "@/lib/whatsapp";
 
 const FILTERS = [
-  { key: "",                  label: "Active"          },  // default — excludes hidden + snoozed
+  { key: "",                  label: "Active"          },  // default - excludes hidden + snoozed
   { key: "_TODAY",            label: "Today"           },
   { key: "_DEMO",             label: "Demo"            },
   { key: "_LOAD_RFQ",         label: "Load/RFQ"        },
@@ -379,7 +379,7 @@ export default async function InboxPage({
   if (focusedLoad) {
     where.AND = where.AND ?? [];
     where.AND.push({ id: { in: focusedLoad.threadIds.length ? focusedLoad.threadIds : ["__none__"] } });
-    // When focused on a load, show hidden + snoozed threads too — operator wants
+    // When focused on a load, show hidden + snoozed threads too - operator wants
     // the complete picture for this deal regardless of triage state.
     delete where.hiddenAt;
     where.AND = where.AND.filter((c: any) => !c.OR || !c.OR.some((o: any) => "snoozedUntil" in o));
@@ -554,7 +554,7 @@ export default async function InboxPage({
     take: 100,
   }) : [];
 
-  // Active jobs available as merge targets (excluding PROPOSED — those are
+  // Active jobs available as merge targets (excluding PROPOSED - those are
   // RFQs themselves, not active loads).
   const activeJobsForMerge = view === "rfqs" ? (await prisma.job.findMany({
     where: { officeId: session.officeId, status: { notIn: ["PROPOSED", "DELIVERED", "CANCELLED"] } },
@@ -915,7 +915,7 @@ export default async function InboxPage({
               <p className="empty-state-copy">
                 {totalSnoozed > 0 ? `${totalSnoozed} thread${totalSnoozed === 1 ? "" : "s"} snoozed. ` : ""}
                 {totalHidden > 0 ? `${totalHidden} hidden as not freight-related. ` : ""}
-                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" className="data-link">Channel Settings</a> to pull fresh mail manually, or wait — mail auto-syncs every 15 minutes and WhatsApp arrives instantly.
+                Click <strong>Sync now</strong> in <a href="/dashboard/settings/email" className="data-link">Channel Settings</a> to pull fresh mail manually, or wait - mail auto-syncs every 15 minutes and WhatsApp arrives instantly.
               </p>
             </>
           )}
@@ -1137,7 +1137,7 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
-function textValue(value: unknown, fallback = "—") {
+function textValue(value: unknown, fallback = "-") {
   if (typeof value === "string" && value.trim()) return value;
   if (typeof value === "number") return value.toLocaleString();
   return fallback;
@@ -1306,13 +1306,13 @@ function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: s
                   </a>
                 </td>
                 <td>
-                  <div>{r.company?.name ?? r.fromCompany ?? "—"}</div>
+                  <div>{r.company?.name ?? r.fromCompany ?? "-"}</div>
                   {r.fromEmail && <div className="data-subline">{displayParty(r.fromEmail)}</div>}
                 </td>
                 <td>
                   {r.origin || r.destination ? (
                     <span>{r.origin ?? "?"} → {r.destination ?? "?"}</span>
-                  ) : <span className="data-muted">—</span>}
+                  ) : <span className="data-muted">-</span>}
                   {r.mode && <div className="data-subline">{r.mode}</div>}
                 </td>
                 <td><TypeBadge type={r.type} /></td>
@@ -1322,7 +1322,7 @@ function RfqListView({ rfqs, activeJobs }: { rfqs: RfqRow[]; activeJobs: { id: s
                     <a href={`/dashboard/jobs/${r.job.id}`} className="data-link">
                       {r.job.reference}
                     </a>
-                  ) : <span className="data-muted">—</span>}
+                  ) : <span className="data-muted">-</span>}
                 </td>
                 <td className="numeric">
                   {r._count.emailThreads > 0 ? (

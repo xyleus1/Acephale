@@ -54,11 +54,11 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" });
 }
 function fmtMoney(n: number | null): string {
-  return n != null ? `$${n.toLocaleString()}` : "—";
+  return n != null ? `$${n.toLocaleString()}` : "-";
 }
 
 type Col = {
@@ -73,16 +73,16 @@ type Col = {
 const COLUMNS: Col[] = [
   { key: "reference",   label: "Reference",   default: true,  value: (j) => j.reference },
   { key: "title",       label: "Deal",        default: true,  value: (j) => j.title,
-    render: (j) => j.title ? <span className="data-cell-strong">{j.title}</span> : "—" },
+    render: (j) => j.title ? <span className="data-cell-strong">{j.title}</span> : "-" },
   { key: "status",      label: "Stage",       default: true,  value: (j) => j.status,
     render: (j) => <span className={`data-status-badge${j.status === "CANCELLED" ? " cancelled" : ""}`}>{STATUS_LABEL[j.status] ?? j.status}</span> },
   { key: "opportunity", label: "Opportunity", default: true,  value: (j) => calculateOpportunity(j).score, numeric: true,
     render: (j) => <OpportunityScorePill score={calculateOpportunity(j)} /> },
   { key: "customer",    label: "Customer",    default: true,  value: (j) => j.companyName },
   { key: "assignee",    label: "Assigned",    default: true,  value: (j) => j.assignedToName,
-    render: (j) => j.assignedToName ?? <span className="data-muted">—</span> },
+    render: (j) => j.assignedToName ?? <span className="data-muted">-</span> },
   { key: "route",       label: "Route",       default: true,  value: (j) => `${j.origin ?? ""} ${j.destination ?? ""}`.trim() || null,
-    render: (j) => j.origin || j.destination ? <>{j.origin ?? "?"} → {j.destination ?? "?"}</> : "—" },
+    render: (j) => j.origin || j.destination ? <>{j.origin ?? "?"} → {j.destination ?? "?"}</> : "-" },
   { key: "mode",        label: "Mode",        default: true,  value: (j) => j.mode },
   { key: "equipment",   label: "Equipment",   default: true,  value: (j) =>
       j.mode === "SEA-FCL" && j.containerCount
@@ -90,15 +90,15 @@ const COLUMNS: Col[] = [
         : dimensionsSummary(j.dimensions)
           || (j.quantity != null ? `${j.quantity.toLocaleString()} ${j.quantityUnit ?? ""}`.trim() : null) },
   { key: "quantity",    label: "Quantity",    default: false, value: (j) => j.quantity, numeric: true,
-    render: (j) => j.quantity != null ? `${j.quantity.toLocaleString()} ${j.quantityUnit ?? ""}`.trim() : "—" },
+    render: (j) => j.quantity != null ? `${j.quantity.toLocaleString()} ${j.quantityUnit ?? ""}`.trim() : "-" },
   { key: "cadence",     label: "Frequency",   default: false, value: (j) => j.cadence,
-    render: (j) => j.cadence === "MONTHLY" ? "Monthly" : j.cadence === "ONE_OFF" ? "One-off" : "—" },
+    render: (j) => j.cadence === "MONTHLY" ? "Monthly" : j.cadence === "ONE_OFF" ? "One-off" : "-" },
   { key: "commodity",   label: "Commodity",   default: false, value: (j) => j.commodity },
   { key: "incoterms",   label: "Incoterms",   default: false, value: (j) => j.incoterms },
   { key: "weight",      label: "Weight (kg)", default: false, value: (j) => j.weight, numeric: true,
-    render: (j) => j.weight != null ? j.weight.toLocaleString() : "—" },
+    render: (j) => j.weight != null ? j.weight.toLocaleString() : "-" },
   { key: "volume",      label: "CBM",         default: false, value: (j) => j.volume, numeric: true,
-    render: (j) => j.volume != null ? j.volume.toLocaleString() : "—" },
+    render: (j) => j.volume != null ? j.volume.toLocaleString() : "-" },
   { key: "stackable",   label: "Stackable",   default: false, value: (j) => j.stackable,
     render: (j) => j.stackable === "YES" ? "Yes" : j.stackable === "NO" ? `No${j.topLoad === "YES" ? " · top load" : ""}` : "Unknown" },
   { key: "dg",          label: "DG",          default: false, value: (j) => j.dangerousGoods,
@@ -114,12 +114,12 @@ const COLUMNS: Col[] = [
   { key: "cost",        label: "Cost",        default: false, value: (j) => j.cost, numeric: true, render: (j) => fmtMoney(j.cost) },
   { key: "profit",      label: "Profit",      default: true,  numeric: true,
     value: (j) => (j.revenue != null && j.cost != null ? j.revenue - j.cost : null),
-    render: (j) => (j.revenue != null && j.cost != null ? fmtMoney(j.revenue - j.cost) : "—") },
+    render: (j) => (j.revenue != null && j.cost != null ? fmtMoney(j.revenue - j.cost) : "-") },
   { key: "margin",      label: "Margin",      default: false, numeric: true,
     value: (j) => (j.revenue && j.cost ? (j.revenue - j.cost) / j.revenue : null),
-    render: (j) => (j.revenue && j.cost ? `${(((j.revenue - j.cost) / j.revenue) * 100).toFixed(1)}%` : "—") },
+    render: (j) => (j.revenue && j.cost ? `${(((j.revenue - j.cost) / j.revenue) * 100).toFixed(1)}%` : "-") },
   { key: "note",        label: "Note",        default: true,  value: (j) => j.notes,
-    render: (j) => j.notes ? <span title={j.notes} className="data-note">{j.notes}</span> : "—" },
+    render: (j) => j.notes ? <span title={j.notes} className="data-note">{j.notes}</span> : "-" },
   { key: "created",     label: "Created",     default: false, value: (j) => j.createdAt, render: (j) => fmtDate(j.createdAt) },
 ];
 
@@ -230,7 +230,7 @@ export function JobsTable({ jobs }: { jobs: TableJob[] }) {
               >
                 {cols.map((c) => (
                   <td key={c.key} className={`${c.numeric ? "numeric" : ""}${c.key === "reference" ? " data-cell-mono" : ""}`}>
-                    {c.render ? c.render(j) : (c.value(j) ?? "—") || "—"}
+                    {c.render ? c.render(j) : (c.value(j) ?? "-") || "-"}
                   </td>
                 ))}
               </tr>

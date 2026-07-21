@@ -55,7 +55,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 function fmt(d: Date | null | undefined) {
-  if (!d) return "—";
+  if (!d) return "-";
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 function fmtInput(d: Date | null | undefined) {
@@ -689,7 +689,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
         include: {
           carrierQuotes: { orderBy: { createdAt: "asc" } },
           targetPriceHistory: { orderBy: { createdAt: "desc" }, take: 6 },
-          // Inquiry-linked threads — these are the supplier replies attached
+          // Inquiry-linked threads - these are the supplier replies attached
           // when the inquiry was the only attachment point.
           emailThreads: { include: { messages: { orderBy: { sentAt: "asc" } } } },
         },
@@ -743,7 +743,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
       at: new Date(job.inquiry.receivedAt).toISOString(),
       iconName: "inbox", who: "auto",
       title: "RFQ captured from inbox",
-      sub: `"${job.inquiry.subject}" — ${displayParty(job.inquiry.fromEmail) || job.inquiry.fromCompany || "Unknown sender"}`,
+      sub: `"${job.inquiry.subject}" - ${displayParty(job.inquiry.fromEmail) || job.inquiry.fromCompany || "Unknown sender"}`,
     });
     if (job.inquiry.parsedData) {
       feed.push({
@@ -752,7 +752,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
         at: new Date(job.inquiry.updatedAt).toISOString(),
         iconName: "sparkles", who: "auto",
         title: "AI parsed shipment fields",
-        sub: `${job.inquiry.origin ?? "?"} → ${job.inquiry.destination ?? "?"} · ${job.inquiry.mode ?? "—"}${job.inquiry.weight ? ` · ${job.inquiry.weight.toLocaleString()}kg` : ""}`,
+        sub: `${job.inquiry.origin ?? "?"} → ${job.inquiry.destination ?? "?"} · ${job.inquiry.mode ?? "-"}${job.inquiry.weight ? ` · ${job.inquiry.weight.toLocaleString()}kg` : ""}`,
       });
     }
     for (const cq of job.inquiry.carrierQuotes) {
@@ -855,7 +855,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
     })),
   }));
 
-  // A WhatsApp-born inquiry stores "whatsapp:<digits>" in fromEmail — that
+  // A WhatsApp-born inquiry stores "whatsapp:<digits>" in fromEmail - that
   // must never be prefilled into an email To field.
   const inquiryEmailRecipient = job.inquiry?.fromEmail && job.inquiry.fromEmail.includes("@")
     ? job.inquiry.fromEmail
@@ -904,10 +904,10 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
   const transitLabel = transitSummary(job.etd, job.eta);
   const routeModeSummary = modeSummary(modeLabel, transitLabel);
   const approvedDocs = docs.filter((d) => d.status === "APPROVED").length;
-  const costLabel = job.cost ? `$${job.cost.toLocaleString()}` : "—";
+  const costLabel = job.cost ? `$${job.cost.toLocaleString()}` : "-";
   const marginLabel = job.revenue && job.cost
     ? `${(((job.revenue - job.cost) / job.revenue) * 100).toFixed(1)}%`
-    : "—";
+    : "-";
   const targetPriceLabel = job.targetPrice
     ? `${job.targetCurrency ?? job.currency ?? "USD"} ${job.targetPrice.toLocaleString()}`
     : job.targetPriceStatus === "NO_TARGET" ? "No target" : "Ask";
@@ -1175,7 +1175,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           {timelineMilestones.map((m, i) => {
             const isDone = !!m.actualAt;
             const isLate = m.plannedAt && !isDone && new Date(m.plannedAt) < today;
-            const dateLabel = isDone ? fmt(m.actualAt) : (m.plannedAt ? fmt(m.plannedAt) : "—");
+            const dateLabel = isDone ? fmt(m.actualAt) : (m.plannedAt ? fmt(m.plannedAt) : "-");
             return (
               <div key={m.id} className={`ms-step ${isDone ? "done" : ""} ${isLate ? "late" : ""}`}>
                 <div className="ms-line" />
@@ -1339,7 +1339,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
         </div>
       </div>
 
-      {/* RIGHT: agent panel — full right side, sticky */}
+      {/* RIGHT: agent panel - full right side, sticky */}
       <aside className="workbench-agent">
         <JobConversationPanel
           scopeJobId={job.id}
@@ -1794,7 +1794,7 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
               <tbody>
                 {ranked.map((q: any) => {
                   const isRec = recommended?.id === q.id;
-                  const seedDescription = `Ocean Freight — ${q.carrier}${q.service ? ` (${q.service})` : ""}`;
+                  const seedDescription = `Ocean Freight - ${q.carrier}${q.service ? ` (${q.service})` : ""}`;
                   const seedAmount = q.total40HC ?? q.total40 ?? q.total20 ?? 0;
                   return (
                     <tr key={q.id} className={isRec ? "recommended" : undefined}>

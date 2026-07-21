@@ -73,7 +73,7 @@ export function PendingQuotesInline({
                 <td style={{ fontSize: 12, color: "var(--text-2)" }}>
                   {q.origin && q.destination
                     ? `${q.origin} → ${q.destination}`
-                    : q.origin ?? q.destination ?? "—"}
+                    : q.origin ?? q.destination ?? "-"}
                   {q.mode && (
                     <span style={{ marginLeft: 6, fontSize: 10, background: "var(--surface-3)", border: "1px solid var(--border)", borderRadius: 4, padding: "1px 5px" }}>
                       {q.mode}
@@ -81,7 +81,7 @@ export function PendingQuotesInline({
                   )}
                 </td>
                 <td style={{ fontSize: 13, fontWeight: 500 }}>
-                  {q.value ? `${q.value.toLocaleString()} ${q.currency ?? ""}`.trim() : "—"}
+                  {q.value ? `${q.value.toLocaleString()} ${q.currency ?? ""}`.trim() : "-"}
                 </td>
                 <td style={{ fontSize: 12, color: d >= 5 ? "var(--danger)" : d >= 2 ? "var(--warning)" : "var(--text-3)", fontWeight: d >= 5 ? 600 : 400 }}>
                   {d === 0 ? "Today" : `${d}d ago`}

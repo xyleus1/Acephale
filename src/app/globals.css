@@ -1,5 +1,5 @@
 /* ============================================================
-   DERYA CRM — Design System
+   DERYA CRM - Design System
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -91,7 +91,7 @@ p { margin: 0; }
 h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
 
 /* ============================================================
-   APP SHELL — SIDEBAR + CONTENT
+   APP SHELL - SIDEBAR + CONTENT
    ============================================================ */
 
 .app-shell {
@@ -33319,7 +33319,7 @@ html.agent-dock-open .page-container {
   font-weight: 600;
 }
 
-/* Lead-quality pill in the subject cell — compact so the subject keeps room. */
+/* Lead-quality pill in the subject cell - compact so the subject keeps room. */
 .rfq-sheet .rfq-quality-badge {
   flex: none;
   padding: 1px 7px;
@@ -34153,7 +34153,7 @@ tr.rfq-row-selected td,
 }
 
 /* ============================================================
-   WHATSAPP CHANNEL — tokens + primitives
+   WHATSAPP CHANNEL - tokens + primitives
    (appended last so these win over earlier per-surface greens)
    ============================================================ */
 
@@ -34180,7 +34180,7 @@ tr.rfq-row-selected td,
   color: var(--whatsapp);
 }
 
-/* Topbar "N WhatsApp awaiting reply" chip — green variant of .topbar-stat. */
+/* Topbar "N WhatsApp awaiting reply" chip - green variant of .topbar-stat. */
 .topbar-stat.topbar-stat-wa {
   background: var(--whatsapp-bg);
   border-color: var(--whatsapp-border);

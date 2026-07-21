@@ -190,7 +190,7 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
       orderBy: { lastMessageAt: "desc" },
       take: 4,
     }),
-    // Contact.phone is free text in operator formats — digit-match in JS when
+    // Contact.phone is free text in operator formats - digit-match in JS when
     // the query looks like a phone number.
     digitsContains
       ? prisma.contact.findMany({
@@ -210,7 +210,7 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
   return [
     ...jobs.map(jobResult),
     ...inquiries.map(inquiryResult),
-    // No company/contact detail routes exist — deep-link into the CRM sheet's
+    // No company/contact detail routes exist - deep-link into the CRM sheet's
     // own search, the same way /dashboard/search results do.
     ...companies.map((c) => ({
       group: "companies" as const,

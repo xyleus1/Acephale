@@ -10,7 +10,7 @@ export const maxDuration = 30;
 // provider, gateway instance state (Green API), and the last inbound stamp.
 export async function GET() {
   // requireSession redirects on missing auth, which breaks the JSON contract
-  // for fetch() callers — surface a clean 401 instead.
+  // for fetch() callers - surface a clean 401 instead.
   let session;
   try {
     session = await requireSession();

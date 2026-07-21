@@ -1,5 +1,5 @@
 // Smoke test for the open-data market baseline parsing/summary helpers.
-// Pure logic only — no network. Run: npx tsx scripts/market-indicators.test.ts
+// Pure logic only - no network. Run: npx tsx scripts/market-indicators.test.ts
 
 import {
   formatIndicatorValue,

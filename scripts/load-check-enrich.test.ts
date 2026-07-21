@@ -1,5 +1,5 @@
 // Smoke test for the pre-flight fact-enrichment parsers (fixtures captured
-// from the live endpoints on 2026-07-17). Pure logic — no network.
+// from the live endpoints on 2026-07-17). Pure logic - no network.
 // Run: npx tsx scripts/load-check-enrich.test.ts
 
 import {
@@ -26,7 +26,7 @@ const htsJson = JSON.stringify([
   { htsno: "8471", general: null, footnotes: [] },
   { htsno: "8471.30.01.00", general: "Free", footnotes: [{ value: "See 9903.88.03." }] },
   { htsno: "8471.50.01.50", general: "Free", footnotes: [] },
-  { htsno: "8542.31.00.00", general: "Free", footnotes: [] }, // different heading — ignored
+  { htsno: "8542.31.00.00", general: "Free", footnotes: [] }, // different heading - ignored
 ]);
 const hts = parseHtsEntries(htsJson, "8471");
 check("hts filters to the requested heading", hts !== null && hts.rates.length === 1 && hts.rates[0] === "Free");

@@ -8,14 +8,14 @@ import { logOutboundWhatsAppMessage, sendWhatsAppText, whatsAppSendConfigured } 
 
 // Send an operator-approved reply into a WhatsApp inbox thread through the
 // CRM's Cloud API number. The counterparty is derived server-side from the
-// thread — the client only supplies the text, never the recipient.
+// thread - the client only supplies the text, never the recipient.
 export async function sendWhatsAppReplyToThread(args: {
   threadDbId: string;
   body: string;
 }): Promise<{ ok: true } | { error: string }> {
   const session = await requireSession();
   if (!whatsAppSendConfigured()) {
-    return { error: "CRM WhatsApp sending is not configured — set WHATSAPP_SEND_ENABLED and the Cloud API credentials." };
+    return { error: "CRM WhatsApp sending is not configured - set WHATSAPP_SEND_ENABLED and the Cloud API credentials." };
   }
   const body = args.body.trim();
   if (!body) return { error: "Message body is required." };

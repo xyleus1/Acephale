@@ -563,7 +563,7 @@ async function applyDedupClusters(officeId: string, clusters: Record<string, unk
     }
 
     const reason = typeof cluster.reason === "string" ? cluster.reason : "Reviewed duplicate proposal";
-    const note = `\n\n[Reviewed merge ${new Date().toISOString().split("T")[0]}: merged ${losers.length} duplicate inquir${losers.length === 1 ? "y" : "ies"} — ${reason}]`;
+    const note = `\n\n[Reviewed merge ${new Date().toISOString().split("T")[0]}: merged ${losers.length} duplicate inquir${losers.length === 1 ? "y" : "ies"} - ${reason}]`;
     await appendInquiryAuditNote(keeper.id, note);
     affectedInquiryIds.push(keeper.id);
     clusterCount++;
@@ -823,7 +823,7 @@ async function applyPendingJobActionProposal(input: ApplyJobProposalInput, propo
   if ("error" in actionResult) {
     return { ok: false, proposalId: proposal.id, message: actionResult.error };
   }
-  if (actionResult.message) note = `${note} — ${actionResult.message}`;
+  if (actionResult.message) note = `${note} - ${actionResult.message}`;
 
   await prisma.agentProposal.updateMany({
     where: { id: proposal.id, officeId: input.officeId },

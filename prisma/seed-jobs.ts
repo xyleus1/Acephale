@@ -245,7 +245,7 @@ const JOBS_DATA = [
     weight: 12000, volume: 45,
     revenue: null, cost: null, currency: "USD",
     etdFromNow: 5, etaFromNow: 10,
-    notes: "TIR request — need to check truck availability with partner.",
+    notes: "TIR request - need to check truck availability with partner.",
   },
   {
     reference: "JOB-2025-007",
@@ -283,14 +283,14 @@ function daysAgo(n: number) {
 
 async function main() {
   const office = await prisma.office.findFirst();
-  if (!office) { console.error("No office found — run the main seed first."); process.exit(1); }
+  if (!office) { console.error("No office found - run the main seed first."); process.exit(1); }
 
   const companies = await prisma.company.findMany({
     where: { officeId: office.id },
     take: 20,
     orderBy: { createdAt: "asc" },
   });
-  if (companies.length === 0) { console.error("No companies found — run the main seed first."); process.exit(1); }
+  if (companies.length === 0) { console.error("No companies found - run the main seed first."); process.exit(1); }
 
   const user = await prisma.user.findFirst({ where: { officeId: office.id, role: "SALES" } });
 

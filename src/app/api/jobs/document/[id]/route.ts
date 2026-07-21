@@ -37,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
-  // Gmail attachment URLs (we control them — re-fetch via stored OAuth token)
+  // Gmail attachment URLs (we control them - re-fetch via stored OAuth token)
   if (doc.url.startsWith("/api/gmail/attachment")) {
     const u = new URL(doc.url, "http://localhost");
     const messageDbId = u.searchParams.get("messageDbId");
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
   }
 
-  // data: URL — strip header, return bytes inline
+  // data: URL - strip header, return bytes inline
   if (doc.url.startsWith("data:")) {
     const m = doc.url.match(/^data:([^;]+);base64,(.+)$/);
     if (!m) return new NextResponse("Malformed data URL", { status: 400 });
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
   }
 
-  // Public URL — proxy through to handle CORS for the iframe.
+  // Public URL - proxy through to handle CORS for the iframe.
   let upstreamUrl: URL;
   try {
     upstreamUrl = new URL(doc.url);

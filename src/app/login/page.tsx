@@ -71,7 +71,7 @@ export default async function LoginPage({ searchParams }: Params) {
         <div className="login-header">
           <LogoMark className="login-logo" />
           <h1 className="login-title">Derya Deal Desk</h1>
-          <p className="login-subtitle">Internal sign-in — a code is emailed to you</p>
+          <p className="login-subtitle">Internal sign-in - a code is emailed to you</p>
         </div>
 
         <div className="login-body">

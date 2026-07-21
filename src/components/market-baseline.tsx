@@ -12,7 +12,7 @@ function monthLabel(month: string): string {
   return `${names[Number(m) - 1] ?? m} ${year}`;
 }
 
-// Async server component — streams in behind Suspense. When every feed is
+// Async server component - streams in behind Suspense. When every feed is
 // down it says so explicitly instead of vanishing: a silently missing card is
 // undiagnosable from a screenshot.
 export async function MarketBaseline() {
@@ -22,12 +22,12 @@ export async function MarketBaseline() {
       <div className="record-panel" style={{ marginBottom: 16 }}>
         <div className="record-card-header">
           <div className="record-card-title">
-            <Icon name="trending-up" size={13} /> Market baseline — open public feeds
+            <Icon name="trending-up" size={13} /> Market baseline - open public feeds
           </div>
         </div>
         <div className="card-body" style={{ fontSize: 12, opacity: 0.7 }}>
           None of the open feeds responded just now ({failures.join(", ") || "no feeds attempted"}). They retry on the
-          next page load — if this persists, the server can&apos;t reach FRED / data.transportation.gov.
+          next page load - if this persists, the server can&apos;t reach FRED / data.transportation.gov.
         </div>
       </div>
     );
@@ -37,7 +37,7 @@ export async function MarketBaseline() {
     <div className="record-panel" style={{ marginBottom: 16 }}>
       <div className="record-card-header">
         <div className="record-card-title">
-          <Icon name="trending-up" size={13} /> Market baseline — open public feeds
+          <Icon name="trending-up" size={13} /> Market baseline - open public feeds
         </div>
       </div>
       <div className="card-body">

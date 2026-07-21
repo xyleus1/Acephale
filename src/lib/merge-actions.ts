@@ -95,7 +95,7 @@ export async function proposeDuplicateInquiryConsolidation(): Promise<
 
   const lines = inquiries.map((i, idx) => {
     const summary = i.notes ? ` | summary=${i.notes.replace(/\s+/g, " ").trim().slice(0, 240)}` : "";
-    return `[${idx}] id=${i.id} | ${i.type} | "${i.subject}" | from=${i.fromEmail ?? i.fromCompany ?? "?"} | commodity=${i.commodity ?? "—"} | route=${i.origin ?? "?"}→${i.destination ?? "?"} | mode=${i.mode ?? "—"} | created=${i.createdAt.toISOString().split("T")[0]}${summary}`;
+    return `[${idx}] id=${i.id} | ${i.type} | "${i.subject}" | from=${i.fromEmail ?? i.fromCompany ?? "?"} | commodity=${i.commodity ?? "-"} | route=${i.origin ?? "?"}→${i.destination ?? "?"} | mode=${i.mode ?? "-"} | created=${i.createdAt.toISOString().split("T")[0]}${summary}`;
   }).join("\n");
 
   const client = new Anthropic({ apiKey });
@@ -199,7 +199,7 @@ export async function proposeMergeAllOpenInquiriesIntoOne(args: MergeArgs = {}):
   if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
 
   const candidates = await openMergeCandidates(session.officeId, args.type);
-  if (candidates.length < 2) return { error: "Need at least 2 mergeable inquiries — none or only one open." };
+  if (candidates.length < 2) return { error: "Need at least 2 mergeable inquiries - none or only one open." };
   candidates.sort((a, b) => {
     if (b._count.emailThreads !== a._count.emailThreads) return b._count.emailThreads - a._count.emailThreads;
     return a.createdAt.getTime() - b.createdAt.getTime();
@@ -208,7 +208,7 @@ export async function proposeMergeAllOpenInquiriesIntoOne(args: MergeArgs = {}):
   const losers = candidates.slice(1);
 
   const summaryInput = candidates.map((c) =>
-    `- "${c.subject}" | commodity: ${c.commodity ?? "—"} | from: ${c.fromEmail ?? c.fromCompany ?? "—"} | route: ${c.origin ?? "?"} → ${c.destination ?? "?"}`
+    `- "${c.subject}" | commodity: ${c.commodity ?? "-"} | from: ${c.fromEmail ?? c.fromCompany ?? "-"} | route: ${c.origin ?? "?"} → ${c.destination ?? "?"}`
   ).join("\n");
 
   const client = new Anthropic({ apiKey });
@@ -277,7 +277,7 @@ Output ONLY this JSON (no markdown):
 
 // AI-driven consolidation of duplicate Inquiries (and their PROPOSED jobs).
 // Used when the inbox has many separate threads that all describe the same
-// underlying deal — typical for SOURCING (one buyer, many supplier replies)
+// underlying deal - typical for SOURCING (one buyer, many supplier replies)
 // where each supplier's first email creates its own thread and the AI hadn't
 // linked them yet at the time.
 //
@@ -313,7 +313,7 @@ export async function consolidateDuplicateInquiries(): Promise<
   // Build candidate list for the AI.
   const lines = inquiries.map((i, idx) => {
     const summary = i.notes ? ` | summary=${i.notes.replace(/\s+/g, " ").trim().slice(0, 240)}` : "";
-    return `[${idx}] id=${i.id} | ${i.type} | "${i.subject}" | from=${i.fromEmail ?? i.fromCompany ?? "?"} | commodity=${i.commodity ?? "—"} | route=${i.origin ?? "?"}→${i.destination ?? "?"} | mode=${i.mode ?? "—"} | created=${i.createdAt.toISOString().split("T")[0]}${summary}`;
+    return `[${idx}] id=${i.id} | ${i.type} | "${i.subject}" | from=${i.fromEmail ?? i.fromCompany ?? "?"} | commodity=${i.commodity ?? "-"} | route=${i.origin ?? "?"}→${i.destination ?? "?"} | mode=${i.mode ?? "-"} | created=${i.createdAt.toISOString().split("T")[0]}${summary}`;
   }).join("\n");
 
   const client = new Anthropic({ apiKey });
@@ -322,18 +322,18 @@ export async function consolidateDuplicateInquiries(): Promise<
     max_tokens: 1200,
     system: `You consolidate duplicate freight inquiries.
 
-Input: a numbered list of open inquiries in one office. Many are duplicates of the same underlying deal (especially SOURCING — multiple supplier conversations for one buyer-commodity).
+Input: a numbered list of open inquiries in one office. Many are duplicates of the same underlying deal (especially SOURCING - multiple supplier conversations for one buyer-commodity).
 
 Output ONLY this JSON (no markdown):
 { "clusters": [
-    { "ids": ["<inquiry-id>", "<inquiry-id>", ...], "reason": "<short — why these are one deal>" }
+    { "ids": ["<inquiry-id>", "<inquiry-id>", ...], "reason": "<short - why these are one deal>" }
 ] }
 
 Rules:
-- Cluster TOGETHER inquiries that represent the SAME underlying deal. Strong signals: same commodity (loose match — "soybean" / "soybean meal" / "SBM" all match), same buyer/customer, overlapping origin or destination, similar subjects (Re:/Fwd: chains, common stem like "Animal Feed Grade Soybean Meal"), or a "summary" field that mentions the other inquiry's commodity/route/buyer (umbrella deals like "multi-destination procurement" whose summary names specific countries should absorb single-country threads).
+- Cluster TOGETHER inquiries that represent the SAME underlying deal. Strong signals: same commodity (loose match - "soybean" / "soybean meal" / "SBM" all match), same buyer/customer, overlapping origin or destination, similar subjects (Re:/Fwd: chains, common stem like "Animal Feed Grade Soybean Meal"), or a "summary" field that mentions the other inquiry's commodity/route/buyer (umbrella deals like "multi-destination procurement" whose summary names specific countries should absorb single-country threads).
 - Use the type as a tiebreaker: SOURCING duplicates are very common; FORWARDING duplicates are rarer.
 - Only include clusters of size >= 2. Singletons go nowhere.
-- Be aggressive about merging — duplicates are a bigger pain than over-merging. The operator can split later.
+- Be aggressive about merging - duplicates are a bigger pain than over-merging. The operator can split later.
 - If nothing clusters, return { "clusters": [] }.`,
     messages: [{
       role: "user",
@@ -358,7 +358,7 @@ Rules:
     if (ids.length < 2) continue;
 
     // Keeper = oldest by createdAt. Skip merging if any non-PROPOSED job is
-    // attached to ANY inquiry in the cluster — those are confirmed and we
+    // attached to ANY inquiry in the cluster - those are confirmed and we
     // should not silently lose data. Merge only into the keeper if it's safe.
     const sorted = ids
       .map((id) => inquiryById.get(id)!)
@@ -378,12 +378,12 @@ Rules:
         data: { inquiryId: keeper.id },
       });
       // Delete the loser's PROPOSED job (cascade is fine since job has only
-      // soft refs — JobMilestone/JobDocument cascade delete via schema).
+      // soft refs - JobMilestone/JobDocument cascade delete via schema).
       if (loser.job?.id) {
         await prisma.job.deleteMany({ where: { id: loser.job.id, officeId: session.officeId } }).catch(() => {});
       }
       // Delete the loser inquiry itself. Anything that referenced it
-      // (email threads moved above; carrier quotes — drop them since this is
+      // (email threads moved above; carrier quotes - drop them since this is
       // an unconfirmed dup).
       await prisma.carrierQuote.deleteMany({ where: { inquiryId: loser.id, inquiry: { officeId: session.officeId } } }).catch(() => {});
       await prisma.inquiry.deleteMany({ where: { id: loser.id, officeId: session.officeId } }).catch(() => {});
@@ -404,7 +404,7 @@ Rules:
 // Operator-directed: consolidate ALL open inquiries (optionally filtered by
 // type) into ONE big procurement/forwarding job. Used when the user has a
 // bunch of related-but-not-identical RFQs (soybean meal, corn gluten,
-// cottonseed cake, fish meal — all animal feed sourcing for one buyer) and
+// cottonseed cake, fish meal - all animal feed sourcing for one buyer) and
 // wants to manage them as a single job rather than N separate ones.
 //
 // Strategy: keep the inquiry with the most attached email threads (richest
@@ -460,7 +460,7 @@ export async function mergeAllOpenInquiriesIntoOne(args: {
     orderBy: { createdAt: "asc" },
   });
 
-  if (candidates.length < 2) return { error: "Need at least 2 mergeable inquiries — none or only one open." };
+  if (candidates.length < 2) return { error: "Need at least 2 mergeable inquiries - none or only one open." };
 
   // Keeper = the one with the most attached email threads (richest context).
   // Tiebreak by oldest.
@@ -473,7 +473,7 @@ export async function mergeAllOpenInquiriesIntoOne(args: {
 
   // AI generates a new subject + commodity that summarizes the consolidated deal.
   const summaryInput = candidates.map((c) =>
-    `- "${c.subject}" | commodity: ${c.commodity ?? "—"} | from: ${c.fromEmail ?? c.fromCompany ?? "—"} | route: ${c.origin ?? "?"} → ${c.destination ?? "?"}`
+    `- "${c.subject}" | commodity: ${c.commodity ?? "-"} | from: ${c.fromEmail ?? c.fromCompany ?? "-"} | route: ${c.origin ?? "?"} → ${c.destination ?? "?"}`
   ).join("\n");
 
   const client = new Anthropic({ apiKey });
@@ -485,7 +485,7 @@ export async function mergeAllOpenInquiriesIntoOne(args: {
 Output ONLY this JSON (no markdown):
 { "subject": string, "commodity": string }
 
-The subject should be short (under 80 chars) and describe the umbrella deal — e.g. "Animal feed procurement (soybean meal, corn gluten, cottonseed cake, fish meal)" or "Multi-port European delivery — Q3 2026".
+The subject should be short (under 80 chars) and describe the umbrella deal - e.g. "Animal feed procurement (soybean meal, corn gluten, cottonseed cake, fish meal)" or "Multi-port European delivery - Q3 2026".
 The commodity field should be a comma-separated list of the underlying commodities or a generic category if they all fit one.`,
     messages: [{
       role: "user",

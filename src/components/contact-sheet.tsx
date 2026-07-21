@@ -168,7 +168,7 @@ export function ContactSheet({
         }
         setRows((prev) => prev.map((r) => (r.id === row.id ? res.row : r)));
       } catch {
-        flash("Could not save — check your connection and try again.");
+        flash("Could not save - check your connection and try again.");
         revertCells(row.id, patchFields(patch));
       } finally {
         markBusy(row.id, false);
@@ -178,7 +178,7 @@ export function ContactSheet({
 
   function commitCompany(row: ContactRow, name: string) {
     const known = companies.some((c) => c.toLowerCase() === name.toLowerCase());
-    if (!known && !window.confirm(`“${name}” is a new company — create it?`)) {
+    if (!known && !window.confirm(`“${name}” is a new company - create it?`)) {
       revertCells(row.id, ["company"]);
       return;
     }
@@ -197,7 +197,7 @@ export function ContactSheet({
         }
         setRows((prev) => prev.filter((r) => r.id !== row.id));
       } catch {
-        flash("Could not delete — check your connection and try again.");
+        flash("Could not delete - check your connection and try again.");
       } finally {
         markBusy(row.id, false);
       }
@@ -236,7 +236,7 @@ export function ContactSheet({
         setRows((prev) => [res.row, ...prev]);
         setDraft(null);
       } catch {
-        flash("Could not add the contact — check your connection and try again.");
+        flash("Could not add the contact - check your connection and try again.");
       } finally {
         setSavingDraft(false);
       }
@@ -387,7 +387,7 @@ export function ContactSheet({
             {visible.length === 0 && !draft && (
               <tr>
                 <td colSpan={COLUMNS.length + 1} className="table-empty-cell">
-                  {rows.length === 0 ? "No contacts yet — hit “Add contact” to start." : "No contacts match."}
+                  {rows.length === 0 ? "No contacts yet - hit “Add contact” to start." : "No contacts match."}
                 </td>
               </tr>
             )}
@@ -443,7 +443,7 @@ export function ContactSheet({
         </table>
       </div>
       <p className="sheet-count">
-        Showing {visible.length} of {rows.length} contacts. Click any cell to edit — changes save automatically.
+        Showing {visible.length} of {rows.length} contacts. Click any cell to edit - changes save automatically.
       </p>
     </div>
   );

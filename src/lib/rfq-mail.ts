@@ -4,10 +4,11 @@ import { prisma } from "./prisma";
 import { deriveInquirySource } from "./inquiry-source";
 import { openInquiryStatusFilter } from "./inquiry-status";
 import { buildLeadCustomerEmailContent, buildLeadScopeFollowUpContent } from "./lead-emails";
+import { stripEmDashes } from "./no-em-dash";
 
 // Outbound RFQ mail from the rfq@usederya.com desk address. This account is
 // not OAuth-connected (no refresh token), so delivery goes over Gmail SMTP
-// with an app password. Nothing sends automatically — every send sits behind
+// with an app password. Nothing sends automatically - every send sits behind
 // an explicit operator button with a preview.
 
 const DEFAULT_MAIL_USER = "rfq@usederya.com";
@@ -111,7 +112,7 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
   const source = deriveInquirySource(inq);
 
   const lane = [inq.origin, inq.destination].filter(Boolean).join(" → ");
-  const subject = `[Derya RFQ] ${inq.commodity ?? inq.subject}${lane ? ` — ${lane}` : ""}`.slice(0, 180);
+  const subject = `[Derya RFQ] ${inq.commodity ?? inq.subject}${lane ? ` - ${lane}` : ""}`.slice(0, 180);
 
   const target = inq.targetPrice != null
     ? `${inq.targetCurrency ?? "USD"} ${inq.targetPrice.toLocaleString("en-GB")}`
@@ -128,7 +129,7 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
   );
 
   sections.push(
-    ["— Contact —",
+    ["- Contact -",
       line("Name", s(parsed.fullName)),
       line("Job title", s(parsed.jobTitle)),
       line("Company", inq.fromCompany ?? inq.company?.name ?? null),
@@ -138,7 +139,7 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
   );
 
   sections.push(
-    ["— Load —",
+    ["- Load -",
       line("Lane", lane || null),
       line("Mode", inq.mode),
       line("Commodity", inq.commodity),
@@ -154,7 +155,7 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
 
   if (isLead) {
     sections.push(
-      ["— Lead form answers —",
+      ["- Lead form answers -",
         line("Commercial shipment", s(answers.commercial)),
         line("Shipment type", s(answers.shipmentType)),
         line("Load info", s(answers.loadInfo)),
@@ -166,7 +167,7 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
     );
   } else if (inq.notes ?? inq.rawEmailBody) {
     const raw = (inq.notes ?? inq.rawEmailBody ?? "").trim();
-    sections.push(`— Notes —\n${raw.slice(0, 1500)}${raw.length > 1500 ? "…" : ""}`);
+    sections.push(`- Notes -\n${raw.slice(0, 1500)}${raw.length > 1500 ? "…" : ""}`);
   }
 
   sections.push(`Open in Derya: https://www.derya.ai/dashboard/rfq/${inq.id}`);
@@ -240,8 +241,8 @@ export async function sendRfqMail(args: {
       to: args.to,
       cc: args.cc.length > 0 ? args.cc : undefined,
       replyTo: args.replyTo ?? undefined,
-      subject: args.subject,
-      text: args.text,
+      subject: stripEmDashes(args.subject),
+      text: stripEmDashes(args.text),
     });
   } catch (e) {
     return { error: `Send failed: ${e instanceof Error ? e.message : String(e)}` };
@@ -289,7 +290,7 @@ export type SendStampKey = "deskForwardedAt" | "confirmationSentAt" | "infoReque
 
 // Legacy rows can hold non-JSON (or JSON-array) parsedData. Stamping those
 // would replace the stored parser output with just the stamp, so we refuse
-// to write rather than destroy data — the send still happened, it just won't
+// to write rather than destroy data - the send still happened, it just won't
 // show as sent after reload.
 function parseForStamp(raw: string | null): Record<string, unknown> | "legacy" {
   if (!raw || !raw.trim()) return {};

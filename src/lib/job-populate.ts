@@ -136,7 +136,7 @@ Output ONLY this JSON (no markdown, no commentary):
   "notes": string | null              // 2-3 sentences operational summary: who's involved, current stage, key open question
 }
 
-Be conservative — null is better than guessing. Use the supplier offers section to inform cost. If only one country is mentioned (e.g. "Turkey", "United Kingdom"), put it in origin/destination as-is — better than null. Convert weights from MT to kg (×1000). For SOURCING jobs the buyer is the customer and origin is the supplier's country.`,
+Be conservative - null is better than guessing. Use the supplier offers section to inform cost. If only one country is mentioned (e.g. "Turkey", "United Kingdom"), put it in origin/destination as-is - better than null. Convert weights from MT to kg (×1000). For SOURCING jobs the buyer is the customer and origin is the supplier's country.`,
     messages: [{
       role: "user",
       content: fullText,

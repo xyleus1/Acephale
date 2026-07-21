@@ -141,7 +141,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   <label className="field">
                     <span>Frequency</span>
                     <select name="cadence" defaultValue={job.cadence ?? ""}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       <option value="ONE_OFF">One-off</option>
                       <option value="MONTHLY">Monthly</option>
                     </select>
@@ -216,7 +216,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   <label className="field">
                     <span>Incoterms</span>
                     <select name="incoterms" defaultValue={job.incoterms ?? ""}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {["EXW","FCA","FAS","FOB","CFR","CIF","CPT","CIP","DAP","DPU","DDP"].map((t) => (
                         <option key={t} value={t}>{t}</option>
                       ))}
@@ -286,7 +286,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   <label className="field">
                     <span>Equipment</span>
                     <select name="equipmentType" defaultValue={job.equipmentType ?? ""}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {CARRIER_EQUIPMENT_TYPES.map(([v, l]) => (
                         <option key={v} value={v}>{l}</option>
                       ))}
@@ -295,7 +295,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   <label className="field">
                     <span>Commodity category</span>
                     <select name="commodityCategory" defaultValue={job.commodityCategory ?? ""}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {COMMODITY_CATEGORIES.map(([v, l]) => (
                         <option key={v} value={v}>{l}</option>
                       ))}
@@ -321,7 +321,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   <label className="field">
                     <span>Tracking</span>
                     <select name="trackingType" defaultValue={job.trackingType ?? ""}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {TRACKING_TYPES.map(([v, l]) => (
                         <option key={v} value={v}>{l}</option>
                       ))}
@@ -360,7 +360,7 @@ export function JobEditPanel({ job, companies }: { job: JobShape; companies: Com
                   name="notes"
                   rows={3}
                   defaultValue={cleanNotes(job.notes)}
-                  placeholder="Short note — only you see this"
+                  placeholder="Short note - only you see this"
                   className="edit-panel-note-textarea"
                 />
               </div>

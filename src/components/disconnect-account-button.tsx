@@ -9,7 +9,7 @@ export function DisconnectAccountButton({ accountId }: { accountId: string }) {
   const [busy, startTransition] = useTransition();
 
   function disconnect() {
-    if (!confirm("Pause this inbox? Sync stops and its emails are hidden from the Inbox — nothing is deleted. You can resume any time.")) return;
+    if (!confirm("Pause this inbox? Sync stops and its emails are hidden from the Inbox - nothing is deleted. You can resume any time.")) return;
     startTransition(async () => {
       await disconnectEmailAccount(accountId);
       router.refresh();

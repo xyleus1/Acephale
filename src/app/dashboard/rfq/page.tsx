@@ -82,7 +82,7 @@ export default async function RFQPage({
 }) {
   const session = await requireSession();
   const { status, q: rawQuery, view, quality } = await searchParams;
-  // Next delivers repeated params as arrays despite the annotation — degrade
+  // Next delivers repeated params as arrays despite the annotation - degrade
   // to no filter rather than crashing on a hand-crafted ?q=a&q=b URL.
   const searchQuery = (typeof rawQuery === "string" ? rawQuery : "").trim().slice(0, 120);
   // ?view=us swaps the sheet to US-market Meta leads; the default view is
@@ -93,7 +93,7 @@ export default async function RFQPage({
   const qualityFilter: "good" | "review" | "all" =
     usView && (quality === "review" || quality === "all") ? quality : usView ? "good" : "all";
 
-  // Custom statuses/modes added on the fly live as plain strings on rows —
+  // Custom statuses/modes added on the fly live as plain strings on rows -
   // whatever is in use in this office becomes a tab and a dropdown option.
   const [statusGroups, modeGroups] = await Promise.all([
     prisma.inquiry.groupBy({ by: ["status"], where: { officeId: session.officeId } }),
@@ -173,7 +173,7 @@ export default async function RFQPage({
 
   // The default view is everything except US-market leads; ?view=us shows
   // only those. NOT-contains alone would also drop rows with NULL parsedData
-  // (SQL LIKE on NULL is unknown) — manual RFQs must stay visible.
+  // (SQL LIKE on NULL is unknown) - manual RFQs must stay visible.
   const usLeadsFilter = { parsedData: { contains: US_LEAD_PARSED_MARKER } };
   const mainFilter = {
     AND: [{ OR: [
@@ -275,7 +275,7 @@ export default async function RFQPage({
         day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
       }),
       subject: inq.subject,
-      from: inq.fromCompany ?? inq.company?.name ?? inq.fromEmail ?? "—",
+      from: inq.fromCompany ?? inq.company?.name ?? inq.fromEmail ?? "-",
       fromCompany: inq.fromCompany,
       fromEmail: inq.fromEmail,
       phone: str(parsed.phone),
@@ -284,7 +284,7 @@ export default async function RFQPage({
       companyName: inq.company?.name ?? inq.fromCompany,
       sourceLabel: source.label,
       // The whatsapp detail is the receiving account address ("whatsapp:<id>")
-      // — machine noise next to a label that already says WhatsApp.
+      // - machine noise next to a label that already says WhatsApp.
       sourceDetail: source.kind === "whatsapp" ? null : source.detail,
       sourceKind: source.kind,
       origin: inq.origin,
@@ -316,13 +316,13 @@ export default async function RFQPage({
       leadQuality,
       confirmation: {
         // A non-single address (or a comma-smuggled list) must never become
-        // an SMTP recipient — surface it as unsendable instead.
+        // an SMTP recipient - surface it as unsendable instead.
         to: isSingleEmailAddress(inq.fromEmail) ? confirmationEmail.to : null,
         cc: confirmationEmail.cc,
         replyTo: confirmationEmail.replyTo,
         subject: confirmationEmail.subject,
         text: confirmationEmail.text,
-        // Each kind has its own stamp — sending the info-request must not
+        // Each kind has its own stamp - sending the info-request must not
         // show the (future) confirmation as already sent.
         sentAtLabel: sentLabel(confirmationEmail.kind === "info-request"
           ? parsed.infoRequestSentAt
@@ -352,7 +352,7 @@ export default async function RFQPage({
 
   const usSheetUrl = metaLeadsSheetUrl(metaLeadsSource("US"));
 
-  // Office-wide count with the same predicate the Send-all action uses —
+  // Office-wide count with the same predicate the Send-all action uses -
   // never the filtered view's count, or the confirm dialog lies.
   const pendingForwards = mailConfigured ? await countPendingDeskForwards(session.officeId) : 0;
 
@@ -461,8 +461,8 @@ export default async function RFQPage({
         searchQuery={searchQuery}
         emptyHint={usView
           ? qualityFilter !== "all" && (qualityCounts?.all ?? 0) > 0
-            ? `No ${qualityFilter === "good" ? "Good" : "Review"}-quality US leads in this view — ${qualityCounts!.all} lead${qualityCounts!.all === 1 ? "" : "s"} total under “All”.`
-            : "US leads sync in hourly from the California lead sheet — press “Sync Google Sheet” to pull now, or try another status filter."
+            ? `No ${qualityFilter === "good" ? "Good" : "Review"}-quality US leads in this view - ${qualityCounts!.all} lead${qualityCounts!.all === 1 ? "" : "s"} total under “All”.`
+            : "US leads sync in hourly from the California lead sheet - press “Sync Google Sheet” to pull now, or try another status filter."
           : undefined}
       />
     </div>

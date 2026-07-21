@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(settingsUrl);
   }
 
-  // Verify state via HMAC signature — no cookie required. The state was
+  // Verify state via HMAC signature - no cookie required. The state was
   // signed with AUTH_SECRET on the start route and includes the officeId +
   // issuedAt timestamp. Falls back to the legacy cookie nonce check for
   // any in-flight OAuth flows started before this code shipped.

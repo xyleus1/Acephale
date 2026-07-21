@@ -80,7 +80,7 @@ export async function getGmailAuthUrl(args: { loginHint?: string | null; origin?
   };
 }
 
-const STATE_TTL_MS = 15 * 60 * 1000; // 15 minutes — covers slow consent screens
+const STATE_TTL_MS = 15 * 60 * 1000; // 15 minutes - covers slow consent screens
 
 function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET;
@@ -181,7 +181,7 @@ export async function getValidAccessToken(accountId: string): Promise<string> {
   const refreshToken = decryptOAuthTokenFromStorage(account.refreshToken);
   if (!refreshToken) throw new Error("Account has no usable refresh token (re-connect needed)");
 
-  // Always refresh — simpler and avoids tracking token expiry.
+  // Always refresh - simpler and avoids tracking token expiry.
   const tokens = await refreshAccessToken(refreshToken);
   await prisma.emailAccount.updateMany({
     where: { id: accountId, officeId: account.officeId },

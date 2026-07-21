@@ -30,7 +30,7 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// "Today" / "Yesterday" / "8 Jul 2026" — chat-view day separators.
+// "Today" / "Yesterday" / "8 Jul 2026" - chat-view day separators.
 function dayLabel(iso: string): string {
   const d = new Date(iso);
   const now = new Date();

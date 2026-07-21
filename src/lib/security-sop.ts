@@ -1,14 +1,14 @@
 // Shared vocabulary + deterministic tier logic for high-value tech freight
 // (client + server safe, no runtime deps). The tier drives the per-load
 // security SOP checklist; the derivation is a visible, overridable suggestion
-// — never a silent write over an operator's choice.
+// - never a silent write over an operator's choice.
 
 export const COMMODITY_CATEGORIES = [
   ["servers_gpu", "Servers / GPUs"],
   ["semicap_tools", "Semiconductor equipment"],
   ["networking", "Networking equipment"],
-  ["batteries_un3480", "Lithium batteries — UN3480 (standalone)"],
-  ["batteries_un3481", "Lithium batteries — UN3481 (in equipment)"],
+  ["batteries_un3480", "Lithium batteries - UN3480 (standalone)"],
+  ["batteries_un3481", "Lithium batteries - UN3481 (in equipment)"],
   ["robotics", "Robotics"],
   ["test_instruments", "Test & lab instruments"],
   ["medical_devices", "Medical devices"],
@@ -60,7 +60,7 @@ export function tierRank(tier: string | null | undefined): number {
 }
 
 // Category floors: what a load of this commodity warrants regardless of value.
-// Everything electronics-shaped starts at "elevated" — electronics is the #1
+// Everything electronics-shaped starts at "elevated" - electronics is the #1
 // stolen commodity and CA is the theft epicenter. Batteries carry DG handling
 // risk on top of theft risk.
 const CATEGORY_FLOOR: Record<CommodityCategory, SecurityTier> = {
@@ -85,7 +85,7 @@ function valueTier(declaredValue: number): SecurityTier {
 }
 
 // Deterministic suggestion: max(value ladder, category floor).
-// Returns null when there is no signal at all — no suggestion beats a wrong one.
+// Returns null when there is no signal at all - no suggestion beats a wrong one.
 export function deriveSecurityTier(input: {
   declaredValue?: number | null;
   commodityCategory?: string | null;
@@ -126,7 +126,7 @@ export const LOAD_SECURITY_CHECKLIST: SecurityChecklistItem[] = [
     key: "identity_reverified",
     label: "Carrier identity re-verified against the bench record",
     minTier: "elevated",
-    hint: "Same MC, same domain, same factoring as the vetted record — mismatches mean stop.",
+    hint: "Same MC, same domain, same factoring as the vetted record - mismatches mean stop.",
   },
   {
     key: "verified_phone_dispatch",
@@ -144,7 +144,7 @@ export const LOAD_SECURITY_CHECKLIST: SecurityChecklistItem[] = [
     key: "tracking_active",
     label: "Tracking live before pickup",
     minTier: "elevated",
-    hint: "Per the load's trackingType — no tracking, no dispatch.",
+    hint: "Per the load's trackingType - no tracking, no dispatch.",
   },
   {
     key: "receiver_confirmed",
@@ -191,7 +191,7 @@ export const LOAD_SECURITY_CHECKLIST: SecurityChecklistItem[] = [
 ];
 
 // Items required for a given tier. Standard (or unknown) tiers get no
-// checklist — SOP noise on ordinary loads erodes the habit on the ones
+// checklist - SOP noise on ordinary loads erodes the habit on the ones
 // that matter.
 export function securityChecklistTemplate(tier: string | null | undefined): SecurityChecklistItem[] {
   const rank = tierRank(tier);

@@ -55,9 +55,9 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
     ["Confidence", score.components.confidence],
   ] as const;
   const price = score.price;
-  const fmt = (n: number | null) => n == null ? "—" : `${price.currency} ${Math.round(n).toLocaleString()}`;
-  const fmtPct = (n: number | null | undefined) => n == null ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
-  const fmtCbm = (n: number | null | undefined) => n == null ? "—" : `${n.toFixed(3)} CBM`;
+  const fmt = (n: number | null) => n == null ? "-" : `${price.currency} ${Math.round(n).toLocaleString()}`;
+  const fmtPct = (n: number | null | undefined) => n == null ? "-" : `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
+  const fmtCbm = (n: number | null | undefined) => n == null ? "-" : `${n.toFixed(3)} CBM`;
   const cargoMath = score.evidence.cargoMath;
   const targetPosture = score.evidence.targetPosture;
   const coveragePosture = score.evidence.coveragePosture;
@@ -319,7 +319,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
         <div className="strategy-target-grid">
           <div>
             <span>Target</span>
-            <strong>{targetPosture.target == null ? "—" : `${targetPosture.currency} ${Math.round(targetPosture.target).toLocaleString()}`}</strong>
+            <strong>{targetPosture.target == null ? "-" : `${targetPosture.currency} ${Math.round(targetPosture.target).toLocaleString()}`}</strong>
           </div>
           <div>
             <span>Margin at target</span>

@@ -45,7 +45,7 @@ export function BrainBridgePanel({ result }: { result: BrainBridgeResult }) {
         {result.sections.length === 0 ? (
           <div className="brain-bridge-empty">
             {result.mode === "error"
-              ? "Context retrieval failed — this panel is read-only context; the RFQ data above is unaffected."
+              ? "Context retrieval failed - this panel is read-only context; the RFQ data above is unaffected."
               : "No brain context sections to show."}
           </div>
         ) : (

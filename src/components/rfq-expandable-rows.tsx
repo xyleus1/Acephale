@@ -111,8 +111,8 @@ function EmailPreviewCard({
         }
       } catch {
         // A rejected action (network drop, server crash) leaves delivery
-        // unknown — say so instead of crashing to the error boundary.
-        setError("Send failed or was interrupted — check with the recipient before retrying.");
+        // unknown - say so instead of crashing to the error boundary.
+        setError("Send failed or was interrupted - check with the recipient before retrying.");
       }
     });
   }
@@ -143,7 +143,7 @@ function EmailPreviewCard({
         </div>
       </div>
       <div className="rfq-mail-meta">
-        <div><span>To</span><strong>{preview.to ?? "—"}</strong></div>
+        <div><span>To</span><strong>{preview.to ?? "-"}</strong></div>
         {preview.cc.length > 0 && <div><span>Cc</span><strong>{preview.cc.join(", ")}</strong></div>}
         {preview.replyTo && <div><span>Reply-To</span><strong>{preview.replyTo}</strong></div>}
         <div><span>Subject</span><strong>{preview.subject}</strong></div>
@@ -189,7 +189,7 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
   const [mailOpen, setMailOpen] = useState(Boolean(forwardError));
   const [waOpen, setWaOpen] = useState(false);
 
-  // A failed row-level "Desk" send surfaces its error on the forward card —
+  // A failed row-level "Desk" send surfaces its error on the forward card -
   // the drawer has to open or the message stays hidden.
   useEffect(() => {
     if (forwardError) setMailOpen(true);
@@ -296,7 +296,7 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
           <EmailPreviewCard
             title={row.confirmationKind === "info-request" ? "Ask lead for missing info" : "Confirmation to lead"}
             hint={row.confirmationKind === "info-request"
-              ? `Asks for ${row.whatsapp.missing.join(", ")} — replies go to oguzhan@`
+              ? `Asks for ${row.whatsapp.missing.join(", ")} - replies go to oguzhan@`
               : "Request-received note, replies go to oguzhan@"}
             preview={row.confirmation}
             disabledReason={mailDisabled ?? (row.confirmation.to ? null : "No valid single sender email address on this RFQ.")}
@@ -310,7 +310,7 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
         hint={
           row.whatsapp.missing.length > 0
             ? `Asks for ${row.whatsapp.missing.join(", ")} (in Turkish)`
-            : "Nothing missing — tells the lead pricing is underway (in Turkish)"
+            : "Nothing missing - tells the lead pricing is underway (in Turkish)"
         }
         badges={
           row.whatsapp.sentAtLabel ? (
@@ -383,14 +383,14 @@ function RowSendCell({ row, onExpand, onError }: {
         }
       } catch {
         setFailed(true);
-        onError("Send failed or was interrupted — check with the recipient before retrying.");
+        onError("Send failed or was interrupted - check with the recipient before retrying.");
         onExpand();
       }
     });
   }
 
   // The customer email (confirmation or missing-info ask), sendable straight
-  // from the row — same email the expanded card previews.
+  // from the row - same email the expanded card previews.
   function sendLead() {
     startLeadTransition(async () => {
       setLeadFailed(false);
@@ -470,7 +470,7 @@ function RowSendCell({ row, onExpand, onError }: {
 //
 // The select-checkbox column and the row-actions (delete) column are fixed
 // chrome; the 12 data columns between them are customizable. The layout is
-// persisted to localStorage keyed by user id — same device-level persistence
+// persisted to localStorage keyed by user id - same device-level persistence
 // the Loads table uses, but scoped per account so shared machines don't leak
 // layouts between users.
 
@@ -572,7 +572,7 @@ function RfqBulkBar({ ids, statusOptions, onDone }: {
         onDone();
         router.refresh();
       } catch {
-        setError("Could not update — check your connection and try again.");
+        setError("Could not update - check your connection and try again.");
       }
     });
   }
@@ -623,13 +623,13 @@ function RfqSearchBar({ initialQuery }: { initialQuery: string }) {
   const [value, setValue] = useState(initialQuery);
   const [busy, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // The query this component last navigated to (or adopted from the URL) —
+  // The query this component last navigated to (or adopted from the URL) -
   // guards against re-navigating when the prop changes underneath.
   const applied = useRef(initialQuery);
   const debounced = useDebouncedValue(value, 350);
 
   // An external navigation (tab link, sidebar link, back button) changed the
-  // URL's q — adopt it, unless the user is mid-typing in this input.
+  // URL's q - adopt it, unless the user is mid-typing in this input.
   useEffect(() => {
     if (document.activeElement === inputRef.current) return;
     applied.current = initialQuery;
@@ -640,7 +640,7 @@ function RfqSearchBar({ initialQuery }: { initialQuery: string }) {
     const next = debounced.trim().slice(0, 120);
     if (next === applied.current) return;
     applied.current = next;
-    // Read the rest of the query string at fire time — props can lag a
+    // Read the rest of the query string at fire time - props can lag a
     // just-clicked tab whose server render hasn't committed yet.
     const params = new URLSearchParams(window.location.search);
     if (next) params.set("q", next);
@@ -659,7 +659,7 @@ function RfqSearchBar({ initialQuery }: { initialQuery: string }) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Escape") setValue(""); }}
-        placeholder="Search RFQs — subject, ref, company, lane…"
+        placeholder="Search RFQs - subject, ref, company, lane…"
         aria-label="Search RFQs"
       />
       {value && (
@@ -692,7 +692,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
   userId: string;
   searchQuery: string;
   // Replaces the default "RFQs arrive from linked email threads…" empty-state
-  // copy (and its New RFQ button) — the US-leads view has its own story for
+  // copy (and its New RFQ button) - the US-leads view has its own story for
   // where rows come from. Search-empty copy is unaffected.
   emptyHint?: string;
 }) {
@@ -740,7 +740,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
 
   // Two width modes. Untouched layout: table fills the shell and Subject
   // flexes into the leftover space. Once the user has resized anything, every
-  // column is a definite px and the table is exactly their sum — otherwise
+  // column is a definite px and the table is exactly their sum - otherwise
   // the browser redistributes slack into the flex column, and a drag on one
   // edge visibly moves other columns the opposite way.
   const customized = Object.keys(layout.widths).length > 0;
@@ -782,8 +782,8 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
       ?? layout.widths[key] ?? COLUMN_BY_KEY[key].width ?? 160;
     const startX = e.clientX;
     // Lock every visible column to its current rendered width before tracking
-    // the drag. From here on the table is exactly as wide as its columns — no
-    // flex slack to redistribute — so the dragged edge follows the pointer
+    // the drag. From here on the table is exactly as wide as its columns - no
+    // flex slack to redistribute - so the dragged edge follows the pointer
     // instead of the freed space flowing back into the flex column and
     // shoving everything the other way.
     const headerRow = th?.parentElement;
@@ -1043,7 +1043,7 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
         }
         router.refresh();
       } catch {
-        flash("Could not save — check your connection and try again.");
+        flash("Could not save - check your connection and try again.");
         revertCells(fields);
       }
     });
@@ -1061,7 +1061,7 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
         }
         router.refresh();
       } catch {
-        flash("Could not delete — check your connection and try again.");
+        flash("Could not delete - check your connection and try again.");
       }
     });
   }
@@ -1074,7 +1074,7 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
         );
       case "ref":
         return (
-          <td key="ref" className="data-cell-mono rfq-ro">{row.reference ?? <span className="data-muted">—</span>}</td>
+          <td key="ref" className="data-cell-mono rfq-ro">{row.reference ?? <span className="data-muted">-</span>}</td>
         );
       case "subject":
         return (
@@ -1097,7 +1097,7 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
                       : row.leadQuality.tier === "REVIEW" ? "badge-warn"
                       : "badge-neutral"
                   }`}
-                  title={`Lead quality: ${row.leadQuality.tier === "GOOD" ? "Good" : row.leadQuality.tier === "REVIEW" ? "Review" : "Weak"} (score ${row.leadQuality.score})${row.leadQuality.reasons.length ? ` — ${row.leadQuality.reasons.join(", ")}` : ""}`}
+                  title={`Lead quality: ${row.leadQuality.tier === "GOOD" ? "Good" : row.leadQuality.tier === "REVIEW" ? "Review" : "Weak"} (score ${row.leadQuality.score})${row.leadQuality.reasons.length ? ` - ${row.leadQuality.reasons.join(", ")}` : ""}`}
                 >
                   {row.leadQuality.tier === "GOOD" ? "Good" : row.leadQuality.tier === "REVIEW" ? "Review" : "Weak"}
                 </span>
@@ -1210,7 +1210,7 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
               key={`dv${rev("declaredValue")}:${row.declaredValueInput}`}
               value={row.declaredValueInput}
               placeholder="USD"
-              title="Declared cargo value — drives the security tier suggestion"
+              title="Declared cargo value - drives the security tier suggestion"
               onCommit={(v) => commit({ declaredValue: v })}
             />
           </td>
@@ -1222,7 +1222,7 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
               key={`ta${rev("target")}:${row.targetInput}`}
               value={row.targetInput}
               placeholder={row.targetPlaceholder}
-              title='Target price — e.g. "USD 1200", "no target", or empty for ask'
+              title='Target price - e.g. "USD 1200", "no target", or empty for ask'
               onCommit={(v) => commit({ target: v })}
             />
           </td>

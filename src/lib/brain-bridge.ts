@@ -100,7 +100,7 @@ export async function getBrainBridgeContext(input: BrainBridgeInput): Promise<Br
       mode: "mock",
       generatedAt: new Date().toISOString(),
       sections: mockBrainBridgeSections(),
-      note: "Mock mode — deterministic sample sections, no network calls, no live Derya memory.",
+      note: "Mock mode - deterministic sample sections, no network calls, no live Derya memory.",
     };
   }
 

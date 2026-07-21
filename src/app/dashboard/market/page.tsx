@@ -3,12 +3,12 @@ import { MarketBaseline } from "@/components/market-baseline";
 import { LoadCheckPanel } from "@/components/load-check-panel";
 import { requireSession } from "@/lib/auth";
 
-// The Census customs queries legitimately take 5-10s on a cold cache — give
+// The Census customs queries legitimately take 5-10s on a cold cache - give
 // the streamed page room instead of letting the platform default cut them off.
 export const maxDuration = 60;
 
 // Market page: run a load idea through the pre-flight, with the open-data
-// baseline underneath. Source notes live in the baseline card's footer —
+// baseline underneath. Source notes live in the baseline card's footer -
 // no separate explainer cards.
 export default async function MarketPage() {
   await requireSession();

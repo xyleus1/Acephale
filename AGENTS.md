@@ -17,6 +17,7 @@
 
 ## Engineering Rules
 
+- ABSOLUTE RULE (Mert, 2026-07-21): NEVER use an em dash (the U+2014 character) anywhere. Not in UI copy, emails, WhatsApp drafts, subjects, notes, memory records, agent-generated text, LLM prompts, code comments, or docs. Use a comma, colon, period, or plain hyphen instead. Only exceptions: historical Prisma migration files (checksummed, never edit) and verbatim quotes of external input.
 - Preserve tenant scoping with `officeId` on reads, writes, syncs, memory records, and agent-visible data.
 - Preserve provenance and evidence for company-brain work. Agent answers should be traceable to source records when possible.
 - Prefer deterministic domain logic before LLM calls. LLMs should explain, draft, rank, or assist, not silently replace business rules.

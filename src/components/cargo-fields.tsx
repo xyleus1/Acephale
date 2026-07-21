@@ -32,7 +32,7 @@ export function CargoFields({
       <div className="form-grid-2">
         <label className="field"><span>Mode</span>
           <select name="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="">— Select —</option>
+            <option value="">- Select -</option>
             <option value="SEA-FCL">Sea FCL</option>
             <option value="SEA-LCL">Sea LCL</option>
             <option value="AIR">Air</option>
@@ -52,7 +52,7 @@ export function CargoFields({
           </label>
           <label className="field"><span>Container type</span>
             <select name="containerType" defaultValue={initialContainerType ?? ""}>
-              <option value="">— Select —</option>
+              <option value="">- Select -</option>
               {CONTAINER_TYPES.map((t) => (
                 <option key={t} value={t}>{CONTAINER_TYPE_LABEL[t]}</option>
               ))}

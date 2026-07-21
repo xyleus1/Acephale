@@ -8,7 +8,7 @@ import { quoteEconomics } from "./truckload-quote-fields";
 // Every issued domestic quote persists as a TruckloadQuote row (normalized
 // lane x equipment x tier + buy/sell economics + speed), every buy rate also
 // lands in LaneRate, and inquiry status changes settle outcomes. All calls
-// are cheap and callers wrap them best-effort — flywheel writes must never
+// are cheap and callers wrap them best-effort - flywheel writes must never
 // block operator flows.
 
 export type RecordTruckloadQuoteInput = {

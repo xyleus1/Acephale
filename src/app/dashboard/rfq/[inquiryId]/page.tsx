@@ -29,7 +29,7 @@ import {
 } from "@/lib/inquiry-status";
 
 function fmt(d: Date | null | undefined) {
-  if (!d) return "—";
+  if (!d) return "-";
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -68,7 +68,7 @@ function parseReferenceDealSource(parsedData: string | null | undefined): Refere
 }
 
 function money(value: number | null | undefined, currency: string | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "-";
   return `${currency ?? "USD"} ${Math.round(value).toLocaleString()}`;
 }
 
@@ -97,11 +97,11 @@ function ReferenceDealSourcePanel({ source }: { source: ReferenceDealSource }) {
           </div>
           <div>
             <span>Cadence</span>
-            <strong>{sheet.cadence || "—"}</strong>
+            <strong>{sheet.cadence || "-"}</strong>
           </div>
           <div>
             <span>Quantity</span>
-            <strong>{[sheet.quantity, sheet.unit].filter(Boolean).join(" ") || "—"}</strong>
+            <strong>{[sheet.quantity, sheet.unit].filter(Boolean).join(" ") || "-"}</strong>
           </div>
         </div>
         <div className="reference-source-warning">
@@ -192,7 +192,7 @@ export default async function RFQDetailPage({
     t.messages.some((m) => m.account?.provider === "WHATSAPP"),
   );
   // deriveInquirySource samples the first thread, whose DB order is
-  // unspecified — any attached WhatsApp thread makes this a WhatsApp deal.
+  // unspecified - any attached WhatsApp thread makes this a WhatsApp deal.
   const isWaSource = source.kind === "whatsapp" || waThreads.length > 0;
   const mailThreads = inquiry.emailThreads.filter((t) => !waThreads.includes(t));
   let parsedJson: Record<string, unknown> = {};
@@ -300,7 +300,7 @@ export default async function RFQDetailPage({
         {/* Left: email body + parsed fields */}
         <div className="record-side-stack">
 
-          {/* Raw source message(s) — a WhatsApp transcript is not an email.
+          {/* Raw source message(s) - a WhatsApp transcript is not an email.
               Hidden when the live conversation renders below (same content). */}
           {inquiry.rawEmailBody && !(isWaSource && waThreads.length > 0) && (
             <div className="record-panel">
@@ -317,7 +317,7 @@ export default async function RFQDetailPage({
             </div>
           )}
 
-          {/* Sourcing comparison table — only for SOURCING inquiries */}
+          {/* Sourcing comparison table - only for SOURCING inquiries */}
           {inquiry.type === "SOURCING" && (
             <SourcingOffersTable
               inquiryId={inquiry.id}
@@ -339,7 +339,7 @@ export default async function RFQDetailPage({
             />
           )}
 
-          {/* WhatsApp conversations — chat rendering, not email chrome */}
+          {/* WhatsApp conversations - chat rendering, not email chrome */}
           {waThreads.map((thread) => (
             <div key={thread.id} className="record-panel">
               <div className="record-card-header">
@@ -365,7 +365,7 @@ export default async function RFQDetailPage({
                           <div className="wa-bubble-sender">{displayParty(msg.fromEmail, msg.fromName)}</div>
                         )}
                         <span className={isMediaNote ? "wa-media-note" : undefined}>
-                          {msg.bodyText ?? "—"}
+                          {msg.bodyText ?? "-"}
                         </span>
                         <span className="wa-bubble-meta">
                           {new Date(msg.sentAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
@@ -379,7 +379,7 @@ export default async function RFQDetailPage({
             </div>
           ))}
 
-          {/* WhatsApp inquiry draft + send — same card as the RFQ sheet */}
+          {/* WhatsApp inquiry draft + send - same card as the RFQ sheet */}
           {isWaSource && (
             <div className="record-panel">
               <div className="card-body">
@@ -408,7 +408,7 @@ export default async function RFQDetailPage({
                           {new Date(msg.sentAt).toLocaleString()}
                         </div>
                       </div>
-                      <div className="email-bubble-body">{msg.bodyText ?? msg.bodyHtml ?? "—"}</div>
+                      <div className="email-bubble-body">{msg.bodyText ?? msg.bodyHtml ?? "-"}</div>
                       {attachments.length > 0 && (
                         <div className="record-attachment-row">
                           {attachments.map((a) => (
@@ -455,7 +455,7 @@ export default async function RFQDetailPage({
                 <div className="form-grid-3 form-row-gap">
                   <label className="field"><span>Mode</span>
                     <select name="mode" defaultValue={inquiry.mode ?? ""}>
-                      <option value="">— Select —</option>
+                      <option value="">- Select -</option>
                       <option value="SEA-FCL">Sea FCL</option>
                       <option value="SEA-LCL">Sea LCL</option>
                       <option value="AIR">Air</option>
@@ -465,7 +465,7 @@ export default async function RFQDetailPage({
                   </label>
                   <label className="field"><span>Container</span>
                     <select name="containerType" defaultValue={inquiry.containerType ?? ""}>
-                      <option value="">— Select —</option>
+                      <option value="">- Select -</option>
                       <option value="20GP">20GP</option>
                       <option value="40GP">40GP</option>
                       <option value="40HC">40HC</option>
@@ -474,7 +474,7 @@ export default async function RFQDetailPage({
                   </label>
                   <label className="field"><span>Incoterms</span>
                     <select name="incoterms" defaultValue={inquiry.incoterms ?? ""}>
-                      <option value="">— Select —</option>
+                      <option value="">- Select -</option>
                       {["EXW","FCA","FAS","FOB","CFR","CIF","CPT","CIP","DAP","DPU","DDP"].map(t => (
                         <option key={t} value={t}>{t}</option>
                       ))}
@@ -683,7 +683,7 @@ export default async function RFQDetailPage({
                       </div>
                       <div className="record-row-value">
                         <strong>
-                          {q.total40HC ? `$${q.total40HC.toLocaleString()}` : q.total40 ? `$${q.total40.toLocaleString()}` : q.total20 ? `$${q.total20.toLocaleString()}` : "—"}
+                          {q.total40HC ? `$${q.total40HC.toLocaleString()}` : q.total40 ? `$${q.total40.toLocaleString()}` : q.total20 ? `$${q.total20.toLocaleString()}` : "-"}
                         </strong>
                         <span>40HC / 40 / 20</span>
                       </div>
@@ -704,10 +704,10 @@ export default async function RFQDetailPage({
             <div className="card-body">
               <div className="record-row-list">
                 {[
-                  { label: "From",        value: displayParty(inquiry.fromEmail) || inquiry.fromCompany || "—" },
+                  { label: "From",        value: displayParty(inquiry.fromEmail) || inquiry.fromCompany || "-" },
                   { label: "Received",    value: fmt(inquiry.receivedAt) },
-                  { label: "Cargo Ready", value: inquiry.cargoReadyDate ? fmt(inquiry.cargoReadyDate) : "—" },
-                  { label: "Container",   value: inquiry.containerType ?? "—" },
+                  { label: "Cargo Ready", value: inquiry.cargoReadyDate ? fmt(inquiry.cargoReadyDate) : "-" },
+                  { label: "Container",   value: inquiry.containerType ?? "-" },
                   { label: "Status",      value: sm.label },
                 ].map(({ label, value }) => (
                   <div key={label} className="record-row">

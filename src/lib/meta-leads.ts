@@ -1,7 +1,7 @@
 // Meta (Instagram/Facebook) Lead Ads export sheets, one per ad market. Every
-// export shares Meta's column layout — id, created_time, ad/campaign/form
+// export shares Meta's column layout - id, created_time, ad/campaign/form
 // metadata, six form answers, budget, origin, destination, commodity, contact
-// fields, job title, inbox url, lead status — so one parser serves all of
+// fields, job title, inbox url, lead status - so one parser serves all of
 // them; only the spreadsheet, the market tag, and the customer-facing
 // language differ.
 
@@ -19,7 +19,7 @@ export type MetaLeadsSource = {
 };
 
 const TR_DEFAULT_SHEET_ID = "12Fvi6qzU_TLx-a5X49ggV5dyxDqFfLnDG3TTpuxlrlA";
-// "DERYA LEAD - USA CALIFORNIA" — the US export campaign's lead sheet.
+// "DERYA LEAD - USA CALIFORNIA" - the US export campaign's lead sheet.
 const US_DEFAULT_SHEET_ID = "1wSZBm5iNbDWjml5ddMebULb7iLBKjs5vuX3U_5oC_Ic";
 
 export function metaLeadsSources(): MetaLeadsSource[] {
@@ -52,7 +52,7 @@ export function metaLeadsSource(market: MetaLeadMarket): MetaLeadsSource {
   return metaLeadsSources().find((s) => s.market === market)!;
 }
 
-// parsedData substring that marks a lead as US-market — used both when the
+// parsedData substring that marks a lead as US-market - used both when the
 // sync writes rows and when /dashboard/rfq splits them into the US panel.
 // Nothing else writes a "market" key into inquiry parsedData.
 export const US_LEAD_PARSED_MARKER = '"market":"US"' as const;

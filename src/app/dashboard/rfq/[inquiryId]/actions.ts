@@ -186,7 +186,7 @@ export async function updateInquiryStatus(inquiryId: string, status: string) {
     idempotencyKey: `inquiry:${inquiryId}:status:${status}:${updated.updatedAt.toISOString()}`,
   }).catch(() => null);
 
-  // Settle pending truckload quotes on terminal statuses — best-effort.
+  // Settle pending truckload quotes on terminal statuses - best-effort.
   const canonical = canonicalInquiryStatus(status);
   const outcome = canonical === "BOOKED" ? "WON" : canonical === "MISSED" ? "LOST" : null;
   if (outcome) {
@@ -411,7 +411,7 @@ export type RecordedQuoteRow = {
 };
 
 // Snapshot the current domestic draft economics into the flywheel. One row
-// per press — each is a quote version; outcomes settle via RFQ status.
+// per press - each is a quote version; outcomes settle via RFQ status.
 export async function recordTruckloadQuoteAction(
   inquiryId: string,
 ): Promise<{ quote: RecordedQuoteRow } | { error: string }> {
@@ -423,7 +423,7 @@ export async function recordTruckloadQuoteAction(
   if (!inquiry) return { error: "RFQ not found." };
 
   const assessment = assessDomesticTruckingPricing(inquiry);
-  if (!assessment.eligible) return { error: "Not a US domestic trucking RFQ — nothing to record." };
+  if (!assessment.eligible) return { error: "Not a US domestic trucking RFQ - nothing to record." };
   const draft = assessment.quoteDraft;
   const selectedBid = await prisma.carrierBid.findFirst({
     where: { officeId: session.officeId, inquiryId, status: "SELECTED" },

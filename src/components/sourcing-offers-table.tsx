@@ -125,7 +125,7 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
   }
 
   const fmtPrice = (o: Offer | null) =>
-    o?.pricePerUnit != null ? `${o.currency ?? ""} ${o.pricePerUnit.toLocaleString()}${o.unit ? `/${o.unit}` : ""}`.trim() : "—";
+    o?.pricePerUnit != null ? `${o.currency ?? ""} ${o.pricePerUnit.toLocaleString()}${o.unit ? `/${o.unit}` : ""}`.trim() : "-";
 
   return (
     <div className="card">
@@ -196,7 +196,7 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
                   >
                     <Td>
                       <div style={{ fontWeight: 600, color: "var(--text)" }}>
-                        {o?.supplierName ?? r.fromEmail ?? "—"}
+                        {o?.supplierName ?? r.fromEmail ?? "-"}
                         {isBest && (
                           <span style={{
                             marginLeft: 6, fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3,
@@ -214,18 +214,18 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
                           <span style={{ fontWeight: 700, color: "var(--brand)" }}>
                             {o?.currency ?? ""} {Math.round(landed(o)!).toLocaleString()}{o?.unit ? `/${o.unit}` : ""}
                           </span>
-                        ) : "—"}
+                        ) : "-"}
                       </Td>
                     )}
-                    <Td>{o?.qtyAvailable ?? "—"}</Td>
-                    <Td>{o?.origin ?? "—"}</Td>
-                    <Td>{o?.incoterms ?? "—"}</Td>
-                    <Td>{o?.paymentTerms ?? "—"}</Td>
-                    <Td>{o?.leadTime ?? "—"}</Td>
-                    <Td>{o?.validity ?? "—"}</Td>
+                    <Td>{o?.qtyAvailable ?? "-"}</Td>
+                    <Td>{o?.origin ?? "-"}</Td>
+                    <Td>{o?.incoterms ?? "-"}</Td>
+                    <Td>{o?.paymentTerms ?? "-"}</Td>
+                    <Td>{o?.leadTime ?? "-"}</Td>
+                    <Td>{o?.validity ?? "-"}</Td>
                     <Td>
                       {o?.sampleAvailable === true ? <Icon name="check" size={12} /> :
-                        o?.sampleAvailable === false ? <span style={{ color: "var(--text-3)" }}>no</span> : "—"}
+                        o?.sampleAvailable === false ? <span style={{ color: "var(--text-3)" }}>no</span> : "-"}
                     </Td>
                     <Td>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
@@ -280,7 +280,7 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
 
       {awardModal && (
         <DraftModal
-          title={`Award confirmation — ${awardModal.supplierName}`}
+          title={`Award confirmation - ${awardModal.supplierName}`}
           subtitle={awardModal.replyTo ? `To: ${awardModal.replyTo}` : ""}
           draft={awardModal.draft}
           threadDbId={awardModal.threadId}
@@ -290,7 +290,7 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
       )}
       {replyModal && (
         <DraftModal
-          title={`Reply draft — ${replyModal.supplierName}`}
+          title={`Reply draft - ${replyModal.supplierName}`}
           subtitle={replyModal.replyTo ? `To: ${replyModal.replyTo}` : ""}
           draft={replyModal.draft}
           threadDbId={replyModal.threadId}
@@ -300,7 +300,7 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
       )}
       {counterModal && (
         <DraftModal
-          title={`Counter-offer — ${counterModal.supplierName}`}
+          title={`Counter-offer - ${counterModal.supplierName}`}
           subtitle={counterModal.replyTo ? `To: ${counterModal.replyTo}` : ""}
           draft={counterModal.draft}
           threadDbId={counterModal.threadId}

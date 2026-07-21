@@ -461,7 +461,7 @@ export async function createLoadFromRfqReview(
     summary: "Moved an RFQ into loads",
   });
 
-  // Seed the SOP checklist for tiered loads — additive, never destructive.
+  // Seed the SOP checklist for tiered loads - additive, never destructive.
   await ensureLoadSecurityChecklist(session.officeId, updatedJob.id, values.securityTier).catch(() => null);
 
   const updatedInquiry = await prisma.inquiry.update({

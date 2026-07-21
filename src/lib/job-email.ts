@@ -16,11 +16,11 @@ async function buildJobContext(jobId: string, officeId: string) {
     },
   });
   if (!job) return null;
-  const margin = job.revenue && job.cost ? `${(((job.revenue - job.cost) / job.revenue) * 100).toFixed(1)}%` : "—";
+  const margin = job.revenue && job.cost ? `${(((job.revenue - job.cost) / job.revenue) * 100).toFixed(1)}%` : "-";
   const quotes = job.inquiry?.carrierQuotes.map((q) => `${q.carrier}: $${(q.total40HC ?? q.total40 ?? q.total20 ?? 0).toLocaleString()} (${q.transitDays ?? "?"}d)`).join("; ") ?? "";
   return {
     job,
-    summary: `Reference: ${job.reference}\nCustomer: ${job.company?.name ?? "—"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMode: ${job.mode ?? "—"}\nIncoterms: ${job.incoterms ?? "—"}\nCommodity: ${job.commodity ?? "—"}\nWeight: ${job.weight ?? "?"}kg, Volume: ${job.volume ?? "?"}cbm\nStatus: ${job.status}\nTarget price: ${job.targetPrice != null ? `${job.targetCurrency ?? "USD"} ${job.targetPrice.toLocaleString()}` : job.targetPriceStatus === "NO_TARGET" ? "No target" : "Ask customer"}\nRevenue: ${job.revenue ? `$${job.revenue.toLocaleString()}` : "—"}, Cost: ${job.cost ? `$${job.cost.toLocaleString()}` : "—"}, Margin: ${margin}\nCarrier rates received: ${quotes || "(none)"}`,
+    summary: `Reference: ${job.reference}\nCustomer: ${job.company?.name ?? "-"}\nRoute: ${job.origin ?? "?"} → ${job.destination ?? "?"}\nMode: ${job.mode ?? "-"}\nIncoterms: ${job.incoterms ?? "-"}\nCommodity: ${job.commodity ?? "-"}\nWeight: ${job.weight ?? "?"}kg, Volume: ${job.volume ?? "?"}cbm\nStatus: ${job.status}\nTarget price: ${job.targetPrice != null ? `${job.targetCurrency ?? "USD"} ${job.targetPrice.toLocaleString()}` : job.targetPriceStatus === "NO_TARGET" ? "No target" : "Ask customer"}\nRevenue: ${job.revenue ? `$${job.revenue.toLocaleString()}` : "-"}, Cost: ${job.cost ? `$${job.cost.toLocaleString()}` : "-"}, Margin: ${margin}\nCarrier rates received: ${quotes || "(none)"}`,
   };
 }
 
@@ -47,7 +47,7 @@ export async function draftStageEmail(jobId: string, stageHint: StageHint): Prom
   const result = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 600,
-    system: `You are drafting freight forwarding emails on behalf of Derya Freight OS. Output ONLY a JSON object: {"subject": "...", "body": "..."}. No markdown, no commentary. Body should be plain text with line breaks. Sign off with "Best, Derya Operations". No emojis.`,
+    system: `You are drafting freight forwarding emails on behalf of Derya Freight OS. Output ONLY a JSON object: {"subject": "...", "body": "..."}. No markdown, no commentary. Body should be plain text with line breaks. Sign off with "Best, Derya Operations". No emojis. Never use the em dash character in your output; use a comma, colon, period, or plain hyphen instead.`,
     messages: [{
       role: "user",
       content: `JOB CONTEXT:\n${ctx.summary}\n\nINSTRUCTION:\n${promptByHint[stageHint]}`,
@@ -92,10 +92,10 @@ export async function draftCounterOffer(
   const result = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 500,
-    system: `You are drafting carrier rate negotiation emails on behalf of Derya Freight OS. Output ONLY a JSON object: {"subject": "...", "body": "..."}. No markdown, no commentary. Body in plain text. Sign off with "Best, Derya Operations". Be polite, direct, professional. No fluff. No emojis. Acknowledge their rate, mention competing pressure or volume, ask for a specific target rate. Don't be aggressive.`,
+    system: `You are drafting carrier rate negotiation emails on behalf of Derya Freight OS. Output ONLY a JSON object: {"subject": "...", "body": "..."}. No markdown, no commentary. Body in plain text. Sign off with "Best, Derya Operations". Be polite, direct, professional. No fluff. No emojis. Acknowledge their rate, mention competing pressure or volume, ask for a specific target rate. Don't be aggressive. Never use the em dash character in your output; use a comma, colon, period, or plain hyphen instead.`,
     messages: [{
       role: "user",
-      content: `JOB CONTEXT:\n${ctx.summary}\n\nCARRIER OFFER:\n- Carrier: ${cq.carrier}\n- Quoted total: $${total.toLocaleString()}\n- Transit: ${cq.transitDays ?? "?"}d\n- Service: ${cq.service ?? "—"}\n- Validity: ${cq.validity ?? "—"}\n\nTASK:\nDraft a counter-offer email to ${cq.carrier} asking them to sharpen the rate. Target $${target.toLocaleString()} (about ${targetReductionPct}% lower). Reference the lane and mode. Keep it under 120 words.`,
+      content: `JOB CONTEXT:\n${ctx.summary}\n\nCARRIER OFFER:\n- Carrier: ${cq.carrier}\n- Quoted total: $${total.toLocaleString()}\n- Transit: ${cq.transitDays ?? "?"}d\n- Service: ${cq.service ?? "-"}\n- Validity: ${cq.validity ?? "-"}\n\nTASK:\nDraft a counter-offer email to ${cq.carrier} asking them to sharpen the rate. Target $${target.toLocaleString()} (about ${targetReductionPct}% lower). Reference the lane and mode. Keep it under 120 words.`,
     }],
   });
 

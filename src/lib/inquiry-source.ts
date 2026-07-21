@@ -44,7 +44,7 @@ export function deriveInquirySource(inq: InquirySourceInput): InquirySourceInfo 
     const platform = typeof parsed.platform === "string" ? parsed.platform : null;
     const base = platform === "ig" ? "Instagram lead" : platform === "fb" ? "Facebook lead" : "Meta lead";
     // Outside the RFQ page's US panel (inbox triage, detail page) the market
-    // isn't otherwise visible — and it decides the outreach language.
+    // isn't otherwise visible - and it decides the outreach language.
     const label = parsed.market === "US" ? `${base} · US` : base;
     const campaign = typeof parsed.campaignName === "string" ? parsed.campaignName : null;
     return { kind: "lead", label, detail: campaign };

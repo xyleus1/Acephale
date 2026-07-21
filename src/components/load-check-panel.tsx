@@ -11,7 +11,7 @@ import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { Icon } from "@/components/icon";
 
 const EXAMPLE =
-  "e.g. 8 pallets of lithium-ion battery modules from our CM in Fremont, CA to a pilot site in Austin, TX — about $180k, 12,000 lbs, needs to deliver in 2 days, pickup Friday";
+  "e.g. 8 pallets of lithium-ion battery modules from our CM in Fremont, CA to a pilot site in Austin, TX - about $180k, 12,000 lbs, needs to deliver in 2 days, pickup Friday";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -67,7 +67,7 @@ export function LoadCheckPanel() {
         setResult(res.result);
         setNote(res.note);
       } catch {
-        setError("Could not analyze — check your connection and try again.");
+        setError("Could not analyze - check your connection and try again.");
       }
     });
   }
@@ -84,13 +84,13 @@ export function LoadCheckPanel() {
           return;
         }
         // No rev bump on success: cell keys carry the server value, so only
-        // cells whose value actually changed remount — in-progress typing in
+        // cells whose value actually changed remount - in-progress typing in
         // OTHER cells survives a resolving re-check.
         setFields(res.fields);
         setResult(res.result);
         setNote(null);
       } catch {
-        setError("Could not re-check — try again.");
+        setError("Could not re-check - try again.");
         setRev((r) => r + 1);
       }
     });
@@ -113,7 +113,7 @@ export function LoadCheckPanel() {
         }
         router.push(`/dashboard/rfq/${res.inquiryId}`);
       } catch {
-        setError("Could not create the RFQ — try again.");
+        setError("Could not create the RFQ - try again.");
       } finally {
         setCreating(false);
       }
@@ -134,7 +134,7 @@ export function LoadCheckPanel() {
     <div className="record-panel" style={{ marginBottom: 16 }}>
       <div className="record-card-header">
         <div className="record-card-title">
-          <Icon name="zap" size={13} /> Load pre-flight — what breaks, and what to do about it
+          <Icon name="zap" size={13} /> Load pre-flight - what breaks, and what to do about it
         </div>
       </div>
       <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -227,10 +227,10 @@ export function LoadCheckPanel() {
                 blockers.length > 0 ? "var(--danger)" : risks.length > 0 ? "var(--warning)" : "var(--success, #2e7d32)";
               const verdict =
                 blockers.length > 0
-                  ? `NO-GO — clear ${blockers.length} blocker${blockers.length === 1 ? "" : "s"} first`
+                  ? `NO-GO - clear ${blockers.length} blocker${blockers.length === 1 ? "" : "s"} first`
                   : risks.length > 0
                     ? `GO, with ${risks.length} action${risks.length === 1 ? "" : "s"}`
-                    : "GO — nothing breaks";
+                    : "GO - nothing breaks";
               const row = (finding: CheckFinding, color: string) => (
                 <details
                   key={finding.id}
@@ -283,7 +283,7 @@ export function LoadCheckPanel() {
                   {result.facts.length > 0 && (
                     <div className="card" style={{ padding: "10px 14px" }}>
                       <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55, marginBottom: 4 }}>
-                        Cited facts — USITC · CBP · FMCSA, live
+                        Cited facts - USITC · CBP · FMCSA, live
                       </div>
                       {result.facts.map((line, index) => (
                         <div key={index} style={{ fontSize: 12, padding: "2px 0", lineHeight: 1.5 }}>
@@ -315,7 +315,7 @@ export function LoadCheckPanel() {
                       ) : (
                         <>
                           no approved match ({bench.approvedOnBench} on bench)
-                          {bench.requirements.length > 0 && ` — needs ${bench.requirements.map((r) => r.label.toLowerCase()).join(", ")}`}
+                          {bench.requirements.length > 0 && ` - needs ${bench.requirements.map((r) => r.label.toLowerCase()).join(", ")}`}
                           {" · "}
                           <Link href="/dashboard/carriers" style={{ textDecoration: "underline" }}>
                             vet a carrier

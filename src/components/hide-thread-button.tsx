@@ -22,7 +22,7 @@ export function HideThreadButton({ threadId, hidden }: { threadId: string; hidde
       type="button"
       onClick={go}
       disabled={busy}
-      title={hidden ? "Restore to active inbox" : "Hide — not freight-related"}
+      title={hidden ? "Restore to active inbox" : "Hide - not freight-related"}
       className="inbox-action-btn"
     >
       <Icon name={hidden ? "check" : "x"} size={11} />
