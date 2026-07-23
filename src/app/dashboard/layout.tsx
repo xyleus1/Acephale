@@ -82,20 +82,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
               <NavLink href="/dashboard/loads" icon={<Icon name="truck" />}>Loads</NavLink>
 
-              <NavLink href="/dashboard/carriers" icon={<Icon name="shield" />}>Carriers</NavLink>
-
               <NavLink href="/dashboard/crm" icon={<Icon name="building" />}>CRM</NavLink>
 
-              <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
+              <NavLink href="/dashboard/market" icon={<Icon name="trending-up" />}>Intelligence</NavLink>
 
-              <NavLink href="/dashboard/market" icon={<Icon name="trending-up" />}>Market</NavLink>
-
-              {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing and /dashboard/intelligence stay reachable directly. */}
+              {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing, /dashboard/intelligence
+                  and /dashboard/carriers stay reachable directly (the carrier bench is linked from the
+                  Intelligence pre-flight results). */}
 
               {/* ─── SETUP ───────────────────────────────────────────────────── */}
               <div className="nav-section-label with-rule">Setup</div>
 
               <NavLink href="/dashboard/settings/email" icon={<Icon name="settings" />}>Channels</NavLink>
+
+              <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
 
               {(session.role === "ADMIN" || session.role === "MANAGER") && (
                 <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
