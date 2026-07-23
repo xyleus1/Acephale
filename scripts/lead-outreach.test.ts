@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import {
   buildLeadFollowUpContent,
   buildLeadOutreachFirstTouch,
+  buildLeadRevivalContent,
   deriveOutreachState,
   leadQualifierQuestions,
   nextOutreachSend,
@@ -148,8 +149,28 @@ assert.equal(stateOf({ infoRequestSentAt: daysAgo(4) }, { repliedAt: new Date(NO
 }
 assert.equal(stateOf({}, { status: "Detailing" }).key, "desk");
 
-// Dropped and paused states.
-assert.equal(stateOf({ infoRequestSentAt: daysAgo(9), leadDroppedAt: daysAgo(1) }, { status: "IGNORED" }).key, "dropped");
+// Dropped and paused states. A fresh drop schedules the one revival email
+// 30 days out; once it is sent the sequence is permanently over.
+{
+  const state = stateOf({ infoRequestSentAt: daysAgo(9), leadDroppedAt: daysAgo(1) }, { status: "IGNORED" });
+  assert.equal(state.key, "dropped");
+  assert.ok(state.nextDueAt && state.nextDueAt > NOW);
+  assert.match(state.detail ?? "", /revival/);
+}
+{
+  const state = stateOf({ infoRequestSentAt: daysAgo(40), leadDroppedAt: daysAgo(31) }, { status: "IGNORED" });
+  assert.equal(state.key, "dropped");
+  assert.ok(state.nextDueAt && state.nextDueAt <= NOW); // revival is due
+}
+{
+  const state = stateOf(
+    { infoRequestSentAt: daysAgo(40), leadDroppedAt: daysAgo(35), revivalSentAt: daysAgo(2) },
+    { status: "IGNORED" },
+  );
+  assert.equal(state.key, "dropped");
+  assert.equal(state.nextDueAt, null);
+  assert.match(state.detail ?? "", /revival sent/);
+}
 {
   const state = stateOf({ infoRequestSentAt: daysAgo(9), sequenceStoppedAt: daysAgo(1) });
   assert.equal(state.key, "stopped");
@@ -230,6 +251,20 @@ assert.deepEqual(leadQualifierQuestions(usLead(), "WEAK"), []);
   const fu = buildLeadFollowUpContent(inq, "REVIEW", 2);
   assert.match(fu.text, /Merhaba/);
   assert.match(fu.text, /hatırlatma/);
+}
+
+// The day-30 revival email: threads onto the original conversation, reads as
+// a low-pressure "still shipping?", both languages, no em dashes.
+{
+  const revival = buildLeadRevivalContent(usLead());
+  assert.ok(revival.subject.startsWith("Re: "));
+  assert.match(revival.text, /back on the agenda/);
+  assert.match(revival.text, /textile machinery/);
+  assert.ok(!revival.text.includes("\u2014") && !revival.subject.includes("\u2014"));
+  const revivalTr = buildLeadRevivalContent(usLead({}, { market: "TR" }));
+  assert.match(revivalTr.text, /Merhaba/);
+  assert.match(revivalTr.text, /yeniden gündemdeyse/);
+  assert.ok(!revivalTr.text.includes("\u2014"));
 }
 
 // ── Reply excerpt ────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ type SyncSummary = {
   operations: { created: number; updated: number; skipped: number; companiesCreated: number };
   leads: LeadCounts;
   leadsUs: LeadCounts;
-  autoReplies: { sent: number; followUps: number; replies: number; dropped: number; skipped: number; failed: number };
+  autoReplies: { sent: number; followUps: number; replies: number; dropped: number; revivals: number; skipped: number; failed: number };
   warnings: string[];
 };
 
@@ -859,7 +859,7 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
   // Outreach automation for freshly-synced US leads (Good + Maybe tiers):
   // reply detection, first touches, follow-ups, drops - never allowed to
   // fail the sync itself.
-  let autoReplies = { sent: 0, followUps: 0, replies: 0, dropped: 0, skipped: 0, failed: 0 };
+  let autoReplies = { sent: 0, followUps: 0, replies: 0, dropped: 0, revivals: 0, skipped: 0, failed: 0 };
   try {
     const auto = await autoReplyToUsLeads(officeId);
     autoReplies = {
@@ -867,6 +867,7 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
       followUps: auto.followUps,
       replies: auto.replies,
       dropped: auto.dropped,
+      revivals: auto.revivals,
       skipped: auto.skipped,
       failed: auto.failed,
     };

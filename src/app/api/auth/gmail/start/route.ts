@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGmailAuthUrl } from "@/lib/gmail-oauth";
-import { isDeryaLoadRfqInbox, normalizeEmailAddress } from "@/lib/derya-inboxes";
+import { isDeryaLoadRfqInbox, isDeryaRfqSourceSender, normalizeEmailAddress } from "@/lib/derya-inboxes";
 
 export async function GET(request: NextRequest) {
   try {
     const requestedEmail = normalizeEmailAddress(request.nextUrl.searchParams.get("email"));
-    const loginHint = isDeryaLoadRfqInbox(requestedEmail) ? requestedEmail : null;
+    // Known mailboxes preselect the right Google account: the load/RFQ
+    // inboxes and the rfq@ desk address (US lead replies land there).
+    const loginHint = isDeryaLoadRfqInbox(requestedEmail) || isDeryaRfqSourceSender(requestedEmail)
+      ? requestedEmail
+      : null;
     const { url } = await getGmailAuthUrl({ loginHint, origin: request.nextUrl.origin });
     return NextResponse.redirect(url);
   } catch (e) {

@@ -317,8 +317,8 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
           <EmailPreviewCard
             title={row.confirmationKind === "info-request" ? "Ask lead for missing info" : "Confirmation to lead"}
             hint={row.confirmationKind === "info-request"
-              ? `Asks for ${row.whatsapp.missing.join(", ")} - replies go to oguzhan@`
-              : "Request-received note, replies go to oguzhan@"}
+              ? `Asks for ${row.whatsapp.missing.join(", ")} - replies go to ${row.confirmation.replyTo ?? "the desk"}`
+              : `Request-received note, replies go to ${row.confirmation.replyTo ?? "the desk"}`}
             preview={row.confirmation}
             disabledReason={mailDisabled ?? (row.confirmation.to ? null : "No valid single sender email address on this RFQ.")}
             onSend={() => sendLeadConfirmationAction(row.id)}

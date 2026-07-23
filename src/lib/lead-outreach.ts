@@ -36,6 +36,11 @@ export const FOLLOW_UP_GAP_DAYS: Record<2 | 3 | 4, number> = { 2: 2, 3: 3, 4: 4 
 // Silence after the final email before the lead is auto-ignored.
 export const DROP_GRACE_DAYS = 4;
 
+// One long-tail revival email this many days after an auto-drop ("still
+// planning to ship?"). Auto-dropped leads only - a lead the operator
+// ignored by hand was a decision, not a timeout, and stays quiet.
+export const REVIVAL_AFTER_DAYS = 30;
+
 // Follow-ups only go out during California business hours - the first touch
 // is an instant receipt and may send any time, but a "just checking in" from
 // Oğuzhan at 3am reads as the robot it is.
@@ -152,12 +157,18 @@ export function deriveOutreachState(input: OutreachStateInput): OutreachState {
     };
   }
   if (droppedAt) {
+    const revivalAt = stampDate(parsed.revivalSentAt);
+    // One revival email waits 30 days out; after it is sent (or answered)
+    // the sequence is permanently over.
+    const revivalDueAt = revivalAt ? null : new Date(droppedAt.getTime() + REVIVAL_AFTER_DAYS * DAY_MS);
     return {
       ...base,
       key: "dropped",
       label: `Dropped - no reply after ${OUTREACH_TOTAL_TOUCHES}`,
-      detail: `dropped ${shortDate(droppedAt)}`,
-      nextDueAt: null,
+      detail: revivalAt
+        ? `dropped ${shortDate(droppedAt)} - revival sent ${shortDate(revivalAt)}`
+        : `dropped ${shortDate(droppedAt)} - revival ${shortDate(new Date(droppedAt.getTime() + REVIVAL_AFTER_DAYS * DAY_MS))}`,
+      nextDueAt: revivalDueAt,
     };
   }
   if (CLOSED_STATUSES.has(status)) {
@@ -396,4 +407,43 @@ ${commodity ? `${commodity} gönderinizi` : "Gönderinizi"} hâlâ taşımayı p
 İyi çalışmalar dileriz,
 ${SIGNATURE_TR}`;
   return { step, subject, text };
+}
+
+// The one revival email, ~30 days after the drop. Freight needs recur on
+// their own clock; this is a low-pressure "still shipping?" that reopens
+// the file with a single reply.
+export function buildLeadRevivalContent(inq: InquiryForOutreach): { subject: string; text: string } {
+  const { market } = leadMissingQuestions(inq);
+  const en = market === "US";
+  const parsed = parsedOf(inq.parsedData);
+  const firstName = leadFirstName(s(parsed.fullName), market);
+  const greeting = en ? `Hi${firstName ? ` ${firstName}` : ""},` : "Merhaba,";
+  const commodity = s(inq.commodity);
+  const lane = [s(inq.origin), s(inq.destination)].filter(Boolean).join(" → ");
+  const aboutEn = commodity
+    ? `your ${commodity} shipment${lane ? ` (${lane})` : ""}`
+    : lane ? `your shipment (${lane})` : "your shipping plans";
+  const aboutTr = commodity
+    ? `${commodity} gönderiniz${lane ? ` (${lane})` : ""}`
+    : lane ? `gönderiniz (${lane})` : "taşıma planlarınız";
+  const subject = `Re: ${buildLeadCustomerEmailContent(inq).subject}`;
+
+  const text = en
+    ? `${greeting}
+
+A while back we closed your quote request when we did not hear back - checking in once more in case the timing simply was not right.
+
+If ${aboutEn} is back on the agenda, just reply to this email and we will pick it up from where we left off and get you a price quickly.
+
+Either way, wishing you good business,
+${SIGNATURE_US}`
+    : `${greeting}
+
+Bir süre önce sizden haber alamayınca talebinizi kapatmıştık - belki de sadece zamanlama uygun değildi diye bir kez daha yazmak istedik.
+
+${aboutTr} yeniden gündemdeyse, bu e-postayı yanıtlamanız yeterli - kaldığımız yerden devam edip fiyatı hızlıca çalışalım.
+
+Her durumda bol kazançlar dileriz,
+${SIGNATURE_TR}`;
+  return { subject, text };
 }

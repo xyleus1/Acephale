@@ -160,8 +160,7 @@ function LeadCard({ row, statusOptions }: {
             <div className="lead-reply">
               <div className="lead-reply-head">
                 <Icon name="mail" size={12} strokeWidth={2.25} />
-                Lead replied{outreach.repliedAtLabel ? ` · ${outreach.repliedAtLabel}` : ""} - pick it up in {" "}
-                <a href={`mailto:${row.fromEmail ?? ""}`}>oguzhan@&apos;s inbox</a>
+                Lead replied{outreach.repliedAtLabel ? ` · ${outreach.repliedAtLabel}` : ""} - waiting in the {row.confirmation.replyTo ?? "rfq@usederya.com"} inbox
               </div>
               {outreach.replyExcerpt && <blockquote className="lead-reply-quote">{outreach.replyExcerpt}</blockquote>}
             </div>
@@ -243,7 +242,7 @@ function LeadCard({ row, statusOptions }: {
             {outreach?.nextSend && (
               <EmailPreviewCard
                 title={outreach.nextSend.label}
-                hint="Next email of the sequence - replies go to oguzhan@"
+                hint={`Next email of the sequence - replies go to ${row.confirmation.replyTo ?? "the rfq@ desk"}`}
                 preview={{
                   to: row.confirmation.to,
                   cc: row.confirmation.cc,

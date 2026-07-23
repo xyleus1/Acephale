@@ -5,7 +5,8 @@ import { deriveInquirySource } from "./inquiry-source";
 import { openInquiryStatusFilter } from "./inquiry-status";
 import { buildLeadCustomerEmailContent, buildLeadScopeFollowUpContent } from "./lead-emails";
 import { assessLeadQuality } from "./lead-quality";
-import { buildLeadFollowUpContent, leadQualifierQuestions } from "./lead-outreach";
+import { buildLeadFollowUpContent, buildLeadRevivalContent, leadQualifierQuestions } from "./lead-outreach";
+import { US_LEAD_PARSED_MARKER } from "./meta-leads";
 import { stripEmDashes } from "./no-em-dash";
 
 // Outbound RFQ mail from the rfq@usederya.com desk address. This account is
@@ -24,8 +25,9 @@ const DEFAULT_LEAD_CC = "mert@usederya.com";
 // unit-testable; this module wraps it with the SMTP desk config.
 
 export function rfqMailConfig() {
+  const user = process.env.RFQ_MAIL_USER ?? DEFAULT_MAIL_USER;
   return {
-    user: process.env.RFQ_MAIL_USER ?? DEFAULT_MAIL_USER,
+    user,
     appPassword: (process.env.RFQ_MAIL_APP_PASSWORD ?? "").replace(/\s+/g, ""),
     forwardTo: process.env.RFQ_FORWARD_TO ?? DEFAULT_FORWARD_TO,
     forwardCc: (process.env.RFQ_FORWARD_CC ?? DEFAULT_FORWARD_CC)
@@ -33,6 +35,10 @@ export function rfqMailConfig() {
       .map((s) => s.trim())
       .filter(Boolean),
     replyTo: process.env.RFQ_MAIL_REPLY_TO ?? DEFAULT_REPLY_TO,
+    // US-market lead emails keep replies on the desk address itself - per
+    // Mert (2026-07-22), nothing about US leads goes through oguzhan@. The
+    // rfq@ mailbox must be OAuth-connected for reply detection to see them.
+    leadReplyToUs: process.env.RFQ_LEAD_REPLY_TO_US ?? user,
     // Every customer-facing lead email (auto or one-click) cc's Mert so the
     // outbound side of the funnel is visible without opening the CRM.
     leadCc: (process.env.RFQ_LEAD_CC ?? DEFAULT_LEAD_CC)
@@ -40,6 +46,13 @@ export function rfqMailConfig() {
       .map((s) => s.trim())
       .filter(Boolean),
   };
+}
+
+// Reply-To for a customer-facing lead email: US leads reply to the rfq@
+// desk (Mert works those), TR leads keep replying to oguzhan@.
+function leadReplyToFor(inq: { parsedData: string | null }): string {
+  const config = rfqMailConfig();
+  return parsedOf(inq).market === "US" ? config.leadReplyToUs : config.replyTo;
 }
 
 export function rfqMailConfigured(): boolean {
@@ -205,7 +218,7 @@ export function buildLeadCustomerEmail(inq: InquiryForMail) {
     from: config.user,
     to: inq.fromEmail,
     cc: config.leadCc,
-    replyTo: config.replyTo,
+    replyTo: leadReplyToFor(inq),
     subject: content.subject,
     text: content.text,
   };
@@ -223,10 +236,25 @@ export function buildLeadFollowUpEmail(inq: InquiryForMail, step: 2 | 3 | 4) {
     from: config.user,
     to: inq.fromEmail,
     cc: config.leadCc,
-    replyTo: config.replyTo,
+    replyTo: leadReplyToFor(inq),
     subject: content.subject,
     text: content.text,
     inReplyTo: lastMsgId,
+  };
+}
+
+// The one revival email an auto-dropped lead gets, 30 days after the drop.
+export function buildLeadRevivalEmail(inq: InquiryForMail) {
+  const config = rfqMailConfig();
+  const content = buildLeadRevivalContent(inq);
+  return {
+    from: config.user,
+    to: inq.fromEmail,
+    cc: config.leadCc,
+    replyTo: leadReplyToFor(inq),
+    subject: content.subject,
+    text: content.text,
+    inReplyTo: s(parsedOf(inq).leadLastMsgId),
   };
 }
 
@@ -238,7 +266,7 @@ export function buildLeadScopeFollowUpEmail(inq: InquiryForMail) {
     from: config.user,
     to: inq.fromEmail,
     cc: config.leadCc,
-    replyTo: config.replyTo,
+    replyTo: leadReplyToFor(inq),
     subject: content.subject,
     text: content.text,
   };
@@ -336,7 +364,7 @@ export type SendStampKey =
   | "deskForwardedAt" | "confirmationSentAt" | "infoRequestSentAt" | "whatsappSentAt"
   | "autoRepliedAt" | "scopeAskedAt"
   | "followUp2SentAt" | "followUp3SentAt" | "followUp4SentAt"
-  | "leadRepliedAt" | "leadDroppedAt" | "sequenceStoppedAt";
+  | "leadRepliedAt" | "leadDroppedAt" | "sequenceStoppedAt" | "revivalSentAt";
 
 // Every parsedData key the app writes onto a lead after the sheet sync
 // created it. The Meta-leads resync rewrites parsedData from the sheet row -
@@ -345,7 +373,7 @@ export const RESYNC_PRESERVED_PARSED_KEYS = [
   "deskForwardedAt", "confirmationSentAt", "infoRequestSentAt", "whatsappSentAt",
   "autoRepliedAt", "scopeAskedAt",
   "followUp2SentAt", "followUp3SentAt", "followUp4SentAt",
-  "leadRepliedAt", "leadDroppedAt", "sequenceStoppedAt",
+  "leadRepliedAt", "leadDroppedAt", "sequenceStoppedAt", "revivalSentAt",
   "leadLastMsgId",
 ] as const;
 
@@ -443,7 +471,13 @@ export async function clearInquirySendStamp(inquiryId: string, key: SendStampKey
 export function pendingDeskForwardWhere(officeId: string) {
   return {
     officeId,
-    parsedData: { contains: '"source":"meta-leads"' },
+    // US leads are excluded: nothing about them goes to oguzhan@'s desk in
+    // bulk (Mert, 2026-07-22). The per-row Forward button stays available
+    // for deliberate one-off use.
+    AND: [
+      { parsedData: { contains: '"source":"meta-leads"' } },
+      { NOT: { parsedData: { contains: US_LEAD_PARSED_MARKER } } },
+    ],
     // Booked/missed/ignored leads must not be desk-forwarded by Send-all.
     status: openInquiryStatusFilter(),
   };

@@ -4,6 +4,68 @@
 
 ## Date
 
+2026-07-22 (later session)
+
+## Branch
+
+us-lead-reply-routing-revival (Conductor workspace yamoussoukro, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+US lead replies rerouted to rfq@; oguzhan@ removed from the US flow; day-30
+revival email for auto-dropped leads.
+
+- **Reply routing**: every US lead email (first touch, follow-ups 2-4, scope
+  follow-up, revival) now sets `Reply-To: rfq@usederya.com`
+  (`RFQ_LEAD_REPLY_TO_US`, defaults to the sending address); TR lead emails
+  keep `oguzhan@`. Send-all desk forwards exclude US leads entirely
+  (`pendingDeskForwardWhere`); the per-row Forward button stays for one-off
+  use. **DEPLOY DEPENDENCY: connect rfq@usederya.com via OAuth (Settings →
+  Email → "RFQ desk mailbox" row → Connect, signed in as rfq@) right after
+  deploy - until then, new replies land in an unsynced mailbox and reply
+  detection cannot see them.** The settings page has a dedicated row +
+  setup gate for this; "connected" means a refresh token, not just the
+  SMTP-only account row that already exists.
+- **Revival**: auto-dropped leads (the `leadDroppedAt` stamp - manual
+  ignores are never revived) get one "still planning to ship?" email 30
+  days after the drop (`REVIVAL_AFTER_DAYS`, stamp `revivalSentAt`,
+  threaded via `leadLastMsgId`). Reply detection now also covers dropped
+  leads, so an answer to the break-up or revival email resurfaces the card
+  as "Replied - needs action".
+- Sync summary + button now count revivals; card and expanded-panel copy
+  show the actual Reply-To instead of hardcoded oguzhan@.
+
+## Files changed
+
+- `src/lib/rfq-mail.ts`, `src/lib/lead-outreach.ts`, `src/lib/lead-auto-reply.ts`
+- `src/lib/google-sheets-sync.ts`, `src/components/sync-google-sheet-button.tsx`
+- `src/components/us-lead-cards.tsx`, `src/components/rfq-expandable-rows.tsx`
+- `src/app/dashboard/settings/email/page.tsx`, `src/app/api/auth/gmail/start/route.ts`
+- `scripts/lead-outreach.test.ts`, `docs/*`
+
+## Verification passed
+
+- tsc + build clean; extended `test:lead-outreach` passes.
+- Neon branch of prod: US lead replyTo=rfq@ (first touch and follow-ups),
+  TR replyTo=oguzhan@, Send-all pool = 57 TR rows / 0 US leads, engine ran
+  the new dropped+revival queries safely (fake SMTP: stamps rolled back,
+  abort after 3 failures), settings page renders the rfq@ row as "reply
+  capture off", replied cards render "waiting in the rfq@usederya.com inbox".
+
+## Caveats
+
+- US emails are still signed "Oğuzhan Karaca" - flagged to Mert as a
+  persona decision, not changed here.
+- No DB migration.
+
+## Previous Update
+
+## Date
+
 2026-07-22
 
 ## Branch

@@ -2131,3 +2131,47 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: consider OAuth-connecting rfq@ for direct-reply capture;
   parse reply content into inquiry fields; multi-select/bulk actions on
   the card view.
+
+### 2026-07-22 - US lead replies to rfq@, day-30 revival, oguzhan@ out of US flow
+
+- Branch: us-lead-reply-routing-revival (Conductor workspace yamoussoukro,
+  targets main)
+- Commit: see git log
+- Task: Per Mert: US lead replies must land at rfq@usederya.com (mert@ cc'd,
+  nothing hits oguzhan@ for US); auto-dropped leads get one revival email.
+- Files changed: `src/lib/rfq-mail.ts` (leadReplyToFor: US leads Reply-To
+  rfq@ via RFQ_LEAD_REPLY_TO_US, TR unchanged; buildLeadRevivalEmail;
+  revivalSentAt stamp + preserve key; Send-all pool excludes US leads),
+  `src/lib/lead-outreach.ts` (REVIVAL_AFTER_DAYS=30, dropped stage carries
+  the revival due time/detail, buildLeadRevivalContent EN/TR),
+  `src/lib/lead-auto-reply.ts` (dropped-candidates query; reply detection
+  widened to auto-dropped leads; revival pass, window/budget/abort shared),
+  `src/lib/google-sheets-sync.ts` + `src/components/sync-google-sheet-button.tsx`
+  (revivals in summary), `src/components/us-lead-cards.tsx` +
+  `src/components/rfq-expandable-rows.tsx` (reply-to texts dynamic),
+  `src/app/dashboard/settings/email/page.tsx` (RFQ desk mailbox row +
+  setup gate: connected means refresh token, not just an account row),
+  `src/app/api/auth/gmail/start/route.ts` (login hint for rfq@),
+  `scripts/lead-outreach.test.ts`.
+- Behavior: every US lead email (first touch, follow-ups, scope, revival)
+  now asks for replies at rfq@usederya.com; TR keeps oguzhan@. Send-all
+  desk forwards skip US leads entirely (57 TR rows, 0 US verified). Auto-
+  dropped leads (leadDroppedAt stamp; manual ignores excluded) get one
+  "still shipping?" email 30 days after the drop, threaded onto the
+  original conversation; reply detection now also covers dropped leads so
+  a late answer resurfaces them as Replied.
+- Verification: tsc clean, build clean, lead-outreach suite extended and
+  passing; on a Neon branch of prod: US replyTo=rfq@, TR replyTo=oguzhan@,
+  Send-all pool 0 US leads, engine ran the new queries (fake SMTP, stamps
+  rolled back, abort guard hit); settings page renders the rfq@ row as
+  "reply capture off" and the replied cards render "waiting in the
+  rfq@usederya.com inbox".
+- Failed/skipped checks: none.
+- Caveats: DEPLOY DEPENDENCY - rfq@usederya.com must be OAuth-connected
+  (Settings → Email → RFQ desk mailbox → Connect, signed in as rfq@)
+  right after deploy; until then new replies to rfq@ are invisible to
+  detection (old in-flight leads still reply to oguzhan@, which stays
+  synced). Signature on US emails still says Oğuzhan Karaca - flagged to
+  Mert, not changed.
+- Follow-up: SMS escalation via Twilio (needs account + A2P registration);
+  bounce parsing from the rfq@ inbox once connected.

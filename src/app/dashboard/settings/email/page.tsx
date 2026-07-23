@@ -8,7 +8,7 @@ import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 import { AppearanceToggle } from "@/components/appearance-toggle";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
 import { CheckWhatsAppStatusButton } from "@/components/check-whatsapp-status-button";
-import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
+import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
 import { whatsAppProvider, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { whatsAppAccountLabel } from "@/lib/whatsapp-display";
 
@@ -62,6 +62,21 @@ export default async function EmailSettingsPage({
       messageCount: account ? countByAccount[account.id] ?? 0 : 0,
     };
   });
+  // The rfq@ desk mailbox sends the US lead outreach and, since 2026-07-22,
+  // receives the replies (Reply-To). It must be OAuth-connected or reply
+  // detection cannot see them. Its EmailAccount row exists even when only
+  // SMTP is configured, so "connected" means a refresh token, not just a row.
+  const rfqDeskRows = DERYA_RFQ_SOURCE_EMAILS.map((email) => {
+    const account = accountByEmail.get(email) ?? null;
+    const connected = Boolean(account?.refreshToken && account.isActive);
+    return {
+      email,
+      account,
+      connected,
+      messageCount: account ? countByAccount[account.id] ?? 0 : 0,
+    };
+  });
+  const rfqDeskDisconnected = rfqDeskRows.filter((row) => !row.connected).map((row) => row.email);
   const oauthConfigured = !!process.env.GOOGLE_CLIENT_ID;
   // WhatsApp health is provider-aware: Green API mode has its own credentials
   // and webhook path; the Meta env vars only matter in meta mode.
@@ -109,6 +124,13 @@ export default async function EmailSettingsPage({
       detail: missingAllowedSenderEmails.length === 0
         ? `Native load/RFQ inboxes connected: ${connectedAllowedSenderEmails.join(", ")}.`
         : `Connect or resume ${missingAllowedSenderEmails.join(", ")} so inbound load/RFQ mail from both accounts is visible.`,
+    },
+    {
+      label: "RFQ desk mailbox (US lead replies)",
+      status: rfqDeskDisconnected.length === 0 ? "ready" : oauthConfigured ? "setup required" : "blocked",
+      detail: rfqDeskDisconnected.length === 0
+        ? `US lead replies and bounces are being captured: ${rfqDeskRows.map((row) => row.email).join(", ")}.`
+        : `Connect ${rfqDeskDisconnected.join(", ")} - US lead emails ask for replies there, and without OAuth the outreach sequence cannot see them (or the bounces).`,
     },
     {
       label: "Forwarder directory",
@@ -366,6 +388,47 @@ export default async function EmailSettingsPage({
             <SyncDeryaInboxesButton disabled={connectedAllowedSenderEmails.length === 0} />
           </div>
           <div style={{ display: "grid", gap: 8 }}>
+            {rfqDeskRows.map((row) => (
+              <div key={row.email} style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0,1fr) auto",
+                gap: 12,
+                alignItems: "center",
+                padding: "12px 14px",
+                border: "1px solid var(--border)",
+                borderLeft: `3px solid ${row.connected ? "var(--brand)" : "var(--danger)"}`,
+                borderRadius: "var(--radius)",
+                background: "var(--surface)",
+              }}>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 13 }}>{row.email}</strong>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 900,
+                      textTransform: "uppercase",
+                      color: row.connected ? "var(--brand)" : "var(--danger)",
+                    }}>
+                      {row.connected ? "connected" : "reply capture off"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 3 }}>
+                    RFQ desk · sends the US lead outreach and receives the replies
+                    {row.connected
+                      ? ` · ${row.messageCount} message${row.messageCount === 1 ? "" : "s"} synced · last sync ${timeAgo(row.account?.lastSyncAt)}`
+                      : " · SMTP send works, but replies and bounces are invisible until this mailbox is OAuth-connected"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                  {row.connected && row.account && <SyncAccountButton accountId={row.account.id} />}
+                  {oauthConfigured && (
+                    <a href={gmailConnectHrefForInbox(row.email)} className="btn btn-sm" style={{ fontSize: 12 }}>
+                      {row.connected ? "Reconnect" : "Connect"}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
             {deryaInboxRows.map((row) => (
               <div key={row.email} style={{
                 display: "grid",

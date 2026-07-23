@@ -33,6 +33,7 @@ import {
 import {
   buildLeadCustomerEmail,
   buildLeadFollowUpEmail,
+  buildLeadRevivalEmail,
   buildLeadScopeFollowUpEmail,
   claimInquirySendStamp,
   clearInquirySendStamp,
@@ -49,6 +50,7 @@ export type AutoReplySummary = {
   followUps: number; // follow-up emails 2-4
   replies: number; // leads newly marked as replied
   dropped: number; // leads auto-ignored after the final email
+  revivals: number; // day-30 "still shipping?" emails to auto-dropped leads
   skipped: number;
   failed: number;
   warnings: string[];
@@ -144,7 +146,7 @@ export async function latestInboundByEmail(
 
 export async function autoReplyToUsLeads(officeId: string): Promise<AutoReplySummary> {
   const summary: AutoReplySummary = {
-    sent: 0, followUps: 0, replies: 0, dropped: 0, skipped: 0, failed: 0, warnings: [],
+    sent: 0, followUps: 0, replies: 0, dropped: 0, revivals: 0, skipped: 0, failed: 0, warnings: [],
   };
   if (!autoReplyEnabled()) return summary;
   if (!rfqMailConfigured()) {
@@ -166,11 +168,27 @@ export async function autoReplyToUsLeads(officeId: string): Promise<AutoReplySum
     take: 400,
   });
 
+  // Auto-dropped leads (status IGNORED via the drop pass, marked by the
+  // leadDroppedAt stamp). They still get reply detection - a late answer to
+  // the break-up email resurfaces them - and one day-30 revival email.
+  const droppedCandidates = await prisma.inquiry.findMany({
+    where: {
+      officeId,
+      status: "IGNORED",
+      AND: [
+        { parsedData: { contains: US_LEAD_PARSED_MARKER } },
+        { parsedData: { contains: '"leadDroppedAt"' } },
+      ],
+    },
+    orderBy: { receivedAt: "asc" },
+    take: 200,
+  });
+
   // ── Pass 1: reply detection ────────────────────────────────────────────
   // Emailed, unreplied leads whose address has since sent us anything - the
-  // reply lands in oguzhan@/mert@ via Reply-To, and the hourly Gmail sync
-  // stores it as an INBOUND EmailMessage.
-  const unreplied = candidates.filter((inq) => {
+  // reply lands in the rfq@/mert@ inboxes via Reply-To and CC, and the
+  // hourly Gmail sync stores it as an INBOUND EmailMessage.
+  const unreplied = [...candidates, ...droppedCandidates].filter((inq) => {
     const parsed = parsedOf(inq.parsedData);
     return firstOutboundAt(parsed) != null && !parsed.leadRepliedAt && isSingleEmailAddress(inq.fromEmail);
   });
@@ -338,6 +356,64 @@ export async function autoReplyToUsLeads(officeId: string): Promise<AutoReplySum
       needsScopeFollowUp ? "meta_leads.auto_reply.sent" : "meta_leads.follow_up.sent",
       { kind: needsScopeFollowUp ? "scope-follow-up" : `follow-up-${step}`, tier, to: inquiry.fromEmail, subject: email.subject },
       `meta_leads_outreach:${inquiry.id}:${stampKey}`,
+    );
+  }
+
+  // ── Pass 3: day-30 revival for auto-dropped leads ──────────────────────
+  // One "still planning to ship?" per dropped lead, REVIVAL_AFTER_DAYS after
+  // the drop. Eligibility was checked at first-touch time; here only the
+  // address still has to be valid. Manual ignores (no leadDroppedAt stamp)
+  // are never revived - the query above already excludes them.
+  for (const inquiry of droppedCandidates) {
+    if (summary.failed >= 3) break; // same systemic-SMTP guard as pass 2
+    if (sendBudget <= 0) break;
+    if (repliedIds.has(inquiry.id)) continue;
+    if (!isSingleEmailAddress(inquiry.fromEmail)) continue;
+    if (!withinOutreachSendWindow(now)) break;
+
+    const parsed = parsedOf(inquiry.parsedData);
+    const state = deriveOutreachState({
+      parsed,
+      tier: assessLeadQuality(inquiry).tier,
+      status: canonicalInquiryStatus(inquiry.status),
+      hasValidEmail: true,
+      now,
+    });
+    // For a dropped lead, nextDueAt is the revival due time (null once sent
+    // or after a reply resurfaced it).
+    if (state.key !== "dropped" || !state.nextDueAt || state.nextDueAt > now) continue;
+
+    const email = buildLeadRevivalEmail(inquiry);
+    const claim = await claimInquirySendStamp(inquiry.id, "revivalSentAt");
+    if (claim !== "claimed") {
+      summary.skipped++;
+      continue;
+    }
+    const result = await sendRfqMail({
+      officeId,
+      inquiryId: inquiry.id,
+      to: inquiry.fromEmail,
+      cc: email.cc,
+      replyTo: email.replyTo,
+      subject: email.subject,
+      text: email.text,
+      inReplyTo: email.inReplyTo,
+      rememberLeadMessageId: true,
+    });
+    if ("error" in result) {
+      await clearInquirySendStamp(inquiry.id, "revivalSentAt");
+      summary.failed++;
+      if (summary.warnings.length === 0) summary.warnings.push(`Revival: ${result.error}`);
+      continue;
+    }
+    sendBudget--;
+    summary.revivals++;
+    await recordOutreachEvent(
+      officeId,
+      inquiry.id,
+      "meta_leads.revival.sent",
+      { kind: "revival", to: inquiry.fromEmail, subject: email.subject },
+      `meta_leads_outreach:${inquiry.id}:revivalSentAt`,
     );
   }
 
