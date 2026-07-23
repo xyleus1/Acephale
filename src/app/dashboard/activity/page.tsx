@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { Icon } from "@/components/icon";
 
+export const metadata = { title: "Activity" };
+
 const STATUS_LABEL: Record<string, string> = {
   INQUIRY: "RFQ",
   QUOTED: "Pricing",

@@ -37,6 +37,8 @@ import { whatsAppSendConfigured } from "@/lib/whatsapp";
 import { metaLeadsSource, metaLeadsSheetUrl, US_LEAD_PARSED_MARKER } from "@/lib/meta-leads";
 import { assessLeadQuality, leadQualitySummary, type LeadQualityTier } from "@/lib/lead-quality";
 
+export const metadata = { title: "Incoming RFQs" };
+
 // Send-all pushes up to 60 sequential SMTP sends through a server action on
 // this segment; the default function timeout would cut the batch short.
 export const maxDuration = 300;

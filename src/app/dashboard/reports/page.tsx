@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth";
 import { canonicalInquiryStatus } from "@/lib/inquiry-status";
 import Link from "next/link";
 
+export const metadata = { title: "Reports" };
+
 type SearchParams = Promise<{ period?: string }>;
 type Tone = "brand" | "info" | "success" | "warning" | "danger" | "muted";
 

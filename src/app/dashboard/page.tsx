@@ -37,6 +37,8 @@ import {
   addQuoteLine, uploadJobDocument,
 } from "./jobs/[jobId]/actions";
 
+export const metadata = { title: "Deal Desk" };
+
 const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"] as const;
 const STATUS_LABEL: Record<string, string> = {
   INQUIRY: "RFQ", QUOTED: "Pricing", BOOKED: "Booked / Waiting Cargo",

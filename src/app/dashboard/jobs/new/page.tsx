@@ -9,6 +9,8 @@ import { Icon } from "@/components/icon";
 import { recordTargetPriceHistory } from "@/lib/target-price-history";
 import { recordAuditLog } from "@/lib/audit";
 
+export const metadata = { title: "New job" };
+
 const VALID_STATUSES = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"];
 
 async function createJob(formData: FormData) {

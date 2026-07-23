@@ -4,6 +4,8 @@ import { requireSession } from "@/lib/auth";
 import { getLang, getT } from "@/lib/i18n";
 import { EmptyState } from "@/components/ui";
 
+export const metadata = { title: "Search" };
+
 type SearchParams = Promise<{ q?: string }>;
 
 export default async function SearchPage({ searchParams }: { searchParams: SearchParams }) {

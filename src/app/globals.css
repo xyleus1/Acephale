@@ -34974,3 +34974,153 @@ tr.rfq-row-selected td,
   .intel-msg-user { max-width: 94%; }
   .intel-verdict-meta { margin-left: 0; }
 }
+
+/* ============================================================
+   APP POLISH - route loading skeleton, error boundary, themed
+   scrollbars, selection, keyboard focus. Appended last.
+   ============================================================ */
+
+/* Route-change skeleton (src/app/dashboard/loading.tsx). The 120ms
+   animation delay keeps fast navigations from flashing a skeleton. */
+.skel-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  opacity: 0;
+  animation: skelIn 0.25s ease both 0.12s;
+}
+.skel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.skel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  animation: skelSweep 1.3s infinite;
+}
+.skel-eyebrow { width: 90px; height: 10px; }
+.skel-title { width: 240px; height: 26px; margin-bottom: 6px; }
+.skel-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.skel-stat { width: 150px; height: 64px; border-radius: 14px; }
+.skel-block { height: 220px; border-radius: 16px; }
+.skel-block.short { height: 120px; }
+@keyframes skelSweep { to { transform: translateX(100%); } }
+@keyframes skelIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Error boundary (src/app/dashboard/error.tsx) */
+.boundary {
+  max-width: 480px;
+  margin: 12vh auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  animation: intelRise 0.3s ease both;
+}
+.boundary-icon {
+  width: 46px;
+  height: 46px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--derya-maroon-soft);
+  border: 1px solid var(--derya-maroon-border);
+  color: var(--derya-maroon);
+}
+.boundary h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--text); }
+.boundary p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--text-2); }
+.boundary-digest {
+  margin-top: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 10px;
+}
+.boundary-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
+.boundary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  background: var(--derya-navy);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.boundary-btn:hover { background: var(--derya-navy-2); transform: translateY(-1px); }
+.boundary-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.boundary-link:hover { border-color: var(--border-strong); color: var(--text); }
+
+/* Themed scrollbars: slim, rounded, quiet until hovered */
+html { scrollbar-color: var(--derya-line-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--derya-line);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--derya-line-strong);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Brand text selection */
+::selection { background: var(--derya-blue); color: #ffffff; }
+
+/* Visible ring for keyboard users only; mouse focus stays quiet */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--derya-blue);
+  outline-offset: 2px;
+}
+
+/* Sheet empty cells get room to breathe */
+.table-empty-cell { padding: 44px 16px; }
+
+/* Respect motion sensitivity across every animation in the app */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -3,6 +3,8 @@ import { IntelligenceDesk } from "@/components/intelligence-desk";
 import { MarketBaseline } from "@/components/market-baseline";
 import { requireSession } from "@/lib/auth";
 
+export const metadata = { title: "Intelligence" };
+
 // The Census customs queries legitimately take 5-10s on a cold cache - give
 // the streamed page room instead of letting the platform default cut them off.
 export const maxDuration = 60;

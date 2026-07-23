@@ -20,6 +20,8 @@ import { applyInboxAgentProposalAction, discardInboxAgentProposalAction } from "
 import { displayParty, whatsAppAccountLabel } from "@/lib/whatsapp-display";
 import { whatsAppSendConfigured } from "@/lib/whatsapp";
 
+export const metadata = { title: "Inbox" };
+
 const FILTERS = [
   { key: "",                  label: "Active"          },  // default - excludes hidden + snoozed
   { key: "_TODAY",            label: "Today"           },

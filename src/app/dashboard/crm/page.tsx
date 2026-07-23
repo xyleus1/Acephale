@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth";
 import { toContactRow } from "@/lib/contact-fields";
 import { ContactSheet } from "@/components/contact-sheet";
 
+export const metadata = { title: "CRM" };
+
 type SearchParams = Promise<{ q?: string }>;
 
 export default async function CrmPage({ searchParams }: { searchParams: SearchParams }) {

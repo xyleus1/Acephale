@@ -28,6 +28,8 @@ import {
 } from "@/lib/market-intelligence/source-quality";
 import { getMarketSignalSuppressionReason } from "@/lib/market-intelligence/signal-suppression";
 
+export const metadata = { title: "Market signals" };
+
 type SearchParams = Promise<{
   status?: string;
   category?: string;

@@ -12,6 +12,8 @@ import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, DERYA_RFQ_SOURCE_E
 import { whatsAppProvider, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { whatsAppAccountLabel } from "@/lib/whatsapp-display";
 
+export const metadata = { title: "Channels" };
+
 function timeAgo(d: Date | null | undefined) {
   if (!d) return "Never";
   const diff = Date.now() - new Date(d).getTime();

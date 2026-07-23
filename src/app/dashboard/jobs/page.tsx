@@ -7,6 +7,8 @@ import { JobsBoard } from "@/components/jobs-board";
 import { JobsTable } from "@/components/jobs-table";
 import { cleanNotes } from "@/lib/quote-lines";
 
+export const metadata = { title: "Pipeline" };
+
 const STATUSES = [
   { key: "PROPOSED",   label: "Proposed"   },
   { key: "INQUIRY",    label: "RFQ"        },

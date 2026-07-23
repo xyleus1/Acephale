@@ -9,6 +9,8 @@ import { createWithFileReference } from "@/lib/references";
 import { recordTargetPriceHistory } from "@/lib/target-price-history";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 
+export const metadata = { title: "New RFQ" };
+
 async function createRFQ(formData: FormData) {
   "use server";
   const session = await requireSession();

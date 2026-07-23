@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Derya Deal Desk",
+  title: { default: "Derya Deal Desk", template: "%s · Derya Deal Desk" },
   applicationName: "Derya",
   description: "Lead-to-quote freight desk for RFQ qualification, pricing, and customer follow-up"
 };

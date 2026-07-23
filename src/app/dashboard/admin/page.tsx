@@ -16,6 +16,8 @@ import { loadJobStrategyInput } from "@/lib/commercial-strategy-persistence";
 import { simulatePricingScenario, type PricingScenarioResult } from "@/lib/pricing-scenario";
 import { operatorPhaseLabel } from "@/lib/operator-action-labels";
 
+export const metadata = { title: "Admin" };
+
 type AdminSearchParams = {
   tab?: string;
   brainJobId?: string;

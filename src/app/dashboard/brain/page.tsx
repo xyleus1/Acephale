@@ -7,6 +7,8 @@ import { TaskListInline } from "@/components/task-list-inline";
 import { WorldIntelligenceMap } from "@/components/intelligence/world-intelligence-map";
 import { getIntelligenceMapData } from "@/lib/market-intelligence/intelligence-map";
 
+export const metadata = { title: "Company Brain" };
+
 type SearchParams = Promise<{
   section?: string;
   map?: string;

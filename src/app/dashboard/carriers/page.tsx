@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth";
 import { toCarrierRow } from "@/lib/carrier-fields";
 import { CarrierSheet } from "@/components/carrier-sheet";
 
+export const metadata = { title: "Carrier bench" };
+
 // Kept in sync with CarrierSheetRecord in src/lib/carrier-fields.ts.
 const SHEET_SELECT = {
   id: true,

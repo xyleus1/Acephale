@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth";
 import { Icon } from "@/components/icon";
 import { LinkRow } from "@/components/link-row";
 
+export const metadata = { title: "Loads" };
+
 const STATUS_LABEL: Record<string, string> = {
   PROPOSED: "Proposed", INQUIRY: "RFQ", QUOTED: "Pricing", BOOKED: "Booked",
   IN_TRANSIT: "En Route", CUSTOMS: "En Route", DELIVERED: "Delivered", CANCELLED: "Cancelled",

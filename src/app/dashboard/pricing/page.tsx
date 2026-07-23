@@ -23,6 +23,8 @@ import { operatorMaturityLabel, operatorMetricLabel, operatorPhaseLabel, operato
 import { canonicalInquiryStatus } from "@/lib/inquiry-status";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 
+export const metadata = { title: "Pricing" };
+
 type SearchParams = Promise<{ inquiry?: string }>;
 
 const ALLOWED_FORWARDER_SENDER_EMAILS = ["mert@usederya.com", "oguzhan@usederya.com"];
