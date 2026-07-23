@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { CellInput, CellSelect } from "@/components/sheet-cells";
+import { LEAD_QUALITY_LABELS } from "@/lib/lead-quality";
 import { SECURITY_TIERS } from "@/lib/security-sop";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { WhatsAppPreviewCard, type RfqWhatsAppPreview } from "@/components/whatsapp-preview-card";
@@ -25,6 +26,24 @@ export type RfqEmailPreview = {
   subject: string;
   text: string;
   sentAtLabel: string | null;
+};
+
+// Client-safe snapshot of the outreach sequence (derived server-side in
+// page.tsx from src/lib/lead-outreach.ts) - drives the US lead cards.
+export type RfqOutreachDisplay = {
+  key: "excluded" | "not_started" | "awaiting" | "final_sent" | "replied" | "desk" | "stopped" | "dropped" | "closed";
+  label: string;
+  detail: string | null;
+  step: number;
+  total: number;
+  stopped: boolean;
+  touches: Array<{ step: number; label: string; atLabel: string | null }>;
+  // Reply pulled live from the synced inboxes (may be ahead of the stamp).
+  repliedAtLabel: string | null;
+  replyExcerpt: string | null;
+  // Preview + button copy for the next email in the sequence (null when the
+  // sequence has nothing left to send).
+  nextSend: { label: string; subject: string; text: string } | null;
 };
 
 export type { RfqWhatsAppPreview } from "@/components/whatsapp-preview-card";
@@ -68,11 +87,13 @@ export type RfqRowData = {
   // Deterministic triage for lead rows (null for non-lead RFQs).
   leadQuality: { tier: "GOOD" | "REVIEW" | "WEAK"; score: number; reasons: string[] } | null;
   whatsapp: RfqWhatsAppPreview;
+  // Outreach sequence state - only populated for the US lead cards view.
+  outreach?: RfqOutreachDisplay | null;
 };
 
 export type SheetOption = readonly [string, string];
 
-function EmailPreviewCard({
+export function EmailPreviewCard({
   title,
   hint,
   preview,
@@ -618,7 +639,7 @@ function RfqBulkBar({ ids, statusOptions, onDone }: {
 // Debounced URL search: typing rewrites ?q= (keeping whatever else is in the
 // URL, like the status tab) so the server re-queries all RFQs, not just the
 // 200 rendered rows.
-function RfqSearchBar({ initialQuery }: { initialQuery: string }) {
+export function RfqSearchBar({ initialQuery }: { initialQuery: string }) {
   const router = useRouter();
   const [value, setValue] = useState(initialQuery);
   const [busy, startTransition] = useTransition();
@@ -1097,9 +1118,9 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
                       : row.leadQuality.tier === "REVIEW" ? "badge-warn"
                       : "badge-neutral"
                   }`}
-                  title={`Lead quality: ${row.leadQuality.tier === "GOOD" ? "Good" : row.leadQuality.tier === "REVIEW" ? "Review" : "Weak"} (score ${row.leadQuality.score})${row.leadQuality.reasons.length ? ` - ${row.leadQuality.reasons.join(", ")}` : ""}`}
+                  title={`Lead quality: ${LEAD_QUALITY_LABELS[row.leadQuality.tier]} (score ${row.leadQuality.score})${row.leadQuality.reasons.length ? ` - ${row.leadQuality.reasons.join(", ")}` : ""}`}
                 >
-                  {row.leadQuality.tier === "GOOD" ? "Good" : row.leadQuality.tier === "REVIEW" ? "Review" : "Weak"}
+                  {LEAD_QUALITY_LABELS[row.leadQuality.tier]}
                 </span>
               )}
               <CellInput

@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import {
   buildDeskForwardEmail,
   buildLeadCustomerEmail,
+  buildLeadFollowUpEmail,
   claimInquirySendStamp,
   clearInquirySendStamp,
   isSingleEmailAddress,
@@ -14,10 +15,12 @@ import {
   sendRfqMail,
   type SendStampKey,
 } from "@/lib/rfq-mail";
+import { deriveOutreachState, nextOutreachSend } from "@/lib/lead-outreach";
+import { assessLeadQuality } from "@/lib/lead-quality";
 import { buildWhatsAppInquiry, waDigitsFromWhatsAppAddress, waPhoneDigits } from "@/lib/rfq-whatsapp";
 import { metaLeadMarketOf, type MetaLeadMarket } from "@/lib/meta-leads";
 import { logOutboundWhatsAppMessage, sendWhatsAppText, whatsAppSendConfigured } from "@/lib/whatsapp";
-import { normalizeInquiryStatusInput } from "@/lib/inquiry-status";
+import { canonicalInquiryStatus, normalizeInquiryStatusInput } from "@/lib/inquiry-status";
 import { deriveSecurityTier } from "@/lib/security-sop";
 import { applyQuoteOutcome } from "@/lib/truckload-quotes";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
@@ -100,6 +103,8 @@ export async function sendLeadConfirmationAction(
     replyTo: email.replyTo,
     subject: email.subject,
     text: email.text,
+    // The outreach follow-ups thread onto this send.
+    rememberLeadMessageId: true,
   });
   if ("error" in result) return result;
 
@@ -107,6 +112,81 @@ export async function sendLeadConfirmationAction(
   // Lead info-requests include the scope/customs questions, so the auto
   // follow-up must not re-ask them.
   if (email.kind === "info-request") await stampAfterSend(inquiry.id, "scopeAskedAt");
+  revalidatePath("/dashboard/rfq");
+  return { ok: true };
+}
+
+// The operator's "send next email now" on a lead card: whatever the outreach
+// sequence would send next (first touch or follow-up N), sent immediately -
+// the cadence and the business-hours window are cron concerns, not operator
+// ones. Refuses states where sending makes no sense (replied/dropped/closed).
+export async function sendNextOutreachAction(
+  inquiryId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const { session, inquiry } = await loadInquiry(inquiryId);
+  if (!inquiry) return { error: "RFQ not found." };
+  if (!isSingleEmailAddress(inquiry.fromEmail)) {
+    return { error: "Sender email is missing or not a single valid address - fix it on the RFQ first." };
+  }
+  let parsed: Record<string, unknown> = {};
+  try {
+    const value = inquiry.parsedData ? JSON.parse(inquiry.parsedData) : {};
+    if (value && typeof value === "object" && !Array.isArray(value)) parsed = value;
+  } catch {
+    return { error: "This RFQ has legacy data that the sequence cannot stamp - send from the email drafts instead." };
+  }
+  if (parsed.source !== "meta-leads") return { error: "The outreach sequence only applies to lead rows." };
+
+  const state = deriveOutreachState({
+    parsed,
+    tier: assessLeadQuality(inquiry).tier,
+    status: canonicalInquiryStatus(inquiry.status),
+    hasValidEmail: true,
+    now: new Date(),
+  });
+  const next = nextOutreachSend(state);
+  if (!next) return { error: `Nothing to send: ${state.label}.` };
+  if (next.type === "first-touch") return sendLeadConfirmationAction(inquiryId);
+
+  const email = buildLeadFollowUpEmail(inquiry, next.step);
+  const stampKey: SendStampKey = `followUp${next.step}SentAt`;
+  const claim = await claimInquirySendStamp(inquiry.id, stampKey);
+  if (claim === "already") return { error: `Follow-up ${next.step} was already sent.` };
+  if (claim !== "claimed") return { error: "Could not claim the send - reload and try again." };
+
+  const result = await sendRfqMail({
+    officeId: session.officeId,
+    inquiryId: inquiry.id,
+    to: inquiry.fromEmail,
+    cc: email.cc,
+    replyTo: email.replyTo,
+    subject: email.subject,
+    text: email.text,
+    inReplyTo: email.inReplyTo,
+    rememberLeadMessageId: true,
+  });
+  if ("error" in result) {
+    await clearInquirySendStamp(inquiry.id, stampKey);
+    return result;
+  }
+  revalidatePath("/dashboard/rfq");
+  return { ok: true };
+}
+
+// Pause / resume the automated sequence for one lead. Paused leads keep
+// their history and reply detection; they just stop getting emails.
+export async function toggleLeadSequenceAction(
+  inquiryId: string,
+  stop: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  const { inquiry } = await loadInquiry(inquiryId);
+  if (!inquiry) return { error: "RFQ not found." };
+  if (stop) {
+    const claim = await claimInquirySendStamp(inquiry.id, "sequenceStoppedAt");
+    if (claim === "legacy") return { error: "This RFQ has legacy data that the sequence cannot stamp." };
+  } else {
+    await clearInquirySendStamp(inquiry.id, "sequenceStoppedAt");
+  }
   revalidatePath("/dashboard/rfq");
   return { ok: true };
 }

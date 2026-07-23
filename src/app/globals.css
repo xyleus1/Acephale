@@ -34304,3 +34304,198 @@ tr.rfq-row-selected td,
   color: var(--whatsapp);
   flex-shrink: 0;
 }
+
+/* ── US lead cards (/dashboard/rfq?view=us) ──────────────────────────────────
+   The US leads view is a card per lead built around the outreach sequence
+   (src/lib/lead-outreach.ts): quality badge, lane, contact, a 4-step email
+   tracker with the current stage, and the reply panel when the lead wrote
+   back. Türkiye keeps the RfqSheet table. */
+
+.lead-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 560px) {
+  .lead-cards { grid-template-columns: 1fr; }
+}
+
+.lead-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.lead-card:hover { box-shadow: var(--shadow-sm); }
+.lead-card--replied {
+  border-color: var(--success-border);
+  box-shadow: 0 0 0 1px var(--success-border), var(--shadow-sm);
+}
+.lead-card--busy { opacity: .7; }
+
+.lead-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.lead-card-idline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.lead-card-ref {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: .02em;
+}
+.lead-card-ago { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.lead-card-status {
+  min-width: 112px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  background: var(--surface-2);
+}
+
+.lead-card-lane { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lead-card-place { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1.2; }
+.lead-card-lane-arrow { color: var(--text-3); flex-shrink: 0; }
+.lead-card-chip { font-size: 10px; }
+.lead-card-target {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.lead-card-subject { font-size: 12px; color: var(--text-2); }
+
+.lead-card-contact { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--text-2); }
+.lead-card-contact span,
+.lead-card-contact a { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.lead-card-contact a { color: var(--text-2); text-decoration: none; }
+.lead-card-contact a:hover { color: var(--text); text-decoration: underline; }
+
+.lead-card-outreach {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.lead-card-stageline { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lead-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.lead-stage--replied { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.lead-stage--waiting { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
+.lead-stage--final,
+.lead-stage--paused { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+.lead-stage--new { background: var(--neutral-bg); color: var(--text-2); border-color: var(--neutral-border); }
+.lead-stage--muted { background: var(--neutral-bg); color: var(--text-3); border-color: var(--neutral-border); }
+.lead-stage-detail { font-size: 11px; color: var(--text-3); }
+
+.lead-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+.lead-step { display: flex; align-items: flex-start; gap: 6px; min-width: 0; opacity: .55; }
+.lead-step--done,
+.lead-step--next { opacity: 1; }
+.lead-step-dot {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  color: var(--text-3);
+}
+.lead-step--done .lead-step-dot { background: var(--success); border-color: var(--success); color: var(--surface); }
+.lead-step--next .lead-step-dot { border-color: var(--accent); color: var(--accent); }
+.lead-step-text { display: flex; flex-direction: column; min-width: 0; }
+.lead-step-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lead-step-date { font-size: 10px; color: var(--text-3); }
+
+.lead-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius-sm);
+  background: var(--success-bg);
+}
+.lead-reply-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--success);
+  flex-wrap: wrap;
+}
+.lead-reply-head a { color: var(--success); }
+.lead-reply-quote {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--success-border);
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.lead-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lead-card-openlink { margin-left: auto; }
+.lead-card-caret { transition: transform .12s ease; }
+.lead-card-caret--open { transform: rotate(90deg); }
+.lead-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+.lead-card-details .rfq-mail-grid { margin-top: 0; }
+
+/* The Replied stage chip doubles as the desk's to-do count. */
+.view-switcher-tab--alert { color: var(--success); font-weight: 800; }

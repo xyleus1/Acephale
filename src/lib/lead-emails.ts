@@ -95,8 +95,15 @@ ${SIGNATURE_TR}`,
       };
 }
 
-export function buildLeadCustomerEmailContent(inq: InquiryForWhatsApp): LeadCustomerEmailContent {
-  const { market, questions, missing } = leadMissingQuestions(inq);
+// extraQuestions are asked first - the outreach sequence prepends the Review
+// qualifier ("is this commercial?" / company name) since that answer decides
+// whether the rest matters.
+export function buildLeadCustomerEmailContent(
+  inq: InquiryForWhatsApp,
+  extraQuestions: string[] = [],
+): LeadCustomerEmailContent {
+  const { market, questions: baseQuestions, missing } = leadMissingQuestions(inq);
+  const questions = [...extraQuestions, ...baseQuestions];
   const en = market === "US";
 
   if (questions.length === 0) {

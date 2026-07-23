@@ -28,6 +28,7 @@
     "test:rfq-whatsapp": "tsx scripts/rfq-whatsapp.test.ts",
     "test:lead-quality": "tsx scripts/lead-quality.test.ts",
     "test:lead-emails": "tsx scripts/lead-emails.test.ts",
+    "test:lead-outreach": "tsx scripts/lead-outreach.test.ts",
     "test:whatsapp-greenapi": "tsx scripts/whatsapp-greenapi.test.ts",
     "test:whatsapp-display": "tsx scripts/whatsapp-display.test.ts",
     "test:whatsapp-crm-touch": "tsx scripts/whatsapp-crm-touch.test.ts",

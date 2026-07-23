@@ -4,6 +4,88 @@
 
 ## Date
 
+2026-07-22
+
+## Branch
+
+us-lead-outreach-sequence (Conductor workspace yamoussoukro, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+US lead outreach sequence (Good + Maybe tiers) + lead cards view.
+
+- **Sequence** (`src/lib/lead-outreach.ts`, engine in
+  `src/lib/lead-auto-reply.ts`, runs after every hourly lead-sheet sync):
+  first email on arrival for GOOD and REVIEW ("Maybe") tiers - Maybe leads
+  get qualifier questions prepended (commercial? company?) and never a
+  processing promise; WEAK never emailed. Follow-ups 2/3/4 go out 2/3/4
+  days after the last outbound (net day 0/+2/+5/+9), only 07:00-19:00
+  America/Los_Angeles; 4 silent days after the final email the lead is
+  auto-set IGNORED (`leadDroppedAt`). First touches only for leads received
+  within `DERYA_LEAD_OUTREACH_BACKLOG_DAYS` (default 30).
+  `DERYA_LEAD_AUTO_REPLY=off` kills all sends.
+- **Reply detection**: deterministic - newest INBOUND `EmailMessage` from
+  the lead's address (case-insensitive) after our first send, across the
+  OAuth-synced inboxes (oguzhan@ = Reply-To, mert@ = CC; both verified
+  connected in prod). Stamps `leadRepliedAt`, stops the sequence, card goes
+  "Replied - needs action" with the reply excerpt. Any desk status change
+  (PRICING, custom) freezes automation ("With the desk").
+- **Stamps** live in `parsedData` (`followUp2/3/4SentAt`, `leadRepliedAt`,
+  `leadDroppedAt`, `sequenceStoppedAt`, `leadLastMsgId` for In-Reply-To
+  threading); the sheet-resync preserve list is now the shared
+  `RESYNC_PRESERVED_PARSED_KEYS` const in rfq-mail - add any new stamp
+  there or the hourly resync erases it.
+- **US cards view** (`src/components/us-lead-cards.tsx` replaces the sheet
+  under `/dashboard/rfq?view=us`; Türkiye keeps the table): one card per
+  lead - quality badge (Review now displays "Maybe"), lane, contact,
+  4-step tracker with dates, stage chip, reply panel, send-next /
+  pause-resume / WhatsApp actions, expandable form answers + email
+  previews. Stage filter chips (Replied / Waiting / Not emailed / Dropped)
+  compose with the Good/Maybe/All quality chips and the status tabs.
+  New actions: `sendNextOutreachAction`, `toggleLeadSequenceAction`.
+
+## Files changed
+
+- `src/lib/lead-outreach.ts` (new), `src/lib/lead-auto-reply.ts`,
+  `src/lib/rfq-mail.ts`, `src/lib/lead-emails.ts`, `src/lib/lead-quality.ts`,
+  `src/lib/google-sheets-sync.ts`
+- `src/app/dashboard/rfq/page.tsx`, `src/app/dashboard/rfq/actions.ts`
+- `src/components/us-lead-cards.tsx` (new),
+  `src/components/rfq-expandable-rows.tsx`,
+  `src/components/sync-google-sheet-button.tsx`, `src/components/icon.tsx`
+- `src/app/globals.css`, `scripts/lead-outreach.test.ts` (new), `package.json`
+
+## Verification passed
+
+- `npx tsc --noEmit` clean; `npm run build` (dummy DATABASE_URL) clean.
+- `test:lead-outreach` (new), `test:lead-quality`, `test:lead-emails`,
+  `test:rfq-whatsapp` pass; lint error count unchanged vs baseline (101).
+- End-to-end on a Neon copy-on-write branch of prod: US view renders 20
+  Good cards + Maybe (71) chip + stage chips with live counts; engine
+  dry-run (fake SMTP password) detected the 2 real replies (DRY26070146,
+  DRY26070127), rolled back claimed stamps on send failure, aborted after
+  3 systemic failures.
+
+## Caveats
+
+- No DB migration - all state is parsedData JSON; nothing to run on prod
+  before deploy.
+- rfq@ stays SMTP-only; reply capture depends on oguzhan@/mert@ staying
+  OAuth-connected.
+- The ~50 in-window Maybe leads get first touches over the first ticks
+  after deploy (cap 25 emails/tick); older Maybe leads stay manual.
+- The qualifier prepend also reaches the TR sheet's manual "Ask info"
+  email for Maybe-tier TR leads (same builder); the automated sequence
+  itself only processes US-marker leads.
+
+## Previous Update
+
+## Date
+
 2026-07-20
 
 ## Branch

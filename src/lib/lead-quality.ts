@@ -103,6 +103,15 @@ function realPlace(value: string | null): boolean {
   return true;
 }
 
+// Whether the lead gave a real company answer. fromCompany falls back to the
+// person's name when the form had none - that fallback is not a company
+// signal. Shared with the outreach qualifier, which asks for the company
+// only when this is false.
+export function hasCompanySignal(fromCompany: string | null, fullName: string | null): boolean {
+  const company = s(fromCompany);
+  return Boolean(company && company !== s(fullName) && !JUNK_COMPANY.has(norm(company)));
+}
+
 export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
   const parsed = parsedOf(inq.parsedData);
   const answers = (parsed.answers && typeof parsed.answers === "object" && !Array.isArray(parsed.answers)
@@ -191,8 +200,7 @@ export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
   // ── Softer signals ──
   // fromCompany falls back to the person's name when the form had no company
   // - that fallback is not a company signal.
-  const company = s(inq.fromCompany);
-  if (company && company !== s(parsed.fullName) && !JUNK_COMPANY.has(norm(company))) score += 1;
+  if (hasCompanySignal(inq.fromCompany, s(parsed.fullName))) score += 1;
   if (s(inq.commodity)) score += 1;
 
   // Desk rules: commercial shipments are always worth working; declared
@@ -209,9 +217,12 @@ export function assessLeadQuality(inq: LeadQualityInput): LeadQuality {
   return { tier, score, reasons };
 }
 
+// REVIEW displays as "Maybe" (Mert, 2026-07-22): the middle tier is worked
+// automatically now - "maybe" says what it is, "review" said what to do
+// back when the desk triaged these by hand.
 export const LEAD_QUALITY_LABELS: Record<LeadQualityTier, string> = {
   GOOD: "Good",
-  REVIEW: "Review",
+  REVIEW: "Maybe",
   WEAK: "Weak",
 };
 

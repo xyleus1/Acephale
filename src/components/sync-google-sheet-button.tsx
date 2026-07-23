@@ -20,7 +20,9 @@ export function SyncGoogleSheetButton() {
           `${res.requests.created + res.requests.updated} RFQs · ` +
           `${res.leads.created + res.leads.updated} TR leads · ` +
           `${res.leadsUs.created + res.leadsUs.updated} US leads · ` +
-          `${res.autoReplies.sent} auto-replies · ` +
+          `${res.autoReplies.sent + res.autoReplies.followUps} outreach emails · ` +
+          `${res.autoReplies.replies} replies · ` +
+          (res.autoReplies.dropped > 0 ? `${res.autoReplies.dropped} dropped · ` : "") +
           `${res.operations.created + res.operations.updated} jobs · ` +
           `${res.operations.companiesCreated} companies` +
           (res.warnings.length > 0 ? ` · ${res.warnings[0]}` : "")

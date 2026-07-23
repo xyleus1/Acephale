@@ -2075,3 +2075,59 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: historical Prisma migration SQL untouched (checksummed). En
   dashes in Meta form-data matchers are input parsing and remain.
 - Follow-up: none.
+
+### 2026-07-22 - US lead outreach sequence + lead cards view
+
+- Branch: us-lead-outreach-sequence (Conductor workspace yamoussoukro,
+  targets main)
+- Commit: see git log
+- Task: Per Mert: (1) auto-email the middle-ground leads too, not just Good;
+  (2) show where each lead is in the outreach process on /dashboard/rfq;
+  (3) the middle tier is "Maybe" and still gets asked; (4) a drastic visual
+  upgrade of the US view (big cards).
+- Files changed: new `src/lib/lead-outreach.ts` (stage derivation, cadence
+  0/+2d/+5d/+9d, drop grace 4d, LA send window, follow-up + qualifier copy
+  EN/TR, reply excerpts), new `src/components/us-lead-cards.tsx` (card view
+  replacing the sheet under ?view=us), `src/lib/lead-auto-reply.ts` (engine:
+  reply detection, Good+Review first touches within a 30-day backlog,
+  follow-ups 2-4, auto-drop to IGNORED), `src/lib/rfq-mail.ts` (new stamp
+  keys, RESYNC_PRESERVED_PARSED_KEYS, Message-ID capture + In-Reply-To
+  threading, mergeInquiryParsedData), `src/lib/lead-emails.ts`
+  (extraQuestions prepend), `src/lib/lead-quality.ts` (hasCompanySignal;
+  REVIEW label renamed "Maybe"), `src/lib/google-sheets-sync.ts` (preserve
+  list from shared const; summary carries followUps/replies/dropped),
+  `src/app/dashboard/rfq/page.tsx` (outreach state per row, live reply
+  lookup, stage chips, card view swap), `src/app/dashboard/rfq/actions.ts`
+  (sendNextOutreachAction, toggleLeadSequenceAction),
+  `src/components/rfq-expandable-rows.tsx` (RfqOutreachDisplay type;
+  EmailPreviewCard/RfqSearchBar exported; Maybe badge),
+  `src/components/icon.tsx` (phone/play/pause), `src/app/globals.css`
+  (lead-card styles), `scripts/lead-outreach.test.ts`, `package.json`.
+- Behavior: US leads (Good + Maybe tiers) get the smart first email on sync
+  (Maybe leads get qualifier questions prepended, never a processing
+  promise), then up to three follow-ups spaced 2/3/4 days from the last
+  outbound, sent only 07:00-19:00 America/Los_Angeles; after the final
+  email sits 4 days unanswered the lead is auto-set to IGNORED. Inbound
+  mail from the lead's address (landing in oguzhan@/mert@ via Reply-To/CC)
+  stops the sequence and flags the card "Replied - needs action" with the
+  reply excerpt. Any desk status change (pricing, custom) freezes the
+  automation ("With the desk"). The US view renders cards with a 4-step
+  tracker, stage chips (Replied/Waiting/Not emailed/Dropped), send-next,
+  pause/resume, WhatsApp, and expandable form answers + email previews.
+- Verification: tsc clean; lead-outreach (new), lead-quality, lead-emails,
+  rfq-whatsapp suites pass; next build clean; lint error count unchanged
+  vs baseline (101). End-to-end against a Neon copy-on-write branch of
+  prod: page renders 20 Good cards, Maybe (71) chip, stage chips with live
+  counts; engine dry-run with a fake SMTP password detected the 2 real
+  replies (DRY26070146, DRY26070127), rolled back claimed stamps on send
+  failure, and aborted after 3 systemic failures as designed.
+- Failed/skipped checks: none.
+- Caveats: rfq@ stays SMTP-only; reply detection relies on the OAuth-synced
+  oguzhan@/mert@ inboxes (verified connected in prod). Leads older than 30
+  days (DERYA_LEAD_OUTREACH_BACKLOG_DAYS) never get a first touch. The
+  qualifier prepend also reaches the TR sheet's manual "Ask info" email for
+  Maybe-tier TR leads (same builder); the automated sequence itself remains
+  US-only. DERYA_LEAD_AUTO_REPLY=off still kills all automated sends.
+- Follow-up: consider OAuth-connecting rfq@ for direct-reply capture;
+  parse reply content into inquiry fields; multi-select/bulk actions on
+  the card view.

@@ -8,6 +8,7 @@ import { requireSession } from "./auth";
 import { createWithFileReference } from "./references";
 import { metaLeadsSources, type MetaLeadsSource } from "./meta-leads";
 import { autoReplyToUsLeads } from "./lead-auto-reply";
+import { RESYNC_PRESERVED_PARSED_KEYS } from "./rfq-mail";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
 
@@ -26,7 +27,7 @@ type SyncSummary = {
   operations: { created: number; updated: number; skipped: number; companiesCreated: number };
   leads: LeadCounts;
   leadsUs: LeadCounts;
-  autoReplies: { sent: number; skipped: number; failed: number };
+  autoReplies: { sent: number; followUps: number; replies: number; dropped: number; skipped: number; failed: number };
   warnings: string[];
 };
 
@@ -625,18 +626,18 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
       select: { id: true, status: true, parsedData: true },
     });
 
-    // Send stamps live in parsedData; a resync rewrite must not erase them.
+    // Send stamps + outreach-sequence state live in parsedData; a resync
+    // rewrite must not erase them. The key list lives next to SendStampKey
+    // in rfq-mail so a new stamp can't be added without deciding its resync
+    // fate.
     let existingStamps: Record<string, unknown> = {};
     if (existing?.parsedData) {
       try {
         const prev = JSON.parse(existing.parsedData);
         if (prev && typeof prev === "object") {
-          if (prev.deskForwardedAt) existingStamps.deskForwardedAt = prev.deskForwardedAt;
-          if (prev.confirmationSentAt) existingStamps.confirmationSentAt = prev.confirmationSentAt;
-          if (prev.infoRequestSentAt) existingStamps.infoRequestSentAt = prev.infoRequestSentAt;
-          if (prev.whatsappSentAt) existingStamps.whatsappSentAt = prev.whatsappSentAt;
-          if (prev.autoRepliedAt) existingStamps.autoRepliedAt = prev.autoRepliedAt;
-          if (prev.scopeAskedAt) existingStamps.scopeAskedAt = prev.scopeAskedAt;
+          for (const key of RESYNC_PRESERVED_PARSED_KEYS) {
+            if (prev[key]) existingStamps[key] = prev[key];
+          }
         }
       } catch {
         existingStamps = {};
@@ -855,12 +856,20 @@ export async function syncDeryaGoogleSheetForOffice(officeId: string): Promise<S
     return { error: warnings.join(" | ") };
   }
 
-  // First-touch automation for freshly-synced US leads (GOOD tier only) -
-  // never allowed to fail the sync itself.
-  let autoReplies = { sent: 0, skipped: 0, failed: 0 };
+  // Outreach automation for freshly-synced US leads (Good + Maybe tiers):
+  // reply detection, first touches, follow-ups, drops - never allowed to
+  // fail the sync itself.
+  let autoReplies = { sent: 0, followUps: 0, replies: 0, dropped: 0, skipped: 0, failed: 0 };
   try {
     const auto = await autoReplyToUsLeads(officeId);
-    autoReplies = { sent: auto.sent, skipped: auto.skipped, failed: auto.failed };
+    autoReplies = {
+      sent: auto.sent,
+      followUps: auto.followUps,
+      replies: auto.replies,
+      dropped: auto.dropped,
+      skipped: auto.skipped,
+      failed: auto.failed,
+    };
     warnings.push(...auto.warnings);
   } catch (e) {
     warnings.push(`Auto-reply: ${e instanceof Error ? e.message : String(e)}`);
