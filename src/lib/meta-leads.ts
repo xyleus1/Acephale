@@ -18,7 +18,9 @@ export type MetaLeadsSource = {
   subjectPrefix: string;
 };
 
-const TR_DEFAULT_SHEET_ID = "12Fvi6qzU_TLx-a5X49ggV5dyxDqFfLnDG3TTpuxlrlA";
+// Current TR lead form export (FORM #2); superset of the retired
+// 12Fvi6qzU_TLx… sheet, so overlapping leads resync onto the same inquiries.
+const TR_DEFAULT_SHEET_ID = "1vdJ-vA4lZhVpRFabSEyWlyqIBaJcaRdSTeLytOquAEU";
 // "DERYA LEAD - USA CALIFORNIA" - the US export campaign's lead sheet.
 const US_DEFAULT_SHEET_ID = "1wSZBm5iNbDWjml5ddMebULb7iLBKjs5vuX3U_5oC_Ic";
 
