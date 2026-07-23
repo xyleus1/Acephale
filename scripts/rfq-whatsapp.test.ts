@@ -97,7 +97,7 @@ const base = {
     containerType: "40ft",
     parsedData: JSON.stringify({ market: "US", fullName: "igor mogilatov", phone: "6105707011" }),
   });
-  assert(d.text.startsWith("Hi Igor, this is Oğuzhan from Derya Logistics."), d.text);
+  assert(d.text.startsWith("Hi Igor, this is Mert from Derya Logistics."), d.text);
   assert(d.text.includes("Savannah - india 40ft container shipment"), d.text);
   assert(!d.text.includes("ağırlığını"), "US draft must not contain Turkish");
   assert(d.text.includes("What will be the exact delivery point?"), d.text);

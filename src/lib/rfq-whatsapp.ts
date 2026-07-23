@@ -375,10 +375,12 @@ export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
   const origin = s(inq.origin);
   const destination = s(inq.destination);
 
+  // US leads hear from Mert (matching the email signature and the rfq@
+  // reply routing); TR leads keep Oğuzhan's voice.
   const greeting = en
     ? (firstName
-        ? `Hi ${firstName}, this is Oğuzhan from Derya Logistics.`
-        : "Hi, this is Oğuzhan from Derya Logistics.")
+        ? `Hi ${firstName}, this is Mert from Derya Logistics.`
+        : "Hi, this is Mert from Derya Logistics.")
     : (firstName
         ? `${firstName} Bey merhaba, ben Derya Lojistik'ten Oğuzhan.`
         : "Merhaba, ben Derya Lojistik'ten Oğuzhan.");

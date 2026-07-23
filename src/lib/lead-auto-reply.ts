@@ -317,7 +317,7 @@ export async function autoReplyToUsLeads(officeId: string): Promise<AutoReplySum
     const needsScopeFollowUp = !parsed.scopeAskedAt;
     const due = state.nextDueAt != null && state.nextDueAt <= now;
     if (!needsScopeFollowUp && !due) continue;
-    // Follow-ups read as personal notes from Oğuzhan - only send them during
+    // Follow-ups read as personal notes from Mert - only send them during
     // California business hours.
     if (!withinOutreachSendWindow(now)) continue;
 

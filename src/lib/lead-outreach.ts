@@ -43,7 +43,7 @@ export const REVIVAL_AFTER_DAYS = 30;
 
 // Follow-ups only go out during California business hours - the first touch
 // is an instant receipt and may send any time, but a "just checking in" from
-// Oğuzhan at 3am reads as the robot it is.
+// Mert at 3am reads as the robot it is.
 export const OUTREACH_SEND_WINDOW = { startHour: 7, endHour: 19, timeZone: "America/Los_Angeles" } as const;
 
 export function withinOutreachSendWindow(now: Date): boolean {
@@ -252,13 +252,14 @@ export function nextOutreachSend(state: OutreachState): NextOutreachSend {
 
 // ── Copy ─────────────────────────────────────────────────────────────────────
 
+// Same personas as lead-emails.ts: Mert signs the US flow, Oğuzhan the TR.
 const SIGNATURE_TR = `--
 Oğuzhan Karaca
 Kurucu Ortak & CEO, Derya
 https://usederya.com/`;
 const SIGNATURE_US = `--
-Oğuzhan Karaca
-Co-founder & CEO, Derya
+Mert Turna
+Co-founder, Derya
 https://usederya.com/`;
 
 function s(value: unknown): string | null {

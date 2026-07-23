@@ -32,7 +32,7 @@ const base = {
   assert.equal(email.missing.length, 0);
   assert.equal(email.subject, "Your request has been received - Derya");
   assert(email.text.includes("within the next 6 hours"), email.text);
-  assert(email.text.includes("Co-founder & CEO"), email.text);
+  assert(email.text.includes("Mert Turna"), email.text); // US flow signed by Mert
 }
 
 // Incomplete US lead → English info-request listing the same questions the

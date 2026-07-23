@@ -22,13 +22,15 @@ export type LeadCustomerEmailContent = {
   missing: string[];
 };
 
+// US emails are signed by Mert (he owns the US flow and answers the rfq@
+// replies, per 2026-07-22); TR emails stay signed by Oğuzhan.
 const SIGNATURE_TR = `--
 Oğuzhan Karaca
 Kurucu Ortak & CEO, Derya
 https://usederya.com/`;
 const SIGNATURE_US = `--
-Oğuzhan Karaca
-Co-founder & CEO, Derya
+Mert Turna
+Co-founder, Derya
 https://usederya.com/`;
 
 const CONFIRMATION_SUBJECT_TR = "Talebiniz alındı - Derya";

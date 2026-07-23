@@ -236,7 +236,7 @@ assert.deepEqual(leadQualifierQuestions(usLead(), "WEAK"), []);
     const fu = buildLeadFollowUpContent(inq, "REVIEW", step);
     assert.ok(fu.subject.startsWith("Re: "), `step ${step} threads onto the first email`);
     assert.ok(!fu.text.includes("\u2014") && !fu.subject.includes("\u2014"), `step ${step} has no em dashes`);
-    assert.match(fu.text, /Oğuzhan Karaca/);
+    assert.match(fu.text, /Mert Turna/); // US flow is signed by Mert
   }
   assert.match(buildLeadFollowUpContent(inq, "REVIEW", 2).text, /commercial \(business\) shipment/);
   assert.match(buildLeadFollowUpContent(inq, "REVIEW", 3).text, /6 hours/);
