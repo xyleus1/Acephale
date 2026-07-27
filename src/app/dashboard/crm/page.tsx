@@ -2,16 +2,18 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { toContactRow } from "@/lib/contact-fields";
 import { prepareOutreachWorkspace } from "@/lib/crm-outreach-plan";
+import { parseCrmView } from "@/lib/crm-view";
 import { ContactSheet } from "@/components/contact-sheet";
 
 export const metadata = { title: "CRM" };
 
-type SearchParams = Promise<{ q?: string }>;
+type SearchParams = Promise<{ q?: string; view?: string }>;
 
 export default async function CrmPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSession();
-  const { q: rawQ } = await searchParams;
+  const { q: rawQ, view: rawView } = await searchParams;
   const q = typeof rawQ === "string" ? rawQ : "";
+  const initialView = parseCrmView(rawView);
   const now = new Date();
   const planItems = await prepareOutreachWorkspace(session.officeId, now);
 
@@ -55,11 +57,12 @@ export default async function CrmPage({ searchParams }: { searchParams: SearchPa
     // so a same-route ?q= navigation (⌘K company/contact pick while already on
     // the CRM) must remount it to actually apply the new search.
     <ContactSheet
-      key={q}
+      key={`${q}:${initialView}`}
       initialRows={rows}
       companies={companies.map((c) => c.name)}
       initialQuery={q}
       initialPlan={planItems}
+      initialView={initialView}
     />
   );
 }

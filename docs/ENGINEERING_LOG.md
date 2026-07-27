@@ -17,6 +17,33 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-27 - CRM Outreach Desk entry point and capacity gaps
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: not committed
+- Task: Make the existing daily and weekly CRM outreach loop visible from the
+  contact-first CRM screen, expose per-channel empty capacity, and keep send
+  controls usable when the agent panel narrows the page.
+- Implementation: `/dashboard/crm` now defaults to Contacts and renders a
+  persistent Outreach Desk launcher. Daily and weekly panels are URL-backed by
+  `src/lib/crm-view.ts`; their channel cards filter the queue; three explicit
+  capacity slots report missing Bookface, LinkedIn, and Email contacts and
+  return to contact classification. The outreach action column is sticky on
+  desktop and returns to normal card flow on mobile.
+- Verification: `npm run test:crm`, `npx tsc --noEmit`, `npm run build`,
+  `git diff --check`, changed-text em dash check, and browser QA at desktop and
+  mobile widths against a disposable local Postgres database. Contacts, daily,
+  and weekly views rendered without console errors.
+- Failed/skipped checks: The first production build collided with a running
+  `next dev` process and lost generated route files. The dev server was stopped,
+  its `.next` cache was moved aside, and the clean rerun passed.
+- Caveats: The workflow records manual completion and never auto-sends. Contacts
+  need an eligible category and assigned outreach channel before they can fill
+  capacity. The branch was two commits behind `origin/main` during this pass.
+- Follow-up: Merge current main, deploy the planner migration, then populate the
+  visible weekly gaps until Bookface reaches 140 and LinkedIn and Email reach
+  210 each.
+
 ### 2026-07-03 - Internal CRM Relationship OS V1
 
 - Branch: feature/internal-crm-v1

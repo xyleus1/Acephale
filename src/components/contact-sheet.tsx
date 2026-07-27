@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -25,10 +26,10 @@ import {
   outreachDateKey,
   type OutreachPlanRow,
 } from "@/lib/crm-outreach";
+import { crmViewHref, type CrmView } from "@/lib/crm-view";
 import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { Icon } from "@/components/icon";
 
-type View = "today" | "week" | "contacts";
 type SortKey =
   | "status"
   | "importance"
@@ -163,16 +164,18 @@ export function ContactSheet({
   companies,
   initialQuery,
   initialPlan,
+  initialView,
 }: {
   initialRows: ContactRow[];
   companies: string[];
   initialQuery: string;
   initialPlan: OutreachPlanRow[];
+  initialView: CrmView;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(initialRows);
   const [plan, setPlan] = useState(initialPlan);
-  const [view, setView] = useState<View>("today");
+  const [view, setView] = useState<CrmView>(initialView);
   const [q, setQ] = useState(initialQuery);
   const [categoryTab, setCategoryTab] = useState<string>("all");
   const [channelTab, setChannelTab] = useState<string>("all");
@@ -194,7 +197,25 @@ export function ContactSheet({
     setPlan(initialPlan);
   }, [initialPlan]);
 
+  useEffect(() => {
+    setView(initialView);
+  }, [initialView]);
+
   const report = useMemo(() => buildOutreachReport(plan), [plan]);
+  const todayAssigned = Math.min(
+    report.today.target,
+    report.today.reached + report.dueNow,
+  );
+  const todayEmpty = Math.max(0, report.today.target - todayAssigned);
+
+  function openView(nextView: CrmView) {
+    setView(nextView);
+    if (nextView === "contacts") {
+      setCategoryTab("all");
+      setChannelTab("all");
+    }
+    router.replace(crmViewHref(nextView, q) as Route, { scroll: false });
+  }
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -713,74 +734,202 @@ export function ContactSheet({
 
   return (
     <div className="contact-sheet outreach-workspace">
-      <section className="outreach-hero">
-        <div>
-          <span className="outreach-eyebrow">CRM outreach operating loop</span>
-          <h1>Make the daily work finite</h1>
-          <p>
-            20 YC companies through Bookface, 30 through LinkedIn, and 30 through email.
-            The weekly pool holds seven days of capacity and promotes only today&apos;s work.
-          </p>
-        </div>
-        <div className="outreach-report-line">
-          <strong>Today: {report.today.reached}/{report.today.target}</strong>
-          <span>{report.today.remaining} remaining</span>
-          <span>Yesterday: {report.yesterday.reached}/{report.yesterday.target}</span>
-          <span>This week: {report.week.reached}/{report.week.target}</span>
-        </div>
-      </section>
+      {view === "contacts" ? (
+        <section className="outreach-launcher" aria-labelledby="outreach-launcher-title">
+          <div className="outreach-launcher-mark">
+            <Icon name="activity" size={20} strokeWidth={2} />
+          </div>
+          <div className="outreach-launcher-copy">
+            <span className="outreach-eyebrow">Outreach desk</span>
+            <h1 id="outreach-launcher-title">Daily and weekly outreach</h1>
+            <p>
+              Send 20 Bookface, 30 LinkedIn, and 30 email outreaches each day.
+              Empty capacity stays visible until you add or classify enough contacts.
+            </p>
+            <div className="outreach-target-pills" aria-label="Daily channel targets">
+              {report.channels.map((channel) => (
+                <span key={channel.key}>
+                  {channel.label} <strong>{channel.dailyTarget}/day</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="outreach-launcher-stats">
+            <div>
+              <span>Today ready</span>
+              <strong>{todayAssigned}/{report.today.target}</strong>
+              <small>{report.dueNow} queued, {todayEmpty} empty</small>
+            </div>
+            <div>
+              <span>This week planned</span>
+              <strong>{report.weeklyPlanned}/{report.weeklyTarget}</strong>
+              <small>{report.weeklyGap} empty</small>
+            </div>
+          </div>
+          <div className="outreach-launcher-actions">
+            <button type="button" className="btn" onClick={() => openView("today")}>
+              Open daily outreach <Icon name="arrow-right" size={14} />
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => openView("week")}>
+              Review weekly pool
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section className="outreach-hero">
+            <div>
+              <span className="outreach-eyebrow">Outreach desk</span>
+              <h1>
+                {view === "today"
+                  ? "Send today's outreach"
+                  : "Build this week's outreach pool"}
+              </h1>
+              <p>
+                {view === "today"
+                  ? "Work the queue by channel, open the contact method, then mark each person reached."
+                  : "Keep seven days of Bookface, LinkedIn, and email capacity ready for daily promotion."}
+              </p>
+            </div>
+            <div className="outreach-report-line">
+              <strong>
+                {view === "today"
+                  ? `Today: ${report.today.reached}/${report.today.target}`
+                  : `This week: ${report.week.reached}/${report.week.target}`}
+              </strong>
+              <span>{view === "today" ? `${report.dueNow} queued` : `${report.weeklyPlanned} planned`}</span>
+              <span>{view === "today" ? `${todayEmpty} empty slots` : `${report.weeklyGap} empty slots`}</span>
+              <span>Yesterday: {report.yesterday.reached}/{report.yesterday.target}</span>
+            </div>
+          </section>
 
-      <div className="outreach-summary-grid">
-        {report.channels.map((channel) => (
-          <article key={channel.key} className="card outreach-channel-card">
-            <div className="outreach-channel-head">
-              <strong>{channel.label}</strong>
-              <span>{channel.today.reached}/{channel.dailyTarget} today</span>
-            </div>
-            <div className="outreach-progress" aria-label={`${channel.label} daily progress`}>
-              <span style={{ width: `${channel.today.percent}%` }} />
-            </div>
-            <div className="outreach-channel-meta">
-              <span>{channel.dueNow} in queue</span>
-              <span>{channel.weeklyPlanned}/{channel.weeklyTarget} weekly pool</span>
-            </div>
-          </article>
-        ))}
-      </div>
+          <div className="outreach-summary-grid">
+            {report.channels.map((channel) => {
+              const dailyAssigned = Math.min(
+                channel.dailyTarget,
+                channel.today.reached + channel.dueNow,
+              );
+              const dailyEmpty = Math.max(0, channel.dailyTarget - dailyAssigned);
+              const progressPercent =
+                view === "today"
+                  ? Math.round((dailyAssigned / channel.dailyTarget) * 100)
+                  : Math.min(
+                      100,
+                      Math.round((channel.weeklyPlanned / channel.weeklyTarget) * 100),
+                    );
 
-      {report.weeklyGap > 0 && (
-        <div className="outreach-pool-warning">
-          <Icon name="info" size={15} />
-          <span>
-            Weekly pool is short {report.weeklyGap} contacts. In Contacts, classify people as
-            Personally important or Startups, then assign Bookface, LinkedIn, or Email.
-          </span>
-        </div>
+              return (
+                <button
+                  key={channel.key}
+                  type="button"
+                  className={`card outreach-channel-card${channelTab === channel.key ? " active" : ""}`}
+                  aria-pressed={channelTab === channel.key}
+                  onClick={() => setChannelTab(channel.key)}
+                >
+                  <div className="outreach-channel-head">
+                    <strong>{channel.label}</strong>
+                    <span>
+                      {view === "today"
+                        ? `${dailyAssigned}/${channel.dailyTarget} ready`
+                        : `${channel.weeklyPlanned}/${channel.weeklyTarget} planned`}
+                    </span>
+                  </div>
+                  <div className="outreach-progress" aria-label={`${channel.label} assigned capacity`}>
+                    <span style={{ width: `${progressPercent}%` }} />
+                  </div>
+                  <div className="outreach-channel-meta">
+                    <span>
+                      {view === "today"
+                        ? `${channel.today.reached} complete`
+                        : `${channel.week.reached} complete`}
+                    </span>
+                    <span>
+                      {view === "today"
+                        ? `${dailyEmpty} empty`
+                        : `${channel.weeklyGap} empty`}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mode-tabs outreach-view-tabs">
+            <button
+              type="button"
+              className={`mode-tab${view === "today" ? " active" : ""}`}
+              aria-current={view === "today" ? "page" : undefined}
+              onClick={() => openView("today")}
+            >
+              Today ({report.dueNow})
+            </button>
+            <button
+              type="button"
+              className={`mode-tab${view === "week" ? " active" : ""}`}
+              aria-current={view === "week" ? "page" : undefined}
+              onClick={() => openView("week")}
+            >
+              This week ({report.weeklyPlanned})
+            </button>
+            <button
+              type="button"
+              className="mode-tab"
+              onClick={() => openView("contacts")}
+            >
+              Contacts ({rows.length})
+            </button>
+          </div>
+
+          <section className="outreach-capacity" aria-labelledby="outreach-capacity-title">
+            <div className="outreach-capacity-head">
+              <div>
+                <span className="outreach-eyebrow">Empty outreach slots</span>
+                <h2 id="outreach-capacity-title">
+                  {view === "today" ? "Fill today's channel gaps" : "Fill the weekly pool"}
+                </h2>
+              </div>
+              <p>
+                Add or classify startup and personally important contacts, then assign
+                their preferred channel. Forwarders remain data-only.
+              </p>
+            </div>
+            <div className="outreach-capacity-grid">
+              {report.channels.map((channel) => {
+                const dailyAssigned = Math.min(
+                  channel.dailyTarget,
+                  channel.today.reached + channel.dueNow,
+                );
+                const empty =
+                  view === "today"
+                    ? Math.max(0, channel.dailyTarget - dailyAssigned)
+                    : channel.weeklyGap;
+                const target = view === "today" ? channel.dailyTarget : channel.weeklyTarget;
+
+                return (
+                  <button
+                    key={channel.key}
+                    type="button"
+                    className={`outreach-capacity-slot${empty > 0 ? " empty" : ""}`}
+                    onClick={() => openView("contacts")}
+                  >
+                    <span>
+                      <strong>{channel.label}</strong>
+                      <small>{target - empty}/{target} assigned</small>
+                    </span>
+                    <span className="outreach-capacity-count">
+                      {empty > 0 ? `${empty} empty` : "Quota filled"}
+                    </span>
+                    <span className="outreach-capacity-action">
+                      {empty > 0 ? "Add or classify contacts" : "Review contacts"}
+                      <Icon name="arrow-right" size={13} />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </>
       )}
-
-      <div className="mode-tabs outreach-view-tabs">
-        <button
-          type="button"
-          className={`mode-tab${view === "today" ? " active" : ""}`}
-          onClick={() => setView("today")}
-        >
-          Today ({report.dueNow})
-        </button>
-        <button
-          type="button"
-          className={`mode-tab${view === "week" ? " active" : ""}`}
-          onClick={() => setView("week")}
-        >
-          This week ({report.weeklyPlanned})
-        </button>
-        <button
-          type="button"
-          className={`mode-tab${view === "contacts" ? " active" : ""}`}
-          onClick={() => setView("contacts")}
-        >
-          Contacts ({rows.length})
-        </button>
-      </div>
 
       {view !== "contacts" && (
         <>

@@ -4,6 +4,78 @@
 
 ## Date
 
+2026-07-27
+
+## Branch
+
+crm-status-structure (Conductor workspace phoenix, targets main)
+
+## Commit
+
+not committed
+
+## Task implemented
+
+Made the daily and weekly CRM outreach workflow impossible to miss.
+
+- `/dashboard/crm` now opens on the contact table with a persistent Outreach
+  Desk launcher above it. The launcher shows daily readiness, weekly planning,
+  channel quotas, and separate buttons for the daily queue and weekly pool.
+- Daily and weekly views have stable URLs at `?view=today` and `?view=week`.
+  Search text survives view changes, so the workflow can be bookmarked or
+  reopened without relying on hidden component state.
+- Bookface, LinkedIn, and Email cards expose assigned, completed, and empty
+  capacity. Weekly shortages appear as three explicit empty-slot prompts that
+  take the operator back to add or classify contact data.
+- Channel cards filter the queue. The Open, Reached out, and Later controls are
+  pinned to the right side of the outreach table so the Desk Assistant panel
+  cannot push the actual work controls off-screen.
+- The launcher, channel summaries, empty-slot prompts, and daily task list
+  remain usable at mobile widths.
+
+## Files changed
+
+- `src/lib/crm-view.ts`
+- `src/app/dashboard/crm/page.tsx`
+- `src/components/contact-sheet.tsx`
+- `src/app/globals.css`
+- `scripts/crm-outreach-ui.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:crm`
+- `npx tsc --noEmit`
+- `npm run build`
+- `git diff --check` and changed-text em dash check
+- Browser QA at 1440px and 390px widths with a disposable local Postgres
+  database. Verified contacts, daily, and weekly URLs; quota and empty-slot
+  counts; pinned row actions; mobile layouts; and no console errors.
+
+## Verification failed then resolved
+
+- The first `npm run build` attempt ran while `next dev` was still using the
+  same `.next` directory and failed page-data collection with missing generated
+  route modules. After stopping the dev server and moving the generated cache
+  aside, a clean production build passed. This was build-cache contention, not
+  a source or type error.
+
+## Caveats
+
+- This remains a human-operated workflow. Open launches the configured channel,
+  and Reached out records completion. No Bookface, LinkedIn, or email message is
+  sent automatically.
+- Contacts only fill outreach capacity after they are classified as Personally
+  important or Startups and assigned Bookface, LinkedIn, or Email. Forwarders
+  remain data-only.
+- The branch is two commits behind `origin/main` at the time of this handoff and
+  should be updated before merge if GitHub reports a conflict.
+
+## Previous Update
+
+## Date
+
 2026-07-26
 
 ## Branch
