@@ -4,6 +4,71 @@
 
 ## Date
 
+2026-07-24
+
+## Branch
+
+pattaya (Conductor workspace, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+Desk Assistant grounded in the Incoming RFQs lead board. The floating agent,
+asked on /dashboard/rfq?view=us "what loads arrived in the last 3 days that
+replied to our initial email", answered from stuck jobs and an unrelated
+implicit-focus job because it had no tool over the Meta-lead cards and no idea
+what page it was on. Fixed on three legs:
+
+- **list_lead_board agent tool** (`src/lib/lead-board.ts` pure derivation +
+  `src/lib/lead-board-query.ts` prisma side): lists Meta-lead cards with the
+  page's exact rules - lead quality tier, outreach sequence state (chips:
+  replied/waiting/new/dropped/desk), live inbound reply detection (only after
+  our first outbound), reply excerpts, review URLs. Filters: market US/TR,
+  stage, quality tier, arrived_within_days, replied_within_days, status_scope
+  open/all, free-text q, limit.
+- **Page scope**: the agent dock now passes the page URL to `chatWithAgent`
+  (new optional `scopePage` arg). On /dashboard/rfq the system prompt gets a
+  live board snapshot (stage counts + up to 30 visible cards mirroring the
+  URL's view/quality/stage/status/q filters; TR view gets the sheet rows) and
+  the implicit most-recent-job focus, commercial-brain preflight, and price
+  intel prefetch are suppressed - those were exactly how the agent hijacked
+  board questions onto a different load. SYSTEM prompt routes lead vocabulary
+  to list_lead_board and forbids answering lead questions from job tools.
+- **search_inquiries** now also matches `reference` (DRY... codes were
+  unfindable) and `fromCompany`, and returns reference + receivedAt.
+
+## Files changed
+
+- `src/lib/lead-board.ts` (new), `src/lib/lead-board-query.ts` (new)
+- `src/lib/agent-tools.ts`, `src/lib/agent-chat.ts`
+- `src/components/agent-chat-widget.tsx`
+- `scripts/lead-board.test.ts` (new), `package.json` (test:lead-board)
+
+## Verification passed
+
+- tsc + next build clean; `test:lead-board` (new), `test:lead-outreach`,
+  `test:lead-quality` pass.
+- Read-only run of `loadLeadBoard` against prod (Derya office): Good+open
+  lens returns total 26 / replied 2 / waiting 24 / new 0 / dropped 0 -
+  identical to the live board chips; the original question resolves to 5
+  leads arrived <=3 days with replies (DRY26070377, DRY26070370, DRY26070167,
+  DRY26070166, DRY26070161) with correct excerpts; TR market returns 249.
+
+## Caveats
+
+- Lint baseline errors (thread-actions/whatsapp any-types) pre-date this
+  change; no new lint findings in touched files.
+- The US-view snapshot maps any explicit status tab to status_scope=all
+  (named in the filter label) rather than replicating per-tab SQL.
+- No DB migration.
+
+## Previous Update
+
+## Date
+
 2026-07-22 (later session)
 
 ## Branch
