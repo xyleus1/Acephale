@@ -16,6 +16,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-27 - Outreach execution is a top-level workspace over CRM data
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Daily and weekly outreach was implemented inside the CRM contact
+  page, which made the operating queue look like a secondary CRM mode and made
+  it too easy to miss.
+- Decision: Keep `/dashboard/crm` focused on canonical contact data and expose
+  daily and weekly execution at the top-level `/dashboard/outreach` route.
+  Both routes reuse the same office-scoped `Contact`, `Company`, and
+  `OutreachPlanItem` records, server loader, planner, and mutation actions.
+  Legacy CRM outreach URLs redirect to the new workspace.
+- Rationale: CRM is where relationship data is maintained. Outreach is where
+  the operator executes today's work and reviews weekly capacity. Separate
+  navigation makes that distinction obvious without creating a second contact
+  database or duplicating business logic.
+- Consequences: Contact and outreach mutations revalidate both routes. The
+  Outreach workspace links back to CRM for classification and channel fixes,
+  while CRM provides a direct link into today's Outreach queue. No new schema,
+  automated send behavior, or parallel outreach system is introduced.
+- Revisit when: channel integrations support approved sending and delivery
+  evidence, or outreach execution needs a dedicated agent context.
+
 ### 2026-07-26 - CRM outreach uses a weekly plan over canonical contacts
 
 - Status: accepted
