@@ -186,7 +186,7 @@ assert.ok(line.includes(sentOne.reference));
 assert.ok(line.includes("Sent 1/4"));
 assert.ok(line.includes("Oakland California -> Lome Togo"));
 assert.ok(line.includes("arrived 1d ago"));
-assert.ok(!line.includes("—"), "no em dashes anywhere");
+assert.ok(!line.includes("\u2014"), "no em dashes anywhere");
 
 // ── Email shape guard ────────────────────────────────────────────────────────
 

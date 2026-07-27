@@ -33121,6 +33121,714 @@ html.agent-dock-open .page-container {
   color: var(--text-3);
 }
 
+/* CRM outreach operating loop */
+.outreach-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.outreach-launcher {
+  display: grid;
+  grid-template-columns: auto minmax(300px, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--brand) 32%, var(--border));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.outreach-launcher-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand) 24%, var(--border));
+  border-radius: 10px;
+}
+
+.outreach-launcher-copy h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.outreach-launcher-copy p {
+  max-width: 620px;
+  margin: 5px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.outreach-target-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.outreach-target-pills span {
+  padding: 4px 7px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 10.5px;
+}
+
+.outreach-target-pills strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.outreach-launcher-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(105px, 1fr));
+  gap: 8px;
+}
+
+.outreach-launcher-stats > div {
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.outreach-launcher-stats span,
+.outreach-launcher-stats small {
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+.outreach-launcher-stats strong {
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.outreach-launcher-actions {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.outreach-launcher-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.outreach-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.outreach-eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.outreach-hero h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.outreach-hero p {
+  max-width: 690px;
+  margin: 7px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.outreach-report-line {
+  display: grid;
+  min-width: 210px;
+  gap: 3px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.outreach-report-line strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.outreach-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.outreach-channel-card {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  color: inherit;
+  text-align: left;
+  white-space: normal !important;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.outreach-workspace button.outreach-channel-card:hover,
+.outreach-workspace button.outreach-channel-card.active {
+  color: var(--text) !important;
+  background: color-mix(in srgb, var(--brand) 5%, var(--surface)) !important;
+  border-color: color-mix(in srgb, var(--brand) 34%, var(--border)) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+.outreach-channel-card.active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.outreach-channel-head,
+.outreach-channel-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.outreach-channel-head strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.outreach-channel-head span,
+.outreach-channel-meta {
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.outreach-progress {
+  height: 5px;
+  margin: 10px 0 8px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 99px;
+}
+
+.outreach-progress span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--brand);
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.outreach-pool-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+}
+
+.outreach-pool-warning svg {
+  flex: none;
+  color: var(--brand);
+}
+
+.outreach-capacity {
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.outreach-capacity-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 11px;
+}
+
+.outreach-capacity-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.outreach-capacity-head p {
+  max-width: 590px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.outreach-capacity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.outreach-capacity-slot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+  padding: 10px 11px;
+  color: var(--text-2) !important;
+  text-align: left;
+  white-space: normal !important;
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 7px;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.outreach-workspace button.outreach-capacity-slot:hover {
+  background: var(--surface-3) !important;
+  border-color: color-mix(in srgb, var(--brand) 34%, var(--border)) !important;
+  box-shadow: none !important;
+}
+
+.outreach-capacity-slot.empty {
+  background: color-mix(in srgb, var(--brand) 4%, var(--surface-2)) !important;
+  border-style: dashed !important;
+}
+
+.outreach-capacity-slot:active {
+  transform: none;
+}
+
+.outreach-capacity-slot > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.outreach-capacity-slot strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.outreach-capacity-slot small {
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+.outreach-capacity-count {
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.outreach-capacity-slot.empty .outreach-capacity-count {
+  color: var(--brand);
+}
+
+.outreach-capacity-action {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 5px;
+  color: var(--brand);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.outreach-view-tabs,
+.outreach-category-tabs {
+  margin: 0 !important;
+}
+
+.outreach-toolbar {
+  margin-bottom: 0 !important;
+}
+
+.outreach-channel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.outreach-channel-tabs button {
+  padding: 6px 9px;
+  color: var(--text-2) !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px;
+  box-shadow: none !important;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.outreach-channel-tabs button:hover,
+.outreach-channel-tabs button.active {
+  color: var(--text) !important;
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+.outreach-table-shell {
+  max-height: 66vh;
+}
+
+.outreach-plan-table {
+  min-width: 1280px;
+}
+
+.outreach-plan-table th:first-child {
+  width: 105px;
+}
+
+.outreach-plan-table th:nth-child(2) {
+  width: 95px;
+}
+
+.outreach-plan-table th:nth-child(3) {
+  width: 150px;
+}
+
+.outreach-plan-table th:nth-child(4),
+.outreach-plan-table th:nth-child(5) {
+  width: 155px;
+}
+
+.outreach-plan-table th:nth-child(6) {
+  width: 90px;
+}
+
+.outreach-plan-table th:nth-child(7) {
+  width: 195px;
+}
+
+.outreach-plan-table th:nth-child(8) {
+  width: 130px;
+}
+
+.outreach-plan-table th:last-child {
+  width: 255px;
+}
+
+.outreach-plan-table th:last-child,
+.outreach-plan-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--surface) !important;
+  box-shadow: -12px 0 14px -14px rgba(15, 23, 42, 0.5);
+}
+
+.outreach-plan-table th:last-child {
+  z-index: 3;
+  background: var(--surface-2) !important;
+}
+
+.outreach-plan-table td {
+  vertical-align: middle;
+}
+
+.outreach-plan-table td strong {
+  display: block;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.outreach-plan-table td small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.outreach-status,
+.outreach-importance {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.outreach-status.today {
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--border));
+}
+
+.outreach-status.overdue {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+
+.outreach-status.done {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+
+.outreach-importance.critical {
+  color: var(--danger);
+}
+
+.outreach-importance.high {
+  color: var(--brand);
+}
+
+.outreach-contact-links,
+.outreach-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.outreach-contact-links a {
+  color: var(--brand);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+
+.outreach-contact-links a:hover {
+  text-decoration: underline;
+}
+
+.outreach-contact-links span,
+.outreach-scheduled {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.outreach-row-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.outreach-row-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.outreach-contact-table-shell {
+  max-height: 68vh;
+}
+
+.sheet-table.outreach-contact-table {
+  min-width: 2320px;
+}
+
+@media (max-width: 900px) {
+  .outreach-launcher {
+    grid-template-columns: auto 1fr;
+  }
+
+  .outreach-launcher-stats,
+  .outreach-launcher-actions {
+    grid-column: 2;
+  }
+
+  .outreach-launcher-actions {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .outreach-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .outreach-report-line {
+    padding-top: 12px;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .outreach-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .outreach-capacity-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .outreach-capacity-head p {
+    text-align: left;
+  }
+
+  .outreach-capacity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .outreach-toolbar {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .contact-sheet .outreach-toolbar input.sheet-search {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .outreach-launcher {
+    grid-template-columns: 1fr;
+    padding: 15px;
+  }
+
+  .outreach-launcher-mark {
+    display: none;
+  }
+
+  .outreach-launcher-stats,
+  .outreach-launcher-actions {
+    grid-column: 1;
+  }
+
+  .outreach-launcher-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .outreach-launcher-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .outreach-table-shell {
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .outreach-plan-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .outreach-plan-table thead {
+    display: none;
+  }
+
+  .outreach-plan-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .outreach-plan-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .outreach-plan-table tbody td {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    white-space: normal;
+  }
+
+  .outreach-plan-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-3);
+    font-size: 9.5px;
+    font-weight: 750;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .outreach-plan-table tbody td:nth-child(3),
+  .outreach-plan-table tbody td:nth-child(4),
+  .outreach-plan-table tbody td:nth-child(5),
+  .outreach-plan-table tbody td:nth-child(7),
+  .outreach-plan-table tbody td:nth-child(9) {
+    grid-column: 1 / -1;
+  }
+
+  .outreach-plan-table th:last-child,
+  .outreach-plan-table td:last-child {
+    position: static;
+    box-shadow: none;
+  }
+
+  .outreach-plan-table .outreach-row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .outreach-plan-table .outreach-status,
+  .outreach-plan-table .outreach-importance {
+    justify-self: start;
+  }
+
+  .outreach-plan-table .outreach-empty-row {
+    display: block;
+  }
+
+  .outreach-plan-table .outreach-empty-row td {
+    display: block;
+    padding: 12px;
+  }
+
+  .outreach-plan-table .outreach-empty-row td::before {
+    content: none;
+  }
+}
+
 /* "Add option…" affordance at the bottom of a sheet select menu */
 .sheet-select-menu button.sheet-select-option.sheet-select-create {
   color: var(--text-2) !important;

@@ -17,6 +17,38 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-27 - CRM Outreach Desk entry point and capacity gaps
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: 00c57f6
+- Task: Make the existing daily and weekly CRM outreach loop visible from the
+  contact-first CRM screen, expose per-channel empty capacity, and keep send
+  controls usable when the agent panel narrows the page.
+- Implementation: `/dashboard/crm` now defaults to Contacts and renders a
+  persistent Outreach Desk launcher. Daily and weekly panels are URL-backed by
+  `src/lib/crm-view.ts`; their channel cards filter the queue; three explicit
+  capacity slots report missing Bookface, LinkedIn, and Email contacts and
+  return to contact classification. The outreach action column is sticky on
+  desktop and returns to normal card flow on mobile.
+- Verification: Prisma validation and generation, `npm run test:crm`,
+  post-merge `npm run test:lead-board`, `npx tsc --noEmit`, `npm run build`,
+  `git diff --check`, changed-text em dash check, and browser QA at desktop and
+  mobile widths against a disposable local Postgres database. Contacts, daily,
+  and weekly views rendered without console errors.
+- Failed/skipped checks: The first production build collided with a running
+  `next dev` process and lost generated route files. The dev server was stopped,
+  its `.next` cache was moved aside, and the clean rerun passed. The first
+  post-merge validation invocation omitted `DATABASE_URL`, and the first
+  post-merge TypeScript pass used a stale generated Prisma client. Supplying the
+  disposable database URL and rerunning `npm run db:generate` resolved both.
+- Caveats: The workflow records manual completion and never auto-sends. Contacts
+  need an eligible category and assigned outreach channel before they can fill
+  capacity. Current `origin/main` was merged and the combined tree was
+  reverified before push.
+- Follow-up: Merge current main, deploy the planner migration, then populate the
+  visible weekly gaps until Bookface reaches 140 and LinkedIn and Email reach
+  210 each.
+
 ### 2026-07-03 - Internal CRM Relationship OS V1
 
 - Branch: feature/internal-crm-v1
@@ -2176,6 +2208,39 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: SMS escalation via Twilio (needs account + A2P registration);
   bounce parsing from the rfq@ inbox once connected.
 
+### 2026-07-26 - CRM daily outreach operating loop
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: not committed
+- Task: Rebuild the CRM contact sheet around Status, Importance, Category,
+  Contact, Company, and contact details. Add a deterministic weekly pool and
+  daily promotion loop for 20 Bookface, 30 LinkedIn, and 30 Email contacts,
+  with explicit completion and daily progress reporting.
+- Files changed: `prisma/schema.prisma`,
+  `prisma/migrations/20260726000100_crm_outreach_planner/migration.sql`,
+  `src/lib/contact-fields.ts`, `src/lib/crm-outreach.ts`,
+  `src/lib/crm-outreach-plan.ts`, `src/app/dashboard/crm/page.tsx`,
+  `src/app/dashboard/crm/actions.ts`, `src/components/contact-sheet.tsx`,
+  `src/app/globals.css`, `scripts/crm-sheet.test.ts`,
+  `scripts/crm-outreach.test.ts`, `scripts/crm-outreach-db.test.ts`,
+  `package.json`, and docs.
+- Verification: `npx prisma validate`, `npm run db:generate`,
+  `npm run test:crm`, planner tests against all migrations on disposable
+  Postgres, `npx tsc --noEmit`, `npm run build`, documentation checks,
+  `git diff --check`, and desktop/mobile browser QA passed. Browser QA verified
+  exact quota counts, required column order, manual completion without daily
+  refill, forwarder exclusion, mobile action visibility, and no console errors.
+- Failed/skipped checks: Targeted ESLint could not start because this repository
+  has ESLint 9 but no flat `eslint.config.*`. No unrelated lint configuration
+  was added. The non-strict tenant-scope audit exited successfully but reported
+  eight pre-existing findings in unrelated files: five high and three medium.
+- Caveats: Deploy the new Prisma migration before this build. Existing contacts
+  are not eligible until they have a Personally important or Startups category
+  and a Bookface, LinkedIn, or Email channel. Outreach completion records a
+  touch but never sends a message.
+- Follow-up: Populate the weekly pool to 140 Bookface, 210 LinkedIn, and 210
+  Email contacts, then use the daily report to decide where source quality or
+  response tracking needs improvement.
 ### 2026-07-24 - Desk Assistant grounded in the Incoming RFQs lead board
 
 - Branch: pattaya (Conductor workspace, targets main)

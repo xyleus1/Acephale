@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-26 - CRM outreach uses a weekly plan over canonical contacts
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Founder outreach needs a repeatable daily operating loop without
+  creating a second contact database or implying that social and email messages
+  were sent automatically.
+- Decision: Keep `Contact` and `Company` as canonical relationship truth. Use
+  office-scoped `OutreachPlanItem` rows to maintain seven days of capacity and
+  promote daily work at fixed channel limits: 20 Bookface, 30 LinkedIn, and 30
+  Email. Only Personally important and Startup contacts with an assigned
+  channel are eligible. Forwarders are data-only. Operators must explicitly
+  mark outreach complete; the action records an activity and touch timestamps
+  but does not send a message.
+- Rationale: A finite queue makes progress measurable while preserving tenant
+  isolation, canonical CRM records, and human control over external contact.
+  Keeping weekly planning separate from contact status also provides an
+  auditable history without overloading the contact record.
+- Consequences: Weekly pool gaps are visible, overdue tasks consume the next
+  day's channel capacity, and completing a task does not silently refill beyond
+  that day's quota. The planner ranks importance deterministically before age.
+- Revisit when: channel integrations can prove delivery and an approved
+  automation policy exists for outbound outreach.
+
 ### 2026-07-03 - CRM relationship OS reuses company/contact truth
 
 - Status: accepted

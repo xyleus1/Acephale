@@ -4,6 +4,149 @@
 
 ## Date
 
+2026-07-27
+
+## Branch
+
+crm-status-structure (Conductor workspace phoenix, targets main)
+
+## Commit
+
+00c57f6
+
+## Task implemented
+
+Made the daily and weekly CRM outreach workflow impossible to miss.
+
+- `/dashboard/crm` now opens on the contact table with a persistent Outreach
+  Desk launcher above it. The launcher shows daily readiness, weekly planning,
+  channel quotas, and separate buttons for the daily queue and weekly pool.
+- Daily and weekly views have stable URLs at `?view=today` and `?view=week`.
+  Search text survives view changes, so the workflow can be bookmarked or
+  reopened without relying on hidden component state.
+- Bookface, LinkedIn, and Email cards expose assigned, completed, and empty
+  capacity. Weekly shortages appear as three explicit empty-slot prompts that
+  take the operator back to add or classify contact data.
+- Channel cards filter the queue. The Open, Reached out, and Later controls are
+  pinned to the right side of the outreach table so the Desk Assistant panel
+  cannot push the actual work controls off-screen.
+- The launcher, channel summaries, empty-slot prompts, and daily task list
+  remain usable at mobile widths.
+
+## Files changed
+
+- `src/lib/crm-view.ts`
+- `src/app/dashboard/crm/page.tsx`
+- `src/components/contact-sheet.tsx`
+- `src/app/globals.css`
+- `scripts/crm-outreach-ui.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npx prisma validate` and `npm run db:generate`
+- `npm run test:crm`
+- `npm run test:lead-board` after merging current main
+- `npx tsc --noEmit`
+- `npm run build`
+- `git diff --check` and changed-text em dash check
+- Browser QA at 1440px and 390px widths with a disposable local Postgres
+  database. Verified contacts, daily, and weekly URLs; quota and empty-slot
+  counts; pinned row actions; mobile layouts; and no console errors.
+
+## Verification failed then resolved
+
+- The first `npm run build` attempt ran while `next dev` was still using the
+  same `.next` directory and failed page-data collection with missing generated
+  route modules. After stopping the dev server and moving the generated cache
+  aside, a clean production build passed. This was build-cache contention, not
+  a source or type error.
+- The first post-merge Prisma validation invocation omitted `DATABASE_URL`, and
+  the first post-merge TypeScript pass used the pre-merge generated Prisma
+  client. Validation passed with the disposable local database URL, then
+  `npm run db:generate` refreshed the client and the combined TypeScript and
+  production-build checks passed.
+
+## Caveats
+
+- This remains a human-operated workflow. Open launches the configured channel,
+  and Reached out records completion. No Bookface, LinkedIn, or email message is
+  sent automatically.
+- Contacts only fill outreach capacity after they are classified as Personally
+  important or Startups and assigned Bookface, LinkedIn, or Email. Forwarders
+  remain data-only.
+- Current `origin/main` was merged after the CRM implementation commit. The
+  combined tree was reverified before push.
+
+## Previous Update
+
+## Date
+
+2026-07-26
+
+## Branch
+
+crm-status-structure (Conductor workspace phoenix, targets main)
+
+## Commit
+
+not committed
+
+## Task implemented
+
+CRM outreach operating loop with a finite daily queue and weekly source pool.
+
+- The CRM now leads with Status, Importance, Category, Contact, Company, and
+  contact details. Categories are Personally important, Startups, Forwarders,
+  and Other. Forwarders remain data-only and are excluded from the outreach
+  queue.
+- The deterministic planner maintains weekly channel pools at seven days of
+  capacity and promotes at most 20 Bookface, 30 LinkedIn, and 30 Email contacts
+  each day. Importance controls promotion order. Unfinished work carries
+  forward and consumes the next day's capacity.
+- Operators explicitly mark a contact Reached out or defer it with Later.
+  Completion creates an office-scoped activity and best-effort memory event,
+  updates contact and company touch timestamps, and never sends a message.
+- The CRM header reports today, yesterday, and current-week progress. Channel
+  cards show reached, due, weekly planned, and weekly target counts. A visible
+  warning explains any weekly pool shortfall.
+- Mobile daily rows render as complete task cards so contact details and
+  completion actions do not require hidden horizontal scrolling.
+
+## Files changed
+
+- `prisma/schema.prisma`,
+  `prisma/migrations/20260726000100_crm_outreach_planner/migration.sql`
+- `src/lib/contact-fields.ts`, `src/lib/crm-outreach.ts`,
+  `src/lib/crm-outreach-plan.ts`
+- `src/app/dashboard/crm/page.tsx`, `src/app/dashboard/crm/actions.ts`
+- `src/components/contact-sheet.tsx`, `src/app/globals.css`
+- `scripts/crm-sheet.test.ts`, `scripts/crm-outreach.test.ts`,
+  `scripts/crm-outreach-db.test.ts`, `package.json`, and docs
+
+## Verification passed
+
+- Prisma validate and client generation.
+- CRM unit tests, planner tests against all migrations on disposable Postgres,
+  TypeScript, production build, documentation checks, and diff checks.
+- Browser QA at desktop and mobile widths, including login, queue totals,
+  manual completion, no quota backfill after completion, contact column order,
+  forwarder exclusion, and console errors.
+
+## Caveats
+
+- Deploy the new Prisma migration before serving this build.
+- Existing contacts need an outreach channel and an eligible category before
+  the planner can use them. A short weekly pool is reported honestly.
+- ESLint 9 cannot run in this repository because no flat `eslint.config.*`
+  exists. This task does not add unrelated lint configuration.
+- The non-strict tenant-scope audit still reports eight pre-existing queries
+  in unrelated files: five high and three medium. None are in this change.
+## Previous Update
+
+## Date
+
 2026-07-24
 
 ## Branch
