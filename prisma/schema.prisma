@@ -132,6 +132,7 @@ model Office {
   marketSignalFeedback MarketSignalFeedback[]
   marketIngestionRuns  MarketIngestionRun[]
   auditLogs            AuditLog[]
+  outreachPlanItems    OutreachPlanItem[]
 
   @@unique([name])
 }
@@ -212,7 +213,7 @@ model Company {
   crmCategory          String    @default("customer")
   crmStage             String    @default("new")
   crmPriority          String    @default("medium")
-  relationshipStrength String    @default("unknown")
+  relationshipStrength String  @default("unknown")
   crmSource            String    @default("manual")
   sourceRefs           Json?
   brainSlug            String?
@@ -265,12 +266,15 @@ model Contact {
   isApprovedForInbox Boolean   @default(false)
   approvedForInboxAt DateTime?
   linkedinUrl        String?
+  bookfaceUrl        String?
   location           String?
   relationshipType   String    @default("buyer")
   leverageLevel      String    @default("medium")
-  relationshipStrength String  @default("unknown")
-  category           String? // customer / potential_customer / logistics_contact / high_value / other
-  status             String? // not_contacted / contacted / in_talks / active / cold
+  relationshipStrength String    @default("unknown")
+  importance         String    @default("medium") // critical / high / medium / low
+  category           String? // personally_important / startup / forwarder / other
+  status             String? // not_contacted / queued / reached_out / replied / follow_up / active / not_a_fit
+  outreachChannel    String? // bookface / linkedin / email
   ownerLabel         String?
   sourceRefs         Json?
   brainSlug          String?
@@ -286,6 +290,7 @@ model Contact {
   tasks            Task[]
   crmOpportunities CrmOpportunity[]
   emailThreads     EmailThread[]
+  outreachPlanItems OutreachPlanItem[]
 
   @@index([companyId])
   @@index([companyId, isApprovedForInbox])
@@ -293,6 +298,32 @@ model Contact {
   @@index([companyId, leverageLevel])
   @@index([companyId, nextActionAt])
   @@index([category])
+  @@index([importance])
+  @@index([outreachChannel, status])
+}
+
+// One office-scoped weekly outreach slot for a contact. Contacts remain the
+// source of truth; this model only records queue membership and completion.
+model OutreachPlanItem {
+  id           String    @id @default(cuid())
+  officeId     String
+  contactId    String
+  weekStart    DateTime
+  channel      String
+  status       String    @default("WEEKLY") // WEEKLY / TODAY / REACHED_OUT / SKIPPED
+  scheduledFor DateTime?
+  reachedOutAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([officeId, contactId, weekStart])
+  @@index([officeId, weekStart, channel, status])
+  @@index([officeId, scheduledFor, status])
+  @@index([officeId, reachedOutAt])
 }
 
 // Multiple owners per company (requested)

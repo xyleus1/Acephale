@@ -1,44 +1,109 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   createContactAction,
+  deferOutreachAction,
   deleteContactAction,
+  markOutreachReachedAction,
   updateContactAction,
   type ContactPatch,
 } from "@/app/dashboard/crm/actions";
 import {
+  CONTACT_CATEGORIES,
+  CONTACT_CONTEXTS,
+  CONTACT_IMPORTANCE_LEVELS,
   CONTACT_STATUSES,
-  CONTACT_TYPES,
-  RELATIONSHIP_LEVELS,
+  OUTREACH_CHANNEL_OPTIONS,
   type ContactRow,
 } from "@/lib/contact-fields";
+import {
+  OUTREACH_CHANNELS,
+  buildOutreachReport,
+  formatOutreachDateKey,
+  outreachDateKey,
+  type OutreachPlanRow,
+} from "@/lib/crm-outreach";
 import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { Icon } from "@/components/icon";
 
+type View = "today" | "week" | "contacts";
 type SortKey =
+  | "status"
+  | "importance"
+  | "category"
   | "name"
   | "company"
-  | "type"
-  | "status"
-  | "relationship"
+  | "context"
+  | "title"
+  | "outreachChannel"
   | "email"
+  | "bookfaceUrl"
+  | "linkedinUrl"
   | "phone"
   | "location"
   | "lastTouchAt";
 
 const COLUMNS: Array<{ key: SortKey | "notes"; label: string; width?: number }> = [
-  { key: "name", label: "Name", width: 140 },
-  { key: "company", label: "Company", width: 140 },
-  { key: "type", label: "Type", width: 135 },
-  { key: "status", label: "Status", width: 110 },
-  { key: "relationship", label: "Relationship", width: 105 },
+  { key: "status", label: "Status", width: 120 },
+  { key: "importance", label: "Importance", width: 100 },
+  { key: "category", label: "Category", width: 155 },
+  { key: "name", label: "Contact", width: 150 },
+  { key: "company", label: "Company", width: 150 },
+  { key: "context", label: "Context", width: 135 },
+  { key: "title", label: "Title", width: 135 },
+  { key: "outreachChannel", label: "Channel", width: 105 },
   { key: "email", label: "Email", width: 210 },
-  { key: "phone", label: "Phone", width: 115 },
-  { key: "location", label: "Location", width: 110 },
-  { key: "lastTouchAt", label: "Last contacted", width: 105 },
+  { key: "bookfaceUrl", label: "Bookface", width: 185 },
+  { key: "linkedinUrl", label: "LinkedIn", width: 185 },
+  { key: "phone", label: "Phone", width: 120 },
+  { key: "location", label: "Location", width: 115 },
+  { key: "lastTouchAt", label: "Last reached", width: 110 },
   { key: "notes", label: "Notes" },
 ];
+
+type Draft = Record<
+  | "status"
+  | "importance"
+  | "category"
+  | "name"
+  | "company"
+  | "context"
+  | "title"
+  | "outreachChannel"
+  | "email"
+  | "bookfaceUrl"
+  | "linkedinUrl"
+  | "phone"
+  | "location"
+  | "notes",
+  string
+>;
+
+const EMPTY_DRAFT: Draft = {
+  status: "not_contacted",
+  importance: "medium",
+  category: "startup",
+  name: "",
+  company: "",
+  context: "founder",
+  title: "",
+  outreachChannel: "",
+  email: "",
+  bookfaceUrl: "",
+  linkedinUrl: "",
+  phone: "",
+  location: "",
+  notes: "",
+};
+
+const IMPORTANCE_RANK: ReadonlyMap<string, number> = new Map(
+  CONTACT_IMPORTANCE_LEVELS.map(([value], index) => [value, index]),
+);
+const CHANNEL_RANK: ReadonlyMap<string, number> = new Map(
+  OUTREACH_CHANNELS.map((channel, index) => [channel.key, index]),
+);
 
 function fmtLastTouch(iso: string | null): string {
   if (!iso) return "Never";
@@ -46,108 +111,252 @@ function fmtLastTouch(iso: string | null): string {
   if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-type Draft = Record<"name" | "company" | "type" | "status" | "relationship" | "email" | "phone" | "location" | "notes", string>;
-
-const EMPTY_DRAFT: Draft = {
-  name: "",
-  company: "",
-  type: "",
-  status: "",
-  relationship: "unknown",
-  email: "",
-  phone: "",
-  location: "",
-  notes: "",
-};
-
-// Cells revert per field on a failed save: map patch keys to the field used in cell keys.
 function patchFields(patch: ContactPatch): string[] {
-  return Object.keys(patch).map((k) => (k === "companyName" ? "company" : k));
+  return Object.keys(patch).map((key) => (key === "companyName" ? "company" : key));
+}
+
+function safeExternalUrl(value: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function contactAccessHref(contact: ContactRow, channel: string): string | null {
+  if (channel === "email") return contact.email ? `mailto:${contact.email}` : null;
+  if (channel === "linkedin") return safeExternalUrl(contact.linkedinUrl);
+  if (channel === "bookface") return safeExternalUrl(contact.bookfaceUrl);
+  return null;
+}
+
+function planStatusLabel(item: OutreachPlanRow, todayKey: string): string {
+  if (item.status === "REACHED_OUT") return "Reached out";
+  if (item.status === "TODAY" && item.scheduledForKey && item.scheduledForKey < todayKey) {
+    return "Overdue";
+  }
+  if (item.status === "TODAY") return "Today";
+  return "This week";
+}
+
+function planStatusClass(item: OutreachPlanRow, todayKey: string): string {
+  if (item.status === "REACHED_OUT") return "done";
+  if (item.status === "TODAY" && item.scheduledForKey && item.scheduledForKey < todayKey) {
+    return "overdue";
+  }
+  if (item.status === "TODAY") return "today";
+  return "weekly";
 }
 
 export function ContactSheet({
   initialRows,
   companies,
   initialQuery,
+  initialPlan,
 }: {
   initialRows: ContactRow[];
   companies: string[];
   initialQuery: string;
+  initialPlan: OutreachPlanRow[];
 }) {
+  const router = useRouter();
   const [rows, setRows] = useState(initialRows);
+  const [plan, setPlan] = useState(initialPlan);
+  const [view, setView] = useState<View>("today");
   const [q, setQ] = useState(initialQuery);
-  const [typeTab, setTypeTab] = useState<string>("all");
+  const [categoryTab, setCategoryTab] = useState<string>("all");
+  const [channelTab, setChannelTab] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyCounts, setBusyCounts] = useState<Record<string, number>>({});
+  const [planBusy, setPlanBusy] = useState<Record<string, boolean>>({});
   const [revisions, setRevisions] = useState<Record<string, number>>({});
   const [, startTransition] = useTransition();
 
-  const counts = useMemo(() => {
-    const byType: Record<string, number> = {};
+  useEffect(() => {
+    setRows(initialRows);
+  }, [initialRows]);
+
+  useEffect(() => {
+    setPlan(initialPlan);
+  }, [initialPlan]);
+
+  const report = useMemo(() => buildOutreachReport(plan), [plan]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
     for (const row of rows) {
-      const key = row.type && CONTACT_TYPES.some(([v]) => v === row.type) ? row.type : "none";
-      byType[key] = (byType[key] ?? 0) + 1;
+      const known = CONTACT_CATEGORIES.some(([value]) => value === row.category);
+      const key = !row.category ? "none" : known ? row.category : "legacy";
+      counts[key] = (counts[key] ?? 0) + 1;
     }
-    return byType;
+    return counts;
   }, [rows]);
 
-  const visible = useMemo(() => {
+  const visibleContacts = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let out = rows;
-    if (typeTab === "none") out = out.filter((r) => !r.type || !CONTACT_TYPES.some(([v]) => v === r.type));
-    else if (typeTab !== "all") out = out.filter((r) => r.type === typeTab);
+    let output = rows;
+    if (categoryTab === "none") output = output.filter((row) => !row.category);
+    else if (categoryTab === "legacy") {
+      output = output.filter(
+        (row) => row.category && !CONTACT_CATEGORIES.some(([value]) => value === row.category),
+      );
+    } else if (categoryTab !== "all") {
+      output = output.filter((row) => row.category === categoryTab);
+    }
     if (needle) {
-      out = out.filter((r) =>
-        [r.name, r.company, r.email, r.phone, r.location, r.notes]
-          .some((v) => v && v.toLowerCase().includes(needle))
+      output = output.filter((row) =>
+        [
+          row.status,
+          row.importance,
+          row.category,
+          row.name,
+          row.company,
+          row.context,
+          row.title,
+          row.outreachChannel,
+          row.email,
+          row.linkedinUrl,
+          row.bookfaceUrl,
+          row.phone,
+          row.location,
+          row.notes,
+        ].some((value) => value?.toLowerCase().includes(needle)),
       );
     }
     if (sortKey) {
-      out = [...out].sort((a, b) => {
+      output = [...output].sort((left, right) => {
         if (sortKey === "lastTouchAt") {
-          const av = a.lastTouchAt ? Date.parse(a.lastTouchAt) : null;
-          const bv = b.lastTouchAt ? Date.parse(b.lastTouchAt) : null;
-          if (av === null && bv === null) return 0;
-          if (av === null) return 1;
-          if (bv === null) return -1;
-          return (av - bv) * sortDir;
+          const leftTime = left.lastTouchAt ? Date.parse(left.lastTouchAt) : null;
+          const rightTime = right.lastTouchAt ? Date.parse(right.lastTouchAt) : null;
+          if (leftTime === null && rightTime === null) return 0;
+          if (leftTime === null) return 1;
+          if (rightTime === null) return -1;
+          return (leftTime - rightTime) * sortDir;
         }
-        const av = (a[sortKey] ?? "").toLowerCase();
-        const bv = (b[sortKey] ?? "").toLowerCase();
-        if (!av && !bv) return 0;
-        if (!av) return 1;
-        if (!bv) return -1;
-        return av.localeCompare(bv) * sortDir;
+        if (sortKey === "importance") {
+          return (
+            ((IMPORTANCE_RANK.get(left.importance) ?? 2) -
+              (IMPORTANCE_RANK.get(right.importance) ?? 2)) *
+            sortDir
+          );
+        }
+        const leftValue = (left[sortKey] ?? "").toLowerCase();
+        const rightValue = (right[sortKey] ?? "").toLowerCase();
+        if (!leftValue && !rightValue) return 0;
+        if (!leftValue) return 1;
+        if (!rightValue) return -1;
+        return leftValue.localeCompare(rightValue) * sortDir;
       });
     }
-    return out;
-  }, [rows, q, typeTab, sortKey, sortDir]);
+    return output;
+  }, [rows, q, categoryTab, sortKey, sortDir]);
+
+  const filteredPlan = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return plan.filter((item) => {
+      if (channelTab !== "all" && item.channel !== channelTab) return false;
+      if (!needle) return true;
+      return [
+        item.contact.name,
+        item.contact.company,
+        item.contact.category,
+        item.contact.email,
+        item.contact.title,
+        item.channel,
+      ].some((value) => value?.toLowerCase().includes(needle));
+    });
+  }, [plan, q, channelTab]);
+
+  const todayRows = useMemo(
+    () =>
+      filteredPlan
+        .filter((item) => {
+          if (
+            item.status === "TODAY" &&
+            item.scheduledForKey &&
+            item.scheduledForKey <= report.todayKey
+          ) {
+            return true;
+          }
+          return (
+            item.status === "REACHED_OUT" &&
+            item.reachedOutAt != null &&
+            outreachDateKey(new Date(item.reachedOutAt)) === report.todayKey
+          );
+        })
+        .sort((left, right) => {
+          const status = Number(left.status === "REACHED_OUT") - Number(right.status === "REACHED_OUT");
+          if (status !== 0) return status;
+          const channel =
+            (CHANNEL_RANK.get(left.channel as "bookface" | "linkedin" | "email") ?? 99) -
+            (CHANNEL_RANK.get(right.channel as "bookface" | "linkedin" | "email") ?? 99);
+          if (channel !== 0) return channel;
+          const importance =
+            (IMPORTANCE_RANK.get(left.contact.importance) ?? 2) -
+            (IMPORTANCE_RANK.get(right.contact.importance) ?? 2);
+          if (importance !== 0) return importance;
+          return left.contact.company.localeCompare(right.contact.company);
+        }),
+    [filteredPlan, report.todayKey],
+  );
+
+  const weekRows = useMemo(
+    () =>
+      filteredPlan
+        .filter(
+          (item) =>
+            item.weekStartKey === report.weekStartKey &&
+            item.status !== "SKIPPED",
+        )
+        .sort((left, right) => {
+          const channel =
+            (CHANNEL_RANK.get(left.channel as "bookface" | "linkedin" | "email") ?? 99) -
+            (CHANNEL_RANK.get(right.channel as "bookface" | "linkedin" | "email") ?? 99);
+          if (channel !== 0) return channel;
+          const leftDate = left.scheduledForKey ?? "9999-12-31";
+          const rightDate = right.scheduledForKey ?? "9999-12-31";
+          if (leftDate !== rightDate) return leftDate.localeCompare(rightDate);
+          const importance =
+            (IMPORTANCE_RANK.get(left.contact.importance) ?? 2) -
+            (IMPORTANCE_RANK.get(right.contact.importance) ?? 2);
+          if (importance !== 0) return importance;
+          return left.contact.company.localeCompare(right.contact.company);
+        }),
+    [filteredPlan, report.weekStartKey],
+  );
 
   function flash(message: string) {
     setError(message);
-    setTimeout(() => setError(null), 6000);
+    window.setTimeout(() => setError(null), 6000);
   }
 
   function markBusy(id: string, busy: boolean) {
-    setBusyCounts((prev) => {
-      const next = { ...prev };
-      const n = (next[id] ?? 0) + (busy ? 1 : -1);
-      if (n <= 0) delete next[id];
-      else next[id] = n;
+    setBusyCounts((previous) => {
+      const next = { ...previous };
+      const count = (next[id] ?? 0) + (busy ? 1 : -1);
+      if (count <= 0) delete next[id];
+      else next[id] = count;
       return next;
     });
   }
 
   function revertCells(rowId: string, fields: string[]) {
-    setRevisions((prev) => {
-      const next = { ...prev };
+    setRevisions((previous) => {
+      const next = { ...previous };
       for (const field of fields) {
         const key = `${rowId}:${field}`;
         next[key] = (next[key] ?? 0) + 1;
@@ -160,15 +369,25 @@ export function ContactSheet({
     markBusy(row.id, true);
     startTransition(async () => {
       try {
-        const res = await updateContactAction(row.id, patch);
-        if ("error" in res) {
-          flash(res.error);
+        const result = await updateContactAction(row.id, patch);
+        if ("error" in result) {
+          flash(result.error);
           revertCells(row.id, patchFields(patch));
           return;
         }
-        setRows((prev) => prev.map((r) => (r.id === row.id ? res.row : r)));
+        setRows((previous) =>
+          previous.map((candidate) => (candidate.id === row.id ? result.row : candidate)),
+        );
+        if (
+          patch.outreachChannel !== undefined ||
+          patch.status !== undefined ||
+          patch.importance !== undefined ||
+          patch.category !== undefined
+        ) {
+          router.refresh();
+        }
       } catch {
-        flash("Could not save - check your connection and try again.");
+        flash("Could not save. Check your connection and try again.");
         revertCells(row.id, patchFields(patch));
       } finally {
         markBusy(row.id, false);
@@ -177,8 +396,8 @@ export function ContactSheet({
   }
 
   function commitCompany(row: ContactRow, name: string) {
-    const known = companies.some((c) => c.toLowerCase() === name.toLowerCase());
-    if (!known && !window.confirm(`“${name}” is a new company - create it?`)) {
+    const known = companies.some((company) => company.toLowerCase() === name.toLowerCase());
+    if (!known && !window.confirm(`"${name}" is a new company. Create it?`)) {
       revertCells(row.id, ["company"]);
       return;
     }
@@ -190,14 +409,15 @@ export function ContactSheet({
     markBusy(row.id, true);
     startTransition(async () => {
       try {
-        const res = await deleteContactAction(row.id);
-        if ("error" in res) {
-          flash(res.error);
+        const result = await deleteContactAction(row.id);
+        if ("error" in result) {
+          flash(result.error);
           return;
         }
-        setRows((prev) => prev.filter((r) => r.id !== row.id));
+        setRows((previous) => previous.filter((candidate) => candidate.id !== row.id));
+        setPlan((previous) => previous.filter((item) => item.contactId !== row.id));
       } catch {
-        flash("Could not delete - check your connection and try again.");
+        flash("Could not delete. Check your connection and try again.");
       } finally {
         markBusy(row.id, false);
       }
@@ -216,225 +436,257 @@ export function ContactSheet({
     }
     setSavingDraft(true);
     const payload: ContactPatch = {
+      status: draft.status,
+      importance: draft.importance,
+      category: draft.category,
       name: draft.name,
       companyName: draft.company,
-      type: draft.type,
-      status: draft.status,
-      relationship: draft.relationship,
+      context: draft.context,
+      title: draft.title,
+      outreachChannel: draft.outreachChannel,
       email: draft.email,
+      bookfaceUrl: draft.bookfaceUrl,
+      linkedinUrl: draft.linkedinUrl,
       phone: draft.phone,
       location: draft.location,
       notes: draft.notes,
     };
     startTransition(async () => {
       try {
-        const res = await createContactAction(payload);
-        if ("error" in res) {
-          flash(res.error);
+        const result = await createContactAction(payload);
+        if ("error" in result) {
+          flash(result.error);
           return;
         }
-        setRows((prev) => [res.row, ...prev]);
+        setRows((previous) => [result.row, ...previous]);
         setDraft(null);
+        router.refresh();
       } catch {
-        flash("Could not add the contact - check your connection and try again.");
+        flash("Could not add the contact. Check your connection and try again.");
       } finally {
         setSavingDraft(false);
       }
     });
   }
 
-  function header(col: (typeof COLUMNS)[number]) {
-    const sortable = col.key !== "notes";
-    const active = sortKey === col.key;
+  function markReached(item: OutreachPlanRow) {
+    setPlanBusy((previous) => ({ ...previous, [item.id]: true }));
+    startTransition(async () => {
+      try {
+        const result = await markOutreachReachedAction(item.id);
+        if ("error" in result) {
+          flash(result.error);
+          return;
+        }
+        const reachedOutAt = result.reachedOutAt ?? new Date().toISOString();
+        setPlan((previous) =>
+          previous.map((candidate) =>
+            candidate.id === item.id
+              ? {
+                  ...candidate,
+                  status: "REACHED_OUT",
+                  reachedOutAt,
+                  contact: { ...candidate.contact, status: "reached_out", lastTouchAt: reachedOutAt },
+                }
+              : candidate,
+          ),
+        );
+        setRows((previous) =>
+          previous.map((candidate) =>
+            candidate.id === item.contactId
+              ? { ...candidate, status: "reached_out", lastTouchAt: reachedOutAt }
+              : candidate,
+          ),
+        );
+        router.refresh();
+      } catch {
+        flash("Could not mark this outreach complete. Try again.");
+      } finally {
+        setPlanBusy((previous) => {
+          const next = { ...previous };
+          delete next[item.id];
+          return next;
+        });
+      }
+    });
+  }
+
+  function defer(item: OutreachPlanRow) {
+    setPlanBusy((previous) => ({ ...previous, [item.id]: true }));
+    startTransition(async () => {
+      try {
+        const result = await deferOutreachAction(item.id);
+        if ("error" in result) {
+          flash(result.error);
+          return;
+        }
+        setPlan((previous) =>
+          previous.map((candidate) =>
+            candidate.id === item.id
+              ? {
+                  ...candidate,
+                  status: "WEEKLY",
+                  scheduledForKey: result.scheduledForKey ?? candidate.scheduledForKey,
+                }
+              : candidate,
+          ),
+        );
+        router.refresh();
+      } catch {
+        flash("Could not defer this contact. Try again.");
+      } finally {
+        setPlanBusy((previous) => {
+          const next = { ...previous };
+          delete next[item.id];
+          return next;
+        });
+      }
+    });
+  }
+
+  function header(column: (typeof COLUMNS)[number]) {
+    const sortable = column.key !== "notes";
+    const active = sortKey === column.key;
     return (
       <th
-        key={col.key}
+        key={column.key}
         style={sortable ? undefined : { cursor: "default" }}
         className={active ? "active" : undefined}
         onClick={
           sortable
             ? () => {
-                if (active) setSortDir((d) => (d === 1 ? -1 : 1));
+                if (active) setSortDir((direction) => (direction === 1 ? -1 : 1));
                 else {
-                  setSortKey(col.key as SortKey);
+                  setSortKey(column.key as SortKey);
                   setSortDir(1);
                 }
               }
             : undefined
         }
       >
-        {col.label}
+        {column.label}
         {active ? (sortDir === 1 ? " ↑" : " ↓") : ""}
       </th>
     );
   }
 
-  const tabs: Array<[string, string]> = [
-    ["all", `All (${rows.length})`],
-    ...CONTACT_TYPES.map(([v, label]) => [v, `${label} (${counts[v] ?? 0})`] as [string, string]),
-    ...(counts["none"] ? ([["none", `Uncategorized (${counts["none"]})`]] as Array<[string, string]>) : []),
-  ];
-
-  return (
-    <div className="contact-sheet">
-      <div className="mode-tabs" style={{ marginBottom: 12 }}>
-        {tabs.map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            className={`mode-tab${typeTab === key ? " active" : ""}`}
-            onClick={() => setTypeTab(key)}
-          >
-            {label}
-          </button>
-        ))}
+  function renderContactLinks(contact: ContactRow) {
+    const bookface = safeExternalUrl(contact.bookfaceUrl);
+    const linkedin = safeExternalUrl(contact.linkedinUrl);
+    return (
+      <div className="outreach-contact-links">
+        {contact.email && <a href={`mailto:${contact.email}`}>Email</a>}
+        {linkedin && <a href={linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
+        {bookface && <a href={bookface} target="_blank" rel="noreferrer">Bookface</a>}
+        {!contact.email && !linkedin && !bookface && <span>No link</span>}
       </div>
+    );
+  }
 
-      <div className="sheet-toolbar">
-        <input
-          className="sheet-search"
-          placeholder="Search name, company, email…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        {error && <span className="sheet-error">{error}</span>}
-        <button type="button" className="btn btn-sm" onClick={() => setDraft(draft ? null : { ...EMPTY_DRAFT })}>
-          <Icon name="plus" size={13} strokeWidth={2.5} /> Add contact
-        </button>
-      </div>
-
-      <datalist id="crm-company-options">
-        {companies.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
-
-      <div className="card table-shell" style={{ maxHeight: "72vh" }}>
-        <table className="data-table sheet-table">
-          <colgroup>
-            {COLUMNS.map((col) => (
-              <col key={col.key} style={col.width ? { width: col.width } : undefined} />
-            ))}
-            <col style={{ width: 32 }} />
-          </colgroup>
+  function renderPlanTable(items: OutreachPlanRow[]) {
+    return (
+      <div className="card table-shell outreach-table-shell">
+        <table className="data-table outreach-plan-table">
           <thead>
             <tr>
-              {COLUMNS.map(header)}
-              <th style={{ cursor: "default" }} aria-label="Row actions" />
+              <th>Status</th>
+              <th>Importance</th>
+              <th>Category</th>
+              <th>Contact</th>
+              <th>Company</th>
+              <th>Channel</th>
+              <th>Contact details</th>
+              <th>Scheduled</th>
+              <th aria-label="Outreach actions" />
             </tr>
           </thead>
           <tbody>
-            {draft && (
-              <tr
-                className="sheet-draft-row"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") saveDraft();
-                }}
-              >
-                <td>
-                  <input
-                    className="sheet-input"
-                    placeholder="Full name *"
-                    autoFocus
-                    value={draft.name}
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="sheet-input"
-                    placeholder="Company *"
-                    list="crm-company-options"
-                    value={draft.company}
-                    onChange={(e) => setDraft({ ...draft, company: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <CellSelect value={draft.type || null} options={CONTACT_TYPES} allowEmpty onCommit={(v) => setDraft({ ...draft, type: v })} />
-                </td>
-                <td>
-                  <CellSelect value={draft.status || null} options={CONTACT_STATUSES} allowEmpty onCommit={(v) => setDraft({ ...draft, status: v })} />
-                </td>
-                <td>
-                  <CellSelect value={draft.relationship} options={RELATIONSHIP_LEVELS} onCommit={(v) => setDraft({ ...draft, relationship: v })} />
-                </td>
-                <td>
-                  <input className="sheet-input" placeholder="Email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
-                </td>
-                <td>
-                  <input className="sheet-input" placeholder="Phone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
-                </td>
-                <td>
-                  <input className="sheet-input" placeholder="Location" value={draft.location} onChange={(e) => setDraft({ ...draft, location: e.target.value })} />
-                </td>
-                <td>
-                  <div className="sheet-draft-actions">
-                    <button type="button" className="btn btn-sm" disabled={savingDraft} onClick={saveDraft}>
-                      {savingDraft ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <input className="sheet-input" placeholder="Notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
-                </td>
-                <td>
-                  <button type="button" className="sheet-del" title="Discard" disabled={savingDraft} onClick={() => setDraft(null)}>
-                    <Icon name="x" size={13} />
-                  </button>
+            {items.length === 0 && (
+              <tr className="outreach-empty-row">
+                <td colSpan={9} className="table-empty-cell">
+                  {report.weeklyGap > 0
+                    ? "No eligible contacts here. Classify startup or personally important contacts and assign a channel."
+                    : "No outreach items match this filter."}
                 </td>
               </tr>
             )}
-            {visible.length === 0 && !draft && (
-              <tr>
-                <td colSpan={COLUMNS.length + 1} className="table-empty-cell">
-                  {rows.length === 0 ? "No contacts yet - hit “Add contact” to start." : "No contacts match."}
-                </td>
-              </tr>
-            )}
-            {visible.map((row) => {
-              const rev = (field: string) => revisions[`${row.id}:${field}`] ?? 0;
-              const busy = (busyCounts[row.id] ?? 0) > 0;
+            {items.map((item) => {
+              const accessHref = contactAccessHref(item.contact, item.channel);
+              const busy = Boolean(planBusy[item.id]);
+              const scheduled = item.scheduledForKey
+                ? item.scheduledForKey < report.todayKey
+                  ? `Overdue from ${formatOutreachDateKey(item.scheduledForKey)}`
+                  : formatOutreachDateKey(item.scheduledForKey)
+                : "Weekly pool";
               return (
-                <tr key={row.id} className={busy ? "sheet-row-busy" : undefined}>
-                  <td>
-                    <CellInput key={`n${rev("name")}:${row.name}`} value={row.name} onCommit={(v) => commit(row, { name: v })} />
+                <tr key={item.id} className={busy ? "sheet-row-busy" : undefined}>
+                  <td data-label="Status">
+                    <span className={`outreach-status ${planStatusClass(item, report.todayKey)}`}>
+                      {planStatusLabel(item, report.todayKey)}
+                    </span>
                   </td>
-                  <td>
-                    <CellInput
-                      key={`c${rev("company")}:${row.company}`}
-                      value={row.company}
-                      list="crm-company-options"
-                      onCommit={(v) => commitCompany(row, v)}
-                    />
+                  <td data-label="Importance">
+                    <span className={`outreach-importance ${item.contact.importance}`}>
+                      {CONTACT_IMPORTANCE_LEVELS.find(([value]) => value === item.contact.importance)?.[1]
+                        ?? item.contact.importance}
+                    </span>
                   </td>
-                  <td>
-                    <CellSelect key={`t${rev("type")}:${row.type ?? ""}`} value={row.type} options={CONTACT_TYPES} allowEmpty onCommit={(v) => commit(row, { type: v })} />
+                  <td data-label="Category">
+                    {CONTACT_CATEGORIES.find(([value]) => value === item.contact.category)?.[1]
+                      ?? item.contact.category
+                      ?? "Uncategorized"}
                   </td>
-                  <td>
-                    <CellSelect key={`s${rev("status")}:${row.status ?? ""}`} value={row.status} options={CONTACT_STATUSES} allowEmpty onCommit={(v) => commit(row, { status: v })} />
+                  <td data-label="Contact">
+                    <strong>{item.contact.name}</strong>
+                    {item.contact.title && <small>{item.contact.title}</small>}
                   </td>
-                  <td>
-                    <CellSelect key={`r${rev("relationship")}:${row.relationship}`} value={row.relationship} options={RELATIONSHIP_LEVELS} onCommit={(v) => commit(row, { relationship: v })} />
+                  <td data-label="Company">{item.contact.company}</td>
+                  <td data-label="Channel">
+                    {OUTREACH_CHANNELS.find((channel) => channel.key === item.channel)?.label
+                      ?? item.channel}
                   </td>
-                  <td>
-                    <CellInput key={`e${rev("email")}:${row.email ?? ""}`} value={row.email} onCommit={(v) => commit(row, { email: v })} />
+                  <td data-label="Contact details">{renderContactLinks(item.contact)}</td>
+                  <td data-label="Scheduled" className="outreach-scheduled">
+                    {item.status === "REACHED_OUT" && item.reachedOutAt
+                      ? `Done ${new Date(item.reachedOutAt).toLocaleTimeString("en-US", {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}`
+                      : scheduled}
                   </td>
-                  <td>
-                    <CellInput key={`p${rev("phone")}:${row.phone ?? ""}`} value={row.phone} onCommit={(v) => commit(row, { phone: v })} />
-                  </td>
-                  <td>
-                    <CellInput key={`l${rev("location")}:${row.location ?? ""}`} value={row.location} onCommit={(v) => commit(row, { location: v })} />
-                  </td>
-                  <td className="sheet-touch" title={row.lastTouchAt ? new Date(row.lastTouchAt).toLocaleString("en-GB") : undefined}>
-                    {fmtLastTouch(row.lastTouchAt)}
-                  </td>
-                  <td>
-                    <CellInput key={`o${rev("notes")}:${row.notes ?? ""}`} value={row.notes} onCommit={(v) => commit(row, { notes: v })} />
-                  </td>
-                  <td>
-                    <button type="button" className="sheet-del" title={`Delete ${row.name}`} onClick={() => remove(row)}>
-                      <Icon name="x" size={13} />
-                    </button>
+                  <td data-label="Actions">
+                    <div className="outreach-row-actions">
+                      {accessHref && (
+                        <a
+                          href={accessHref}
+                          className="btn btn-sm btn-ghost"
+                          target={item.channel === "email" ? undefined : "_blank"}
+                          rel={item.channel === "email" ? undefined : "noreferrer"}
+                        >
+                          Open <Icon name="external" size={12} />
+                        </a>
+                      )}
+                      {item.status === "TODAY" && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={busy}
+                            onClick={() => markReached(item)}
+                          >
+                            <Icon name="check" size={12} /> {busy ? "Saving…" : "Reached out"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            disabled={busy}
+                            onClick={() => defer(item)}
+                          >
+                            Later
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -442,9 +694,365 @@ export function ContactSheet({
           </tbody>
         </table>
       </div>
-      <p className="sheet-count">
-        Showing {visible.length} of {rows.length} contacts. Click any cell to edit - changes save automatically.
-      </p>
+    );
+  }
+
+  const categoryTabs: Array<[string, string]> = [
+    ["all", `All (${rows.length})`],
+    ...CONTACT_CATEGORIES.map(
+      ([value, label]) =>
+        [value, `${label} (${categoryCounts[value] ?? 0})`] as [string, string],
+    ),
+    ...(categoryCounts.none
+      ? ([["none", `Uncategorized (${categoryCounts.none})`]] as Array<[string, string]>)
+      : []),
+    ...(categoryCounts.legacy
+      ? ([["legacy", `Needs reclassification (${categoryCounts.legacy})`]] as Array<[string, string]>)
+      : []),
+  ];
+
+  return (
+    <div className="contact-sheet outreach-workspace">
+      <section className="outreach-hero">
+        <div>
+          <span className="outreach-eyebrow">CRM outreach operating loop</span>
+          <h1>Make the daily work finite</h1>
+          <p>
+            20 YC companies through Bookface, 30 through LinkedIn, and 30 through email.
+            The weekly pool holds seven days of capacity and promotes only today&apos;s work.
+          </p>
+        </div>
+        <div className="outreach-report-line">
+          <strong>Today: {report.today.reached}/{report.today.target}</strong>
+          <span>{report.today.remaining} remaining</span>
+          <span>Yesterday: {report.yesterday.reached}/{report.yesterday.target}</span>
+          <span>This week: {report.week.reached}/{report.week.target}</span>
+        </div>
+      </section>
+
+      <div className="outreach-summary-grid">
+        {report.channels.map((channel) => (
+          <article key={channel.key} className="card outreach-channel-card">
+            <div className="outreach-channel-head">
+              <strong>{channel.label}</strong>
+              <span>{channel.today.reached}/{channel.dailyTarget} today</span>
+            </div>
+            <div className="outreach-progress" aria-label={`${channel.label} daily progress`}>
+              <span style={{ width: `${channel.today.percent}%` }} />
+            </div>
+            <div className="outreach-channel-meta">
+              <span>{channel.dueNow} in queue</span>
+              <span>{channel.weeklyPlanned}/{channel.weeklyTarget} weekly pool</span>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {report.weeklyGap > 0 && (
+        <div className="outreach-pool-warning">
+          <Icon name="info" size={15} />
+          <span>
+            Weekly pool is short {report.weeklyGap} contacts. In Contacts, classify people as
+            Personally important or Startups, then assign Bookface, LinkedIn, or Email.
+          </span>
+        </div>
+      )}
+
+      <div className="mode-tabs outreach-view-tabs">
+        <button
+          type="button"
+          className={`mode-tab${view === "today" ? " active" : ""}`}
+          onClick={() => setView("today")}
+        >
+          Today ({report.dueNow})
+        </button>
+        <button
+          type="button"
+          className={`mode-tab${view === "week" ? " active" : ""}`}
+          onClick={() => setView("week")}
+        >
+          This week ({report.weeklyPlanned})
+        </button>
+        <button
+          type="button"
+          className={`mode-tab${view === "contacts" ? " active" : ""}`}
+          onClick={() => setView("contacts")}
+        >
+          Contacts ({rows.length})
+        </button>
+      </div>
+
+      {view !== "contacts" && (
+        <>
+          <div className="sheet-toolbar outreach-toolbar">
+            <input
+              className="sheet-search"
+              placeholder="Search contact or company"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+            />
+            <div className="outreach-channel-tabs">
+              <button
+                type="button"
+                className={channelTab === "all" ? "active" : undefined}
+                onClick={() => setChannelTab("all")}
+              >
+                All
+              </button>
+              {OUTREACH_CHANNELS.map((channel) => (
+                <button
+                  key={channel.key}
+                  type="button"
+                  className={channelTab === channel.key ? "active" : undefined}
+                  onClick={() => setChannelTab(channel.key)}
+                >
+                  {channel.label}
+                </button>
+              ))}
+            </div>
+            {error && <span className="sheet-error">{error}</span>}
+          </div>
+          {view === "today" ? renderPlanTable(todayRows) : renderPlanTable(weekRows)}
+          <p className="sheet-count">
+            {view === "today"
+              ? `${todayRows.filter((item) => item.status !== "REACHED_OUT").length} open today. Missed work carries forward and consumes the next day's capacity.`
+              : `${weekRows.length} contacts in this week's pool. Highest importance is promoted first.`}
+          </p>
+        </>
+      )}
+
+      {view === "contacts" && (
+        <>
+          <div className="mode-tabs outreach-category-tabs">
+            {categoryTabs.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={`mode-tab${categoryTab === key ? " active" : ""}`}
+                onClick={() => setCategoryTab(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="sheet-toolbar">
+            <input
+              className="sheet-search"
+              placeholder="Search name, company, email, or context"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+            />
+            {error && <span className="sheet-error">{error}</span>}
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setDraft(draft ? null : { ...EMPTY_DRAFT })}
+            >
+              <Icon name="plus" size={13} strokeWidth={2.5} /> Add contact
+            </button>
+          </div>
+
+          <datalist id="crm-company-options">
+            {companies.map((name) => <option key={name} value={name} />)}
+          </datalist>
+
+          <div className="card table-shell outreach-contact-table-shell">
+            <table className="data-table sheet-table outreach-contact-table">
+              <colgroup>
+                {COLUMNS.map((column) => (
+                  <col
+                    key={column.key}
+                    style={column.width ? { width: column.width } : undefined}
+                  />
+                ))}
+                <col style={{ width: 32 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {COLUMNS.map(header)}
+                  <th style={{ cursor: "default" }} aria-label="Row actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {draft && (
+                  <tr
+                    className="sheet-draft-row"
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter" &&
+                        (event.target as HTMLElement).tagName === "INPUT"
+                      ) {
+                        saveDraft();
+                      }
+                    }}
+                  >
+                    <td>
+                      <CellSelect
+                        value={draft.status}
+                        options={CONTACT_STATUSES}
+                        onCommit={(value) => setDraft({ ...draft, status: value })}
+                      />
+                    </td>
+                    <td>
+                      <CellSelect
+                        value={draft.importance}
+                        options={CONTACT_IMPORTANCE_LEVELS}
+                        onCommit={(value) => setDraft({ ...draft, importance: value })}
+                      />
+                    </td>
+                    <td>
+                      <CellSelect
+                        value={draft.category}
+                        options={CONTACT_CATEGORIES}
+                        onCommit={(value) => setDraft({ ...draft, category: value })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="sheet-input"
+                        placeholder="Full name *"
+                        autoFocus
+                        value={draft.name}
+                        onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="sheet-input"
+                        placeholder="Company *"
+                        list="crm-company-options"
+                        value={draft.company}
+                        onChange={(event) => setDraft({ ...draft, company: event.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <CellSelect
+                        value={draft.context}
+                        options={CONTACT_CONTEXTS}
+                        onCommit={(value) => setDraft({ ...draft, context: value })}
+                      />
+                    </td>
+                    <td>
+                      <input className="sheet-input" placeholder="Title" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
+                    </td>
+                    <td>
+                      <CellSelect
+                        value={draft.outreachChannel || null}
+                        options={OUTREACH_CHANNEL_OPTIONS}
+                        allowEmpty
+                        onCommit={(value) => setDraft({ ...draft, outreachChannel: value })}
+                      />
+                    </td>
+                    <td>
+                      <input className="sheet-input" placeholder="Email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
+                    </td>
+                    <td>
+                      <input className="sheet-input" placeholder="Bookface URL" value={draft.bookfaceUrl} onChange={(event) => setDraft({ ...draft, bookfaceUrl: event.target.value })} />
+                    </td>
+                    <td>
+                      <input className="sheet-input" placeholder="LinkedIn URL" value={draft.linkedinUrl} onChange={(event) => setDraft({ ...draft, linkedinUrl: event.target.value })} />
+                    </td>
+                    <td>
+                      <input className="sheet-input" placeholder="Phone" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} />
+                    </td>
+                    <td>
+                      <input className="sheet-input" placeholder="Location" value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} />
+                    </td>
+                    <td>
+                      <div className="sheet-draft-actions">
+                        <button type="button" className="btn btn-sm" disabled={savingDraft} onClick={saveDraft}>
+                          {savingDraft ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <input className="sheet-input" placeholder="Notes" value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
+                    </td>
+                    <td>
+                      <button type="button" className="sheet-del" title="Discard" disabled={savingDraft} onClick={() => setDraft(null)}>
+                        <Icon name="x" size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {visibleContacts.length === 0 && !draft && (
+                  <tr>
+                    <td colSpan={COLUMNS.length + 1} className="table-empty-cell">
+                      {rows.length === 0
+                        ? "No contacts yet. Add the first contact to start the outreach pool."
+                        : "No contacts match."}
+                    </td>
+                  </tr>
+                )}
+                {visibleContacts.map((row) => {
+                  const revision = (field: string) => revisions[`${row.id}:${field}`] ?? 0;
+                  const busy = (busyCounts[row.id] ?? 0) > 0;
+                  return (
+                    <tr key={row.id} className={busy ? "sheet-row-busy" : undefined}>
+                      <td>
+                        <CellSelect key={`s${revision("status")}:${row.status ?? ""}`} value={row.status} options={CONTACT_STATUSES} allowEmpty onCommit={(value) => commit(row, { status: value })} />
+                      </td>
+                      <td>
+                        <CellSelect key={`i${revision("importance")}:${row.importance}`} value={row.importance} options={CONTACT_IMPORTANCE_LEVELS} onCommit={(value) => commit(row, { importance: value })} />
+                      </td>
+                      <td>
+                        <CellSelect key={`g${revision("category")}:${row.category ?? ""}`} value={row.category} options={CONTACT_CATEGORIES} allowEmpty onCommit={(value) => commit(row, { category: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`n${revision("name")}:${row.name}`} value={row.name} onCommit={(value) => commit(row, { name: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`c${revision("company")}:${row.company}`} value={row.company} list="crm-company-options" onCommit={(value) => commitCompany(row, value)} />
+                      </td>
+                      <td>
+                        <CellSelect key={`x${revision("context")}:${row.context}`} value={row.context} options={CONTACT_CONTEXTS} onCommit={(value) => commit(row, { context: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`t${revision("title")}:${row.title ?? ""}`} value={row.title} onCommit={(value) => commit(row, { title: value })} />
+                      </td>
+                      <td>
+                        <CellSelect key={`h${revision("outreachChannel")}:${row.outreachChannel ?? ""}`} value={row.outreachChannel} options={OUTREACH_CHANNEL_OPTIONS} allowEmpty onCommit={(value) => commit(row, { outreachChannel: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`e${revision("email")}:${row.email ?? ""}`} value={row.email} onCommit={(value) => commit(row, { email: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`b${revision("bookfaceUrl")}:${row.bookfaceUrl ?? ""}`} value={row.bookfaceUrl} onCommit={(value) => commit(row, { bookfaceUrl: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`d${revision("linkedinUrl")}:${row.linkedinUrl ?? ""}`} value={row.linkedinUrl} onCommit={(value) => commit(row, { linkedinUrl: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`p${revision("phone")}:${row.phone ?? ""}`} value={row.phone} onCommit={(value) => commit(row, { phone: value })} />
+                      </td>
+                      <td>
+                        <CellInput key={`l${revision("location")}:${row.location ?? ""}`} value={row.location} onCommit={(value) => commit(row, { location: value })} />
+                      </td>
+                      <td className="sheet-touch" title={row.lastTouchAt ? new Date(row.lastTouchAt).toLocaleString("en-GB") : undefined}>
+                        {fmtLastTouch(row.lastTouchAt)}
+                      </td>
+                      <td>
+                        <CellInput key={`o${revision("notes")}:${row.notes ?? ""}`} value={row.notes} onCommit={(value) => commit(row, { notes: value })} />
+                      </td>
+                      <td>
+                        <button type="button" className="sheet-del" title={`Delete ${row.name}`} onClick={() => remove(row)}>
+                          <Icon name="x" size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="sheet-count">
+            Showing {visibleContacts.length} of {rows.length} contacts. Weekly planning uses
+            Not contacted and Queued startup or personally important rows with a preferred
+            channel, highest importance first. Forwarders stay data-only.
+          </p>
+        </>
+      )}
     </div>
   );
 }

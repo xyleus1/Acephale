@@ -30,6 +30,9 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 
 ### 3. CRM sub-module (the customer side)
 - Customer pool (companies), contacts, segmentation
+- Outreach loop: status, importance, and category first; daily limits of 20
+  Bookface, 30 LinkedIn, and 30 Email contacts; a seven-day weekly pool; manual
+  completion reporting; forwarders remain data-only
 - Activity tracking (visit/call/email/WhatsApp), tasks, risk alerts
 - Sales assignment, ownership history
 - Customer profile shows job history alongside activities and quotes

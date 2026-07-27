@@ -2175,3 +2175,37 @@ Use this file for chronological implementation notes that future agents should s
   Mert, not changed.
 - Follow-up: SMS escalation via Twilio (needs account + A2P registration);
   bounce parsing from the rfq@ inbox once connected.
+
+### 2026-07-26 - CRM daily outreach operating loop
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: not committed
+- Task: Rebuild the CRM contact sheet around Status, Importance, Category,
+  Contact, Company, and contact details. Add a deterministic weekly pool and
+  daily promotion loop for 20 Bookface, 30 LinkedIn, and 30 Email contacts,
+  with explicit completion and daily progress reporting.
+- Files changed: `prisma/schema.prisma`,
+  `prisma/migrations/20260726000100_crm_outreach_planner/migration.sql`,
+  `src/lib/contact-fields.ts`, `src/lib/crm-outreach.ts`,
+  `src/lib/crm-outreach-plan.ts`, `src/app/dashboard/crm/page.tsx`,
+  `src/app/dashboard/crm/actions.ts`, `src/components/contact-sheet.tsx`,
+  `src/app/globals.css`, `scripts/crm-sheet.test.ts`,
+  `scripts/crm-outreach.test.ts`, `scripts/crm-outreach-db.test.ts`,
+  `package.json`, and docs.
+- Verification: `npx prisma validate`, `npm run db:generate`,
+  `npm run test:crm`, planner tests against all migrations on disposable
+  Postgres, `npx tsc --noEmit`, `npm run build`, documentation checks,
+  `git diff --check`, and desktop/mobile browser QA passed. Browser QA verified
+  exact quota counts, required column order, manual completion without daily
+  refill, forwarder exclusion, mobile action visibility, and no console errors.
+- Failed/skipped checks: Targeted ESLint could not start because this repository
+  has ESLint 9 but no flat `eslint.config.*`. No unrelated lint configuration
+  was added. The non-strict tenant-scope audit exited successfully but reported
+  eight pre-existing findings in unrelated files: five high and three medium.
+- Caveats: Deploy the new Prisma migration before this build. Existing contacts
+  are not eligible until they have a Personally important or Startups category
+  and a Bookface, LinkedIn, or Email channel. Outreach completion records a
+  touch but never sends a message.
+- Follow-up: Populate the weekly pool to 140 Bookface, 210 LinkedIn, and 210
+  Email contacts, then use the daily report to decide where source quality or
+  response tracking needs improvement.

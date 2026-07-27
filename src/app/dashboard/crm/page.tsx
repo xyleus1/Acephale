@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { toContactRow } from "@/lib/contact-fields";
+import { prepareOutreachWorkspace } from "@/lib/crm-outreach-plan";
 import { ContactSheet } from "@/components/contact-sheet";
 
 export const metadata = { title: "CRM" };
@@ -11,6 +12,8 @@ export default async function CrmPage({ searchParams }: { searchParams: SearchPa
   const session = await requireSession();
   const { q: rawQ } = await searchParams;
   const q = typeof rawQ === "string" ? rawQ : "";
+  const now = new Date();
+  const planItems = await prepareOutreachWorkspace(session.officeId, now);
 
   const [contacts, companies] = await Promise.all([
     prisma.contact.findMany({
@@ -19,10 +22,15 @@ export default async function CrmPage({ searchParams }: { searchParams: SearchPa
         id: true,
         fullName: true,
         companyId: true,
-        category: true,
         status: true,
-        relationshipStrength: true,
+        importance: true,
+        category: true,
+        relationshipType: true,
+        title: true,
+        outreachChannel: true,
         email: true,
+        linkedinUrl: true,
+        bookfaceUrl: true,
         phone: true,
         location: true,
         notes: true,
@@ -51,6 +59,7 @@ export default async function CrmPage({ searchParams }: { searchParams: SearchPa
       initialRows={rows}
       companies={companies.map((c) => c.name)}
       initialQuery={q}
+      initialPlan={planItems}
     />
   );
 }
