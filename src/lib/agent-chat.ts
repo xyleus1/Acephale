@@ -154,6 +154,7 @@ STYLE RULE (absolute): never use the em dash character in anything you write - a
 - "what happened here" / "what changed" / "summarize this job" / "job memory" → **search_job_memory** first when a job is in scope.
 - "why did we quote this" / "why this price" / "why this route" / "why this risk decision" → **explain_strategy_decision** first, then cite the strategy assessment and memory evidence naturally.
 - "market signal" / "market intelligence" / "freight news" / "rates this week" / "disruption" / "port congestion" / "customs advisory" → **search_market_intelligence** or **get_lane_intelligence** first.
+- "hardware imports" / "China imports" / "West Coast import data" / "California hardware demand" / "ImportGenius" / "TradeAtlas" / "Trademo" / "hardware import leads" → **get_hardware_import_report** first. Tell the operator the full cited report is attached below the answer when the tool succeeds.
 - "market research" / "research feed" / "source article" / "what did this update say" → **search_market_research** or **list_market_research_feed** first. Treat research as evidence, not operational truth.
 - "market sources" / "source registry" / "source quality" / "which sources are enabled" → **list_market_sources** or **get_market_source_quality** first.
 - "preview Firecrawl" / "preview market source" / "test source ingestion" → **preview_market_source** or **ingest_market_source_preview** only when explicitly asked. Preview does not persist memory or mutate operations.
@@ -694,6 +695,12 @@ function parseLeadBoardScope(scopePage?: string): LeadBoardPageScope | null {
   };
 }
 
+function isIntelDeskScope(scopePage?: string): boolean {
+  if (!scopePage || typeof scopePage !== "string") return false;
+  const [rawPath] = scopePage.slice(0, 600).split("?");
+  return rawPath.replace(/\/+$/, "") === "/dashboard/intel";
+}
+
 function boardAgeLabel(receivedAt: Date, now: Date): string {
   const days = Math.max(0, Math.floor((now.getTime() - new Date(receivedAt).getTime()) / 86_400_000));
   return days === 0 ? "today" : `${days}d ago`;
@@ -805,9 +812,15 @@ export async function chatWithAgent(history: ChatMsg[], userMessage: string, sco
 
 async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string, scopePage?: string): Promise<ChatResult> {
   const session = await requireSession();
+  const intelDeskScope = isIntelDeskScope(scopePage);
+
+  async function recordRun(args: Parameters<typeof logAgentRun>[0]) {
+    if (intelDeskScope) return;
+    await logAgentRun(args);
+  }
 
   async function finishSpecialRun(result: ChatResult, tools: InternalToolTrace[] = []): Promise<ChatResult> {
-    await logAgentRun({
+    await recordRun({
       officeId: session.officeId,
       userId: session.userId,
       scopeJobId,
@@ -859,7 +872,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
 
   // Branch 1: pasted RFQ → ingest as Inquiry (kept as a special case because
   // tool-use isn't the right shape for "the message itself is the data").
-  if (looksLikeRFQ(userMessage)) {
+  if (!intelDeskScope && looksLikeRFQ(userMessage)) {
     const parsed = await parsePastedRfqText(apiKey, userMessage).catch(() => null);
 
     if (scopeJobId && parsed) {
@@ -1288,23 +1301,43 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   // answering about a different load there, so the board scope suppresses
   // both and injects a live snapshot of the visible cards instead.
   const leadBoardScope = parseLeadBoardScope(scopePage);
-  const effectiveScopeJobId = scopeJobId ?? (leadBoardScope ? null : await getImplicitFocusJobId(session.officeId));
+  const suppressImplicitJob = Boolean(leadBoardScope || intelDeskScope);
+  const effectiveScopeJobId =
+    scopeJobId ??
+    (suppressImplicitJob
+      ? null
+      : await getImplicitFocusJobId(session.officeId));
+  const intelDeskContext = intelDeskScope
+    ? `INTEL DESK SCOPE:
+The operator is asking a research or freight-intelligence question on /dashboard/intel.
+Do not assume any recent job, RFQ, customer, or load is in scope.
+For China, California, West Coast, startup hardware, historic customs data, or ImportGenius, TradeAtlas, and Trademo questions, call get_hardware_import_report first.
+Answer directly, keep claims tied to the tool evidence, and say when the attached report has the detail.
+If the operator provides one real China-to-U.S. ocean shipment, direct them to the attached report's "Check a China load" action or /dashboard/intel/load.
+Do not create or update an RFQ from text entered on this page.`
+    : "";
   const [ctx, scopedCtx, leadBoardCtx, customerMemoryContext, jobMemoryContext, priceContext] = await Promise.all([
-    cachedOpsContext(session.officeId),
+    intelDeskScope
+      ? Promise.resolve(intelDeskContext)
+      : cachedOpsContext(session.officeId),
     effectiveScopeJobId ? cachedScopedJobContext(effectiveScopeJobId, session.officeId) : Promise.resolve(""),
     leadBoardScope ? cachedLeadBoardContext(session.officeId, leadBoardScope) : Promise.resolve(""),
-    buildCompactCustomerMemoryContext({
-      officeId: session.officeId,
-      jobId: effectiveScopeJobId,
-      companyId: scopeCompanyId ?? null,
-      limit: 8,
-    }).catch(() => ""),
-    buildCompactJobMemoryContext({
-      officeId: session.officeId,
-      jobId: effectiveScopeJobId,
-      limit: 8,
-    }).catch(() => ""),
-    isPriceQuery(userMessage) && !leadBoardScope
+    intelDeskScope
+      ? Promise.resolve("")
+      : buildCompactCustomerMemoryContext({
+          officeId: session.officeId,
+          jobId: effectiveScopeJobId,
+          companyId: scopeCompanyId ?? null,
+          limit: 8,
+        }).catch(() => ""),
+    intelDeskScope
+      ? Promise.resolve("")
+      : buildCompactJobMemoryContext({
+          officeId: session.officeId,
+          jobId: effectiveScopeJobId,
+          limit: 8,
+        }).catch(() => ""),
+    isPriceQuery(userMessage) && !leadBoardScope && !intelDeskScope
       ? buildPriceContext(session.officeId, effectiveScopeJobId ?? undefined)
       : Promise.resolve(""),
   ]);
@@ -1364,7 +1397,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       if (response.stop_reason !== "tool_use") {
         // Final answer.
         const reply = text || finalText || preambleText || "(no reply)";
-        await logAgentRun({
+        await recordRun({
           officeId: session.officeId,
           userId: session.userId,
           scopeJobId: effectiveScopeJobId,
@@ -1417,7 +1450,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     // Capped out without a non-tool-use response. Return whatever text we
     // last saw mid-flight rather than dropping to a generic error.
     const reply = preambleText || finalText || "I gathered some data but couldn't reach a final answer in time. Try rephrasing more narrowly.";
-    await logAgentRun({
+    await recordRun({
       officeId: session.officeId,
       userId: session.userId,
       scopeJobId: effectiveScopeJobId,
@@ -1431,7 +1464,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[agent-chat] tool-use loop failed:", msg, e);
-    await logAgentRun({
+    await recordRun({
       officeId: session.officeId,
       userId: session.userId,
       scopeJobId: effectiveScopeJobId,

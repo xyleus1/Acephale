@@ -44,6 +44,8 @@ export {
   buildOceanHardwareRoutingResearchBrief,
 } from "./research/corridor-watch";
 
+export { buildHardwareImportAgentBrief } from "./research/hardware-agent-brief";
+
 export { buildChinaUsCustomsDecisionGuide } from "./research/china-customs-guide";
 
 export {

@@ -67,6 +67,7 @@ export function AgentChatWidget() {
   const isCompanyBrainPage =
     pathname.startsWith("/dashboard/brain") &&
     brainSection !== "todos" && brainSection !== "news" && brainSection !== "map";
+  const isIntelChatPage = pathname === "/dashboard/intel";
   const [open, setOpen] = useState(true);
   const [dashboardAgentChecked, setDashboardAgentChecked] = useState(!isDashboardWorkbench);
   const [hasEmbeddedWorkbenchAgent, setHasEmbeddedWorkbenchAgent] = useState(false);
@@ -128,12 +129,16 @@ export function AgentChatWidget() {
   const suppressedByWorkbenchAgent = isDashboardWorkbench && (!dashboardAgentChecked || hasEmbeddedWorkbenchAgent);
 
   useEffect(() => {
-    const active = open && !suppressedByWorkbenchAgent && !isCompanyBrainPage;
+    const active =
+      open &&
+      !suppressedByWorkbenchAgent &&
+      !isCompanyBrainPage &&
+      !isIntelChatPage;
     document.documentElement.classList.toggle("agent-dock-open", active);
     return () => {
       document.documentElement.classList.remove("agent-dock-open");
     };
-  }, [open, suppressedByWorkbenchAgent, isCompanyBrainPage]);
+  }, [open, suppressedByWorkbenchAgent, isCompanyBrainPage, isIntelChatPage]);
 
   function setDockOpen(next: boolean) {
     setOpen(next);
@@ -146,7 +151,7 @@ export function AgentChatWidget() {
   }
 
   // The Company Brain chat view IS the chat - the floating dock would duplicate it.
-  if (isCompanyBrainPage) return null;
+  if (isCompanyBrainPage || isIntelChatPage) return null;
 
   // The dashboard root sometimes has a permanent embedded agent. Suppress the
   // global dock only in that state; the empty dashboard still needs an agent.

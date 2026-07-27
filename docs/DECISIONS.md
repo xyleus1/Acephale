@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-27 - Intel is chat-first and reports attach to answers
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Rendering a large market report at the top of the Intel route made
+  the page look like a static dashboard and pushed the question workflow out
+  of the primary hierarchy.
+- Decision: Keep `/dashboard/intel` as a dedicated full-page conversation.
+  Render detailed research reports only under the assistant answer whose
+  successful read-only tool call requested that evidence. Keep real shipment
+  review as the separate `/dashboard/intel/load` workflow.
+- Rationale: The operator starts with an actual question, receives a direct
+  answer, and can inspect all supporting detail without losing the composer or
+  switching to a second generic agent window.
+- Consequences: The exact Intel page suppresses the floating dock and does not
+  inherit recent jobs, customer or job memory, price prefetch, or pasted-RFQ
+  ingestion. It also skips the persistent agent event log. The hardware report
+  remains nonpersistent, deterministic, and explicit about unconnected
+  providers and evidence limitations.
+- Revisit when: Intel conversations need approved office-scoped persistence or
+  a second report type requires its own deterministic attachment contract.
+
 ### 2026-07-27 - Outreach execution is a top-level workspace over CRM data
 
 - Status: accepted

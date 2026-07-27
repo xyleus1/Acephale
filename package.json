@@ -57,6 +57,7 @@
     "test:intel-china-watch-export": "tsx scripts/intel-china-watch-export.test.ts",
     "test:intel-hardware-export-route": "tsx scripts/intel-hardware-export-route.test.ts",
     "test:intel-report-ui": "tsx scripts/intel-report-ui.test.ts",
+    "test:intel-chat-first": "tsx scripts/intel-chat-first.test.ts",
     "snapshot:intel-hardware": "tsx scripts/build-census-public-hardware-snapshot.ts",
     "test:security-sop": "tsx scripts/security-sop.test.ts",
     "test:truckload-quotes": "tsx scripts/truckload-quotes.test.ts",
