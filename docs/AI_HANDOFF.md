@@ -16,6 +16,26 @@ see git log
 
 ## Task implemented
 
+### Intel is chat-first
+
+`/dashboard/intel` now opens as a dedicated full-page intelligence
+conversation instead of rendering the hardware import report before the
+operator can ask a question.
+
+- The question composer stays visible while answers and evidence are read.
+  Suggested questions cover China to U.S. West Coast history, California
+  hardware categories, trade-data providers, and customs risk.
+- A successful `get_hardware_import_report` tool call attaches the complete
+  sourced hardware report directly under that answer. The report does not
+  render as a landing banner.
+- The hardware tool returns deterministic facts from the validated Census
+  snapshot plus explicit provider gaps. ImportGenius, TradeAtlas, and Trademo
+  remain labeled as not connected.
+- The exact Intel page suppresses the duplicate floating agent dock, recent
+  job focus, job and customer memory injection, price prefetch, and pasted-RFQ
+  ingestion. Questions and answers are not written to the agent event log.
+  Actual shipment review stays at `/dashboard/intel/load`.
+
 ### GPT-5.6 and Intel shipment review
 All active application reasoning paths now use OpenAI GPT-5.6 through the
 existing server-side `OPENAI_API_KEY`.

@@ -49,6 +49,10 @@ import {
   markMarketImpactActioned,
   recordMarketSignalFeedback,
 } from "./market-intelligence/market-impact-review";
+import {
+  buildHardwareImportAgentBrief,
+  getCensusPublicHardwareSnapshot,
+} from "@/lib/intel/server";
 import type { StrategyEvidenceCheck } from "./commercial-strategy";
 import { operatorMetricLabel } from "./operator-action-labels";
 
@@ -154,6 +158,19 @@ export const TOOLS = [
       properties: {
         job_id: { type: "string", description: "Exact job id or job reference. Defaults to focused job." },
         inquiry_id: { type: "string", description: "RFQ/inquiry id when no job exists yet." },
+      },
+    },
+  },
+  {
+    name: "get_hardware_import_report",
+    description: "Return the official, read-only China to U.S. West Coast hardware import report brief. Use first for hardware import volume, historical China customs data, California destination demand, West Coast gateway districts, startup production hardware, ImportGenius, TradeAtlas, Trademo, or hardware-import lead research. The full cited report is attached by the Intel chat UI when this tool succeeds.",
+    input_schema: {
+      type: "object",
+      properties: {
+        focus: {
+          type: "string",
+          description: "Optional focus such as history, gateway, category, provider, customs, or leads",
+        },
       },
     },
   },
@@ -2385,6 +2402,20 @@ export async function dispatchTool(
             jobId: jobId ?? undefined,
             inquiryId: inquiryId || undefined,
           }),
+        };
+      }
+      case "get_hardware_import_report": {
+        return {
+          ok: true,
+          result: {
+            focus:
+              typeof input.focus === "string"
+                ? input.focus.trim().slice(0, 120)
+                : null,
+            ...buildHardwareImportAgentBrief(
+              getCensusPublicHardwareSnapshot()
+            ),
+          },
         };
       }
       case "search_market_intelligence": {

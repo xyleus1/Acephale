@@ -2760,3 +2760,35 @@ Use this file for chronological implementation notes that future agents should s
   market=TR covers that). No DB migration.
 - Follow-up: consider a lead-board quick action in the dock's empty state;
   wire the workbench/company-brain chat surfaces to pass scopePage too.
+
+### 2026-07-27 - Chat-first Intel workspace
+
+- Branch: find-hardware-import-data
+- Commit: see git log
+- Task: Replace the static report-first Intel landing with a persistent
+  full-page chat that attaches the complete sourced hardware report only after
+  the relevant question succeeds.
+- Files changed: `src/app/dashboard/intel/page.tsx`,
+  `src/app/dashboard/intel/components/intel-chat-desk.tsx`,
+  `src/app/dashboard/intel/components/intel-chat-desk.module.css`,
+  `src/components/agent-chat-widget.tsx`, `src/lib/agent-chat.ts`,
+  `src/lib/agent-tools.ts`, `src/lib/intel/server.ts`,
+  `src/lib/intel/research/hardware-agent-brief.ts`,
+  `scripts/intel-chat-first.test.ts`, `package.json`, and docs.
+- Verification: `npm run test:intel-chat-first`,
+  `npm run test:gpt56-runtime`, `npm run test:intel-report-ui`,
+  `npm run test:intel-boundary`, `npm run test:intel-ocean-hardware`,
+  `npm run test:intel-china-customs-guide`, and
+  `npm run test:intel-china-load-ui` passed. Prisma generation,
+  `npx tsc --noEmit`, the Next.js production build, docs freshness, and final
+  diff checks also passed.
+- Failed/skipped checks: Authenticated visual browser review was not available
+  from the clean browser session. The production Intel route correctly
+  redirected that unauthenticated session to login.
+- Caveats: The attached report uses the existing validated Census snapshot.
+  ImportGenius, TradeAtlas, and Trademo are still research targets, not live
+  integrations. Intel chat history is client-local for the current page
+  session and Intel turns skip the persistent agent event log.
+- Follow-up: Test one real hardware question and one real China ocean load
+  after deployment. Keep the chat answer and report claims separated from
+  shipment-specific conclusions until the load facts are reviewed.
