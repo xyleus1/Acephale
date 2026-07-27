@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { CellInput, CellSelect } from "@/components/sheet-cells";
+import { CopyRef } from "@/components/copy-ref";
 import { LEAD_QUALITY_LABELS } from "@/lib/lead-quality";
 import { SECURITY_TIERS } from "@/lib/security-sop";
+import { inquiryStatusTone } from "@/lib/inquiry-status";
 import { RfqLoadReviewButton } from "@/components/rfq-load-review-button";
 import { WhatsAppPreviewCard, type RfqWhatsAppPreview } from "@/components/whatsapp-preview-card";
 import {
@@ -70,6 +72,9 @@ export type RfqRowData = {
   destination: string | null;
   mode: string | null;
   status: string;
+  assignedToUserId: string | null;
+  assignedToName: string | null;
+  forwardedTo: string[];
   securityTier: string | null;
   declaredValueInput: string;
   target: string;
@@ -257,6 +262,16 @@ function ExpandedPanel({ row, forwardError, onClearForwardError }: {
               <span>Source</span>
               <strong>{row.sourceLabel}{row.sourceDetail ? ` · ${row.sourceDetail}` : ""}</strong>
             </div>
+            <div className="record-fact">
+              <span>Assigned</span>
+              <strong>{row.assignedToName ?? "Unassigned"}</strong>
+            </div>
+            {row.forwardedTo.length > 0 && (
+              <div className="record-fact">
+                <span>Forwarded to</span>
+                <strong>{row.forwardedTo.join(", ")}</strong>
+              </div>
+            )}
           </div>
         </div>
 
@@ -497,7 +512,7 @@ function RowSendCell({ row, onExpand, onError }: {
 
 type SheetColumnKey =
   | "received" | "ref" | "subject" | "from" | "source"
-  | "lane" | "mode" | "status" | "security" | "declared" | "target" | "send";
+  | "lane" | "mode" | "status" | "assignee" | "security" | "declared" | "target" | "send";
 
 type SheetColumn = {
   key: SheetColumnKey;
@@ -516,6 +531,7 @@ const SHEET_COLUMNS: ReadonlyArray<SheetColumn> = [
   { key: "lane", label: "Lane", width: 190 },
   { key: "mode", label: "Mode", width: 104 },
   { key: "status", label: "Status", width: 116 },
+  { key: "assignee", label: "Assigned", width: 128 },
   { key: "security", label: "Security", width: 104 },
   { key: "declared", label: "Declared Value", width: 112, numeric: true },
   { key: "target", label: "Target Price", width: 112, numeric: true },
@@ -706,10 +722,12 @@ function useDebouncedValue<T>(value: T, ms: number): T {
   return v;
 }
 
-export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery, emptyHint }: {
+export function RfqSheet({ rows, statusOptions, modeOptions, userOptions, userId, searchQuery, emptyHint }: {
   rows: RfqRowData[];
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
+  // [userId, fullName] of active office users, for the Assigned column.
+  userOptions: ReadonlyArray<SheetOption>;
   userId: string;
   searchQuery: string;
   // Replaces the default "RFQs arrive from linked email threads…" empty-state
@@ -1003,6 +1021,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
                 colSpan={colSpan}
                 statusOptions={statusOptions}
                 modeOptions={modeOptions}
+                userOptions={userOptions}
                 onToggle={toggleOpen}
                 onExpand={expandRow}
                 onToggleSelect={toggleSelect}
@@ -1016,7 +1035,7 @@ export function RfqSheet({ rows, statusOptions, modeOptions, userId, searchQuery
   );
 }
 
-function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOptions, onToggle, onExpand, onToggleSelect }: {
+function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOptions, userOptions, onToggle, onExpand, onToggleSelect }: {
   row: RfqRowData;
   open: boolean;
   selected: boolean;
@@ -1024,6 +1043,7 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
   colSpan: number;
   statusOptions: ReadonlyArray<SheetOption>;
   modeOptions: ReadonlyArray<SheetOption>;
+  userOptions: ReadonlyArray<SheetOption>;
   onToggle: (id: string) => void;
   onExpand: (id: string) => void;
   onToggleSelect: (id: string) => void;
@@ -1095,7 +1115,9 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
         );
       case "ref":
         return (
-          <td key="ref" className="data-cell-mono rfq-ro">{row.reference ?? <span className="data-muted">-</span>}</td>
+          <td key="ref" className="data-cell-mono rfq-ro">
+            {row.reference ? <CopyRef code={row.reference} /> : <span className="data-muted">-</span>}
+          </td>
         );
       case "subject":
         return (
@@ -1202,14 +1224,29 @@ function RowPair({ row, open, selected, columns, colSpan, statusOptions, modeOpt
       case "status":
         return (
           <td key="status">
-            <CellSelect
-              key={`st${rev("status")}:${row.status}`}
-              value={row.status}
-              options={statusOptions}
-              allowCreate
-              createLabel="Add status…"
-              onCommit={(v) => commit({ status: v })}
-            />
+            <div className={`status-cell status-cell--${inquiryStatusTone(row.status)}`}>
+              <CellSelect
+                key={`st${rev("status")}:${row.status}`}
+                value={row.status}
+                options={statusOptions}
+                allowCreate
+                createLabel="Add status…"
+                onCommit={(v) => commit({ status: v })}
+              />
+            </div>
+          </td>
+        );
+      case "assignee":
+        return (
+          <td key="assignee">
+            <div className={`status-cell assignee-cell${row.assignedToUserId ? "" : " assignee-cell--empty"}`}>
+              <CellSelect
+                key={`as${rev("assignedToUserId")}:${row.assignedToUserId ?? ""}`}
+                value={row.assignedToUserId}
+                options={[["", "Unassigned"], ...userOptions]}
+                onCommit={(v) => commit({ assignedToUserId: v })}
+              />
+            </div>
           </td>
         );
       case "security":

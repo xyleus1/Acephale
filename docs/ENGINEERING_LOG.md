@@ -20,7 +20,7 @@ Use this file for chronological implementation notes that future agents should s
 ### 2026-07-27 - CRM Outreach Desk entry point and capacity gaps
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)
-- Commit: not committed
+- Commit: 00c57f6
 - Task: Make the existing daily and weekly CRM outreach loop visible from the
   contact-first CRM screen, expose per-channel empty capacity, and keep send
   controls usable when the agent panel narrows the page.
@@ -30,16 +30,21 @@ Use this file for chronological implementation notes that future agents should s
   capacity slots report missing Bookface, LinkedIn, and Email contacts and
   return to contact classification. The outreach action column is sticky on
   desktop and returns to normal card flow on mobile.
-- Verification: `npm run test:crm`, `npx tsc --noEmit`, `npm run build`,
+- Verification: Prisma validation and generation, `npm run test:crm`,
+  post-merge `npm run test:lead-board`, `npx tsc --noEmit`, `npm run build`,
   `git diff --check`, changed-text em dash check, and browser QA at desktop and
   mobile widths against a disposable local Postgres database. Contacts, daily,
   and weekly views rendered without console errors.
 - Failed/skipped checks: The first production build collided with a running
   `next dev` process and lost generated route files. The dev server was stopped,
-  its `.next` cache was moved aside, and the clean rerun passed.
+  its `.next` cache was moved aside, and the clean rerun passed. The first
+  post-merge validation invocation omitted `DATABASE_URL`, and the first
+  post-merge TypeScript pass used a stale generated Prisma client. Supplying the
+  disposable database URL and rerunning `npm run db:generate` resolved both.
 - Caveats: The workflow records manual completion and never auto-sends. Contacts
   need an eligible category and assigned outreach channel before they can fill
-  capacity. The branch was two commits behind `origin/main` during this pass.
+  capacity. Current `origin/main` was merged and the combined tree was
+  reverified before push.
 - Follow-up: Merge current main, deploy the planner migration, then populate the
   visible weekly gaps until Bookface reaches 140 and LinkedIn and Email reach
   210 each.
@@ -2236,3 +2241,38 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Populate the weekly pool to 140 Bookface, 210 LinkedIn, and 210
   Email contacts, then use the daily report to decide where source quality or
   response tracking needs improvement.
+### 2026-07-24 - Desk Assistant grounded in the Incoming RFQs lead board
+
+- Branch: pattaya (Conductor workspace, targets main)
+- Commit: see git log
+- Task: On /dashboard/rfq?view=us the Desk Assistant answered a lead-board
+  question ("loads arrived last 3 days that replied to our initial email")
+  from stuck jobs and an unrelated implicit-focus job. Root causes: no agent
+  tool over the Meta-lead cards, and the chat had no idea what page the dock
+  was on, so the implicit most-recent-job focus plus job-centric tools
+  hijacked the answer.
+- Files changed: `src/lib/lead-board.ts` (new pure derivation: stage chips,
+  quality, live-reply rules, filters, agent/prompt shapes),
+  `src/lib/lead-board-query.ts` (new prisma side: meta-lead fetch via the
+  '"source":"meta-leads"' / US market markers + latestInboundByEmail join),
+  `src/lib/agent-tools.ts` (list_lead_board tool + dispatch; search_inquiries
+  now matches reference and fromCompany and returns reference/receivedAt),
+  `src/lib/agent-chat.ts` (scopePage arg; board-page context block with live
+  snapshot; suppresses implicit job focus, brain preflight, and price-intel
+  prefetch on the board; SYSTEM routing for lead vocabulary),
+  `src/components/agent-chat-widget.tsx` (passes pathname+query as scopePage),
+  `scripts/lead-board.test.ts` (new), `package.json` (test:lead-board).
+- Verification: tsc + next build clean; test:lead-board, test:lead-outreach,
+  test:lead-quality pass. Read-only loadLeadBoard run against prod (Derya
+  office): Good+open lens total 26 / replied 2 / waiting 24 / new 0 /
+  dropped 0, identical to the live board chips; the original question yields
+  5 replied leads arrived within 3 days with correct reply excerpts; TR
+  market returns 249 leads.
+- Failed/skipped checks: lint has pre-existing baseline errors
+  (thread-actions.ts/whatsapp.ts any-types); no findings in touched files.
+- Caveats: US-view snapshot maps any explicit status tab to
+  status_scope=all (named in the filter label) instead of per-tab SQL; TR
+  sheet snapshot lists rows without outreach derivation (list_lead_board
+  market=TR covers that). No DB migration.
+- Follow-up: consider a lead-board quick action in the dock's empty state;
+  wire the workbench/company-brain chat surfaces to pass scopePage too.

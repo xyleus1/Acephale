@@ -19,7 +19,10 @@ import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { buildCompactCustomerMemoryContext } from "@/lib/memory/customer-dossier";
 import { buildCompactJobMemoryContext } from "@/lib/memory/search-memory";
 import { dimensionsSummary } from "@/lib/cargo";
-import { openInquiryStatusFilter } from "@/lib/inquiry-status";
+import { canonicalInquiryStatus, INQUIRY_STATUS_VALUES, inquiryStatusValuesFor, openInquiryStatusFilter } from "@/lib/inquiry-status";
+import { loadLeadBoard } from "@/lib/lead-board-query";
+import { leadBoardPromptLine } from "@/lib/lead-board";
+import { US_LEAD_PARSED_MARKER } from "@/lib/meta-leads";
 import { operatorMetricLabel } from "@/lib/operator-action-labels";
 import {
   parsedCargoVolumeReview,
@@ -133,6 +136,7 @@ STYLE RULE (absolute): never use the em dash character in anything you write - a
 - "rates" / "carrier prices" on a forwarding job → **summarize_carrier_rates**.
 - "what's stuck" / "stale" → **list_stuck_jobs**.
 - "who's waiting on me" / "needs reply" → **list_threads_awaiting_reply**.
+- "leads" / "lead board" / "US leads" / "Meta leads" / "Facebook or Instagram leads" / "Incoming RFQs board" / "which leads replied" / "who wrote back to our emails" / "new leads that arrived" / "dropped leads" → **list_lead_board**. Lead cards on the Incoming RFQs board are ad-form RFQs worked by an automated email outreach sequence; they are NOT jobs. Never answer lead-board questions from list_stuck_jobs, search_jobs, list_threads_awaiting_reply, or the active-jobs snapshot - those cover different records.
 - "what should I work on" / "what is most urgent" / "what's on my plate" / "run the desk" → **list_decision_queue**.
 - "pricing desk" / "pricing brain queue" / "RFQs to price" / "quote gate queue" / "commercial pricing commands" → **list_pricing_commands**.
 - "morning briefing" → **morning_briefing**.
@@ -228,7 +232,7 @@ Pick the most specific tool. ONE tool call answers most questions - don't chain 
 
 When the user asks a question:
 - If the answer requires looking up data you don't already have (jobs, inquiries, threads, customers, supplier offers, carrier rates, milestones, etc.) - **call the right search/lookup tool first**, then answer.
-- Don't say "I don't see X in my view" - search or inspect it. There are search_jobs, search_inquiries, search_companies, search_email_threads, get_job, list_open_inquiries, list_threads_awaiting_reply, list_stuck_jobs, list_decision_queue, inspect_control_sheet, prepare_control_sheet_rfq, inspect_job_readiness, plan_next_actions, create_forwarder_drafts, draft_customer_quote, find_follow_up_targets, draft_missing_info_request, draft_customer_update, summarize_supplier_offers, summarize_carrier_rates.
+- Don't say "I don't see X in my view" - search or inspect it. There are search_jobs, search_inquiries, search_companies, search_email_threads, get_job, list_open_inquiries, list_lead_board, list_threads_awaiting_reply, list_stuck_jobs, list_decision_queue, inspect_control_sheet, prepare_control_sheet_rfq, inspect_job_readiness, plan_next_actions, create_forwarder_drafts, draft_customer_quote, find_follow_up_targets, draft_missing_info_request, draft_customer_update, summarize_supplier_offers, summarize_carrier_rates.
 
 **HARD RULE - never confuse pricing models:**
 - A SOURCING (procurement) job's pricing is **SUPPLIER OFFERS**, NOT carrier quotes. Suppliers are the parties selling the commodity. When the user asks about "rates" / "prices" / "offers" / "what we got" / "how much" on a SOURCING job, ALWAYS call summarize_supplier_offers - never mention carriers, never say "no carrier quotes yet."
@@ -642,14 +646,146 @@ ${typeBlock}
 **"this load" / "this job" / "this deal" / "the deal" ALWAYS means the focused job above.** Don't ask the operator which job they mean. Answer directly from the data above; only call tools (get_job, summarize_supplier_offers, etc) when you need data NOT already in the prompt.`;
 }
 
-export async function chatWithAgent(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string): Promise<ChatResult> {
+// ── Incoming RFQs board scope ────────────────────────────────────────────────
+// The floating dock passes the page URL it is docked on. When that page is
+// the Incoming RFQs board, the agent gets a live snapshot of the visible
+// cards and their filters, so "the loads in front of me" means the board.
+
+const LEAD_BOARD_STAGE_PARAMS = ["replied", "waiting", "new", "dropped"] as const;
+type LeadBoardStageParam = (typeof LEAD_BOARD_STAGE_PARAMS)[number];
+
+type LeadBoardPageScope = {
+  usView: boolean;
+  quality: "good" | "review" | "all";
+  stage: "" | LeadBoardStageParam;
+  statusTab: string; // "" = the default Open tab; "all", canonical, or custom
+  q: string;
+};
+
+// Mirrors the page's own searchParams parsing (page.tsx) so the snapshot
+// matches what the operator sees. Returns null off the board.
+function parseLeadBoardScope(scopePage?: string): LeadBoardPageScope | null {
+  if (!scopePage || typeof scopePage !== "string") return null;
+  const [rawPath, rawQuery = ""] = scopePage.slice(0, 600).split("?");
+  // Only the board itself - /dashboard/rfq/new and /dashboard/rfq/<id> are
+  // different surfaces.
+  if (rawPath.replace(/\/+$/, "") !== "/dashboard/rfq") return null;
+  const params = new URLSearchParams(rawQuery);
+  const usView = params.get("view") === "us";
+  const quality = params.get("quality");
+  const stage = params.get("stage") ?? "";
+  return {
+    usView,
+    quality: usView && (quality === "review" || quality === "all") ? quality : usView ? "good" : "all",
+    stage: usView && (LEAD_BOARD_STAGE_PARAMS as readonly string[]).includes(stage)
+      ? (stage as LeadBoardStageParam)
+      : "",
+    statusTab: (params.get("status") ?? "").trim().slice(0, 40),
+    q: (params.get("q") ?? "").trim().slice(0, 120),
+  };
+}
+
+function boardAgeLabel(receivedAt: Date, now: Date): string {
+  const days = Math.max(0, Math.floor((now.getTime() - new Date(receivedAt).getTime()) / 86_400_000));
+  return days === 0 ? "today" : `${days}d ago`;
+}
+
+async function buildLeadBoardContext(officeId: string, scope: LeadBoardPageScope): Promise<string> {
+  if (scope.usView) {
+    const board = await loadLeadBoard(officeId, {
+      market: "US",
+      quality: scope.quality === "good" ? "GOOD" : scope.quality === "review" ? "REVIEW" : undefined,
+      stage: scope.stage || undefined,
+      // Any explicit status tab widens the lens to every status; the exact
+      // tab is named in the filter label below.
+      statusScope: scope.statusTab === "" ? "open" : "all",
+      q: scope.q || undefined,
+      limit: 30,
+    });
+    const filtersLabel = [
+      scope.quality === "all" ? "all quality tiers" : scope.quality === "review" ? "Maybe quality only" : "Good quality only",
+      scope.stage ? `stage: ${scope.stage}` : "all stages",
+      scope.statusTab === "" ? "open statuses" : `status tab: ${scope.statusTab}`,
+      scope.q ? `search: "${scope.q}"` : null,
+    ].filter(Boolean).join(" · ");
+    const c = board.counts.byStage;
+    const lines = board.rows.map(leadBoardPromptLine);
+    return `
+
+CURRENT PAGE - INCOMING RFQS LEAD BOARD (US view, /dashboard/rfq?view=us):
+The operator is looking at the US Meta ad lead cards synced from the California lead sheet (${filtersLabel}). On this page "loads", "leads", "RFQs", "these", and "in front of me" mean these lead cards - NOT ops jobs, NOT a focused job, NOT stuck jobs. There is no focused job on this page.
+Each lead is worked by the automated outreach sequence: first email on arrival, follow-ups every few days, dropped after the 4th goes unanswered; replies are detected from the synced inboxes.
+Stage counts within this lens: replied ${c.replied} · waiting ${c.waiting} · not emailed ${c.new} · dropped ${c.dropped} · with the desk ${c.desk}.
+Visible lead cards (${board.rows.length}${board.totalMatching > board.rows.length ? ` of ${board.totalMatching}` : ""}, newest first):
+${lines.join("\n") || "  (none match the current filters)"}
+Answer questions about these leads from this snapshot, or call list_lead_board for different filters (other stages, TR market, reply excerpts, arrival windows). DRY-prefixed codes are RFQ/inquiry references - look them up with list_lead_board q or search_inquiries, never with get_job/search_jobs.`;
+  }
+
+  // Default (Türkiye) view: the RFQ sheet over every non-US-lead inquiry -
+  // manual RFQs, email RFQs, and TR Meta leads together.
+  const contains = scope.q ? { contains: scope.q, mode: "insensitive" as const } : null;
+  const canonicalTab = canonicalInquiryStatus(scope.statusTab);
+  const statusWhere = scope.statusTab === ""
+    ? { status: openInquiryStatusFilter() }
+    : scope.statusTab.toLowerCase() === "all"
+      ? {}
+      : INQUIRY_STATUS_VALUES.includes(canonicalTab)
+        ? { status: { in: inquiryStatusValuesFor(canonicalTab) } }
+        : { status: scope.statusTab };
+  const rows = await prisma.inquiry.findMany({
+    where: {
+      officeId,
+      ...statusWhere,
+      AND: [{ OR: [
+        { parsedData: null },
+        { NOT: { parsedData: { contains: US_LEAD_PARSED_MARKER } } },
+      ] }],
+      ...(contains
+        ? { OR: [
+            { reference: contains },
+            { subject: contains },
+            { fromCompany: contains },
+            { fromEmail: contains },
+            { origin: contains },
+            { destination: contains },
+            { commodity: contains },
+          ] }
+        : {}),
+    },
+    select: {
+      id: true, reference: true, subject: true, status: true, receivedAt: true,
+      fromCompany: true, fromEmail: true, origin: true, destination: true,
+      commodity: true, parsedData: true,
+    },
+    orderBy: { receivedAt: "desc" },
+    take: 30,
+  });
+  const now = new Date();
+  const lines = rows.map((inq) => {
+    const isLead = !!inq.parsedData?.includes('"source":"meta-leads"');
+    return `- ${inq.reference ?? "(no ref)"} | "${inq.subject}" | ${inq.fromCompany ?? inq.fromEmail ?? "?"} | ${inq.origin ?? "?"} -> ${inq.destination ?? "?"} | ${inq.commodity ?? "-"} | ${canonicalInquiryStatus(inq.status)} | arrived ${boardAgeLabel(inq.receivedAt, now)}${isLead ? " | TR Meta lead" : ""}`;
+  });
+  const filtersLabel = [
+    scope.statusTab === "" ? "open statuses" : `status tab: ${scope.statusTab}`,
+    scope.q ? `search: "${scope.q}"` : null,
+  ].filter(Boolean).join(" · ");
+  return `
+
+CURRENT PAGE - INCOMING RFQS SHEET (Türkiye view, /dashboard/rfq):
+The operator is looking at the RFQ sheet of every non-US-market inquiry (${filtersLabel}). On this page "RFQs", "leads", "loads", "these", and "in front of me" mean these rows - NOT ops jobs and NOT a focused job. There is no focused job on this page.
+Visible rows (up to 30, newest first):
+${lines.join("\n") || "  (none match the current filters)"}
+Rows tagged "TR Meta lead" come from the Türkiye ad lead sheet; for their outreach state (emailed, replied, dropped) call list_lead_board with market TR. DRY-prefixed codes are RFQ/inquiry references - look them up with search_inquiries or list_lead_board q, never with get_job/search_jobs.`;
+}
+
+export async function chatWithAgent(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string, scopePage?: string): Promise<ChatResult> {
   // No-op test: returns immediately without touching session, db, or AI.
   // If this fails, the error is in the framework / deploy / client bundle, not my code.
   if (userMessage.trim().toLowerCase() === "/ping") {
-    return { reply: `pong · history-len=${history.length} · job-scope=${scopeJobId ?? "none"} · customer-scope=${scopeCompanyId ?? "none"} · build=${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"}` };
+    return { reply: `pong · history-len=${history.length} · job-scope=${scopeJobId ?? "none"} · customer-scope=${scopeCompanyId ?? "none"} · page-scope=${scopePage ?? "none"} · build=${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"}` };
   }
   try {
-    return await _chatWithAgentImpl(history, userMessage, scopeJobId, scopeCompanyId);
+    return await _chatWithAgentImpl(history, userMessage, scopeJobId, scopeCompanyId, scopePage);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : "";
@@ -658,7 +794,7 @@ export async function chatWithAgent(history: ChatMsg[], userMessage: string, sco
   }
 }
 
-async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string): Promise<ChatResult> {
+async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string, scopePage?: string): Promise<ChatResult> {
   const session = await requireSession();
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -1129,10 +1265,18 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   // focus. So "this load" / "the deal" works on every surface - floating
   // pill, workbench, anywhere - without forcing the operator to remember
   // a JOB-ref.
-  const effectiveScopeJobId = scopeJobId ?? await getImplicitFocusJobId(session.officeId);
-  const [ctx, scopedCtx, customerMemoryContext, jobMemoryContext, priceContext] = await Promise.all([
+  //
+  // Exception: on the Incoming RFQs board the operator is looking at lead
+  // cards, not at any job. The implicit most-recent-job focus (and the
+  // price-intel prefetch that hangs off it) is exactly how the agent ends up
+  // answering about a different load there, so the board scope suppresses
+  // both and injects a live snapshot of the visible cards instead.
+  const leadBoardScope = parseLeadBoardScope(scopePage);
+  const effectiveScopeJobId = scopeJobId ?? (leadBoardScope ? null : await getImplicitFocusJobId(session.officeId));
+  const [ctx, scopedCtx, leadBoardCtx, customerMemoryContext, jobMemoryContext, priceContext] = await Promise.all([
     cachedOpsContext(session.officeId),
     effectiveScopeJobId ? cachedScopedJobContext(effectiveScopeJobId, session.officeId) : Promise.resolve(""),
+    leadBoardScope ? cachedLeadBoardContext(session.officeId, leadBoardScope) : Promise.resolve(""),
     buildCompactCustomerMemoryContext({
       officeId: session.officeId,
       jobId: effectiveScopeJobId,
@@ -1144,7 +1288,9 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       jobId: effectiveScopeJobId,
       limit: 8,
     }).catch(() => ""),
-    isPriceQuery(userMessage) ? buildPriceContext(session.officeId, effectiveScopeJobId ?? undefined) : Promise.resolve(""),
+    isPriceQuery(userMessage) && !leadBoardScope
+      ? buildPriceContext(session.officeId, effectiveScopeJobId ?? undefined)
+      : Promise.resolve(""),
   ]);
 
   const toolTrace: InternalToolTrace[] = [];
@@ -1175,7 +1321,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   // Use Anthropic prompt caching: the system prompt + tools array become a
   // cached prefix. Cache is reused for ~5 min from first miss.
   const systemBlocks: any[] = [
-    { type: "text", text: SYSTEM + "\n\n" + ctx + scopedCtx + customerMemoryContext + jobMemoryContext + brainPreflightContext + priceContext, cache_control: { type: "ephemeral" } },
+    { type: "text", text: SYSTEM + "\n\n" + ctx + leadBoardCtx + scopedCtx + customerMemoryContext + jobMemoryContext + brainPreflightContext + priceContext, cache_control: { type: "ephemeral" } },
   ];
   const toolsWithCache = ([...TOOLS] as any[]).map((t, i, arr) =>
     i === arr.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t
@@ -1366,6 +1512,7 @@ async function buildPriceContext(officeId: string, scopeJobId?: string): Promise
 // across requests on the same Vercel function instance.
 const OPS_CTX_CACHE = new Map<string, { value: string; at: number }>();
 const SCOPED_CTX_CACHE = new Map<string, { value: string; at: number }>();
+const LEAD_BOARD_CTX_CACHE = new Map<string, { value: string; at: number }>();
 const CTX_TTL_MS = 20_000;
 
 async function cachedOpsContext(officeId: string): Promise<string> {
@@ -1382,5 +1529,16 @@ async function cachedScopedJobContext(jobId: string, officeId: string): Promise<
   if (c && Date.now() - c.at < CTX_TTL_MS) return c.value;
   const value = await buildScopedJobContext(jobId, officeId);
   SCOPED_CTX_CACHE.set(key, { value, at: Date.now() });
+  return value;
+}
+
+async function cachedLeadBoardContext(officeId: string, scope: LeadBoardPageScope): Promise<string> {
+  const key = `${officeId}::${scope.usView ? "us" : "main"}::${scope.quality}::${scope.stage}::${scope.statusTab}::${scope.q}`;
+  const c = LEAD_BOARD_CTX_CACHE.get(key);
+  if (c && Date.now() - c.at < CTX_TTL_MS) return c.value;
+  // A snapshot failure must not take the whole chat down - the agent still
+  // has list_lead_board.
+  const value = await buildLeadBoardContext(officeId, scope).catch(() => "");
+  LEAD_BOARD_CTX_CACHE.set(key, { value, at: Date.now() });
   return value;
 }

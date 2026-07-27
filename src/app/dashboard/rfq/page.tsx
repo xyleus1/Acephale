@@ -35,6 +35,7 @@ import { latestInboundByEmail, type InboundReply } from "@/lib/lead-auto-reply";
 import { buildWhatsAppInquiry } from "@/lib/rfq-whatsapp";
 import { whatsAppSendConfigured } from "@/lib/whatsapp";
 import { metaLeadsSource, metaLeadsSheetUrl, US_LEAD_PARSED_MARKER } from "@/lib/meta-leads";
+import { parseForwardedTo } from "@/lib/forwarder-partners";
 import { assessLeadQuality, leadQualitySummary, type LeadQualityTier } from "@/lib/lead-quality";
 
 export const metadata = { title: "Incoming RFQs" };
@@ -114,10 +115,13 @@ function stageFilterOf(outreach: RfqOutreachDisplay | null | undefined): StageFi
 export default async function RFQPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; view?: string; quality?: string; stage?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; view?: string; quality?: string; stage?: string; assigned?: string }>;
 }) {
   const session = await requireSession();
-  const { status, q: rawQuery, view, quality, stage } = await searchParams;
+  const { status, q: rawQuery, view, quality, stage, assigned } = await searchParams;
+  // ?assigned=me / ?assigned=unassigned narrow to the operator's own desk.
+  const assignedFilter: "me" | "unassigned" | "" =
+    assigned === "me" || assigned === "unassigned" ? assigned : "";
   // Next delivers repeated params as arrays despite the annotation - degrade
   // to no filter rather than crashing on a hand-crafted ?q=a&q=b URL.
   const searchQuery = (typeof rawQuery === "string" ? rawQuery : "").trim().slice(0, 120);
@@ -195,10 +199,16 @@ export default async function RFQPage({
           ],
         }
       : {}),
+    ...(assignedFilter === "me"
+      ? { assignedToUserId: session.userId }
+      : assignedFilter === "unassigned"
+        ? { assignedToUserId: null }
+        : {}),
   };
   const includeRelations = {
     company: { select: { id: true, name: true } },
     job: { select: { id: true, reference: true } },
+    assignedTo: { select: { id: true, fullName: true } },
     emailThreads: {
       take: 1,
       select: {
@@ -224,7 +234,7 @@ export default async function RFQPage({
   // officeId is already in whereBase; restated so the scope survives
   // refactors (and the tenant-scope audit can see it). The other view's
   // count feeds the view-switcher badge.
-  const [inquiriesRaw, usTabCount] = await Promise.all([
+  const [inquiriesRaw, usTabCount, officeUsers] = await Promise.all([
     prisma.inquiry.findMany({
       where: { ...whereBase, ...(usView ? usLeadsFilter : mainFilter), officeId: session.officeId },
       include: includeRelations,
@@ -236,7 +246,13 @@ export default async function RFQPage({
       : prisma.inquiry.count({
           where: { ...whereBase, ...usLeadsFilter, officeId: session.officeId },
         }),
+    prisma.user.findMany({
+      where: { officeId: session.officeId, isActive: true },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: "asc" },
+    }),
   ]);
+  const userOptions: SheetOption[] = officeUsers.map((u) => [u.id, u.fullName] as const);
 
   const mailConfigured = rfqMailConfigured();
   const waConfigured = whatsAppSendConfigured();
@@ -400,6 +416,9 @@ export default async function RFQPage({
       // Canonicalized so legacy rows (INGESTED, WON, …) read and edit as
       // their canonical status; a re-pick writes the canonical value.
       status: canonicalInquiryStatus(inq.status),
+      assignedToUserId: inq.assignedTo?.id ?? null,
+      assignedToName: inq.assignedTo?.fullName ?? null,
+      forwardedTo: parseForwardedTo(inq.forwardedTo),
       securityTier: inq.securityTier,
       declaredValueInput: inq.declaredValue != null ? String(inq.declaredValue) : "",
       target,
@@ -515,6 +534,7 @@ export default async function RFQPage({
             if (usView) params.set("view", "us");
             if (usView && qualityFilter !== "good") params.set("quality", qualityFilter);
             if (stageFilter) params.set("stage", stageFilter);
+            if (assignedFilter) params.set("assigned", assignedFilter);
             const qs = params.toString();
             return (
               <Link
@@ -540,6 +560,7 @@ export default async function RFQPage({
               params.set("view", "us");
               if (key !== "good") params.set("quality", key);
               if (stageFilter) params.set("stage", stageFilter);
+              if (assignedFilter) params.set("assigned", assignedFilter);
               return (
                 <Link
                   key={key}
@@ -561,6 +582,7 @@ export default async function RFQPage({
               params.set("view", "us");
               if (qualityFilter !== "good") params.set("quality", qualityFilter);
               if (key) params.set("stage", key);
+              if (assignedFilter) params.set("assigned", assignedFilter);
               const count = key ? ` (${stageCounts[key] ?? 0})` : "";
               return (
                 <Link
@@ -575,6 +597,32 @@ export default async function RFQPage({
           </div>
         )}
         <div className="view-switcher">
+          {([
+            ["", "Anyone"],
+            ["me", "Mine"],
+            ["unassigned", "Unassigned"],
+          ] as const).map(([key, label]) => {
+            const params = new URLSearchParams();
+            if (filter) params.set("status", filter);
+            if (searchQuery) params.set("q", searchQuery);
+            if (usView) params.set("view", "us");
+            if (usView && qualityFilter !== "good") params.set("quality", qualityFilter);
+            if (stageFilter) params.set("stage", stageFilter);
+            if (key) params.set("assigned", key);
+            const qs = params.toString();
+            return (
+              <Link
+                key={key || "anyone"}
+                href={`/dashboard/rfq${qs ? `?${qs}` : ""}` as "/dashboard/rfq"}
+                className={`view-switcher-tab${assignedFilter === key ? " active" : ""}`}
+                title={key === "" ? "All RFQs regardless of owner" : key === "me" ? "RFQs assigned to me" : "RFQs nobody owns yet"}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+        <div className="view-switcher">
           {[
             { key: "", label: "🇹🇷 Türkiye" },
             { key: "us", label: `🇺🇸 US${!usView && usCount > 0 ? ` (${usCount})` : ""}` },
@@ -583,6 +631,7 @@ export default async function RFQPage({
             if (filter) params.set("status", filter);
             if (searchQuery) params.set("q", searchQuery);
             if (v.key) params.set("view", v.key);
+            if (assignedFilter) params.set("assigned", assignedFilter);
             const qs = params.toString();
             return (
               <Link
@@ -601,6 +650,7 @@ export default async function RFQPage({
         <UsLeadCards
           rows={rows}
           statusOptions={statusOptions}
+          userOptions={userOptions}
           searchQuery={searchQuery}
           emptyHint={stageFilter && qualityRows.length > 0
             ? `No leads in the “${STAGE_FILTERS.find(([key]) => key === stageFilter)?.[1]}” stage here - clear the stage chip to see all ${qualityRows.length}.`
@@ -613,6 +663,7 @@ export default async function RFQPage({
           rows={rows}
           statusOptions={statusOptions}
           modeOptions={modeOptions}
+          userOptions={userOptions}
           userId={session.userId}
           searchQuery={searchQuery}
         />

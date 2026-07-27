@@ -9,6 +9,7 @@ import { createWithFileReference } from "./references";
 import { metaLeadsSources, type MetaLeadsSource } from "./meta-leads";
 import { autoReplyToUsLeads } from "./lead-auto-reply";
 import { RESYNC_PRESERVED_PARSED_KEYS } from "./rfq-mail";
+import { cleanAnswer } from "./answer-noise";
 import { ingestKnowledgeObject } from "./memory/ingest-object";
 import { recordMemoryEvent } from "./memory/record-event";
 
@@ -591,15 +592,17 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
     const transportPref = pretty(row[16]);
     const existingQuote = pretty(row[17]);
     const budgetRaw = clean(row[18]);
-    const origin = clean(row[19]);
-    const destination = clean(row[20]);
-    const commodity = clean(row[21]);
+    // Junk answers ("I don't know", "bilmiyorum", "-") stay out of the
+    // structured fields; the raw text still lands in the form-answers body.
+    const origin = cleanAnswer(clean(row[19]));
+    const destination = cleanAnswer(clean(row[20]));
+    const commodity = cleanAnswer(clean(row[21]));
     const email = clean(row[22]);
-    const fullName = clean(row[23]);
+    const fullName = cleanAnswer(clean(row[23]));
     const phone = clean(row[24])?.replace(/^p:/, "") ?? null;
-    const companyRaw = clean(row[25]);
+    const companyRaw = cleanAnswer(clean(row[25]));
     const companyName = companyRaw && companyRaw !== "." ? companyRaw : null;
-    const jobTitle = clean(row[26]);
+    const jobTitle = cleanAnswer(clean(row[26]));
     const leadStatus = clean(row[28]);
 
     // The size answers tell us when a lead is container freight - mark it so
@@ -706,6 +709,9 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
       notes: leadBody,
       receivedAt,
     };
+    // Contact columns are operator-owned truth once set - seed them on create
+    // only, so an hourly resync never clobbers a hand-corrected name/number.
+    const createOnly = { contactName: fullName, contactPhone: phone };
 
     const eventType = existing ? "meta_leads.inquiry.updated" : "meta_leads.inquiry.created";
     // Operators advance lead RFQs in-app; a resync must not reset their status.
@@ -713,7 +719,7 @@ async function syncMetaLeadRows(officeId: string, rows: string[][], source: Meta
       ? await prisma.inquiry.update({ where: { id: existing.id }, data: { ...data, status: existing.status } })
       : await createWithFileReference(
           officeId,
-          (reference) => prisma.inquiry.create({ data: { officeId, reference, ...data } }),
+          (reference) => prisma.inquiry.create({ data: { officeId, reference, ...data, ...createOnly } }),
           receivedAt
         );
 

@@ -12,6 +12,8 @@ import { analyzeJobDocument, askAboutDocument } from "./doc-analyze";
 import { createPendingBulkHideThreadsProposal, createPendingJobActionProposal, createPendingJobUpdateProposal } from "./agent-proposals";
 import { qualifyRfq } from "./rfq-qualification";
 import { openInquiryStatusFilter } from "./inquiry-status";
+import { loadLeadBoard } from "./lead-board-query";
+import { leadBoardRowForAgent, LEAD_BOARD_STAGES, type LeadBoardStage } from "./lead-board";
 import { buildMissingInfoDraft } from "./missing-info-draft";
 import { displayParty } from "./whatsapp-display";
 import { parsePipeLines } from "./quote-lines";
@@ -361,6 +363,23 @@ export const TOOLS = [
       properties: {
         type: { type: "string", enum: ["SOURCING", "FORWARDING"] },
         limit: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "list_lead_board",
+    description: "List Meta ad lead cards from the Incoming RFQs lead board (Facebook/Instagram lead-form RFQs, US and TR markets) with lead quality tier and the automated outreach sequence state: emails sent (max 4), waiting, replied (with reply time and excerpt), dropped, or taken over by the desk. Use for any lead-board question: which leads replied to our emails, new leads that arrived recently, leads awaiting follow-up, dropped leads, or 'the leads/loads on the Incoming RFQs page'. These lead cards are inquiries worked by an email sequence, NOT jobs - never answer lead questions from job tools.",
+    input_schema: {
+      type: "object",
+      properties: {
+        market: { type: "string", enum: ["US", "TR"], description: "US = California lead sheet (the US cards view), TR = Türkiye sheet. Omit for both markets." },
+        stage: { type: "string", enum: ["replied", "waiting", "new", "dropped", "desk"], description: "replied = the lead answered our outreach and needs desk action; waiting = emailed, no reply yet; new = not emailed yet; dropped = sequence exhausted or lead closed; desk = an operator took it over." },
+        quality: { type: "string", enum: ["GOOD", "REVIEW", "WEAK"], description: "Lead quality tier. The board shows GOOD ('Good') by default; REVIEW displays as 'Maybe'." },
+        arrived_within_days: { type: "number", description: "Only leads received in the last N days." },
+        replied_within_days: { type: "number", description: "Only leads whose reply landed in the last N days." },
+        status_scope: { type: "string", enum: ["open", "all"], description: "open = only open RFQ statuses (the board's default Open tab). Default all: dropped/booked leads are only visible under all." },
+        q: { type: "string", description: "Free-text match on reference (DRY...), route, commodity, contact, or company." },
+        limit: { type: "number", description: "Max leads returned. Default 20, max 60." },
       },
     },
   },
@@ -2259,14 +2278,16 @@ export async function dispatchTool(
           where: {
             ...where,
             OR: q ? [
+              { reference: { contains: q, mode: "insensitive" } },
               { subject: { contains: q, mode: "insensitive" } },
               { commodity: { contains: q, mode: "insensitive" } },
               { fromEmail: { contains: q, mode: "insensitive" } },
+              { fromCompany: { contains: q, mode: "insensitive" } },
               { origin: { contains: q, mode: "insensitive" } },
               { destination: { contains: q, mode: "insensitive" } },
             ] : undefined,
           },
-          select: { id: true, subject: true, type: true, status: true, commodity: true, origin: true, destination: true, fromEmail: true },
+          select: { id: true, reference: true, subject: true, type: true, status: true, commodity: true, origin: true, destination: true, fromEmail: true, receivedAt: true },
           take: limit, orderBy: { receivedAt: "desc" },
         });
         return { ok: true, result: rows };
@@ -2611,6 +2632,32 @@ export async function dispatchTool(
           orderBy: { receivedAt: "desc" },
         });
         return { ok: true, result: rows };
+      }
+      case "list_lead_board": {
+        const stageInput = typeof input.stage === "string" ? input.stage.trim().toLowerCase() : "";
+        const qualityInput = typeof input.quality === "string" ? input.quality.trim().toUpperCase() : "";
+        const board = await loadLeadBoard(ctx.officeId, {
+          market: input.market === "US" || input.market === "TR" ? input.market : undefined,
+          stage: (LEAD_BOARD_STAGES as string[]).includes(stageInput) ? stageInput as LeadBoardStage : undefined,
+          quality: qualityInput === "GOOD" || qualityInput === "REVIEW" || qualityInput === "WEAK" ? qualityInput : undefined,
+          arrivedWithinDays: input.arrived_within_days != null ? Number(input.arrived_within_days) : undefined,
+          repliedWithinDays: input.replied_within_days != null ? Number(input.replied_within_days) : undefined,
+          statusScope: input.status_scope === "open" ? "open" : "all",
+          q: typeof input.q === "string" ? input.q : undefined,
+          limit: input.limit != null ? Number(input.limit) : undefined,
+        });
+        return {
+          ok: true,
+          result: {
+            board: "Incoming RFQs lead board (/dashboard/rfq; US cards at /dashboard/rfq?view=us)",
+            total_matching: board.totalMatching,
+            counts: {
+              by_stage: board.counts.byStage,
+              by_quality: board.counts.byQuality,
+            },
+            leads: board.rows.map(leadBoardRowForAgent),
+          },
+        };
       }
       case "list_threads_awaiting_reply": {
         const cands = await prisma.emailThread.findMany({

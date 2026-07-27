@@ -163,7 +163,12 @@ export function AgentChatWidget() {
     setMessages(next);
     setBusy(true);
     try {
-      const res = await chatWithAgent(history, text, routeJobId);
+      // Page scope: the server tailors context to the page the dock is on
+      // (e.g. the Incoming RFQs board snapshot), so "the loads in front of
+      // me" means what the operator actually sees.
+      const query = searchParams.toString();
+      const scopePage = `${pathname}${query ? `?${query}` : ""}`;
+      const res = await chatWithAgent(history, text, routeJobId, undefined, scopePage);
       setMessages([...next, { role: "assistant", content: res.reply, toolTrace: res.toolTrace }]);
       if (res.ingestedInquiryId || res.refresh) {
         router.refresh();

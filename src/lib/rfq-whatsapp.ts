@@ -20,6 +20,10 @@ export type InquiryForWhatsApp = {
   dimensions: string | null;
   cargoReadyDate: Date | null;
   parsedData: string | null;
+  // Operator-entered contact truth (Inquiry columns, 2026-07-24) - preferred
+  // over the lead form's parsedData when present.
+  contactName?: string | null;
+  contactPhone?: string | null;
 };
 
 export type WhatsAppDraft = {
@@ -369,8 +373,8 @@ export function buildWhatsAppInquiry(inq: InquiryForWhatsApp): WhatsAppDraft {
   const parsed = parsedOf(inq);
   const { market, questions, missing } = leadMissingQuestions(inq);
   const en = market === "US";
-  const phone = s(parsed.phone);
-  const firstName = leadFirstName(s(parsed.fullName), market);
+  const phone = s(inq.contactPhone) ?? s(parsed.phone);
+  const firstName = leadFirstName(s(inq.contactName) ?? s(parsed.fullName), market);
 
   const origin = s(inq.origin);
   const destination = s(inq.destination);

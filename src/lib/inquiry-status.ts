@@ -83,6 +83,22 @@ export function inquiryStatusBadgeCls(raw: string): string {
   return STATUS_BADGE_CLS[canonicalInquiryStatus(raw)] ?? "badge-neutral";
 }
 
+// Solid color-coded pills (2026-07-24): Received=blue, Pricing=amber,
+// Booked=green, Missed=red, Ignored/Trash dimmed, custom=neutral. CSS classes
+// .status-pill--<tone> / .status-cell--<tone> live in globals.css.
+const STATUS_TONE: Record<string, string> = {
+  BOOKED: "booked",
+  PRICING: "pricing",
+  MISSED: "missed",
+  RECEIVED: "received",
+  IGNORED: "ignored",
+  TRASH: "trash",
+};
+
+export function inquiryStatusTone(raw: string): string {
+  return STATUS_TONE[canonicalInquiryStatus(raw)] ?? "custom";
+}
+
 // Normalize an operator-entered status: known values (canonical, legacy, or a
 // canonical label like "missed ($)") collapse onto the canonical value; anything
 // else is kept as a custom status, trimmed.
