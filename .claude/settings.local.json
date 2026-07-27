@@ -5,7 +5,11 @@
       "Bash(npx prisma:*)",
       "Bash(npx tsc:*)",
       "Bash(pkill -f \"next dev\")",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(gh pr *)",
+      "Bash(git fetch *)"
     ]
   }
 }
