@@ -17,6 +17,33 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-27 - Hardware VC campaign for today's outreach
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Populate today's Outreach workflow with 20 Bookface, 30 LinkedIn, and
+  30 email targets who can introduce Derya to hardware and industrial portfolio
+  companies.
+- Files changed: `src/lib/hardware-vc-outreach-campaign.ts`,
+  `src/lib/load-hardware-vc-outreach.ts`, `src/app/dashboard/crm/actions.ts`,
+  `src/components/contact-sheet.tsx`, `src/app/globals.css`,
+  `scripts/hardware-vc-outreach.test.ts`,
+  `scripts/hardware-vc-outreach-loader.test.ts`, `package.json`, and docs.
+- Verification: `npm run test:hardware-vc-outreach`,
+  `npm run test:crm-outreach`, `npm run test:crm`, `npx tsc --noEmit`,
+  `git diff --check`, and changed-text em dash check passed.
+- Failed/skipped checks: `npm run test:crm-outreach-db` could not run because
+  this workspace has no disposable PostgreSQL credential. The test reached
+  Prisma with the correct React Server condition and failed at database
+  authentication against the explicit placeholder URL.
+- Caveats: The campaign is human-operated and sends nothing. Email addresses
+  are intentionally not guessed. Loading is limited to admin and manager roles,
+  reuses canonical office-scoped CRM rows, refuses protected status changes,
+  locks company/contact writes during the load, and requires an explicit
+  confirmation in the Outreach UI.
+- Follow-up: Load the campaign from `/dashboard/outreach`, verify any email
+  addresses before outreach, and mark each completed contact Reached out.
+
 ### 2026-07-27 - Separate connected Outreach workspace
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)

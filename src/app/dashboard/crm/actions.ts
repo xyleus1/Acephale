@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { resolveCompanyIdByName } from "@/lib/company-resolve";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
+import { loadHardwareVcOutreachCampaign } from "@/lib/load-hardware-vc-outreach";
 import {
   CONTACT_CATEGORY_VALUES,
   CONTACT_CONTEXT_VALUES,
@@ -66,6 +67,19 @@ type OutreachActionResult =
       planItemId: string;
       reachedOutAt?: string;
       scheduledForKey?: string;
+    }
+  | { error: string };
+
+export type HardwareVcCampaignActionResult =
+  | {
+      ok: true;
+      createdContacts: number;
+      reusedContacts: number;
+      queued: {
+        bookface: number;
+        linkedin: number;
+        email: number;
+      };
     }
   | { error: string };
 
@@ -260,6 +274,26 @@ export async function deleteContactAction(
   if (deleted.count === 0) return { error: "Contact not found." };
   revalidateCrmWorkspaces();
   return { ok: true };
+}
+
+export async function loadHardwareVcOutreachAction(): Promise<HardwareVcCampaignActionResult> {
+  const session = await requireSession();
+  if (!["ADMIN", "MANAGER"].includes(session.role)) {
+    return { error: "Only an admin or manager can load a full outreach campaign." };
+  }
+
+  try {
+    const result = await loadHardwareVcOutreachCampaign(session.officeId);
+    revalidateCrmWorkspaces();
+    return { ok: true, ...result };
+  } catch (error) {
+    console.error("[crm-outreach] hardware VC campaign load failed:", error);
+    return {
+      error: error instanceof Error
+        ? error.message
+        : "Could not load the hardware VC campaign.",
+    };
+  }
 }
 
 export async function markOutreachReachedAction(
