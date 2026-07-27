@@ -29,12 +29,12 @@ Add a `Supplier` model: name, type (CARRIER / AGENT / TRUCKER / CUSTOMS_BROKER),
 - Relate to `CarrierQuote` (replace the current free-text `carrier` field with a `supplierId`)
 
 ### A2 — Outbound carrier RFQ fan-out
-On a job/inquiry, click "Request rates" → select 3-N matching suppliers (by lane/mode), system drafts an RFQ email per supplier (Claude), shows previews, sends via connected Gmail/Outlook account on confirmation.
+On a job/inquiry, click "Request rates", select 3-N matching suppliers by lane and mode, let GPT-5.6 draft an RFQ email per supplier, review previews, then send through the connected Gmail or Outlook account on confirmation.
 - Status pill on the job: "RFQs sent: 5 · Replied: 2 · Pending: 3"
 - Each sent RFQ creates a `CarrierQuote` row in PENDING status
 
 ### A3 — Inbound reply parsing
-When a carrier replies (matched by email thread `In-Reply-To`), Claude extracts rate, transit days, validity, surcharges → updates the corresponding `CarrierQuote` from PENDING → RECEIVED with structured fields. Notify the operator in-app.
+When a carrier replies and the email thread matches `In-Reply-To`, GPT-5.6 extracts rate, transit days, validity, and surcharges. The reviewed workflow updates the corresponding `CarrierQuote` from PENDING to RECEIVED with structured fields and notifies the operator in-app.
 
 ### A4 — Comparison + selection
 Side-by-side table on the job (already exists for manual quotes) — sort by total, transit, validity. One-click "Select carrier" copies the cost into `Job.cost`, marks others as "not selected". The Quote tab auto-fills line items.
@@ -61,7 +61,7 @@ Magic-link URL: `/portal/[token]` — customer sees their job's status, current 
 ## Phase C — Document intelligence
 
 ### C1 — Upload + auto-classify
-When user drops a PDF on the job → Claude reads the text, infers doc type (BL/Invoice/PL/COO/Customs), pre-fills the document slot in the checklist.
+When the user drops a PDF on the job, GPT-5.6 reads extracted text, infers the document type (BL, invoice, packing list, COO, or customs), and pre-fills the document slot in the checklist.
 
 ### C2 — Field extraction
 Pull BL number, container numbers, vessel/voyage, gross weight, chargeable weight from the parsed PDF — auto-fill milestone fields, validate against the booking.

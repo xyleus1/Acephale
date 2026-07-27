@@ -88,7 +88,7 @@ Same flow. Each authorization creates a separate `EmailAccount` record. When the
 ## Costs
 
 - **Google Cloud / Gmail API:** free for the volumes any single forwarding office will hit
-- **Anthropic (Claude Haiku) classifier:** ~$0.001 per inbound email classified; first sync of 7 days might be 100 emails ≈ $0.10
+- **OpenAI GPT-5.6 classifier:** usage depends on input, output, and reasoning tokens. Check current OpenAI pricing before estimating production sync cost.
 
 ## Limitations of the current MVP
 

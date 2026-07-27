@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { prisma } from "./prisma";
 import { openInquiryStatusFilter } from "./inquiry-status";
 import { isDeryaRfqSourceSender } from "./derya-inboxes";
@@ -67,8 +67,8 @@ export async function classifyInboundEmail(args: {
     };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { kind: "OTHER", reason: "ANTHROPIC_API_KEY missing" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { kind: "OTHER", reason: "OPENAI_API_KEY missing" };
 
   // Pull current state of the office for matching context
   const [inquiries, jobs, customers] = await Promise.all([
@@ -108,9 +108,9 @@ export async function classifyInboundEmail(args: {
   }
   const senderDomain = args.fromEmail.split("@")[1]?.toLowerCase() ?? "";
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 700,
     system: `You analyze inbound emails for a freight forwarding office. You output ONLY one JSON object - no markdown, no commentary.
 

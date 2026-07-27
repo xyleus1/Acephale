@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { prisma } from "./prisma";
 
 export type StuckJob = {
@@ -45,8 +45,8 @@ export async function findStuckJobs(officeId: string, opts: { daysThreshold?: nu
 
   if (jobs.length === 0) return [];
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const client = apiKey ? new Anthropic({ apiKey }) : null;
+  const apiKey = process.env.OPENAI_API_KEY;
+  const client = apiKey ? new Gpt56Client({ apiKey }) : null;
 
   const out: StuckJob[] = [];
   for (const j of jobs) {
@@ -58,7 +58,7 @@ export async function findStuckJobs(officeId: string, opts: { daysThreshold?: nu
     if (client) {
       try {
         const result = await client.messages.create({
-          model: "claude-haiku-4-5-20251001",
+          model: "gpt-5.6",
           max_tokens: 120,
           system: `You suggest the SINGLE next concrete action for a freight job that has been stagnant. Reply in one short sentence. No emojis. No preamble.`,
           messages: [{

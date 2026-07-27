@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { prisma } from "./prisma";
 
 // Classify an email attachment into one of our doc types and attach it as a
@@ -15,7 +15,7 @@ export async function classifyEmailAttachments(args: {
   jobId: string;
   officeId: string;
 }): Promise<{ ok: true; created: number }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { ok: true, created: 0 };
 
   const job = await prisma.job.findFirst({
@@ -42,7 +42,7 @@ export async function classifyEmailAttachments(args: {
   });
 
   const existingUrls = new Set(job.documents.map((d) => d.url).filter(Boolean));
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   let created = 0;
 
   for (const thread of allThreads) {
@@ -54,9 +54,9 @@ export async function classifyEmailAttachments(args: {
         const url = `/api/gmail/attachment?messageDbId=${msg.id}&attachmentId=${encodeURIComponent(a.attachmentId)}&filename=${encodeURIComponent(a.filename)}`;
         if (existingUrls.has(url)) continue;
 
-        // Ask Haiku to classify based on filename + email subject + body excerpt.
+        // Ask GPT-5.6 to classify based on filename + email subject + body excerpt.
         const result = await client.messages.create({
-          model: "claude-haiku-4-5-20251001",
+          model: "gpt-5.6",
           max_tokens: 120,
           system: `You classify a single freight document attachment by its filename + the email it arrived in.
 

@@ -1,7 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 
-const anthropic = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const gpt56 = process.env.OPENAI_API_KEY
+  ? new Gpt56Client({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
 // ── Meeting note from raw transcript ────────────────────────────────────────
@@ -9,10 +9,10 @@ const anthropic = process.env.ANTHROPIC_API_KEY
 export async function buildMeetingNote(rawTranscript: string): Promise<string | null> {
   if (!rawTranscript.trim()) return null;
 
-  if (anthropic) {
+  if (gpt56) {
     try {
-      const msg = await anthropic.messages.create({
-        model: "claude-opus-4-6",
+      const msg = await gpt56.messages.create({
+        model: "gpt-5.6",
         max_tokens: 600,
         messages: [
           {
@@ -34,7 +34,7 @@ ${rawTranscript}`,
       const block = msg.content[0];
       return block.type === "text" ? block.text : null;
     } catch (e) {
-      console.error("Claude meeting note error:", e);
+      console.error("GPT-5.6 meeting note error:", e);
     }
   }
 
@@ -72,10 +72,10 @@ export async function buildEmailDraft(input: {
 }): Promise<string> {
   const { customerName, purpose, context, senderName = "Sales Team" } = input;
 
-  if (anthropic) {
+  if (gpt56) {
     try {
-      const msg = await anthropic.messages.create({
-        model: "claude-opus-4-6",
+      const msg = await gpt56.messages.create({
+        model: "gpt-5.6",
         max_tokens: 500,
         messages: [
           {
@@ -100,7 +100,7 @@ Requirements:
       const block = msg.content[0];
       return block.type === "text" ? block.text : buildEmailDraftFallback(input);
     } catch (e) {
-      console.error("Claude email draft error:", e);
+      console.error("GPT-5.6 email draft error:", e);
     }
   }
 

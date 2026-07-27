@@ -8,9 +8,9 @@ import { createJobWithReference } from "@/lib/job-actions";
 import { qualifyRfq } from "@/lib/rfq-qualification";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
 import { recordAuditLog } from "@/lib/audit";
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "@/lib/gpt56-client";
 
-// Decision: parse an inbound RFQ with Claude
+// Decision: parse an inbound RFQ with GPT-5.6.
 export async function approveParse(inquiryId: string): Promise<void> {
   const session = await requireSession();
   const inquiry = await prisma.inquiry.findFirst({
@@ -18,14 +18,14 @@ export async function approveParse(inquiryId: string): Promise<void> {
   });
   if (!inquiry || !inquiry.rawEmailBody) return;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
       await prisma.inquiry.updateMany({
         where: { id: inquiryId, officeId: session.officeId },
         data: {
         notes: [
           inquiry.notes,
-          "RFQ parsing blocked: ANTHROPIC_API_KEY is not configured.",
+          "RFQ parsing blocked: OPENAI_API_KEY is not configured.",
         ].filter(Boolean).join("\n"),
       },
     });
@@ -33,9 +33,9 @@ export async function approveParse(inquiryId: string): Promise<void> {
     return;
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const msg = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 400,
     messages: [{
       role: "user",

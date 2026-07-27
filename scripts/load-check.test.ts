@@ -7,9 +7,12 @@ import {
   EMPTY_LOAD_IDEA,
   estimateMiles,
   formatPreflightReport,
+  hasOperationalLoadFacts,
+  isLoadIdeaDecisionable,
   type BenchCarrier,
   type LoadIdea,
-} from "../src/lib/load-check";
+} from "../src/lib/intel/preflight/engine";
+import { reviewedSourceUse } from "../src/lib/intel/sources";
 import { COMMODITY_CATEGORY_VALUES } from "../src/lib/security-sop";
 
 let failures = 0;
@@ -37,6 +40,10 @@ function severityOf(result: ReturnType<typeof run>, id: string) {
   return result.findings.find((f) => f.id === id)?.severity ?? null;
 }
 
+function sourceIdsOf(result: ReturnType<typeof run>, id: string) {
+  return result.findings.find((f) => f.id === id)?.sources.map((source) => source.sourceId) ?? [];
+}
+
 const LITHIUM_CARRIER: BenchCarrier = {
   id: "c1",
   name: "Golden State Secure",
@@ -52,6 +59,31 @@ const LITHIUM_CARRIER: BenchCarrier = {
   cargoInsuranceExpiry: "2027-01-01T00:00:00Z",
 };
 
+check(
+  "description-only text is not treated as an operational load",
+  !hasOperationalLoadFacts({
+    ...EMPTY_LOAD_IDEA,
+    description: "what model are you running",
+  })
+);
+check(
+  "a partial load cannot receive a decision-ready verdict",
+  !isLoadIdeaDecisionable({
+    ...EMPTY_LOAD_IDEA,
+    origin: "Fremont, CA",
+    description: "8 pallets of servers",
+  })
+);
+check(
+  "a lane plus cargo description is decisionable",
+  isLoadIdeaDecisionable({
+    ...EMPTY_LOAD_IDEA,
+    origin: "Fremont, CA",
+    destination: "Austin, TX",
+    description: "8 pallets of servers",
+  })
+);
+
 // The flagship scenario: standalone lithium batteries, CA -> TX, $180k, Friday pickup.
 const battery = run({
   commodityCategory: "batteries_un3480",
@@ -64,7 +96,11 @@ const battery = run({
 check("UN3480 raises the fully-regulated blocker", severityOf(battery, "un3480_fully_regulated") === "blocker");
 check("value >100k raises insurance risk", severityOf(battery, "value_over_100k") === "risk");
 check("CA lane + high value raises theft-corridor risk", severityOf(battery, "ca_theft_corridor") === "risk");
-check("Friday pickup raises weekend-dwell watch", severityOf(battery, "friday_pickup_dwell") === "watch");
+check("Friday pickup raises the weekend-dwell watch", severityOf(battery, "friday_pickup_dwell") === "watch");
+check(
+  "Friday dwell cites the dated CargoNet analysis and current FBI mitigation guidance",
+  sourceIdsOf(battery, "friday_pickup_dwell").join() === "cargonet_friday_theft,fbi_cargo_theft"
+);
 check("security tier derives to high_value", battery.securityTier === "high_value");
 check("states resolved from free-text locations", battery.originState === "CA" && battery.destState === "TX");
 check("no bench carrier -> risk when bench is empty", severityOf(battery, "no_bench_carrier") === "risk");
@@ -135,26 +171,44 @@ check(
   teamLane.carrierMatch.requirements.some((r) => r.key === "team")
 );
 
-// Desert heat: fragile tech, July, interstate CA->TX, no temp control.
+// Restore the original equipment and calendar checks with claim-specific sources.
 const heat = run({
   commodityCategory: "servers_gpu",
   origin: "San Jose, CA",
   destination: "Austin, TX",
   pickupDate: "2026-07-20",
 });
-check("summer desert crossing raises heat risk", severityOf(heat, "desert_heat") === "risk");
+check("summer desert crossing raises a storage-temperature risk", severityOf(heat, "desert_heat") === "risk");
+check(
+  "summer heat cites only the NWS heat guidance",
+  sourceIdsOf(heat, "desert_heat").join() === "nws_desert_heat"
+);
 
-// Holiday window.
+const julyHoliday = run({ declaredValue: 150_000, pickupDate: "2026-07-03" });
+check("July 4 pickup raises the holiday theft window", severityOf(julyHoliday, "holiday_theft_window") === "risk");
 check(
-  "July 4th pickup raises the holiday theft window",
-  severityOf(run({ declaredValue: 150_000, pickupDate: "2026-07-03" }), "holiday_theft_window") === "risk"
+  "July 4 finding cites its exact advisory",
+  sourceIdsOf(julyHoliday, "holiday_theft_window").join() === "cargonet_july_fourth"
+);
+const newYearHoliday = run({ declaredValue: 150_000, pickupDate: "2026-12-30" });
+check("Dec 30 pickup falls in the New Year window", severityOf(newYearHoliday, "holiday_theft_window") === "risk");
+check(
+  "New Year finding cites the winter advisory",
+  sourceIdsOf(newYearHoliday, "holiday_theft_window").join() === "cargonet_winter_holidays"
 );
 check(
-  "Dec 30 pickup falls in the New Year window (month boundary)",
-  severityOf(run({ declaredValue: 150_000, pickupDate: "2026-12-30" }), "holiday_theft_window") === "risk"
+  "winter advisory window does not extend before Dec 23 or after Jan 2",
+  !ids(run({ declaredValue: 150_000, pickupDate: "2026-12-22" })).includes("holiday_theft_window") &&
+    !ids(run({ declaredValue: 150_000, pickupDate: "2027-01-03" })).includes("holiday_theft_window")
+);
+const thanksgivingHoliday = run({ declaredValue: 150_000, pickupDate: "2025-11-25" });
+check(
+  "Thanksgiving uses the fourth Thursday analysis window",
+  severityOf(thanksgivingHoliday, "holiday_theft_window") === "risk" &&
+    sourceIdsOf(thanksgivingHoliday, "holiday_theft_window").join() === "cargonet_thanksgiving"
 );
 check(
-  "mid-November pickup is outside every window",
+  "mid-November pickup is outside every holiday window",
   !ids(run({ declaredValue: 150_000, pickupDate: "2026-11-10" })).includes("holiday_theft_window")
 );
 
@@ -170,15 +224,20 @@ check(
   severityOf(run({ temperatureSensitive: true, origin: "Fremont, CA", destination: "Reno, NV" }), "carb_tru") === "risk"
 );
 
-// Semicap white-glove + open-deck mismatch.
-check("semicap raises white-glove risk", severityOf(run({ commodityCategory: "semicap_tools" }), "semicap_whiteglove") === "risk");
+const semicap = run({ commodityCategory: "semicap_tools" });
+check("semicap raises a customer and OEM handling risk", severityOf(semicap, "semicap_whiteglove") === "risk");
 check(
-  "flatbed for instruments raises mismatch risk",
-  severityOf(run({ commodityCategory: "test_instruments", equipmentType: "FLATBED" }), "open_deck_mismatch") === "risk"
+  "semicap handling cites the TI capital-equipment manual",
+  sourceIdsOf(semicap, "semicap_whiteglove").join() === "ti_capital_equipment_shipping"
 );
+const openDeck = run({ commodityCategory: "test_instruments", equipmentType: "FLATBED" });
+check("flatbed for instruments raises an OEM-approval risk", severityOf(openDeck, "open_deck_mismatch") === "risk");
+check("fragile tech retains the dock and liftgate check", severityOf(openDeck, "dock_liftgate") === "watch");
+check("dock finding cites the carrier's liftgate rule", sourceIdsOf(openDeck, "dock_liftgate").join() === "rl_liftgate");
 
 // Broker-authority watch always present.
 check("operating-authority watch is always present", ids(run({})).includes("broker_authority"));
+check("every emitted finding has at least one exact source use", battery.findings.every((finding) => finding.sources.length > 0));
 
 // estimateMiles sanity: LA to Dallas centroids ≈ 1,240 ± 150 road miles.
 const miles = estimateMiles({ lat: 34.0522, lon: -118.2437 }, { lat: 32.7767, lon: -96.797 });
@@ -228,9 +287,17 @@ check("report has section headers", report.includes("BLOCKERS (") && report.incl
 check("facts default to empty and stay out of the report", reportResult.facts.length === 0 && !report.includes("CITED FACTS"));
 const withFacts = formatPreflightReport(reportIdea, {
   ...reportResult,
-  facts: ["Duty, HTS 8507: MFN 3.4% (USITC HTS)"],
+  facts: [
+    {
+      id: "hts-duty-8507",
+      text: "HTS heading 8507 returned possible MFN rates; verify the full classification",
+      sources: [reviewedSourceUse("usitc_hts")],
+    },
+  ],
+  sources: [reviewedSourceUse("usitc_hts")],
 });
-check("cited facts render as a report section", withFacts.report.includes("CITED FACTS (1)") && withFacts.report.includes("• Duty, HTS 8507"));
+check("cited facts render as a report section", withFacts.report.includes("CITED FACTS (1)") && withFacts.report.includes("• HTS heading 8507"));
+check("persisted report appends a sources footer", withFacts.report.includes("SOURCES\n[1] Harmonized Tariff Schedule"));
 check("report carries the facts line", report.includes("Declared value: $180,000") && report.includes("Weight: 12,000 lbs"));
 check("report names the empty-bench state", report.includes("0 approved on the bench"));
 

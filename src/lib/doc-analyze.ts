@@ -1,13 +1,13 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { getValidAccessToken } from "./gmail-oauth";
 
 // Fetch a JobDocument's actual bytes (Gmail attachment, public URL, or
-// data: URL), extract text from PDFs, ask Haiku to generate a structured
+// data: URL), extract text from PDFs, ask GPT-5.6 to generate a structured
 // commentary, and persist results. Surfaced on the job workbench.
 //
 // Idempotent: skips if aiAnalyzedAt is recent (within 7 days) and force=false.
@@ -16,8 +16,8 @@ export async function analyzeJobDocument(args: {
   force?: boolean;
 }): Promise<{ ok: true; summary: string; flags: string[]; keyFields: Record<string, unknown> } | { error: string }> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const doc = await prisma.jobDocument.findFirst({
     where: { id: args.documentId, officeId: session.officeId },
@@ -83,9 +83,9 @@ export async function analyzeJobDocument(args: {
     return { error: "Couldn't extract any text from the document - may be a scanned image (OCR not yet supported)" };
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 600,
     system: `You are a freight forwarding office assistant analyzing a single shipment document.
 
@@ -141,14 +141,14 @@ Be conservative with flags - false alarms erode trust.`,
 
 // Ask a free-form question about a JobDocument. Fetches the PDF text on the
 // fly (or reuses cached aiSummary + key fields if PDF text is unavailable)
-// and feeds the operator's question through Haiku for a grounded answer.
+// and feeds the operator's question through GPT-5.6 for a grounded answer.
 export async function askAboutDocument(args: {
   documentId: string;
   question: string;
 }): Promise<{ ok: true; answer: string } | { error: string }> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const doc = await prisma.jobDocument.findFirst({
     where: { id: args.documentId, officeId: session.officeId },
@@ -204,9 +204,9 @@ export async function askAboutDocument(args: {
     return { error: "Couldn't read the document and no cached analysis exists. Approve the doc first to trigger analysis." };
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 600,
     system: `You answer the operator's question about a single freight document. Be concise (<120 words). Quote specific numbers/dates from the doc when relevant. If the answer isn't in the document, say so plainly - don't speculate. No emojis, no markdown headers.
 

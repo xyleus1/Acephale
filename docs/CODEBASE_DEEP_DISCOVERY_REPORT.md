@@ -133,7 +133,7 @@ flowchart LR
 
   Gmail["Gmail OAuth + Gmail API"] --> GmailSync["Gmail Sync"]
   GmailSync --> Threads["EmailThread / EmailMessage"]
-  Threads --> Classifier["Claude email classifier"]
+  Threads --> Classifier["GPT-5.6 email classifier"]
   Classifier --> Inquiry["Inquiry"]
   Inquiry --> Job["Job"]
 
@@ -147,7 +147,7 @@ flowchart LR
 
   Job --> Docs["JobDocument"]
   Docs --> Storage["Local or S3-compatible document storage"]
-  Docs --> DocAI["Claude document classify/analyze"]
+  Docs --> DocAI["GPT-5.6 document classify/analyze"]
 
   Inquiry --> CarrierQuotes["CarrierQuote"]
   Inquiry --> ForwarderDrafts["ForwarderRequestDraft"]
@@ -157,7 +157,7 @@ flowchart LR
   Job --> Strategy["Commercial strategy engine"]
   Inquiry --> Strategy
   Strategy --> StrategyTables["StrategyAssessment / RouteOption / PriceRecommendation / RiskAssessment / StrategyAction"]
-  Strategy --> Agent["In-app Claude agent + tools"]
+  Strategy --> Agent["In-app GPT-5.6 agent + tools"]
 
   Cron["Vercel cron"] --> GmailSync
   Cron --> RiskScan["Risk scan"]
@@ -172,9 +172,9 @@ There is one Next.js application using App Router, React 19, and server actions.
 
 Evidence:
 
-- `package.json:20-29` dependencies include Next, React, Prisma, Anthropic, OpenAI, pdf-parse, zod.
+- `package.json:20-29` dependencies include Next, React, Prisma, OpenAI, pdf-parse, and zod.
 - `src/app` contains UI routes and API routes.
-- `README.md:12-16` lists Next.js, Prisma, cookie auth, and Anthropic Claude.
+- `README.md:12-16` lists Next.js, Prisma, cookie auth, and OpenAI GPT-5.6.
 
 Major UI routes:
 
@@ -248,24 +248,24 @@ Current queue risks:
 
 ### AI systems
 
-AI is mostly direct Anthropic calls embedded in product code. There is no central prompt registry, no RAG service, no embedding index, and no evaluation framework except commercial strategy tests.
+AI calls use a shared GPT-5.6 Responses API adapter. There is no central prompt registry, no RAG service, no embedding index, and no evaluation framework except commercial strategy tests and the static GPT-5.6 runtime contract.
 
 Evidence:
 
 - `src/lib/agent-chat.ts:139-267` contains the in-app agent system prompt.
 - `src/lib/agent-tools.ts:33+` defines tool schemas; `src/lib/agent-tools.ts:1931+` dispatches them.
-- `src/lib/email-classifier.ts:53-164` classifies inbound email with Claude.
-- `src/lib/thread-actions.ts:10-390` parses/link/creates inquiry from email threads with Claude.
-- `src/lib/doc-analyze.ts:14-140` analyzes PDF documents with Claude.
-- `src/lib/doc-classify.ts:14-119` classifies email attachments with Claude.
-- `src/lib/sourcing-offers.ts:26-134` extracts supplier offers with Claude.
+- `src/lib/email-classifier.ts:53-164` classifies inbound email with GPT-5.6.
+- `src/lib/thread-actions.ts:10-390` parses, links, or creates inquiries from email threads with GPT-5.6.
+- `src/lib/doc-analyze.ts:14-140` analyzes PDF documents with GPT-5.6.
+- `src/lib/doc-classify.ts:14-119` classifies email attachments with GPT-5.6.
+- `src/lib/sourcing-offers.ts:26-134` extracts supplier offers with GPT-5.6.
 - `src/app/api/transcribe/route.ts:12-33` uses OpenAI Whisper.
 
 ### External integrations
 
 Implemented:
 
-- Anthropic Claude.
+- OpenAI GPT-5.6.
 - OpenAI Whisper for transcription.
 - Gmail OAuth, Gmail read, Gmail send, attachment fetch.
 - Google Sheets API/service-account/API-key/CSV fallback.
@@ -311,7 +311,7 @@ Important files:
 
 Dependencies:
 
-- Next.js 15, React 19, Prisma 6, Anthropic SDK, OpenAI SDK, pdf-parse, zod.
+- Next.js 15, React 19, Prisma 6, OpenAI SDK, pdf-parse, and zod.
 
 Business ownership:
 
@@ -321,7 +321,7 @@ Notes:
 
 - `package.json:7` runs `prisma generate && next build`.
 - `package.json:11-16` has strategy tests, tenant audit, Prisma generate/migrate/push.
-- `.env.example` omits several env vars used by code: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `CRON_SECRET`. That is sloppy and will waste deployment time.
+- `.env.example` includes the active OpenAI key contract. Gmail OAuth and cron environment documentation must remain aligned with their runtime routes.
 
 ### `/docs`
 
@@ -1107,8 +1107,7 @@ Limitations:
 
 ### Models used
 
-- Anthropic `claude-haiku-4-5-20251001`: parsing, classification, linked-thread creation, document classify/analyze, sourcing offers, stuck-job summaries, in-app agent tool loop.
-- Anthropic `claude-opus-4-6`: meeting notes and email drafts in `src/lib/assistant.ts`.
+- OpenAI `gpt-5.6`: parsing, classification, linked-thread creation, document classify/analyze, sourcing offers, stuck-job summaries, meeting notes, drafts, and the in-app agent tool loop.
 - OpenAI `whisper-1`: audio transcription in `src/app/api/transcribe/route.ts`.
 
 Evidence:
@@ -1139,9 +1138,9 @@ The main in-app agent:
 - Trigger: user sends a message in agent chat.
 - Input: chat history, user message, optional focused job.
 - Context: active jobs, pending RFQs, reference control sheet summary, focused job details, documents, target history, linked threads, attachments, strategy packet.
-- Processing: optional special RFQ paste path, optional commercial brain preflight, Anthropic tool-calling loop, dispatch through `agent-tools`.
+- Processing: optional special RFQ paste path, optional commercial brain preflight, GPT-5.6 Responses API function-calling loop, dispatch through `agent-tools`.
 - Output: assistant reply, tool trace, page cues, optional proposal IDs.
-- Failure modes: missing `ANTHROPIC_API_KEY`, JSON parse failures in special parsers, wrong tool routing, stale tool context, source span limitations, token/context truncation.
+- Failure modes: missing `OPENAI_API_KEY`, JSON parse failures in special parsers, wrong tool routing, stale tool context, source span limitations, and token or context truncation.
 
 Evidence:
 
@@ -1193,18 +1192,18 @@ Missing:
 
 | Workflow | Trigger | Input | Processing | Output | Failure modes |
 | --- | --- | --- | --- | --- | --- |
-| Inbound email classification | Gmail sync or reclassify | Message subject/body/sender plus open inquiries/jobs/customers | Claude classifier | `EmailMessage.classification`, parsed RFQ/rate hints | Missing API key returns `OTHER`; JSON parse can fail; prompt may over/under-link |
-| Thread auto-create/link | Gmail sync/WhatsApp ingest/manual action | Full thread transcript, open inquiries/jobs | Claude chooses skip/link/create | `Inquiry`, linked `EmailThread`, proposed `Job` | Duplicate or wrong linking; no exact source spans |
-| Pasted RFQ parsing | Agent chat paste | User message | Claude JSON extraction, then proposal/direct create | `AgentProposal` or `Inquiry`/target history | JSON parse; hallucinated fields mitigated by prompt but not schema-validated |
+| Inbound email classification | Gmail sync or reclassify | Message subject/body/sender plus open inquiries/jobs/customers | GPT-5.6 classifier | `EmailMessage.classification`, parsed RFQ/rate hints | Missing API key returns `OTHER`; JSON parse can fail; prompt may over/under-link |
+| Thread auto-create/link | Gmail sync/WhatsApp ingest/manual action | Full thread transcript, open inquiries/jobs | GPT-5.6 chooses skip/link/create | `Inquiry`, linked `EmailThread`, proposed `Job` | Duplicate or wrong linking; no exact source spans |
+| Pasted RFQ parsing | Agent chat paste | User message | GPT-5.6 JSON extraction, then proposal/direct create | `AgentProposal` or `Inquiry`/target history | JSON parse; hallucinated fields mitigated by prompt but not schema-validated |
 | Commercial strategy | Job/RFQ pages, agent tools, decision queue | Inquiry/job, quotes, lanes, history, margin, documents, target trail | Deterministic engine | `StrategyAssessment`, route/price/risk/action tables | Bad inputs produce bad strategy; not AI, but depends on data quality |
 | Customer quote draft | Job action/agent tool | Strategy + job/RFQ context | Deterministic draft builder | Draft subject/body/line items | Blocks if quote gate not ready; no actual send in this flow |
 | Negotiation/missing-info drafts | Job actions/agent tools | Strategy, RFQ gaps, route/quote context | Deterministic/templated helpers | Drafts/events | Draft only; freshness key helps but not enough for legal audit |
 | Forwarder draft creation | Pricing/job/agent tool | Inquiry + strategy + forwarder directory | Deterministic draft builder | `ForwarderRequestDraft` rows | Blocks if RFQ immature; send operationally blocked by sender/directory setup |
-| Document attachment classification | Gmail sync/job doc flow | Attachment metadata + email/body/job context | Claude classify | `JobDocument` filled/updated | No OCR; attachment URL/proxy dependence |
-| PDF document analysis | Document approval/background job | PDF bytes/text | `pdf-parse` + Claude JSON | AI summary/flags/key fields | Scanned docs fail; arbitrary URL fetch risk; JSON parse failure |
-| Supplier offer extraction | Operator/agent/source summary | Linked email threads | Claude batches extraction | `EmailThread.supplierOffer` JSON | Offer fields are JSON strings; no normalized supplier offer table |
-| Sourcing award/counter/reply | Operator action | Thread/inquiry/job context | Deterministic mutations + Claude draft | Awarded supplier, child forwarding job, draft emails | Requires good linked threads; not a full procurement state machine |
-| Stuck job summary | Cron/API/tool | Old jobs | Optional Claude summary | Stuck job list with next action | Missing API key produces fallback |
+| Document attachment classification | Gmail sync/job doc flow | Attachment metadata + email/body/job context | GPT-5.6 classify | `JobDocument` filled/updated | No OCR; attachment URL/proxy dependence |
+| PDF document analysis | Document approval/background job | PDF bytes/text | `pdf-parse` + GPT-5.6 JSON | AI summary/flags/key fields | Scanned docs fail; arbitrary URL fetch risk; JSON parse failure |
+| Supplier offer extraction | Operator/agent/source summary | Linked email threads | GPT-5.6 batches extraction | `EmailThread.supplierOffer` JSON | Offer fields are JSON strings; no normalized supplier offer table |
+| Sourcing award/counter/reply | Operator action | Thread/inquiry/job context | Deterministic mutations + GPT-5.6 draft | Awarded supplier, child forwarding job, draft emails | Requires good linked threads; not a full procurement state machine |
+| Stuck job summary | Cron/API/tool | Old jobs | Optional GPT-5.6 summary | Stuck job list with next action | Missing API key produces fallback |
 | Voice transcription | `/api/transcribe` upload | Audio file | OpenAI Whisper | Transcript | No durable transcript entity by itself |
 
 ### RAG, embeddings, evals, MCP
@@ -1220,7 +1219,7 @@ Missing:
 
 | Integration | Where implemented | Authentication | Key functions | Risks |
 | --- | --- | --- | --- | --- |
-| Anthropic Claude | `src/lib/assistant.ts`, `agent-chat.ts`, `email-classifier.ts`, `thread-actions.ts`, `doc-*`, `sourcing-*`, `job-email.ts` | `ANTHROPIC_API_KEY` | Parsing, classification, drafts, agent tool loop, document analysis | Prompts scattered; JSON parsing fragile; no central evals; `.env.example` omits key |
+| OpenAI GPT-5.6 | `src/lib/gpt56-client.ts`, `assistant.ts`, `agent-chat.ts`, `email-classifier.ts`, `thread-actions.ts`, `doc-*`, `sourcing-*`, `job-email.ts` | `OPENAI_API_KEY` | Parsing, classification, drafts, agent tool loop, document analysis | Shared runtime adapter; JSON parsing remains fragile outside the China Structured Outputs path |
 | OpenAI Whisper | `src/app/api/transcribe/route.ts` | `OPENAI_API_KEY` | Audio transcription | No durable transcript workflow obvious; `.env.example` omits key |
 | Gmail OAuth/read/send | `src/lib/gmail-oauth.ts`, `gmail-sync.ts`, `gmail-send.ts`, auth routes | Google OAuth client ID/secret/redirect; stored OAuth tokens | Mail sync, outbound send, attachments | Tokens plaintext; Gmail-only despite Outlook/IMAP docs; send scope and allowed sender setup required |
 | Google Sheets | `src/lib/google-sheets-sync.ts`, `src/app/api/google-sheets/sync/route.ts` | Service account JWT, API key, or public CSV fallback | Import requests/jobs | Conflict/source-of-truth rules missing; source IDs are weak row keys |

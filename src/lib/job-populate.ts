@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { createPendingJobUpdateProposal } from "./agent-proposals";
@@ -53,8 +53,8 @@ function displayValue(value: unknown) {
 // AgentProposal before any write happens.
 export async function populateJobFromEmails(jobId: string): Promise<PopulateResult> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const job = await prisma.job.findFirst({
     where: { id: jobId, officeId: session.officeId },
@@ -101,9 +101,9 @@ export async function populateJobFromEmails(jobId: string): Promise<PopulateResu
 
   const fullText = (transcripts.join("\n\n════\n\n") + (offerSummaries.length ? `\n\nSUPPLIER OFFERS PARSED EARLIER:\n${offerSummaries.join("\n")}` : "")).slice(0, 18000);
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 800,
     system: `You consolidate an entire email/conversation history about ONE freight deal into a structured load record.
 

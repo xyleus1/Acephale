@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { openInquiryStatusFilter } from "@/lib/inquiry-status";
 import { buildRouteViewport, type RouteMapPoint } from "@/lib/route-map-viewport";
 
+export const maxDuration = 60;
 export const metadata = { title: "Domestic pricing" };
 
 type SearchParams = Promise<{ inquiry?: string }>;

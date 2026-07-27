@@ -2,21 +2,39 @@
 
 You are building the intelligence layer for Derya (this repo: Next.js 15 App Router + TypeScript + Prisma + Neon Postgres, deployed on Vercel at derya.ai). Derya runs a freight brokerage niche: high-value, security-sensitive tech freight for California hardware companies (servers/GPUs, semicap tools, lithium batteries, networking gear, robotics, instruments). Read `docs/PROJECT_CONTEXT.md`, `docs/DECISIONS.md`, and `docs/intel/SOURCES.md` before writing code.
 
+## Implementation status as of 2026-07-21
+
+Phase A is complete in the `casablanca` workspace: the existing pre-flight,
+enrichment, market baseline, location classifier, and shared vocabularies now
+have canonical homes under `src/lib/intel/`; the UI lives at
+`/dashboard/intel`; `/dashboard/market` redirects; and exact source uses flow
+through widgets and persisted RFQ reports. The separate company-brain
+`/dashboard/intelligence` surface was not changed.
+
+Phase B is next. The unified question input, intent router, serializable
+`AnswerDocument`, and standalone customs, carrier, and lane resolvers do not
+exist yet. Do not describe Phase A as the complete Intel V1.
+
 ## Mission
 
 An operator types any shipment or market question ("8 pallets of battery modules Fremont to Austin, $180k, Friday pickup", "what duty does a China-origin network switch pay", "is carrier DOT 1234567 safe to use", "what is the market on SF to Phoenix") and gets back a decision-grade answer built from CITED PUBLIC DATA: real duty rates, real rulings, real insurance filings, real carrier safety records, real market indexes. The bar: every answer must beat a generic ChatGPT response because every number is traceable to a named public source. An uncited number is a bug.
 
 ## Non-negotiables
 
-1. **Isolated silo.** All new code lives in `src/lib/intel/` (engine, sources, fetchers, parsers) and `src/app/dashboard/intel/` (routes/UI). The rest of the app may import from intel only through a small index (`src/lib/intel/index.ts`); intel may import shared primitives (prisma, auth, sheet-cells, icon) but nothing feature-specific. The goal: this module could be extracted to its own service later without surgery. First task: absorb the existing intel-ish libs into the silo with re-export shims so nothing breaks: `src/lib/load-check.ts` (~30-rule deterministic pre-flight engine, heavily tested), `src/lib/load-check-extract.ts` (Haiku free-text parser), `src/lib/load-check-enrich.ts` (HTS duty + CROSS rulings + FMCSA L&I facts), `src/lib/market-indicators.ts` (EIA/BLS/FMCSA/Census baseline), plus their UI (`load-check-panel.tsx`, `market-baseline.tsx`) and tests (`scripts/load-check*.test.ts`, `scripts/market-indicators.test.ts`).
+1. **Isolated silo.** All new code lives in `src/lib/intel/` (engine, sources, fetchers, parsers) and `src/app/dashboard/intel/` (routes/UI). The rest of the app may import from Intel only through `src/lib/intel/index.ts` for client-safe logic or the build-enforced `src/lib/intel/server.ts` for server-only operations. Intel may import shared primitives (prisma, auth, sheet-cells, icon) but nothing feature-specific. The goal: this module could be extracted to its own service later without surgery. The Phase A compatibility paths are one-way re-export shims: `src/lib/load-check.ts`, `src/lib/load-check-extract.ts`, `src/lib/load-check-enrich.ts`, and `src/lib/market-indicators.ts`.
 
 2. **The Source Registry is the spine.** Create `src/lib/intel/sources.ts`: a typed registry where every source is `{ id, name, publisher, homepage, access: keyless|free_key|manual, cadence, cacheSeconds, reachableFromVercel: boolean, notes }`. Every fetcher returns facts tagged `{ sourceId, asOf, fetchedAt }`. No fetch outside the registry.
 
 3. **The Sources button.** Every intel widget, tile, answer, and report renders a small corner affordance (a compact "Sources" chip/button) that opens a popover listing exactly the sources used for what is on screen: name, deep link, data as-of date, cache age. Exported/persisted reports append a plain-text sources footer. This is a product feature, not a footnote: it is the visible proof that the answer is not made up.
 
-4. **Public data, maximally.** Free and public first, always. Keys already live in Vercel env (never in the repo): `CENSUS_API_KEY`, `EIA_API_KEY`, `ANTHROPIC_API_KEY`. Mert will do free signups when asked (FMCSA QCMobile webkey via login.gov, optional BLS key). Monthly manual steps are acceptable if documented as ops tasks (FBI cargo-theft CSV ETL, BTS TransBorder downloads). No paid sources may be assumed.
+4. **Public data, maximally.** Free and public first, always. Keys already live in Vercel env (never in the repo): `CENSUS_API_KEY`, `EIA_API_KEY`, `OPENAI_API_KEY`. Mert will do free signups when asked (FMCSA QCMobile webkey via login.gov, optional BLS key). Monthly manual steps are acceptable if documented as ops tasks (FBI cargo-theft CSV ETL, BTS TransBorder downloads). No paid sources may be assumed.
 
-5. **Deterministic before LLM.** The AI (Haiku, pattern in `load-check-extract.ts`) only parses free text into structured intent/entities. Every fact comes from a deterministic resolver against the registry; every judgment comes from a rule with a citable basis. Answers compose facts + rules; the LLM never generates facts.
+5. **Deterministic before LLM.** China load extraction uses GPT-5.6
+   Structured Outputs in `preflight/extract-china-import.ts`. The model only
+   parses free text into a draft structured packet. Every external fact comes
+   from a deterministic resolver against the registry, and every judgment
+   comes from a rule with a citable basis. Answers compose facts and rules;
+   the LLM never establishes customs facts or conclusions.
 
 ## v1 scope (in priority order)
 

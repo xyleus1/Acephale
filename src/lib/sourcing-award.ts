@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
@@ -15,7 +15,7 @@ export async function awardSupplier(threadId: string): Promise<
   | { error: string }
 > {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
 
   const thread = await prisma.emailThread.findFirst({
     where: { id: threadId, officeId: session.officeId },
@@ -113,7 +113,7 @@ export async function awardSupplier(threadId: string): Promise<
     }
   }
 
-  // Draft a confirmation email to the supplier with Haiku.
+  // Draft a confirmation email to the supplier with GPT-5.6.
   let emailDraft = `Dear ${offer.supplierName ?? thread.messages.find((m) => m.direction === "INBOUND")?.fromName ?? "supplier"},\n\nWe are pleased to confirm we are moving forward with your offer for ${thread.inquiry.commodity ?? "the discussed commodity"}. Please send your pro forma invoice and contract for our review.\n\nKind regards,\nDerya Maritime Inc.`;
 
   if (apiKey) {
@@ -123,9 +123,9 @@ export async function awardSupplier(threadId: string): Promise<
         return `${dir} ${m.sentAt.toISOString().split("T")[0]} · ${m.fromName ?? m.fromEmail}\n${m.bodyText ?? ""}`;
       }).join("\n\n────\n\n").slice(0, 6000);
 
-      const client = new Anthropic({ apiKey });
+      const client = new Gpt56Client({ apiKey });
       const result = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
+        model: "gpt-5.6",
         max_tokens: 400,
         system: `You draft a short, professional supplier-award email from a freight/procurement office to a supplier whose offer we just accepted. Keep it under 120 words. Reference the commodity, accept their terms, ask for pro forma invoice + draft contract. No emojis, no markdown. Sign as "Derya Maritime Inc."`,
         messages: [{
@@ -154,8 +154,8 @@ export async function draftCounterOffer(args: {
   target: string;  // free-form: "$480/MT", "5% under best", "match BEST", "ask for sample"
 }): Promise<{ ok: true; draft: string; replyTo: string | null } | { error: string }> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const thread = await prisma.emailThread.findFirst({
     where: { id: args.threadId, officeId: session.officeId },
@@ -210,9 +210,9 @@ export async function draftCounterOffer(args: {
 
   const lastInbound = [...thread.messages].reverse().find((m) => m.direction === "INBOUND");
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 450,
     system: `You draft a polite, professional COUNTER-OFFER email from a freight/procurement office to a supplier whose price is too high. Keep under 130 words. No emojis, no markdown headers. Tone: respectful, firm, value-anchored. Reference what they last quoted, state the target price clearly, hint that we have other offers but never name a competing supplier or expose another supplier's exact number. Ask them to come back with a revised offer by a specific date (today + 3 business days). End with "Looking forward to your revised pricing." or similar. Sign as "Derya Maritime Inc." (no specific person name). Output ONLY the email body, ready to send.`,
     messages: [{
@@ -246,8 +246,8 @@ export async function draftReplyToMessage(args: {
   | { error: string }
 > {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   let thread;
   let target;
@@ -287,9 +287,9 @@ export async function draftReplyToMessage(args: {
   const emailSystem = `You draft short, professional email replies for a freight forwarding & procurement office (Derya Maritime Inc., Istanbul-based). Keep under 150 words. No emojis, no markdown headers, no preamble like "Here's the draft:" - output ONLY the email body, ready to send. Sign as the user (don't add a placeholder name - the user has their own signature). Match the tone of the most recent inbound message.`;
   const whatsAppSystem = `You draft WhatsApp replies for a freight forwarding & procurement office (Derya Lojistik, Istanbul-based). Reply in the language of the conversation (usually Turkish). Keep it short - under 80 words, like a real WhatsApp message: no subject line, no formal letter opening, no signature block, no markdown. Warm but professional; no emojis unless the counterparty uses them. Output ONLY the message text, ready to send.`;
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 500,
     system: isWhatsApp ? whatsAppSystem : emailSystem,
     messages: [{

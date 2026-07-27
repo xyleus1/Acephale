@@ -86,7 +86,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
               <NavLink href="/dashboard/outreach" icon={<Icon name="activity" />}>Outreach</NavLink>
 
-              <NavLink href="/dashboard/market" icon={<Icon name="trending-up" />}>Intelligence</NavLink>
+              <NavLink href="/dashboard/intel" icon={<Icon name="trending-up" />}>Intel</NavLink>
 
               {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing, /dashboard/intelligence
                   and /dashboard/carriers stay reachable directly (the carrier bench is linked from the

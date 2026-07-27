@@ -13,7 +13,7 @@ Automated freight forwarding & procurement platform. Captures customer RFQs, par
 - DB: SQLite (local demo) / Postgres-ready
 - ORM: Prisma
 - Auth: Cookie-based credentials
-- AI: Anthropic Claude (Haiku for RFQ parsing, Opus for drafts)
+- AI: OpenAI GPT-5.6 via the Responses API
 
 ## Prereqs
 
@@ -21,7 +21,7 @@ Automated freight forwarding & procurement platform. Captures customer RFQs, par
 
 ## Getting started
 
-1) Create `.env` from `.env.example` (set `ANTHROPIC_API_KEY` for AI parsing)
+1) Create `.env` from `.env.example` (set `OPENAI_API_KEY` for AI features)
 2) Install deps:
 
 ```bash

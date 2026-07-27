@@ -17,7 +17,7 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 
 ### 1. Forwarding & Operations (the shipment)
 - **RFQ Inbox** — auto-capture inbound freight requests from connected Gmail/Outlook (or manual entry)
-- **AI Parsing** — Claude extracts origin, destination, mode, container, incoterms, commodity, weight, volume, cargo-ready date from unstructured email text
+- **AI Parsing:** GPT-5.6 extracts origin, destination, mode, container, incoterms, commodity, weight, volume, and cargo-ready date from unstructured email text.
 - **Job Pipeline** — INQUIRY → QUOTED → BOOKED → IN_TRANSIT → CUSTOMS → DELIVERED
 - **Documents** — checklist per job (BL, Invoice, Packing List, COO, Customs Declaration, Booking Conf.) with PENDING/UPLOADED/APPROVED states
 - **Milestones** — Booking, Cargo Ready, ETD, ETA, Customs Entry, Customs Release, Delivery (planned + actual dates, late detection)
@@ -42,7 +42,10 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 1. **Tenant isolation** — multi-office, fully isolated by `officeId`
 2. **Visibility** — own-accounts vs whole-office configurable per user
 3. **MVP storage shortcut** — quote line items stored as pipe-delimited strings in `Job.notes` (`description|amount|currency`)
-4. **AI provider** — Anthropic Claude (Haiku for parsing, Opus for drafts)
+4. **AI provider:** All active reasoning, parsing, classification, drafting,
+   document analysis, and agent tool-use paths use OpenAI GPT-5.6 through
+   `OPENAI_API_KEY`. Audio transcription remains on `whisper-1`, the
+   specialized speech-to-text endpoint.
 5. **Email** — Gmail/Outlook OAuth + IMAP fallback; UI complete, OAuth backend pending env keys
 6. **PDF generation** — server-rendered HTML at `/api/jobs/[id]/quote-pdf`, browser-printed via `window.print()` (no headless Chromium dependency)
 
@@ -52,7 +55,7 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 - Office-isolated foundation, credentials login, role-based visibility
 - Customer pool, segmentation, company detail with contacts/activities/quotes/tasks
 - Job pipeline (kanban + 6-tab detail: overview/emails/documents/milestones/procurement/quote)
-- RFQ inbox + detail with AI parse button (Claude Haiku)
+- RFQ inbox + detail with GPT-5.6 parse button
 - Manual New Job + New RFQ forms
 - Email connection UI (Gmail/Outlook/IMAP)
 - Operations Command (`/dashboard/activity`) — RFQ pipeline, overdue jobs, milestones, procurement queue
@@ -69,7 +72,9 @@ See `PRODUCTIZATION_ROADMAP.md` for the full path to a production-ready automate
 - Next.js 15 (App Router) + TypeScript, server components + server actions
 - Prisma + SQLite (dev). Drift exists; use `npx prisma db push`, not `migrate dev`
 - Cookie-based credentials session
-- Anthropic SDK (`@anthropic-ai/sdk`) for parsing/drafting
+- Shared OpenAI Responses API adapter with GPT-5.6 for parsing, drafting,
+  classification, document analysis, and agent function tools
+- GPT-5.6 Structured Outputs for China Intel load extraction
 - Mercury banking-app inspired design system (white sidebar, indigo accent, thin dividers)
 
 ## Open Decisions
