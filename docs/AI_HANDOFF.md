@@ -12,72 +12,67 @@ crm-status-structure (Conductor workspace phoenix, targets main)
 
 ## Commit
 
-00c57f6
+see git log
 
 ## Task implemented
 
-Made the daily and weekly CRM outreach workflow impossible to miss.
+Split Outreach into its own top-level workspace while keeping it fully
+connected to CRM.
 
-- `/dashboard/crm` now opens on the contact table with a persistent Outreach
-  Desk launcher above it. The launcher shows daily readiness, weekly planning,
-  channel quotas, and separate buttons for the daily queue and weekly pool.
-- Daily and weekly views have stable URLs at `?view=today` and `?view=week`.
-  Search text survives view changes, so the workflow can be bookmarked or
-  reopened without relying on hidden component state.
-- Bookface, LinkedIn, and Email cards expose assigned, completed, and empty
-  capacity. Weekly shortages appear as three explicit empty-slot prompts that
-  take the operator back to add or classify contact data.
-- Channel cards filter the queue. The Open, Reached out, and Later controls are
-  pinned to the right side of the outreach table so the Desk Assistant panel
-  cannot push the actual work controls off-screen.
-- The launcher, channel summaries, empty-slot prompts, and daily task list
-  remain usable at mobile widths.
+- Added `/dashboard/outreach` and a dedicated Outreach item in the Commercial
+  Workflow navigation. The route defaults to today's queue and keeps the weekly
+  pool at `?view=week`.
+- `/dashboard/crm` is now the contact-data workspace. It shows status,
+  importance, category, channel, and contact details, with a direct Open
+  Outreach button instead of embedding outreach as a CRM mode.
+- Both routes reuse the same office-scoped contacts, companies, deterministic
+  planner, `OutreachPlanItem` records, and CRM server actions. There is no
+  copied data and no second outreach implementation.
+- Daily and weekly views return to CRM through Manage CRM contacts and the
+  empty-capacity cards. Search text survives the route transition.
+- Existing `/dashboard/crm?view=today|week` links redirect to the new Outreach
+  route so bookmarks do not strand operators on an obsolete CRM mode.
+- Contact edits, Reached out, and Later now revalidate both CRM and Outreach.
+  Manual completion still writes the CRM activity and touch timestamps.
 
 ## Files changed
 
-- `src/lib/crm-view.ts`
-- `src/app/dashboard/crm/page.tsx`
-- `src/components/contact-sheet.tsx`
-- `src/app/globals.css`
+- `src/app/dashboard/outreach/page.tsx`
+- `src/app/dashboard/crm/page.tsx`, `src/app/dashboard/crm/actions.ts`
+- `src/app/dashboard/layout.tsx`, `src/components/contact-sheet.tsx`
+- `src/lib/crm-view.ts`, `src/lib/crm-workspace.ts`
 - `scripts/crm-outreach-ui.test.ts`
-- `package.json`
 - `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
+- `docs/DECISIONS.md`
 
 ## Verification passed
 
-- `npx prisma validate` and `npm run db:generate`
 - `npm run test:crm`
-- `npm run test:lead-board` after merging current main
 - `npx tsc --noEmit`
 - `npm run build`
 - `git diff --check` and changed-text em dash check
-- Browser QA at 1440px and 390px widths with a disposable local Postgres
-  database. Verified contacts, daily, and weekly URLs; quota and empty-slot
-  counts; pinned row actions; mobile layouts; and no console errors.
+- Authenticated browser QA with a disposable local Postgres database. Verified
+  the sidebar tab, CRM and Outreach cross-links, daily and weekly URLs, legacy
+  redirects, search preservation, responsive layouts, Reached out persistence
+  into CRM, and no console errors.
 
 ## Verification failed then resolved
 
-- The first `npm run build` attempt ran while `next dev` was still using the
-  same `.next` directory and failed page-data collection with missing generated
-  route modules. After stopping the dev server and moving the generated cache
-  aside, a clean production build passed. This was build-cache contention, not
-  a source or type error.
-- The first post-merge Prisma validation invocation omitted `DATABASE_URL`, and
-  the first post-merge TypeScript pass used the pre-merge generated Prisma
-  client. Validation passed with the disposable local database URL, then
-  `npm run db:generate` refreshed the client and the combined TypeScript and
-  production-build checks passed.
+- The first build invocation omitted `DATABASE_URL`. The build passed after
+  using the disposable local database URL.
+- The first local login attempts lacked the QA email allowlist and
+  `AUTH_SECRET`. Both were supplied only to the disposable local server.
+- The disposable QA database was behind the current Prisma schema. A guarded
+  local `npm run db:push` synchronized it before browser QA.
 
 ## Caveats
 
-- This remains a human-operated workflow. Open launches the configured channel,
-  and Reached out records completion. No Bookface, LinkedIn, or email message is
+- This route split has no schema or dependency change. The production planner
+  migration was already deployed with the prior CRM outreach release.
+- Outreach remains human-operated. No Bookface, LinkedIn, or Email message is
   sent automatically.
-- Contacts only fill outreach capacity after they are classified as Personally
-  important or Startups and assigned Bookface, LinkedIn, or Email. Forwarders
-  remain data-only.
-- Current `origin/main` was merged after the CRM implementation commit. The
-  combined tree was reverified before push.
+- Contacts must be classified as Personally important or Startups and assigned
+  a channel before they can fill capacity. Forwarders remain data-only.
 
 ## Previous Update
 

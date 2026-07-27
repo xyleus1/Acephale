@@ -17,6 +17,33 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-27 - Separate connected Outreach workspace
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Move daily and weekly outreach execution out of the CRM page and into
+  a top-level Outreach tab without duplicating contact data or planner logic.
+- Files changed: `src/app/dashboard/outreach/page.tsx`,
+  `src/app/dashboard/crm/page.tsx`, `src/app/dashboard/crm/actions.ts`,
+  `src/app/dashboard/layout.tsx`, `src/components/contact-sheet.tsx`,
+  `src/lib/crm-view.ts`, `src/lib/crm-workspace.ts`,
+  `scripts/crm-outreach-ui.test.ts`, and docs.
+- Verification: `npm run test:crm`, `npx tsc --noEmit`, `npm run build`,
+  `git diff --check`, changed-text em dash check, and authenticated browser QA
+  against a disposable local Postgres database. Browser QA verified the
+  top-level navigation link, daily and weekly route state, legacy CRM redirect,
+  CRM return link, responsive layouts, manual completion, canonical CRM status
+  updates, and no console errors.
+- Failed/skipped checks: The first build invocation omitted `DATABASE_URL`.
+  The build passed after using the disposable local database URL. The first
+  local login attempts lacked the QA allowlist and `AUTH_SECRET`; both were
+  supplied only to the disposable local server. The stale QA schema was
+  synchronized after the first dashboard load exposed a missing column.
+- Caveats: No migration or dependency change is part of this route split.
+  Outreach remains human-operated and records completion without sending.
+- Follow-up: Populate real CRM contacts and work the daily Outreach queue from
+  `/dashboard/outreach`.
+
 ### 2026-07-27 - CRM Outreach Desk entry point and capacity gaps
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)

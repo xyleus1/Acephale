@@ -86,6 +86,11 @@ type ContactData = {
   companyId?: string;
 };
 
+function revalidateCrmWorkspaces() {
+  revalidatePath("/dashboard/crm");
+  revalidatePath("/dashboard/outreach");
+}
+
 function text(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -169,7 +174,7 @@ export async function createContactAction(patch: ContactPatch): Promise<ActionRe
     },
     select: ROW_SELECT,
   });
-  revalidatePath("/dashboard/crm");
+  revalidateCrmWorkspaces();
   return { row: toContactRow(contact) };
 }
 
@@ -241,7 +246,7 @@ export async function updateContactAction(
     select: ROW_SELECT,
   });
   if (!contact) return { error: "Contact not found." };
-  revalidatePath("/dashboard/crm");
+  revalidateCrmWorkspaces();
   return { row: toContactRow(contact) };
 }
 
@@ -253,7 +258,7 @@ export async function deleteContactAction(
     where: { id: contactId, company: { officeId: session.officeId } },
   });
   if (deleted.count === 0) return { error: "Contact not found." };
-  revalidatePath("/dashboard/crm");
+  revalidateCrmWorkspaces();
   return { ok: true };
 }
 
@@ -394,7 +399,7 @@ export async function markOutreachReachedAction(
     console.warn("[crm-outreach] memory event failed:", error);
   }
 
-  revalidatePath("/dashboard/crm");
+  revalidateCrmWorkspaces();
   revalidatePath("/dashboard/activity");
   return {
     ok: true,
@@ -423,6 +428,6 @@ export async function deferOutreachAction(
   if (deferred.count === 0) {
     return { error: "This outreach item is no longer in today's queue." };
   }
-  revalidatePath("/dashboard/crm");
+  revalidateCrmWorkspaces();
   return { ok: true, planItemId, scheduledForKey: tomorrowKey };
 }

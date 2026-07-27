@@ -26,7 +26,11 @@ import {
   outreachDateKey,
   type OutreachPlanRow,
 } from "@/lib/crm-outreach";
-import { crmViewHref, type CrmView } from "@/lib/crm-view";
+import {
+  crmContactsHref,
+  outreachViewHref,
+  type CrmView,
+} from "@/lib/crm-view";
 import { CellInput, CellSelect } from "@/components/sheet-cells";
 import { Icon } from "@/components/icon";
 
@@ -209,12 +213,12 @@ export function ContactSheet({
   const todayEmpty = Math.max(0, report.today.target - todayAssigned);
 
   function openView(nextView: CrmView) {
-    setView(nextView);
     if (nextView === "contacts") {
-      setCategoryTab("all");
-      setChannelTab("all");
+      router.push(crmContactsHref(q) as Route);
+      return;
     }
-    router.replace(crmViewHref(nextView, q) as Route, { scroll: false });
+    setView(nextView);
+    router.replace(outreachViewHref(nextView, q) as Route, { scroll: false });
   }
 
   const categoryCounts = useMemo(() => {
@@ -735,45 +739,18 @@ export function ContactSheet({
   return (
     <div className="contact-sheet outreach-workspace">
       {view === "contacts" ? (
-        <section className="outreach-launcher" aria-labelledby="outreach-launcher-title">
-          <div className="outreach-launcher-mark">
-            <Icon name="activity" size={20} strokeWidth={2} />
-          </div>
-          <div className="outreach-launcher-copy">
-            <span className="outreach-eyebrow">Outreach desk</span>
-            <h1 id="outreach-launcher-title">Daily and weekly outreach</h1>
+        <section className="outreach-hero" aria-labelledby="crm-contacts-title">
+          <div>
+            <span className="outreach-eyebrow">CRM contacts</span>
+            <h1 id="crm-contacts-title">Contacts and outreach data</h1>
             <p>
-              Send 20 Bookface, 30 LinkedIn, and 30 email outreaches each day.
-              Empty capacity stays visible until you add or classify enough contacts.
+              Maintain status, importance, category, channel, and contact details here.
+              The separate Outreach workspace uses this same data for its daily and weekly queues.
             </p>
-            <div className="outreach-target-pills" aria-label="Daily channel targets">
-              {report.channels.map((channel) => (
-                <span key={channel.key}>
-                  {channel.label} <strong>{channel.dailyTarget}/day</strong>
-                </span>
-              ))}
-            </div>
           </div>
-          <div className="outreach-launcher-stats">
-            <div>
-              <span>Today ready</span>
-              <strong>{todayAssigned}/{report.today.target}</strong>
-              <small>{report.dueNow} queued, {todayEmpty} empty</small>
-            </div>
-            <div>
-              <span>This week planned</span>
-              <strong>{report.weeklyPlanned}/{report.weeklyTarget}</strong>
-              <small>{report.weeklyGap} empty</small>
-            </div>
-          </div>
-          <div className="outreach-launcher-actions">
-            <button type="button" className="btn" onClick={() => openView("today")}>
-              Open daily outreach <Icon name="arrow-right" size={14} />
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={() => openView("week")}>
-              Review weekly pool
-            </button>
-          </div>
+          <a className="btn" href={outreachViewHref("today", q)}>
+            Open Outreach <Icon name="arrow-right" size={14} />
+          </a>
         </section>
       ) : (
         <>
@@ -876,7 +853,7 @@ export function ContactSheet({
               className="mode-tab"
               onClick={() => openView("contacts")}
             >
-              Contacts ({rows.length})
+              Manage CRM contacts ({rows.length})
             </button>
           </div>
 
@@ -920,7 +897,7 @@ export function ContactSheet({
                       {empty > 0 ? `${empty} empty` : "Quota filled"}
                     </span>
                     <span className="outreach-capacity-action">
-                      {empty > 0 ? "Add or classify contacts" : "Review contacts"}
+                      {empty > 0 ? "Add or classify CRM contacts" : "Review CRM contacts"}
                       <Icon name="arrow-right" size={13} />
                     </span>
                   </button>
