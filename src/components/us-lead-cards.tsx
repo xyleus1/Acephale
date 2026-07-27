@@ -11,7 +11,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { CellSelect } from "@/components/sheet-cells";
+import { CopyRef } from "@/components/copy-ref";
+import { AssigneeSelect } from "@/components/assignee-select";
 import { LEAD_QUALITY_LABELS } from "@/lib/lead-quality";
+import { inquiryStatusTone } from "@/lib/inquiry-status";
 import {
   EmailPreviewCard,
   RfqSearchBar,
@@ -73,9 +76,10 @@ function StepTracker({ outreach }: { outreach: RfqOutreachDisplay }) {
   );
 }
 
-function LeadCard({ row, statusOptions }: {
+function LeadCard({ row, statusOptions, userOptions }: {
   row: RfqRowData;
   statusOptions: ReadonlyArray<SheetOption>;
+  userOptions: ReadonlyArray<SheetOption>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -112,20 +116,23 @@ function LeadCard({ row, statusOptions }: {
               {LEAD_QUALITY_LABELS[row.leadQuality.tier]}
             </span>
           )}
-          {row.reference && <span className="lead-card-ref">{row.reference}</span>}
+          {row.reference && <CopyRef code={row.reference} className="lead-card-ref" />}
           <span className="lead-card-ago" title={row.receivedFull}>
             {row.receivedAgo} · {row.sourceLabel}
           </span>
         </div>
-        <div className="lead-card-status" onClick={(e) => e.stopPropagation()}>
-          <CellSelect
-            key={`st:${row.status}`}
-            value={row.status}
-            options={statusOptions}
-            allowCreate
-            createLabel="Add status…"
-            onCommit={(v) => run(() => updateInquiryRowAction(row.id, { status: v }))}
-          />
+        <div className="lead-card-controls" onClick={(e) => e.stopPropagation()}>
+          <div className={`lead-card-status status-cell status-cell--${inquiryStatusTone(row.status)}`}>
+            <CellSelect
+              key={`st:${row.status}`}
+              value={row.status}
+              options={statusOptions}
+              allowCreate
+              createLabel="Add status…"
+              onCommit={(v) => run(() => updateInquiryRowAction(row.id, { status: v }))}
+            />
+          </div>
+          <AssigneeSelect inquiryId={row.id} value={row.assignedToUserId} options={userOptions} compact />
         </div>
       </header>
 
@@ -272,9 +279,10 @@ function LeadCard({ row, statusOptions }: {
   );
 }
 
-export function UsLeadCards({ rows, statusOptions, searchQuery, emptyHint }: {
+export function UsLeadCards({ rows, statusOptions, userOptions, searchQuery, emptyHint }: {
   rows: RfqRowData[];
   statusOptions: ReadonlyArray<SheetOption>;
+  userOptions: ReadonlyArray<SheetOption>;
   searchQuery: string;
   emptyHint: string;
 }) {
@@ -296,7 +304,7 @@ export function UsLeadCards({ rows, statusOptions, searchQuery, emptyHint }: {
       ) : (
         <div className="lead-cards">
           {rows.map((row) => (
-            <LeadCard key={row.id} row={row} statusOptions={statusOptions} />
+            <LeadCard key={row.id} row={row} statusOptions={statusOptions} userOptions={userOptions} />
           ))}
         </div>
       )}

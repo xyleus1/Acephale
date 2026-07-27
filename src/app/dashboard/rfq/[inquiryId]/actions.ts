@@ -77,12 +77,20 @@ export async function updateInquiryField(inquiryId: string, formData: FormData) 
   });
   if (!inquiry) throw new Error("Inquiry not found");
 
+  // cargoReadyDate arrives as <input type="date"> ("YYYY-MM-DD" or "").
+  const cargoReadyRaw = String(formData.get("cargoReadyDate") ?? "").trim();
+  const cargoReadyParsed = cargoReadyRaw ? new Date(`${cargoReadyRaw}T12:00:00Z`) : null;
+
   const data = {
     origin: emptyToNull(formData.get("origin")),
     destination: emptyToNull(formData.get("destination")),
     mode: emptyToNull(formData.get("mode")),
     commodity: emptyToNull(formData.get("commodity")),
     incoterms: emptyToNull(formData.get("incoterms")),
+    fromCompany: emptyToNull(formData.get("fromCompany")),
+    contactName: emptyToNull(formData.get("contactName")),
+    contactPhone: emptyToNull(formData.get("contactPhone")),
+    cargoReadyDate: cargoReadyParsed && !Number.isNaN(cargoReadyParsed.getTime()) ? cargoReadyParsed : null,
     containerType: emptyToNull(formData.get("containerType")),
     containerCount: numberOrNull(formData.get("containerCount")),
     dimensions: emptyToNull(formData.get("dimensions")),
@@ -154,6 +162,24 @@ export async function updateInquiryField(inquiryId: string, formData: FormData) 
   }
 
   revalidatePath(`/dashboard/rfq/${inquiryId}`);
+}
+
+// The "real details (WhatsApp)" paste box - its own action so a Load-details
+// form save can never wipe it, and vice versa.
+export async function saveManualDetailsAction(
+  inquiryId: string,
+  text: string,
+): Promise<{ ok: true } | { error: string }> {
+  const session = await requireSession();
+  const value = text.trim().slice(0, 20_000);
+  const updated = await prisma.inquiry.updateMany({
+    where: { id: inquiryId, officeId: session.officeId },
+    data: { manualDetails: value ? value : null },
+  });
+  if (updated.count === 0) return { error: "RFQ not found." };
+  revalidatePath(`/dashboard/rfq/${inquiryId}`);
+  revalidatePath("/dashboard/rfq");
+  return { ok: true };
 }
 
 export async function updateInquiryStatus(inquiryId: string, status: string) {

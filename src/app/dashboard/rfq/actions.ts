@@ -21,6 +21,7 @@ import { buildWhatsAppInquiry, waDigitsFromWhatsAppAddress, waPhoneDigits } from
 import { metaLeadMarketOf, type MetaLeadMarket } from "@/lib/meta-leads";
 import { logOutboundWhatsAppMessage, sendWhatsAppText, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { canonicalInquiryStatus, normalizeInquiryStatusInput } from "@/lib/inquiry-status";
+import { parseForwardedTo } from "@/lib/forwarder-partners";
 import { deriveSecurityTier } from "@/lib/security-sop";
 import { applyQuoteOutcome } from "@/lib/truckload-quotes";
 import { recordTargetPriceHistory, targetPriceChanged } from "@/lib/target-price-history";
@@ -214,8 +215,11 @@ export async function sendWhatsAppInquiryAction(
     parsedPhone = null;
   }
   // Same market rules as the preview's wa.me link - the number the operator
-  // saw is the number the Cloud API send goes to.
-  const digits = waPhoneDigits(parsedPhone, market) ?? waDigitsFromWhatsAppAddress(inquiry.fromEmail);
+  // saw is the number the Cloud API send goes to. The operator-entered
+  // contactPhone column outranks the lead form's number.
+  const digits = waPhoneDigits(inquiry.contactPhone, market)
+    ?? waPhoneDigits(parsedPhone, market)
+    ?? waDigitsFromWhatsAppAddress(inquiry.fromEmail);
   if (!digits) return { error: "No usable phone number on this RFQ - add one to the lead first." };
 
   const draft = buildWhatsAppInquiry(inquiry);
@@ -315,6 +319,8 @@ export type InquiryRowPatch = {
   securityTier?: string;
   // Free-text amount like "250000" or "$250,000"; "" clears.
   declaredValue?: string;
+  // User id of the assignee; "" unassigns. Anyone on the office can assign.
+  assignedToUserId?: string;
 };
 
 type RowActionResult = { ok: true } | { error: string };
@@ -409,6 +415,19 @@ export async function updateInquiryRowAction(
   if (patch.securityTier !== undefined) {
     data.securityTier = trimmedOrNull(patch.securityTier, 24)?.toLowerCase() ?? null;
   }
+  if (patch.assignedToUserId !== undefined) {
+    const userId = patch.assignedToUserId.trim();
+    if (!userId) {
+      data.assignedToUserId = null;
+    } else {
+      const assignee = await prisma.user.findFirst({
+        where: { id: userId, officeId: session.officeId, isActive: true },
+        select: { id: true },
+      });
+      if (!assignee) return { error: "That user is not on this office (or is deactivated)." };
+      data.assignedToUserId = assignee.id;
+    }
+  }
   if (patch.declaredValue !== undefined) {
     const raw = patch.declaredValue.trim().replace(/^\$\s*/, "");
     if (!raw) {
@@ -488,7 +507,40 @@ export async function updateInquiryRowAction(
   }
 
   revalidatePath("/dashboard/rfq");
+  // The assignee/status selects also mount on the RFQ detail hero.
+  revalidatePath(`/dashboard/rfq/${inquiryId}`);
   return { ok: true };
+}
+
+// Toggle one partner forwarder on Inquiry.forwardedTo (JSON string[]) - the
+// "İlettiğimiz forwarderlar" chips on the RFQ detail page.
+export async function toggleForwardedToAction(
+  inquiryId: string,
+  partner: string,
+): Promise<{ ok: true; forwardedTo: string[] } | { error: string }> {
+  const session = await requireSession();
+  const name = partner.trim().toUpperCase().slice(0, 40);
+  if (!name) return { error: "Forwarder name is required." };
+
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: inquiryId, officeId: session.officeId },
+    select: { id: true, forwardedTo: true },
+  });
+  if (!inquiry) return { error: "RFQ not found." };
+
+  const current = parseForwardedTo(inquiry.forwardedTo);
+  const next = current.includes(name)
+    ? current.filter((p) => p !== name)
+    : [...current, name];
+
+  await prisma.inquiry.update({
+    where: { id: inquiryId, officeId: session.officeId },
+    data: { forwardedTo: next.length > 0 ? JSON.stringify(next) : null },
+  });
+
+  revalidatePath("/dashboard/rfq");
+  revalidatePath(`/dashboard/rfq/${inquiryId}`);
+  return { ok: true, forwardedTo: next };
 }
 
 // Bulk status change from the sheet's multi-select - one office-scoped

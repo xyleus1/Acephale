@@ -69,6 +69,7 @@ export function isSingleEmailAddress(value: string | null | undefined): value is
 
 type InquiryForMail = {
   id: string;
+  reference?: string | null;
   subject: string;
   status: string;
   fromEmail: string | null;
@@ -127,7 +128,16 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
   const source = deriveInquirySource(inq);
 
   const lane = [inq.origin, inq.destination].filter(Boolean).join(" → ");
-  const subject = `[Derya RFQ] ${inq.commodity ?? inq.subject}${lane ? ` - ${lane}` : ""}`.slice(0, 180);
+  // Desk heading format (Mert, 2026-07-24): Derya RFQ // REF // from > to, product.
+  // Segments without data drop out; a few words of product only.
+  const laneCompact = [inq.origin, inq.destination].filter(Boolean).join(" > ");
+  const productShort = (inq.commodity ?? "").trim().split(/\s+/).slice(0, 4).join(" ");
+  const loadPhrase = [laneCompact || null, productShort || null].filter(Boolean).join(", ");
+  const subject = [
+    "Derya RFQ",
+    inq.reference ?? null,
+    loadPhrase || inq.subject,
+  ].filter(Boolean).join(" // ").slice(0, 180);
 
   const target = inq.targetPrice != null
     ? `${inq.targetCurrency ?? "USD"} ${inq.targetPrice.toLocaleString("en-GB")}`

@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { updateInquiryField, updateInquiryStatus, parseRFQWithAI } from "./actions";
 import { Icon } from "@/components/icon";
+import { CopyRef } from "@/components/copy-ref";
+import { AssigneeSelect } from "@/components/assignee-select";
+import { ManualDetailsCard } from "@/components/manual-details-card";
+import { ForwardedToChips } from "@/components/forwarded-to-chips";
+import { parseForwardedTo } from "@/lib/forwarder-partners";
+import { cleanAnswer } from "@/lib/answer-noise";
 import { SourcingOffersTable } from "@/components/sourcing-offers-table";
 import { OpportunityScoreCard, OpportunityScorePill } from "@/components/opportunity-score-card";
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
@@ -24,8 +30,8 @@ import { sendWhatsAppInquiryAction } from "@/app/dashboard/rfq/actions";
 import {
   canonicalInquiryStatus,
   CLOSED_INQUIRY_STATUSES,
-  inquiryStatusBadgeCls,
   inquiryStatusLabel,
+  inquiryStatusTone,
 } from "@/lib/inquiry-status";
 
 function fmt(d: Date | null | undefined) {
@@ -141,7 +147,7 @@ export default async function RFQDetailPage({
   if (!inquiry) notFound();
 
   // Truckload desk data: buy-side bids, recorded flywheel quotes, bench names.
-  const [carrierBids, truckloadQuotes, benchCarriers] = await Promise.all([
+  const [carrierBids, truckloadQuotes, benchCarriers, officeUsers] = await Promise.all([
     prisma.carrierBid.findMany({
       where: { officeId: session.officeId, inquiryId: inquiry.id },
       select: {
@@ -167,9 +173,15 @@ export default async function RFQDetailPage({
       orderBy: { name: "asc" },
       take: 500,
     }),
+    prisma.user.findMany({
+      where: { officeId: session.officeId, isActive: true },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: "asc" },
+    }),
   ]);
+  const userOptions = officeUsers.map((u) => [u.id, u.fullName] as const);
 
-  const sm = { label: inquiryStatusLabel(inquiry.status), cls: inquiryStatusBadgeCls(inquiry.status) };
+  const sm = { label: inquiryStatusLabel(inquiry.status), tone: inquiryStatusTone(inquiry.status) };
   const canConvert = (!inquiry.job || inquiry.job.status === "PROPOSED") && !CLOSED_INQUIRY_STATUSES.includes(inquiry.status);
 
   // Keyed by canonical status so legacy values (INGESTED/PARSED/PRICED/QUOTED) hit too.
@@ -204,6 +216,34 @@ export default async function RFQDetailPage({
       parsedJson = {};
     }
   }
+  // Raw form answers (read-only reference at the bottom of the page) + the
+  // noise-filtered autofill defaults for the editable Load-details form.
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const isLead = parsedJson.source === "meta-leads";
+  const answersJson = (parsedJson.answers && typeof parsedJson.answers === "object" && !Array.isArray(parsedJson.answers)
+    ? parsedJson.answers
+    : {}) as Record<string, unknown>;
+  const formAnswers: Array<[string, string]> = isLead
+    ? ([
+        ["Name", str(parsedJson.fullName)],
+        ["Phone", str(parsedJson.phone)],
+        ["Job title", str(parsedJson.jobTitle)],
+        ["Commercial shipment", str(answersJson.commercial)],
+        ["Shipment type", str(answersJson.shipmentType)],
+        ["Load info", str(answersJson.loadInfo)],
+        ["Timing", str(answersJson.timing)],
+        ["Transport preference", str(answersJson.transportPref)],
+        ["Existing quote", str(answersJson.existingQuote)],
+        ["Budget (as written)", str(parsedJson.budget)],
+      ] as Array<[string, string | null]>).filter((pair): pair is [string, string] => Boolean(pair[1]))
+    : [];
+  // Contact autofill: operator-entered columns win; otherwise the form's
+  // answers, junk filtered - a noisy name never pre-fills the field.
+  const contactNameDefault = inquiry.contactName ?? cleanAnswer(str(parsedJson.fullName)) ?? "";
+  const contactPhoneDefault = inquiry.contactPhone ?? str(parsedJson.phone) ?? "";
+  const cargoReadyDefault = inquiry.cargoReadyDate ? inquiry.cargoReadyDate.toISOString().slice(0, 10) : "";
+  const forwardedTo = parseForwardedTo(inquiry.forwardedTo);
+
   const waSentLabel = typeof parsedJson.whatsappSentAt === "string" && !Number.isNaN(new Date(parsedJson.whatsappSentAt).getTime())
     ? new Date(parsedJson.whatsappSentAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : null;
@@ -261,8 +301,8 @@ export default async function RFQDetailPage({
         <div className="record-hero-top">
           <div className="record-hero-main">
             <div className="record-eyebrow">
-              {inquiry.reference && <span className="record-chip data-cell-mono">{inquiry.reference}</span>}
-              <span className={`badge ${sm.cls}`}>{sm.label}</span>
+              {inquiry.reference && <CopyRef code={inquiry.reference} className="record-chip" />}
+              <span className={`status-pill status-pill--${sm.tone}`}>{sm.label}</span>
               {opportunity && <OpportunityScorePill score={opportunity} />}
               {isWaSource && (
                 <span
@@ -281,6 +321,7 @@ export default async function RFQDetailPage({
             </p>
           </div>
           <div className="record-actions">
+            <AssigneeSelect inquiryId={inquiry.id} value={inquiry.assignedToUserId} options={userOptions} />
             {inquiry.job ? (
               <a href={`/dashboard/jobs/${inquiry.job.id}`} className="btn btn-sm">
                 Load {inquiry.job.reference} <Icon name="arrow-right" size={13} />
@@ -297,25 +338,157 @@ export default async function RFQDetailPage({
       </div>
 
       <div className="record-two-pane record-two-pane-sidebar">
-        {/* Left: email body + parsed fields */}
+        {/* Left: editable load details on top, live comms in the middle,
+            raw form answers + source message read-only at the bottom. */}
         <div className="record-side-stack">
 
-          {/* Raw source message(s) - a WhatsApp transcript is not an email.
-              Hidden when the live conversation renders below (same content). */}
-          {inquiry.rawEmailBody && !(isWaSource && waThreads.length > 0) && (
-            <div className="record-panel">
-              <div className="record-card-header">
-                <div className="record-card-title">
-                  <Icon name={isWaSource ? "whatsapp" : "mail"} size={13} /> {isWaSource ? "Original Messages" : "Email Content"}
-                </div>
+          {/* Editable load details - auto-filled from the form answers (junk
+              filtered), operator edits win and survive lead resyncs. */}
+          <div className="record-panel">
+            <div className="record-card-header">
+              <div className="record-card-title">
+                <Icon name="file-check" size={13} /> Load Details
               </div>
-              <div className="card-body">
-                <div className="record-mono-block">
-                  {inquiry.rawEmailBody}
-                </div>
-              </div>
+              <span className="record-card-hint">editable · auto-filled from the form</span>
             </div>
-          )}
+            <div className="card-body">
+              <form action={updateInquiryField.bind(null, inquiryId)}>
+                <div className="form-grid-3 form-row-gap">
+                  <label className="field"><span>Company</span>
+                    <input name="fromCompany" defaultValue={inquiry.fromCompany ?? ""} placeholder="Customer company" />
+                  </label>
+                  <label className="field"><span>Contact</span>
+                    <input name="contactName" defaultValue={contactNameDefault} placeholder="Contact person" />
+                  </label>
+                  <label className="field"><span>Contact number</span>
+                    <input name="contactPhone" defaultValue={contactPhoneDefault} placeholder="+90 5xx xxx xx xx" />
+                  </label>
+                </div>
+                <div className="form-grid-2 form-row-gap">
+                  <label className="field"><span>Origin</span>
+                    <input name="origin" defaultValue={inquiry.origin ?? ""} placeholder="e.g. Shanghai, CN" />
+                  </label>
+                  <label className="field"><span>Destination</span>
+                    <input name="destination" defaultValue={inquiry.destination ?? ""} placeholder="e.g. Hamburg, DE" />
+                  </label>
+                </div>
+                <div className="form-grid-3 form-row-gap">
+                  <label className="field"><span>Mode</span>
+                    <select name="mode" defaultValue={inquiry.mode ?? ""}>
+                      <option value="">- Select -</option>
+                      <option value="SEA-FCL">Sea FCL</option>
+                      <option value="SEA-LCL">Sea LCL</option>
+                      <option value="AIR">Air</option>
+                      <option value="ROAD">Road</option>
+                      <option value="COURIER">Courier</option>
+                    </select>
+                  </label>
+                  <label className="field"><span>Container</span>
+                    <select name="containerType" defaultValue={inquiry.containerType ?? ""}>
+                      <option value="">- Select -</option>
+                      <option value="20GP">20GP</option>
+                      <option value="40GP">40GP</option>
+                      <option value="40HC">40HC</option>
+                      <option value="LCL">LCL</option>
+                    </select>
+                  </label>
+                  <label className="field"><span>Incoterms</span>
+                    <select name="incoterms" defaultValue={inquiry.incoterms ?? ""}>
+                      <option value="">- Select -</option>
+                      {["EXW","FCA","FAS","FOB","CFR","CIF","CPT","CIP","DAP","DPU","DDP"].map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="form-grid-3 form-row-gap">
+                  <label className="field"><span>Commodity</span>
+                    <input name="commodity" defaultValue={inquiry.commodity ?? ""} placeholder="e.g. Electronics" />
+                  </label>
+                  <label className="field"><span>Weight (kg)</span>
+                    <input name="weight" type="number" defaultValue={inquiry.weight ?? ""} placeholder="0" />
+                  </label>
+                  <label className="field"><span>Volume (cbm)</span>
+                    <input name="volume" type="number" defaultValue={inquiry.volume ?? ""} placeholder="0" />
+                  </label>
+                </div>
+                <div className="form-grid-3 form-row-gap">
+                  <label className="field"><span>Cargo ready</span>
+                    <input name="cargoReadyDate" type="date" defaultValue={cargoReadyDefault} />
+                  </label>
+                  <label className="field"><span>Container count</span>
+                    <input name="containerCount" type="number" min="1" defaultValue={inquiry.containerCount ?? ""} placeholder="e.g. 2" />
+                  </label>
+                  <label className="field">
+                    <span>Dangerous goods?</span>
+                    <select name="dangerousGoods" defaultValue={inquiry.dangerousGoods ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Unknown</option>
+                      <option value="NO">No</option>
+                      <option value="YES">Yes</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="form-grid-3 form-row-gap">
+                  <label className="field">
+                    <span>Stackable?</span>
+                    <select name="stackable" defaultValue={inquiry.stackable ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Unknown</option>
+                      <option value="YES">Yes</option>
+                      <option value="NO">No</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Top load?</span>
+                    <select name="topLoad" defaultValue={inquiry.topLoad ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Unknown</option>
+                      <option value="YES">Requested</option>
+                      <option value="NO">Not requested</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Customs work by</span>
+                    <select name="customsBy" defaultValue={inquiry.customsBy ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Unknown</option>
+                      <option value="US">Us</option>
+                      <option value="CUSTOMER">Customer</option>
+                      <option value="FORWARDER">Forwarder / agent</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="form-grid-3 form-row-gap">
+                  <label className="field">
+                    <span>Target price status</span>
+                    <select name="targetPriceStatus" defaultValue={inquiry.targetPriceStatus ?? "UNKNOWN"}>
+                      <option value="UNKNOWN">Ask customer</option>
+                      <option value="PROVIDED">Target provided</option>
+                      <option value="NO_TARGET">No target given</option>
+                    </select>
+                  </label>
+                  <label className="field"><span>Target price</span>
+                    <input name="targetPrice" type="number" step="any" defaultValue={inquiry.targetPrice ?? ""} placeholder="e.g. 1550" />
+                  </label>
+                  <label className="field">
+                    <span>Currency</span>
+                    <select name="targetCurrency" defaultValue={inquiry.targetCurrency ?? "USD"}>
+                      <option>USD</option><option>EUR</option><option>TRY</option><option>GBP</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="field form-row-gap">
+                  <span>Target price source / note</span>
+                  <input name="targetPriceSource" defaultValue={inquiry.targetPriceSource ?? ""} placeholder="Where this target came from" />
+                </label>
+                <label className="field form-row-gap"><span>Notes</span>
+                  <textarea name="notes" defaultValue={inquiry.notes ?? ""} rows={3} placeholder="Internal notes…" />
+                </label>
+                <button className="btn btn-secondary" type="submit">Save Fields</button>
+              </form>
+            </div>
+          </div>
+
+          {/* Real details pasted from WhatsApp - the truth source when the
+              form answers are irrelevant. */}
+          <ManualDetailsCard inquiryId={inquiry.id} initial={inquiry.manualDetails ?? ""} />
 
           {/* Sourcing comparison table - only for SOURCING inquiries */}
           {inquiry.type === "SOURCING" && (
@@ -435,139 +608,54 @@ export default async function RFQDetailPage({
             </div>
           )}
 
-          {/* Parsed / editable fields */}
-          <div className="record-panel">
-            <div className="record-card-header">
-              <div className="record-card-title">
-                <Icon name="file-check" size={13} /> Parsed Fields
+          {/* Raw form answers - read-only, reference only. The junk stays
+              visible here even when it was filtered out of the fields above. */}
+          {formAnswers.length > 0 && (
+            <div className="record-panel record-raw-panel">
+              <div className="record-card-header">
+                <div className="record-card-title">
+                  <Icon name="list" size={13} /> Form Answers
+                </div>
+                <span className="record-card-hint">raw · read-only</span>
+              </div>
+              <div className="card-body">
+                <div className="record-fact-grid">
+                  {formAnswers.map(([label, value]) => (
+                    <div key={label} className="record-fact">
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="card-body">
-              <form action={updateInquiryField.bind(null, inquiryId)}>
-                <div className="form-grid-2 form-row-gap">
-                  <label className="field"><span>Origin</span>
-                    <input name="origin" defaultValue={inquiry.origin ?? ""} placeholder="e.g. Shanghai, CN" />
-                  </label>
-                  <label className="field"><span>Destination</span>
-                    <input name="destination" defaultValue={inquiry.destination ?? ""} placeholder="e.g. Hamburg, DE" />
-                  </label>
+          )}
+
+          {/* Raw source message(s) - a WhatsApp transcript is not an email.
+              Hidden when the live conversation renders above (same content). */}
+          {inquiry.rawEmailBody && !(isWaSource && waThreads.length > 0) && (
+            <div className="record-panel record-raw-panel">
+              <div className="record-card-header">
+                <div className="record-card-title">
+                  <Icon name={isWaSource ? "whatsapp" : "mail"} size={13} /> {isWaSource ? "Original Messages" : isLead ? "Raw Form Export" : "Email Content"}
                 </div>
-                <div className="form-grid-3 form-row-gap">
-                  <label className="field"><span>Mode</span>
-                    <select name="mode" defaultValue={inquiry.mode ?? ""}>
-                      <option value="">- Select -</option>
-                      <option value="SEA-FCL">Sea FCL</option>
-                      <option value="SEA-LCL">Sea LCL</option>
-                      <option value="AIR">Air</option>
-                      <option value="ROAD">Road</option>
-                      <option value="COURIER">Courier</option>
-                    </select>
-                  </label>
-                  <label className="field"><span>Container</span>
-                    <select name="containerType" defaultValue={inquiry.containerType ?? ""}>
-                      <option value="">- Select -</option>
-                      <option value="20GP">20GP</option>
-                      <option value="40GP">40GP</option>
-                      <option value="40HC">40HC</option>
-                      <option value="LCL">LCL</option>
-                    </select>
-                  </label>
-                  <label className="field"><span>Incoterms</span>
-                    <select name="incoterms" defaultValue={inquiry.incoterms ?? ""}>
-                      <option value="">- Select -</option>
-                      {["EXW","FCA","FAS","FOB","CFR","CIF","CPT","CIP","DAP","DPU","DDP"].map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </label>
+                <span className="record-card-hint">reference only</span>
+              </div>
+              <div className="card-body">
+                <div className="record-mono-block">
+                  {inquiry.rawEmailBody}
                 </div>
-                <div className="form-grid-3 form-row-gap">
-                  <label className="field"><span>Commodity</span>
-                    <input name="commodity" defaultValue={inquiry.commodity ?? ""} placeholder="e.g. Electronics" />
-                  </label>
-                  <label className="field"><span>Weight (kg)</span>
-                    <input name="weight" type="number" defaultValue={inquiry.weight ?? ""} placeholder="0" />
-                  </label>
-                  <label className="field"><span>Volume (cbm)</span>
-                    <input name="volume" type="number" defaultValue={inquiry.volume ?? ""} placeholder="0" />
-                  </label>
-                </div>
-                <div className="form-grid-3 form-row-gap">
-                  <label className="field"><span>Container count</span>
-                    <input name="containerCount" type="number" min="1" defaultValue={inquiry.containerCount ?? ""} placeholder="e.g. 2" />
-                  </label>
-                  <label className="field">
-                    <span>Stackable?</span>
-                    <select name="stackable" defaultValue={inquiry.stackable ?? "UNKNOWN"}>
-                      <option value="UNKNOWN">Unknown</option>
-                      <option value="YES">Yes</option>
-                      <option value="NO">No</option>
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Top load?</span>
-                    <select name="topLoad" defaultValue={inquiry.topLoad ?? "UNKNOWN"}>
-                      <option value="UNKNOWN">Unknown</option>
-                      <option value="YES">Requested</option>
-                      <option value="NO">Not requested</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="form-grid-2 form-row-gap">
-                  <label className="field">
-                    <span>Dangerous goods?</span>
-                    <select name="dangerousGoods" defaultValue={inquiry.dangerousGoods ?? "UNKNOWN"}>
-                      <option value="UNKNOWN">Unknown</option>
-                      <option value="NO">No</option>
-                      <option value="YES">Yes</option>
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Customs work by</span>
-                    <select name="customsBy" defaultValue={inquiry.customsBy ?? "UNKNOWN"}>
-                      <option value="UNKNOWN">Unknown</option>
-                      <option value="US">Us</option>
-                      <option value="CUSTOMER">Customer</option>
-                      <option value="FORWARDER">Forwarder / agent</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="form-grid-3 form-row-gap">
-                  <label className="field">
-                    <span>Target price status</span>
-                    <select name="targetPriceStatus" defaultValue={inquiry.targetPriceStatus ?? "UNKNOWN"}>
-                      <option value="UNKNOWN">Ask customer</option>
-                      <option value="PROVIDED">Target provided</option>
-                      <option value="NO_TARGET">No target given</option>
-                    </select>
-                  </label>
-                  <label className="field"><span>Target price</span>
-                    <input name="targetPrice" type="number" step="any" defaultValue={inquiry.targetPrice ?? ""} placeholder="e.g. 1550" />
-                  </label>
-                  <label className="field">
-                    <span>Currency</span>
-                    <select name="targetCurrency" defaultValue={inquiry.targetCurrency ?? "USD"}>
-                      <option>USD</option><option>EUR</option><option>TRY</option><option>GBP</option>
-                    </select>
-                  </label>
-                </div>
-                <label className="field form-row-gap">
-                  <span>Target price source / note</span>
-                  <input name="targetPriceSource" defaultValue={inquiry.targetPriceSource ?? ""} placeholder="Where this target came from" />
-                </label>
-                <label className="field form-row-gap"><span>Notes</span>
-                  <textarea name="notes" defaultValue={inquiry.notes ?? ""} rows={3} placeholder="Internal notes…" />
-                </label>
-                <button className="btn btn-secondary" type="submit">Save Fields</button>
-              </form>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right: Convert to Job + carrier quotes */}
         <div className="record-side-stack">
 
           {referenceSource && <ReferenceDealSourcePanel source={referenceSource} />}
+
+          <ForwardedToChips inquiryId={inquiry.id} initial={forwardedTo} />
 
           <BrainBridgePanel result={brainBridgeContext} />
 
@@ -705,6 +793,7 @@ export default async function RFQDetailPage({
               <div className="record-row-list">
                 {[
                   { label: "From",        value: displayParty(inquiry.fromEmail) || inquiry.fromCompany || "-" },
+                  { label: "Assigned",    value: officeUsers.find((u) => u.id === inquiry.assignedToUserId)?.fullName ?? "Unassigned" },
                   { label: "Received",    value: fmt(inquiry.receivedAt) },
                   { label: "Cargo Ready", value: inquiry.cargoReadyDate ? fmt(inquiry.cargoReadyDate) : "-" },
                   { label: "Container",   value: inquiry.containerType ?? "-" },

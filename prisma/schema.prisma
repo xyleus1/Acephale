@@ -185,6 +185,7 @@ model User {
   activitiesCreated     Activity[]         @relation("ActivityCreatedBy")
   assignmentChangesMade AssignmentChange[] @relation("AssignmentChangedBy")
   assignedJobs          Job[]              @relation("JobAssignee")
+  assignedInquiries     Inquiry[]          @relation("InquiryAssignee")
 
   @@unique([officeId, email])
   @@index([officeId, role])
@@ -961,6 +962,13 @@ model Inquiry {
   teamDriversRequired   String? // YES / NO / UNKNOWN
   type              String    @default("FORWARDING") // FORWARDING (move customer's cargo) | SOURCING (find + buy a commodity for customer)
   status            String    @default("INGESTED") // INGESTED / PARSED / PRICED / QUOTED / WON / LOST
+  // RFQ desk workflow (2026-07-24): who owns the RFQ + operator-entered truth
+  // that survives lead resyncs (resync never writes these columns).
+  assignedToUserId  String?
+  contactName       String?
+  contactPhone      String?
+  manualDetails     String? // real details pasted from WhatsApp - the truth when form answers are noise
+  forwardedTo       String? // JSON string[] of partner forwarders this RFQ went to (see src/lib/forwarder-partners.ts)
   rawEmailBody      String?
   parsedData        String? // JSON: AI-extracted fields
   notes             String?
@@ -976,6 +984,7 @@ model Inquiry {
 
   office              Office                  @relation(fields: [officeId], references: [id], onDelete: Cascade)
   company             Company?                @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  assignedTo          User?                   @relation("InquiryAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   carrierQuotes       CarrierQuote[]
   job                 Job?
   emailThreads        EmailThread[]
@@ -992,6 +1001,7 @@ model Inquiry {
   @@unique([officeId, reference])
   @@index([officeId, status, receivedAt])
   @@index([officeId, companyId])
+  @@index([officeId, assignedToUserId])
 }
 
 model TargetPriceHistory {
