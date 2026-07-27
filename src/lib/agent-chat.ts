@@ -120,6 +120,18 @@ function formatBrainPreflightContext(result: unknown) {
   return `\n\nLIVE COMMERCIAL BRAIN PACKET (read before answering scoped commercial questions):\n${JSON.stringify(excerpt, null, 2)}\n`;
 }
 
+// Desk assistant model, overridable per deployment without a code change:
+// set DERYA_AGENT_MODEL (e.g. claude-opus-4-8 or claude-sonnet-5) once a
+// funded API key is in place. Default stays Haiku 4.5. Non-Haiku models get
+// more output headroom by default because Sonnet 5 runs adaptive thinking
+// inside the same max_tokens budget; DERYA_AGENT_MAX_TOKENS overrides.
+const AGENT_MODEL = process.env.DERYA_AGENT_MODEL?.trim() || "claude-haiku-4-5-20251001";
+const AGENT_MAX_TOKENS = (() => {
+  const raw = Number(process.env.DERYA_AGENT_MAX_TOKENS);
+  if (Number.isFinite(raw) && raw >= 256) return Math.min(raw, 16000);
+  return AGENT_MODEL.startsWith("claude-haiku") ? 1024 : 4096;
+})();
+
 const SYSTEM = `You are the in-app agent for Derya Freight OS - a freight forwarding & procurement platform for an Istanbul-based office.
 
 You have a set of tools (see the tools list). USE THEM. Do not describe what you would do - call the tool and report the actual result.
@@ -1336,8 +1348,8 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   try {
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       const response = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
+        model: AGENT_MODEL,
+        max_tokens: AGENT_MAX_TOKENS,
         system: systemBlocks as any,
         tools: toolsWithCache as any,
         messages,
