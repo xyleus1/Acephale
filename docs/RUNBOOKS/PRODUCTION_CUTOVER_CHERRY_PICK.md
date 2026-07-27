@@ -196,7 +196,6 @@ Set production env vars in Vercel without exposing values:
 - `DATABASE_URL_UNPOOLED` or `DIRECT_URL` = Neon production direct URL
 - `TOKEN_ENCRYPTION_KEY`
 - `CRON_SECRET`
-- `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`

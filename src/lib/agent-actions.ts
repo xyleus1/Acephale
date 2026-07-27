@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { parsePipeLines } from "./quote-lines";
@@ -13,7 +13,7 @@ import { recordTargetPriceHistory, targetPriceChanged } from "./target-price-his
 //   { action: "add-milestone", type, plannedAt?, actualAt? }
 //   { action: "none" }                        - fall through to chat
 //
-// We avoid full tool-use plumbing here - single Haiku call returns JSON,
+// We avoid full tool-use plumbing here. One GPT-5.6 call returns JSON,
 // the caller validates and applies. Cheap and predictable.
 
 type ExtractedAction =
@@ -39,12 +39,12 @@ export async function extractActionFromMessage(args: {
   scopeType: "SOURCING" | "FORWARDING";
   scopeStatus: string;
 }): Promise<ExtractedAction> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { action: "none" };
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 450,
     system: `You parse a single chat message into ONE structured action against the focused freight job. Output ONLY JSON, no preamble.
 

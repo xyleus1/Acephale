@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { prisma } from "./prisma";
 import { sendReplyToThread } from "./gmail-send";
 import { ensurePortalToken } from "./portal";
@@ -34,7 +34,7 @@ export async function maybeNotifyCustomerOnMilestone(jobId: string, milestoneTyp
 }
 
 async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; fromStatus: string; toStatus: string } | { reason: "milestone"; milestoneType: string }): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
 
   const job = await prisma.job.findUnique({
@@ -83,7 +83,7 @@ async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; f
   void ensurePortalToken;
 
   // AI drafts the body.
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const ctxLine = ctx.reason === "status-change"
     ? `The shipment just moved to status "${ctx.toStatus}". Previous status was "${ctx.fromStatus}".`
     : `The "${ctx.milestoneType}" milestone has been confirmed.`;
@@ -93,7 +93,7 @@ async function sendStatusUpdate(jobId: string, ctx: { reason: "status-change"; f
   ).join(", ");
 
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 350,
     system: `You write a short customer-facing shipment-update email from a freight forwarding & procurement office to their CUSTOMER (not a supplier). Tone: professional, calm, factual. No emojis, no markdown. Under 110 words. Sign as "Your forwarder at Derya Maritime" (do not invent a name). Always include the portal link if provided so the customer can self-serve future updates. Never use the em dash character in your output; use a comma, colon, period, or plain hyphen instead.`,
     messages: [{

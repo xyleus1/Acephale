@@ -52,8 +52,8 @@ import {
 import type { StrategyEvidenceCheck } from "./commercial-strategy";
 import { operatorMetricLabel } from "./operator-action-labels";
 
-// Tool schemas matching Anthropic's tool-use spec. Each has a strict
-// input_schema so Claude knows exactly what arguments are valid.
+// Tool schemas use the app's provider-neutral input_schema shape. The shared
+// GPT-5.6 adapter converts these to Responses API function tools.
 export const TOOLS = [
   // ── Lookups ────────────────────────────────────────────────────────────────
   {

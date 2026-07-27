@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     VERCEL_GIT_COMMIT_SHA: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7),
     AUTH_SECRET: !!process.env.AUTH_SECRET,
     DATABASE_URL: !!process.env.DATABASE_URL,
-    ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
     GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI: normalizeGoogleRedirectUri(process.env.GOOGLE_REDIRECT_URI) ?? "unset",

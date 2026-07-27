@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "./auth";
 import { prisma } from "./prisma";
@@ -43,8 +43,8 @@ function seedIfWhatsApp(
 
 export async function createInquiryFromThread(threadId: string): Promise<{ ok: true; inquiryId: string } | { error: string }> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const thread = await prisma.emailThread.findFirst({
     where: { id: threadId, officeId: session.officeId },
@@ -61,9 +61,9 @@ export async function createInquiryFromThread(threadId: string): Promise<{ ok: t
   }).join("\n\n────\n\n");
   const sourceSignal = deryaRfqSourceSignal(thread.messages) + whatsAppSourceSignal(thread.messages);
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 700,
     system: `You are a freight forwarding office assistant. The user wants to create a single Inquiry record from a thread of emails that are all related to one shipment. Read the entire thread (multiple sent + received messages) and extract a consolidated inquiry.
 
@@ -222,8 +222,8 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
   | { ok: true; created: false; linkedJobId: string }
   | { error: string }
 > {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const thread = await prisma.emailThread.findUnique({
     where: { id: threadId },
@@ -272,9 +272,9 @@ export async function autoCreateInquiryFromThread(threadId: string): Promise<
   }).join("\n\n────\n\n");
   const sourceSignal = deryaRfqSourceSignal(thread.messages) + whatsAppSourceSignal(thread.messages);
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 800,
     system: `You are a freight forwarding office assistant. For an email thread, decide ONE of:
 

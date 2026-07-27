@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
@@ -27,8 +27,8 @@ export async function extractSourcingOffersForInquiry(
   inquiryId: string
 ): Promise<{ ok: true; threads: number; extracted: number } | { error: string }> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const inquiry = await prisma.inquiry.findFirst({
     where: { id: inquiryId, officeId: session.officeId },
@@ -40,7 +40,7 @@ export async function extractSourcingOffersForInquiry(
   });
   if (!inquiry) return { error: "Inquiry not found" };
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   let extracted = 0;
 
   // Skip threads that already have a recent extraction WITH a real price
@@ -76,7 +76,7 @@ export async function extractSourcingOffersForInquiry(
         }).join("\n\n────\n\n").slice(0, 12000);
 
         const result = await client.messages.create({
-          model: "claude-haiku-4-5-20251001",
+          model: "gpt-5.6",
           max_tokens: 600,
           system: `You analyze a single email thread between our office and ONE supplier (or one party). Extract the supplier's offer terms for the commodity "${inquiry.commodity ?? "(unknown)"}".
 

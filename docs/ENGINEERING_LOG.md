@@ -2135,6 +2135,463 @@ Use this file for chronological implementation notes that future agents should s
   dashes in Meta form-data matchers are input parsing and remain.
 - Follow-up: none.
 
+### Intelligence branch history
+### 2026-07-21 - Intel Phase A silo, source registry, and citation UI
+
+- Branch: casablanca (Conductor workspace, targets main)
+- Commit: not committed
+- Task: Complete Phase A of the Derya Intelligence Layer by moving the
+  existing load pre-flight and public market baseline behind an isolated Intel
+  boundary, then make exact source provenance visible and persistable.
+- Files changed: `src/lib/intel/**`, `src/app/dashboard/intel/**`, one-way
+  compatibility shims under the old library/component/route paths,
+  `src/lib/domestic-trucking-pricing.ts`, `src/lib/security-sop.ts`,
+  `src/lib/carrier-vetting.ts`, `src/components/nav-link.tsx`, Intel tests,
+  `package.json`, and required docs.
+- Behavior added: `/dashboard/intel` is the canonical cited pre-flight and
+  market-baseline surface; `/dashboard/market` redirects there. A typed source
+  registry gates every Intel fetch and citation host. Source chips show exact
+  deep links, data dates, and either cache age or manual review age. RFQ
+  promotion re-runs the check server-side, remains office-scoped, stores the
+  structured source snapshot, and appends a plain-text sources footer.
+- Verification: Intel source, boundary, load-check, enrichment,
+  market-indicator, security-SOP, carrier-vetting, and truckload-quote tests
+  passed. TypeScript and the production build passed with a disposable local
+  database URL. Authenticated HTTP integration rendered Intel, confirmed the
+  Market redirect, ran analysis, created `DRY26070002`, and verified persisted
+  source records plus the report footer in a throwaway Postgres
+  database. Scoped Next lint passed for Intel-owned files and compatibility
+  shims.
+- Failed/skipped checks: repo-wide `npm run lint` still fails on unrelated
+  pre-existing lint debt. The claimed DB-free full `test:*` premise is false:
+  several existing scripts use Prisma or seed prerequisites, so the relevant
+  bridge and pure-lib suites were run instead. Click-level browser visual QA
+  was unavailable; source popover behavior was reviewed in code but not
+  exercised by a browser automation tool.
+- Caveats: this is Phase A, not the complete Intel V1. The unified question
+  input, intent router, `AnswerDocument`, QCMobile integration, and standalone
+  customs/carrier/lane resolvers remain Phase B. Adversarial completion-gap
+  review caught an attempted deletion of six existing calendar and equipment
+  checks; all six were restored with narrower copy and claim-specific CargoNet,
+  FBI, TI, R+L, and National Weather Service citations.
+- Follow-up: implement Phase B on top of the public Intel entrypoints, then add
+  browser interaction coverage for source popovers and the four resolver
+  families.
+
+### 2026-07-22 - Hardware import research report and provider reality
+
+- Branch: find-hardware-import-data (Conductor workspace, targets main)
+- Commit: see git log
+- Task: Replace the shipment-check response to a California and West Coast
+  hardware-import research question with a fixed, decision-grade, sourced
+  report and evaluate public versus paid company-level data options.
+- Files changed: new AnswerDocument and ocean-hardware research contracts under
+  `src/lib/intel/answers/` and `src/lib/intel/research/`; new report component,
+  server data composer, and responsive report stylesheet under
+  `src/app/dashboard/intel/components/`; source registry and source catalog;
+  pure contract tests and package scripts.
+- Behavior: the report leads with a direct answer, then official aggregate
+  coverage, the 46-code commodity proxy, three manually verified ImportGenius
+  examples, system recommendations, and a source ledger. California
+  destination and West Coast gateway results remain separate. Census fetches
+  are bounded to ten partitions and partial results are labeled as subtotals.
+  Shipment pre-flight remains available below the report.
+- Data reality: no paid provider is connected. ImportYeti is not available for
+  Derya commercial use without permission or a license. Current aggregate data
+  requires the free Census key; 2021-2025 history requires a scheduled
+  backfill; complete importer rankings require licensed bill-of-lading data.
+- Verification: all seven targeted Intel suites passed, TypeScript passed, the
+  production build passed against disposable Postgres, and authenticated
+  browser QA passed across phone, tablet, and desktop layouts with no runtime
+  console errors or horizontal overflow.
+- Follow-up: configure the Census key in the target environment, build the
+  annual snapshot job, then request a narrow ImportGenius or equivalent sample
+  export before buying any provider.
+
+### 2026-07-22 - Keyless Census hardware snapshot and report upgrade
+
+- Branch: find-hardware-import-data (Conductor workspace, targets main)
+- Commit: not committed at documentation time
+- Task: Replace the hardware report's runtime Census API dependency and
+  missing five-year history with a validated keyless public-file snapshot,
+  then make current origins, coverage, and source roles explicit in the report.
+- Files changed: `scripts/build-census-public-hardware-snapshot.ts`,
+  `scripts/intel-census-public-hardware.test.ts`,
+  `src/lib/intel/research/census-public-hardware.ts`,
+  `src/lib/intel/research/generated/census-public-hardware-v1.json`,
+  `src/lib/intel/research/ocean-hardware.ts`, `src/lib/intel/sources.ts`,
+  `src/lib/intel/index.ts`, the Intel hardware report components and CSS, the
+  authenticated hardware data export route, `package.json`, and required docs.
+- Behavior: `npm run snapshot:intel-hardware -- --as-of=YYYY-MM` downloads and
+  streams official Census State Imports HS6 and Port Imports HS6 ZIPs, applies
+  the declared startup-production hardware basket, resolves Schedule C country
+  names, validates the compact result, and atomically writes the generated JSON
+  artifact. The checked-in snapshot contains 2021-2025 revised December YTD
+  totals plus May 2026 YTD for California ultimate destination and West Coast
+  ports of unlading. The report now renders current-period origin rankings,
+  a five-district West Coast port mix, exact file coverage, a separate
+  provider-reference ledger, print controls, and a role-restricted Census JSON
+  export without a runtime Census key.
+- Integrity: every scope must reconcile its category, country, and geography
+  row counts and all seven metrics to the scope total. Every source retains its
+  ZIP SHA-256. Warm caches are reused only after Census HTTP validators,
+  byte-length, and local checksum verification; `--refresh` forces clean
+  downloads.
+- Data boundary: 2021 contains 43 applicable codes; 2022 onward contains 46
+  because 8485, 8806, and 8807 entered in the HS 2022 revision. Current origins
+  and categories use only the current YTD period. Census aggregates never
+  establish company identity, startup status, supplier relationships, bill of
+  lading history, shipment delays, or lead quality.
+- Verification: `npm run test:intel-census-public-hardware`,
+  `npm run test:intel-ocean-hardware`, `npm run test:intel-sources`,
+  `npm run test:intel-report-ui`, and
+  `npx tsc --noEmit --incremental false` passed. The production build passed
+  against disposable local Postgres. Authenticated browser QA passed at 390,
+  768, and 1440 pixel widths, including zero horizontal overflow, the 17-source
+  ledger, 13 source checksums, print layout, a `200` authenticated export, a
+  `401` unauthenticated export, a clean 14-page letter PDF, and no runtime
+  console errors. Mobile report labels render at 10 pixels or larger, and long
+  origin names wrap instead of truncating.
+- Caveats: snapshot refresh is manual and reviewed. A complete importer ranking
+  still requires licensed company-level bill-of-lading coverage, and public
+  vessel-manifest disclosure can be incomplete. Cache and route-role tests are
+  still contract-level rather than injected-fetch and request-level behavior
+  tests.
+- Follow-up: refresh the snapshot after each new Census monthly release and
+  review the artifact diff. Evaluate a narrow licensed provider sample before
+  buying company-level coverage.
+
+### 2026-07-23 - Joint hardware corridor slice and operator decision report
+
+- Branch: `find-hardware-import-data`
+- Commits: `f6425d6`, `f671e9b`, `4c19bef`
+- Snapshot contract: bumped the checked-in Census artifact to schema v3 and
+  added a current-only country-of-origin by hardware-category by West Coast
+  unlading-district slice. The artifact stores 681 positive-vessel-value
+  segments and remains under 1.3 MB.
+- Validation: tuple uniqueness, declared dimensions, safe non-negative integer
+  metrics across scope and every rollup, positive vessel value, containerized
+  bounds, deterministic ordering, and exact four-metric reconciliation all
+  fail closed. Fractional and unsafe aggregate values have regression tests.
+- Domain behavior: West Coast research reports expose label-resolved corridor
+  rollups with exact Port Imports HS6 and Schedule C evidence. California
+  destination reports expose an empty corridor array.
+- Report behavior: replaced the generic top conclusion with a three-finding
+  decision brief, added a category-by-gateway matrix and ranked segment
+  disclosure, separated completed years from current YTD, and made qualified
+  lead count explicitly zero.
+- Provider behavior: refreshed precise official ImportGenius, TradeAtlas, and
+  Trademo references, added the official `w3.importgenius.com` host to the
+  source allow-list, and published one identical sample and acceptance gate.
+  No provider connection, account, export, or API was created.
+- Visual behavior: reduced hero height and collapsed detailed evidence,
+  provider references, ranked corridors, methodology, and sample acceptance
+  content by default. Print opens report details before capture.
+- Export behavior: the role-gated snapshot route delegates to an injected
+  handler with behavioral tests for anonymous HTTP 401, employee HTTP 403, and
+  authorized HTTP 200 responses. Denied requests do not read the artifact.
+- Verification passed: Intel source, Census public snapshot, ocean hardware,
+  Census ocean, export route, report UI, and Intel boundary suites;
+  TypeScript; production build; authenticated responsive browser QA at 390,
+  768, and 1440 pixels; no horizontal overflow; no runtime console errors;
+  authenticated schema-v3 export with 681 segments.
+- Safety: no tenant, company-brain, CRM, RFQ, job, provider, or customer-facing
+  writes were added. Aggregate corridor signals remain excluded from lead
+  scoring and route optimization.
+
+### 2026-07-23 - China corridor watch and routing research brief
+
+- Branch: `find-hardware-import-data`
+- Commit: see git log
+- Task: Make China to the U.S. West Coast the primary hardware intelligence
+  workflow, improve the operator report hierarchy, and add deterministic
+  gateway and routing-research signals without inventing a route.
+- Files changed: new corridor-watch domain and tests under
+  `src/lib/intel/research/` and `scripts/`; new China watch component and
+  responsive stylesheet under `src/app/dashboard/intel/components/`; Intel
+  report composition and hierarchy; authenticated China watch export route and
+  handler; strengthened Census snapshot validation; package scripts and
+  required docs.
+- Behavior added: May 2026 China value, West Coast share, five gateway
+  districts, 23 category-by-gateway segments, 2022-2025 comparable history,
+  category-specific research posture, explicit missing routing evidence, and a
+  five-gate research queue. The generic all-origin report is collapsed by
+  default but remains available with its evidence ledger.
+- Validation added: all four current corridor metrics reconcile exactly across
+  category, country, gateway district, and grand-total views. Twelve balanced
+  adversarial mutations cover every dimension and metric while preserving the
+  grand total.
+- Export added: `/api/intel/hardware-imports/china-watch` returns the
+  deterministic watch plus routing brief to the explicit `ADMIN`, `MANAGER`,
+  and `SALES` role allow-list. Anonymous, unknown-role, customer-role, and all
+  three authorized paths have behavioral tests.
+- Verification: Census snapshot, corridor watch, China export, full hardware
+  export, report UI, and Intel boundary tests passed. TypeScript and the
+  production build passed against disposable local Postgres. Authenticated
+  browser QA passed at 390, 768, and 1440 pixel widths with no horizontal
+  overflow and no runtime console errors after a clean reload. The downloaded
+  watch contained schema v1, China origin, 23 segments, and
+  `research_only` readiness.
+- Failed/skipped checks: scoped ESLint could not start because this repository
+  has ESLint 9 with only legacy `.eslintrc.json` configuration and no flat
+  `eslint.config.*`. No live provider test was possible because no
+  ImportGenius, TradeAtlas, Trademo, schedule, rate, or carrier integration is
+  connected.
+- Caveats: District 27 groups Los Angeles, Long Beach, Hueneme, and other
+  district ports. The watch does not identify the foreign loading port, exact
+  discharge port or terminal, carrier service, sailing, rate, transit
+  reliability, shipment endpoints, importer, supplier, or qualified lead.
+- Follow-up: choose between a licensed bill-of-lading sample for company and
+  port-pair evidence or live schedule and rate inputs for route feasibility.
+
+### 2026-07-23 - Fixed China history and customs intelligence layer
+
+- Branch: `find-hardware-import-data`
+- Commit: see git log
+- Task: extend the China hardware report with comparable pre-2021 customs
+  history and a deterministic, source-backed customs operating guide.
+- Census data: schema v4 adds a China-only core43 slice for complete years
+  2010-2025 and May 2026 YTD. It captures 34 unique State Imports HS6 and Port
+  Imports HS6 ZIPs plus the Schedule C dictionary and remains below the
+  1.3 MB artifact ceiling.
+- Historical method: the fixed series excludes the three HS groups introduced
+  in 2022. Current 46-code all-origin and category detail remains separate.
+  Values are nominal customs value, not inflation-adjusted economic output.
+- Historical UI: two accessible small-multiple charts show West Coast and
+  California value and China share. The exact 16-year table and claim-local
+  source links are available in a keyboard-accessible disclosure.
+- Customs data: 47 official authority and guidance references support eight
+  gates and twelve product-specific triggers. The source review order is
+  controlling authority, fact-matched ruling or scope decision, current
+  implementation guidance, then handbook context.
+- Temporal controls: the guide stores a rule as-of date, review timestamp,
+  publication date, effective range, handbook revision, and page modification
+  separately. Alert order is domain data, not a hard-coded UI list. The report
+  derives the next revalidation boundary from active and upcoming rules.
+- Current authority snapshot: HTS 2026 Revision 12, the time-limited Section
+  122 action ending July 24, the Section 301 exclusions ending November 9, and
+  EPA refrigerant changes effective July 27 are represented with their exact
+  temporal state as of July 23, 2026.
+- Product controls: added explicit conditional screens for lithium transport,
+  engines, refrigerant equipment, DOE-covered equipment, regulated solid wood
+  packaging, FCC, FDA, and CPSC requirements. Charged finished equipment and
+  bulk refrigerant remain separate decisions.
+- Export: China watch schema v2 includes the customs guide and fixed history.
+  The full authenticated Census export now returns snapshot schema v4.
+- Safety: no live provider, broker, customs, customer, tenant, CRM, RFQ, job,
+  or company-brain writes were added. The guide does not calculate duties or
+  produce a compliance determination.
+- Verification passed: focused Census, corridor, customs, China export, full
+  export, ocean report, source registry, UI contract, Intel boundary, and
+  TypeScript checks plus the production build against local Postgres.
+  Authenticated responsive browser QA passed at 390, 768, and 1440 pixel
+  widths with no horizontal overflow.
+
+### 2026-07-23 - Live USTR refresh and report design audit
+
+- Branch: `find-hardware-import-data`
+- Commits: see git log
+- Regulatory refresh: reviewed USTR's July 23 forced-labor Section 301 final
+  action and added it as an upcoming July 24 rule. The model records 12.5
+  percent under HTSUS 9903.05.31, Annex I and Annex II Part A exemptions, and
+  the conjunctive vessel-loading, final-mode transit, and July 28 entry
+  conditions without presenting any of them as shipment-ready duty advice.
+- Boundary precision: exact EDT instants are separate from legal dates. The
+  UI shows the next cutoff in West Coast local time and official Eastern time.
+  Tests cover the second before and at the July 24 transition for both the new
+  Section 301 action and expiring Section 122 action.
+- Regulatory corrections: split the FCC pre-sale condition effective April
+  12, 2022 from the covered-equipment amendment effective December 26, 2025.
+  Split FDA medical devices from medical and non-medical radiation-emitting
+  products.
+- Product coverage: added direct regulation and guidance branches for general
+  hazardous materials, vessel carriage, nuclear and radioactive imports, and
+  EPA FIFRA pesticides and pesticidal devices. The guide now collects
+  material, license, consignee, declaration, labeling, transport, and carrier
+  evidence without deciding compliance.
+- Trust guard: the no-duty-conclusion invariant now rejects broad shipment
+  statements such as a total duty percentage while allowing a cited action's
+  published rate in its authority record.
+- Authority fix: controlling authority now precedes fact-matched rulings or
+  scope decisions, then current implementation guidance and handbook context.
+  A recently updated guidance page no longer outranks an applicable ruling.
+- Responsive evidence: replaced the six-column annual table with year, West
+  Coast, and California columns. Each geography contains its value, China
+  share, and labeled source, and the cells stack on mobile.
+- Accessibility: chart descriptions identify the solid and dashed series and
+  their start and end values. Historical source targets expose 44 pixel touch
+  areas and open the evidence ledger. Customs alert contrast and mobile text
+  size were increased.
+- Report structure: primary sections now run from 01 through 06. Supporting
+  all-origin analysis is Appendix A with A1 through A6.
+- Browser verification: authenticated QA covered 390, 768, and 1440 pixel
+  widths, keyboard disclosures, source deep links, assistant-open desktop
+  layout, and collapsed Appendix A. No horizontal overflow was found. A clean
+  reload had no product console errors; later hydration warnings were isolated
+  to the browser QA tool changing caret inline styles while capturing images.
+- Safety: no customs determination, broker instruction, live provider call,
+  CRM write, lead score, route choice, quote, or customer-facing action was
+  added.
+
+### 2026-07-24 - Read-only China ocean load review
+
+- Branch: `find-hardware-import-data`
+- Commit: see git log
+- Task: turn the static China customs guide into a real-load pre-flight without
+  reusing the domestic trucking contract or creating an RFQ.
+- Files changed: new China shipment input, extraction, assessment, route,
+  component, stylesheet, and focused tests under `src/lib/intel/preflight/`,
+  `src/app/dashboard/intel/load/`,
+  `src/app/dashboard/intel/components/`, and `scripts/`; Intel actions,
+  entrypoints, source controls, report links, domestic-tool labeling, package
+  scripts, and required docs.
+- Behavior: `/dashboard/intel/load` accepts a pasted brief or manual packet,
+  keeps the review in memory, and renders a fixed report before the editor.
+  The report covers facts, exact dated actions, eight customs gates, twelve
+  product screens, next questions, and a 47-record official source ledger.
+  Print exposes source URLs and the question list can be copied.
+- Extraction fallback: when Anthropic is absent or fails, a deterministic
+  local parser reads only explicitly labeled shipment facts and explicit
+  positive lithium or solid-wood statements. It does not infer negative
+  screens, and all locally parsed facts remain supplier statements until the
+  operator confirms them.
+- Trust controls: the action is authenticated and contains no Prisma write.
+  AI values require individual confirmation, negative screens require
+  confirmed or document-backed facts, request sequencing rejects stale
+  responses, unsupported origin is visible, and no output may claim duty,
+  compliance, admissibility, approval, or clearance.
+- Final adversarial review also fixed two fail-open paths: submitted non-ocean
+  modes now remain outside the ocean workflow, and a confirmed damaged-battery
+  blocker now requires confirmed provenance for both the battery screen and
+  the damage claim.
+- Regulatory behavior: the official source review is current through
+  `2026-07-24T23:48:00.000Z`. USTR and Section 122 switch at the exact July 24
+  Eastern cutoff. The in-transit fact request closes at the July 28 deadline.
+  Exact controlling event, origin, HTS, value, product, filing, and evidence
+  facts remain required.
+- Verification: China load assessment, local extraction, China load UI, China
+  customs guide, TypeScript, production build, and browser checks at 390px and
+  1440px passed. The browser check found and fixed a closed editor that still
+  consumed layout space.
+- Caveats: no live HTS, ACE, broker, rate, schedule, bill-of-lading provider,
+  persistence, filing, RFQ creation, or customer action was added. The USTR
+  source is the official prepublication final notice and still requires a
+  current filing-time check.
+- Follow-up: test several real operator loads, record which questions create
+  useful broker or supplier follow-up, then design an office-scoped saved
+  review only if the workflow proves repeatable.
+
+### 2026-07-27 - China load trial UX and authority refresh
+
+- Branch: `find-hardware-import-data`
+- Route: `/dashboard/intel/load`
+- Regulatory refresh: moved the guide snapshot to July 27 while preserving
+  individual source-review timestamps. Marked the published Section 122
+  window expired, made the EPA July 27 date-only rule current, added the
+  current July 16 FCC previously authorized covered-equipment prohibition,
+  added FCC 26-50 as adopted but not yet effective, and refreshed the FCC
+  Covered List metadata to July 7.
+- Temporal correctness: date-only rule boundaries now participate in snapshot
+  freshness. The report shows a readable legal date and says the source gives
+  date only when an exact timestamp was not published.
+- Review workflow: added explicit multi-select confirmation for AI and
+  source-text drafts. The operator must select rows and then press a separate
+  confirm action. One action rebuilds the assessment after all selected facts
+  receive operator-confirmed provenance.
+- Questions: replaced generic field-by-field prompts with role-owned Mert,
+  supplier, and broker or importer groups. The deterministic queue preserves
+  UFLPA, ISF, agency, and dated-action questions.
+- Evidence: the assessment now contains the 49 authorities referenced by its
+  gates, screens, and timing actions. The collapsed UI ledger shows authority
+  status, type, effective window, source review, caveat, and exact report use.
+  Historical handbooks are visibly historical.
+- Visual QA: desktop review found stretched short question groups beside the
+  long supplier list. Adding start alignment keeps each owner card at its
+  natural height. Mobile and desktop layouts have no page-level horizontal
+  overflow.
+- Safety: the page remains read-only and nonpersistent. No exact duty,
+  compliance, admissibility, approval, broker filing, clearance, RFQ, or
+  customer action was added.
+- Verification: focused customs, assessment, extraction, UI, report, boundary,
+  source, and load-check tests passed. TypeScript and the production build
+  passed. Authenticated browser QA at 1440px and 390px exercised fallback
+  extraction, batch confirmation, triggered battery and wood screens, all 49
+  authority records, and responsive layouts with a clean console.
+
+### 2026-07-27 - China Intel GPT-5.6 extraction
+
+- Branch: `find-hardware-import-data`
+- Commit: pending
+- Task: Route the read-only China hardware load extractor through the existing
+  server-side `OPENAI_API_KEY` and GPT-5.6.
+- Files changed: `src/lib/intel/preflight/extract-china-import.ts`, the China
+  load review disclosure and focused tests, `.env.example`,
+  `docs/PROJECT_CONTEXT.md`, `docs/intel/NEXT_SESSION_BRIEF.md`,
+  `docs/AI_HANDOFF.md`, and `docs/DECISIONS.md`.
+- Behavior: OpenAI Responses API extraction uses the `gpt-5.6` alias, medium
+  reasoning, `store: false`, a 45-second timeout, one SDK retry, and
+  Zod-backed Structured Outputs. The existing no-key or request-failure path
+  still performs conservative local parsing. The deterministic customs
+  assessment and operator-confirmation boundary are unchanged.
+- Verification: `npm run test:intel-china-load-extraction`,
+  `npm run test:intel-china-load-ui`, and
+  `npm run test:intel-china-load-assessment`,
+  `npm run test:intel-china-customs-guide`, `npm run test:intel-boundary`,
+  `npm run test:intel-sources`, `npm run test:docs`, `npm run check:docs`,
+  `npx tsc --noEmit --incremental false`, and the production build passed.
+- Failed/skipped checks: the first build attempt stopped before compilation
+  because this shell had no `DATABASE_URL`. The build passed with a disposable
+  local PostgreSQL-shaped URL. No live OpenAI request was made because
+  credentials were not read or printed from this workspace.
+- Caveats: the model drafts shipment facts only. It does not calculate duty,
+  establish origin or classification, decide admissibility, promise clearance,
+  persist records, or make customer-facing or broker-facing changes.
+- Follow-up: test the GPT-5.6 path with one real operator load in Preview, then
+  compare extracted facts against the source packet before confirming them.
+
+### 2026-07-27 - Unified active AI runtime on GPT-5.6
+
+- Branch: `find-hardware-import-data`
+- Commit: pending
+- Task: Make GPT-5.6 the reasoning model for every active AI-assisted product
+  path using the existing `OPENAI_API_KEY`.
+- Files changed: added `src/lib/gpt56-client.ts`, migrated all active
+  Anthropic callers, removed `@anthropic-ai/sdk`, updated the authenticated
+  health environment contract and current provider documentation, and added
+  `scripts/gpt56-runtime.test.ts`.
+- Runtime: the shared Responses API adapter centralizes the `gpt-5.6` alias,
+  `store: false`, timeout, retry count, reasoning level, message conversion,
+  function schemas, reasoning-item replay, and function call output history.
+- Safety: deterministic freight logic, office scoping, proposal review, and
+  outbound approval requirements remain unchanged. The China load extractor
+  retains its stricter Zod Structured Outputs contract.
+- Model exception: `whisper-1` remains only for audio transcription because
+  GPT-5.6 is not the speech-to-text endpoint.
+- Verification: `npm run test:gpt56-runtime`,
+  `npm run test:email-classifier`, and `npx tsc --noEmit` passed before the
+  final production build.
+- Follow-up: exercise a real load in Preview, compare extracted fields with the
+  source packet, and monitor latency and token cost before raising reasoning
+  effort on high-volume classifiers.
+
+### 2026-07-27 - Agent identity and pre-flight false-green fix
+
+- Branch: `find-hardware-import-data`
+- Commit: pending
+- Symptom: production screenshots showed the desk agent claiming to be Claude
+  and a model-identity question producing a green domestic pre-flight result.
+- Root cause: the deployed branch did not yet contain the GPT-5.6 migration,
+  model identity was left to generation, and description-only parser fallback
+  could reach verdict code that treated zero blockers and risks as approval.
+- Fix: centralized a deterministic GPT-5.6 identity answer, added the same
+  identity boundary to the system prompt, reject unsupported pre-flight text
+  with no operational facts, require lane plus cargo facts for a
+  decision-ready verdict or RFQ conversion, and replaced "nothing breaks" with
+  the narrower "no flagged rule conflicts" result.
+- Verification: load-check regression tests, GPT-5.6 runtime tests,
+  TypeScript, production build, and the original unsupported-input
+  reproduction passed.
+### Main branch CRM and lead workflow history
 ### 2026-07-22 - US lead outreach sequence + lead cards view
 
 - Branch: us-lead-outreach-sequence (Conductor workspace yamoussoukro,

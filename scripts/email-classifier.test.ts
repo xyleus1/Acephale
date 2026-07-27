@@ -13,18 +13,18 @@ async function main() {
   assert.equal(sourceResult.relatedConfidence, 95);
   assert.match(sourceResult.reason, /configured Derya RFQ source address/i);
 
-  const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
-  delete process.env.ANTHROPIC_API_KEY;
+  const originalOpenAiKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
   const nonSourceResult = await classifyInboundEmail({
     subject: "Calendar update",
     fromEmail: "calendar@example.com",
     bodyText: "Meeting moved.",
     officeId: "office-test",
   });
-  if (originalAnthropicKey) process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+  if (originalOpenAiKey) process.env.OPENAI_API_KEY = originalOpenAiKey;
 
   assert.equal(nonSourceResult.kind, "OTHER");
-  assert.equal(nonSourceResult.reason, "ANTHROPIC_API_KEY missing");
+  assert.equal(nonSourceResult.reason, "OPENAI_API_KEY missing");
 
   console.log("email-classifier deterministic source tests passed");
 }

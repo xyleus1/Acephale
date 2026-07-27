@@ -21,7 +21,7 @@ import {
   toCarrierBidRow,
   type CarrierBidRow,
 } from "@/lib/truckload-quote-fields";
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "@/lib/gpt56-client";
 
 function emptyToNull(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -515,13 +515,13 @@ export async function parseRFQWithAI(inquiryId: string): Promise<void> {
   });
   if (!inquiry || !inquiry.rawEmailBody) return;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
 
   const msg = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 400,
     messages: [{
       role: "user",

@@ -28,16 +28,7 @@ export const CARRIER_AUTHORITY_STATUSES = [
   ["unknown", "Unknown"],
 ] as const;
 
-// Mirrors DomesticEquipmentType in src/lib/domestic-trucking-pricing.ts -
-// kept as a local list so client components don't import the pricing engine.
-export const CARRIER_EQUIPMENT_TYPES = [
-  ["DRY_VAN", "Dry van"],
-  ["REEFER", "Reefer"],
-  ["FLATBED", "Flatbed"],
-  ["STEP_DECK", "Step deck"],
-  ["BOX_TRUCK", "Box truck"],
-  ["CONTAINER_DRAYAGE", "Container drayage"],
-] as const;
+export { INTEL_EQUIPMENT_TYPES as CARRIER_EQUIPMENT_TYPES } from "@/lib/intel";
 
 export const CARRIER_SECURITY_FEATURES = [
   ["high_security_locks", "High-security locks"],

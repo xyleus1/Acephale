@@ -1,6 +1,10 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client, {
+  DERYA_AI_IDENTITY_REPLY,
+  DERYA_AI_MODEL_LABEL,
+  isDeryaModelIdentityQuestion,
+} from "./gpt56-client";
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
@@ -120,19 +124,12 @@ function formatBrainPreflightContext(result: unknown) {
   return `\n\nLIVE COMMERCIAL BRAIN PACKET (read before answering scoped commercial questions):\n${JSON.stringify(excerpt, null, 2)}\n`;
 }
 
-// Desk assistant model, overridable per deployment without a code change:
-// set DERYA_AGENT_MODEL (e.g. claude-opus-4-8 or claude-sonnet-5) once a
-// funded API key is in place. Default stays Haiku 4.5. Non-Haiku models get
-// more output headroom by default because Sonnet 5 runs adaptive thinking
-// inside the same max_tokens budget; DERYA_AGENT_MAX_TOKENS overrides.
-const AGENT_MODEL = process.env.DERYA_AGENT_MODEL?.trim() || "claude-haiku-4-5-20251001";
-const AGENT_MAX_TOKENS = (() => {
-  const raw = Number(process.env.DERYA_AGENT_MAX_TOKENS);
-  if (Number.isFinite(raw) && raw >= 256) return Math.min(raw, 16000);
-  return AGENT_MODEL.startsWith("claude-haiku") ? 1024 : 4096;
-})();
-
 const SYSTEM = `You are the in-app agent for Derya Freight OS - a freight forwarding & procurement platform for an Istanbul-based office.
+
+IDENTITY RULE:
+- You are Derya Desk Assistant running on OpenAI ${DERYA_AI_MODEL_LABEL}.
+- If asked what model or provider you use, answer that directly.
+- Never identify yourself as Claude or claim to be made by Anthropic.
 
 You have a set of tools (see the tools list). USE THEM. Do not describe what you would do - call the tool and report the actual result.
 
@@ -300,9 +297,9 @@ function looksLikeRFQ(text: string): boolean {
 }
 
 async function parsePastedRfqText(apiKey: string, userMessage: string): Promise<Record<string, any> | null> {
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const parseRes = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 500,
     messages: [{
       role: "user",
@@ -808,10 +805,6 @@ export async function chatWithAgent(history: ChatMsg[], userMessage: string, sco
 
 async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scopeJobId?: string, scopeCompanyId?: string, scopePage?: string): Promise<ChatResult> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { reply: "Agent unavailable - ANTHROPIC_API_KEY is not configured." };
-  }
 
   async function finishSpecialRun(result: ChatResult, tools: InternalToolTrace[] = []): Promise<ChatResult> {
     await logAgentRun({
@@ -830,6 +823,17 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     };
   }
 
+  if (isDeryaModelIdentityQuestion(userMessage)) {
+    return finishSpecialRun({
+      reply: DERYA_AI_IDENTITY_REPLY,
+    });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return { reply: "Agent unavailable - OPENAI_API_KEY is not configured." };
+  }
+
   // Diagnostic: "/debug" reports schema and env state without invoking AI.
   if (userMessage.trim().toLowerCase() === "/debug") {
     const checks: string[] = [];
@@ -845,7 +849,7 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
       const m = await prisma.emailMessage.findFirst({ select: { id: true, gmailMessageId: true } });
       checks.push(`emailMessage gmailMessageId: ${m ? "yes" : "no rows"}`);
     } catch (e) { checks.push(`emailMessage FAIL: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`); }
-    return { reply: `Debug:\n· officeId: ${session.officeId}\n· scopeJobId: ${scopeJobId ?? "none"}\n· ANTHROPIC_API_KEY: ${apiKey ? "set" : "MISSING"}\n· ${checks.join("\n· ")}` };
+    return { reply: `Debug:\n· officeId: ${session.officeId}\n· scopeJobId: ${scopeJobId ?? "none"}\n· OPENAI_API_KEY: ${apiKey ? "set" : "MISSING"}\n· ${checks.join("\n· ")}` };
   }
 
   const applyMatch = userMessage.trim().match(/^apply(?:\s+update)?\s+([a-z0-9]+)/i);
@@ -1324,14 +1328,13 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
     }
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const messages: any[] = [
     ...history.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: userMessage },
   ];
 
-  // Use Anthropic prompt caching: the system prompt + tools array become a
-  // cached prefix. Cache is reused for ~5 min from first miss.
+  // Keep the system prompt and tool definitions centralized for each turn.
   const systemBlocks: any[] = [
     { type: "text", text: SYSTEM + "\n\n" + ctx + leadBoardCtx + scopedCtx + customerMemoryContext + jobMemoryContext + brainPreflightContext + priceContext, cache_control: { type: "ephemeral" } },
   ];
@@ -1348,8 +1351,8 @@ async function _chatWithAgentImpl(history: ChatMsg[], userMessage: string, scope
   try {
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       const response = await client.messages.create({
-        model: AGENT_MODEL,
-        max_tokens: AGENT_MAX_TOKENS,
+        model: "gpt-5.6",
+        max_tokens: 1024,
         system: systemBlocks as any,
         tools: toolsWithCache as any,
         messages,

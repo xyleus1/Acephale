@@ -8,11 +8,11 @@ Loosely ordered by impact-per-effort. Effort is rough hours; treat as relative.
 
 ## Quick demo wins (≤4 hours each)
 
-- **AI counter-offer on carrier rates** — Each rate row in the INQUIRY stage gets a `Counter` button. Click → Claude drafts a polite "can you sharpen this to $X" email using rate + lane history context. Logged via existing email pipeline. ✅ shipping this turn.
+- **AI counter-offer on carrier rates:** Each rate row in the INQUIRY stage gets a `Counter` button. Click it and GPT-5.6 drafts a polite "can you sharpen this to $X" email using rate and lane history context. The existing email pipeline logs it.
 - **Customer portal magic-link** — `/portal/[token]` route, read-only. Customer sees their job status, milestones, ETA, docs available, contact info. Big trust win and stops "where's my container?" emails. Token = job.id for now; upgrade to signed token later. ✅ shipping this turn.
 - **Stage handoff suggestions** — When user changes status (e.g. QUOTED → BOOKED), surface 2 suggested emails side-by-side ("notify carrier", "notify customer") with AI drafts ready to send. One click each.
-- **Tracking number → milestone fill** — Paste a container/BL number, Claude generates plausible ETD/ETA/intermediate milestones based on lane and current date. (Stub now; replace with Project44 / Sealogix when real.)
-- **Document drag-and-drop classify** — Drop a PDF on the workbench → upload, Claude reads it (vision API), assigns to the correct slot in the doc checklist (BL/Invoice/PL/COO/Customs). 95% of manual doc handling disappears.
+- **Tracking number to milestone fill:** Paste a container or BL number. Do not let GPT-5.6 invent milestones. Use a real tracking provider such as Project44 or Sealogix, then let GPT-5.6 explain provider-backed events.
+- **Document drag-and-drop classify:** Drop a PDF on the workbench, upload it, extract its text, and let GPT-5.6 propose the correct checklist slot (BL, invoice, packing list, COO, or customs).
 - **"Recommended" / "BEST" badge on cheapest carrier rate** — Subtle visual cue. ✅ shipped 2026-05-02.
 - **Send PDF quote as email attachment** — Wire the existing quote-pdf endpoint into the QUOTED stage email; attach automatically when sending.
 - **Job profitability badge in topbar** — Show focused job's margin% in topbar so it's always visible.
@@ -25,7 +25,7 @@ Loosely ordered by impact-per-effort. Effort is rough hours; treat as relative.
 
 ## Real automation (½–3 days each)
 
-- **Gmail OAuth + sync** — Connect a real Gmail account, poll the inbox, Claude classifies each new email per stage (RFQ / carrier-reply / customer-quote-reply / customs / other) and attaches to the right job. Outlook via Microsoft Graph next.
+- **Gmail OAuth + sync:** Connect a real Gmail account, poll the inbox, let GPT-5.6 classify each new email per stage, and attach it to the right job. Outlook via Microsoft Graph is next.
 - **Outbound SMTP send** — When you hit "Send" in the composer, actually transmit via the connected account (Nodemailer or Gmail API). We already log; just wire the send.
 - **Automatic carrier reply parsing** — When a carrier replies on a thread we sent, AI reads the body, extracts rate/transit/validity/surcharges, updates the matching `CarrierQuote` from PENDING → RECEIVED with structured fields. Closes the procurement loop.
 - **AI-suggested status transitions** — When a carrier "confirmed" email lands, AI proposes "Move to BOOKED?" as a queue card. When customer says "yes proceed", AI proposes WON.
@@ -73,7 +73,7 @@ Loosely ordered by impact-per-effort. Effort is rough hours; treat as relative.
 - **Audit log** — Every change to a job (status, fields, milestones) is logged with user + timestamp. Surface in the activity feed.
 - **Soft delete + restore** — `deletedAt` on Job/Inquiry; trash bin in Records.
 - **Rate limiting on agent chat** — Cap per-user requests per minute on `chatWithAgent` to avoid runaway costs.
-- **API key rotation** — UI for rotating the Anthropic key without restart.
+- **API key rotation:** UI for rotating the OpenAI key without restart.
 - **Role-based permissions** — SALES sees only own jobs unless `canViewWholeOffice`; MANAGER sees all in office; ADMIN can edit office settings.
 
 ## Nice-to-have / wild
@@ -95,7 +95,7 @@ Loosely ordered by impact-per-effort. Effort is rough hours; treat as relative.
 - 2026-05-02 — Stage email panel with AI draft + outbound logging
 - 2026-05-02 — Milestone edit popover that actually closes
 - 2026-05-02 — Topbar declutter; agent on full right side; Lane Rates back in sidebar
-- 2026-05-02 — Floating agent chat widget; agent server actions powered by Claude Haiku
+- 2026-05-02: Floating agent chat widget, now powered by GPT-5.6 through the shared Responses API adapter.
 - 2026-05-02 — Command palette (⌘K) for job switching
 - 2026-05-02 — Live event toast (15s polling)
 - 2026-05-02 — Customer popover from workbench header

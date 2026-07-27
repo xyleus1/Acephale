@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
@@ -73,8 +73,8 @@ export async function proposeDuplicateInquiryConsolidation(): Promise<
   | { error: string }
 > {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const inquiries = await prisma.inquiry.findMany({
     where: {
@@ -98,9 +98,9 @@ export async function proposeDuplicateInquiryConsolidation(): Promise<
     return `[${idx}] id=${i.id} | ${i.type} | "${i.subject}" | from=${i.fromEmail ?? i.fromCompany ?? "?"} | commodity=${i.commodity ?? "-"} | route=${i.origin ?? "?"}→${i.destination ?? "?"} | mode=${i.mode ?? "-"} | created=${i.createdAt.toISOString().split("T")[0]}${summary}`;
   }).join("\n");
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 1200,
     system: `You consolidate duplicate freight inquiries.
 
@@ -184,7 +184,7 @@ Rules:
     reviewItems,
     sourceType: "AI_DUPLICATE_SCAN",
     sourcePreview: `AI duplicate scan over ${inquiries.length} open inquiries proposed ${clusters.length} reviewed cluster${clusters.length === 1 ? "" : "s"}.`,
-    toolTrace: { parser: "claude-haiku-4-5-20251001", rawParsed: parsed },
+    toolTrace: { parser: "gpt-5.6", rawParsed: parsed },
   });
   if (!proposal.ok) return { error: proposal.error };
   return { ok: true, proposalId: proposal.proposalId, clusters: clusters.length, duplicates, message: proposal.message };
@@ -195,8 +195,8 @@ export async function proposeMergeAllOpenInquiriesIntoOne(args: MergeArgs = {}):
   | { error: string }
 > {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const candidates = await openMergeCandidates(session.officeId, args.type);
   if (candidates.length < 2) return { error: "Need at least 2 mergeable inquiries - none or only one open." };
@@ -211,9 +211,9 @@ export async function proposeMergeAllOpenInquiriesIntoOne(args: MergeArgs = {}):
     `- "${c.subject}" | commodity: ${c.commodity ?? "-"} | from: ${c.fromEmail ?? c.fromCompany ?? "-"} | route: ${c.origin ?? "?"} → ${c.destination ?? "?"}`
   ).join("\n");
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 250,
     system: `You write a single concise subject line for a consolidated procurement/forwarding job that merges multiple related RFQs.
 
@@ -269,7 +269,7 @@ Output ONLY this JSON (no markdown):
     reviewItems,
     sourceType: "AGENT_MERGE_PROPOSAL",
     sourcePreview: `Proposal to consolidate ${candidates.length} ${args.type ?? "open"} inquiries into "${finalSubject}".`,
-    toolTrace: { parser: "claude-haiku-4-5-20251001", generatedSubject: newSubject, generatedCommodity: newCommodity },
+    toolTrace: { parser: "gpt-5.6", generatedSubject: newSubject, generatedCommodity: newCommodity },
   });
   if (!proposal.ok) return { error: proposal.error };
   return { ok: true, proposalId: proposal.proposalId, mergeCount: losers.length, subject: finalSubject, message: proposal.message };
@@ -281,7 +281,7 @@ Output ONLY this JSON (no markdown):
 // where each supplier's first email creates its own thread and the AI hadn't
 // linked them yet at the time.
 //
-// Strategy: load all open inquiries for the office, hand the list to Haiku,
+// Strategy: load all open inquiries for the office, hand the list to GPT-5.6,
 // ask it to cluster them into "this is one deal" groups. For each cluster of
 // 2+, keep the oldest inquiry, move all email threads from the others onto
 // the keeper, and delete the duplicates (plus their PROPOSED jobs). Confirmed
@@ -291,8 +291,8 @@ export async function consolidateDuplicateInquiries(): Promise<
   | { error: string }
 > {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const inquiries = await prisma.inquiry.findMany({
     where: {
@@ -316,9 +316,9 @@ export async function consolidateDuplicateInquiries(): Promise<
     return `[${idx}] id=${i.id} | ${i.type} | "${i.subject}" | from=${i.fromEmail ?? i.fromCompany ?? "?"} | commodity=${i.commodity ?? "-"} | route=${i.origin ?? "?"}→${i.destination ?? "?"} | mode=${i.mode ?? "-"} | created=${i.createdAt.toISOString().split("T")[0]}${summary}`;
   }).join("\n");
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 1200,
     system: `You consolidate duplicate freight inquiries.
 
@@ -425,8 +425,8 @@ export async function mergeAllOpenInquiriesIntoOne(args: {
   | { error: string }
 > {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set" };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "OPENAI_API_KEY is not set" };
 
   const where: {
     officeId: string;
@@ -476,9 +476,9 @@ export async function mergeAllOpenInquiriesIntoOne(args: {
     `- "${c.subject}" | commodity: ${c.commodity ?? "-"} | from: ${c.fromEmail ?? c.fromCompany ?? "-"} | route: ${c.origin ?? "?"} → ${c.destination ?? "?"}`
   ).join("\n");
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 250,
     system: `You write a single concise subject line for a consolidated procurement/forwarding job that merges multiple related RFQs.
 

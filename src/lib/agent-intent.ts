@@ -1,8 +1,8 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 
-// Single Haiku call that maps a user message to one of the agent's
+// Single GPT-5.6 call that maps a user message to one of the agent's
 // executable verbs. Used as a SAFETY NET - fast regex layer runs first; if
 // regex says "no action" but the user clearly meant one, this catches it.
 //
@@ -27,12 +27,12 @@ export async function classifyAgentIntent(args: {
   scopeJobId?: string;
   scopeJobType?: "SOURCING" | "FORWARDING";
 }): Promise<AgentIntent> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { intent: "chat" };
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 250,
     system: `You classify the operator's message to a freight platform's agent into ONE executable action. Output ONLY the JSON, no preamble.
 

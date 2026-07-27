@@ -8,7 +8,7 @@
 
 ## Branch
 
-crm-status-structure (Conductor workspace phoenix, targets main)
+find-hardware-import-data, merged with current main
 
 ## Commit
 
@@ -16,6 +16,103 @@ see git log
 
 ## Task implemented
 
+### GPT-5.6 and Intel shipment review
+All active application reasoning paths now use OpenAI GPT-5.6 through the
+existing server-side `OPENAI_API_KEY`.
+
+- `src/lib/gpt56-client.ts` centralizes the Responses API contract, including
+  `store: false`, a 45-second timeout, one SDK retry, low reasoning for bounded
+  calls, medium reasoning for function-tool loops, and provider-neutral
+  message and function schema conversion. It replays GPT reasoning items and
+  function call IDs with each tool result.
+- RFQ parsing, pasted-load extraction, email classification, thread
+  consolidation, document analysis, supplier-offer extraction, job proposal
+  population, meeting notes, email drafts, stuck-job recommendations, intent
+  parsing, and the main operator agent all use GPT-5.6.
+- The Anthropic SDK and active `ANTHROPIC_API_KEY` contract were removed.
+  `whisper-1` remains only for `/api/transcribe` because speech-to-text is a
+  specialized endpoint.
+- Deterministic freight rules, tenant-scoped data access, proposal review, and
+  outbound human approval boundaries remain unchanged.
+- `scripts/gpt56-runtime.test.ts` scans all TypeScript source files and rejects
+  Anthropic imports, Anthropic environment references, Claude model names, and
+  unexpected model literals.
+- Model identity questions bypass model generation and return the canonical
+  OpenAI GPT-5.6 identity string. The domestic trucking pre-flight rejects
+  unsupported text with zero operational load facts, labels partial loads as
+  needing details, disables RFQ creation until lane and cargo facts exist, and
+  no longer presents zero findings as "nothing breaks."
+
+Intel also has a dedicated, read-only China to U.S. ocean shipment review at
+`/dashboard/intel/load`.
+
+- The review accepts a pasted shipment brief or a blank manual packet. When
+  `OPENAI_API_KEY` is configured, the page sends pasted text to OpenAI
+  GPT-5.6 through the Responses API and requires Zod-backed Structured
+  Outputs. The request uses medium reasoning and `store: false`. The text,
+  extracted fields, and assessment are not persisted by Derya, and the action
+  has no Prisma write, RFQ conversion, revalidation, or downstream provider
+  action.
+- If model extraction is unavailable or fails, a conservative local parser
+  still reads explicitly labeled shipment facts. It does not infer negative
+  product screens, and every locally parsed value remains an unconfirmed
+  supplier statement.
+- A separate versioned input contract records route, controlling customs
+  event, exact entry timing, product identity, proposed HTS, origin,
+  valuation, importer and broker facts, UFLPA evidence, ocean filing, and
+  twelve tri-state product screens. Missing values remain unknown.
+- AI and supplier values remain unverified until individually confirmed.
+  Hidden values cannot be bulk-confirmed, negative agency screens close only
+  from operator-confirmed or document-backed facts, and stale async responses
+  cannot overwrite newer edits.
+- Explicit air, road, rail, or unknown modes remain outside this ocean
+  workflow instead of being coerced into scope. A damaged-battery blocker
+  requires confirmed provenance for both the battery screen and the damage
+  claim.
+- The report renders before the editor and contains an executive readiness
+  view, missing and unconfirmed facts, date-sensitive actions, eight customs
+  gates, product and agency screens, a supplier/importer/broker question list,
+  and a collapsed 47-record official source ledger. It includes sticky report
+  navigation, print output with source URLs, and copyable questions.
+- Rule timing was refreshed at `2026-07-24T23:48:00.000Z`. The July 24 USTR
+  Section 301 action is active at and after 12:01 a.m. EDT, while the temporary
+  Section 122 action is expired at that same instant. The review recomputes
+  state from the shipment's confirmed controlling event and exact timestamp.
+- The USTR in-transit path asks for vessel-loading and final-mode facts only
+  before the July 28, 12:01 a.m. EDT exception deadline. Dotted ten-digit HTS
+  values normalize safely, nonpositive weights and values fail closed, and a
+  late ISF timestamp cannot make the ocean-filing gate ready.
+- The old load checker is now labeled as a U.S. domestic trucking pre-flight
+  and explicitly says that it does not assess import duty, ocean filing,
+  product admissibility, or customs clearance. A missing local Carrier table
+  now degrades to an empty carrier bench instead of crashing that read path.
+
+## Verification passed
+
+- `npm run test:gpt56-runtime`
+- `npm run test:email-classifier`
+- `npm run test:intel-china-load-assessment`
+- `npm run test:intel-china-load-extraction`
+- `npm run test:intel-china-load-ui`
+- `npm run test:intel-china-customs-guide`
+- `npx tsc --noEmit --incremental false`
+- `npm run build` with the documented local database and auth placeholders
+- Browser QA at 390px and 1440px with no horizontal overflow or console errors
+
+## Known gaps
+
+- The shipment review does not calculate duty, fetch a live HTS result, submit
+  ISF or entry data, replace a licensed customs broker, or promise clearance.
+- The USTR final action is represented from the official July 23
+  prepublication final notice. The current USITC HTS revision predates the
+  July 24 transition, so a broker and current ACE/HTS check remain mandatory.
+- No ImportGenius, TradeAtlas, Trademo, schedule, rate, or carrier provider is
+  connected. Freight quote readiness means the core fact packet is usable for
+  rate research, not that a rate was retrieved.
+- The page is intentionally nonpersistent. Printing or copying the questions
+  is the current handoff path; a saved, office-scoped review record would
+  require a separate approved schema and audit design.
+### CRM and Outreach workspace
 Split Outreach into its own top-level workspace while keeping it fully
 connected to CRM.
 
@@ -78,6 +175,134 @@ connected to CRM.
 
 ## Date
 
+### Intelligence history
+2026-07-23
+
+## Branch
+
+find-hardware-import-data (Conductor workspace, targets main)
+
+## Commit
+
+see git log
+
+## Task implemented
+
+Intel now opens as a structured China to U.S. West Coast hardware report with
+fixed-basket customs history, current tariff and admissibility controls, and
+claim-local official evidence.
+
+- Census snapshot schema v4 contains a China-only fixed 43-code vessel series
+  for every complete year from 2010 through 2025 plus May 2026 YTD. It uses 34
+  unique official State Imports HS6 and Port Imports HS6 ZIP files plus the
+  Schedule C dictionary, with checksums and reconciliation checks.
+- The fixed 43-code history stays separate from the current 46-code hardware
+  basket. The report does not splice classifications introduced in 2022 into
+  earlier years or compare a partial YTD period directly with a complete year.
+- The primary watch still reports May 2026 YTD China-origin vessel value of
+  $8.89B across West Coast port-of-unlading districts, 20.8% of the current
+  West Coast hardware basket by value, and 23 positive category-by-district
+  observations. Districts remain research areas, not port, carrier, or route
+  recommendations.
+- The customs operator guide uses eight deterministic gates and 47 official
+  authority and guidance references. It separately stores controlling law,
+  fact-matched rulings or scope decisions, current implementation guidance,
+  and handbook context.
+- The same-day USTR review added the July 23, 2026 forced-labor Section 301
+  final action. The prepublication notice establishes 12.5 percent under HTSUS
+  9903.05.31 for covered products of China from 12:01 a.m. EDT on July 24,
+  subject to Annex I and Annex II Part A exemptions. A narrow in-transit
+  exception requires loading onto a vessel at the port of loading and transit
+  on the final mode before the cutoff, followed by entry before 12:01 a.m. EDT
+  on July 28. The UI shows the July 24 Eastern cutoff as July 23 at 9:01 p.m.
+  PDT for West Coast operators and requires rechecking the filed notice,
+  current HTS, exact product, expected entry date, and transit facts.
+- Rules remain evaluated as of `2026-07-23`; source review time is
+  `2026-07-24T01:36:03.000Z`. Publication, effectiveness, expiration, handbook
+  revision, page modification, and review dates are not collapsed into one
+  misleading date.
+- Twelve product screens separate FCC current conditions and dated
+  amendments, FDA medical-device and radiation-product requirements, CPSC,
+  lithium batteries, general hazardous materials and vessel carriage, NRC
+  nuclear imports, EPA engines, EPA FIFRA pesticides and devices, EPA
+  refrigerant equipment, DOE covered equipment, and APHIS solid wood
+  packaging. Finished charged equipment remains separate from bulk
+  refrigerant and from its transport classification.
+- The report presents primary sections 01 through 06 and moves the all-origin
+  supporting report into Appendix A. Historical evidence is a responsive
+  three-column table that stacks on mobile, chart descriptions name each
+  series and endpoints, alerts meet readable contrast, and source links expose
+  their geography.
+- The authenticated China watch export returns schema v2 JSON containing the
+  watch, fixed history, routing brief, and customs guide. No provider account,
+  licensed bill-of-lading export, CRM write, route choice, quote, lead score,
+  or customer-facing action was added.
+
+## Verification passed
+
+- `npm run test:intel-census-public-hardware`
+- `npm run test:intel-corridor-watch`
+- `npm run test:intel-china-customs-guide`
+- `npm run test:intel-china-watch-export`
+- `npm run test:intel-hardware-export-route`
+- `npm run test:intel-ocean-hardware`
+- `npm run test:intel-sources`
+- `npm run test:intel-report-ui`
+- `npm run test:intel-boundary`
+- `npx tsc --noEmit --incremental false`
+- `npm run check:docs`
+- Production build against local Postgres
+- Authenticated browser QA at 390, 768, and 1440 pixel widths
+- Zero horizontal overflow, working evidence deep links, keyboard-operable
+  disclosures, collapsed Appendix A, and no product console errors on a clean
+  reload
+
+## Known gaps
+
+- Refresh is an explicit build step, not a scheduler. Run
+  `npm run snapshot:intel-hardware -- --as-of=YYYY-MM` after a new Census
+  monthly release from January through November, review the diff, and commit
+  the regenerated artifact. December is rejected because that file represents
+  a complete year; the following January refresh captures it correctly.
+- The watch still lacks the foreign loading port, exact U.S. port and terminal,
+  shipment endpoints, actual bill-of-lading route, carrier and service,
+  sailing schedule, rate and accessorials, transit reliability, and
+  shipment-specific cargo constraints.
+- Company and lead qualification still require licensed bill-of-lading
+  evidence. ImportGenius, TradeAtlas, and Trademo remain unconnected.
+- District observations cannot be joined to the independent California
+  ultimate-destination signal. May 2026 is partial-year data and cannot be
+  compared directly with a complete year.
+- The customs guide organizes evidence and blocks unsupported promises. It
+  does not calculate the exact duty, issue a ruling, replace a customs broker,
+  or promise admissibility or clearance. Revalidate all current, upcoming, and
+  time-limited actions against the expected entry date.
+- Scoped ESLint cannot start in the current repository because ESLint 9 expects
+  a flat `eslint.config.*` file while the repo still has `.eslintrc.json`.
+
+## Previous Update
+
+## Date
+
+2026-07-22
+
+## Summary
+
+The hardware report moved to the validated keyless Census file snapshot with
+five complete years plus current YTD, exact ZIP checksums, current origin and
+gateway rollups, and a role-gated full snapshot export. See the engineering
+log and the 2026-07-22 decisions for the complete source and refresh contract.
+
+## Previous Update
+
+## Date
+
+2026-07-21
+
+## Branch
+
+casablanca (Conductor workspace, targets main)
+### CRM outreach history
 2026-07-26
 
 ## Branch
@@ -90,6 +315,69 @@ not committed
 
 ## Task implemented
 
+### Intel Phase A
+Intel Phase A is complete.
+
+- Canonical code now lives under `src/lib/intel/` and
+  `src/app/dashboard/intel/`. The old load-check, enrichment, market-indicator,
+  component, and Market route paths are one-way compatibility shims or a
+  redirect. Domestic pricing uses the canonical Intel location classifier.
+- `src/lib/intel/sources.ts` is the typed source spine. Every fetch is
+  registry-gated, citation hosts are allow-listed, secret-bearing links fail
+  closed, and cache timestamps are stored inside cached results. Manual rule
+  review time is distinct from live data fetch time.
+- Every Intel card and finding exposes an exact Sources chip. Census commodity
+  tiles cite only their own HS query. Persisted RFQ reports include a
+  plain-text source footer, and `parsedData.preflight.sources` stores the same
+  structured snapshot.
+- `/dashboard/intel` is canonical, `/dashboard/market` redirects, and
+  `/dashboard/intelligence` remains the separate company-brain market-signal
+  surface. Nav matching uses path-segment boundaries so Intel and Intelligence
+  do not collide.
+- Adversarial review fixes include rejecting modified CBP rulings, removing
+  historical Section 301 percentage claims from heading-level scans, hedging
+  MFN output until an 8 or 10 digit classification exists, and using FMCSA
+  dataset metadata instead of HTTP fetch time for insurance data vintage.
+  L&I history is filtered to active policies before display; broker
+  registration copy now separates federal requirements from Derya policy; and
+  HOS-based mileage thresholds are labeled as Intel planning assumptions. A
+  completion-gap review also restored all six original calendar and equipment
+  checks with narrower language and claim-specific CargoNet, FBI, TI, R+L,
+  and National Weather Service citations.
+
+## Verification passed
+
+- `npm run test:intel-sources`
+- `npm run test:intel-boundary`
+- `npm run test:load-check`
+- `npm run test:load-check-enrich`
+- `npm run test:market-indicators`
+- `npm run test:security-sop`
+- `npm run test:carrier-vetting`
+- `npm run test:truckload-quotes`
+- `npx tsc --noEmit --incremental false`
+- Production build with disposable database placeholders
+- Scoped Next lint for Intel-owned files and compatibility shims
+- Authenticated local HTTP integration: rendered Intel, followed the Market
+  redirect, analyzed the flagship battery load, created a throwaway RFQ, and
+  verified office scope, persisted source records, and the report footer
+
+## Known baseline failures and gaps
+
+- Repo-wide lint still fails on unrelated pre-existing lint debt, including
+  the dashboard layout's plain anchor and domestic pricing's image warning.
+- Several existing `test:*` scripts use Prisma or seed prerequisites, contrary
+  to the brief's DB-free assumption. The relevant pure-lib and bridge suites
+  above passed.
+- Click-level browser visual QA was unavailable. Source-chip keyboard,
+  positioning, scroll, and link behavior were code-reviewed but not exercised
+  by a browser automation tool.
+- This is Phase A only. The one-input intent router, serializable
+  `AnswerDocument`, standalone customs/carrier/lane resolvers, and QCMobile
+  work remain Phase B.
+
+## Earlier Update
+### CRM outreach operating loop
 CRM outreach operating loop with a finite daily queue and weekly source pool.
 
 - The CRM now leads with Status, Importance, Category, Contact, Company, and
@@ -2205,6 +2493,82 @@ Pre-hardening checkpoint:
 - `npm run test:morning-brief`
 - `npm run test:market-intelligence`
 - `npm run test:market-impact`
+
+## Hardware corridor intelligence and decision brief
+
+Status:
+
+- Implemented on 2026-07-23 on `find-hardware-import-data`.
+- Local commits: `f6425d6`, `f671e9b`, and `4c19bef`.
+- Not pushed at documentation time.
+
+What changed:
+
+- Census hardware snapshot schema v3 adds 681 positive-value current-period
+  segments keyed by hardware category, country of origin, and West Coast
+  port-of-unlading district.
+- All four stored vessel metrics reconcile exactly to the current West Coast
+  Port Imports HS6 totals. California destination reports receive no gateway
+  corridor rows.
+- The hardware report now leads with three explicit decisions: the first
+  corridor to research, gateway concentration to stress-test, and a hard hold
+  on lead outreach because the report contains zero qualified leads.
+- The Origins section adds a category-by-gateway matrix and a collapsed ranked
+  segment table. Copy states that this is a corridor signal, not a
+  port-to-port lane.
+- Completed annual totals are visually separated from current YTD metrics.
+- ImportGenius, TradeAtlas, and Trademo now have precise official pricing,
+  field, sample, FAQ, and API references. The report compares their public
+  acquisition paths and defines one identical licensed-sample scorecard.
+- Exact claim evidence, provider references, ranked segment rows, methodology,
+  and sample acceptance details are collapsed by default but open
+  automatically for print.
+- The hero and decision hierarchy were tightened for operator use. The fixed
+  seven-section report and print mode remain intact.
+- Final review hardened every aggregate snapshot metric to a safe
+  non-negative integer. Fractional and unsafe values now fail validation even
+  when dimension totals otherwise reconcile.
+- Export authorization now has behavioral coverage for anonymous HTTP 401,
+  employee HTTP 403, and authorized HTTP 200 responses. Denied requests do not
+  read the snapshot.
+
+Provider reality:
+
+- No paid shipment provider is connected.
+- ImportGenius Pro is the clearest published benchmark at $449 per month for
+  U.S. history from 2006 to present, subject to published search and download
+  limits.
+- TradeAtlas publishes a free 2022 U.S. sample path and starts at $2,950 per
+  year for 15 HS6 codes.
+- Trademo publishes custom pricing and strong prospect-workflow claims, but
+  its public coverage counts conflict and require written clarification.
+- Do not buy any provider until the same sample passes history, freshness,
+  shipment-field, geography, entity-resolution, relevance, and commercial
+  rights gates.
+
+Verification:
+
+- `npm run test:intel-sources`
+- `npm run test:intel-census-public-hardware`
+- `npm run test:intel-ocean-hardware`
+- `npm run test:intel-census-ocean`
+- `npm run test:intel-hardware-export-route`
+- `npm run test:intel-report-ui`
+- `npm run test:intel-boundary`
+- `npx tsc --noEmit --incremental false`
+- `npm run build`
+- Authenticated browser QA at 390, 768, and 1440 pixels with zero horizontal
+  overflow and no runtime console errors.
+- Authenticated snapshot export returned HTTP 200, schema version 3, and all
+  681 corridor segments.
+
+Boundaries and next work:
+
+- The joint slice does not establish a foreign loading port, service, rate,
+  transit, delay, buyer, supplier, optimized route, or lead.
+- The next product choice is whether to make saved corridor watches and
+  shipment research briefs the primary operator workflow, or to prioritize a
+  licensed lead queue after the provider sample.
 - `npm run test:firecrawl`
 - `npm run test:source-quality`
 - `npm run test:scheduled-market-ingestion`
@@ -4174,3 +4538,161 @@ Verification:
 - `npm run test:source-quality`
 - `npm run test:market-intelligence`
 - `npm run test:market-impact`
+
+## China hardware history and customs operator guide
+
+Status:
+
+- Implemented on 2026-07-23 on `find-hardware-import-data`.
+- Local commits are recorded in git history. The branch is not assumed to be
+  pushed.
+
+What changed:
+
+- Census snapshot schema v4 adds a China-only fixed 43-code vessel history for
+  every complete year from 2010 through 2025 plus May 2026 YTD. The current
+  five-year all-origin and category detail keeps the 46-code current basket.
+  The two series are deliberately separate.
+- The compact artifact contains 17 China history periods, 34 unique official
+  Census ZIP URLs, one Schedule C dictionary source, exact archive checksums,
+  fixed-code coverage validation, and an atomic 1.3 MB byte ceiling.
+- The China report now uses two accessible trend charts for nominal vessel
+  value and China basket share. Exact annual values and their State Imports
+  HS6 and Port Imports HS6 files remain in a keyboard-accessible disclosure.
+- The report evidence ledger now includes all China-watch sources. The header
+  identifies the 46-code current basket and 43-code fixed history separately.
+- A deterministic China-to-U.S. customs guide adds eight ordered decision
+  gates: classification, origin and marking, valuation, tariff stack, product
+  admissibility, UFLPA traceability, importer and entry ownership, and ocean
+  filing.
+- The guide uses 47 official authority and guidance references. Its source
+  review order separates controlling authority, fact-matched rulings or scope
+  decisions, current implementation guidance, and handbook context.
+  Publication, effective, expiration, handbook revision, page modification,
+  source review, and rule as-of dates remain separate.
+- Twelve feature-driven product screens cover FCC, separate FDA medical-device
+  and radiation-product branches, CPSC, lithium batteries, general hazardous
+  materials and vessel carriage, NRC nuclear imports, EPA engines, EPA FIFRA
+  pesticides and devices, EPA refrigerant equipment, DOE covered equipment,
+  and APHIS solid wood packaging. Finished refrigerant-charged equipment is
+  not treated as bulk refrigerant or as transport-exempt without product
+  facts.
+- The UI shows active and upcoming quote-changing actions, derives its alert
+  order from domain data, exposes the next revalidation boundary, and keeps
+  the detailed gates, document packet, evidence hierarchy, and historical
+  timeline collapsed by default.
+- The July 23 USTR forced-labor Section 301 final action is represented as an
+  upcoming July 24 action. Its 12.5 percent rate, HTSUS 9903.05.31, Annex
+  exemptions, and July 28 in-transit deadline remain subject to shipment-level
+  verification.
+- Exact EDT boundary instants are stored separately from legal dates. The
+  report displays the next boundary in West Coast local time and the official
+  Eastern cutoff, and temporal tests cover the second immediately before and
+  at the July 24 switch.
+- The responsive exact-value table groups each year's West Coast value, share,
+  and source separately from its California value, share, and source. Chart
+  descriptions name both series and their endpoints. The primary report uses
+  sections 01 through 06, while the all-origin report is Appendix A.
+- The authenticated China watch JSON contract is schema v2 and includes the
+  customs guide. The embedded Census snapshot contract is schema v4.
+
+Trust boundaries:
+
+- The 2010-to-2025 values are nominal customs value and are not adjusted for
+  inflation.
+- The long-run series excludes HS 8485, 8806, and 8807 because those groups
+  entered in 2022. Do not splice the 46-code current view into the 43-code
+  trend.
+- Customs gates organize evidence collection. They do not calculate a duty,
+  issue a ruling, promise clearance, or replace a licensed customs broker or
+  legal review.
+- Current regulatory status is frozen to `rulesAsOf=2026-07-23`. Revalidate
+  every time-limited or upcoming action for the expected entry date.
+- Census aggregates still do not identify an importer, supplier, loading port,
+  carrier service, shipment, rate, qualified lead, or recommended route.
+
+Verification completed before handoff:
+
+- `npm run test:intel-census-public-hardware`
+- `npm run test:intel-corridor-watch`
+- `npm run test:intel-china-customs-guide`
+- `npm run test:intel-china-watch-export`
+- `npm run test:intel-hardware-export-route`
+- `npm run test:intel-ocean-hardware`
+- `npm run test:intel-sources`
+- `npm run test:intel-report-ui`
+- `npm run test:intel-boundary`
+- `npx tsc --noEmit --incremental false`
+- production `npm run build` against local Postgres
+
+Handoff checks completed:
+
+- Authenticated responsive browser review at 390, 768, and 1440 pixel widths.
+- Exact-value evidence navigation opens the collapsed evidence ledger and
+  positions the selected source.
+- No horizontal overflow and no product console errors on a clean reload.
+- Refresh current tariff and agency actions for the expected entry date before
+  relying on the guide.
+
+## China load trial readiness, July 27 regulatory refresh
+
+Status:
+
+- Implemented on `find-hardware-import-data`.
+- The authenticated test surface remains `/dashboard/intel/load`.
+- The branch still requires a successful remote push before another machine
+  can use it.
+
+What changed:
+
+- The customs rules snapshot is current through
+  `2026-07-27T19:10:49.000Z`. Source records keep their individual review
+  timestamps, so a July 27 rule refresh does not falsely relabel every older
+  handbook or guidance review as new.
+- The July 24 Section 122 cutoff is represented as expired. The USTR July 23
+  final action uses HTSUS 9903.05.31 and the stated 9903.05.85 through
+  9903.05.92 exceptions, while still blocking shipment duty output until the
+  current HTS and filing instructions are confirmed.
+- The July 16 FCC prohibition for certain previously authorized Covered List
+  equipment is current. FCC 26-50 is separately labeled upcoming because
+  Federal Register publication and its effective date were not available at
+  the review timestamp. The FCC Covered List source is dated July 7.
+- EPA's HFC Technology Transitions reconsideration is current on July 27.
+  Because the authority supplies a date without an exact timestamp, the report
+  displays date precision instead of inventing a time or zone.
+- Rules freshness now evaluates both exact-instant and date-only boundaries.
+  A date-only boundary can invalidate an older snapshot instead of being
+  silently ignored.
+- The assessment carries all 49 referenced authority records with status,
+  effective window, caveat, source identity, review provenance, and the report
+  gates, agency screens, or timing actions that use each authority.
+- Questions are prioritized and separated into Mert, supplier, and broker or
+  importer ownership. UFLPA, ISF, triggered agency, and deadline-sensitive
+  questions are no longer displaced by a twelve-item list of generic field
+  prompts.
+- AI and source-text facts can be explicitly selected and confirmed in one
+  rebuild. Selection alone has no effect, and each confirmed value keeps the
+  operator-review boundary. Local fallback extraction is visibly labeled.
+
+Trust boundary:
+
+- The review remains in memory and performs no Prisma, RFQ, shipment, filing,
+  provider, customer, or company-brain write.
+- It does not calculate duty, establish origin or classification, decide
+  admissibility, promise clearance, or replace a broker or legal review.
+- HTS Revision 12 predates the July 23 USTR final action. Filing-time HTS,
+  broker, ACE, and official-action confirmation remain required.
+
+Verification:
+
+- China customs guide, load assessment, local extraction, load UI, report UI,
+  Intel boundary, source registry, load-check, and load-check enrichment tests
+  passed.
+- `npx tsc --noEmit --incremental false` passed.
+- Production `npm run build` passed against local Postgres configuration.
+- Authenticated browser QA passed at 1440px and 390px. Batch confirmation
+  reduced the review queue from 23 to 21 facts in one rebuild, the two
+  confirmed agency screens became triggered, all 49 authority records
+  rendered, horizontal overflow stayed false, and the console remained clean.
+- Browser QA found and fixed unequal question-card stretching on the desktop
+  report.

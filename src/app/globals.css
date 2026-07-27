@@ -35012,7 +35012,6 @@ tr.rfq-row-selected td,
   color: var(--whatsapp);
   flex-shrink: 0;
 }
-
 /* ── US lead cards (/dashboard/rfq?view=us) ──────────────────────────────────
    The US leads view is a card per lead built around the outreach sequence
    (src/lib/lead-outreach.ts): quality badge, lane, contact, a 4-step email
@@ -36029,4 +36028,11 @@ summary:focus-visible,
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Keep evidence controls keyboard-visible even where legacy button rules suppress outlines. */
+[data-intel-sources-trigger]:focus-visible,
+[data-intel-sources-close]:focus-visible {
+  outline: 3px solid #c4774e !important;
+  outline-offset: 2px !important;
 }

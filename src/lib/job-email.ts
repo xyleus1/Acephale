@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import Gpt56Client from "./gpt56-client";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "./auth";
 import { prisma } from "./prisma";
@@ -26,8 +26,8 @@ async function buildJobContext(jobId: string, officeId: string) {
 
 export async function draftStageEmail(jobId: string, stageHint: StageHint): Promise<DraftResult | { error: string }> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "Set ANTHROPIC_API_KEY to draft emails." };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "Set OPENAI_API_KEY to draft emails." };
   const ctx = await buildJobContext(jobId, session.officeId);
   if (!ctx) return { error: "Job not found." };
 
@@ -43,9 +43,9 @@ export async function draftStageEmail(jobId: string, stageHint: StageHint): Prom
     "DELIVERED-CUSTOMER-POD":      `Draft a delivery confirmation email to the customer with proof-of-delivery details, final billing summary, and a thank-you closer.`,
   };
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 600,
     system: `You are drafting freight forwarding emails on behalf of Derya Freight OS. Output ONLY a JSON object: {"subject": "...", "body": "..."}. No markdown, no commentary. Body should be plain text with line breaks. Sign off with "Best, Derya Operations". No emojis. Never use the em dash character in your output; use a comma, colon, period, or plain hyphen instead.`,
     messages: [{
@@ -72,8 +72,8 @@ export async function draftCounterOffer(
   targetReductionPct: number = 5,
 ): Promise<DraftResult | { error: string }> {
   const session = await requireSession();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "Set ANTHROPIC_API_KEY to draft emails." };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "Set OPENAI_API_KEY to draft emails." };
 
   const cq = await prisma.carrierQuote.findFirst({
     where: { id: carrierQuoteId, inquiry: { officeId: session.officeId } },
@@ -88,9 +88,9 @@ export async function draftCounterOffer(
   const ctx = await buildJobContext(jobId, session.officeId);
   if (!ctx) return { error: "Job not found." };
 
-  const client = new Anthropic({ apiKey });
+  const client = new Gpt56Client({ apiKey });
   const result = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "gpt-5.6",
     max_tokens: 500,
     system: `You are drafting carrier rate negotiation emails on behalf of Derya Freight OS. Output ONLY a JSON object: {"subject": "...", "body": "..."}. No markdown, no commentary. Body in plain text. Sign off with "Best, Derya Operations". Be polite, direct, professional. No fluff. No emojis. Acknowledge their rate, mention competing pressure or volume, ask for a specific target rate. Don't be aggressive. Never use the em dash character in your output; use a comma, colon, period, or plain hyphen instead.`,
     messages: [{

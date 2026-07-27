@@ -2,6 +2,7 @@
 // Pure logic only - no network. Run: npx tsx scripts/market-indicators.test.ts
 
 import {
+  buildCensusSourceUsesByCommodity,
   formatIndicatorValue,
   formatUsdCompact,
   parseBlsSeries,
@@ -11,7 +12,8 @@ import {
   summarizeTechImports,
   type CensusPoint,
   type SeriesPoint,
-} from "../src/lib/market-indicators";
+} from "../src/lib/intel/market/indicators";
+import { reviewedSourceUse } from "../src/lib/intel/sources";
 
 let failures = 0;
 
@@ -142,6 +144,18 @@ check(
     Math.abs(imports!.byCommodity[1].yoyPct! - 50) < 0.001
 );
 check("imports empty when no CA rows", summarizeTechImports([{ district: "53", commodity: "8542", time: "2026-03", value: 5 }]) === null);
+
+const censusSourcesByCommodity = buildCensusSourceUsesByCommodity([
+  { code: "8471", source: reviewedSourceUse("census_trade", "https://api.census.gov/data?I_COMMODITY=8471") },
+  { code: "8542", source: reviewedSourceUse("census_trade", "https://api.census.gov/data?I_COMMODITY=8542") },
+]);
+check(
+  "each Census commodity keeps only its exact query source",
+  censusSourcesByCommodity["8471"].length === 1 &&
+    censusSourcesByCommodity["8471"][0].sourceUrl.endsWith("I_COMMODITY=8471") &&
+    censusSourcesByCommodity["8542"].length === 1 &&
+    censusSourcesByCommodity["8542"][0].sourceUrl.endsWith("I_COMMODITY=8542")
+);
 
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`);

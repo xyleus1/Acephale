@@ -6,6 +6,216 @@ Merged from the 2026-07-16/17 intelligence pulls and the 53-source web scout. St
 Raw pulls live in `raw/`. Every OPEN source below has a repeatable command; re-run to refresh.
 Access legend: **OPEN** (pulled today, keyless) · **KEY** (free key needed - blocked until provided) · **PAID** · **MANUAL** (no clean automation path).
 
+## Report source contract: U.S. hardware imports
+
+Source checked: **2026-07-23**.
+
+This contract applies to the five-complete-year plus current-YTD hardware-import report. It keeps official aggregate import volume separate from manually observed company examples. A company name must never be inferred from an aggregate Census row.
+
+### Official aggregate import volume
+
+- **Public products:** the report uses keyless files from the Census
+  International Trade Data Products catalog at
+  `https://www.census.gov/foreign-trade/data/dataproducts.html`. It does not
+  need `CENSUS_API_KEY` and does not make a live Census request while the page
+  renders.
+- **California destination volume:** use State Imports HS6. Census defines
+  this geography as state of ultimate destination. A California row supports
+  aggregate import value reported to California as the ultimate destination state.
+  It does not prove which customs gateway handled the cargo, which company
+  bought it, or where it was finally delivered. Layout:
+  `https://www.census.gov/foreign-trade/reference/products/layouts/isths6.html`.
+  Download pattern:
+  `https://www.census.gov/trade/downloads/YYYY/state_imp/hs6_m/ISTHSMYYMM.ZIP`.
+- **West Coast throughput:** use Port Imports HS6, filtered to ports of
+  unlading whose port codes fall within districts **25 San Diego, 27 Los
+  Angeles, 28 San Francisco, 29 Columbia-Snake, and 30 Seattle**. These values
+  describe where cargo was unladen, not the importer location, customs entry
+  district, destination state, or final delivery point. Layout:
+  `https://www.census.gov/foreign-trade/reference/products/layouts/dporths6i.html`.
+  Download pattern:
+  `https://www.census.gov/trade/downloads/YYYY/Port/im_hs6_m/PORTHS6MMYYMM.ZIP`.
+- **Origin names:** country codes are resolved through the official Schedule C
+  dictionary at
+  `https://www.census.gov/foreign-trade/schedules/c/country3.txt`. Country is
+  country of origin, not supplier location, country of shipment, or foreign
+  loading port.
+- **Mode variables:** the snapshot retains general, vessel, containerized
+  vessel, and air value plus vessel, containerized vessel, and air shipping
+  weight. Containerized vessel is a subset of vessel, not a container count or
+  separate mode, and must not be added to vessel. Air stays separate from
+  vessel. Year-to-date fields are not summed across months.
+- **Company limitation:** Census state, port, HS, country, mode, value, and
+  weight rows are official aggregate statistics. They cannot identify an
+  importer, consignee, supplier, startup, buyer, bill of lading, shipment
+  count, transit time, or delay.
+
+### Checked-in snapshot and refresh contract
+
+- The current validated artifact is
+  `src/lib/intel/research/generated/census-public-hardware-v1.json`. It covers
+  revised December YTD files for 2021-2025 and May 2026 YTD for the full
+  basket. A China-only fixed core43 slice extends complete-year history to
+  2010 and also includes May 2026 YTD. Across the overlapping views there are
+  34 unique import ZIPs plus one hashed Schedule C dictionary. The evidence
+  ledger also lists the HS revision notice and three manual company
+  observations. The artifact is schema v4 and includes 681 positive-value
+  current-period origin-country by hardware-category by West Coast
+  unlading-district segments.
+- Rebuild with
+  `npm run snapshot:intel-hardware -- --as-of=YYYY-MM`. Add `--refresh` to
+  force clean downloads. The generator downloads
+  raw ZIPs into a temporary cache, streams each fixed-width text file, resolves
+  Schedule C names, validates the compact result, rereads it, and atomically
+  replaces the checked-in JSON. Raw Census ZIPs are not committed.
+- The current-period contract accepts January through November. A December
+  `--as-of` value fails explicitly because the Census archive is a complete
+  year while the report and export still model `asOfMonth` as current YTD.
+  Use the latest available non-December month. The following January refresh
+  then picks up the prior December as a complete-year period.
+- Each period and scope retains the exact source URL, file name, original fetch
+  time, source HTTP timestamp, archive SHA-256, matched row count, observed HS
+  codes, origin count, and rollups by category, origin, and geography. The
+  current West Coast Port HS6 file also retains the joint category, country of
+  origin, and port-of-unlading district slice with vessel value, vessel weight,
+  containerized vessel value, and containerized vessel weight. All four joint
+  metrics must reconcile exactly to the current West Coast scope. This is a
+  corridor research signal, not a foreign-port lane, shipment, or route.
+  The
+  Schedule C URL, original fetch time, revision, and SHA-256 are retained too.
+  Warm caches are reused only when content length, local SHA-256, and every
+  upstream validator Census supplies still match. Cache validation never
+  relabels an old archive as newly fetched. URLs must pass the Intel secret-free
+  allow-list. Census `Last-Modified` can vary between requests, so a mismatch
+  conservatively forces a fresh download. The committed SHA-256, not the HTTP
+  timestamp, is the integrity identity.
+- The startup-production proxy has 43 applicable codes in 2021 and 46 from
+  2022 onward. HS 8485, 8806, and 8807 entered in the HS 2022 revision. Do not
+  describe full-basket 2021-to-2022 growth as a like-for-like comparison unless
+  predecessor codes are separately researched and backcast. The separate
+  China core43 series uses only the fixed 43 codes for 2010-2026. Its nominal
+  customs values are comparable by included code set, but are not adjusted for
+  inflation.
+- The UI reads the validated artifact and exposes a JSON download to roles that
+  can open Intel. Refresh remains a reviewed build operation, not an automatic
+  write into tenant or company-brain data.
+- HS revision reference:
+  `https://www.usitc.gov/press_room/archive/featured_news/update_2022_hts_basic_edition`.
+
+### China corridor-watch contract
+
+- The China watch uses Schedule C code `5700` and the current joint Port
+  Imports HS6 slice. It contains 23 positive category-by-gateway observations
+  for May 2026 and must reconcile to the China country marginal, every
+  category marginal, every gateway marginal, and the West Coast scope total.
+- Current facts are observations, not lanes: $8.89B in China-origin West Coast
+  hardware vessel value, 20.8% of the West Coast basket by value, and $6.29B
+  observed in District 27. District 27 groups Los Angeles, Long Beach,
+  Hueneme, and other district ports.
+- Comparable China history uses one fixed 43-code basket for complete years
+  2010-2025. Current May 2026 YTD and the current 46-code basket stay separate
+  from those complete-year trend statements. The fixed series excludes HS
+  8485, 8806, and 8807 and is not adjusted for inflation.
+- Category posture is deterministic and research-only. A comparison district
+  must represent at least 10% of the category and at least $50M in observed
+  vessel value. A concentration label does not establish route feasibility,
+  risk, service quality, or a rerouting opportunity.
+- Observed dollar value divided by reported shipping weight is unit value per
+  kg, not physical cargo density. It may be paired with aggregate weight as a
+  commercial research cue, but it does not establish handling complexity or
+  shipment risk.
+- The routing brief stays `research_only` until the foreign loading port,
+  exact U.S. discharge port and terminal, pickup and delivery endpoints,
+  shipment route, carrier and service, sailing schedule, transit reliability,
+  freight rate and accessorials, cargo handling requirements, and licensed
+  company shipment evidence are available.
+- The role-gated JSON export at
+  `/api/intel/hardware-imports/china-watch` contains the watch, source
+  checksums, limitations, customs guide, and routing brief. It does not write
+  to operational or company-brain data.
+
+### China-to-U.S. customs authority contract
+
+- **Authority date:** the checked-in guide is reviewed and evaluated as of
+  2026-07-23. It must be refreshed for the expected entry date before quoting
+  landed cost or promising clearance.
+- **Source review order:** start with controlling authority such as the HTS,
+  statute, regulation, Federal Register action, or enforceable order. Then use
+  an applicable ruling or scope decision, current implementation guidance, and
+  handbook context. Legacy handbooks and recently modified guidance pages do
+  not override current authority or a fact-matched ruling.
+- **Current HTS:** use the edition in force on entry. The reviewed release is
+  2026 Revision 12:
+  `https://www.usitc.gov/2026_hts_revision_12`.
+- **Section 301:** use exact origin, 10-digit classification, Chapter 99
+  instructions, entry date, and exclusion language. The reviewed exclusion
+  extension begins 2025-11-30 and runs through 2026-11-09:
+  `https://www.govinfo.gov/content/pkg/FR-2025-12-01/pdf/2025-21671.pdf`.
+- **Temporary Section 122 action:** as of 2026-07-23 the action ends before
+  2026-07-24 00:01 EDT unless changed or extended. Exact exemptions and
+  Section 232 interaction require review:
+  `https://www.federalregister.gov/documents/2026/02/25/2026-03824/imposing-a-temporary-import-surcharge-to-address-fundamental-international-payments-problems`.
+- **Classification and customs process:** current Title 19 regulations and
+  the HTS control. CBP CROSS supports fact-matched classification research:
+  `https://rulings.cbp.gov/`. The commercial importer handbook was last
+  revised in 2006. The specialized classification, value, entry,
+  recordkeeping, and reasonable-care publications preserve their own
+  historical publication or revision dates.
+- **UFLPA:** forced-labor tracing is separate from tariff calculation. A
+  current entity-list search is necessary but not sufficient. Shipment-level
+  production and transaction evidence is still required:
+  `https://www.dhs.gov/uflpa-entity-list`.
+- **Product controls:** deterministic feature screens use direct or official
+  FCC, FDA, CPSC, PHMSA, EPA, DOE, and APHIS sources. HS category alone does
+  not establish agency jurisdiction.
+- **Refrigerant equipment:** current 40 CFR Parts 84 and 82 require exact end
+  use, product or component status, refrigerant, GWP, charge, date, and label
+  facts. Finished charged equipment is not a bulk HFC import merely because it
+  contains refrigerant. The 2026 reconsideration rule was published on
+  2026-05-26 but is upcoming until 2026-07-27:
+  `https://www.govinfo.gov/content/pkg/FR-2026-05-26/pdf/2026-10387.pdf`.
+- **Boundary:** the guide collects evidence and blocks unsupported promises.
+  It is not legal advice, a customs ruling, a broker filing instruction, a
+  duty calculator, or a compliance determination.
+
+### Company-level bill-of-lading evidence
+
+- **ImportGenius public pages:** public importer and supplier pages under `https://www.importgenius.com/importers/` and `https://www.importgenius.com/suppliers/`, plus the public U.S. trade preview at `https://www.importgenius.com/tradebase`, may be cited only as manually reviewed public-preview samples. Record the exact page URL and review date. Do not automate retrieval, aggregate the preview pages, or describe the visible sample as complete history. ImportGenius is not connected to Derya: there is no account, licensed export, API, or live integration.
+- **ImportYeti:** `https://www.importyeti.com/` is unavailable for Derya commercial use under its public terms. The terms at `https://www.importyeti.com/policies/terms` limit use to personal, internal, non-commercial purposes and prohibit robot, spider, site-search, data-mining, and other automated retrieval. Derya must not search, retrieve, manually copy, cite as company evidence, scrape, crawl, bulk-download, or automate ImportYeti data unless Derya first obtains explicit written commercial permission or a commercial license. The terms page may be cited only to document this access restriction.
+- **ImportGenius paid benchmark:** the official pricing page at `https://w3.importgenius.com/pricing` lists USA Pro Flex at $449 per month with U.S. import history from 2006 to present, 50 searches per day, and 1,000 downloaded rows per month. The same page says no free trial is offered. The U.S. field page at `https://w3.importgenius.com/how-it-works/our-datasets/us-imports` lists entity-resolved importers, consignee addresses, shippers, foreign and U.S. ports, vessel, weight, quantity, and descriptions. This is published product documentation, not proof that a Derya sample meets those claims.
+- **TradeAtlas sample path:** the official pricing page at `https://www.tradeatlas.com/en/pricing-data-and-ai-package` starts at $2,950 per year for 15 six-digit HS codes and publishes importer, exporter, product, and port searches. `https://www.tradeatlas.com/en` offers a free 2022 U.S. sample and paths to request sample files and an API trial. Field availability and normalization vary and must be checked in the requested sample.
+- **Trademo sales-validation path:** `https://www.trademo.com/intel/pricing` publishes custom pricing plus prospect, contact, saved-search, and monitoring claims. `https://www.trademo.com/faqs` claims a no-expiry free trial and a 1-2 day update lag. Its public pages publish conflicting shipment and company counts, so coverage must be clarified in writing and tested before purchase.
+- **Connection state:** ImportGenius, TradeAtlas, and Trademo are not connected to Derya. There is no licensed account, export, API, or live integration. Public marketing or preview pages are not evidence of complete company coverage and must not be presented as retrieved shipment data.
+- **Five-year company history:** a complete five-year company bill-of-lading history requires a licensed company-level BOL provider with an approved export or API path. Official Census aggregates and scattered public previews cannot supply that history. Even licensed results must retain the provider query, coverage dates, record identifiers, retrieval date, and vessel-manifest confidentiality caveat. Air company history requires a separate licensed source because public U.S. vessel manifests do not cover air shipments.
+- **Public-manifest boundary:** company-level ocean records derive from public vessel-manifest disclosure and can be incomplete because parties may request confidentiality. The governing public-disclosure reference is `https://www.ecfr.gov/current/title-19/part-103/section-103.31`. Company examples are observed records, not a census of all importers and not qualified leads without separate review.
+
+### Licensed-provider sample gate
+
+Request the same sample from every candidate before buying access:
+
+- U.S. ocean imports from April 1 through June 30, 2026, plus the same quarter
+  in 2022-2025.
+- HS6 codes 847950, 850760, 854231, 902750, and 880622.
+- West Coast arrival ports kept separate from importer addresses in
+  California, Oregon, and Washington.
+- Complete row counts, a stable untruncated export, field dictionary,
+  suppression rules, update timestamp, API or delivery quote, and written
+  commercial-use rights.
+
+Hard acceptance gates:
+
+- Five-year history and update lag no more than 7 days.
+- Core shipment fields at least 95% complete and normalized state and ZIP at
+  least 80% complete.
+- Entity-resolution precision at least 90% on the top 50 importers and
+  intermediary contamination no more than 10%.
+- Bill-of-lading deduplication and commodity relevance at least 85%.
+- Written permission to store, normalize, score, and use the licensed data in
+  Derya workflows.
+
+Aggregate Census volume can rank market and corridor research. It cannot
+increase a company lead score.
+
 ## 1. Carrier supply - FMCSA Company Census · OPEN
 Socrata dataset `az4n-8mr2` on data.transportation.gov. Full US carrier universe: identity (DOT#, legal/DBA name), location, fleet size, drivers, hazmat flag, phone, operation class. Keyless (throttled; a free Socrata app token raises limits).
 - CA for-hire active by fleet bucket → `raw/fmcsa_ca_forhire_by_fleetsize.json`
@@ -34,11 +244,53 @@ Keyless CSV: `https://fred.stlouisfed.org/graph/fredgraph.csv?id=<SERIES>` → `
 Both port sites 403 automated fetches. Monthly numbers reliably appear in press releases/news (June 2026: **PoLA 1,002,734 TEU - record June, imports +13%; POLB 779k TEU, +10.6%** - importers frontloading). Options: manual monthly grab, scrape with browser headers, or Port Optimizer (volumes.portoptimizer.com) if they expose a feed.
 
 ## 4. Customs flows (the actual "customs data") - US Census International Trade API · ACTIVE ✅
-`api.census.gov/data/timeseries/intltrade/imports/hs` - monthly import value by **HS code × customs district** (LA=27, SF=28, San Diego=25). **Key active since 2026-07-16** (`CENSUS_API_KEY` in Vercel prod+preview; never in repo). Wired into the market-baseline card via `fetchCensusTechImports()` in `src/lib/market-indicators.ts` (6 HS codes, from-prior-January range, 24h cache). First read (May 2026, latest published): **CA tech imports $12.42B/mo, +17.7% YoY - networking gear +51%, semicap +32%, computers $6.28B, batteries −11%**. Aggregate only - no company names.
+`api.census.gov/data/timeseries/intltrade/imports/hs` - monthly import value by **HS code × customs district** (LA=27, SF=28, San Diego=25). **Key active since 2026-07-16** (`CENSUS_API_KEY` in Vercel prod+preview; never in repo). Wired into the market-baseline card via `fetchCensusTechImports()` in `src/lib/intel/market/indicators.ts` (6 HS codes, from-prior-January range, 24h cache). First read (May 2026, latest published): **selected West Coast gateway tech import value across all transportation modes was $12.42B/mo, +17.7% YoY - networking gear +51%, semicap +32%, computers $6.28B, batteries −11%**. This is a customs-gateway aggregate for districts 25, 27, and 28, not California destination volume or California-only imports. Districts 27 and 28 include Nevada-area ports such as Las Vegas and Reno. Aggregate only - no company names.
+
+## 4a. China customs authority guide · ACTIVE, REVIEWED
+
+The China hardware report uses 47 official authority and guidance references
+across classification, origin and marking, valuation, tariff stacking, product
+admissibility, UFLPA traceability, importer and entry ownership, and ocean
+filing. Review controlling authority first, then an applicable ruling or scope
+decision, current implementation guidance, and handbook context.
+
+- Rules are evaluated as of `2026-07-23`; sources were reviewed at
+  `2026-07-24T01:36:03.000Z`.
+- USTR's July 23, 2026 forced-labor Section 301
+  [final action notice](https://ustr.gov/sites/default/files/files/Press/Releases/2026/FLIP%20301%20Investigation%20Final%20Action%20FRN%207-23-26%20FINAL.pdf)
+  is modeled as upcoming on July 24. It establishes 12.5 percent under HTSUS
+  9903.05.31 for covered products of China, subject to listed exemptions and a
+  conditional July 28 in-transit deadline. The exception requires loading onto
+  a vessel at the port of loading and transit on the final mode before the
+  July 24 cutoff. The report shows that official 12:01 a.m. EDT cutoff as July
+  23 at 9:01 p.m. PDT for West Coast operators.
+- FCC history separates the April 12, 2022 pre-sale import condition in 47 CFR
+  2.1204(a)(11) from the December 26, 2025 covered-equipment amendment to
+  paragraph (a)(1).
+- FDA medical-device requirements are separate from medical and non-medical
+  radiation-emitting product requirements, including 21 CFR 1.77, performance
+  standards, product reports, accession numbers, and Form FDA 2877 where
+  applicable.
+- General hazardous-material screening cites 49 CFR Parts 172, 173, and 176
+  for classification, communication, packaging, vessel stowage, segregation,
+  and acceptance. A narrow PHMSA refrigerating-machine interpretation is
+  preserved as fact-specific guidance, not a blanket refrigerant exception.
+- NRC screening covers radioactive sources, nuclear material, and nuclear
+  equipment under 10 CFR Part 110, including license or exception basis,
+  consignee possession authority, and required notifications.
+- EPA FIFRA screening covers hardware with pesticidal claims or functions,
+  including sterilizers, sanitizers, UV devices, and similar equipment. It
+  requires product scope, registration or exception, producing-establishment,
+  labeling, and Notice of Arrival evidence.
+- The guide is an evidence checklist, not a duty calculator, binding ruling,
+  broker instruction, admissibility decision, or clearance promise. Recheck
+  the filed Federal Register notice, current HTS revision, expected entry date,
+  product description, origin facts, and any claimed exemption for each
+  shipment.
 
 ## 5. Company-level customs BOLs (who imports what, from which CM) · PAID/MANUAL
 Ocean bills of lading name shipper + consignee - the prospecting goldmine ("X just imported 12 containers of server racks from Foxconn").
-- ImportYeti - free web UI, manual lookups (ToS disallows scraping)
+- ImportYeti - unavailable for Derya commercial use without explicit written permission or a commercial license; do not use public-term lookups as company evidence
 - ImportGenius / Panjiva (S&P) - paid APIs/exports
 - Raw CBP AMS data subscription - paid, heavy engineering
 Note: air shipments (most high-value tech) are largely NOT in public BOL data.
@@ -54,7 +306,11 @@ Truck freight value by port of entry (Otay Mesa/Calexico) × commodity × state.
 Adapter slot already exists (`DomesticRateProvider`). Commercial/API paperwork is the long pole - start now.
 
 ## Refresh cadence suggestion
-Weekly: FRED (diesel/PPI). Monthly: FMCSA aggregates, port TEUs (manual), Census trade (once key exists). Product wiring: a `scripts/intel-pull.ts` + BackgroundJob cron writing `MarketSignal` rows is the natural next slice - after the key/paid decisions land.
+Weekly: FRED (diesel/PPI). Monthly: FMCSA aggregates, port TEUs (manual), and
+the keyless Census hardware snapshot after the new monthly files publish. The
+separate Census API key remains relevant to the legacy six-code market-baseline
+tile, not to the hardware research report. Keep snapshot regeneration
+reviewed until release timing, revision behavior, and artifact diffs are stable.
 
 ---
 
@@ -85,7 +341,7 @@ Date: 2026-07-17. Ranked by (value to the niche ÷ effort) from 53 scout-verifie
 - **Effort:** hours.
 
 ### 4. BLS PPI - Long-Distance Truckload (PCU484121484121)
-- **Wire into:** Market baseline tile - the direct replacement for blocked-FRED. One cached daily fetch gives the "TL linehaul rates up X% y/y" line in reports and on /dashboard/market.
+- **Wire into:** Market baseline tile - the direct replacement for blocked-FRED. One cached daily fetch gives the "TL linehaul rates up X% y/y" line in reports and on `/dashboard/intel`.
 - **Access steps:** Keyless works now (25 queries/day, verified live); register a free BLS key for 500/day headroom. `POST https://api.bls.gov/publicAPI/v2/timeseries/data/` with the series ID; cache 24h.
 - **Gotchas:** Latest month is often flagged preliminary (June 2026 was) - render a "(prelim)" annotation and expect revisions. BLS is the primary source FRED mirrors, but still smoke-test from a Vercel function before deleting the FRED code path.
 - **Effort:** hours.
@@ -140,7 +396,7 @@ Date: 2026-07-17. Ranked by (value to the niche ÷ effort) from 53 scout-verifie
 - **Carrier411 ($99/mo, 30-day trial)** - FreightGuard complaint history is the one non-reproducible vetting signal; first paid pilot once the free vetting stack is live.
 - **SONAR Quick Rates ($249/yr)** - buy a seat as a human rate-check tool; it's not an integration (no API at that tier).
 - **SaferWebAPI ($30/mo)** - hold as contingency only if QCMobile blocks Vercel IPs.
-- **ImportYeti (free) / ImportGenius ($229–449/mo)** - manual sales-side BOL research; use ImportYeti ad-hoc, pay ImportGenius only if the workflow proves out.
+- **Licensed ocean BOL sample** - ImportYeti is unavailable for Derya commercial use without explicit written permission or a commercial license. Test the identical sample gate against ImportGenius Pro at the published $449 monthly benchmark, TradeAtlas, and Trademo before buying any provider.
 - **NMFTA SCAC ($570/yr), Highway, MyCarrierPortal ($515/mo), Truckstop RMIS ($340+)** - identity/onboarding suites; redundant until volume justifies, and MCP/RMIS are build-vs-buy benchmarks, not feeds.
 - **TAPA IIS ($2,100/yr)** - cheapest live theft-alert feed; revisit when there are recurring high-value lanes to monitor.
 - **UN Comtrade / Freightos FBX / ACT Research** - context-only; free tiers have no usable API path worth automating now.
