@@ -8,13 +8,69 @@
 
 ## Branch
 
-find-hardware-import-data, merged with current main
+crm-status-structure, merged with current main
 
 ## Commit
 
 see git log
 
 ## Task implemented
+
+### Today's 80-person hardware VC outreach campaign
+
+The Outreach workspace now has an authenticated, tenant-scoped loader for a
+researched hardware VC portfolio-intro campaign.
+
+- The campaign contains exactly 20 Bookface, 30 LinkedIn, and 30 email targets.
+  Targets include named people from YC, Fifty Years, HAX, DCVC, Lux, Root,
+  Playground, Construct, Dynamo, Ironspring, Autotech, and other hardware,
+  industrial, logistics, and deep-tech funds.
+- Every target includes the fund, current role, official team source, relevance
+  to Derya, and a specific request for introductions to portfolio founders with
+  hardware import, Asia manufacturing, or U.S. freight needs.
+- The loader reuses a matching person already in CRM and creates only missing
+  companies and contacts. It preserves existing email, phone, and profile data.
+  It refuses to overwrite duplicate people, protected relationship statuses, or
+  outreach already completed this week.
+- Loading the campaign makes those 80 people today's open queue and moves the
+  previous open Today rows back to the weekly pool. It verifies the 20/30/30
+  split before committing the transaction.
+- Matching is case-insensitive within the current office. The transaction locks
+  company and contact writes during the one-time load, and an intentional reload
+  restores skipped campaign rows to Today.
+- Email addresses remain blank when they have not been verified. Email targets
+  include a LinkedIn people search and official team source so the operator can
+  find and confirm the address rather than storing guessed contact data.
+- The daily and weekly tables now show the portfolio-intro reason and ask
+  directly beside each person.
+
+## Files changed
+
+- `src/lib/hardware-vc-outreach-campaign.ts`
+- `src/lib/load-hardware-vc-outreach.ts`
+- `src/app/dashboard/crm/actions.ts`
+- `src/components/contact-sheet.tsx`
+- `src/app/globals.css`
+- `scripts/hardware-vc-outreach.test.ts`
+- `scripts/hardware-vc-outreach-loader.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:hardware-vc-outreach`
+- `npm run test:crm`
+- `npm run test:crm-outreach`
+- `npx tsc --noEmit`
+- `git diff --check`
+- Changed-text em dash check
+
+## Verification blocked
+
+- `npm run test:crm-outreach-db` reached Prisma correctly with the required
+  React Server condition, but the disposable PostgreSQL URL is not available
+  in this workspace. The database rejected the placeholder credentials before
+  the test could create its isolated office.
 
 ### Intel is chat-first
 

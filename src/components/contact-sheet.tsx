@@ -7,6 +7,7 @@ import {
   createContactAction,
   deferOutreachAction,
   deleteContactAction,
+  loadHardwareVcOutreachAction,
   markOutreachReachedAction,
   updateContactAction,
   type ContactPatch,
@@ -169,12 +170,14 @@ export function ContactSheet({
   initialQuery,
   initialPlan,
   initialView,
+  canLoadHardwareVcCampaign = false,
 }: {
   initialRows: ContactRow[];
   companies: string[];
   initialQuery: string;
   initialPlan: OutreachPlanRow[];
   initialView: CrmView;
+  canLoadHardwareVcCampaign?: boolean;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(initialRows);
@@ -187,6 +190,7 @@ export function ContactSheet({
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [campaignBusy, setCampaignBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyCounts, setBusyCounts] = useState<Record<string, number>>({});
   const [planBusy, setPlanBusy] = useState<Record<string, boolean>>({});
@@ -569,6 +573,35 @@ export function ContactSheet({
     });
   }
 
+  function loadHardwareVcCampaign() {
+    if (campaignBusy) return;
+    if (
+      !window.confirm(
+        "Load 80 researched hardware VC contacts into today's queue? This will replace the current open Today queue with 20 Bookface, 30 LinkedIn, and 30 email targets.",
+      )
+    ) {
+      return;
+    }
+    setCampaignBusy(true);
+    startTransition(async () => {
+      try {
+        const result = await loadHardwareVcOutreachAction();
+        if ("error" in result) {
+          flash(result.error);
+          return;
+        }
+        flash(
+          `Loaded ${result.createdContacts} new and ${result.reusedContacts} existing contacts. Today's queue is 20 Bookface, 30 LinkedIn, and 30 email.`,
+        );
+        router.refresh();
+      } catch {
+        flash("Could not load the hardware VC campaign. Try again.");
+      } finally {
+        setCampaignBusy(false);
+      }
+    });
+  }
+
   function header(column: (typeof COLUMNS)[number]) {
     const sortable = column.key !== "notes";
     const active = sortKey === column.key;
@@ -621,6 +654,7 @@ export function ContactSheet({
               <th>Company</th>
               <th>Channel</th>
               <th>Contact details</th>
+              <th>Why this target</th>
               <th>Scheduled</th>
               <th aria-label="Outreach actions" />
             </tr>
@@ -628,7 +662,7 @@ export function ContactSheet({
           <tbody>
             {items.length === 0 && (
               <tr className="outreach-empty-row">
-                <td colSpan={9} className="table-empty-cell">
+                <td colSpan={10} className="table-empty-cell">
                   {report.weeklyGap > 0
                     ? "No eligible contacts here. Classify startup or personally important contacts and assign a channel."
                     : "No outreach items match this filter."}
@@ -671,6 +705,9 @@ export function ContactSheet({
                       ?? item.channel}
                   </td>
                   <td data-label="Contact details">{renderContactLinks(item.contact)}</td>
+                  <td data-label="Why this target" className="outreach-target-notes">
+                    {item.contact.notes ?? "Add a portfolio-intro reason in CRM."}
+                  </td>
                   <td data-label="Scheduled" className="outreach-scheduled">
                     {item.status === "REACHED_OUT" && item.reachedOutAt
                       ? `Done ${new Date(item.reachedOutAt).toLocaleTimeString("en-US", {
@@ -905,6 +942,29 @@ export function ContactSheet({
               })}
             </div>
           </section>
+
+          {canLoadHardwareVcCampaign && (
+            <section className="outreach-campaign-loader" aria-labelledby="hardware-vc-campaign-title">
+              <div>
+                <span className="outreach-eyebrow">Today's researched list</span>
+                <h2 id="hardware-vc-campaign-title">Load 80 hardware VC intro targets</h2>
+                <p>
+                  Adds or reuses named investors from YC, HAX, DCVC, Lux, Root,
+                  Construct, Dynamo, and other hardware-focused funds. Email targets
+                  stay blank where an address still needs verification.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn"
+                disabled={campaignBusy}
+                onClick={loadHardwareVcCampaign}
+              >
+                <Icon name="plus" size={14} />
+                {campaignBusy ? "Loading 80 targets..." : "Load today's 20 + 30 + 30"}
+              </button>
+            </section>
+          )}
         </>
       )}
 

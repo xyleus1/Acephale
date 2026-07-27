@@ -31,6 +31,9 @@ export default async function OutreachPage({
       initialQuery={q}
       initialPlan={planItems}
       initialView={initialView}
+      canLoadHardwareVcCampaign={
+        session.role === "ADMIN" || session.role === "MANAGER"
+      }
     />
   );
 }
