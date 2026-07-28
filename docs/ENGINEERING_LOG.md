@@ -17,13 +17,13 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
-### 2026-07-27 - Hardware VC campaign for today's outreach
+### 2026-07-27 - Corrected hardware-company and VC channel campaign
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)
 - Commit: see git log
-- Task: Populate today's Outreach workflow with 20 Bookface, 30 LinkedIn, and
-  30 email targets who can introduce Derya to hardware and industrial portfolio
-  companies.
+- Task: Populate today's Outreach workflow with 20 YC hardware-company founders
+  on Bookface, 30 hardware-company leaders on LinkedIn, and 62 hardware and
+  deep-tech investors on email.
 - Files changed: `src/lib/hardware-vc-outreach-campaign.ts`,
   `src/lib/load-hardware-vc-outreach.ts`, `src/app/dashboard/crm/actions.ts`,
   `src/components/contact-sheet.tsx`, `src/app/globals.css`,
@@ -37,10 +37,11 @@ Use this file for chronological implementation notes that future agents should s
   Prisma with the correct React Server condition and failed at database
   authentication against the explicit placeholder URL.
 - Caveats: The campaign is human-operated and sends nothing. Email addresses
-  are intentionally not guessed. Loading is limited to admin and manager roles,
-  reuses canonical office-scoped CRM rows, refuses protected status changes,
-  locks company/contact writes during the load, and requires an explicit
-  confirmation in the Outreach UI.
+  are intentionally not guessed. Bookface and LinkedIn contacts are categorized
+  as startup buyer leads; email contacts are categorized as personally
+  important investors. Loading is limited to admin and manager roles, reuses
+  canonical office-scoped CRM rows, refuses protected status changes, locks
+  company/contact writes during the load, and requires explicit confirmation.
 - Follow-up: Load the campaign from `/dashboard/outreach`, verify any email
   addresses before outreach, and mark each completed contact Reached out.
 

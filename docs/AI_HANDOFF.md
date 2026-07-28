@@ -16,33 +16,35 @@ see git log
 
 ## Task implemented
 
-### Today's 80-person hardware VC outreach campaign
+### Corrected 112-person hardware outreach campaign
 
 The Outreach workspace now has an authenticated, tenant-scoped loader for a
-researched hardware VC portfolio-intro campaign.
+researched hardware-company and investor campaign.
 
-- The campaign contains exactly 20 Bookface, 30 LinkedIn, and 30 email targets.
-  Targets include named people from YC, Fifty Years, HAX, DCVC, Lux, Root,
-  Playground, Construct, Dynamo, Ironspring, Autotech, and other hardware,
-  industrial, logistics, and deep-tech funds.
-- Every target includes the fund, current role, official team source, relevance
-  to Derya, and a specific request for introductions to portfolio founders with
-  hardware import, Asia manufacturing, or U.S. freight needs.
+- Bookface contains exactly 20 YC hardware-company founders. LinkedIn contains
+  exactly 30 hardware-company founders and executives. Those 50 rows are
+  startup buyer leads, not investors.
+- Email contains 62 specialist hardware, industrial, logistics, climate, and
+  deep-tech investors from Fifty Years, HAX, DCVC, Lux, Root, Playground,
+  Construct, Dynamo, Ironspring, Autotech, Material Impact, and related funds.
+- Every company target includes an official source, freight relevance, and a
+  direct discovery ask about components, Asia manufacturing, and U.S. inbound
+  freight. Every investor target includes a specific portfolio-introduction ask.
 - The loader reuses a matching person already in CRM and creates only missing
   companies and contacts. It preserves existing email, phone, and profile data.
   It refuses to overwrite duplicate people, protected relationship statuses, or
   outreach already completed this week.
-- Loading the campaign makes those 80 people today's open queue and moves the
-  previous open Today rows back to the weekly pool. It verifies the 20/30/30
+- Loading the campaign makes those 112 people today's open queue and moves the
+  previous open Today rows back to the weekly pool. It verifies the 20/30/62
   split before committing the transaction.
 - Matching is case-insensitive within the current office. The transaction locks
   company and contact writes during the one-time load, and an intentional reload
   restores skipped campaign rows to Today.
-- Email addresses remain blank when they have not been verified. Email targets
-  include a LinkedIn people search and official team source so the operator can
-  find and confirm the address rather than storing guessed contact data.
-- The daily and weekly tables now show the portfolio-intro reason and ask
-  directly beside each person.
+- Email addresses remain blank when they have not been verified. The 62 VC
+  targets include a LinkedIn people search and official team source so the
+  operator can find and confirm the address rather than storing guessed data.
+- The daily and weekly tables show the freight-prospect or portfolio-intro
+  reason and ask directly beside each person.
 
 ## Files changed
 
