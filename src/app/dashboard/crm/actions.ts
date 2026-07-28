@@ -287,11 +287,11 @@ export async function loadHardwareVcOutreachAction(): Promise<HardwareVcCampaign
     revalidateCrmWorkspaces();
     return { ok: true, ...result };
   } catch (error) {
-    console.error("[crm-outreach] hardware VC campaign load failed:", error);
+    console.error("[crm-outreach] hardware outreach campaign load failed:", error);
     return {
       error: error instanceof Error
         ? error.message
-        : "Could not load the hardware VC campaign.",
+        : "Could not load the hardware outreach campaign.",
     };
   }
 }

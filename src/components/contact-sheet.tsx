@@ -577,7 +577,7 @@ export function ContactSheet({
     if (campaignBusy) return;
     if (
       !window.confirm(
-        "Load 80 researched hardware VC contacts into today's queue? This will replace the current open Today queue with 20 Bookface, 30 LinkedIn, and 30 email targets.",
+        "Load 112 researched hardware outreach contacts into today's queue? This replaces the current open Today queue with 20 Bookface hardware companies, 30 LinkedIn hardware companies, and 62 hardware VCs for email.",
       )
     ) {
       return;
@@ -591,11 +591,11 @@ export function ContactSheet({
           return;
         }
         flash(
-          `Loaded ${result.createdContacts} new and ${result.reusedContacts} existing contacts. Today's queue is 20 Bookface, 30 LinkedIn, and 30 email.`,
+          `Loaded ${result.createdContacts} new and ${result.reusedContacts} existing contacts. Today's queue is 20 Bookface companies, 30 LinkedIn companies, and ${result.queued.email} hardware VCs for email.`,
         );
         router.refresh();
       } catch {
-        flash("Could not load the hardware VC campaign. Try again.");
+        flash("Could not load the hardware outreach campaign. Try again.");
       } finally {
         setCampaignBusy(false);
       }
@@ -947,11 +947,11 @@ export function ContactSheet({
             <section className="outreach-campaign-loader" aria-labelledby="hardware-vc-campaign-title">
               <div>
                 <span className="outreach-eyebrow">Today's researched list</span>
-                <h2 id="hardware-vc-campaign-title">Load 80 hardware VC intro targets</h2>
+                <h2 id="hardware-vc-campaign-title">Load 112 hardware outreach targets</h2>
                 <p>
-                  Adds or reuses named investors from YC, HAX, DCVC, Lux, Root,
-                  Construct, Dynamo, and other hardware-focused funds. Email targets
-                  stay blank where an address still needs verification.
+                  Bookface gets 20 YC hardware founders. LinkedIn gets 30 hardware
+                  company leaders. Email gets 62 specialist hardware and deep-tech
+                  investors for portfolio introductions.
                 </p>
               </div>
               <button
@@ -961,7 +961,7 @@ export function ContactSheet({
                 onClick={loadHardwareVcCampaign}
               >
                 <Icon name="plus" size={14} />
-                {campaignBusy ? "Loading 80 targets..." : "Load today's 20 + 30 + 30"}
+                {campaignBusy ? "Loading 112 targets..." : "Load today's 20 + 30 + 62"}
               </button>
             </section>
           )}

@@ -37,6 +37,12 @@ function contactKey(companyId: string, fullName: string): string {
   return `${companyId}:${fullName.trim().toLowerCase()}`;
 }
 
+function targetTags(target: HardwareVcOutreachTarget): string[] {
+  return target.kind === "hardware_vc"
+    ? ["hardware_vc", "portfolio_intro", HARDWARE_VC_CAMPAIGN_TAG]
+    : ["hardware_company", "freight_prospect", HARDWARE_VC_CAMPAIGN_TAG];
+}
+
 function targetContactData(target: HardwareVcOutreachTarget, companyId: string) {
   return {
     companyId,
@@ -44,8 +50,8 @@ function targetContactData(target: HardwareVcOutreachTarget, companyId: string) 
     title: target.title,
     status: "queued",
     importance: target.importance,
-    category: "personally_important",
-    relationshipType: "investor",
+    category: target.kind === "hardware_vc" ? "personally_important" : "startup",
+    relationshipType: target.kind === "hardware_vc" ? "investor" : "buyer",
     leverageLevel: "high",
     relationshipStrength: "unknown",
     outreachChannel: target.channel,
@@ -54,11 +60,7 @@ function targetContactData(target: HardwareVcOutreachTarget, companyId: string) 
       target.channel === "bookface" ? null : linkedinPeopleSearchUrl(target),
     bookfaceUrl: target.channel === "bookface" ? BOOKFACE_URL : null,
     notes: hardwareVcCampaignNotes(target),
-    tags: [
-      "hardware_vc",
-      "portfolio_intro",
-      HARDWARE_VC_CAMPAIGN_TAG,
-    ] as Prisma.InputJsonValue,
+    tags: targetTags(target) as Prisma.InputJsonValue,
     sourceRefs: {
       campaign: HARDWARE_VC_CAMPAIGN_TAG,
       officialSourceUrl: target.sourceUrl,
@@ -73,12 +75,14 @@ export async function loadHardwareVcOutreachCampaign(
 ): Promise<CampaignLoadResult> {
   const expected = hardwareVcCampaignCounts();
   if (
-    HARDWARE_VC_OUTREACH_CAMPAIGN.length !== 80 ||
+    HARDWARE_VC_OUTREACH_CAMPAIGN.length !== 112 ||
     expected.bookface !== 20 ||
     expected.linkedin !== 30 ||
-    expected.email !== 30
+    expected.email < 30
   ) {
-    throw new Error("Hardware VC campaign does not contain the required 20/30/30 split.");
+    throw new Error(
+      "Hardware outreach campaign must contain 20 Bookface companies, 30 LinkedIn companies, and at least 30 email VCs.",
+    );
   }
 
   const calendar = outreachCalendar(now);
@@ -123,16 +127,12 @@ export async function loadHardwareVcOutreachCampaign(
             officeId,
             name,
             website: target.website,
-            crmCategory: "investor",
+            crmCategory: target.kind === "hardware_vc" ? "investor" : "prospect",
             crmStage: "prospect",
             crmPriority: "high",
             relationshipStrength: "unknown",
             crmSource: "web_research",
-            crmTags: [
-              "hardware_vc",
-              "portfolio_intro",
-              HARDWARE_VC_CAMPAIGN_TAG,
-            ] as Prisma.InputJsonValue,
+            crmTags: targetTags(target) as Prisma.InputJsonValue,
             sourceRefs: {
               campaign: HARDWARE_VC_CAMPAIGN_TAG,
               officialSourceUrl: target.sourceUrl,
@@ -155,7 +155,7 @@ export async function loadHardwareVcOutreachCampaign(
       },
     });
     if (companies.length !== companyNames.length) {
-      throw new Error("Could not resolve every hardware VC firm inside this office.");
+      throw new Error("Could not resolve every hardware company and VC inside this office.");
     }
 
     const companyByName = new Map(companies.map((company) => [company.name, company]));
@@ -164,15 +164,13 @@ export async function loadHardwareVcOutreachCampaign(
       if (!target) continue;
       const tags = [...new Set([
         ...stringArray(company.crmTags),
-        "hardware_vc",
-        "portfolio_intro",
-        HARDWARE_VC_CAMPAIGN_TAG,
+        ...targetTags(target),
       ])];
       const updatedCompany = await tx.company.updateMany({
         where: { id: company.id, officeId },
         data: {
           website: company.website ?? target.website,
-          crmCategory: "investor",
+          crmCategory: target.kind === "hardware_vc" ? "investor" : "prospect",
           crmStage: "prospect",
           crmPriority: "high",
           crmTags: tags as Prisma.InputJsonValue,
@@ -224,7 +222,7 @@ export async function loadHardwareVcOutreachCampaign(
     }
     if (duplicateKeys.size > 0) {
       throw new Error(
-        "Duplicate matching VC contacts already exist. Merge them in CRM before loading this campaign.",
+        "Duplicate matching campaign contacts already exist. Merge them in CRM before loading this campaign.",
       );
     }
 
@@ -275,8 +273,9 @@ export async function loadHardwareVcOutreachCampaign(
           title: existing.title ?? target.title,
           status: "queued",
           importance: target.importance,
-          category: "personally_important",
-          relationshipType: "investor",
+          category:
+            target.kind === "hardware_vc" ? "personally_important" : "startup",
+          relationshipType: target.kind === "hardware_vc" ? "investor" : "buyer",
           leverageLevel: "high",
           outreachChannel: target.channel,
           ownerLabel: existing.ownerLabel ?? "Mert",
@@ -289,9 +288,7 @@ export async function loadHardwareVcOutreachCampaign(
           notes,
           tags: [...new Set([
             ...stringArray(existing.tags),
-            "hardware_vc",
-            "portfolio_intro",
-            HARDWARE_VC_CAMPAIGN_TAG,
+            ...targetTags(target),
           ])] as Prisma.InputJsonValue,
           sourceRefs: {
             ...jsonObject(existing.sourceRefs),
@@ -337,8 +334,10 @@ export async function loadHardwareVcOutreachCampaign(
       contactIdsByChannel[target.channel].push(contact.id);
     }
     const campaignContactIds = Object.values(contactIdsByChannel).flat();
-    if (new Set(campaignContactIds).size !== 80) {
-      throw new Error("Hardware VC campaign did not resolve to 80 unique CRM contacts.");
+    if (new Set(campaignContactIds).size !== HARDWARE_VC_OUTREACH_CAMPAIGN.length) {
+      throw new Error(
+        "Hardware outreach campaign did not resolve to the expected unique CRM contacts.",
+      );
     }
 
     const currentPlans = await tx.outreachPlanItem.findMany({
@@ -427,14 +426,16 @@ export async function loadHardwareVcOutreachCampaign(
     if (
       queued.bookface !== 20 ||
       queued.linkedin !== 30 ||
-      queued.email !== 30
+      queued.email !== expected.email
     ) {
-      throw new Error("Today's hardware VC queue failed the required 20/30/30 verification.");
+      throw new Error(
+        "Today's hardware outreach queue failed the company and VC channel verification.",
+      );
     }
 
     return {
       createdContacts: missingTargets.length,
-      reusedContacts: 80 - missingTargets.length,
+      reusedContacts: HARDWARE_VC_OUTREACH_CAMPAIGN.length - missingTargets.length,
       queued,
     };
   }, {

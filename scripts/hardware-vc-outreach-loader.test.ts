@@ -347,17 +347,17 @@ async function testFreshLoadAndIdempotentRerun() {
   await withFakePrisma(initialState(), async (fake) => {
     const first = await loadHardwareVcOutreachCampaign(OFFICE_ID, NOW);
     const afterFirst = fake.getState();
-    check("fresh load creates all 80 contacts", first.createdContacts === 80);
-    check("fresh load creates one contact per target", afterFirst.contacts.length === 80);
+    check("fresh load creates all 112 contacts", first.createdContacts === 112);
+    check("fresh load creates one contact per target", afterFirst.contacts.length === 112);
     check(
-      "fresh load creates one company per fund",
+      "fresh load creates one company per organization",
       afterFirst.companies.length ===
         new Set(HARDWARE_VC_OUTREACH_CAMPAIGN.map((target) => target.company)).size,
     );
     check(
       "fresh load creates the exact Today channel split",
       JSON.stringify(channelCounts(afterFirst)) ===
-        JSON.stringify({ bookface: 20, linkedin: 30, email: 30 }),
+        JSON.stringify({ bookface: 20, linkedin: 30, email: 62 }),
     );
     check(
       "email targets do not store guessed email addresses",
@@ -365,14 +365,34 @@ async function testFreshLoadAndIdempotentRerun() {
         .filter((contact) => contact.outreachChannel === "email")
         .every((contact) => contact.email === null && contact.linkedinUrl?.includes("linkedin.com")),
     );
+    check(
+      "company channels become startup buyer leads",
+      afterFirst.contacts
+        .filter((contact) => contact.outreachChannel !== "email")
+        .every(
+          (contact) =>
+            contact.category === "startup" &&
+            contact.relationshipType === "buyer",
+        ),
+    );
+    check(
+      "email channel becomes personally important investor outreach",
+      afterFirst.contacts
+        .filter((contact) => contact.outreachChannel === "email")
+        .every(
+          (contact) =>
+            contact.category === "personally_important" &&
+            contact.relationshipType === "investor",
+        ),
+    );
     check("transaction takes a per-office advisory lock", afterFirst.advisoryLocks.length === 1);
     check("transaction locks company and contact writes", afterFirst.tableLocks === 1);
 
     const second = await loadHardwareVcOutreachCampaign(OFFICE_ID, NOW);
     const afterSecond = fake.getState();
-    check("rerun reuses all 80 contacts", second.createdContacts === 0 && second.reusedContacts === 80);
-    check("rerun does not duplicate contacts", afterSecond.contacts.length === 80);
-    check("rerun does not duplicate plan rows", afterSecond.plans.length === 80);
+    check("rerun reuses all 112 contacts", second.createdContacts === 0 && second.reusedContacts === 112);
+    check("rerun does not duplicate contacts", afterSecond.contacts.length === 112);
+    check("rerun does not duplicate plan rows", afterSecond.plans.length === 112);
     check(
       "rerun does not duplicate campaign notes",
       afterSecond.contacts.every(
@@ -387,7 +407,7 @@ async function testExistingContactPreservationAndQueueReplacement() {
   seed.companies.push({
     id: "existing-company",
     officeId: OFFICE_ID,
-    name: "Y Combinator",
+    name: "Astranis",
     website: "https://existing.example/",
     crmTags: ["existing_tag"],
     sourceRefs: { importedFrom: "crm" },
@@ -395,7 +415,7 @@ async function testExistingContactPreservationAndQueueReplacement() {
   seed.contacts.push({
     id: "existing-contact",
     companyId: "existing-company",
-    fullName: "garry tan",
+    fullName: "john gedmark",
     title: null,
     status: "not_contacted",
     email: "verified@example.com",
@@ -475,7 +495,7 @@ async function testForeignOfficeIsolation() {
   seed.companies.push({
     id: "foreign-yc",
     officeId: "office-foreign",
-    name: "Y Combinator",
+    name: "Astranis",
     website: "https://foreign.example/",
     crmTags: ["foreign_company_tag"],
     sourceRefs: { importedFrom: "foreign-office" },
@@ -483,7 +503,7 @@ async function testForeignOfficeIsolation() {
   seed.contacts.push({
     id: "foreign-garry",
     companyId: "foreign-yc",
-    fullName: "Garry Tan",
+    fullName: "John Gedmark",
     title: "Foreign office title",
     status: "queued",
     email: "foreign@example.com",
@@ -515,7 +535,7 @@ async function testForeignOfficeIsolation() {
     const foreignPlan = state.plans.find((plan) => plan.id === "foreign-plan");
     check(
       "loader does not reuse or mutate a matching contact from another office",
-      state.contacts.length === 81 &&
+      state.contacts.length === 113 &&
         foreignContact?.email === "foreign@example.com" &&
         foreignContact.notes === "Foreign office note.",
     );
@@ -554,7 +574,7 @@ async function testFailureRollbacks() {
   protectedSeed.companies.push({
     id: "yc",
     officeId: OFFICE_ID,
-    name: "Y Combinator",
+    name: "Astranis",
     website: null,
     crmTags: null,
     sourceRefs: null,
@@ -562,7 +582,7 @@ async function testFailureRollbacks() {
   protectedSeed.contacts.push({
     id: "garry",
     companyId: "yc",
-    fullName: "Garry Tan",
+    fullName: "John Gedmark",
     title: null,
     status: "active",
     email: null,
@@ -583,7 +603,11 @@ async function testFailureRollbacks() {
     ...duplicateSeed.contacts[0],
     id: "garry-duplicate",
   });
-  await expectRollback("duplicate rejection", duplicateSeed, "Duplicate matching VC contacts");
+  await expectRollback(
+    "duplicate rejection",
+    duplicateSeed,
+    "Duplicate matching campaign contacts",
+  );
 
   const completedSeed = initialState();
   await withFakePrisma(completedSeed, async (fake) => {
@@ -612,7 +636,7 @@ async function testFailureRollbacks() {
       check(
         "reloading a skipped target preserves the exact channel split",
         JSON.stringify(channelCounts(reloaded)) ===
-          JSON.stringify({ bookface: 20, linkedin: 30, email: 30 }),
+          JSON.stringify({ bookface: 20, linkedin: 30, email: 62 }),
       );
     });
   });

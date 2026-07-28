@@ -24,11 +24,23 @@ const uniquePeople = new Set(
 );
 const renderedCampaign = JSON.stringify(HARDWARE_VC_OUTREACH_CAMPAIGN);
 
-check("campaign has exactly 80 people", HARDWARE_VC_OUTREACH_CAMPAIGN.length === 80);
-check("campaign people are unique within each fund", uniquePeople.size === 80);
-check("campaign has 20 Bookface targets", counts.bookface === 20);
-check("campaign has 30 LinkedIn targets", counts.linkedin === 30);
-check("campaign has 30 email targets", counts.email === 30);
+check("campaign has exactly 112 people", HARDWARE_VC_OUTREACH_CAMPAIGN.length === 112);
+check("campaign people are unique within each organization", uniquePeople.size === 112);
+check("campaign has 20 Bookface hardware-company targets", counts.bookface === 20);
+check("campaign has 30 LinkedIn hardware-company targets", counts.linkedin === 30);
+check("campaign has 62 email hardware-VC targets", counts.email === 62);
+check(
+  "Bookface and LinkedIn contain only hardware-company prospects",
+  HARDWARE_VC_OUTREACH_CAMPAIGN
+    .filter((target) => target.channel !== "email")
+    .every((target) => target.kind === "hardware_company"),
+);
+check(
+  "email contains only hardware-VC intro targets",
+  HARDWARE_VC_OUTREACH_CAMPAIGN
+    .filter((target) => target.channel === "email")
+    .every((target) => target.kind === "hardware_vc"),
+);
 check(
   "every target has an official HTTPS source",
   HARDWARE_VC_OUTREACH_CAMPAIGN.every(
@@ -53,7 +65,7 @@ check(
 );
 check(
   "campaign includes the core hardware investor networks",
-  ["Y Combinator", "SOSV / HAX", "DCVC", "Lux Capital", "Root Ventures", "Construct Capital"]
+  ["Fifty Years", "SOSV / HAX", "DCVC", "Lux Capital", "Root Ventures", "Construct Capital"]
     .every((company) =>
       HARDWARE_VC_OUTREACH_CAMPAIGN.some((target) => target.company === company),
     ),
