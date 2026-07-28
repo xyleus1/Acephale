@@ -14,7 +14,7 @@ import {
 } from "@/lib/hardware-vc-outreach-campaign";
 import { dateKeyToUtcDate, outreachCalendar } from "@/lib/crm-outreach";
 
-const ELIGIBLE_STATUSES = new Set([null, "not_contacted", "queued"]);
+const ELIGIBLE_STATUSES = new Set([null, "not_contacted", "queued", "contacted"]);
 const BOOKFACE_URL = "https://bookface.ycombinator.com/";
 
 type CampaignLoadResult = {
@@ -75,13 +75,13 @@ export async function loadHardwareVcOutreachCampaign(
 ): Promise<CampaignLoadResult> {
   const expected = hardwareVcCampaignCounts();
   if (
-    HARDWARE_VC_OUTREACH_CAMPAIGN.length !== 112 ||
-    expected.bookface !== 20 ||
-    expected.linkedin !== 30 ||
-    expected.email < 30
+    HARDWARE_VC_OUTREACH_CAMPAIGN.length !== 120 ||
+    expected.bookface !== 27 ||
+    expected.linkedin !== 31 ||
+    expected.email !== 62
   ) {
     throw new Error(
-      "Hardware outreach campaign must contain 20 Bookface companies, 30 LinkedIn companies, and at least 30 email VCs.",
+      "Hardware outreach campaign must contain 27 Bookface companies, 31 LinkedIn companies, and 62 email VCs.",
     );
   }
 
@@ -424,8 +424,8 @@ export async function loadHardwareVcOutreachCampaign(
       }
     }
     if (
-      queued.bookface !== 20 ||
-      queued.linkedin !== 30 ||
+      queued.bookface !== expected.bookface ||
+      queued.linkedin !== expected.linkedin ||
       queued.email !== expected.email
     ) {
       throw new Error(

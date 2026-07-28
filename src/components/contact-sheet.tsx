@@ -577,7 +577,7 @@ export function ContactSheet({
     if (campaignBusy) return;
     if (
       !window.confirm(
-        "Load 112 researched hardware outreach contacts into today's queue? This replaces the current open Today queue with 20 Bookface hardware companies, 30 LinkedIn hardware companies, and 62 hardware VCs for email.",
+        "Load 120 researched hardware outreach contacts into today's queue? This replaces the current open Today queue with 27 Bookface hardware companies, 31 LinkedIn hardware companies, and 62 hardware VCs for email. Previously contacted people can be queued again.",
       )
     ) {
       return;
@@ -591,7 +591,7 @@ export function ContactSheet({
           return;
         }
         flash(
-          `Loaded ${result.createdContacts} new and ${result.reusedContacts} existing contacts. Today's queue is 20 Bookface companies, 30 LinkedIn companies, and ${result.queued.email} hardware VCs for email.`,
+          `Loaded ${result.createdContacts} new and ${result.reusedContacts} existing contacts. Today's queue is ${result.queued.bookface} Bookface companies, ${result.queued.linkedin} LinkedIn companies, and ${result.queued.email} hardware VCs for email.`,
         );
         router.refresh();
       } catch {
@@ -947,11 +947,12 @@ export function ContactSheet({
             <section className="outreach-campaign-loader" aria-labelledby="hardware-vc-campaign-title">
               <div>
                 <span className="outreach-eyebrow">Today's researched list</span>
-                <h2 id="hardware-vc-campaign-title">Load 112 hardware outreach targets</h2>
+                <h2 id="hardware-vc-campaign-title">Load 120 hardware outreach targets</h2>
                 <p>
-                  Bookface gets 20 YC hardware founders. LinkedIn gets 30 hardware
+                  Bookface gets 27 YC hardware founders. LinkedIn gets 31 hardware
                   company leaders. Email gets 62 specialist hardware and deep-tech
-                  investors for portfolio introductions.
+                  investors for portfolio introductions. Previously contacted people
+                  are eligible to queue again.
                 </p>
               </div>
               <button
@@ -961,7 +962,7 @@ export function ContactSheet({
                 onClick={loadHardwareVcCampaign}
               >
                 <Icon name="plus" size={14} />
-                {campaignBusy ? "Loading 112 targets..." : "Load today's 20 + 30 + 62"}
+                {campaignBusy ? "Loading 120 targets..." : "Load today's 27 + 31 + 62"}
               </button>
             </section>
           )}
