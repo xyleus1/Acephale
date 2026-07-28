@@ -96,8 +96,12 @@ function createFakePrisma(initial: DatabaseState) {
 
   const tx = {
     $queryRaw(strings: TemplateStringsArray, ...values: unknown[]) {
-      state.advisoryLocks.push(`${strings.join("?")}:${values.join(":")}`);
-      return Promise.resolve([{ pg_advisory_xact_lock: null }]);
+      const sql = strings.join("?");
+      state.advisoryLocks.push(`${sql}:${values.join(":")}`);
+      if (sql.includes("pg_advisory_xact_lock") && !sql.includes("::text")) {
+        throw new Error("Failed to deserialize column of type 'void'.");
+      }
+      return Promise.resolve([{ advisory_lock: "" }]);
     },
     $executeRaw() {
       state.tableLocks += 1;
@@ -386,6 +390,10 @@ async function testFreshLoadAndIdempotentRerun() {
         ),
     );
     check("transaction takes a per-office advisory lock", afterFirst.advisoryLocks.length === 1);
+    check(
+      "advisory lock casts PostgreSQL void before Prisma deserialization",
+      afterFirst.advisoryLocks[0]?.includes("::text") === true,
+    );
     check("transaction locks company and contact writes", afterFirst.tableLocks === 1);
 
     const second = await loadHardwareVcOutreachCampaign(OFFICE_ID, NOW);
