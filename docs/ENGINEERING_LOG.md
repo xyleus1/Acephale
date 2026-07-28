@@ -17,6 +17,24 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-27 - Fix production advisory-lock deserialization
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Fix the production campaign loader failure caused by Prisma trying to
+  deserialize PostgreSQL's `void` return from `pg_advisory_xact_lock`.
+- Files changed: `src/lib/load-hardware-vc-outreach.ts`,
+  `scripts/hardware-vc-outreach-loader.test.ts`, and handoff docs.
+- Verification: The new regression test failed with the reported
+  deserialization error before the fix. `npm run test:hardware-vc-outreach`,
+  `npm run test:crm`, and `npx tsc --noEmit` pass after casting the lock result
+  to a Prisma-supported text value.
+- Failed/skipped checks: No direct production database test was run because
+  this workspace has no production database credential.
+- Caveats: The failed live attempt stopped on the first statement, before
+  company, contact, or outreach-plan writes.
+- Follow-up: Retry the authenticated campaign load after the hotfix deploys.
+
 ### 2026-07-27 - Corrected hardware-company and VC channel campaign
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)

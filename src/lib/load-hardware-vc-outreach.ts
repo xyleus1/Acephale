@@ -96,10 +96,10 @@ export async function loadHardwareVcOutreachCampaign(
   );
 
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`
+    await tx.$queryRaw<Array<{ advisory_lock: string }>>`
       SELECT pg_advisory_xact_lock(
         hashtextextended(${`${HARDWARE_VC_CAMPAIGN_TAG}:${officeId}`}, 0)
-      )
+      )::text AS advisory_lock
     `;
     await tx.$executeRaw`
       LOCK TABLE "Company", "Contact" IN SHARE ROW EXCLUSIVE MODE

@@ -16,6 +16,19 @@ see git log
 
 ## Task implemented
 
+### Production outreach loader advisory-lock hotfix
+
+The first production campaign-load attempt failed before any CRM writes because
+PostgreSQL returns `pg_advisory_xact_lock` as `void`, which Prisma cannot decode
+from `$queryRaw`.
+
+- The advisory-lock query now casts its result to `text` while preserving the
+  same transaction-scoped, office-specific lock.
+- The loader test now reproduces Prisma's `void` deserialization failure when
+  that cast is missing.
+- The focused campaign suite, CRM suite, and TypeScript check pass with the
+  fix. The operator can safely retry the load after deployment.
+
 ### Corrected 112-person hardware outreach campaign
 
 The Outreach workspace now has an authenticated, tenant-scoped loader for a
