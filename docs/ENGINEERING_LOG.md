@@ -17,6 +17,27 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-27 - Requeue contacted people and expand hardware prospects
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Honor the operator's decision to contact previously contacted people
+  again and add eight fresh hardware-company prospects.
+- Files changed: `src/lib/hardware-vc-outreach-campaign.ts`,
+  `src/lib/load-hardware-vc-outreach.ts`, `src/components/contact-sheet.tsx`,
+  `scripts/hardware-vc-outreach.test.ts`,
+  `scripts/hardware-vc-outreach-loader.test.ts`, and handoff docs.
+- Verification: `npm run test:hardware-vc-outreach`, `npm run test:crm`, and
+  `npx tsc --noEmit` pass. The loader test covers re-queueing a contacted person
+  while preserving verified contact details and current-week completion safety.
+- Failed/skipped checks: No direct production database write was run because
+  this workspace has no authenticated production database session.
+- Caveats: The campaign is now 120 people with a 27 Bookface, 31 LinkedIn, and
+  62 Email split. Only CRM status `contacted` was added to the safe requeue set.
+  Other protected statuses and current-week Reached out rows still stop loading.
+- Follow-up: Deploy, retry the authenticated campaign load, and verify the
+  resulting 27/31/62 Today queue.
+
 ### 2026-07-27 - Fix production advisory-lock deserialization
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)

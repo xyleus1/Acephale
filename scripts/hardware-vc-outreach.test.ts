@@ -24,10 +24,10 @@ const uniquePeople = new Set(
 );
 const renderedCampaign = JSON.stringify(HARDWARE_VC_OUTREACH_CAMPAIGN);
 
-check("campaign has exactly 112 people", HARDWARE_VC_OUTREACH_CAMPAIGN.length === 112);
-check("campaign people are unique within each organization", uniquePeople.size === 112);
-check("campaign has 20 Bookface hardware-company targets", counts.bookface === 20);
-check("campaign has 30 LinkedIn hardware-company targets", counts.linkedin === 30);
+check("campaign has exactly 120 people", HARDWARE_VC_OUTREACH_CAMPAIGN.length === 120);
+check("campaign people are unique within each organization", uniquePeople.size === 120);
+check("campaign has 27 Bookface hardware-company targets", counts.bookface === 27);
+check("campaign has 31 LinkedIn hardware-company targets", counts.linkedin === 31);
 check("campaign has 62 email hardware-VC targets", counts.email === 62);
 check(
   "Bookface and LinkedIn contain only hardware-company prospects",

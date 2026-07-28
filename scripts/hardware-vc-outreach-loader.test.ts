@@ -351,8 +351,8 @@ async function testFreshLoadAndIdempotentRerun() {
   await withFakePrisma(initialState(), async (fake) => {
     const first = await loadHardwareVcOutreachCampaign(OFFICE_ID, NOW);
     const afterFirst = fake.getState();
-    check("fresh load creates all 112 contacts", first.createdContacts === 112);
-    check("fresh load creates one contact per target", afterFirst.contacts.length === 112);
+    check("fresh load creates all 120 contacts", first.createdContacts === 120);
+    check("fresh load creates one contact per target", afterFirst.contacts.length === 120);
     check(
       "fresh load creates one company per organization",
       afterFirst.companies.length ===
@@ -361,7 +361,7 @@ async function testFreshLoadAndIdempotentRerun() {
     check(
       "fresh load creates the exact Today channel split",
       JSON.stringify(channelCounts(afterFirst)) ===
-        JSON.stringify({ bookface: 20, linkedin: 30, email: 62 }),
+        JSON.stringify({ bookface: 27, linkedin: 31, email: 62 }),
     );
     check(
       "email targets do not store guessed email addresses",
@@ -398,9 +398,9 @@ async function testFreshLoadAndIdempotentRerun() {
 
     const second = await loadHardwareVcOutreachCampaign(OFFICE_ID, NOW);
     const afterSecond = fake.getState();
-    check("rerun reuses all 112 contacts", second.createdContacts === 0 && second.reusedContacts === 112);
-    check("rerun does not duplicate contacts", afterSecond.contacts.length === 112);
-    check("rerun does not duplicate plan rows", afterSecond.plans.length === 112);
+    check("rerun reuses all 120 contacts", second.createdContacts === 0 && second.reusedContacts === 120);
+    check("rerun does not duplicate contacts", afterSecond.contacts.length === 120);
+    check("rerun does not duplicate plan rows", afterSecond.plans.length === 120);
     check(
       "rerun does not duplicate campaign notes",
       afterSecond.contacts.every(
@@ -425,7 +425,7 @@ async function testExistingContactPreservationAndQueueReplacement() {
     companyId: "existing-company",
     fullName: "john gedmark",
     title: null,
-    status: "not_contacted",
+    status: "contacted",
     email: "verified@example.com",
     linkedinUrl: "https://linkedin.com/in/verified",
     bookfaceUrl: null,
@@ -476,6 +476,7 @@ async function testExistingContactPreservationAndQueueReplacement() {
     const existing = state.contacts.find((contact) => contact.id === "existing-contact");
     const oldPlan = state.plans.find((plan) => plan.id === "old-plan");
     check("loader reuses a matching CRM person", result.reusedContacts === 1);
+    check("loader queues a previously contacted person again", existing?.status === "queued");
     check(
       "loader preserves verified existing contact details",
       existing?.email === "verified@example.com" &&
@@ -543,7 +544,7 @@ async function testForeignOfficeIsolation() {
     const foreignPlan = state.plans.find((plan) => plan.id === "foreign-plan");
     check(
       "loader does not reuse or mutate a matching contact from another office",
-      state.contacts.length === 113 &&
+      state.contacts.length === 121 &&
         foreignContact?.email === "foreign@example.com" &&
         foreignContact.notes === "Foreign office note.",
     );
@@ -644,7 +645,7 @@ async function testFailureRollbacks() {
       check(
         "reloading a skipped target preserves the exact channel split",
         JSON.stringify(channelCounts(reloaded)) ===
-          JSON.stringify({ bookface: 20, linkedin: 30, email: 62 }),
+          JSON.stringify({ bookface: 27, linkedin: 31, email: 62 }),
       );
     });
   });

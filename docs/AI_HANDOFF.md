@@ -16,6 +16,22 @@ see git log
 
 ## Task implemented
 
+### Recontact support and eight fresh hardware prospects
+
+The authenticated campaign loader now queues contacts whose CRM status is
+`contacted`, matching the operator's explicit decision that prior outreach does
+not disqualify a person from a new attempt.
+
+- Truly protected relationship states still stop the transaction, and a person
+  already marked Reached out in the current week still cannot be reloaded.
+- Eight new researched hardware-company prospects expand the campaign from 112
+  to 120 people: Atomic Industries, Forge Robotics, Tensr, Diode Computers,
+  Cosmic Robotics, Tenet Industries, ProvenMetal, and Nine Fives.
+- Today's load is now 27 YC hardware founders on Bookface, 31 hardware-company
+  leaders on LinkedIn, and 62 specialist hardware investors on Email.
+- The loader test proves that a previously contacted CRM person is preserved,
+  reused, changed back to queued, and added to today's outreach plan.
+
 ### Production outreach loader advisory-lock hotfix
 
 The first production campaign-load attempt failed before any CRM writes because
@@ -29,13 +45,13 @@ from `$queryRaw`.
 - The focused campaign suite, CRM suite, and TypeScript check pass with the
   fix. The operator can safely retry the load after deployment.
 
-### Corrected 112-person hardware outreach campaign
+### Corrected 120-person hardware outreach campaign
 
 The Outreach workspace now has an authenticated, tenant-scoped loader for a
 researched hardware-company and investor campaign.
 
-- Bookface contains exactly 20 YC hardware-company founders. LinkedIn contains
-  exactly 30 hardware-company founders and executives. Those 50 rows are
+- Bookface contains exactly 27 YC hardware-company founders. LinkedIn contains
+  exactly 31 hardware-company founders and executives. Those 58 rows are
   startup buyer leads, not investors.
 - Email contains 62 specialist hardware, industrial, logistics, climate, and
   deep-tech investors from Fifty Years, HAX, DCVC, Lux, Root, Playground,
@@ -47,8 +63,8 @@ researched hardware-company and investor campaign.
   companies and contacts. It preserves existing email, phone, and profile data.
   It refuses to overwrite duplicate people, protected relationship statuses, or
   outreach already completed this week.
-- Loading the campaign makes those 112 people today's open queue and moves the
-  previous open Today rows back to the weekly pool. It verifies the 20/30/62
+- Loading the campaign makes those 120 people today's open queue and moves the
+  previous open Today rows back to the weekly pool. It verifies the 27/31/62
   split before committing the transaction.
 - Matching is case-insensitive within the current office. The transaction locks
   company and contact writes during the one-time load, and an intentional reload
