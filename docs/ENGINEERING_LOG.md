@@ -17,6 +17,72 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-29 - Separate liveness failures from queue degradation
+
+- Branch: find-hardware-import-data
+- Commit: see git log
+- Task: Fix production `/api/health` returning 500 while the application and
+  scheduled routes remained reachable.
+- Files changed: `src/app/api/health/route.ts`,
+  `src/lib/health-status.ts`, `scripts/health-status.test.ts`, and handoff
+  documentation.
+- Verification: The regression test covers healthy, degraded, and unhealthy
+  classifications. A fresh disposable PostgreSQL database was seeded with one
+  failed background job, then the production build was served locally. Public
+  `/api/health` returned HTTP 200 with `status=degraded`; the authorized
+  response retained the failed warning and safe queue counts. `npm run
+  test:security`, `npx tsc --noEmit`, and `npm run build` passed against the
+  current schema.
+- Failed/skipped checks: The first security-test attempt had no
+  `DATABASE_URL`. The existing local database was then rejected because its
+  `Job` table lacks current fields. No existing database was modified.
+- Caveats: The production route must be rechecked after deployment. If it
+  remains HTTP 500, a critical database or schema check is failing and the
+  detailed `CRON_SECRET`-authorized diagnostic must be used before any further
+  code change.
+- Follow-up: Deploy, verify production reports healthy or degraded with HTTP
+  200, then inspect and retry failed queue items from the Admin page without
+  treating them as an application outage.
+
+### 2026-07-29 - Olympian load dossier, unified workspace, and Intel bridge
+
+- Branch: find-hardware-import-data
+- Commit: see git log
+- Task: Create the real Olympian Motors shipment as one deduplicated load,
+  redesign the load page around its operational fields and conversations, make
+  the route map trustworthy, and connect the load naturally to Intel.
+- Files changed: `src/lib/olympian-load.ts`, Olympian import scripts and tests,
+  the jobs index and detail routes, `src/lib/load-workspace.ts`,
+  `src/components/load-workspace.tsx`, offline load-route helpers and
+  components, the dashboard route map, the load-to-Intel brief helper, Intel
+  page prefills, the agent dock suppression, package scripts, and docs.
+- Verification: Olympian database import test passed against disposable
+  Postgres with first-create, idempotent rerun, office isolation, one thread,
+  seven messages, fifteen fixture documents, nine tasks, six milestones, zero
+  carrier quotes, and one memory event. The repair case preserved a sixteenth
+  operator-created document row instead of overwriting it. Load workspace, route map, legacy
+  workbench map, Intel privacy brief, Intel chat-first, and China load UI tests
+  passed. `npx tsc --noEmit`, `git diff --check`, changed-file U+2014 checks,
+  and the production build passed. Authenticated browser QA covered the actual
+  Olympian load, no horizontal overflow, load-scoped chat, the offline
+  Shanghai to Irvine city-area route, privacy-safe Intel prefill, unsent Intel
+  questions, and a clean console before screenshot tooling modified form caret
+  styles. Adversarial review then removed invented port calls, isolated every
+  Intel route from the global dock, made Job truth outrank parsed dossier data,
+  office-scoped linked records, bounded the conversation feed, and made
+  idempotent imports repair their fixture-owned child records.
+- Failed/skipped checks: ESLint cannot start because the repository uses
+  `.eslintrc` while installed ESLint 9 expects flat configuration. No lint
+  configuration was changed.
+- Caveats: The local QA database contains the recreated Olympian demo load.
+  Production creation requires the ADMIN action after deployment. Imported
+  messages are sanitized summaries and must be checked against the original
+  email exports. The map is planned routing, not live tracking. Historical
+  rate evidence is not an executable carrier quote.
+- Follow-up: Test the deployed ADMIN import, open the load in Intel, review the
+  privacy-safe brief, and build the read-only customs report. Attach original
+  documents only through the normal document controls.
+
 ### 2026-07-27 - Requeue contacted people and expand hardware prospects
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)

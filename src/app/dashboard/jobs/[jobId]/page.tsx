@@ -30,6 +30,14 @@ import { assessJobStrategy } from "@/lib/commercial-strategy-persistence";
 import { draftFreshnessKey, type DraftFreshnessScope } from "@/lib/draft-freshness";
 import { reviewedFieldTokenLabel } from "@/lib/agent-proposal-review";
 import { displayParty, isWhatsAppAddress } from "@/lib/whatsapp-display";
+import { LoadWorkspace } from "@/components/load-workspace";
+import {
+  buildLoadWorkspaceModel,
+  type LoadWorkspaceMarketReviewInput,
+} from "@/lib/load-workspace";
+import { listMarketImpactReviews } from "@/lib/market-intelligence/market-impact-review";
+import type { FeedItem } from "@/components/job-conversation-panel";
+import loadWorkspaceStyles from "@/components/load-workspace.module.css";
 
 const STATUS_ORDER = ["INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED"] as const;
 const STATUS_SELECT = ["PROPOSED", "INQUIRY", "QUOTED", "BOOKED", "IN_TRANSIT", "DELIVERED", "CANCELLED"] as const;
@@ -69,7 +77,7 @@ function relTime(d: Date) {
 
 type AutoEvent = {
   at: Date;
-  iconName: "inbox" | "sparkles" | "ship" | "box" | "check" | "file" | "file-check" | "mail-in" | "mail-out" | "user" | "whatsapp";
+  iconName: "inbox" | "sparkles" | "ship" | "box" | "check" | "file" | "file-check" | "mail-in" | "mail-out" | "whatsapp";
   kind: "auto" | "manual";
   title: string;
   sub?: string;
@@ -436,7 +444,6 @@ export default async function JobDetailPage({
     include: {
       company: { select: { id: true, name: true } },
       assignedTo: { select: { id: true, fullName: true, email: true } },
-      inquiry: { include: { carrierQuotes: { orderBy: { createdAt: "asc" } } } },
       documents: { orderBy: { createdAt: "asc" } },
       milestones: { orderBy: { createdAt: "asc" } },
       securityChecks: { orderBy: { createdAt: "asc" } },
@@ -448,12 +455,82 @@ export default async function JobDetailPage({
         orderBy: { createdAt: "desc" },
         take: 5,
       },
-      emailThreads: {
-        include: { messages: { orderBy: { sentAt: "asc" } } },
-      },
     },
   });
   if (!job) notFound();
+
+  const inquiry = job.inquiryId
+    ? await prisma.inquiry.findFirst({
+        where: {
+          id: job.inquiryId,
+          officeId: session.officeId,
+        },
+        include: {
+          carrierQuotes: { orderBy: { createdAt: "asc" } },
+          tasks: {
+            where: { officeId: session.officeId },
+            orderBy: [{ priority: "asc" }, { dueAt: "asc" }, { createdAt: "asc" }],
+          },
+        },
+      })
+    : null;
+  const threadLinks = [
+    { jobId: job.id },
+    ...(inquiry ? [{ inquiryId: inquiry.id }] : []),
+  ];
+  const [conversationThreads, conversationThreadCount, conversationMessageCount] =
+    await Promise.all([
+      prisma.emailThread.findMany({
+        where: {
+          officeId: session.officeId,
+          OR: threadLinks,
+        },
+        orderBy: { lastMessageAt: "desc" },
+        take: 8,
+        include: {
+          messages: {
+            orderBy: { sentAt: "desc" },
+            take: 50,
+          },
+        },
+      }),
+      prisma.emailThread.count({
+        where: {
+          officeId: session.officeId,
+          OR: threadLinks,
+        },
+      }),
+      prisma.emailMessage.count({
+        where: {
+          thread: {
+            officeId: session.officeId,
+            OR: threadLinks,
+          },
+        },
+      }),
+    ]);
+
+  const marketImpactResults = await Promise.all([
+    listMarketImpactReviews({
+      officeId: session.officeId,
+      linkedEntityType: "job",
+      linkedEntityId: job.id,
+      limit: 12,
+    }).catch(() => ({ reviews: [], evidence: [] })),
+    inquiry
+      ? listMarketImpactReviews({
+          officeId: session.officeId,
+          linkedEntityType: "inquiry",
+          linkedEntityId: inquiry.id,
+          limit: 12,
+        }).catch(() => ({ reviews: [], evidence: [] }))
+      : Promise.resolve({ reviews: [], evidence: [] }),
+  ]);
+  const linkedMarketReviews = marketImpactResults
+    .flatMap((result) => result.reviews)
+    .filter((review, index, all) =>
+      all.findIndex((candidate) => candidate.id === review.id) === index
+    );
 
   // Load assignment: admins/managers pick anyone; everyone else can take an
   // unassigned load for themselves.
@@ -509,25 +586,24 @@ export default async function JobDetailPage({
   const currentIdx = (STATUS_ORDER as readonly string[]).indexOf(visibleStatus);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const timelineMilestones = milestones.filter((m) => !["ETD", "ETA", "CUSTOMS_ENTRY", "CUSTOMS_RELEASE"].includes(m.type));
-
   // ── Build chronological activity feed ───────────────────────────────────
   const events: AutoEvent[] = [];
-  if (job.inquiry) {
+  if (inquiry) {
     events.push({
-      at: new Date(job.inquiry.receivedAt),
+      at: new Date(inquiry.receivedAt),
       iconName: "inbox", kind: "auto",
       title: "RFQ captured from inbox",
-      sub: `"${job.inquiry.subject}" - ${displayParty(job.inquiry.fromEmail) || job.inquiry.fromCompany || "Unknown sender"}`,
+      sub: `"${inquiry.subject}" - ${displayParty(inquiry.fromEmail) || inquiry.fromCompany || "Unknown sender"}`,
     });
-    if (job.inquiry.parsedData) {
+    if (inquiry.parsedData) {
       events.push({
-        at: new Date(job.inquiry.updatedAt),
+        at: new Date(inquiry.updatedAt),
         iconName: "sparkles", kind: "auto",
         title: "AI parsed shipment fields",
-        sub: `${job.inquiry.origin ?? "?"} → ${job.inquiry.destination ?? "?"} · ${job.inquiry.mode ?? "-"}${job.inquiry.weight ? ` · ${job.inquiry.weight.toLocaleString()}kg` : ""}`,
+        sub: `${inquiry.origin ?? "?"} → ${inquiry.destination ?? "?"} · ${inquiry.mode ?? "-"}${inquiry.weight ? ` · ${inquiry.weight.toLocaleString()}kg` : ""}`,
       });
     }
-    for (const cq of job.inquiry.carrierQuotes) {
+    for (const cq of inquiry.carrierQuotes) {
       const total = cq.total40HC ?? cq.total40 ?? cq.total20;
       if (cq.status === "PENDING") {
         events.push({
@@ -549,8 +625,8 @@ export default async function JobDetailPage({
   events.push({
     at: new Date(job.createdAt),
     iconName: "box",
-    kind: job.inquiry ? "auto" : "manual",
-    title: job.inquiry ? `Converted to ${job.reference}` : `Job ${job.reference} created manually`,
+    kind: inquiry ? "auto" : "manual",
+    title: inquiry ? `Converted to ${job.reference}` : `Job ${job.reference} created manually`,
     sub: `Status set to ${STATUS_LABEL[job.status] ?? job.status}`,
   });
   for (const m of timelineMilestones) {
@@ -574,9 +650,16 @@ export default async function JobDetailPage({
       });
     }
   }
-  for (const thread of job.emailThreads) {
+  for (const thread of conversationThreads) {
     for (const msg of thread.messages) {
       const isWa = isWhatsAppAddress(msg.fromEmail);
+      const bodyPreview = (msg.bodyText ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 180);
+      const sender = isWa
+        ? displayParty(msg.fromEmail, msg.fromName)
+        : displayParty(msg.fromEmail, msg.fromName) || msg.fromEmail;
       events.push({
         at: new Date(msg.sentAt),
         iconName: isWa ? "whatsapp" : msg.direction === "INBOUND" ? "mail-in" : "mail-out",
@@ -584,11 +667,21 @@ export default async function JobDetailPage({
         title: msg.direction === "INBOUND"
           ? (isWa ? "Inbound WhatsApp" : "Inbound email")
           : (isWa ? "Outbound WhatsApp" : "Outbound email"),
-        sub: isWa ? displayParty(msg.fromEmail, msg.fromName) : `${msg.fromEmail ?? thread.subject}`,
+        sub: `${sender || thread.subject}${bodyPreview ? ` · ${bodyPreview}` : ""}`,
       });
     }
   }
   events.sort((a, b) => b.at.getTime() - a.at.getTime());
+  const visibleEvents = events.slice(0, 120);
+  const conversationFeed: FeedItem[] = visibleEvents.map((event, index) => ({
+    kind: "event",
+    id: `${event.at.toISOString()}-${index}`,
+    at: event.at.toISOString(),
+    iconName: event.iconName,
+    who: event.kind,
+    title: event.title,
+    sub: event.sub,
+  }));
 
   const NEXT_AUTO: Record<string, string> = {
     INQUIRY: "Qualify missing RFQ facts before forwarder handoff",
@@ -614,8 +707,8 @@ export default async function JobDetailPage({
   const relevantExistingDrafts = asRecordList(relevantDraftPayload.existingDrafts);
   const draftFreshnessInput = {
     ...job,
-    subject: job.title ?? job.inquiry?.subject ?? job.reference,
-    carrierQuotes: job.inquiry?.carrierQuotes ?? [],
+    subject: job.title ?? inquiry?.subject ?? job.reference,
+    carrierQuotes: inquiry?.carrierQuotes ?? [],
   };
   const currentDraftFreshnessKeys: Record<DraftFreshnessScope, string> = {
     rfq: draftFreshnessKey(draftFreshnessInput, "rfq"),
@@ -624,12 +717,12 @@ export default async function JobDetailPage({
   };
   const latestBaseDraftInputChange = latestDate([
     job.updatedAt,
-    job.inquiry?.updatedAt ?? null,
+    inquiry?.updatedAt ?? null,
     job.targetPriceHistory[0]?.createdAt ?? null,
   ]);
   const latestPricingDraftInputChange = latestDate([
     latestBaseDraftInputChange,
-    ...(job.inquiry?.carrierQuotes ?? []).map((quote) => quote.updatedAt ?? quote.createdAt),
+    ...(inquiry?.carrierQuotes ?? []).map((quote) => quote.updatedAt ?? quote.createdAt),
   ]);
   const latestRelevantDraftInputChange =
     strategy?.operatorDecision.toolHint === "create_forwarder_drafts" ||
@@ -714,7 +807,7 @@ export default async function JobDetailPage({
       ? `${job.containerCount} × ${job.containerType ? (CONTAINER_TYPE_LABEL[job.containerType] ?? job.containerType) : "container"}`
       : dimensionsSummary(job.dimensions);
 
-  const carrierQuotes = job.inquiry?.carrierQuotes ?? [];
+  const carrierQuotes = inquiry?.carrierQuotes ?? [];
   const receivedQuotes = carrierQuotes.filter((q) => q.status === "RECEIVED");
   const pendingQuotes = carrierQuotes.filter((q) => q.status === "PENDING");
   const headerMeta = [
@@ -726,9 +819,46 @@ export default async function JobDetailPage({
       ? `Assigned: ${job.assignedTo.id === session.userId ? "you" : job.assignedTo.fullName}`
       : "Unassigned",
   ].filter(Boolean);
+  const marketReviews: LoadWorkspaceMarketReviewInput[] = linkedMarketReviews.map((review) => ({
+    id: review.id,
+    impactLevel: review.impactLevel,
+    impactReason: review.impactReason,
+    recommendedAction: review.recommendedAction,
+    status: review.status,
+    summary: review.signal.summary,
+    sourceTitle: review.signal.sourceObject?.title,
+  }));
+  const loadWorkspace = buildLoadWorkspaceModel({
+    reference: job.reference,
+    status: job.status,
+    origin: job.origin,
+    destination: job.destination,
+    mode: job.mode,
+    commodity: job.commodity,
+    containerCount: job.containerCount,
+    containerType: job.containerType,
+    dimensions: job.dimensions,
+    quantity: job.quantity,
+    quantityUnit: job.quantityUnit,
+    weight: job.weight,
+    dangerousGoods: job.dangerousGoods,
+    cargoReadyDate: inquiry?.cargoReadyDate,
+    etd: job.etd,
+    eta: job.eta,
+    incoterms: job.incoterms,
+    customsBy: job.customsBy,
+    declaredValue: job.declaredValue,
+    declaredValueCurrency: job.declaredValueCurrency,
+    parsedData: inquiry?.parsedData,
+    tasks: inquiry?.tasks ?? [],
+    documents: docs,
+    marketReviews,
+    threadCount: conversationThreadCount,
+    messageCount: conversationMessageCount,
+  });
 
   return (
-    <div className="record-page">
+    <div className={`record-page ${loadWorkspaceStyles.pageScope}`}>
       {/* Back */}
       <div className="record-back-row">
         <a href="/dashboard/jobs" className="back-link">
@@ -826,6 +956,24 @@ export default async function JobDetailPage({
         </div>
       </div>
 
+      <LoadWorkspace
+        jobId={job.id}
+        reference={job.reference}
+        companyName={job.company?.name ?? "Unknown customer"}
+        origin={job.origin}
+        destination={job.destination}
+        mode={job.mode}
+        etdLabel={job.etd ? `ETD ${fmt(job.etd)}` : null}
+        etaLabel={job.eta ? `ETA ${fmt(job.eta)}` : null}
+        model={loadWorkspace}
+        feed={conversationFeed}
+      />
+
+      <details className={loadWorkspaceStyles.supportingDetails}>
+        <summary>
+          Commercial, document, security, and operating controls
+        </summary>
+
       {strategy && (
         <>
           <CommercialDecisionCockpit
@@ -833,7 +981,7 @@ export default async function JobDetailPage({
             docs={docs}
             jobReference={job.reference}
             jobId={job.id}
-            inquiryId={job.inquiryId}
+            inquiryId={inquiry?.id ?? null}
             recentDraft={recentDraft}
             auditDraftHealth={auditDraftStates.length > 0 ? {
               total: auditDraftStates.length,
@@ -862,16 +1010,18 @@ export default async function JobDetailPage({
               <span>Load trail</span>
             </div>
             <span className="record-card-count">
-              {events.length} event{events.length !== 1 ? "s" : ""}
+              {visibleEvents.length}
+              {events.length > visibleEvents.length ? ` latest of ${events.length}` : ""}
+              {" "}event{visibleEvents.length !== 1 ? "s" : ""}
             </span>
           </div>
           <div className="record-scroll-area">
-            {events.length === 0 ? (
+            {visibleEvents.length === 0 ? (
               <div className="record-empty-state">
                 No updates yet.
               </div>
             ) : (
-              events.map((e, i) => (
+              visibleEvents.map((e, i) => (
                 <div key={i} className="record-event-row">
                   <span className={["record-event-icon", e.kind === "auto" ? "auto" : "manual"].join(" ")}>
                     <Icon name={e.iconName} size={13} strokeWidth={2} />
@@ -1043,7 +1193,7 @@ export default async function JobDetailPage({
                               ? fieldLabels[field] as string
                               : PROPOSAL_FIELD_LABELS[field] ?? field;
                             const current = scope === "rfq"
-                              ? (job.inquiry as unknown as Record<string, unknown> | null)?.[field]
+                              ? (inquiry as unknown as Record<string, unknown> | null)?.[field]
                               : (job as unknown as Record<string, unknown>)[field];
                             return (
                               <label key={`${scope}-${field}`} className="agent-proposal-field-row">
@@ -1102,7 +1252,7 @@ export default async function JobDetailPage({
                         {mature ? "RFQ would be mature after applying." : `Still missing: ${missing.join(" ") || "review required"}`}
                       </div>
                       <div className="agent-proposal-actions">
-                        <form action={discardAgentProposalAction.bind(null, proposal.id, jobId, job.inquiryId)}>
+                        <form action={discardAgentProposalAction.bind(null, proposal.id, jobId, inquiry?.id ?? null)}>
                           <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="Discarding...">Discard</SubmitButton>
                         </form>
                       </div>
@@ -1331,21 +1481,21 @@ export default async function JobDetailPage({
               ) : (
                 <span className="record-muted">No customer linked</span>
               )}
-              {job.inquiry?.fromEmail && (
+              {inquiry?.fromEmail && (
                 <div className="record-small-muted">
-                  {isWhatsAppAddress(job.inquiry.fromEmail) && (
+                  {isWhatsAppAddress(inquiry.fromEmail) && (
                     <Icon name="whatsapp" size={11} />
-                  )}{isWhatsAppAddress(job.inquiry.fromEmail) ? " " : ""}{displayParty(job.inquiry.fromEmail)}
+                  )}{isWhatsAppAddress(inquiry.fromEmail) ? " " : ""}{displayParty(inquiry.fromEmail)}
                 </div>
               )}
             </div>
           </div>
 
           {/* Procurement: supplier offers comparison */}
-          {job.type === "SOURCING" && job.inquiry && (
+          {job.type === "SOURCING" && inquiry && (
             <SourcingOffersTable
-              inquiryId={job.inquiry.id}
-              rows={job.emailThreads.map((t) => {
+              inquiryId={inquiry.id}
+              rows={conversationThreads.map((t) => {
                 let offer: Record<string, unknown> | null = null;
                 if (t.supplierOffer) { try { offer = JSON.parse(t.supplierOffer); } catch {} }
                 const firstInbound = t.messages.find((m) => m.direction === "INBOUND");
@@ -1373,7 +1523,7 @@ export default async function JobDetailPage({
               )}
             </div>
             <div className="record-card-body compact">
-              {!job.inquiry ? (
+              {!inquiry ? (
                 <div className="record-empty-line">No source RFQ - pricing tracked manually.</div>
               ) : carrierQuotes.length === 0 ? (
                 <div className="record-empty-line">No forwarder pricing requests sent yet.</div>
@@ -1418,12 +1568,12 @@ export default async function JobDetailPage({
             </div>
 
             {/* Quick add carrier rate (manual) */}
-            {job.inquiry && (
+            {inquiry && (
               <details className="record-inline-details">
                 <summary className="record-details-summary">
                   + Add forwarder price manually
                 </summary>
-                <form action={addCarrierQuote.bind(null, job.inquiry.id)} className="record-add-grid two">
+                <form action={addCarrierQuote.bind(null, inquiry.id)} className="record-add-grid two">
                   <input name="carrier" placeholder="Forwarder name" required />
                   <input name="service" placeholder="Service" />
                   <input name="total40HC" type="number" placeholder="Total 40HC ($)" />
@@ -1630,6 +1780,7 @@ export default async function JobDetailPage({
 
         </div>
       </div>
+      </details>
     </div>
   );
 }

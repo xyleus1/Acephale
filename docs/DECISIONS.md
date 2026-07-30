@@ -16,6 +16,35 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-29 - The load page is the operational dossier and Intel uses an explicit handoff
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Shipment facts, correspondence, issues, documents, route context,
+  commercial strategy, and market research were split across a long record
+  page and separate modules. The old map depended on public tile requests and
+  silently assigned unknown locations to unrelated fallback cities.
+- Decision: Treat the office-scoped load record as the canonical operational
+  dossier. Its primary surface combines recorded and source-stated facts,
+  conflicts, open tasks, document state, correspondence, linked market
+  reviews, and a load-scoped agent. Render planned routes from checked-in map
+  geometry and a conservative known-location registry. Never invent a point
+  or exact port call for an unresolved location. Operator-edited Job fields
+  outrank imported or AI-extracted dossier data, and parsed dossier data cannot
+  mark itself operator-confirmed. Connect a load to standalone Intel only
+  through an explicit privacy-safe prefill that does not auto-send,
+  auto-analyze, or persist an Intel review.
+- Rationale: Operators need one decision surface without allowing research,
+  inferred geography, or AI extraction to impersonate shipment truth.
+- Consequences: Dense commercial and operating tools remain available as
+  supporting controls rather than dominating the page. Intel remains
+  chat-first and context-isolated. The China load review still requires an
+  operator click and preserves its read-only evidence contract. Maps are route
+  plans, not tracking or carrier schedules.
+- Revisit when: saved Intel reviews have an approved office-scoped schema and
+  audit contract, or a live tracking provider supplies verified positions and
+  event timestamps.
+
 ### 2026-07-27 - Intel is chat-first and reports attach to answers
 
 - Status: accepted

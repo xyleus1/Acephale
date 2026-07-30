@@ -25,6 +25,7 @@ const ROUTE_GEO_LOOKUP: RouteGeoEntry[] = [
   { match: ["adana"], label: "Adana", country: "Turkey", countryCode: "TR", lon: 35.321, lat: 37.0 },
   { match: ["gemlik"], label: "Gemlik", country: "Turkey", countryCode: "TR", lon: 29.159, lat: 40.431 },
   { match: ["shenzhen"], label: "Shenzhen", country: "China", countryCode: "CN", lon: 114.0579, lat: 22.5431 },
+  { match: ["yangshan"], label: "Yangshan Deep-Water Port", country: "China", countryCode: "CN", lon: 122.071, lat: 30.626 },
   { match: ["shanghai"], label: "Shanghai", country: "China", countryCode: "CN", lon: 121.474, lat: 31.23 },
   { match: ["ningbo"], label: "Ningbo", country: "China", countryCode: "CN", lon: 121.55, lat: 29.868 },
   { match: ["rotterdam"], label: "Rotterdam", country: "Netherlands", countryCode: "NL", lon: 4.48, lat: 51.924 },
@@ -33,25 +34,11 @@ const ROUTE_GEO_LOOKUP: RouteGeoEntry[] = [
   { match: ["ashgabat"], label: "Ashgabat", country: "Turkmenistan", countryCode: "TM", lon: 58.383, lat: 37.96 },
   { match: ["port sudan"], label: "Port Sudan", country: "Sudan", countryCode: "SD", lon: 37.216, lat: 19.615 },
   { match: ["munich"], label: "Munich", country: "Germany", countryCode: "DE", lon: 11.582, lat: 48.135 },
+  { match: ["port of long beach", "long beach", "polb"], label: "Port of Long Beach", country: "United States", countryCode: "US", lon: -118.216, lat: 33.754 },
+  { match: ["port of los angeles", "los angeles", "la port", "san pedro"], label: "Port of Los Angeles", country: "United States", countryCode: "US", lon: -118.264, lat: 33.739 },
+  { match: ["irvine"], label: "Irvine", country: "United States", countryCode: "US", lon: -117.8265, lat: 33.6846 },
   { match: ["houston"], label: "Houston", country: "United States", countryCode: "US", lon: -95.369, lat: 29.76 },
   { match: ["guadalajara"], label: "Guadalajara", country: "Mexico", countryCode: "MX", lon: -103.3496, lat: 20.6597 },
-];
-
-const COUNTRY_GEO_FALLBACK: RouteGeoEntry[] = [
-  { match: ["malaysia"], label: "Port Klang", country: "Malaysia", countryCode: "MY", lon: 101.397, lat: 2.999 },
-  { match: ["turkey", "turkiye", "türkiye"], label: "Turkey", country: "Turkey", countryCode: "TR", lon: 35.0, lat: 39.0 },
-  { match: ["italy"], label: "Italy", country: "Italy", countryCode: "IT", lon: 12.5, lat: 42.5 },
-  { match: ["ireland"], label: "Shannon", country: "Ireland", countryCode: "IE", lon: -8.864, lat: 52.713 },
-  { match: ["china"], label: "China", country: "China", countryCode: "CN", lon: 113.5, lat: 23.5 },
-  { match: ["germany"], label: "Germany", country: "Germany", countryCode: "DE", lon: 10.45, lat: 51.16 },
-  { match: ["romania"], label: "Constanta", country: "Romania", countryCode: "RO", lon: 28.634, lat: 44.159 },
-  { match: ["netherlands"], label: "Rotterdam", country: "Netherlands", countryCode: "NL", lon: 4.48, lat: 51.924 },
-  { match: ["uae", "united arab emirates"], label: "Jebel Ali", country: "UAE", countryCode: "AE", lon: 55.027, lat: 24.985 },
-  { match: ["saudi", "saudi arabia"], label: "Jeddah", country: "Saudi Arabia", countryCode: "SA", lon: 39.197, lat: 21.485 },
-  { match: ["turkmenistan"], label: "Ashgabat", country: "Turkmenistan", countryCode: "TM", lon: 58.383, lat: 37.96 },
-  { match: ["sudan"], label: "Port Sudan", country: "Sudan", countryCode: "SD", lon: 37.216, lat: 19.615 },
-  { match: ["usa", "united states", "texas"], label: "Houston", country: "United States", countryCode: "US", lon: -95.369, lat: 29.76 },
-  { match: ["mexico"], label: "Mexico", country: "Mexico", countryCode: "MX", lon: -102.55, lat: 23.63 },
 ];
 
 function routePointFromGeo(label: string, country: string, countryCode: string | null, lon: number, lat: number): RouteMapPoint {
@@ -68,33 +55,24 @@ function matchesGeoEntry(normalized: string, entry: RouteGeoEntry) {
   return entry.match.some((token) => normalized.includes(token));
 }
 
-function matchesCountryFallback(normalized: string, entry: RouteGeoEntry) {
-  return entry.match.some((token) => normalized === token || normalized.endsWith(`, ${token}`));
-}
-
 export function flagEmoji(countryCode: string | null) {
   if (!countryCode || countryCode.length !== 2) return "";
   const code = countryCode.toUpperCase();
   return String.fromCodePoint(...[...code].map((char) => 127397 + char.charCodeAt(0)));
 }
 
-export function routeMapPoint(value: string | null | undefined, fallback: "origin" | "destination"): RouteMapPoint {
+export function routeMapPoint(
+  value: string | null | undefined,
+  _fallback: "origin" | "destination"
+): RouteMapPoint | null {
   const raw = (value ?? "").trim();
+  if (!raw) return null;
   const normalized = raw.toLowerCase();
   const hit = ROUTE_GEO_LOOKUP.find((entry) => matchesGeoEntry(normalized, entry));
   if (hit) {
     return routePointFromGeo(raw || hit.label, hit.country, hit.countryCode, hit.lon, hit.lat);
   }
-
-  const countryHit = COUNTRY_GEO_FALLBACK.find((entry) => matchesCountryFallback(normalized, entry));
-  if (countryHit) {
-    return routePointFromGeo(raw || countryHit.label, countryHit.country, countryHit.countryCode, countryHit.lon, countryHit.lat);
-  }
-
-  const fallbackPoint = fallback === "origin"
-    ? { lon: 101.397, lat: 2.999, label: "Origin TBD", country: "Origin" }
-    : { lon: 28.978, lat: 41.008, label: "Destination TBD", country: "Destination" };
-  return routePointFromGeo(raw || fallbackPoint.label, raw || fallbackPoint.country, null, fallbackPoint.lon, fallbackPoint.lat);
+  return null;
 }
 
 const ROUTE_KNOWN_WAYPOINTS = {

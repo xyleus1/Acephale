@@ -4,17 +4,75 @@
 
 ## Date
 
-2026-07-27
+2026-07-29
 
 ## Branch
 
-crm-status-structure, merged with current main
+find-hardware-import-data, merged with current main
 
 ## Commit
 
 see git log
 
 ## Task implemented
+
+### Production health severity fix
+
+The public `/api/health` route no longer reports the entire application as
+down because one recoverable background job exhausted its retries.
+
+- Database reachability and checked Prisma schema fields remain critical. Any
+  failure in those checks still returns HTTP 500 with `status=unhealthy`.
+- Background-job backlog is now an operational warning. Failed or stale jobs
+  return HTTP 200 with `status=degraded`, while the authorized diagnostic
+  still includes the failed check, severity, and redacted counts.
+- The public response remains shallow. It exposes only `ok`, `status`, and a
+  timestamp, with no environment values, queue counts, model names, or errors.
+- Production evidence before the patch showed the app, Gmail cron,
+  background-job cron, Google Sheets sync, and pentest repair route returning
+  successfully while only `/api/health` returned 500.
+
+Verification used a fresh disposable PostgreSQL database with one intentionally
+failed background job. The public route returned HTTP 200 and
+`status=degraded`; the authorized diagnostic retained
+`backgroundJob_backlog ok=false`, `severity=warning`, and the fixture count.
+The disposable database was removed after verification.
+
+### Olympian load dossier and unified load workspace
+
+The dashboard now has one office-scoped, idempotent Olympian Motors import for
+reference `OM-O1-AUG2026-SHA-LAX`.
+
+- An ADMIN can add or reopen the load from `/dashboard/jobs`. The importer
+  creates one company link, inquiry, job, deduplicated sanitized conversation,
+  required-document list, milestone plan, issue tasks, audit event, and memory
+  event. Re-running it returns the same load and repairs missing fixture-owned
+  messages, documents, tasks, milestones, audit evidence, and memory evidence.
+- The imported facts describe two prototype Model O1 Coupe EVs in one 40HC,
+  Shanghai origin, a requested Los Angeles-area ocean arrival, Irvine final
+  delivery, installed batteries, August 27 cargo-ready target, and the
+  requested August 31 through September 2 vessel window.
+- Missing weights, VINs, commercial value, currency, HTS, Incoterm, broker,
+  confirmed booking, ETD, ETA, carrier acceptance, and port authorization stay
+  unresolved. The April 30 rate revision is visible only as historical source
+  evidence. It does not create a carrier quote, cost, revenue, or target.
+- The primary load page is now a unified control surface with an ordered issue
+  brief, action queue, evidence-state dossier, document and conversation
+  counts, load-scoped chat, and a working offline route map. Dense legacy
+  commercial, document, security, and operating controls remain available in
+  one collapsed supporting section.
+- The Shanghai to Irvine plan renders a coarse, date-line-safe city-area
+  corridor because neither exact port is confirmed. It does not invent
+  Yangshan, the Port of Los Angeles, or drayage handoffs. Explicit ports render
+  only when the load names them. The map is planned, not live tracking.
+- `Review this load in Intel` opens `/dashboard/intel/load?jobId=...` with a
+  privacy-safe, office-scoped structured brief. The operator must review and
+  click Build shipment report. No analysis starts automatically and nothing
+  is persisted. `Research lane risks` prefills the main Intel chat without
+  sending the question.
+
+Local verification created the load in the disposable QA office. Production
+creation still requires the authenticated ADMIN action after deployment.
 
 ### Recontact support and eight fresh hardware prospects
 
@@ -118,10 +176,11 @@ operator can ask a question.
 - The hardware tool returns deterministic facts from the validated Census
   snapshot plus explicit provider gaps. ImportGenius, TradeAtlas, and Trademo
   remain labeled as not connected.
-- The exact Intel page suppresses the duplicate floating agent dock, recent
-  job focus, job and customer memory injection, price prefetch, and pasted-RFQ
-  ingestion. Questions and answers are not written to the agent event log.
-  Actual shipment review stays at `/dashboard/intel/load`.
+- Every `/dashboard/intel` route suppresses the duplicate floating agent dock.
+  The main Intel desk also suppresses recent job focus, job and customer memory
+  injection, price prefetch, and pasted-RFQ ingestion. Questions and answers
+  are not written to the agent event log. Actual shipment review stays at
+  `/dashboard/intel/load`.
 
 ### GPT-5.6 and Intel shipment review
 All active application reasoning paths now use OpenAI GPT-5.6 through the
