@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import type { Route } from "next";
+import type { Metadata, Route } from "next";
 import { notFound, redirect } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { LogoMark } from "@/components/logo-mark";
@@ -16,15 +16,27 @@ import {
   type CustomerPortalPrincipal,
 } from "@/lib/customer-portal-data";
 import {
+  customerPortalDocumentHref,
+  customerPortalShipmentHref,
+  customerPortalWorkspaceHref,
+} from "@/lib/customer-portal-navigation";
+import { requireCustomerPortalPreviewPrincipal } from "@/lib/customer-portal-preview";
+import {
   CUSTOMER_PORTAL_STATUS_ORDER,
   CUSTOMER_PORTAL_STATUS_SHORT_LABEL,
   customerPortalCanRespondToQuote,
 } from "@/lib/customer-portal-view";
 import styles from "../../portal-workspace.module.css";
 
+export const metadata: Metadata = {
+  title: { absolute: "Shipment tracking | Derya" },
+};
+
 type ShipmentParams = {
+  company?: string;
   notice?: string;
   error?: string;
+  preview?: string;
 };
 
 function fmtDate(value: Date | null | undefined) {
@@ -82,12 +94,23 @@ export default async function CustomerPortalShipmentPage({
   params: Promise<{ jobId: string }>;
   searchParams: Promise<ShipmentParams>;
 }) {
-  const principal = await requireCustomerPortalPrincipal();
   const { jobId } = await params;
   const query = await searchParams;
+  const isPreview = query.preview === "1";
+  const principal = isPreview
+    ? await requireCustomerPortalPreviewPrincipal(query.company)
+    : await requireCustomerPortalPrincipal();
+  if (!principal) notFound();
+
   const data = await loadCustomerPortalShipment(principal as CustomerPortalPrincipal, jobId);
   if (!data) notFound();
   const shipment = data.shipment;
+  const navigationContext = {
+    companyId: data.company.id,
+    isPreview,
+  };
+  const workspaceHref = customerPortalWorkspaceHref(data.company.id, isPreview);
+  const currentShipmentHref = customerPortalShipmentHref(shipment.id, navigationContext);
 
   async function logoutAction() {
     "use server";
@@ -161,29 +184,43 @@ export default async function CustomerPortalShipmentPage({
     <div className={styles.shell}>
       <header className={styles.topbar}>
         <div className={styles.topbarInner}>
-          <a href="/portal/workspace" className={styles.brand}>
+          <a href={workspaceHref} className={styles.brand}>
             <LogoMark className={styles.brandMark} />
             <div>
               <div className={styles.brandTitle}>{data.officeName}</div>
-              <div className={styles.brandSub}>Customer control tower</div>
+              <div className={styles.brandSub}>Shipment workspace</div>
             </div>
           </a>
           <nav className={styles.portalNav} aria-label="Customer workspace">
-            <a className={styles.portalNavLink} href={`/portal/workspace?company=${encodeURIComponent(data.company.id)}`}>Overview</a>
-            <a className={styles.portalNavActive} href={`/portal/shipments/${shipment.id}`}>Shipment</a>
+            <a className={styles.portalNavLink} href={workspaceHref}>Overview</a>
+            <a aria-current="page" className={styles.portalNavActive} href={currentShipmentHref}>Shipment</a>
             <a className={styles.portalNavLink} href="mailto:rfq@usederya.com">New request</a>
           </nav>
           <div className={styles.userNav}>
-            <span>{principal.email}</span>
-            <form action={logoutAction}>
-              <button className={styles.signOutButton} type="submit">Sign out</button>
-            </form>
+            <span>{isPreview ? "Customer preview" : principal.email}</span>
+            {isPreview ? (
+              <a className={styles.signOutButton} href="/dashboard/customer-portal">Exit preview</a>
+            ) : (
+              <form action={logoutAction}>
+                <button className={styles.signOutButton} type="submit">Sign out</button>
+              </form>
+            )}
           </div>
         </div>
       </header>
 
       <main className={styles.main}>
-        <a className={styles.backLink} href={`/portal/workspace?company=${encodeURIComponent(data.company.id)}`}>
+        {isPreview && (
+          <aside className={styles.previewBanner} aria-label="Customer preview mode">
+            <div>
+              <strong>Customer preview: {data.company.name}</strong>
+              <span>This is the member experience using current shipment data. Quote and upload actions are disabled.</span>
+            </div>
+            <a href="/dashboard/customer-portal">Exit preview</a>
+          </aside>
+        )}
+
+        <a className={styles.backLink} href={workspaceHref}>
           <Icon name="arrow-left" size={14} /> All shipments
         </a>
 
@@ -248,7 +285,7 @@ export default async function CustomerPortalShipmentPage({
               {shipment.nextMilestone?.plannedAt && <small>{fmtDate(shipment.nextMilestone.plannedAt)}</small>}
             </div>
           </div>
-          <p className={styles.trackingNote}>This page reflects operational milestones recorded by Derya. It does not claim live GPS or vessel position.</p>
+          <p className={styles.trackingNote}>Tracking is based on milestones recorded by Derya, not live GPS or vessel position.</p>
         </section>
 
         <div className={styles.detailLayout}>
@@ -284,7 +321,7 @@ export default async function CustomerPortalShipmentPage({
               <div className={styles.cardHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Shipment details</h2>
-                  <p className={styles.cardCopy}>Customer-safe operating facts for this shipment.</p>
+                  <p className={styles.cardCopy}>Cargo and handling details recorded for this shipment.</p>
                 </div>
               </div>
               <div className={styles.factGrid}>
@@ -326,15 +363,29 @@ export default async function CustomerPortalShipmentPage({
 
           <aside className={styles.detailAside}>
             {shipment.quoteLines.length > 0 && canAct && (
-              <section className={styles.actionCard}>
-                <div className={styles.actionCardIcon}><Icon name="file-check" size={18} /></div>
-                <h2>Quote decision</h2>
+            <section className={styles.actionCard}>
+              <h2>Quote decision</h2>
                 {shipment.latestQuoteResponse && shipment.latestQuoteResponse.status !== "REJECTED" ? (
                   <div className={styles.actionResolved}>
                     <strong>{shipment.latestQuoteResponse.type === "QUOTE_ACCEPTED" ? "Quote approved" : "Changes requested"}</strong>
                     <span>Sent by {shipment.latestQuoteResponse.submittedBy}. Derya status: {shipment.latestQuoteResponse.status.toLowerCase()}.</span>
                   </div>
-                ) : customerPortalCanRespondToQuote(shipment) && data.membership.role !== "VIEWER" ? (
+                ) : customerPortalCanRespondToQuote(shipment) && data.membership.role !== "VIEWER" ? isPreview ? (
+                  <div className={styles.quoteActions}>
+                    {shipment.latestQuoteResponse?.status === "REJECTED" && (
+                      <div className={styles.inlineError}>The previous response was rejected. A customer can review the current quote and respond again.</div>
+                    )}
+                    <button className={styles.buttonWide} type="button" disabled>Approve quote</button>
+                    <div className={styles.form}>
+                      <label className={styles.label}>
+                        Request a change
+                        <textarea className={styles.textarea} disabled placeholder="Describe the pricing, scope, or timing change." />
+                      </label>
+                      <button className={styles.secondaryButtonWide} type="button" disabled>Send change request</button>
+                    </div>
+                    <p className={styles.actionFootnote}>Customer controls are visible but disabled in operator preview.</p>
+                  </div>
+                ) : (
                   <div className={styles.quoteActions}>
                     {shipment.latestQuoteResponse?.status === "REJECTED" && (
                       <div className={styles.inlineError}>The previous response was rejected. Review the current quote and respond again.</div>
@@ -382,13 +433,20 @@ export default async function CustomerPortalShipmentPage({
                           <div><strong>{document.name}</strong><small>{document.status === "UNDER_REVIEW" ? "Uploaded, under review" : "Upload needed"}</small></div>
                         </div>
                         {document.status === "NEEDED" && (
-                          <form action={uploadDocumentAction} className={styles.uploadForm}>
-                            <input type="hidden" name="companyId" value={data.company.id} />
-                            <input type="hidden" name="jobId" value={shipment.id} />
-                            <input type="hidden" name="documentId" value={document.id} />
-                            <input className={styles.fileInput} type="file" name="file" required />
-                            <button className={styles.secondaryButtonWide} type="submit">Upload document</button>
-                          </form>
+                          isPreview ? (
+                            <div className={styles.uploadForm}>
+                              <input className={styles.fileInput} type="file" disabled />
+                              <button className={styles.secondaryButtonWide} type="button" disabled>Upload document</button>
+                            </div>
+                          ) : (
+                            <form action={uploadDocumentAction} className={styles.uploadForm}>
+                              <input type="hidden" name="companyId" value={data.company.id} />
+                              <input type="hidden" name="jobId" value={shipment.id} />
+                              <input type="hidden" name="documentId" value={document.id} />
+                              <input className={styles.fileInput} type="file" name="file" required />
+                              <button className={styles.secondaryButtonWide} type="submit">Upload document</button>
+                            </form>
+                          )
                         )}
                       </div>
                     ))}
@@ -397,7 +455,7 @@ export default async function CustomerPortalShipmentPage({
                 <div className={styles.documentGroup}>
                   <div className={styles.documentGroupLabel}>Approved files</div>
                   {shipment.documents.length > 0 ? shipment.documents.map((document) => (
-                    <a className={styles.documentLink} href={`/api/portal/documents/${document.id}`} target="_blank" rel="noreferrer" key={document.id}>
+                    <a className={styles.documentLink} href={customerPortalDocumentHref(document.id, isPreview)} target="_blank" rel="noreferrer" key={document.id}>
                       <div className={styles.documentName}>
                         <span><Icon name="file-check" size={15} /></span>
                         <div><strong>{document.name}</strong><small>{document.docType} · {fmtDate(document.updatedAt)}</small></div>
@@ -410,10 +468,9 @@ export default async function CustomerPortalShipmentPage({
             </section>
 
             <section className={styles.supportCard}>
-              <div className={styles.supportCardIcon}><Icon name="message-circle" size={18} /></div>
               <div>
                 <strong>Need help with this shipment?</strong>
-                <span>Reply to your latest Derya email so the message stays with the operating record.</span>
+                <span>Reply to your latest Derya email and include the shipment reference.</span>
               </div>
               <a href="mailto:rfq@usederya.com">Email Derya</a>
             </section>

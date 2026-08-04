@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LogoMark } from "@/components/logo-mark";
 import {
@@ -7,6 +8,10 @@ import {
   verifyCustomerPortalCode,
 } from "@/lib/customer-portal-auth";
 import styles from "./portal-workspace.module.css";
+
+export const metadata: Metadata = {
+  title: { absolute: "Customer sign-in | Derya" },
+};
 
 type PortalLoginParams = {
   sent?: string;
@@ -61,17 +66,39 @@ export default async function CustomerPortalLoginPage({
 
   return (
     <main className={styles.loginShell}>
-      <section className={styles.loginCard}>
-        <div className={styles.loginBrand}>
+      <header className={styles.loginTopbar}>
+        <a className={styles.loginWordmark} href="/portal" aria-label="Derya customer portal">
           <LogoMark className={styles.brandMark} />
           <div>
-            <div className={styles.eyebrow}>Derya</div>
-            <h1 className={styles.loginTitle}>Shipment workspace</h1>
+            <strong>Derya</strong>
+            <span>Customer portal</span>
           </div>
-        </div>
-        <p className={styles.loginCopy}>
-          Review requests, quotes, active shipments, milestones, and approved documents in one place.
-        </p>
+        </a>
+        <nav className={styles.loginLinks} aria-label="Portal links">
+          <a href="mailto:rfq@usederya.com">Start a shipment</a>
+          <a href="/login">Derya team sign in</a>
+        </nav>
+      </header>
+
+      <div className={styles.loginLayout}>
+        <section className={styles.loginIntro}>
+          <div className={styles.loginKicker}>Managed freight, shared clearly</div>
+          <h1>See what is moving, what changed, and what needs your attention.</h1>
+          <p>
+            Your Derya team runs the operation. This workspace keeps shipment status, quote decisions, requested documents, and approved files in one place.
+          </p>
+          <div className={styles.loginContact}>
+            <span>Starting a new shipment?</span>
+            <a href="mailto:rfq@usederya.com">Email rfq@usederya.com</a>
+          </div>
+        </section>
+
+        <section className={styles.loginPanel} aria-labelledby="customer-sign-in-heading">
+          <div className={styles.loginPanelHeader}>
+            <div className={styles.eyebrow}>Secure access</div>
+            <h2 id="customer-sign-in-heading">Sign in to your company workspace</h2>
+            <p>We will email a six-digit code to an address approved by your Derya operator.</p>
+          </div>
 
         {query.error && (
           <div className={styles.error}>{ERROR_TEXT[query.error] ?? "Something went wrong. Try again."}</div>
@@ -126,9 +153,10 @@ export default async function CustomerPortalLoginPage({
         )}
 
         <div className={styles.loginFoot}>
-          Access is granted by your Derya operator. A portal account is not required to send an RFQ by email.
+          Need access? Contact your Derya operator. You can still send a new request by email without portal access.
         </div>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }

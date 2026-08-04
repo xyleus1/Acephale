@@ -1,4 +1,6 @@
 import assert from "assert";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import {
   decodeCustomerPortalSession,
   encodeCustomerPortalSession,
@@ -8,9 +10,52 @@ import {
   normalizeCustomerPortalEmail,
 } from "../src/lib/customer-portal-security";
 import {
+  buildCustomerPortalOperationsBrief,
   buildCustomerPortalShipment,
   customerPortalCanRespondToQuote,
 } from "../src/lib/customer-portal-view";
+import {
+  customerPortalDocumentHref,
+  customerPortalShipmentHref,
+  customerPortalWorkspaceHref,
+} from "../src/lib/customer-portal-navigation";
+
+assert.strictEqual(
+  customerPortalWorkspaceHref("company/a", true),
+  "/portal/workspace?company=company%2Fa&preview=1",
+);
+assert.strictEqual(
+  customerPortalShipmentHref("job/a", { companyId: "company/a", isPreview: true }),
+  "/portal/shipments/job%2Fa?company=company%2Fa&preview=1",
+);
+assert.strictEqual(
+  customerPortalShipmentHref("job/a", { companyId: "company/a", isPreview: false }),
+  "/portal/shipments/job%2Fa",
+);
+assert.strictEqual(customerPortalDocumentHref("doc/a", true), "/api/jobs/document/doc%2Fa");
+assert.strictEqual(customerPortalDocumentHref("doc/a"), "/api/portal/documents/doc%2Fa");
+
+const customerLoginSource = readFileSync(resolve(process.cwd(), "src/app/portal/page.tsx"), "utf8");
+const staffLoginSource = readFileSync(resolve(process.cwd(), "src/app/login/page.tsx"), "utf8");
+const staffPortalSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/page.tsx"), "utf8");
+const customerDevelopmentPreviewSource = readFileSync(resolve(process.cwd(), "src/app/customer/page.tsx"), "utf8");
+const customerWorkspaceSource = readFileSync(resolve(process.cwd(), "src/app/portal/workspace/page.tsx"), "utf8");
+
+assert.match(customerLoginSource, /href="\/login">Derya team sign in/);
+assert.match(customerLoginSource, /href="mailto:rfq@usederya\.com">Start a shipment/);
+assert.match(staffLoginSource, /Customer\? <a href="\/portal">Sign in to your shipment workspace<\/a>/);
+assert.match(staffPortalSource, /customerPortalWorkspaceHref\(membership\.company\.id, true\)/);
+assert.match(staffPortalSource, /Customer sign-in:/);
+assert.match(staffPortalSource, />View as customer</);
+assert.match(customerDevelopmentPreviewSource, /robots: \{ index: false, follow: false \}/);
+assert.match(customerDevelopmentPreviewSource, /Development preview with fictional data/);
+assert.match(customerDevelopmentPreviewSource, /buildCustomerPortalShipment/);
+assert.match(customerDevelopmentPreviewSource, /CustomerOperationsOverview/);
+assert.match(customerDevelopmentPreviewSource, /href="\/portal">Customer sign-in/);
+assert.doesNotMatch(customerDevelopmentPreviewSource, /\bprisma\./);
+assert.doesNotMatch(customerDevelopmentPreviewSource, /loadCustomerPortalWorkspace/);
+assert.match(customerWorkspaceSource, /CustomerOperationsOverview/);
+assert.match(customerWorkspaceSource, /Freight operations \| Derya/);
 
 assert.strictEqual(normalizeCustomerPortalEmail("  Ops@Customer.COM "), "ops@customer.com");
 for (let index = 0; index < 100; index += 1) {
@@ -156,5 +201,96 @@ assert.deepStrictEqual(
 );
 assert.ok(!("notes" in shipment), "internal notes must not enter the customer projection");
 assert.ok(!("cost" in shipment), "internal cost must not enter the customer projection");
+
+const operationsBrief = buildCustomerPortalOperationsBrief(
+  [shipment],
+  new Date("2026-08-04T16:00:00.000Z"),
+);
+assert.deepStrictEqual(
+  operationsBrief.overdueMilestones.map((milestone) => milestone.id),
+  ["ms-etd"],
+  "unconfirmed planned milestones in the past should enter the schedule watch",
+);
+assert.deepStrictEqual(operationsBrief.upcomingMilestones, []);
+assert.deepStrictEqual(operationsBrief.documents, {
+  published: 1,
+  needed: 1,
+  underReview: 1,
+});
+assert.ok(
+  operationsBrief.recentUpdates.some((update) => update.label === "Approved visible published"),
+  "published customer documents should enter recent updates",
+);
+assert.ok(
+  operationsBrief.recentUpdates.some((update) => update.label === "Commercial invoice received"),
+  "customer uploads under review should enter recent updates",
+);
+assert.ok(
+  operationsBrief.recentUpdates.every((update) => !update.label.includes("Approved hidden")),
+  "hidden documents must not enter the customer operations brief",
+);
+
+const futureShipment = buildCustomerPortalShipment({
+  ...portalInput,
+  id: "job-future",
+  reference: "DRY-1002",
+  status: "BOOKED",
+  milestones: [
+    { id: "ms-today", type: "BOOKING", plannedAt: new Date("2026-08-04T23:30:00.000Z"), actualAt: null },
+    { id: "ms-tomorrow", type: "CARGO_READY", plannedAt: new Date("2026-08-05T00:00:00.000Z"), actualAt: null },
+    { id: "ms-boundary", type: "ETD", plannedAt: new Date("2026-08-25T00:00:00.000Z"), actualAt: null },
+    { id: "ms-outside", type: "ETA", plannedAt: new Date("2026-08-26T00:00:00.000Z"), actualAt: null },
+    { id: "ms-confirmed", type: "CUSTOMS_ENTRY", plannedAt: new Date("2026-08-03T00:00:00.000Z"), actualAt: new Date("2026-08-03T18:00:00.000Z") },
+    { id: "ms-undated", type: "DELIVERY", plannedAt: null, actualAt: null },
+  ],
+  documents: [],
+  customerPortalActions: [{
+    id: "quote-change-1",
+    type: "QUOTE_CHANGES_REQUESTED",
+    status: "PENDING",
+    message: "Please revise transit time",
+    createdAt: new Date("2026-08-04T15:00:00.000Z"),
+    portalUser: { fullName: "Taylor Chen", email: "taylor@example.com" },
+  }],
+});
+const deliveredShipment = buildCustomerPortalShipment({
+  ...portalInput,
+  id: "job-delivered",
+  reference: "DRY-1003",
+  status: "DELIVERED",
+  milestones: [
+    { id: "ms-delivered-pending", type: "DELIVERY", plannedAt: new Date("2026-08-05T00:00:00.000Z"), actualAt: null },
+  ],
+  documents: [],
+  customerPortalActions: [],
+});
+const expandedBrief = buildCustomerPortalOperationsBrief(
+  [shipment, futureShipment, deliveredShipment],
+  new Date("2026-08-04T16:00:00.000Z"),
+);
+assert.deepStrictEqual(
+  expandedBrief.upcomingMilestones.map((milestone) => [milestone.id, milestone.daysFromToday]),
+  [["ms-today", 0], ["ms-tomorrow", 1], ["ms-boundary", 21]],
+  "schedule watch should use UTC calendar days and include the horizon boundary",
+);
+assert.ok(
+  expandedBrief.upcomingMilestones.every((milestone) => milestone.id !== "ms-delivered-pending"),
+  "delivered shipments must not remain on schedule watch",
+);
+assert.ok(
+  expandedBrief.recentUpdates.some((update) =>
+    update.kind === "MILESTONE" && update.label === "Customs entry confirmed"
+  ),
+  "confirmed customer milestones should enter recent updates",
+);
+assert.strictEqual(expandedBrief.recentUpdates[0]?.kind, "QUOTE_RESPONSE");
+assert.strictEqual(expandedBrief.recentUpdates[0]?.label, "Quote change requested");
+assert.strictEqual(expandedBrief.recentUpdates[0]?.detail, "Submitted by Taylor Chen");
+assert.ok(
+  expandedBrief.recentUpdates.every((update, index, updates) =>
+    index === 0 || updates[index - 1].occurredAt >= update.occurredAt
+  ),
+  "shared activity should be newest first",
+);
 
 console.log("customer portal unit test passed");

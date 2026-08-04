@@ -37,6 +37,59 @@
   flex: 0 0 auto;
 }
 
+.previewCard {
+  padding: 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, .7fr);
+  gap: 32px;
+  align-items: center;
+  border-color: var(--border-strong, var(--border));
+  background: var(--surface);
+}
+
+.previewCopy {
+  min-width: 0;
+}
+
+.previewCopy h2 {
+  margin: 5px 0;
+  color: var(--text);
+  font-size: 18px;
+  letter-spacing: -.02em;
+}
+
+.previewCopy p {
+  max-width: 660px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.previewForm {
+  padding-left: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  border-left: 1px solid var(--border);
+}
+
+.previewForm label {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.previewEmpty {
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 3px;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: center;
+}
+
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(380px, .8fr);
@@ -47,7 +100,7 @@
 .card {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 3px;
   background: var(--surface);
 }
 
@@ -77,13 +130,26 @@
   border-bottom: 1px solid var(--border);
 }
 
+.field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.formSubmit {
+  align-self: end;
+}
+
 .input,
 .select {
   min-width: 0;
   height: 38px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 3px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -155,7 +221,24 @@
   line-height: 1.5;
 }
 
+.inviteHint a {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 @media (max-width: 1050px) {
+  .previewCard {
+    grid-template-columns: 1fr;
+  }
+
+  .previewForm {
+    padding: 18px 0 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
   .grid {
     grid-template-columns: 1fr;
   }
@@ -172,8 +255,13 @@
   }
 
   .form,
-  .row {
+  .row,
+  .previewForm {
     grid-template-columns: 1fr;
+  }
+
+  .previewForm label {
+    grid-column: auto;
   }
 
   .actions {

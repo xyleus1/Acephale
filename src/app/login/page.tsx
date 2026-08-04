@@ -139,6 +139,10 @@ export default async function LoginPage({ searchParams }: Params) {
               </button>
             </form>
           </details>
+
+          <div className="login-audience-switch">
+            Customer? <a href="/portal">Sign in to your shipment workspace</a>
+          </div>
         </div>
       </div>
     </main>

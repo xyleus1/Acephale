@@ -4,6 +4,197 @@
 
 ## Date
 
+2026-08-04
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Public customer design sandbox
+
+`/customer` is now a no-login review surface for iterating on the customer
+workspace without Vercel preview protection or customer authentication.
+
+- The overview contains fictional active, quoted, customs, delivered, RFQ,
+  quote-action, and document-request states.
+- Shipment rows open shareable detail states such as
+  `/customer?shipment=dry-2608-014`, and the detail view returns to the same
+  overview.
+- The sandbox uses the real customer portal stylesheet, typography, status
+  order, milestone labels, and deterministic customer shipment projection.
+- Quote, upload, and document controls are visible but disabled. The page does
+  not import Prisma, portal authentication, or customer workspace loaders.
+- The route is marked `noindex, nofollow` and says plainly that its data is
+  fictional.
+- The authenticated product remains `/portal`. `/customer` is a design and
+  feedback harness, not a second customer data surface.
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- HTTP 200 for `/customer`
+- HTTP 200 for `/customer?shipment=dry-2608-014`
+- rendered output contains the development label, fictional company, shipment
+  overview, and `noindex`
+
+## Local review
+
+Run the app on the Conductor workspace port and open `/customer`. For this
+workspace the current URL is `http://127.0.0.1:55050/customer`.
+
+## Deployment note
+
+No schema, migration, environment, or dependency change is required. The route
+will be publicly reachable at `/customer` after this branch is merged and
+deployed. It must never be connected to live customer records without a new
+authenticated design.
+
+## Prior update
+
+## Date
+
+2026-08-03
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Customer-facing portal design and clear staff access
+
+The portal now reads as a real freight operations workspace instead of a
+generic generated dashboard.
+
+- `/portal` is a dedicated customer sign-in surface with customer-specific
+  copy, a passwordless email-code form, a new-shipment email link, and an
+  explicit route back to internal Derya sign-in.
+- The internal `/login` page now sends customers to `/portal` instead of
+  leaving the two audiences ambiguous.
+- The customer workspace uses a compact operating summary, shipment rows,
+  document requests, and direct status language. Decorative icon tiles,
+  gradients, shadows, and nested rounded cards were removed.
+- Shipment detail is organized as a record with separated facts, milestones,
+  quote actions, and documents. It still says tracking comes from Derya
+  milestones, not live GPS or vessel position.
+- `/dashboard/customer-portal` now gives staff a generic customer sign-in URL,
+  company-scoped `View as customer` controls, and member-specific sign-in
+  links. The access form has visible labels.
+- Staff preview remains read-only and office-scoped. This design pass adds no
+  schema, dependency, membership, authentication, or shipment-state change.
+- Portal entry-point tests now protect the customer login, staff login, and
+  staff preview routes.
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- `npx prisma validate`
+- `npm run test:security`
+- `npm run test:docs`
+- `npm run audit:tenant-scope`
+- `npm run build`
+- authenticated browser review of the customer login, workspace, shipment
+  detail, and staff access page at desktop and mobile widths
+- no horizontal overflow at 390 pixels
+- customer quote and upload controls remain disabled in staff preview
+
+The non-strict tenant audit exits successfully and still reports nine known
+warnings in unrelated agent, search, login-code, RFQ, thread, and WhatsApp
+paths. Browser automation added temporary inline style attributes while
+inspecting disabled form controls, which produced hydration mismatch messages;
+no application exception was observed.
+
+## Deployment note
+
+No migration or environment change is required. Customers enter at `/portal`.
+Admins and managers enter at `/dashboard/customer-portal`, where they can
+grant access, copy a sign-in link, or open the same workspace with `View as
+customer`.
+
+## Prior update
+
+## Date
+
+2026-08-03
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Read-only preview of the actual customer workspace
+
+Internal admins and managers can now inspect the customer-facing product
+without creating a fake customer account or stopping at the sign-in page.
+
+- `/dashboard/customer-portal` has a company picker that opens the real
+  customer shipment dashboard in read-only preview mode.
+- Preview uses the existing customer-safe workspace and shipment projection
+  over current same-office company data. It does not maintain a second mock or
+  copy shipment records.
+- Preview identity comes from the authenticated internal session and is limited
+  to `ADMIN` and `MANAGER`. Company selection is scoped by `officeId`; invalid
+  company or shipment IDs return 404.
+- Workspace, action-queue, active-load, delivered-load, and shipment-detail
+  links preserve preview context.
+- Quote decisions and requested-document controls remain visible so operators
+  can see the member experience, but all of those controls are disabled.
+  Customer server actions still require a real customer portal session.
+- Published document links use the existing internal, office-scoped document
+  route during preview. Real customers still use the customer portal document
+  route.
+- No schema, migration, dependency, customer identity, membership, login code,
+  or customer session is added by preview.
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- `npx prisma validate`
+- `npm run test:security`
+- `npm run test:docs`
+- `npm run audit:tenant-scope`
+- `npm run build`
+- all migrations applied to a disposable PostgreSQL database
+- authenticated browser QA of the admin launcher, customer dashboard, and
+  shipment detail at desktop, tablet, and mobile widths
+- no horizontal overflow or console errors
+- preview quote, textarea, file, and upload controls verified disabled
+- anonymous preview redirects to internal login, non-manager preview redirects
+  to the dashboard, valid same-office preview returns 200, and invalid company
+  scope returns 404
+
+The non-strict tenant audit exits successfully and still reports nine known
+warnings in unrelated agent, search, login-code, RFQ, thread, and WhatsApp
+paths. The new preview query is office-scoped and adds no finding.
+
+## Deployment note
+
+No migration or environment change is required. After deployment, sign in as
+an admin or manager, open `/dashboard/customer-portal`, choose a company, and
+click View as customer.
+
+## Prior update
+
+## Date
+
 2026-08-03
 
 ## Branch
@@ -5000,3 +5191,62 @@ Verification:
   rendered, horizontal overflow stayed false, and the console remained clean.
 - Browser QA found and fixed unequal question-card stretching on the desktop
   report.
+
+## Customer freight operations desk, August 4
+
+Status:
+
+- Implemented on `customer-logistics-dashboard`.
+- Production deployment remains pending until this branch is merged to `main`.
+
+What changed:
+
+- Replaced the generic customer KPI strip and alert card with an operations
+  desk organized around customer actions, one next recorded event per active
+  shipment, active load records, recent shared activity, open RFQs, and the
+  delivered archive.
+- Added a deterministic customer-safe operations brief derived only from the
+  existing portal shipment projection. It summarizes overdue and upcoming
+  recorded milestones, approved document publication, requested uploads under
+  review, quote responses, and document counts.
+- Moved the overview presentation into one shared server component used by the
+  authenticated `/portal/workspace` and fictional `/customer` sandbox. Design
+  feedback can no longer improve the sandbox while leaving the real customer
+  workspace behind.
+- Preserved the compact shipment tracking page and added customer-specific
+  browser titles plus `aria-current` navigation state.
+- Date-only freight milestones now render in UTC so a planned calendar date
+  does not shift to the previous day in a West Coast development environment.
+
+Safety:
+
+- No schema, dependency, membership, session, upload, quote-action, or job
+  status behavior changed.
+- The operations brief consumes only the allowlisted customer portal view
+  model. It does not add Prisma reads or expose internal notes, cost, margin,
+  supplier messages, or hidden documents.
+- `/customer` remains fictional, noindex, and independent of portal auth and
+  live tenant data.
+
+Verification completed before release:
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- `git diff --check`
+- Browser checks at 1440px, 820px, and 390px with no horizontal overflow or
+  console errors.
+- Quote and document action links opened the correct sample shipment anchors.
+- Shipment detail remained readable at desktop and mobile widths.
+
+Design result:
+
+- Design score improved from B- to A-.
+- AI slop score improved from C+ to A.
+- Full local report:
+  `~/.gstack/projects/mmturna-derya-crm/designs/design-audit-20260804/design-audit-customer.md`.
+
+Release note:
+
+- No migration or environment change is required. After merge, verify
+  `/customer`, `/portal`, and one authenticated or staff-preview shipment on
+  the deployed domain.

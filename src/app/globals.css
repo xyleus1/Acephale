@@ -36087,3 +36087,19 @@ summary:focus-visible,
   outline: 3px solid #c4774e !important;
   outline-offset: 2px !important;
 }
+/* Audience switch between the internal desk and the customer shipment portal. */
+.login-audience-switch {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: center;
+}
+
+.login-audience-switch a {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

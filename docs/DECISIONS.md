@@ -16,6 +16,53 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-04 - Public customer design sandbox is fixture-only
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Vercel branch previews require team authentication, and the real
+  customer workspace requires either a customer membership or an internal
+  staff session. That made rapid visual feedback on the customer experience
+  unnecessarily slow.
+- Decision: Keep `/customer` as a public, no-login, noindex design sandbox that
+  uses only fictional fixture data. It may reuse customer-safe deterministic
+  view logic and portal styles, but it must not query Prisma, authenticate a
+  customer, resolve an office or company, or expose a real document. All
+  consequential controls remain disabled.
+- Rationale: Product review needs a stable route that anyone on the local
+  workspace can open, while customer and tenant data must remain behind the
+  real `/portal` and staff-preview authorization boundaries.
+- Consequences: Feedback can cite `/customer` or a shareable
+  `/customer?shipment=...` state. Accepted design changes should be applied to
+  the authenticated portal, not left only in the sandbox. Future edits must
+  preserve the source test that rejects Prisma and live workspace loaders from
+  the route.
+- Revisit when: The design is stable enough to remove the sandbox, or a
+  separately authorized public demo environment is introduced.
+
+### 2026-08-03 - Customer portal preview is internal and read-only
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Operators could configure customer access but could not inspect the
+  actual company workspace without creating a customer identity and completing
+  the external login flow. The sign-in page is not a useful product preview.
+- Decision: Admins and managers may open the real customer workspace for one
+  same-office company through an explicit preview mode. Preview reuses the
+  customer-safe projection, workspace, shipment detail pages, and current
+  canonical records. It uses the internal session and a temporary member-shaped
+  principal. It does not create a customer user, membership, login code, or
+  customer session. Quote and upload controls are visible but disabled, and the
+  underlying server actions continue to require a real customer principal.
+- Rationale: Reusing the actual customer routes prevents a separate mock from
+  drifting while preserving tenant isolation and the human approval boundary.
+- Consequences: Preview links must preserve the selected company and preview
+  mode across shipment navigation. Invalid or cross-office company and job IDs
+  return 404. Preview has a persistent banner and exit control so an operator
+  cannot mistake it for a customer session.
+- Revisit when: Derya needs support impersonation with audited actions. That
+  requires a separate persisted approval and audit design, not writable preview.
+
 ### 2026-07-29 - Customer portal is an email-first company workspace
 
 - Status: accepted

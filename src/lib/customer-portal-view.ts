@@ -144,6 +144,7 @@ export type CustomerPortalShipment = {
     name: string;
     docType: string;
     status: "NEEDED" | "UNDER_REVIEW";
+    updatedAt: Date;
   }>;
   latestQuoteResponse: {
     id: string;
@@ -205,11 +206,12 @@ export function buildCustomerPortalShipment(job: PortalJobInput): CustomerPortal
       .map(({ id, name, docType, updatedAt }) => ({ id, name, docType, updatedAt })),
     documentRequests: job.documents
       .filter((document) => document.customerRequested && document.status !== "APPROVED")
-      .map(({ id, name, docType, status }) => ({
+      .map(({ id, name, docType, status, updatedAt }) => ({
         id,
         name,
         docType,
         status: status === "UPLOADED" ? "UNDER_REVIEW" as const : "NEEDED" as const,
+        updatedAt,
       })),
     latestQuoteResponse: latestQuoteResponse ? {
       id: latestQuoteResponse.id,
@@ -224,4 +226,138 @@ export function buildCustomerPortalShipment(job: PortalJobInput): CustomerPortal
 
 export function customerPortalCanRespondToQuote(shipment: CustomerPortalShipment) {
   return shipment.status === "QUOTED" && shipment.quoteLines.length > 0;
+}
+
+export type CustomerPortalMilestoneWatch = {
+  id: string;
+  shipmentId: string;
+  reference: string;
+  route: string;
+  label: string;
+  plannedAt: Date;
+  daysFromToday: number;
+};
+
+export type CustomerPortalPublishedUpdate = {
+  id: string;
+  shipmentId: string;
+  reference: string;
+  route: string;
+  label: string;
+  detail: string;
+  occurredAt: Date;
+  kind: "MILESTONE" | "DOCUMENT" | "DOCUMENT_REVIEW" | "QUOTE_RESPONSE";
+};
+
+export type CustomerPortalOperationsBrief = {
+  overdueMilestones: CustomerPortalMilestoneWatch[];
+  upcomingMilestones: CustomerPortalMilestoneWatch[];
+  recentUpdates: CustomerPortalPublishedUpdate[];
+  documents: {
+    published: number;
+    needed: number;
+    underReview: number;
+  };
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function utcDay(value: Date) {
+  return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+}
+
+export function buildCustomerPortalOperationsBrief(
+  shipments: CustomerPortalShipment[],
+  now: Date,
+  horizonDays = 21,
+): CustomerPortalOperationsBrief {
+  const today = utcDay(now);
+  const activeShipments = shipments.filter((shipment) =>
+    !["DELIVERED", "CANCELLED"].includes(shipment.status)
+  );
+  const milestoneWatch = activeShipments.flatMap((shipment) =>
+    shipment.milestones.flatMap((milestone) => {
+      if (milestone.actualAt || !milestone.plannedAt) return [];
+      return [{
+        id: milestone.id,
+        shipmentId: shipment.id,
+        reference: shipment.reference,
+        route: shipment.route,
+        label: milestone.label,
+        plannedAt: milestone.plannedAt,
+        daysFromToday: Math.round((utcDay(milestone.plannedAt) - today) / DAY_MS),
+      }];
+    })
+  );
+
+  const recentUpdates = shipments.flatMap((shipment) => {
+    const milestoneUpdates: CustomerPortalPublishedUpdate[] = shipment.milestones.flatMap((milestone) =>
+      milestone.actualAt ? [{
+        id: `milestone-${milestone.id}`,
+        shipmentId: shipment.id,
+        reference: shipment.reference,
+        route: shipment.route,
+        label: `${milestone.label} confirmed`,
+        detail: shipment.route,
+        occurredAt: milestone.actualAt,
+        kind: "MILESTONE" as const,
+      }] : []
+    );
+    const documentUpdates: CustomerPortalPublishedUpdate[] = shipment.documents.map((document) => ({
+      id: `document-${document.id}`,
+      shipmentId: shipment.id,
+      reference: shipment.reference,
+      route: shipment.route,
+      label: `${document.name} published`,
+      detail: `Approved file for ${shipment.route}`,
+      occurredAt: document.updatedAt,
+      kind: "DOCUMENT" as const,
+    }));
+    const documentReviewUpdates: CustomerPortalPublishedUpdate[] = shipment.documentRequests.flatMap((document) =>
+      document.status === "UNDER_REVIEW" ? [{
+        id: `document-review-${document.id}`,
+        shipmentId: shipment.id,
+        reference: shipment.reference,
+        route: shipment.route,
+        label: `${document.name} received`,
+        detail: "Derya review in progress",
+        occurredAt: document.updatedAt,
+        kind: "DOCUMENT_REVIEW" as const,
+      }] : []
+    );
+    const quoteUpdates: CustomerPortalPublishedUpdate[] = shipment.latestQuoteResponse ? [{
+      id: `quote-${shipment.latestQuoteResponse.id}`,
+      shipmentId: shipment.id,
+      reference: shipment.reference,
+      route: shipment.route,
+      label: shipment.latestQuoteResponse.type === "QUOTE_ACCEPTED"
+        ? "Quote approval submitted"
+        : "Quote change requested",
+      detail: `Submitted by ${shipment.latestQuoteResponse.submittedBy}`,
+      occurredAt: shipment.latestQuoteResponse.createdAt,
+      kind: "QUOTE_RESPONSE" as const,
+    }] : [];
+    return [...milestoneUpdates, ...documentUpdates, ...documentReviewUpdates, ...quoteUpdates];
+  }).sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
+
+  return {
+    overdueMilestones: milestoneWatch
+      .filter((milestone) => milestone.daysFromToday < 0)
+      .sort((left, right) => left.daysFromToday - right.daysFromToday),
+    upcomingMilestones: milestoneWatch
+      .filter((milestone) => milestone.daysFromToday >= 0 && milestone.daysFromToday <= horizonDays)
+      .sort((left, right) => left.daysFromToday - right.daysFromToday),
+    recentUpdates,
+    documents: {
+      published: shipments.reduce((total, shipment) => total + shipment.documents.length, 0),
+      needed: shipments.reduce(
+        (total, shipment) => total + shipment.documentRequests.filter((document) => document.status === "NEEDED").length,
+        0,
+      ),
+      underReview: shipments.reduce(
+        (total, shipment) => total + shipment.documentRequests.filter((document) => document.status === "UNDER_REVIEW").length,
+        0,
+      ),
+    },
+  };
 }
