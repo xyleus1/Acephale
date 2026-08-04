@@ -100,7 +100,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
 
               {(session.role === "ADMIN" || session.role === "MANAGER") && (
-                <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
+                <>
+                  <NavLink href="/dashboard/customer-portal" icon={<Icon name="external" />}>Customer Portal</NavLink>
+                  <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
+                </>
               )}
 
               <NavLink href="/dashboard/inbox" icon={<Icon name="mail" />}>Inbox</NavLink>

@@ -81,6 +81,7 @@
     "test:intelligence-page-empty-state": "tsx scripts/intelligence-page-empty-state.test.ts",
     "test:scheduled-market-ingestion": "tsx scripts/scheduled-market-ingestion.test.ts",
     "test:security": "tsx scripts/security-hardening.test.ts",
+    "test:customer-portal": "tsx scripts/customer-portal.test.ts",
     "test:brain": "tsx scripts/brain-ops.test.ts",
     "test:docs": "tsx scripts/check-docs-fresh.test.ts",
     "check:docs": "tsx scripts/check-docs-fresh.ts",

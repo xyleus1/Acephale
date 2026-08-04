@@ -37,6 +37,17 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 - Sales assignment, ownership history
 - Customer profile shows job history alongside activities and quotes
 
+### 4. Customer workspace (the shared state layer)
+
+- Email-first intake for RFQs, changes, and exceptions
+- Passwordless, company-scoped customer access separated from internal users
+- A customer control tower for active and completed shipments, RFQs, action
+  requests, and dedicated milestone-based shipment detail pages
+- Quote lines, requested uploads, and approved customer-visible documents
+- Quote responses and requested document uploads recorded as operator-review
+  actions, with no automatic booking or status change
+- Existing one-load guest link retained for read-only shipment sharing
+
 ## Confirmed Product Decisions
 
 1. **Tenant isolation** — multi-office, fully isolated by `officeId`
@@ -63,6 +74,9 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 - Customer profile shows job history
 - Printable PDF quote
 - Flow hint banners on RFQ + Job detail pages
+- Authenticated customer control tower, dedicated shipment tracking pages,
+  portal access administration, quote response queue, requested uploads, and
+  explicit document publication
 
 ### 🚧 In progress / planned
 See `PRODUCTIZATION_ROADMAP.md` for the full path to a production-ready automated forwarding office.
@@ -81,7 +95,6 @@ See `PRODUCTIZATION_ROADMAP.md` for the full path to a production-ready automate
 
 - Carrier outreach: API integrations (Maersk Spot, MSC INSTANT, CMA Online) vs email automation vs hybrid
 - Document OCR for incoming BL/invoice attachments
-- Customer portal (where customers can see their jobs/quotes)
 - Demurrage/detention risk scoring
 - Multi-currency consolidation rules
 - Siber legacy data bridge (Phase 2)

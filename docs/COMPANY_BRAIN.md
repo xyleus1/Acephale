@@ -1009,3 +1009,66 @@ Daily market automation exists as a safe path but remains env-gated:
 - Live runs require `MARKET_INTELLIGENCE_CRON_ENABLED=true`
 - Default safe rotation: Maersk, Drewry WCI, CBP CSMS, Port of Los Angeles
 - No operational freight records are mutated by external intelligence
+
+## Customer Portal Delivery Contract
+
+The customer portal is a governed projection of the internal Freight OS and
+company brain. It is not a second operating system and it is not the canonical
+record for shipment execution.
+
+### Channel model
+
+- Email remains the default intake channel for new RFQs, free-form changes,
+  urgent exceptions, and relationship-heavy communication.
+- The authenticated customer workspace holds shared state: company RFQs,
+  active and completed shipments, customer quote lines, milestones, approved
+  documents, document requests, and action status.
+- Operators handle exceptions and all consequential execution.
+- A read-only guest shipment link remains available for one-load status sharing.
+- API, webhook, EDI, and embedded customer integrations are a later access
+  level over the same office-scoped records. They must not create a parallel
+  shipment database.
+
+### Identity and tenant boundary
+
+- External `CustomerPortalUser` identities are separate from internal `User`
+  identities and the internal founder/operator allowlist.
+- Access is granted through explicit, revocable
+  `CustomerPortalMembership` records.
+- Every portal identity, membership, login code, action, document access, and
+  workspace query is scoped by `officeId`.
+- Company access is never inferred from an email domain, CRM contact match, or
+  a guessed relationship.
+
+### Customer-safe projection
+
+Customer surfaces may expose only fields selected by the customer portal view
+model. Never expose buy cost, margin, internal notes, supplier messages, agent
+reasoning, risk deliberation, or draft operational data.
+
+A job document is customer-visible only when:
+
+1. its status is `APPROVED`
+2. it has a real file
+3. `customerVisible` is explicitly true
+
+Upload, analysis, or approval alone must not publish a document. Existing
+documents remain hidden after migration until an operator explicitly shares
+them.
+
+### Write-back and human approval
+
+- Quote acceptance and quote-change requests create a
+  `CustomerPortalAction`.
+- Customer document uploads fill only an explicitly requested document slot.
+- Customer uploads return to `UPLOADED` review state and set
+  `customerVisible=false`.
+- Portal writes never change job status, book or tender freight, send a quote,
+  approve a file, or overwrite operational truth.
+- Internal operators acknowledge, resolve, or reject each portal action.
+- Portal writes and operator review decisions create provenance-backed
+  `MemoryEvent` records for audit and retrieval.
+
+This contract lets Derya handle more loads without forcing customers into a
+new workflow for every interaction. Email starts work, the portal keeps shared
+state coherent, and humans retain authority where freight risk is real.

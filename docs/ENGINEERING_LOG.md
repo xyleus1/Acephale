@@ -2925,3 +2925,72 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Test one real hardware question and one real China ocean load
   after deployment. Keep the chat answer and report claims separated from
   shipment-specific conclusions until the load facts are reviewed.
+
+### 2026-07-29 - Email-first customer workspace
+
+- Branch: customer-portal-strategy
+- Commit: see git log
+- Task: Record the customer interface strategy in the company brain and build
+  the first authenticated customer portal without splitting operational truth
+  away from the Freight OS.
+- Architecture: Added separate office-scoped external users, passwordless login
+  codes and sessions, explicit company memberships, and a pending customer
+  action queue. The customer view model is an allowlisted projection over
+  canonical RFQs, jobs, milestones, quote lines, and documents.
+- Safety: Quote responses do not change job status or book freight. Customer
+  uploads fill only requested slots and return to operator review. Documents
+  require approval plus an explicit customer-visible flag. Internal cost,
+  margin, notes, supplier messages, and agent reasoning are excluded.
+- Operator workflow: Admins and managers can grant and revoke company access,
+  acknowledge or resolve customer actions, request documents on the job, and
+  publish approved files. All customer writes and operator portal decisions
+  create provenance-backed memory events.
+- Customer workflow: The company workspace shows RFQs, active and completed
+  shipments, quote actions, milestone dates, approved files, and requested
+  uploads. The read-only one-load guest page remains available with a tighter
+  document boundary.
+- Verification: Prisma validation, client generation, disposable PostgreSQL
+  migration deployment, focused portal tests, security tests, TypeScript,
+  production build, docs freshness, tenant audit, and diff checks passed. HTTP
+  runtime checks proved session enforcement, company workspace rendering,
+  guest and member document authorization, and customer quote acceptance
+  remaining a pending action while job status stayed `QUOTED`.
+- Verification limitation: The connected in-app browser control was
+  unavailable, so the interface received HTTP runtime checks rather than a
+  screenshot-based visual review.
+- Deployment: Apply migration
+  `20260729000100_customer_portal_workspace` before application deployment.
+  Existing documents remain hidden until an operator explicitly publishes
+  them.
+
+### 2026-08-03 - Customer shipment control tower and tracking detail
+
+- Branch: customer-logistics-dashboard
+- Commit: see git log
+- Task: Turn the authenticated customer workspace into the main customer-facing
+  shipment dashboard and add a dedicated detail page for every visible load.
+- Files changed: Portal workspace and shipment routes, portal styles, customer
+  projection and scoped data loaders, membership hardening, focused tests, and
+  customer portal documentation.
+- Verification: Customer portal tests, TypeScript, Prisma validation, all
+  migrations, security tests, docs checks, non-strict tenant audit, and the
+  production build passed against a disposable PostgreSQL database.
+  Authenticated browser QA covered login, dashboard and detail pages at 1440,
+  820, and 390 pixel widths, no horizontal overflow, no console errors, legacy
+  workspace redirects, unauthenticated redirects, inaccessible-load 404s, and
+  quote approval remaining pending while the job stayed `QUOTED`.
+- Failed/skipped checks: The in-app browser controller was unavailable in this
+  session, so the checked-in browser QA runner was used. The tenant audit
+  exited successfully and reported nine pre-existing suspicious queries in
+  unrelated agent, search, RFQ, login-code, thread, and WhatsApp paths.
+- Caveats: Shipment tracking is based on operator-recorded milestones. It is
+  intentionally not described as live GPS, vessel, or carrier tracking. Portal
+  invitations are still sent manually after access is granted.
+- Release hardening: Customer quote lines now come only from `Job.quoteLines`,
+  never the legacy internal-note fallback. The customer document route rejects
+  arbitrary remote URLs before the shared document streamer can fetch them.
+- Release hardening verification: `npm run test:customer-portal`,
+  `npx tsc --noEmit`, and `git diff --check` passed.
+- Follow-up: Apply the customer portal migration, grant a pilot customer access,
+  and verify the same flows on the deployed URL before calling this production
+  ready.

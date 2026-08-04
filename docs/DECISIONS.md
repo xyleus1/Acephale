@@ -16,6 +16,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-07-29 - Customer portal is an email-first company workspace
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Higher customer load volume makes email-only status, document, and
+  quote coordination expensive, but forcing every freight interaction through
+  a new SaaS workflow would add customer friction and create a second source of
+  truth.
+- Decision: Keep email as the default intake and exception channel. Add an
+  authenticated, company-scoped customer workspace over canonical
+  `Inquiry`, `Job`, milestone, quote-line, and document records. Preserve the
+  existing one-load guest link. External identities and login codes remain
+  separate from internal users. Company membership and document publication
+  are explicit and revocable. Customer quote responses and uploads create
+  pending review actions and never execute freight operations automatically.
+- Rationale: Customers get durable shared state and self-service for repetitive
+  coordination while Derya keeps one operating system, one company brain, and
+  human control over consequential actions.
+- Consequences: Deploy the customer portal migration before the application.
+  Existing approved documents are hidden by default. Operators must grant
+  company access, request uploads, publish approved files, and resolve customer
+  actions from the internal Customer Portal page. The customer control tower
+  and `/portal/shipments/[jobId]` detail route project canonical shipment state.
+  They describe recorded operational milestones and must not imply live GPS,
+  vessel, or carrier tracking without an explicit trusted integration.
+- Revisit when: A customer requires SSO, API, webhook, EDI, embedded access, or
+  a policy-approved class of automatic low-risk actions.
+
 ### 2026-07-29 - The load page is the operational dossier and Intel uses an explicit handoff
 
 - Status: accepted

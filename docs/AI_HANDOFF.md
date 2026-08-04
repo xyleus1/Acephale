@@ -4,6 +4,144 @@
 
 ## Date
 
+2026-08-03
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Customer shipment control tower and tracking detail
+
+The authenticated customer workspace now starts with an operations dashboard
+and gives every visible load a dedicated shipment page.
+
+- `/portal/workspace` shows counts for in-progress, in-transit, action-needed,
+  and delivered shipments, plus a consolidated quote and document action queue.
+- Active shipment cards show the customer-safe route, current stage, milestone
+  progress, ETD, ETA, and next recorded milestone.
+- `/portal/shipments/[jobId]` shows the full customer-safe timeline, shipment
+  facts, quote lines, requested uploads, and explicitly published documents.
+- The shipment page says plainly that it reflects recorded milestones and does
+  not claim live GPS or vessel position.
+- Detail reads require an authenticated portal session, the same `officeId`,
+  and an active membership in the shipment's company. Missing or unauthorized
+  shipment IDs return 404.
+- Quote approval remains a pending operator action. Browser verification proved
+  the approval notice appears while the canonical job remains `QUOTED`.
+- The release review removed the legacy internal-note fallback from customer
+  quote lines. Portal document downloads now reject arbitrary remote URLs and
+  accept only Derya-managed storage, Gmail attachments, or embedded demo files.
+
+## Files changed
+
+- `src/app/portal/workspace/page.tsx`
+- `src/app/portal/shipments/[jobId]/page.tsx`
+- `src/app/portal/portal-workspace.module.css`
+- `src/lib/customer-portal-auth.ts`
+- `src/lib/customer-portal-data.ts`
+- `src/lib/customer-portal-security.ts`
+- `src/lib/customer-portal-view.ts`
+- `src/app/api/portal/documents/[id]/route.ts`
+- `scripts/customer-portal.test.ts`
+- customer portal architecture and handoff documentation
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- Prisma schema validation and all migrations on disposable PostgreSQL
+- `npm run test:security`
+- `npm run test:docs`
+- `npm run audit:tenant-scope`
+- `npm run build`
+- Authenticated browser QA at desktop, tablet, and mobile widths with no
+  horizontal overflow or console errors
+- Runtime checks for login, legacy `?job=` redirects, unauthenticated detail
+  redirects, inaccessible shipment 404s, and pending quote approval
+- Release-review regression tests for internal-note isolation and portal
+  document source restrictions
+
+## Deployment note
+
+Apply migration `20260729000100_customer_portal_workspace` before deploying.
+Portal access still requires an operator to grant company membership and send
+the deployed `/portal` URL. Tracking is milestone-based until a carrier or
+telematics source is explicitly integrated and its data quality is defined.
+
+## Prior update
+
+## Date
+
+2026-07-29
+
+## Branch
+
+customer-portal-strategy
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Email-first customer portal and operator control plane
+
+Derya now has an authenticated, company-scoped customer workspace on top of
+the existing Freight OS records.
+
+- External customer identities, login codes, sessions, and company
+  memberships are separate from internal operator authentication.
+- Customers can see their company's RFQs, active and completed shipments,
+  quote lines, customer milestones, and explicitly published documents.
+- Customers can accept a quote, request quote changes, and upload only
+  documents that an operator requested.
+- Every customer write creates a pending operator-review action. No portal
+  action books freight, changes job status, approves a document, or sends an
+  external message.
+- Operators manage access and customer actions at
+  `/dashboard/customer-portal`.
+- Job document controls now distinguish request, upload, approval, and
+  customer publication. Existing documents remain hidden after migration.
+- The guest shipment page remains read-only, now shows ETD, ETA, and customs
+  milestones, and serves only explicitly customer-visible approved files
+  through an authorized proxy.
+- The company-brain delivery contract and durable architecture decision now
+  record the email, portal, and human operating model.
+
+## Files changed
+
+- `prisma/schema.prisma` and
+  `prisma/migrations/20260729000100_customer_portal_workspace/migration.sql`
+- `src/app/portal`, `src/app/api/portal`, and customer portal libraries
+- `src/app/dashboard/customer-portal`
+- job document actions, controls, and download response helper
+- `scripts/customer-portal.test.ts` and `package.json`
+- company brain, decisions, product context, ideas, handoff, and engineering log
+
+## Verification
+
+- Prisma schema validation
+- Prisma client generation
+- TypeScript no-emit check
+- Customer portal unit test
+- Production build, docs check, tenant audit, and final diff checks
+
+## Deployment note
+
+Apply the new Prisma migration before deploying the application. Portal access
+does not send an invitation automatically. An operator grants access and sends
+the deployed `/portal` URL to the customer through the normal approved channel.
+
+## Prior update
+
+## Date
+
 2026-07-29
 
 ## Branch

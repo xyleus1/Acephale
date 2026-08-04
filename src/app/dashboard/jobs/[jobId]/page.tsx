@@ -7,6 +7,7 @@ import {
   markMilestoneActual, updateMilestonePlanned,
   addCarrierQuote, selectCarrierQuote, updateJobStatus,
   addQuoteLine, uploadJobDocument,
+  updateDocumentPortalPolicy,
   applyAgentProposalAction, discardAgentProposalAction,
   claimJobAction, assignJobAction,
 } from "./actions";
@@ -1656,6 +1657,8 @@ export default async function JobDetailPage({
                       <div className="record-row-meta">
                         {DOC_TYPE_LABEL[d.docType] ?? d.docType} - {d.status.toLowerCase()}
                         {d.aiAnalyzedAt && <span className="record-ai-inline">AI commented</span>}
+                        {d.customerVisible && <span className="record-ai-inline">Customer-visible</span>}
+                        {d.customerRequested && <span className="record-ai-inline">Requested from customer</span>}
                       </div>
                     </div>
                     <div className="record-row-actions">
@@ -1676,6 +1679,20 @@ export default async function JobDetailPage({
                       {d.status === "UPLOADED" && (
                         <form action={updateDocStatus.bind(null, d.id, "APPROVED")}>
                           <SubmitButton className="btn btn-sm" pendingLabel="...">Approve</SubmitButton>
+                        </form>
+                      )}
+                      {d.status === "APPROVED" && d.url && !d.url.includes("placeholder") && (
+                        <form action={updateDocumentPortalPolicy.bind(null, d.id, "customerVisible", !d.customerVisible)}>
+                          <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="...">
+                            {d.customerVisible ? "Hide from customer" : "Share with customer"}
+                          </SubmitButton>
+                        </form>
+                      )}
+                      {d.status !== "APPROVED" && (
+                        <form action={updateDocumentPortalPolicy.bind(null, d.id, "customerRequested", !d.customerRequested)}>
+                          <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="...">
+                            {d.customerRequested ? "Stop customer request" : "Request from customer"}
+                          </SubmitButton>
                         </form>
                       )}
                     </div>
