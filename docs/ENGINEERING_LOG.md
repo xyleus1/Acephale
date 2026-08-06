@@ -2859,3 +2859,29 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Test one real hardware question and one real China ocean load
   after deployment. Keep the chat answer and report claims separated from
   shipment-specific conclusions until the load facts are reviewed.
+
+### 2026-08-05 - Standalone Supply OS v0.5 prototype
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Build a clickable product prototype for Derya's supplier-intelligence
+  and automated-logistics thesis without coupling it to existing application
+  behavior or data.
+- Files changed: `src/app/supply-os/page.tsx`,
+  `src/app/supply-os/supply-os-prototype.tsx`,
+  `src/app/supply-os/supply-os.module.css`,
+  `scripts/supply-os-prototype.test.ts`, `package.json`, and handoff docs.
+- Verification: `npm run test:supply-os-prototype`,
+  `npx tsc --noEmit --incremental false`, production `npm run build`,
+  `git diff --check`, changed-text em dash check, and Chrome browser QA at
+  1440px and 390px. Browser QA covered all six workspaces, primary state
+  changes, console errors, and horizontal overflow.
+- Failed/skipped checks: The preferred in-app browser bridge was unavailable,
+  so the visual and interaction pass used the installed local Chrome browser.
+- Caveats: `/supply-os` is public and completely synthetic. It imports no
+  application libraries or components, performs no fetch or server action,
+  writes no data, and sends no partner or customer communication.
+- Follow-up: Use founder and customer feedback on this prototype to choose the
+  first production slice. The strongest candidate is Supply Need to supplier
+  passport to quote comparison, with approval-gated execution and explicit
+  authority policy.

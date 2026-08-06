@@ -4,6 +4,76 @@
 
 ## Date
 
+2026-08-05
+
+## Branch
+
+crm-status-structure
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Standalone Derya Supply OS v0.5 prototype
+
+Added a public, nonpersistent prototype at `/supply-os` for testing the
+supplier-intelligence and automated-logistics product thesis without coupling
+it to the existing dashboard, database, authentication, or operational action
+paths.
+
+- The Command Center turns one synthetic supply need into a recommended
+  supplier, route, customs-review, partner-RFQ, and delivery plan.
+- The Supply Map shows product movement, alternate sources, route paths,
+  concentration risk, modeled cost, and evidence coverage.
+- Supplier Intelligence provides selectable supplier passports with response,
+  cargo-ready, document, price, risk, and evidence signals.
+- The Quote Room compares existing forwarders and Derya-network options, keeps
+  total plan cost and reliability visible, and records only local prototype
+  approval state.
+- The Execution Room shows handoffs, documents, conversations, and the human
+  approval boundary before booking.
+- Derya Control exposes five operating modes plus granular permissions,
+  commercial limits, and explicit ownership of existing partner relationships.
+- All companies, rates, scores, sources, and events are labeled synthetic.
+  Nothing sends, books, files, posts, persists, or calls an external provider.
+
+## Files changed
+
+- `src/app/supply-os/page.tsx`
+- `src/app/supply-os/supply-os-prototype.tsx`
+- `src/app/supply-os/supply-os.module.css`
+- `scripts/supply-os-prototype.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:supply-os-prototype`
+- `npx tsc --noEmit --incremental false`
+- production `npm run build` with non-secret local placeholders
+- `git diff --check`
+- changed-text em dash check
+- Browser smoke test in local Chrome at 1440px and 390px. All six views,
+  supply-plan rebuild, map layer, supplier selection, quote selection and
+  approval, execution state, authority mode, and permission toggle passed.
+  There was no page overflow or browser console error.
+
+## Caveats
+
+- This is a product prototype, not a second production application. It has no
+  database schema, office-scoped records, provider adapters, or live data.
+- The route is intentionally outside `/dashboard` and has no navigation link
+  from the existing freight OS.
+- Production implementation should reuse canonical office-scoped supplier,
+  product, partner, quote, shipment, evidence, risk, and approval records
+  instead of preserving this in-component demo dataset.
+
+## Previous Update
+
+## Date
+
 2026-07-27
 
 ## Branch

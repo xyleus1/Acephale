@@ -10,6 +10,7 @@
     "lint": "next lint",
     "ai:handoff": "tsx scripts/generate-ai-handoff.ts",
     "test:strategy": "tsx scripts/commercial-strategy.test.ts",
+    "test:supply-os-prototype": "tsx scripts/supply-os-prototype.test.ts",
     "test:memory": "tsx scripts/memory-write-smoke.test.ts",
     "test:memory-search": "tsx scripts/memory-search.test.ts",
     "test:morning-brief": "tsx scripts/morning-brief.test.ts",
