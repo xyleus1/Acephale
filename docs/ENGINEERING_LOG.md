@@ -3124,3 +3124,29 @@ Use this file for chronological implementation notes that future agents should s
   execute freight, customs, supplier, or customer actions.
 - Follow-up: After deployment, sign in with a non-employee account, click
   `Supply OS` under Commercial Workflow, and confirm `/supply-os` loads.
+
+### 2026-08-06 - Integrate Supply OS and replace the decorative map
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Correct the standalone green Supply OS prototype by placing it inside
+  the authenticated dashboard, preserving the product palette, using real
+  geography, and reducing generic dashboard styling.
+- Files changed: the dashboard navigation and brand, the legacy Supply OS
+  redirect, a new dashboard Supply OS route and workspace, the focused test,
+  and handoff and decision documentation. The old standalone component and
+  stylesheet were removed.
+- Verification: `npm run test:supply-os-prototype`, `npm run
+  test:load-route-map`, `npm run test:customer-portal`, TypeScript, the
+  production build with non-secret placeholders, `git diff --check`, and the
+  changed-text em dash check passed. Local visual review covered desktop and
+  390 pixel widths in the dashboard shell.
+- Failed/skipped checks: Authenticated browser review used a local-only shell
+  harness because the workspace has no disposable authenticated session. The
+  harness was removed before commit. Route authentication and the compatibility
+  redirect were checked separately.
+- Caveats: Every supplier, quote, route, event, and score in this workspace is
+  synthetic. Natural Earth provides real geography, but lanes are modeled and
+  are not live vessel, container, or carrier tracking.
+- Follow-up: Replace synthetic records only after office-scoped supplier,
+  product, lane, quote, and approval contracts are accepted.

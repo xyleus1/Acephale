@@ -1,11 +1,6 @@
-import type { Metadata } from "next";
-import { SupplyOsPrototype } from "./supply-os-prototype";
-
-export const metadata: Metadata = {
-  title: { absolute: "Derya Supply OS v0.5" },
-  description: "A standalone prototype of Derya's supplier intelligence and logistics execution system.",
-};
+import type { Route } from "next";
+import { redirect } from "next/navigation";
 
 export default function SupplyOsPage() {
-  return <SupplyOsPrototype />;
+  redirect("/dashboard/supply-os" as Route);
 }

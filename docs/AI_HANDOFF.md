@@ -16,54 +16,53 @@ see git log
 
 ## Task implemented
 
-### Supply OS sidebar launch
+### Supply OS integrated dashboard workspace
 
-The existing Supply OS v0.5 prototype is now discoverable from the authenticated
-Derya product instead of requiring a direct URL.
+Supply OS now lives inside the authenticated Derya application instead of
+opening a separate green prototype shell.
 
-- The non-employee dashboard sidebar includes `Supply OS` under Commercial
-  Workflow with the existing layers icon.
-- The sidebar item opens `/supply-os`, the standalone six-workspace prototype
-  for command center, supply map, supplier intelligence, quote comparison,
-  execution, and operating authority.
-- The prototype remains isolated from Prisma, tenant data, external providers,
-  server actions, and operational writes. It is still synthetic and sends,
-  books, files, and persists nothing.
-- The focused regression test now protects both the standalone safety boundary
-  and the product navigation entry point.
-- The branch was reconciled with current `origin/main` before release so the
-  customer operations workspace, portal, load workspace, and health changes
-  remain intact.
+- The non-employee sidebar opens `/dashboard/supply-os`. The legacy
+  `/supply-os` URL redirects to that authenticated route.
+- The workspace keeps the existing Derya navy, blue, walnut, and white palette
+  and inherits the product sidebar and topbar. It does not add a second app
+  shell or a second brand color system.
+- The overview is a compact operations screen with one supply request, a
+  status strip, a real Natural Earth geography map, and three pending
+  decisions. It avoids the previous oversized hero, decorative icon tiles,
+  fake KPI wall, and nested dashboard cards.
+- The real map plots synthetic but geographically correct suppliers, origin
+  and receiving ports, a final destination, Pacific route segments, and land
+  connections. It is labeled as a modeled network, not live tracking.
+- Overview, Supply map, Suppliers, Quote room, Execution, and Control remain
+  clickable. Approval and authority changes are local prototype state only.
+- The prototype still imports no Prisma client, server action, external
+  provider, or write path. It sends, books, files, and persists nothing.
+- The sidebar brand now says only `Derya`.
 
 ## Files changed
 
 - `src/app/dashboard/layout.tsx`
+- `src/app/dashboard/supply-os/page.tsx`
+- `src/app/dashboard/supply-os/supply-os-workspace.tsx`
+- `src/app/dashboard/supply-os/supply-os-workspace.module.css`
 - `scripts/supply-os-prototype.test.ts`
 - `src/app/supply-os/page.tsx`
-- `src/app/supply-os/supply-os-prototype.tsx`
-- `src/app/supply-os/supply-os.module.css`
-- `package.json`
-- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
+- removed the old standalone Supply OS component and stylesheet
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
 
 ## Verification passed
 
 - `npm run test:supply-os-prototype`
+- `npm run test:load-route-map`
 - `npm run test:customer-portal`
 - `npx tsc --noEmit --incremental false`
 - production `npm run build` with non-secret local placeholders
 - `git diff --check`
 - changed-text em dash check
-
-The first TypeScript invocation used stale generated Next route types from
-before the main merge and rejected the new portal routes. The production build
-regenerated the route map, then the same TypeScript command passed without a
-source change.
+- local desktop and 390 pixel visual review in the real dashboard shell
 
 ## Caveats
 
-- The authenticated app sidebar is the entry point, but `/supply-os` keeps its
-  own prototype sidebar and page shell. It is not nested inside the operational
-  dashboard layout.
 - The prototype is a review surface, not production supply-chain execution.
   Live implementation still requires canonical office-scoped records,
   provider adapters, provenance, and approval-gated actions.

@@ -16,6 +16,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-06 - Supply OS is an authenticated dashboard workspace
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first Supply OS prototype was linked from the product sidebar
+  but opened a standalone page with its own green shell. That made it look like
+  a separate product and bypassed the established Derya visual system.
+- Decision: Keep Supply OS at `/dashboard/supply-os` inside the authenticated
+  application layout. Keep `/supply-os` only as a compatibility redirect. Use
+  the existing Derya palette and checked-in Natural Earth geography. Prototype
+  decisions may update local browser state but cannot call server actions,
+  external providers, or operational write paths.
+- Rationale: Supply intelligence and logistics control are part of Derya, not
+  a detached microsite. A real geographic base and restrained record-oriented
+  layout make the prototype more credible without pretending synthetic lanes
+  are live tracking.
+- Consequences: New Supply OS views should extend the authenticated workspace
+  and reuse office-scoped canonical records when backend work begins. They must
+  preserve provenance and human approval before supplier, broker, forwarder,
+  customs, booking, or spend actions.
+- Revisit when: A separately authorized public demo or customer-facing supply
+  network product is approved.
+
 ### 2026-08-04 - Public customer design sandbox is fixture-only
 
 - Status: accepted
