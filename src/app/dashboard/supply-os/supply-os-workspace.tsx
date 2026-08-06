@@ -11,6 +11,21 @@ type ViewId = "overview" | "map" | "suppliers" | "quotes" | "execution" | "contr
 type MapLayer = "network" | "risk" | "cost";
 type AuthorityMode = "observe" | "assist" | "coordinate" | "execute";
 type PermissionKey = "supplier" | "forwarder" | "broker" | "pickup" | "updates";
+type NetworkLayerKey = "suppliers" | "ports" | "routes" | "risk" | "milestones";
+
+type Movement = {
+  id: string;
+  po: string;
+  supplier: string;
+  cargo: string;
+  route: string;
+  eta: string;
+  cost: string;
+  status: "At risk" | "On schedule" | "Documents" | "Alternate ready";
+  statusTone: "danger" | "success" | "warning" | "neutral";
+  mode: string;
+  timeline: Array<{ label: string; detail: string; state: "complete" | "current" | "pending" | "blocked" }>;
+};
 
 type Supplier = {
   id: string;
@@ -44,7 +59,7 @@ type MapPoint = {
   detail: string;
   lat: number;
   lng: number;
-  kind: "supplier" | "port" | "destination";
+  kind: "supplier" | "port" | "destination" | "chokepoint";
   labelSide?: "left" | "right";
   labelDx?: number;
   labelDy?: number;
@@ -125,6 +140,85 @@ const QUOTES: Quote[] = [
   { id: "atlasair", partner: "Atlas Air Desk", source: "Your forwarder", route: "Shenzhen - DFW - Austin", price: 28940, transit: "4 to 6 days", reliability: "97%", valid: "18h" },
 ];
 
+const MOVEMENTS: Movement[] = [
+  {
+    id: "po-1048",
+    po: "PO-1048",
+    supplier: "Kepler Precision",
+    cargo: "12,000 CNC enclosures",
+    route: "Yantian - Long Beach - Austin",
+    eta: "Sep 9",
+    cost: "$7,780",
+    status: "At risk",
+    statusTone: "danger",
+    mode: "Ocean FCL",
+    timeline: [
+      { label: "Supply confirmed", detail: "12,000 units", state: "complete" },
+      { label: "Documents", detail: "6 of 7 ready", state: "current" },
+      { label: "Broker review", detail: "HTS 7616.99 open", state: "blocked" },
+      { label: "Ocean booking", detail: "Plan approval required", state: "pending" },
+      { label: "Final delivery", detail: "Austin, Sep 9", state: "pending" },
+    ],
+  },
+  {
+    id: "po-1052",
+    po: "PO-1052",
+    supplier: "NovaForge",
+    cargo: "8,400 sensor housings",
+    route: "Penang - Singapore - Long Beach",
+    eta: "Sep 14",
+    cost: "$8,210",
+    status: "On schedule",
+    statusTone: "success",
+    mode: "Ocean LCL",
+    timeline: [
+      { label: "Supplier confirmed", detail: "Capacity reserved", state: "complete" },
+      { label: "Export documents", detail: "Packet complete", state: "complete" },
+      { label: "Origin pickup", detail: "Booked for Aug 18", state: "current" },
+      { label: "Ocean movement", detail: "ETD Aug 21", state: "pending" },
+      { label: "Receiving", detail: "Long Beach, Sep 14", state: "pending" },
+    ],
+  },
+  {
+    id: "po-1037",
+    po: "PO-1037",
+    supplier: "Sierra Metalworks",
+    cargo: "3,200 battery brackets",
+    route: "Monterrey - Laredo - Austin",
+    eta: "Aug 23",
+    cost: "$3,460",
+    status: "Documents",
+    statusTone: "warning",
+    mode: "Truck FTL",
+    timeline: [
+      { label: "Production", detail: "Cargo ready", state: "complete" },
+      { label: "Commercial invoice", detail: "Revision requested", state: "current" },
+      { label: "Broker packet", detail: "Waiting for invoice", state: "blocked" },
+      { label: "Border crossing", detail: "Laredo slot held", state: "pending" },
+      { label: "Final delivery", detail: "Austin, Aug 23", state: "pending" },
+    ],
+  },
+  {
+    id: "po-1061",
+    po: "PO-1061",
+    supplier: "ForgeWest Components",
+    cargo: "900 launch-critical enclosures",
+    route: "Reno - Austin",
+    eta: "Aug 17",
+    cost: "$5,930",
+    status: "Alternate ready",
+    statusTone: "neutral",
+    mode: "Truck LTL",
+    timeline: [
+      { label: "Capacity check", detail: "900 units available", state: "complete" },
+      { label: "Quality evidence", detail: "Prior lot accepted", state: "complete" },
+      { label: "Price approval", detail: "+28.4% emergency premium", state: "current" },
+      { label: "Pickup", detail: "Can dispatch in 24h", state: "pending" },
+      { label: "Final delivery", detail: "Austin, Aug 17", state: "pending" },
+    ],
+  },
+];
+
 const MAP_POINTS: MapPoint[] = [
   { id: "dongguan", label: "Dongguan", detail: "Current supplier", lat: 23.02, lng: 113.75, kind: "supplier", labelSide: "left", labelDx: -12, labelDy: -11 },
   { id: "penang", label: "Penang", detail: "Qualified alternate", lat: 5.41, lng: 100.34, kind: "supplier", labelSide: "left", labelDx: -10, labelDy: -8 },
@@ -133,6 +227,11 @@ const MAP_POINTS: MapPoint[] = [
   { id: "yantian", label: "Yantian", detail: "Origin port", lat: 22.58, lng: 114.27, kind: "port", labelSide: "right", labelDx: 12, labelDy: 15 },
   { id: "long-beach", label: "Long Beach", detail: "Receiving port", lat: 33.75, lng: -118.2, kind: "port", labelSide: "left", labelDx: -10, labelDy: 15 },
   { id: "austin", label: "Austin", detail: "Final delivery", lat: 30.27, lng: -97.74, kind: "destination", labelSide: "right", labelDx: 10, labelDy: -8 },
+  { id: "singapore", label: "Singapore", detail: "Transshipment port", lat: 1.29, lng: 103.85, kind: "port", labelSide: "right", labelDx: 10, labelDy: 15 },
+  { id: "shanghai", label: "Shanghai", detail: "Regional port", lat: 31.23, lng: 121.47, kind: "port", labelSide: "left", labelDx: -10, labelDy: -9 },
+  { id: "rotterdam", label: "Rotterdam", detail: "European gateway", lat: 51.92, lng: 4.48, kind: "port", labelSide: "right", labelDx: 10, labelDy: -7 },
+  { id: "suez", label: "Suez", detail: "Modeled chokepoint", lat: 29.97, lng: 32.55, kind: "chokepoint", labelSide: "right", labelDx: 10, labelDy: 14 },
+  { id: "panama", label: "Panama", detail: "Modeled chokepoint", lat: 9.08, lng: -79.68, kind: "chokepoint", labelSide: "left", labelDx: -10, labelDy: 14 },
 ];
 
 const PERMISSIONS: Array<{ key: PermissionKey; label: string; detail: string }> = [
@@ -160,14 +259,112 @@ function landPath(fromId: string, toId: string) {
   return `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} L ${to.x.toFixed(1)} ${to.y.toFixed(1)}`;
 }
 
-function SupplyNetworkMap({ layer, compact = false }: { layer: MapLayer; compact?: boolean }) {
+function SupplyNetworkMap({
+  layer,
+  setLayer,
+  selectedMovementId,
+  onSelectMovement,
+  layers,
+  setLayers,
+  compact = false,
+}: {
+  layer: MapLayer;
+  setLayer: (layer: MapLayer) => void;
+  selectedMovementId: string;
+  onSelectMovement: (id: string) => void;
+  layers: Record<NetworkLayerKey, boolean>;
+  setLayers: (layers: Record<NetworkLayerKey, boolean>) => void;
+  compact?: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [zoom, setZoom] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const yantian = project(pointById("yantian").lat, pointById("yantian").lng);
   const longBeach = project(pointById("long-beach").lat, pointById("long-beach").lng);
   const penang = project(pointById("penang").lat, pointById("penang").lng);
+  const singapore = project(pointById("singapore").lat, pointById("singapore").lng);
+  const rotterdam = project(pointById("rotterdam").lat, pointById("rotterdam").lng);
+  const suez = project(pointById("suez").lat, pointById("suez").lng);
+  const selectedMovement = MOVEMENTS.find((movement) => movement.id === selectedMovementId) ?? MOVEMENTS[0];
+  const zoomedWidth = 1000 / zoom;
+  const zoomedHeight = 500 / zoom;
+  const viewBox = zoom === 1
+    ? WORLD_MAP_VIEWBOX
+    : `${((1000 - zoomedWidth) / 2).toFixed(1)} ${((500 - zoomedHeight) / 2).toFixed(1)} ${zoomedWidth.toFixed(1)} ${zoomedHeight.toFixed(1)}`;
+  const normalizedSearch = search.trim().toLowerCase();
+  const searchResults = normalizedSearch.length < 2
+    ? []
+    : [
+      ...MOVEMENTS.map((movement) => ({ id: movement.id, label: `${movement.po} ${movement.supplier}`, detail: movement.route, type: "movement" as const })),
+      ...MAP_POINTS.map((point) => ({ id: point.id, label: point.label, detail: point.detail, type: "point" as const })),
+    ].filter((result) => `${result.label} ${result.detail}`.toLowerCase().includes(normalizedSearch)).slice(0, 6);
+  const visiblePoints = MAP_POINTS.filter((point) => {
+    if (point.kind === "supplier") return layers.suppliers;
+    if (point.kind === "port" || point.kind === "chokepoint") return layers.ports;
+    return true;
+  });
+  const routeClass = (movementId: string, routeStyle: "primary" | "secondary" | "feeder") => [
+    styles.networkRoute,
+    routeStyle === "primary" ? styles.primaryRoute : routeStyle === "secondary" ? styles.secondaryRoute : styles.feederRoute,
+    selectedMovementId === movementId ? styles.selectedRoute : styles.unselectedRoute,
+  ].join(" ");
+  const filterEntries: Array<{ key: NetworkLayerKey; label: string; count: string }> = [
+    { key: "suppliers", label: "Suppliers", count: "4" },
+    { key: "ports", label: "Ports and crossings", count: "7" },
+    { key: "routes", label: "Planned lanes", count: "4" },
+    { key: "milestones", label: "Modeled milestones", count: "8" },
+    { key: "risk", label: "Risk areas", count: "3" },
+  ];
 
   return (
     <figure className={styles.mapFigure} data-layer={layer} data-compact={compact}>
-      <svg viewBox={WORLD_MAP_VIEWBOX} role="img" aria-label="World map showing modeled suppliers, ports, and transport lanes">
+      <div className={styles.mapToolbar}>
+        <div className={styles.mapSearch}>
+          <label htmlFor={compact ? "overview-map-search" : "supply-map-search"}>Search network</label>
+          <input
+            id={compact ? "overview-map-search" : "supply-map-search"}
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search supplier, port, or PO"
+          />
+          {searchResults.length > 0 ? (
+            <div className={styles.mapSearchResults}>
+              {searchResults.map((result) => (
+                <a
+                  key={`${result.type}-${result.id}`}
+                  href={`#network-${result.id}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (result.type === "movement") onSelectMovement(result.id);
+                    else setZoom(1.45);
+                    setSearch("");
+                  }}
+                >
+                  <strong>{result.label}</strong>
+                  <small>{result.detail}</small>
+                </a>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className={styles.mapLayerTabs} aria-label="Map analysis">
+          {(["network", "risk", "cost"] as MapLayer[]).map((item) => (
+            <a key={item} href={`#map-${item}`} data-active={layer === item} onClick={(event) => { event.preventDefault(); setLayer(item); }}>{item}</a>
+          ))}
+        </div>
+        <a className={styles.filterControl} href="#map-filters" data-active={filtersOpen} onClick={(event) => { event.preventDefault(); setFiltersOpen(!filtersOpen); }}>
+          Filters <span>{filterEntries.filter((entry) => layers[entry.key]).length}</span>
+        </a>
+      </div>
+
+      <div className={styles.mapToolRail} aria-label="Map controls">
+        <a href="#map-fit" onClick={(event) => { event.preventDefault(); setZoom(1); }}>Fit</a>
+        <a href="#map-route" onClick={(event) => { event.preventDefault(); setZoom(1.35); }}>Route</a>
+        <a href="#map-risk" data-active={layer === "risk"} onClick={(event) => { event.preventDefault(); setLayer("risk"); }}>Risk</a>
+      </div>
+
+      <svg viewBox={viewBox} role="img" aria-label="World map showing modeled suppliers, ports, transport lanes, and movement milestones">
         <rect width="1000" height="500" className={styles.mapOcean} />
         <g className={styles.mapGrid}>
           {[125, 250, 375].map((y) => <path key={`lat-${y}`} d={`M 0 ${y} H 1000`} />)}
@@ -176,18 +373,49 @@ function SupplyNetworkMap({ layer, compact = false }: { layer: MapLayer; compact
         <g className={styles.mapLand}>
           {WORLD_MAP_LAND_PATHS.map((path, index) => <path key={`land-${index}`} d={path} />)}
         </g>
-        <g className={styles.mapRoutes}>
-          <path className={styles.feederRoute} d={landPath("dongguan", "yantian")} />
-          <path className={styles.primaryRoute} d={`M ${yantian.x.toFixed(1)} ${yantian.y.toFixed(1)} Q 920 118 998 210`} />
-          <path className={styles.primaryRoute} d={`M 2 210 Q 88 126 ${longBeach.x.toFixed(1)} ${longBeach.y.toFixed(1)}`} />
-          <path className={styles.secondaryRoute} d={`M ${penang.x.toFixed(1)} ${penang.y.toFixed(1)} Q 918 205 998 245`} />
-          <path className={styles.secondaryRoute} d={`M 2 245 Q 90 170 ${longBeach.x.toFixed(1)} ${longBeach.y.toFixed(1)}`} />
-          <path className={styles.feederRoute} d={landPath("long-beach", "austin")} />
-          <path className={styles.secondaryRoute} d={landPath("monterrey", "austin")} />
-          <path className={styles.secondaryRoute} d={landPath("reno", "austin")} />
-        </g>
+        {layers.risk ? (
+          <g className={styles.riskZones}>
+            <ellipse cx={yantian.x} cy={yantian.y} rx="28" ry="18" />
+            <ellipse cx={longBeach.x} cy={longBeach.y} rx="32" ry="20" />
+            <ellipse cx={suez.x} cy={suez.y} rx="24" ry="14" />
+          </g>
+        ) : null}
+        {layers.routes ? (
+          <g className={styles.mapRoutes}>
+            <path className={styles.referenceRoute} d={`M ${rotterdam.x.toFixed(1)} ${rotterdam.y.toFixed(1)} Q ${suez.x.toFixed(1)} ${(suez.y - 35).toFixed(1)} ${suez.x.toFixed(1)} ${suez.y.toFixed(1)} Q 690 310 ${singapore.x.toFixed(1)} ${singapore.y.toFixed(1)}`} />
+            <g role="button" tabIndex={0} data-movement="po-1048" onClick={() => onSelectMovement("po-1048")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onSelectMovement("po-1048"); }}>
+              <title>PO-1048, Yantian to Long Beach to Austin</title>
+              <path className={routeClass("po-1048", "feeder")} d={landPath("dongguan", "yantian")} />
+              <path className={routeClass("po-1048", "primary")} d={`M ${yantian.x.toFixed(1)} ${yantian.y.toFixed(1)} Q 920 118 998 210`} />
+              <path className={routeClass("po-1048", "primary")} d={`M 2 210 Q 88 126 ${longBeach.x.toFixed(1)} ${longBeach.y.toFixed(1)}`} />
+              <path className={routeClass("po-1048", "feeder")} d={landPath("long-beach", "austin")} />
+            </g>
+            <g role="button" tabIndex={0} data-movement="po-1052" onClick={() => onSelectMovement("po-1052")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onSelectMovement("po-1052"); }}>
+              <title>PO-1052, Penang to Singapore to Long Beach</title>
+              <path className={routeClass("po-1052", "feeder")} d={landPath("penang", "singapore")} />
+              <path className={routeClass("po-1052", "secondary")} d={`M ${singapore.x.toFixed(1)} ${singapore.y.toFixed(1)} Q 925 210 998 245`} />
+              <path className={routeClass("po-1052", "secondary")} d={`M 2 245 Q 90 170 ${longBeach.x.toFixed(1)} ${longBeach.y.toFixed(1)}`} />
+            </g>
+            <g role="button" tabIndex={0} data-movement="po-1037" onClick={() => onSelectMovement("po-1037")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onSelectMovement("po-1037"); }}>
+              <title>PO-1037, Monterrey to Austin</title>
+              <path className={routeClass("po-1037", "secondary")} d={landPath("monterrey", "austin")} />
+            </g>
+            <g role="button" tabIndex={0} data-movement="po-1061" onClick={() => onSelectMovement("po-1061")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onSelectMovement("po-1061"); }}>
+              <title>PO-1061, Reno to Austin</title>
+              <path className={routeClass("po-1061", "secondary")} d={landPath("reno", "austin")} />
+            </g>
+          </g>
+        ) : null}
+        {layers.milestones ? (
+          <g className={styles.movementMarkers}>
+            <polygon data-selected={selectedMovementId === "po-1048"} points="0,-6 10,0 0,6 2,0" transform="translate(963 192) rotate(18)" />
+            <polygon data-selected={selectedMovementId === "po-1048"} points="0,-6 10,0 0,6 2,0" transform="translate(55 186) rotate(-20)" />
+            <polygon data-selected={selectedMovementId === "po-1052"} points="0,-5 9,0 0,5 2,0" transform="translate(945 231) rotate(14)" />
+            <polygon data-selected={selectedMovementId === "po-1052"} points="0,-5 9,0 0,5 2,0" transform="translate(82 222) rotate(-18)" />
+          </g>
+        ) : null}
         <g className={styles.mapPoints}>
-          {MAP_POINTS.map((point) => {
+          {visiblePoints.map((point) => {
             const position = project(point.lat, point.lng);
             const left = point.labelSide === "left";
             return (
@@ -203,9 +431,62 @@ function SupplyNetworkMap({ layer, compact = false }: { layer: MapLayer; compact
           })}
         </g>
       </svg>
+
+      {filtersOpen ? (
+        <aside className={styles.mapFilters} id="map-filters">
+          <header><div><span>Network layers</span><strong>Map filters</strong></div><a href="#hide-filters" onClick={(event) => { event.preventDefault(); setFiltersOpen(false); }}>Hide</a></header>
+          <div className={styles.filterGroup}>
+            <span>Operational network</span>
+            {filterEntries.map((entry) => (
+              <label key={entry.key}>
+                <input type="checkbox" checked={layers[entry.key]} onChange={() => setLayers({ ...layers, [entry.key]: !layers[entry.key] })} />
+                <i />
+                <strong>{entry.label}</strong>
+                <small>{entry.count}</small>
+              </label>
+            ))}
+          </div>
+          <div className={styles.filterSummary}>
+            <span>Scope</span>
+            <strong>Atlas Robotics</strong>
+            <small>4 suppliers, 4 movements, 3 risk areas</small>
+          </div>
+        </aside>
+      ) : null}
+
+      <aside className={styles.mapInspector}>
+        <div className={styles.inspectorHeader}>
+          <div><span>Selected movement</span><strong>{selectedMovement.po}</strong></div>
+          <span className={styles.movementStatus} data-tone={selectedMovement.statusTone}>{selectedMovement.status}</span>
+        </div>
+        <h3>{selectedMovement.supplier}</h3>
+        <p>{selectedMovement.cargo}</p>
+        <dl>
+          <div><dt>Route</dt><dd>{selectedMovement.route}</dd></div>
+          <div><dt>Mode</dt><dd>{selectedMovement.mode}</dd></div>
+          <div><dt>ETA</dt><dd>{selectedMovement.eta}</dd></div>
+          <div><dt>Plan</dt><dd>{selectedMovement.cost}</dd></div>
+        </dl>
+        {!compact ? (
+          <nav className={styles.movementQuickList} aria-label="Modeled movements">
+            {MOVEMENTS.map((movement) => (
+              <a key={movement.id} href={`#${movement.id}`} data-active={movement.id === selectedMovementId} onClick={(event) => { event.preventDefault(); onSelectMovement(movement.id); }}>
+                <span>{movement.po}</span><strong>{movement.supplier}</strong><small>{movement.status}</small>
+              </a>
+            ))}
+          </nav>
+        ) : null}
+      </aside>
+
+      <div className={styles.mapZoom} aria-label="Map zoom">
+        <a href="#zoom-in" aria-label="Zoom in" onClick={(event) => { event.preventDefault(); setZoom(Math.min(1.8, zoom + 0.2)); }}>+</a>
+        <span>{Math.round(zoom * 100)}%</span>
+        <a href="#zoom-out" aria-label="Zoom out" onClick={(event) => { event.preventDefault(); setZoom(Math.max(1, zoom - 0.2)); }}>−</a>
+      </div>
+
       <figcaption>
         <span>Natural Earth 1:110m geography</span>
-        <span>Modeled network, not live tracking</span>
+        <span>Modeled network, not live tracking or AIS</span>
       </figcaption>
     </figure>
   );
@@ -214,6 +495,8 @@ function SupplyNetworkMap({ layer, compact = false }: { layer: MapLayer; compact
 export function SupplyOsWorkspace() {
   const [view, setView] = useState<ViewId>("overview");
   const [layer, setLayer] = useState<MapLayer>("network");
+  const [selectedMovementId, setSelectedMovementId] = useState("po-1048");
+  const [networkLayers, setNetworkLayers] = useState<Record<NetworkLayerKey, boolean>>({ suppliers: true, ports: true, routes: true, risk: true, milestones: true });
   const [supplierId, setSupplierId] = useState("kepler");
   const [quoteId, setQuoteId] = useState("blueharbor");
   const [request, setRequest] = useState("12,000 CNC-machined 6061 aluminum enclosures from Dongguan to Austin by September 15. Keep logistics under $8,500 and protect the launch date.");
@@ -265,9 +548,24 @@ export function SupplyOsWorkspace() {
             window.setTimeout(() => setPlanUpdated(false), 1800);
           }}
           setView={setView}
+          layer={layer}
+          setLayer={setLayer}
+          selectedMovementId={selectedMovementId}
+          setSelectedMovementId={setSelectedMovementId}
+          networkLayers={networkLayers}
+          setNetworkLayers={setNetworkLayers}
         />
       ) : null}
-      {view === "map" ? <MapView layer={layer} setLayer={setLayer} setView={setView} /> : null}
+      {view === "map" ? (
+        <MapView
+          layer={layer}
+          setLayer={setLayer}
+          selectedMovementId={selectedMovementId}
+          setSelectedMovementId={setSelectedMovementId}
+          networkLayers={networkLayers}
+          setNetworkLayers={setNetworkLayers}
+        />
+      ) : null}
       {view === "suppliers" ? <SuppliersView supplier={supplier} setSupplierId={setSupplierId} /> : null}
       {view === "quotes" ? <QuoteView quote={quote} setQuoteId={setQuoteId} approvedQuoteId={approvedQuoteId} setApprovedQuoteId={setApprovedQuoteId} /> : null}
       {view === "execution" ? <ExecutionView approvedQuoteId={approvedQuoteId} setView={setView} /> : null}
@@ -278,85 +576,140 @@ export function SupplyOsWorkspace() {
   );
 }
 
-function Overview({ request, setRequest, planUpdated, rebuild, setView }: {
+function Overview({
+  request,
+  setRequest,
+  planUpdated,
+  rebuild,
+  setView,
+  layer,
+  setLayer,
+  selectedMovementId,
+  setSelectedMovementId,
+  networkLayers,
+  setNetworkLayers,
+}: {
   request: string;
   setRequest: (value: string) => void;
   planUpdated: boolean;
   rebuild: () => void;
   setView: (view: ViewId) => void;
+  layer: MapLayer;
+  setLayer: (layer: MapLayer) => void;
+  selectedMovementId: string;
+  setSelectedMovementId: (id: string) => void;
+  networkLayers: Record<NetworkLayerKey, boolean>;
+  setNetworkLayers: (layers: Record<NetworkLayerKey, boolean>) => void;
 }) {
+  const selectedMovement = MOVEMENTS.find((movement) => movement.id === selectedMovementId) ?? MOVEMENTS[0];
+
   return (
     <div className={styles.view}>
-      <section className={styles.requestBar}>
+      <section className={styles.commandBar}>
+        <div className={styles.commandLabel}><span>Planning input</span><strong>Current supply need</strong></div>
         <label htmlFor="supply-request">Current supply need</label>
         <textarea id="supply-request" value={request} onChange={(event) => setRequest(event.target.value)} />
         <button type="button" className={styles.primaryButton} onClick={rebuild}>{planUpdated ? "Plan updated" : "Update plan"}</button>
       </section>
 
-      <div className={styles.statusStrip}>
-        <div><span>Supplier</span><strong>Kepler Precision</strong><small>Current source</small></div>
-        <div><span>Primary route</span><strong>Yantian - Long Beach</strong><small>22 to 25 days</small></div>
-        <div><span>Best quote</span><strong>$7,780</strong><small>$720 below target</small></div>
-        <div><span>Delivery</span><strong>September 9</strong><small>6 day buffer</small></div>
-      </div>
+      <section className={styles.controlTower}>
+        <div className={styles.operationsPane}>
+          <header className={styles.operationsHeader}>
+            <div><span>Scenario snapshot</span><h2>Network operations</h2></div>
+            <div><strong>Atlas Robotics</strong><small>Updated 08:42 PT</small></div>
+          </header>
 
-      <div className={styles.overviewGrid}>
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div><h2>Supply network</h2><p>Current source, alternate capacity, and receiving route.</p></div>
-            <a href="#map" className={styles.textLink} onClick={(event) => { event.preventDefault(); setView("map"); }}>Open map</a>
+          <div className={styles.exceptionBand}>
+            <div data-tone="danger"><span>Critical</span><strong>1</strong><small>Broker hold</small></div>
+            <div data-tone="warning"><span>At risk</span><strong>3</strong><small>Needs action</small></div>
+            <div data-tone="success"><span>On schedule</span><strong>8</strong><small>Within plan</small></div>
+            <div data-tone="neutral"><span>Alternates</span><strong>2</strong><small>Ready to use</small></div>
           </div>
-          <SupplyNetworkMap layer="network" compact />
-        </section>
 
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}><div><h2>Decisions</h2><p>One approval blocks execution.</p></div></div>
-          <div className={styles.decisionList}>
-            <a href="#quotes" onClick={(event) => { event.preventDefault(); setView("quotes"); }}>
-              <span data-tone="action">Approval</span>
-              <strong>Select a transport plan</strong>
-              <small>Four quotes compared against cost, transit, and reliability.</small>
-            </a>
-            <a href="#suppliers" onClick={(event) => { event.preventDefault(); setView("suppliers"); }}>
-              <span data-tone="watch">Concentration</span>
-              <strong>Qualify NovaForge for 20%</strong>
-              <small>Reduces China concentration with a modeled 2.1% premium.</small>
-            </a>
-            <a href="#execution" onClick={(event) => { event.preventDefault(); setView("execution"); }}>
-              <span data-tone="blocked">Broker review</span>
-              <strong>Confirm proposed HTS 7616.99</strong>
-              <small>Classification and aluminum derivative exposure remain open.</small>
-            </a>
+          <div className={styles.analyticsBand}>
+            <section className={styles.exposurePanel}>
+              <header><span>Exposure</span><a href="#suppliers" onClick={(event) => { event.preventDefault(); setView("suppliers"); }}>Review suppliers</a></header>
+              <div className={styles.exposureRow}><div><strong>China source concentration</strong><small>72% of enclosure volume</small></div><span>72%</span><i><b style={{ width: "72%" }} /></i></div>
+              <div className={styles.exposureRow}><div><strong>Long Beach dependency</strong><small>2 active ocean movements</small></div><span>61%</span><i><b style={{ width: "61%" }} /></i></div>
+              <div className={styles.exposureRow}><div><strong>Document readiness</strong><small>1 packet is blocked</small></div><span>86%</span><i><b style={{ width: "86%" }} /></i></div>
+            </section>
+            <section className={styles.coveragePanel}>
+              <header><span>Forwarder coverage</span><strong>4 quotes</strong></header>
+              <div className={styles.coverageChart}>
+                <svg viewBox="0 0 72 72" aria-label="Two Derya network quotes and two existing forwarder quotes">
+                  <circle cx="36" cy="36" r="25" className={styles.coverageTrack} />
+                  <circle cx="36" cy="36" r="25" className={styles.coverageOwned} />
+                  <circle cx="36" cy="36" r="25" className={styles.coverageExisting} />
+                </svg>
+                <div><strong>2 + 2</strong><small>network mix</small></div>
+              </div>
+              <ul><li><i data-tone="brand" />Derya network <strong>2</strong></li><li><i data-tone="accent" />Your forwarders <strong>2</strong></li></ul>
+            </section>
           </div>
-        </section>
-      </div>
+
+          <section className={styles.movementLedger}>
+            <header><div><span>Active movements</span><strong>4 modeled plans</strong></div><a href="#full-map" onClick={(event) => { event.preventDefault(); setView("map"); }}>Open full map</a></header>
+            <div className={styles.movementTable} role="table" aria-label="Active modeled movements">
+              <div className={styles.movementTableHead} role="row"><span>PO / supplier</span><span>ETA</span><span>Status</span></div>
+              {MOVEMENTS.map((movement) => (
+                <a key={movement.id} href={`#${movement.id}`} role="row" data-active={movement.id === selectedMovementId} onClick={(event) => { event.preventDefault(); setSelectedMovementId(movement.id); }}>
+                  <span><strong>{movement.po}</strong><small>{movement.supplier}</small></span>
+                  <span><strong>{movement.eta}</strong><small>{movement.mode}</small></span>
+                  <span className={styles.movementStatus} data-tone={movement.statusTone}>{movement.status}</span>
+                </a>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.movementTimeline}>
+            <header><div><span>Selected workflow</span><strong>{selectedMovement.po}, {selectedMovement.supplier}</strong></div><a href="#execution" onClick={(event) => { event.preventDefault(); setView("execution"); }}>Execution detail</a></header>
+            <div>
+              {selectedMovement.timeline.map((event) => (
+                <article key={event.label} data-state={event.state}><i /><div><strong>{event.label}</strong><small>{event.detail}</small></div><span>{event.state === "complete" ? "Done" : event.state === "current" ? "Now" : event.state === "blocked" ? "Hold" : "Next"}</span></article>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <div className={styles.overviewMap}>
+          <SupplyNetworkMap
+            layer={layer}
+            setLayer={setLayer}
+            selectedMovementId={selectedMovementId}
+            onSelectMovement={setSelectedMovementId}
+            layers={networkLayers}
+            setLayers={setNetworkLayers}
+            compact
+          />
+        </div>
+      </section>
     </div>
   );
 }
 
-function MapView({ layer, setLayer, setView }: { layer: MapLayer; setLayer: (layer: MapLayer) => void; setView: (view: ViewId) => void }) {
+function MapView({ layer, setLayer, selectedMovementId, setSelectedMovementId, networkLayers, setNetworkLayers }: {
+  layer: MapLayer;
+  setLayer: (layer: MapLayer) => void;
+  selectedMovementId: string;
+  setSelectedMovementId: (id: string) => void;
+  networkLayers: Record<NetworkLayerKey, boolean>;
+  setNetworkLayers: (layers: Record<NetworkLayerKey, boolean>) => void;
+}) {
   return (
     <div className={styles.view}>
       <div className={styles.viewHeader}>
-        <div><h2>Supply map</h2><p>Supplier, port, and destination geography for PO-1048.</p></div>
-        <div className={styles.layerTabs}>
-          {(["network", "risk", "cost"] as MapLayer[]).map((item) => (
-            <a key={item} href={`#map-${item}`} data-active={layer === item} onClick={(event) => { event.preventDefault(); setLayer(item); }}>{item}</a>
-          ))}
-        </div>
+        <div><h2>Supply map</h2><p>Suppliers, ports, planned lanes, exceptions, and modeled milestones.</p></div>
+        <span className={styles.mapDataNotice}>Scenario data, no live AIS or GPS</span>
       </div>
-      <section className={styles.panel}>
-        <SupplyNetworkMap layer={layer} />
-      </section>
-      <section className={styles.tablePanel}>
-        <table>
-          <thead><tr><th>Lane</th><th>Role</th><th>Transit</th><th>Cost signal</th><th>Risk</th><th /></tr></thead>
-          <tbody>
-            <tr><td>Yantian - Long Beach - Austin</td><td>Primary</td><td>22 to 25 days</td><td>$7,780 best quote</td><td><span className={styles.risk} data-risk="medium">Medium</span></td><td><a href="#quotes" onClick={(event) => { event.preventDefault(); setView("quotes"); }}>Quotes</a></td></tr>
-            <tr><td>Penang - Long Beach - Austin</td><td>Supplier alternate</td><td>25 to 29 days</td><td>+3.4% modeled</td><td><span className={styles.risk} data-risk="low">Low</span></td><td><a href="#suppliers" onClick={(event) => { event.preventDefault(); setView("suppliers"); }}>Supplier</a></td></tr>
-            <tr><td>Monterrey - Austin</td><td>Nearshore alternate</td><td>2 to 4 days</td><td>+11.8% unit cost</td><td><span className={styles.risk} data-risk="low">Low</span></td><td><a href="#suppliers" onClick={(event) => { event.preventDefault(); setView("suppliers"); }}>Supplier</a></td></tr>
-          </tbody>
-        </table>
+      <section className={styles.fullMapWorkspace}>
+        <SupplyNetworkMap
+          layer={layer}
+          setLayer={setLayer}
+          selectedMovementId={selectedMovementId}
+          onSelectMovement={setSelectedMovementId}
+          layers={networkLayers}
+          setLayers={setNetworkLayers}
+        />
       </section>
     </div>
   );

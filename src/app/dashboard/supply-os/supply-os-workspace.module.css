@@ -853,6 +853,1211 @@
   text-align: right;
 }
 
+/* Enterprise control tower */
+
+.commandBar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 142px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.commandBar > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.commandLabel {
+  display: grid;
+  gap: 2px;
+}
+
+.commandLabel span,
+.operationsHeader span,
+.exposurePanel header span,
+.coveragePanel header span,
+.movementLedger header span,
+.movementTimeline header span,
+.mapFilters header span,
+.filterGroup > span,
+.filterSummary span,
+.inspectorHeader > div span {
+  color: var(--text-3);
+  font-size: 8px;
+  font-weight: 780;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.commandLabel strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.commandBar textarea {
+  width: 100%;
+  min-height: 38px;
+  max-height: 74px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  outline: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 7px 9px;
+}
+
+.commandBar textarea:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+.controlTower {
+  display: grid;
+  grid-template-columns: minmax(430px, 0.82fr) minmax(600px, 1.18fr);
+  min-height: 690px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.operationsPane {
+  min-width: 0;
+  overflow: auto;
+  border-right: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.operationsHeader {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--border);
+}
+
+.operationsHeader h2 {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.operationsHeader > div:last-child {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.operationsHeader > div:last-child strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.operationsHeader > div:last-child small {
+  color: var(--text-3);
+  font-size: 8px;
+}
+
+.exceptionBand {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.exceptionBand > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1fr auto;
+  gap: 1px 5px;
+  padding: 8px 9px 7px;
+  border-right: 1px solid var(--border);
+  box-shadow: inset 0 2px 0 var(--border-strong);
+}
+
+.exceptionBand > div:last-child {
+  border-right: 0;
+}
+
+.exceptionBand > div[data-tone="danger"] {
+  box-shadow: inset 0 2px 0 var(--danger);
+}
+
+.exceptionBand > div[data-tone="warning"] {
+  box-shadow: inset 0 2px 0 var(--warning);
+}
+
+.exceptionBand > div[data-tone="success"] {
+  box-shadow: inset 0 2px 0 var(--success);
+}
+
+.exceptionBand > div[data-tone="neutral"] {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.exceptionBand span {
+  align-self: end;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 8px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.exceptionBand strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  color: var(--text);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.exceptionBand small {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analyticsBand {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(150px, 0.55fr);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.exposurePanel,
+.coveragePanel {
+  min-width: 0;
+  padding: 9px 10px 10px;
+}
+
+.exposurePanel {
+  border-right: 1px solid var(--border);
+}
+
+.exposurePanel header,
+.coveragePanel header,
+.movementLedger > header,
+.movementTimeline > header {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exposurePanel header a,
+.movementLedger > header a,
+.movementTimeline > header a {
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.exposureRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 4px 8px;
+  padding: 5px 0;
+}
+
+.exposureRow > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.exposureRow strong,
+.coveragePanel header strong {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exposureRow small {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exposureRow > span {
+  align-self: end;
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.exposureRow > i {
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.exposureRow > i b {
+  display: block;
+  height: 100%;
+  background: var(--brand-hover);
+}
+
+.coverageChart {
+  position: relative;
+  display: grid;
+  width: 76px;
+  height: 76px;
+  margin: 2px auto 4px;
+  place-items: center;
+}
+
+.coverageChart svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.coverageChart circle {
+  fill: none;
+  stroke-width: 8;
+}
+
+.coverageTrack {
+  stroke: var(--surface-3);
+}
+
+.coverageOwned {
+  stroke: var(--brand-hover);
+  stroke-dasharray: 78.5 157;
+}
+
+.coverageExisting {
+  stroke: var(--accent);
+  stroke-dasharray: 78.5 157;
+  stroke-dashoffset: -78.5;
+}
+
+.coverageChart > div {
+  z-index: 1;
+  display: grid;
+  gap: 1px;
+  text-align: center;
+}
+
+.coverageChart strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.coverageChart small {
+  color: var(--text-3);
+  font-size: 7px;
+}
+
+.coveragePanel ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coveragePanel li {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+  font-size: 8px;
+}
+
+.coveragePanel li i {
+  width: 6px;
+  height: 6px;
+  background: var(--brand-hover);
+}
+
+.coveragePanel li i[data-tone="accent"] {
+  background: var(--accent);
+}
+
+.coveragePanel li strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.movementLedger,
+.movementTimeline {
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.movementLedger > header,
+.movementTimeline > header {
+  padding: 7px 10px 6px;
+}
+
+.movementLedger > header > div,
+.movementTimeline > header > div {
+  display: grid;
+  gap: 1px;
+}
+
+.movementLedger > header strong,
+.movementTimeline > header strong {
+  color: var(--text);
+  font-size: 9px;
+}
+
+.movementTable {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.movementTableHead,
+.movementTable > a {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) 74px 84px;
+  align-items: center;
+  gap: 7px;
+}
+
+.movementTableHead {
+  min-height: 23px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 7px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.movementTable > a {
+  min-height: 39px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+}
+
+.movementTable > a:last-child {
+  border-bottom: 0;
+}
+
+.movementTable > a:hover,
+.movementTable > a[data-active="true"] {
+  background: var(--accent-light);
+}
+
+.movementTable > a[data-active="true"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.movementTable > a > span:not(.movementStatus) {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.movementTable > a strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movementTable > a small {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movementStatus {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--neutral-bg);
+  color: var(--text-2);
+  font-size: 8px;
+  font-weight: 750;
+  line-height: 1;
+  padding: 4px 5px;
+  white-space: nowrap;
+}
+
+.movementStatus[data-tone="danger"] {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.movementStatus[data-tone="warning"] {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.movementStatus[data-tone="success"] {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.movementTimeline > div {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 7px 10px 9px;
+}
+
+.movementTimeline article {
+  position: relative;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+  padding-right: 6px;
+}
+
+.movementTimeline article::before {
+  position: absolute;
+  top: 5px;
+  right: 0;
+  left: 6px;
+  height: 1px;
+  background: var(--border-strong);
+  content: "";
+}
+
+.movementTimeline article:last-child::before {
+  display: none;
+}
+
+.movementTimeline article > i {
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin-top: 1px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--border-strong);
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.movementTimeline article[data-state="complete"] > i {
+  background: var(--success);
+  box-shadow: 0 0 0 1px var(--success-border);
+}
+
+.movementTimeline article[data-state="current"] > i {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-border);
+}
+
+.movementTimeline article[data-state="blocked"] > i {
+  background: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger-border);
+}
+
+.movementTimeline article > div {
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding-top: 14px;
+}
+
+.movementTimeline article strong,
+.movementTimeline article small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movementTimeline article strong {
+  color: var(--text-2);
+  font-size: 8px;
+}
+
+.movementTimeline article small {
+  color: var(--text-3);
+  font-size: 7px;
+}
+
+.movementTimeline article > span {
+  grid-column: 2;
+  width: fit-content;
+  color: var(--text-3);
+  font-size: 7px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.overviewMap,
+.fullMapWorkspace {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.fullMapWorkspace {
+  min-height: 720px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+}
+
+.mapDataNotice {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 650;
+  padding: 5px 7px;
+}
+
+.mapFigure,
+.mapFigure[data-compact="true"] {
+  position: relative;
+  height: 100%;
+  min-height: 690px;
+  overflow: hidden;
+  margin: 0;
+  background: #dfeaf3;
+  isolation: isolate;
+}
+
+.fullMapWorkspace .mapFigure {
+  min-height: 720px;
+}
+
+.mapFigure svg,
+.mapFigure[data-compact="true"] svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.mapOcean {
+  fill: #dfeaf3;
+}
+
+.mapGrid {
+  stroke: #b7cad9;
+  stroke-dasharray: 2 8;
+  stroke-width: 0.7;
+}
+
+.mapLand {
+  fill: #edf3f7;
+  stroke: #a9bece;
+  stroke-width: 0.8;
+}
+
+.mapToolbar {
+  position: absolute;
+  z-index: 8;
+  top: 10px;
+  right: 10px;
+  left: 52px;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto auto;
+  align-items: start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.mapToolbar > * {
+  pointer-events: auto;
+}
+
+.mapSearch {
+  position: relative;
+  width: min(360px, 100%);
+}
+
+.mapSearch > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.mapSearch input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid rgba(10, 31, 58, 0.22);
+  border-radius: 3px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 7px rgba(10, 31, 58, 0.12);
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+  padding: 0 10px;
+}
+
+.mapSearch input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light), 0 2px 7px rgba(10, 31, 58, 0.12);
+}
+
+.mapSearchResults {
+  position: absolute;
+  z-index: 11;
+  top: 36px;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  border: 1px solid rgba(10, 31, 58, 0.22);
+  border-radius: 3px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgba(10, 31, 58, 0.15);
+}
+
+.mapSearchResults a {
+  display: grid;
+  gap: 1px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+}
+
+.mapSearchResults a:last-child {
+  border-bottom: 0;
+}
+
+.mapSearchResults a:hover {
+  background: var(--surface-2);
+}
+
+.mapSearchResults strong {
+  color: var(--text);
+  font-size: 9px;
+}
+
+.mapSearchResults small {
+  color: var(--text-3);
+  font-size: 8px;
+}
+
+.mapLayerTabs {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(10, 31, 58, 0.22);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 7px rgba(10, 31, 58, 0.1);
+}
+
+.mapLayerTabs a {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 0 9px;
+  border-right: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 8px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.mapLayerTabs a:last-child {
+  border-right: 0;
+}
+
+.mapLayerTabs a:hover,
+.mapLayerTabs a[data-active="true"] {
+  background: var(--brand);
+  color: #ffffff;
+}
+
+.filterControl {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(10, 31, 58, 0.22);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 7px rgba(10, 31, 58, 0.1);
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.filterControl span {
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 2px;
+  background: var(--brand);
+  color: #ffffff;
+  font-size: 8px;
+}
+
+.mapToolRail {
+  position: absolute;
+  z-index: 7;
+  top: 52px;
+  left: 10px;
+  display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(10, 31, 58, 0.22);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 3px 9px rgba(10, 31, 58, 0.12);
+}
+
+.mapToolRail a {
+  display: grid;
+  width: 34px;
+  height: 32px;
+  place-items: center;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 7px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.mapToolRail a:last-child {
+  border-bottom: 0;
+}
+
+.mapToolRail a:hover,
+.mapToolRail a[data-active="true"] {
+  background: var(--brand);
+  color: #ffffff;
+}
+
+.networkRoute {
+  cursor: pointer;
+  transition: opacity 140ms ease, stroke-width 140ms ease;
+}
+
+.selectedRoute {
+  opacity: 1;
+}
+
+.unselectedRoute {
+  opacity: 0.38;
+}
+
+.mapRoutes g:hover .networkRoute,
+.mapRoutes g:focus .networkRoute {
+  opacity: 1;
+}
+
+.primaryRoute {
+  stroke: var(--brand);
+  stroke-width: 3.2;
+}
+
+.secondaryRoute {
+  stroke: var(--accent);
+  stroke-dasharray: 5 4;
+  stroke-width: 2.2;
+}
+
+.feederRoute {
+  stroke: #566c80;
+  stroke-width: 2;
+}
+
+.referenceRoute {
+  fill: none;
+  stroke: #7893a7;
+  stroke-dasharray: 3 5;
+  stroke-linecap: round;
+  stroke-width: 1.2;
+  opacity: 0.6;
+}
+
+.mapFigure[data-layer="risk"] .selectedRoute {
+  stroke: var(--danger);
+}
+
+.mapFigure[data-layer="cost"] .selectedRoute {
+  stroke-width: 5;
+}
+
+.riskZones ellipse {
+  fill: rgba(154, 53, 47, 0.13);
+  stroke: rgba(154, 53, 47, 0.55);
+  stroke-dasharray: 3 3;
+  stroke-width: 1.2;
+}
+
+.movementMarkers polygon {
+  fill: var(--accent);
+  stroke: #ffffff;
+  stroke-width: 1.2;
+  opacity: 0.58;
+}
+
+.movementMarkers polygon[data-selected="true"] {
+  fill: var(--brand);
+  opacity: 1;
+}
+
+.pointHalo {
+  fill: rgba(255, 255, 255, 0.9);
+  stroke: #8299ab;
+  stroke-width: 1;
+}
+
+.mapPoints circle[data-kind="chokepoint"] {
+  fill: var(--warning);
+}
+
+.mapPoints text {
+  fill: #13283e;
+  stroke: #edf3f7;
+  stroke-width: 3.2;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.mapFilters,
+.mapInspector {
+  position: absolute;
+  z-index: 7;
+  overflow: hidden;
+  border: 1px solid rgba(10, 31, 58, 0.28);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 6px 18px rgba(10, 31, 58, 0.16);
+}
+
+.mapFilters {
+  top: 52px;
+  right: 10px;
+  width: 196px;
+}
+
+.mapFilters header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--brand);
+}
+
+.mapFilters header > div {
+  display: grid;
+  gap: 1px;
+}
+
+.mapFilters header span {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.mapFilters header strong {
+  color: #ffffff;
+  font-size: 10px;
+}
+
+.mapFilters header a {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.filterGroup {
+  padding: 8px 9px 7px;
+}
+
+.filterGroup > span {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.filterGroup label {
+  display: grid;
+  min-height: 28px;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.filterGroup label input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.filterGroup label i {
+  display: grid;
+  width: 13px;
+  height: 13px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--surface);
+}
+
+.filterGroup label input:checked + i {
+  border-color: var(--brand);
+  background: var(--brand);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+
+.filterGroup label input:focus-visible + i {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.filterGroup label strong {
+  color: var(--text-2);
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.filterGroup label small {
+  color: var(--text-3);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.filterSummary {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.filterSummary strong {
+  color: var(--text);
+  font-size: 9px;
+}
+
+.filterSummary small {
+  color: var(--text-3);
+  font-size: 7px;
+}
+
+.mapInspector {
+  bottom: 31px;
+  left: 52px;
+  width: 304px;
+}
+
+.inspectorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px 6px;
+}
+
+.inspectorHeader > div {
+  display: grid;
+  gap: 1px;
+}
+
+.inspectorHeader > div strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.mapInspector > h3 {
+  margin: 0;
+  padding: 0 9px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.mapInspector > p {
+  margin: 2px 0 0;
+  padding: 0 9px 7px;
+  color: var(--text-3);
+  font-size: 8px;
+}
+
+.mapInspector dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+
+.mapInspector dl > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  padding: 6px 8px;
+  border-right: 1px solid var(--border);
+}
+
+.mapInspector dl > div:first-child {
+  grid-column: 1 / -1;
+  border-right: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mapInspector dl > div:last-child {
+  border-right: 0;
+}
+
+.mapInspector dt {
+  color: var(--text-3);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.mapInspector dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 8px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movementQuickList {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.movementQuickList a {
+  display: grid;
+  min-height: 27px;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+}
+
+.movementQuickList a:last-child {
+  border-bottom: 0;
+}
+
+.movementQuickList a:hover,
+.movementQuickList a[data-active="true"] {
+  background: var(--accent-light);
+}
+
+.movementQuickList span,
+.movementQuickList small {
+  color: var(--text-3);
+  font-size: 7px;
+}
+
+.movementQuickList strong {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapZoom {
+  position: absolute;
+  z-index: 7;
+  right: 10px;
+  bottom: 31px;
+  display: grid;
+  justify-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(10, 31, 58, 0.22);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 3px 9px rgba(10, 31, 58, 0.12);
+}
+
+.mapZoom a {
+  display: grid;
+  width: 28px;
+  height: 26px;
+  place-items: center;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.mapZoom span {
+  display: grid;
+  width: 28px;
+  height: 18px;
+  place-items: center;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mapFigure figcaption {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 9px;
+  border-top: 1px solid rgba(10, 31, 58, 0.18);
+  background: rgba(247, 250, 252, 0.92);
+  color: #5d7285;
+  font-size: 7px;
+}
+
+.mapFigure[data-compact="true"] .mapInspector {
+  width: 270px;
+}
+
 @media (max-width: 1050px) {
   .overviewGrid,
   .supplierGrid,
@@ -862,6 +2067,19 @@
 
   .mapFigure[data-compact="true"] svg {
     min-height: 240px;
+  }
+
+  .controlTower {
+    grid-template-columns: 1fr;
+  }
+
+  .operationsPane {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .overviewMap .mapFigure {
+    min-height: 610px;
   }
 }
 
@@ -883,6 +2101,14 @@
     grid-template-columns: 1fr;
   }
 
+  .commandBar {
+    grid-template-columns: 1fr;
+  }
+
+  .commandBar .primaryButton {
+    width: 100%;
+  }
+
   .requestBar .primaryButton {
     width: 100%;
   }
@@ -902,6 +2128,113 @@
   .mapFigure svg,
   .mapFigure[data-compact="true"] svg {
     min-height: 0;
+  }
+
+  .analyticsBand {
+    grid-template-columns: 1fr;
+  }
+
+  .exposurePanel {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .coveragePanel {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .coveragePanel header {
+    grid-column: 1 / -1;
+  }
+
+  .coverageChart {
+    margin: 0;
+  }
+
+  .coveragePanel ul {
+    min-width: 150px;
+  }
+
+  .movementTimeline > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .movementTimeline article {
+    grid-template-columns: 12px minmax(0, 1fr) auto;
+    min-height: 40px;
+    padding: 0;
+  }
+
+  .movementTimeline article::before {
+    top: 7px;
+    bottom: -3px;
+    left: 4px;
+    width: 1px;
+    height: auto;
+  }
+
+  .movementTimeline article > div {
+    padding: 0 0 8px;
+  }
+
+  .movementTimeline article > span {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .mapFigure,
+  .mapFigure[data-compact="true"],
+  .overviewMap .mapFigure,
+  .fullMapWorkspace .mapFigure {
+    min-height: 590px;
+  }
+
+  .mapToolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mapLayerTabs {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+
+  .mapSearch {
+    width: 100%;
+  }
+
+  .mapFilters {
+    top: 90px;
+    right: 8px;
+    width: 184px;
+  }
+
+  .mapFigure[data-compact="true"] .mapFilters {
+    display: none;
+  }
+
+  .mapInspector,
+  .mapFigure[data-compact="true"] .mapInspector {
+    right: 8px;
+    bottom: 29px;
+    left: 52px;
+    width: auto;
+  }
+
+  .movementQuickList {
+    display: none;
+  }
+
+  .mapZoom {
+    right: 8px;
+    bottom: 29px;
+  }
+
+  .mapInspector + .mapZoom {
+    display: none;
   }
 
   .mapPoints text {
