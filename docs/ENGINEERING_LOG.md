@@ -17,6 +17,33 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-06 - Rebuild Supply OS as a customer command center
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Replace the sparse Supply OS presentation with a dense customer-facing
+  operating picture informed by Kpler and Windward patterns.
+- Files changed: the Supply OS workspace and scoped stylesheet, command model,
+  three Supply OS regression tests, package scripts, architecture decision,
+  engineering log, and handoff.
+- Verification: all three Supply OS tests and TypeScript pass. Browser QA covered
+  all six views, objective recompute, exception synchronization, review state,
+  map search and layers, quote approval, execution gates, authority controls,
+  responsive layouts, and console errors.
+- Integrity checks cover movement-scoped assessment resolution, separate
+  Yantian and Shanghai quote sets, honest no-quote states, country of origin,
+  and prevention of cross-movement quote approvals in execution.
+- Failed/skipped checks: targeted ESLint could not run because this repository
+  has no `eslint.config.*` for its installed ESLint 9. Live provider behavior
+  was not tested because no live provider or write path is part of this
+  prototype.
+- Caveats: all operational records, rates, risk areas, locations, evidence,
+  confidence, and events on the page are modeled or fictional. The interface
+  explicitly says no AIS, GPS, carrier, customs, or port feed is connected.
+- Follow-up: project office-scoped customer records into this interface, then
+  add provider adapters and human-approved actions without weakening source
+  provenance or tenant boundaries.
+
 ### 2026-07-29 - Separate liveness failures from queue degradation
 
 - Branch: find-hardware-import-data

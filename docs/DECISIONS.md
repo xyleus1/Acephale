@@ -1302,3 +1302,33 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: production evaluations show a task-specific model improves
   measurable accuracy, latency, or cost enough to justify a documented
   exception.
+
+### 2026-08-06 - Supply OS uses a scoped customer command-center language
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first Supply OS prototype proved the workflow but looked like a
+  generic dashboard. A customer-facing resilience product needs a clear
+  operating picture, faster exception recognition, dense evidence, and an
+  explicit boundary between modeled intelligence and connected live data.
+- Decision: Keep the authenticated Supply OS inside the existing Derya shell,
+  but give the workspace its own dark command-center design language. Make the
+  real Natural Earth map, ranked exceptions, selected entity dossier, evidence,
+  and recommended action the command surface. Reuse that state across network,
+  supplier, procurement, execution, and authority views. Every surface must
+  distinguish fictional or modeled records from connected feeds and external
+  actions. Movement-scoped intelligence must fail closed: when an assessment,
+  quote set, or approval does not belong to the selected movement, show its own
+  fallback or an honest empty state instead of borrowing another record.
+- Rationale: Kpler-style geospatial density and Windward-style anomaly dossiers
+  support fast operational decisions, while Derya differentiates through the
+  full supplier-to-execution workflow and explicit delegation policy. Scoping
+  the visual language avoids destabilizing the internal application shell.
+- Consequences: Supply OS may be visually denser and darker than the rest of
+  the product. It still uses canonical geography, deterministic local state,
+  no provider calls, no server actions, and no external writes in the current
+  prototype. Tablet and mobile layouts must stack the operating surfaces rather
+  than crop the desktop canvas.
+- Revisit when: real office-scoped customer records and provider events are
+  connected, or when customer testing shows that a specific data layer needs a
+  different default hierarchy.

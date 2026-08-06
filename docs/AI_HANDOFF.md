@@ -8,6 +8,78 @@
 
 ## Branch
 
+crm-status-structure, targeting main
+
+## Task implemented
+
+### Supply OS customer command center
+
+The authenticated Supply OS is now a customer-facing logistics command center
+informed by Kpler and Windward product patterns without copying either product.
+
+- Command combines a ranked exception queue, real Natural Earth map, selected
+  movement dossier, confidence, evidence, next action, saved watches, and a
+  compact network event stream.
+- Network expands the same supply graph with tracked movements and a port,
+  supplier, crossing, or destination dossier.
+- Supplier intelligence combines dependency, performance, document quality,
+  capacity, price, facility, gateway, audit, and resilience actions.
+- Procurement normalizes movement-scoped modeled offers against lane history,
+  reliability, free time, transit, emissions, cost, and delivery buffer. The
+  Yantian and Shanghai decisions have distinct quote sets and lane evidence.
+- Execution keeps chronology, custody, customs packet state, evidence, and the
+  transport approval gate in one record.
+- Authority makes observe, assist, coordinate, and execute boundaries explicit
+  per action class. High-risk commitments remain human-gated.
+- The dark command-center language is scoped to Supply OS. It does not change
+  the internal Derya shell or introduce a green theme.
+- Desktop, tablet, and mobile now have deliberate layouts. Narrow screens
+  stack the exception queue, map, dossier, and event stream instead of
+  cropping a desktop canvas.
+- Every live-looking surface states that its records are fictional or modeled.
+  No AIS, GPS, carrier, customs, port, booking, messaging, filing, persistence,
+  or external write path was added.
+- Movement selection now scopes the assessment, quote approval, execution
+  partner, and customs origin. Missing quote evidence produces an honest empty
+  state instead of borrowing another movement's data.
+
+## Files changed
+
+- `src/app/dashboard/supply-os/supply-os-workspace.tsx`
+- `src/app/dashboard/supply-os/supply-os-workspace.module.css`
+- `src/lib/supply-os-command-model.ts`
+- `scripts/supply-os-command-model.test.ts`
+- `scripts/supply-os-enterprise-design.test.ts`
+- `scripts/supply-os-prototype.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
+
+## Verification passed
+
+- `npm run test:supply-os-prototype`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-command-model`
+- `npx tsc --noEmit`
+- production `npm run build` with non-secret local placeholders
+- Browser interaction checks for objectives, exceptions, review state, search,
+  map modes, layers, quote approval, execution gates, and authority controls
+- Browser screenshots at 1440 by 900, 1280 by 800, 768 by 1024, and 375 by 812
+- Browser console check with no application errors
+
+## Caveats
+
+- This remains a client-side modeled workspace. Production data must come from
+  office-scoped canonical records with source provenance and approval-aware
+  actions.
+
+## Previous Update
+
+## Date
+
+2026-08-06
+
+## Branch
+
 crm-status-structure, merged with current main
 
 ## Commit
@@ -69,7 +141,7 @@ enterprise maritime control towers instead of a sparse card dashboard.
   Live implementation still requires canonical office-scoped records,
   provider adapters, provenance, and approval-gated actions.
 
-## Previous Update
+## Earlier Update
 
 ## Date
 
