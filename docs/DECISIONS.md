@@ -16,6 +16,33 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-06 - Supply OS demos start from a generated customer case
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The command-center prototype displayed dense fictional operations
+  before the user identified a customer. Several controls changed only local
+  labels, and six separate views made the demo look broader than its working
+  behavior.
+- Decision: Make one natural-language customer prompt the start of the Supply
+  OS demo. Generate a single scrollable dashboard containing normalized company
+  facts, a supply route, supplier search briefs, indicative forwarder options,
+  customs checks, risks, and open questions. Save and browse demo dashboards in
+  versioned browser storage only. Keep one discreet demo disclosure and mark
+  every unsourced or missing claim for verification.
+- Rationale: A customer can understand the product by watching their own supply
+  case appear. One complete flow is more credible than multiple disconnected
+  tabs, fake telemetry, or disabled controls.
+- Consequences: Browser saves do not create or link CRM companies, persist to
+  Prisma, publish to a customer portal, or authorize any supplier, forwarder,
+  broker, customs, booking, or spend action. Local keys are namespaced by the
+  authenticated office and user, but this is not a substitute for
+  server-enforced tenancy. The future server implementation should use
+  office-scoped cases and immutable snapshots with explicit company linking and
+  allowlisted customer projection.
+- Revisit when: shared case persistence, live provider evidence, or explicit
+  customer access is approved.
+
 ### 2026-08-06 - Supply OS is an authenticated dashboard workspace
 
 - Status: accepted

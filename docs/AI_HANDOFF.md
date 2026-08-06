@@ -12,6 +12,93 @@ crm-status-structure, targeting main
 
 ## Task implemented
 
+### Supply OS customer-case builder and saved dashboard flow
+
+Supply OS now starts with the customer instead of a prebuilt fictional command
+center. An operator can describe what a company does, where it operates, what
+it needs to source, likely source regions, and delivery markets in one prompt.
+The page generates one coherent case and scrolls to the result.
+
+- The six disconnected command-center tabs, fake coverage metrics, model
+  timestamp, briefing control, watches, exports, and repeated prototype copy
+  were removed.
+- The generated case contains normalized company facts, a Natural Earth route
+  with supplier, gateway, conditional customs, and destination nodes, supplier
+  search briefs, three indicative forwarder options, operating risks, customs
+  checks, open questions, and one recommended first move.
+- Missing facts fail closed as `needs_confirmation`. Inferred supplier
+  profiles, gateways, forwarder choices, schedules, prices, and customs checks
+  never present themselves as confirmed or live.
+- DHL Global Forwarding, Kuehne+Nagel, and DSV appear only as indicative
+  comparison options. The page states that no rate, capacity, schedule,
+  reliability result, provider response, or booking is connected.
+- Generated dashboards can be saved, reopened, and browsed from versioned
+  browser storage namespaced by the signed-in office and user. Saving does not
+  create a CRM company, link a tenant record, publish anything to a customer
+  portal, or write to the server.
+- Free-form parsing covers the natural-language example, direct and tentative
+  ship-to phrases, city and state pairs, and missing fields. Unknown geography
+  stays unmodeled instead of becoming a false international lane.
+- Route generation wraps Pacific paths at the date line, uses source-aware
+  gateways, separates domestic, intra-EU, cross-border road, and import lanes,
+  and limits US-specific customs and tariff checks to US-bound cases.
+- The page is one scrollable customer flow with route, suppliers, shipping,
+  and customs and risk anchors. Empty product tabs and disabled controls are
+  gone.
+- The graphite visual system, limited semantic palette, real Natural Earth
+  geography, scoped form-control styling, and desktop, tablet, and mobile
+  layouts remain.
+
+## Files changed
+
+- `src/lib/supply-os-case-model.ts`
+- `src/app/dashboard/supply-os/supply-os-workspace.tsx`
+- `src/app/dashboard/supply-os/supply-os-workspace.module.css`
+- `src/app/dashboard/supply-os/page.tsx`
+- `scripts/supply-os-case-model.test.ts`
+- `scripts/supply-os-prototype.test.ts`
+- `scripts/supply-os-enterprise-design.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
+
+## Verification passed
+
+- `npm run test:supply-os-case-model`
+- `npm run test:supply-os-prototype`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-command-model`
+- `npx tsc --noEmit --incremental false`
+- `DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/derya_build' AUTH_SECRET='local-build-secret-only' npm run build`
+- Browser generation from the example and a separate medtech prompt
+- Browser save, second-case save, saved-case switching, and reload persistence
+- Browser incomplete-input behavior with explicit missing questions
+- Browser layout and overflow checks at 1440, 1024, and 390 pixel widths
+- Browser keyboard-focus and clean-console checks
+
+## Caveats
+
+- Saved dashboards are local to one browser and namespaced by office and user.
+  They are not shared, backed up, protected by server-enforced tenant records,
+  linked to CRM companies, or customer-visible.
+- This is deterministic demo generation, not live supplier discovery, rate
+  retrieval, customs advice, or provider execution.
+- A production version needs office-scoped `SupplyCase` records with immutable
+  snapshots, server-created provenance, explicit CRM linking, and an allowlisted
+  customer projection. It must preserve human approval for outbound or
+  operational actions.
+
+## Previous Update
+
+## Date
+
+2026-08-06
+
+## Branch
+
+crm-status-structure, targeting main
+
+## Task implemented
+
 ### Supply OS command center with Pallet-style visual restraint
 
 The authenticated Supply OS is now a customer-facing logistics command center

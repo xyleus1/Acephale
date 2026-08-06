@@ -3236,3 +3236,39 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Connect the surface to office-scoped canonical supplier, product,
   lane, quote, shipment, and approval records only after those contracts are
   approved.
+
+### 2026-08-06 - Replace the Supply OS command demo with customer-case generation
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Start Supply OS from a customer description, generate one coherent
+  sourcing and logistics dashboard, and let the operator save and reopen demo
+  cases.
+- Files changed: deterministic case model, Supply OS workspace and scoped
+  stylesheet, page metadata, three Supply OS regression tests, package script,
+  decisions, engineering log, and handoff.
+- Behavior: one prompt now produces normalized customer facts, supplier and
+  gateway nodes, conditional customs checkpoints, route legs, supplier search
+  briefs, indicative forwarder comparisons, risks, customs readiness checks,
+  and missing questions. Results scroll into view and can be saved in versioned
+  browser storage.
+- Trust boundary: no CRM company is created or linked. No Prisma, server action,
+  provider request, booking, filing, message, or customer publication was
+  added. Missing and inferred facts stay marked for confirmation or review.
+- Local persistence: browser keys include `officeId` and `userId`, stale-tab
+  saves merge against current storage, storage failures remain non-fatal, and
+  legacy unscoped demo keys are removed rather than ambiguously migrated.
+- Route trust: unresolved geography stays unmodeled. Domestic and intra-EU
+  lanes omit import customs, Mexico-US lanes use a border-road model, Pacific
+  routes wrap at the date line, and destination-specific checks avoid applying
+  US rules to non-US imports.
+- Verification: Supply OS model, prototype, design, and prior command-model
+  tests pass with TypeScript and the production build. Browser QA covered the
+  example, a separate medtech company, missing inputs, save and reopen, refresh
+  persistence, route-node selection, and desktop, tablet, and mobile overflow.
+- Caveats: local browser storage is for the demo only. It is namespaced by
+  office and user but is not shared or protected by server-enforced tenancy.
+  Production persistence needs office-scoped cases, immutable snapshots,
+  server-created provenance, explicit CRM linking, and customer-safe projection.
+- Follow-up: validate the demo with customers before adding shared persistence
+  or live supplier, rate, customs, and forwarder adapters.
