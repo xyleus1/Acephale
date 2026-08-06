@@ -12,10 +12,34 @@ crm-status-structure, targeting main
 
 ## Task implemented
 
-### Supply OS customer command center
+### Supply OS command center with Pallet-style visual restraint
 
 The authenticated Supply OS is now a customer-facing logistics command center
-informed by Kpler and Windward product patterns without copying either product.
+that combines Kpler and Windward operating density with Pallet's visual
+discipline without copying any of those products.
+
+- The stylesheet now uses a deliberate graphite surface system, one muted
+  interactive accent, and red, amber, or sage only for real operating states.
+  The explicit palette fell from 373 improvised values to 56 controlled tokens.
+- Decorative radial highlights, route glows, color-washed cards, and multicolor
+  chart bands are gone. Selected objects use weight, contrast, and a quiet edge
+  indicator instead of neon decoration.
+- The duplicate map tool rail and redundant operating-picture plate are gone.
+  Search, analysis mode, time range, layers, zoom, legend, and the selected-node
+  plate remain available in one clear control hierarchy.
+- Exception rows, evidence, signal summaries, tables, and secondary dossiers
+  have flatter grouping, larger working text, and fewer boxed subsections.
+- The evidence ledger is collapsed by default, keeping provenance one click
+  away without letting it dominate the current decision.
+- A stable Supply OS root scope now prevents old global button and input theme
+  rules from overriding the customer workspace. Zero-specificity `:where()`
+  exclusions preserve the cascade on every other page, while Supply OS keeps a
+  neutral keyboard focus ring. The module adds no `!important` workaround.
+- The command layout stacks at 1040 pixels, so common tablet widths no longer
+  show a horizontally clipped three-column canvas.
+- Regression coverage now caps palette drift and rejects decorative radial
+  highlights, glowing map treatments, duplicated map controls, and lost global
+  style isolation.
 
 - Command combines a ranked exception queue, real Natural Earth map, selected
   movement dossier, confidence, evidence, next action, saved watches, and a
@@ -47,12 +71,9 @@ informed by Kpler and Windward product patterns without copying either product.
 
 - `src/app/dashboard/supply-os/supply-os-workspace.tsx`
 - `src/app/dashboard/supply-os/supply-os-workspace.module.css`
-- `src/lib/supply-os-command-model.ts`
-- `scripts/supply-os-command-model.test.ts`
+- `src/app/globals.css`
 - `scripts/supply-os-enterprise-design.test.ts`
-- `scripts/supply-os-prototype.test.ts`
-- `package.json`
-- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
 
 ## Verification passed
 
@@ -63,8 +84,8 @@ informed by Kpler and Windward product patterns without copying either product.
 - production `npm run build` with non-secret local placeholders
 - Browser interaction checks for objectives, exceptions, review state, search,
   map modes, layers, quote approval, execution gates, and authority controls
-- Browser screenshots at 1440 by 900, 1280 by 800, 768 by 1024, and 375 by 812
-- Browser console check with no application errors
+- Browser screenshots of the command surface at desktop, 1024 by 900, and
+  390 by 844, plus visual review of all six workspace views
 
 ## Caveats
 

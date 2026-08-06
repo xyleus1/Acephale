@@ -619,19 +619,6 @@ function MapWorkspace({
         </button>
       </div>
 
-      <div className={styles.mapToolRail} aria-label="Map controls">
-        <button type="button" onClick={() => setZoom(1)}><Icon name="grid" size={13} /><span>Global</span></button>
-        <button type="button" onClick={() => setZoom(1.35)}><Icon name="activity" size={13} /><span>Route</span></button>
-        <button type="button" data-active={mapMode === "risk"} onClick={() => setMapMode("risk")}><Icon name="alert" size={13} /><span>Risk</span></button>
-        <button type="button" data-active={mapMode === "customs"} onClick={() => setMapMode("customs")}><Icon name="shield" size={13} /><span>Customs</span></button>
-      </div>
-
-      <div className={styles.mapScopePlate}>
-        <span>Operating picture</span>
-        <strong>Global inbound network</strong>
-        <small>{timeRange} horizon / 6 active plans / 25 nodes</small>
-      </div>
-
       <svg viewBox={viewBox} role="img" aria-label="Modeled supply network with suppliers, ports, routes, customs crossings, and risk areas">
         <rect width="1000" height="500" className={styles.mapOcean} />
         <g className={styles.mapGrid}>
@@ -809,7 +796,7 @@ export function SupplyOsWorkspace() {
   }
 
   return (
-    <div className={styles.workspace}>
+    <div className={`${styles.workspace} supply-os-workspace`}>
       <header className={styles.workspaceHeader}>
         <div className={styles.titleBlock}>
           <span>Atlas Robotics / Global inbound</span>
@@ -1012,7 +999,7 @@ function CommandView({
               </button>
             </div>
           </section>
-          <details className={styles.evidenceLedger} open>
+          <details className={styles.evidenceLedger}>
             <summary>Evidence ledger <span>{selectedMovement.evidence.length}</span></summary>
             {selectedMovement.evidence.map((item) => <div key={item.source}><i /><span><strong>{item.source}</strong><small>{item.age} ago</small></span><em>{item.confidence}</em></div>)}
           </details>

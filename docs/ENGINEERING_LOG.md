@@ -17,6 +17,34 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-06 - Remove decorative color and flatten Supply OS hierarchy
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Keep the dense Supply OS operating model while replacing the improvised
+  tactical color treatment with a restrained, Pallet-informed enterprise
+  system.
+- Files changed: Supply OS workspace and scoped stylesheet, global form and
+  button theme isolation, enterprise design regression test, engineering log,
+  and handoff.
+- Pre-landing review: generic form and button exclusions were converted to
+  zero-specificity `:where()` selectors so the isolation does not strengthen
+  global rules on unrelated pages. Remaining generic button states are scoped
+  out of Supply OS, which now owns its neutral keyboard focus treatment.
+- Verification: all three Supply OS tests, TypeScript, production build, and
+  `git diff --check` pass. Browser QA covered all six views and command layouts
+  at desktop, 1024 by 900, and 390 by 844.
+- Failed/skipped checks: authenticated production behavior was not exercised
+  locally because the design prototype has no production data or provider
+  connection. Browser console history contained unrelated WebGL failures from
+  the Pallet reference tab and a style attribute injected into local inputs by
+  the browser harness.
+- Caveats: operational records remain modeled or fictional. This change does
+  not add live feeds, persistence, booking, filing, messaging, or external
+  writes.
+- Follow-up: connect office-scoped canonical records and provider evidence
+  behind the existing human-approval boundaries before enabling actions.
+
 ### 2026-08-06 - Rebuild Supply OS as a customer command center
 
 - Branch: crm-status-structure, targeting main
