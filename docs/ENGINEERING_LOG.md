@@ -3150,3 +3150,34 @@ Use this file for chronological implementation notes that future agents should s
   are not live vessel, container, or carrier tracking.
 - Follow-up: Replace synthetic records only after office-scoped supplier,
   product, lane, quote, and approval contracts are accepted.
+
+### 2026-08-06 - Rebuild Supply OS as an enterprise map control tower
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commits: `395cc3c`, `194639b`
+- Task: Make Supply OS resemble an enterprise maritime operations product while
+  keeping Derya's current dashboard shell and color system.
+- UI: Replaced the sparse map and decisions-card layout with a split operating
+  console. The left pane now shows exceptions, exposure, quote-source coverage,
+  active modeled movements, and the selected workflow. The right pane is a
+  full-height Natural Earth map with search, filters, analysis modes, risk areas,
+  route focus, zoom, modeled milestones, and a selected-movement inspector.
+- Interaction: Selecting one of four modeled POs updates the workflow, route
+  emphasis, status, and inspector. The Supply map tab expands the same map and
+  preserves the shared selection and filters.
+- Data boundary: Real geography and coordinates remain deterministic and
+  checked in. Every movement, route, date, cost, status, milestone, and risk
+  area is synthetic. The UI states that no live AIS or GPS feed is connected.
+- Safety: No database, tenant, provider, server action, or external write path
+  was added. Existing approval and execution boundaries are unchanged.
+- Design QA: Browser review covered 1280, 768, and 375 pixel widths. Search,
+  movement selection, map modes, layer filters, route focus, and zoom worked
+  without console errors. A local dashboard-shell harness was removed before
+  commit.
+- Verification: `npm run test:supply-os-enterprise-design`, `npm run
+  test:supply-os-prototype`, `npm run test:load-route-map`, `npm run
+  test:customer-portal`, TypeScript, the production build with non-secret
+  placeholders, `git diff --check`, and the changed-text em dash scan passed.
+- Follow-up: Connect the surface to office-scoped canonical supplier, product,
+  lane, quote, shipment, and approval records only after those contracts are
+  approved.

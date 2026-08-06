@@ -16,42 +16,42 @@ see git log
 
 ## Task implemented
 
-### Supply OS integrated dashboard workspace
+### Supply OS enterprise control tower
 
-Supply OS now lives inside the authenticated Derya application instead of
-opening a separate green prototype shell.
+The authenticated Supply OS now uses one dense operating surface modeled on
+enterprise maritime control towers instead of a sparse card dashboard.
 
-- The non-employee sidebar opens `/dashboard/supply-os`. The legacy
-  `/supply-os` URL redirects to that authenticated route.
-- The workspace keeps the existing Derya navy, blue, walnut, and white palette
-  and inherits the product sidebar and topbar. It does not add a second app
-  shell or a second brand color system.
-- The overview is a compact operations screen with one supply request, a
-  status strip, a real Natural Earth geography map, and three pending
-  decisions. It avoids the previous oversized hero, decorative icon tiles,
-  fake KPI wall, and nested dashboard cards.
-- The real map plots synthetic but geographically correct suppliers, origin
-  and receiving ports, a final destination, Pacific route segments, and land
-  connections. It is labeled as a modeled network, not live tracking.
-- Overview, Supply map, Suppliers, Quote room, Execution, and Control remain
-  clickable. Approval and authority changes are local prototype state only.
+- The Overview keeps planning input above a split control tower. The left pane
+  shows exceptions, concentration signals, forwarder coverage, active modeled
+  movements, and the selected workflow without forcing the operator through
+  separate cards.
+- The right pane makes the Natural Earth map the primary workspace. It adds
+  supplier, port, route, milestone, and risk layers; network, risk, and cost
+  analysis modes; supplier and PO search; zoom and route focus; a filter drawer;
+  and a selected-movement inspector.
+- The dedicated Supply map tab expands the same map into a larger operating
+  canvas with a movement selector and the same shared state as Overview.
+- Four modeled movements can be selected. The selected PO updates the route,
+  status, workflow, map emphasis, and inspector across both views.
+- The map uses actual coordinates for suppliers, ports, destinations, and
+  chokepoints. All cargo positions, lanes, costs, dates, status, and risk areas
+  remain synthetic. The UI explicitly says there is no live AIS or GPS feed.
+- The Derya dashboard shell and its navy, blue-gray, walnut, white, and semantic
+  status colors remain unchanged. No green product theme was introduced.
 - The prototype still imports no Prisma client, server action, external
   provider, or write path. It sends, books, files, and persists nothing.
-- The sidebar brand now says only `Derya`.
 
 ## Files changed
 
-- `src/app/dashboard/layout.tsx`
-- `src/app/dashboard/supply-os/page.tsx`
 - `src/app/dashboard/supply-os/supply-os-workspace.tsx`
 - `src/app/dashboard/supply-os/supply-os-workspace.module.css`
-- `scripts/supply-os-prototype.test.ts`
-- `src/app/supply-os/page.tsx`
-- removed the old standalone Supply OS component and stylesheet
-- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
+- `scripts/supply-os-enterprise-design.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
 
 ## Verification passed
 
+- `npm run test:supply-os-enterprise-design`
 - `npm run test:supply-os-prototype`
 - `npm run test:load-route-map`
 - `npm run test:customer-portal`
@@ -59,7 +59,9 @@ opening a separate green prototype shell.
 - production `npm run build` with non-secret local placeholders
 - `git diff --check`
 - changed-text em dash check
-- local desktop and 390 pixel visual review in the real dashboard shell
+- local browser review at 1280, 768, and 375 pixel widths in the dashboard shell
+- movement selection, search, map modes, filters, route focus, and zoom checks
+- browser console error check
 
 ## Caveats
 
