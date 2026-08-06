@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type React from "react";
 import { revalidatePath } from "next/cache";
+import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Icon } from "@/components/icon";
@@ -37,6 +38,7 @@ type SearchParams = Promise<{
   source?: string;
   sourceCategory?: string;
   q?: string;
+  jobId?: string;
 }>;
 
 const REVIEW_STATUSES = ["all", "pending", "acknowledged", "dismissed", "actioned", "expired"];
@@ -214,11 +216,15 @@ function extractionInfo(object: { payload?: Prisma.JsonValue | null } | null | u
   };
 }
 
-function filterHref(overrides: Record<string, string | null | undefined>) {
+function filterHref(
+  overrides: Record<string, string | null | undefined>,
+  linkedJobId?: string
+) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(overrides)) {
     if (value && value !== "all") params.set(key, value);
   }
+  if (linkedJobId) params.set("jobId", linkedJobId);
   const qs = params.toString();
   return `/dashboard/intelligence${qs ? `?${qs}` : ""}`;
 }
@@ -278,6 +284,46 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   const sourceCategoryFilter = (sp.sourceCategory ?? "").trim();
   const query = (sp.q ?? "").trim();
   const queryTokens = query.toLowerCase().split(/[^a-z0-9]+/i).filter((token) => token.length >= 3).slice(0, 5);
+  const requestedJobId = (sp.jobId ?? "").trim();
+  const linkedJob = requestedJobId
+    ? await prisma.job.findFirst({
+        where: {
+          id: requestedJobId,
+          officeId: session.officeId,
+        },
+        select: {
+          id: true,
+          reference: true,
+          inquiryId: true,
+        },
+      })
+    : null;
+  if (requestedJobId && !linkedJob) notFound();
+  const linkedInquiry = linkedJob?.inquiryId
+    ? await prisma.inquiry.findFirst({
+        where: {
+          id: linkedJob.inquiryId,
+          officeId: session.officeId,
+        },
+        select: {
+          id: true,
+        },
+      })
+    : null;
+  const linkedReviewTargets = linkedJob
+    ? [
+        {
+          linkedEntityType: "job",
+          linkedEntityId: linkedJob.id,
+        },
+        ...(linkedInquiry
+          ? [{
+              linkedEntityType: "inquiry",
+              linkedEntityId: linkedInquiry.id,
+            }]
+          : []),
+      ]
+    : null;
   const registry = getMarketIntelligenceSourceRegistry();
   const sourceCategories = [...new Set(registry.map((source) => source.sourceCategory))].sort();
 
@@ -287,6 +333,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         officeId: session.officeId,
         ...(status !== "all" ? { status } : {}),
         ...(category ? { marketSignal: { category } } : {}),
+        ...(linkedReviewTargets ? { OR: linkedReviewTargets } : {}),
       },
       orderBy: [{ createdAt: "desc" }],
       take: 100,
@@ -437,6 +484,23 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         </div>
       </div>
 
+      {linkedJob && (
+        <section className="workbench-section intelligence-section">
+          <div className="workbench-card-header">
+            <div>
+              <h2>Load filter: {linkedJob.reference}</h2>
+              <p>
+                Impact Reviews below are limited to this load and its office-scoped source RFQ.
+                Research and signals remain the broader market evidence feed.
+              </p>
+            </div>
+            <a className="btn btn-secondary btn-sm" href={`/dashboard/jobs/${encodeURIComponent(linkedJob.id)}`}>
+              Back to load
+            </a>
+          </div>
+        </section>
+      )}
+
       {hasNoMarketData && <EmptyIntelligenceMapCta sources={safeManualSources} />}
 
       <WorldIntelligenceMap data={mapData} />
@@ -482,6 +546,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       </section>
 
       <form className="filter-bar" action="/dashboard/intelligence">
+        {linkedJob && <input type="hidden" name="jobId" value={linkedJob.id} />}
         <input name="q" defaultValue={query} placeholder="Search research feed" />
         <select name="status" defaultValue={status}>
           {REVIEW_STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
@@ -534,7 +599,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                 <span>{quality.objectCount} objects / {quality.signalCount} signals / {quality.actionedReviewCount} actioned</span>
                 <span className="muted">{quality.failedRunCount} failed runs / {quality.wrongLinkFeedbackCount} wrong links / {quality.irrelevantFeedbackCount} irrelevant</span>
                 <div className="intelligence-actions">
-                  <a className="btn btn-secondary btn-sm" href={filterHref({ status, category, severity, sourceCategory: sourceCategoryFilter, q: query, source: quality.sourceId })}>Filter</a>
+                  <a className="btn btn-secondary btn-sm" href={filterHref({ status, category, severity, sourceCategory: sourceCategoryFilter, q: query, source: quality.sourceId }, linkedJob?.id)}>Filter</a>
                 </div>
               </div>
             );
@@ -542,13 +607,17 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         </div>
       </section>
 
-      <section className="workbench-section intelligence-section">
+      <section className="workbench-section intelligence-section" id="impact-reviews">
         <div className="workbench-card-header">
           <div>
-            <h2>Impact Reviews</h2>
-            <p>Ranked by pending status, impact, signal severity, source quality, business linkage, and recency.</p>
+            <h2>{linkedJob ? `Impact Reviews for ${linkedJob.reference}` : "Impact Reviews"}</h2>
+            <p>
+              {linkedJob
+                ? "Only reviews linked to this load or its source RFQ are shown."
+                : "Ranked by pending status, impact, signal severity, source quality, business linkage, and recency."}
+            </p>
           </div>
-          <a className="btn btn-secondary btn-sm" href={filterHref({ status: "pending", category, severity, sourceCategory: sourceCategoryFilter, source: sourceFilter, q: query })}>Pending</a>
+          <a className="btn btn-secondary btn-sm" href={filterHref({ status: "pending", category, severity, sourceCategory: sourceCategoryFilter, source: sourceFilter, q: query }, linkedJob?.id)}>Pending</a>
         </div>
         <div className="intelligence-list">
           {reviews.length === 0 ? (

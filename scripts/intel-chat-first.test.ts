@@ -80,9 +80,10 @@ assert.ok(
   "the report brief preserves provider and evidence limitations"
 );
 assert.ok(
-  agentWidget.includes('const isIntelChatPage = pathname === "/dashboard/intel";') &&
-    agentWidget.includes("if (isCompanyBrainPage || isIntelChatPage) return null;"),
-  "the global floating chat is suppressed on the full-page Intel chat"
+  agentWidget.includes('pathname === "/dashboard/intel"') &&
+    agentWidget.includes('pathname.startsWith("/dashboard/intel/")') &&
+    agentWidget.includes("if (isCompanyBrainPage || isIntelPage) return null;"),
+  "the global floating chat is suppressed across the isolated Intel workspace"
 );
 assert.ok(
   deskStyles.includes("position: sticky") &&

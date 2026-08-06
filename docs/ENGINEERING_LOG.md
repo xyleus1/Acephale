@@ -17,6 +17,72 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-07-29 - Separate liveness failures from queue degradation
+
+- Branch: find-hardware-import-data
+- Commit: see git log
+- Task: Fix production `/api/health` returning 500 while the application and
+  scheduled routes remained reachable.
+- Files changed: `src/app/api/health/route.ts`,
+  `src/lib/health-status.ts`, `scripts/health-status.test.ts`, and handoff
+  documentation.
+- Verification: The regression test covers healthy, degraded, and unhealthy
+  classifications. A fresh disposable PostgreSQL database was seeded with one
+  failed background job, then the production build was served locally. Public
+  `/api/health` returned HTTP 200 with `status=degraded`; the authorized
+  response retained the failed warning and safe queue counts. `npm run
+  test:security`, `npx tsc --noEmit`, and `npm run build` passed against the
+  current schema.
+- Failed/skipped checks: The first security-test attempt had no
+  `DATABASE_URL`. The existing local database was then rejected because its
+  `Job` table lacks current fields. No existing database was modified.
+- Caveats: The production route must be rechecked after deployment. If it
+  remains HTTP 500, a critical database or schema check is failing and the
+  detailed `CRON_SECRET`-authorized diagnostic must be used before any further
+  code change.
+- Follow-up: Deploy, verify production reports healthy or degraded with HTTP
+  200, then inspect and retry failed queue items from the Admin page without
+  treating them as an application outage.
+
+### 2026-07-29 - Olympian load dossier, unified workspace, and Intel bridge
+
+- Branch: find-hardware-import-data
+- Commit: see git log
+- Task: Create the real Olympian Motors shipment as one deduplicated load,
+  redesign the load page around its operational fields and conversations, make
+  the route map trustworthy, and connect the load naturally to Intel.
+- Files changed: `src/lib/olympian-load.ts`, Olympian import scripts and tests,
+  the jobs index and detail routes, `src/lib/load-workspace.ts`,
+  `src/components/load-workspace.tsx`, offline load-route helpers and
+  components, the dashboard route map, the load-to-Intel brief helper, Intel
+  page prefills, the agent dock suppression, package scripts, and docs.
+- Verification: Olympian database import test passed against disposable
+  Postgres with first-create, idempotent rerun, office isolation, one thread,
+  seven messages, fifteen fixture documents, nine tasks, six milestones, zero
+  carrier quotes, and one memory event. The repair case preserved a sixteenth
+  operator-created document row instead of overwriting it. Load workspace, route map, legacy
+  workbench map, Intel privacy brief, Intel chat-first, and China load UI tests
+  passed. `npx tsc --noEmit`, `git diff --check`, changed-file U+2014 checks,
+  and the production build passed. Authenticated browser QA covered the actual
+  Olympian load, no horizontal overflow, load-scoped chat, the offline
+  Shanghai to Irvine city-area route, privacy-safe Intel prefill, unsent Intel
+  questions, and a clean console before screenshot tooling modified form caret
+  styles. Adversarial review then removed invented port calls, isolated every
+  Intel route from the global dock, made Job truth outrank parsed dossier data,
+  office-scoped linked records, bounded the conversation feed, and made
+  idempotent imports repair their fixture-owned child records.
+- Failed/skipped checks: ESLint cannot start because the repository uses
+  `.eslintrc` while installed ESLint 9 expects flat configuration. No lint
+  configuration was changed.
+- Caveats: The local QA database contains the recreated Olympian demo load.
+  Production creation requires the ADMIN action after deployment. Imported
+  messages are sanitized summaries and must be checked against the original
+  email exports. The map is planned routing, not live tracking. Historical
+  rate evidence is not an executable carrier quote.
+- Follow-up: Test the deployed ADMIN import, open the load in Intel, review the
+  privacy-safe brief, and build the read-only customs report. Attach original
+  documents only through the normal document controls.
+
 ### 2026-07-27 - Requeue contacted people and expand hardware prospects
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)
@@ -2860,28 +2926,201 @@ Use this file for chronological implementation notes that future agents should s
   after deployment. Keep the chat answer and report claims separated from
   shipment-specific conclusions until the load facts are reviewed.
 
-### 2026-08-05 - Standalone Supply OS v0.5 prototype
+### 2026-07-29 - Email-first customer workspace
+
+- Branch: customer-portal-strategy
+- Commit: see git log
+- Task: Record the customer interface strategy in the company brain and build
+  the first authenticated customer portal without splitting operational truth
+  away from the Freight OS.
+- Architecture: Added separate office-scoped external users, passwordless login
+  codes and sessions, explicit company memberships, and a pending customer
+  action queue. The customer view model is an allowlisted projection over
+  canonical RFQs, jobs, milestones, quote lines, and documents.
+- Safety: Quote responses do not change job status or book freight. Customer
+  uploads fill only requested slots and return to operator review. Documents
+  require approval plus an explicit customer-visible flag. Internal cost,
+  margin, notes, supplier messages, and agent reasoning are excluded.
+- Operator workflow: Admins and managers can grant and revoke company access,
+  acknowledge or resolve customer actions, request documents on the job, and
+  publish approved files. All customer writes and operator portal decisions
+  create provenance-backed memory events.
+- Customer workflow: The company workspace shows RFQs, active and completed
+  shipments, quote actions, milestone dates, approved files, and requested
+  uploads. The read-only one-load guest page remains available with a tighter
+  document boundary.
+- Verification: Prisma validation, client generation, disposable PostgreSQL
+  migration deployment, focused portal tests, security tests, TypeScript,
+  production build, docs freshness, tenant audit, and diff checks passed. HTTP
+  runtime checks proved session enforcement, company workspace rendering,
+  guest and member document authorization, and customer quote acceptance
+  remaining a pending action while job status stayed `QUOTED`.
+- Verification limitation: The connected in-app browser control was
+  unavailable, so the interface received HTTP runtime checks rather than a
+  screenshot-based visual review.
+- Deployment: Apply migration
+  `20260729000100_customer_portal_workspace` before application deployment.
+  Existing documents remain hidden until an operator explicitly publishes
+  them.
+
+### 2026-08-03 - Customer shipment control tower and tracking detail
+
+- Branch: customer-logistics-dashboard
+- Commit: see git log
+- Task: Turn the authenticated customer workspace into the main customer-facing
+  shipment dashboard and add a dedicated detail page for every visible load.
+- Files changed: Portal workspace and shipment routes, portal styles, customer
+  projection and scoped data loaders, membership hardening, focused tests, and
+  customer portal documentation.
+- Verification: Customer portal tests, TypeScript, Prisma validation, all
+  migrations, security tests, docs checks, non-strict tenant audit, and the
+  production build passed against a disposable PostgreSQL database.
+  Authenticated browser QA covered login, dashboard and detail pages at 1440,
+  820, and 390 pixel widths, no horizontal overflow, no console errors, legacy
+  workspace redirects, unauthenticated redirects, inaccessible-load 404s, and
+  quote approval remaining pending while the job stayed `QUOTED`.
+- Failed/skipped checks: The in-app browser controller was unavailable in this
+  session, so the checked-in browser QA runner was used. The tenant audit
+  exited successfully and reported nine pre-existing suspicious queries in
+  unrelated agent, search, RFQ, login-code, thread, and WhatsApp paths.
+- Caveats: Shipment tracking is based on operator-recorded milestones. It is
+  intentionally not described as live GPS, vessel, or carrier tracking. Portal
+  invitations are still sent manually after access is granted.
+- Release hardening: Customer quote lines now come only from `Job.quoteLines`,
+  never the legacy internal-note fallback. The customer document route rejects
+  arbitrary remote URLs before the shared document streamer can fetch them.
+- Release hardening verification: `npm run test:customer-portal`,
+  `npx tsc --noEmit`, and `git diff --check` passed.
+- Follow-up: Apply the customer portal migration, grant a pilot customer access,
+  and verify the same flows on the deployed URL before calling this production
+  ready.
+
+### 2026-08-03 - Read-only operator preview of the customer workspace
+
+- Branch: customer-logistics-dashboard
+- Commit: see git log
+- Task: Let an authenticated operator open the actual customer dashboard and
+  shipment pages instead of seeing only the portal sign-in or access form.
+- Files changed: Customer portal admin page and styles, workspace and shipment
+  routes, portal styles, preview authentication and navigation helpers, focused
+  tests, decision record, and handoff documentation.
+- Security: Preview requires an internal admin or manager session, resolves the
+  selected company with both `id` and `officeId`, and constructs a temporary
+  member-shaped principal without writing customer identity or access records.
+  Customer mutation server actions still require a real customer portal
+  principal. Preview renders quote and upload controls disabled.
+- Verification: Customer portal tests, TypeScript, Prisma validation, security
+  tests, docs checks, the non-strict tenant audit, and the production build
+  passed. All migrations applied to a fresh disposable PostgreSQL database.
+  Browser QA verified the admin launcher, real workspace, and shipment detail
+  at 1280, 768, and 375 pixel widths with no horizontal overflow or console
+  errors. Anonymous access redirected to login, a sales role redirected to the
+  dashboard, the valid same-office preview returned 200, and an invalid company
+  returned 404.
+- Failed/skipped checks: None. The tenant audit still reports nine known
+  unrelated baseline warnings and reports no finding in the new preview path.
+- Caveats: Preview is intentionally read-only and does not impersonate a real
+  customer session. It shows the member experience, not customer-admin account
+  management behavior.
+- Follow-up: Deploy, open `/dashboard/customer-portal`, choose a real company,
+  and verify its current shipment records before sharing customer access.
+
+### 2026-08-03 - Customer portal design and audience entry points
+
+- Branch: customer-logistics-dashboard
+- Commits: `e919164`, `cfec4cd`, `8dc441a`, `434aa46`
+- Task: Replace the templated customer portal presentation with a calmer
+  freight operations interface and make customer versus staff access explicit.
+- Customer entry: `/portal` now has a dedicated customer sign-in layout, a
+  new-shipment email route, and a Derya team sign-in link. `/login` links
+  customers back to the shipment workspace.
+- Customer workspace: Replaced icon tiles, gradients, nested rounded cards,
+  and decorative reassurance copy with a compact status summary, shipment
+  rows, direct action language, and record-like shipment detail.
+- Staff workflow: `/dashboard/customer-portal` now exposes the customer
+  sign-in URL, a company-scoped `View as customer` flow, member-specific
+  sign-in links, and labeled access fields.
+- Safety: Preview remains read-only, admin or manager only, and scoped by
+  `officeId`. No schema, dependency, membership, session, or shipment-state
+  behavior changed.
+- Verification: Customer portal tests, TypeScript, Prisma validation, security
+  tests, docs checks, the non-strict tenant audit, and the production build
+  passed. Browser review covered customer and staff surfaces at desktop and
+  mobile widths with no horizontal overflow.
+- Baseline note: The tenant audit still reports nine unrelated findings.
+  Browser inspection of disabled controls injected temporary inline styles and
+  produced hydration mismatch messages; no application exception was found.
+- Deployment: No migration or environment change is required. Merge and deploy
+  the branch, then use `/portal` for customers and
+  `/dashboard/customer-portal` for staff access management and preview.
+
+### 2026-08-04 - Public customer design sandbox
+
+- Branch: customer-logistics-dashboard
+- Commit: see git log
+- Task: Add a stable `/customer` route for rapid founder review without portal
+  authentication or Vercel branch-preview access.
+- Implementation: Added a fictional customer overview and shareable shipment
+  detail states. The sandbox reuses portal styles and deterministic status and
+  milestone projection, while keeping all quote, upload, and file controls
+  disabled.
+- Security: The page is `noindex, nofollow`, imports no Prisma or portal-auth
+  loader, and never reads tenant, company, shipment, or document records.
+- Verification: Customer portal tests and TypeScript passed. Both the overview
+  and `?shipment=dry-2608-014` returned HTTP 200 locally, and rendered output
+  included the fictional-data disclosure and `noindex` metadata.
+- Local review: Start Next.js on the Conductor workspace port and open
+  `/customer`. The active workspace used port 55050.
+- Deployment: No migration, dependency, or environment change is required.
+  Public production visibility still requires merging and deploying the branch.
+
+### 2026-08-04 - Customer operations brief and shared overview
+
+- Branch: `customer-logistics-dashboard`
+- Commits: `db89590`, `2d7db55`
+- Task: Make the customer workspace useful as an outsourced freight operations
+  surface and remove the remaining generic dashboard structure.
+- Domain logic: Added `buildCustomerPortalOperationsBrief`, a pure helper over
+  `CustomerPortalShipment`. It derives date-based schedule watch items, recent
+  customer-safe activity, and document readiness without new database reads.
+- UI: Added `CustomerOperationsOverview` and reused it from both
+  `/portal/workspace` and `/customer`. The page now prioritizes customer
+  actions, one next milestone per load, active shipments, shared updates, open
+  requests, and delivered records.
+- Safety: Existing office and company query scoping is unchanged. Hidden
+  documents and internal freight data remain outside the view model. Customer
+  writes still create review actions and do not execute freight operations.
+- Design QA: Browser checks passed at 1440, 820, and 390 pixel widths with no
+  overflow or console errors. Customer action links and shipment detail were
+  checked directly.
+- Verification: `npm run test:customer-portal`,
+  `npx tsc --noEmit --incremental false`, and `git diff --check` passed before
+  documentation updates.
+- Deployment: Pending merge to `main`. No migration, dependency, or environment
+  change is required.
+
+### 2026-08-06 - Publish Supply OS through the main sidebar
 
 - Branch: crm-status-structure (Conductor workspace phoenix, targets main)
 - Commit: see git log
-- Task: Build a clickable product prototype for Derya's supplier-intelligence
-  and automated-logistics thesis without coupling it to existing application
-  behavior or data.
-- Files changed: `src/app/supply-os/page.tsx`,
-  `src/app/supply-os/supply-os-prototype.tsx`,
-  `src/app/supply-os/supply-os.module.css`,
-  `scripts/supply-os-prototype.test.ts`, `package.json`, and handoff docs.
+- Task: Make the standalone Supply OS v0.5 prototype discoverable from the
+  authenticated product and publish the reconciled result to main.
+- Files changed: `src/app/dashboard/layout.tsx`,
+  `scripts/supply-os-prototype.test.ts`, the existing `src/app/supply-os`
+  prototype, `package.json`, and handoff documentation.
 - Verification: `npm run test:supply-os-prototype`,
-  `npx tsc --noEmit --incremental false`, production `npm run build`,
-  `git diff --check`, changed-text em dash check, and Chrome browser QA at
-  1440px and 390px. Browser QA covered all six workspaces, primary state
-  changes, console errors, and horizontal overflow.
-- Failed/skipped checks: The preferred in-app browser bridge was unavailable,
-  so the visual and interaction pass used the installed local Chrome browser.
-- Caveats: `/supply-os` is public and completely synthetic. It imports no
-  application libraries or components, performs no fetch or server action,
-  writes no data, and sends no partner or customer communication.
-- Follow-up: Use founder and customer feedback on this prototype to choose the
-  first production slice. The strongest candidate is Supply Need to supplier
-  passport to quote comparison, with approval-gated execution and explicit
-  authority policy.
+  `npm run test:customer-portal`, `npx tsc --noEmit --incremental false`, the
+  production build with non-secret placeholders, `git diff --check`, and the
+  changed-text em dash scan passed. The production route table contains the
+  static `/supply-os` page.
+- Failed/skipped checks: The first TypeScript pass used stale generated Next
+  route types from before the main merge and rejected `/portal` redirects. The
+  build regenerated route types, and the unchanged TypeScript command then
+  passed. Authenticated browser QA of the dashboard sidebar was not run because
+  the local runtime has no disposable database session; the focused test
+  verifies the exact rendered navigation declaration.
+- Caveats: The main dashboard sidebar opens a standalone synthetic prototype
+  with its own sidebar. It does not read or write office data and does not
+  execute freight, customs, supplier, or customer actions.
+- Follow-up: After deployment, sign in with a non-employee account, click
+  `Supply OS` under Commercial Workflow, and confirm `/supply-os` loads.

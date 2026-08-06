@@ -9,8 +9,17 @@ function assertKnownPoint(label: string, actual: number, expected: number) {
   assert(Math.abs(actual - expected) < 0.02, `${label}: expected ${expected}, got ${actual}`);
 }
 
-const giresun = routeMapPoint("Giresun, Turkey", "origin");
-const ancona = routeMapPoint("Ancona, Italy", "destination");
+function requiredPoint(
+  value: string,
+  role: "origin" | "destination"
+) {
+  const point = routeMapPoint(value, role);
+  assert(point, `${value} should resolve to a known route point`);
+  return point;
+}
+
+const giresun = requiredPoint("Giresun, Turkey", "origin");
+const ancona = requiredPoint("Ancona, Italy", "destination");
 
 assert(giresun.countryCode === "TR", "Giresun should resolve to Turkey");
 assert(ancona.countryCode === "IT", "Ancona should resolve to Italy");
@@ -42,16 +51,26 @@ for (const point of overview.points) {
 }
 
 const turkeyFallback = routeMapPoint("Turkey", "origin");
-assert(turkeyFallback.label === "Turkey", "Country-only Turkey should not silently become Istanbul");
-assert(turkeyFallback.lon !== 28.978, "Turkey fallback should not use the old Istanbul coordinate");
+assert(turkeyFallback === null, "Country-only Turkey should stay unresolved instead of silently becoming Istanbul");
+assert(routeMapPoint("United States", "destination") === null, "Country-only United States should stay unresolved instead of silently becoming Houston");
+assert(routeMapPoint("Unknown factory", "origin") === null, "Unknown locations should stay unresolved");
 
-const shenzhen = routeMapPoint("Shenzhen, China", "origin");
-const berlin = routeMapPoint("Berlin, Germany", "destination");
+const shenzhen = requiredPoint("Shenzhen, China", "origin");
+const berlin = requiredPoint("Berlin, Germany", "destination");
 const shenzhenRoute = routeLegPoints(shenzhen, berlin, "SEA-LCL");
 assert(shenzhen.countryCode === "CN", "Shenzhen should resolve to China");
 assert(berlin.countryCode === "DE", "Berlin should resolve to Germany");
 assert(shenzhenRoute.length >= 5, "Shenzhen to Berlin sea route should include corridor waypoints");
 assert(shenzhenRoute.some((point) => point.label === "Suez Canal"), "Asia to Europe sea route should include Suez");
+
+const yangshan = requiredPoint("Yangshan, China", "origin");
+const portOfLosAngeles = requiredPoint("Port of Los Angeles", "destination");
+const portOfLongBeach = requiredPoint("Port of Long Beach", "destination");
+const irvine = requiredPoint("Irvine, CA", "destination");
+assert(yangshan.countryCode === "CN", "Yangshan should resolve to China");
+assert(portOfLosAngeles.countryCode === "US", "Port of Los Angeles should resolve to the United States");
+assert(portOfLongBeach.countryCode === "US", "Port of Long Beach should resolve to the United States");
+assert(irvine.countryCode === "US", "Irvine should resolve to the United States");
 
 console.log(JSON.stringify({
   ok: true,

@@ -16,6 +16,110 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-04 - Public customer design sandbox is fixture-only
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Vercel branch previews require team authentication, and the real
+  customer workspace requires either a customer membership or an internal
+  staff session. That made rapid visual feedback on the customer experience
+  unnecessarily slow.
+- Decision: Keep `/customer` as a public, no-login, noindex design sandbox that
+  uses only fictional fixture data. It may reuse customer-safe deterministic
+  view logic and portal styles, but it must not query Prisma, authenticate a
+  customer, resolve an office or company, or expose a real document. All
+  consequential controls remain disabled.
+- Rationale: Product review needs a stable route that anyone on the local
+  workspace can open, while customer and tenant data must remain behind the
+  real `/portal` and staff-preview authorization boundaries.
+- Consequences: Feedback can cite `/customer` or a shareable
+  `/customer?shipment=...` state. Accepted design changes should be applied to
+  the authenticated portal, not left only in the sandbox. Future edits must
+  preserve the source test that rejects Prisma and live workspace loaders from
+  the route.
+- Revisit when: The design is stable enough to remove the sandbox, or a
+  separately authorized public demo environment is introduced.
+
+### 2026-08-03 - Customer portal preview is internal and read-only
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Operators could configure customer access but could not inspect the
+  actual company workspace without creating a customer identity and completing
+  the external login flow. The sign-in page is not a useful product preview.
+- Decision: Admins and managers may open the real customer workspace for one
+  same-office company through an explicit preview mode. Preview reuses the
+  customer-safe projection, workspace, shipment detail pages, and current
+  canonical records. It uses the internal session and a temporary member-shaped
+  principal. It does not create a customer user, membership, login code, or
+  customer session. Quote and upload controls are visible but disabled, and the
+  underlying server actions continue to require a real customer principal.
+- Rationale: Reusing the actual customer routes prevents a separate mock from
+  drifting while preserving tenant isolation and the human approval boundary.
+- Consequences: Preview links must preserve the selected company and preview
+  mode across shipment navigation. Invalid or cross-office company and job IDs
+  return 404. Preview has a persistent banner and exit control so an operator
+  cannot mistake it for a customer session.
+- Revisit when: Derya needs support impersonation with audited actions. That
+  requires a separate persisted approval and audit design, not writable preview.
+
+### 2026-07-29 - Customer portal is an email-first company workspace
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Higher customer load volume makes email-only status, document, and
+  quote coordination expensive, but forcing every freight interaction through
+  a new SaaS workflow would add customer friction and create a second source of
+  truth.
+- Decision: Keep email as the default intake and exception channel. Add an
+  authenticated, company-scoped customer workspace over canonical
+  `Inquiry`, `Job`, milestone, quote-line, and document records. Preserve the
+  existing one-load guest link. External identities and login codes remain
+  separate from internal users. Company membership and document publication
+  are explicit and revocable. Customer quote responses and uploads create
+  pending review actions and never execute freight operations automatically.
+- Rationale: Customers get durable shared state and self-service for repetitive
+  coordination while Derya keeps one operating system, one company brain, and
+  human control over consequential actions.
+- Consequences: Deploy the customer portal migration before the application.
+  Existing approved documents are hidden by default. Operators must grant
+  company access, request uploads, publish approved files, and resolve customer
+  actions from the internal Customer Portal page. The customer control tower
+  and `/portal/shipments/[jobId]` detail route project canonical shipment state.
+  They describe recorded operational milestones and must not imply live GPS,
+  vessel, or carrier tracking without an explicit trusted integration.
+- Revisit when: A customer requires SSO, API, webhook, EDI, embedded access, or
+  a policy-approved class of automatic low-risk actions.
+
+### 2026-07-29 - The load page is the operational dossier and Intel uses an explicit handoff
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Shipment facts, correspondence, issues, documents, route context,
+  commercial strategy, and market research were split across a long record
+  page and separate modules. The old map depended on public tile requests and
+  silently assigned unknown locations to unrelated fallback cities.
+- Decision: Treat the office-scoped load record as the canonical operational
+  dossier. Its primary surface combines recorded and source-stated facts,
+  conflicts, open tasks, document state, correspondence, linked market
+  reviews, and a load-scoped agent. Render planned routes from checked-in map
+  geometry and a conservative known-location registry. Never invent a point
+  or exact port call for an unresolved location. Operator-edited Job fields
+  outrank imported or AI-extracted dossier data, and parsed dossier data cannot
+  mark itself operator-confirmed. Connect a load to standalone Intel only
+  through an explicit privacy-safe prefill that does not auto-send,
+  auto-analyze, or persist an Intel review.
+- Rationale: Operators need one decision surface without allowing research,
+  inferred geography, or AI extraction to impersonate shipment truth.
+- Consequences: Dense commercial and operating tools remain available as
+  supporting controls rather than dominating the page. Intel remains
+  chat-first and context-isolated. The China load review still requires an
+  operator click and preserves its read-only evidence contract. Maps are route
+  plans, not tracking or carrier schedules.
+- Revisit when: saved Intel reviews have an approved office-scoped schema and
+  audit contract, or a live tracking provider supplies verified positions and
+  event timestamps.
+
 ### 2026-07-27 - Intel is chat-first and reports attach to answers
 
 - Status: accepted

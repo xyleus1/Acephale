@@ -133,6 +133,10 @@ model Office {
   marketIngestionRuns  MarketIngestionRun[]
   auditLogs            AuditLog[]
   outreachPlanItems    OutreachPlanItem[]
+  customerPortalUsers       CustomerPortalUser[]
+  customerPortalMemberships CustomerPortalMembership[]
+  customerPortalLoginCodes  CustomerPortalLoginCode[]
+  customerPortalActions     CustomerPortalAction[]
 
   @@unique([name])
 }
@@ -243,6 +247,8 @@ model Company {
   emailThreads      EmailThread[]
   carriers          Carrier[]
   truckloadQuotes   TruckloadQuote[]
+  customerPortalMemberships CustomerPortalMembership[]
+  customerPortalActions     CustomerPortalAction[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -1028,6 +1034,7 @@ model Inquiry {
   tasks               Task[]
   carrierBids         CarrierBid[]
   truckloadQuotes     TruckloadQuote[]
+  customerPortalActions CustomerPortalAction[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, receivedAt])
@@ -1449,6 +1456,7 @@ model Job {
   securityChecks      LoadSecurityCheck[]
   carrierBids         CarrierBid[]
   truckloadQuotes     TruckloadQuote[]
+  customerPortalActions CustomerPortalAction[]
 
   @@unique([officeId, reference])
   @@index([officeId, status, createdAt])
@@ -1629,6 +1637,9 @@ model JobDocument {
   docType          String // BL / INVOICE / PACKING_LIST / COO / CUSTOMS / BOOKING / OTHER
   status           String    @default("PENDING") // PENDING / UPLOADED / APPROVED
   uploadedByUserId String?
+  uploadedByPortalUserId String?
+  customerVisible Boolean   @default(false)
+  customerRequested Boolean @default(false)
   // AI-generated analysis after the doc is uploaded/approved
   aiSummary        String? // 1-3 sentence synopsis of the document content
   aiFlags          String? // JSON array of strings: red flags / discrepancies AI noticed
@@ -1639,9 +1650,11 @@ model JobDocument {
 
   job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  uploadedByPortalUser CustomerPortalUser? @relation(fields: [uploadedByPortalUserId], references: [id], onDelete: SetNull)
 
   @@index([jobId])
   @@index([officeId, docType])
+  @@index([officeId, customerVisible, customerRequested, status], map: "JobDocument_portal_visibility_idx")
 }
 
 model JobMilestone {
@@ -1757,4 +1770,98 @@ model LoginCode {
   createdAt  DateTime  @default(now())
 
   @@index([email, createdAt])
+}
+
+// External customer identity. This is intentionally separate from the
+// internal User model and its founder/operator allowlist.
+model CustomerPortalUser {
+  id        String  @id @default(cuid())
+  officeId  String
+  email     String
+  fullName  String?
+  isActive  Boolean @default(true)
+
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  office      Office                     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  memberships CustomerPortalMembership[]
+  loginCodes  CustomerPortalLoginCode[]
+  actions     CustomerPortalAction[]
+  uploads     JobDocument[]
+
+  @@unique([officeId, email])
+  @@index([officeId, isActive])
+}
+
+// Company access is explicit and revocable. It is never inferred from CRM
+// contact records or email-domain matching.
+model CustomerPortalMembership {
+  id        String  @id @default(cuid())
+  officeId  String
+  userId    String
+  companyId String
+  role      String  @default("MEMBER") // ADMIN / MEMBER / VIEWER
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office  Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  user    CustomerPortalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([officeId, companyId, isActive])
+  @@index([officeId, userId, isActive])
+}
+
+// Customer sign-in codes never share the internal LoginCode table. This keeps
+// the external portal from weakening the internal operator allowlist.
+model CustomerPortalLoginCode {
+  id         String    @id @default(cuid())
+  officeId   String
+  userId     String
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  office Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  user   CustomerPortalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, email, createdAt])
+  @@index([userId, createdAt])
+}
+
+// Customer writes are requests for operator review. They do not silently
+// advance job status, book freight, or overwrite operational truth.
+model CustomerPortalAction {
+  id           String  @id @default(cuid())
+  officeId     String
+  companyId    String
+  jobId        String?
+  inquiryId    String?
+  portalUserId String
+  type         String // QUOTE_ACCEPTED / QUOTE_CHANGES_REQUESTED / DOCUMENT_UPLOADED
+  status       String @default("PENDING") // PENDING / ACKNOWLEDGED / RESOLVED / REJECTED
+  message      String?
+  payload      Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office     Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job        Job?               @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  inquiry    Inquiry?           @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  portalUser CustomerPortalUser @relation(fields: [portalUserId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, status, createdAt])
+  @@index([officeId, companyId, createdAt])
+  @@index([officeId, jobId, createdAt])
+  @@index([portalUserId, createdAt])
 }

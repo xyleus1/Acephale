@@ -88,6 +88,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
               <NavLink href="/dashboard/intel" icon={<Icon name="trending-up" />}>Intel</NavLink>
 
+              <NavLink href="/supply-os" icon={<Icon name="layers" />}>Supply OS</NavLink>
+
               {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing, /dashboard/intelligence
                   and /dashboard/carriers stay reachable directly (the carrier bench is linked from the
                   Intelligence pre-flight results). */}
@@ -100,7 +102,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
 
               {(session.role === "ADMIN" || session.role === "MANAGER") && (
-                <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
+                <>
+                  <NavLink href="/dashboard/customer-portal" icon={<Icon name="external" />}>Customer Portal</NavLink>
+                  <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
+                </>
               )}
 
               <NavLink href="/dashboard/inbox" icon={<Icon name="mail" />}>Inbox</NavLink>

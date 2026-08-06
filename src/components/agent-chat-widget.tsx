@@ -59,6 +59,7 @@ export function AgentChatWidget() {
   const pathname = usePathname();
   const routeJobIdRaw = pathname.match(/^\/dashboard\/jobs\/([^/]+)/)?.[1];
   const routeJobId = routeJobIdRaw && routeJobIdRaw !== "new" ? routeJobIdRaw : undefined;
+  const isLoadWorkspace = Boolean(routeJobId);
   const isDashboardWorkbench = pathname === "/dashboard";
   const searchParams = useSearchParams();
   // Mirror the brain page's section parsing: only the default (chat) view embeds
@@ -67,7 +68,9 @@ export function AgentChatWidget() {
   const isCompanyBrainPage =
     pathname.startsWith("/dashboard/brain") &&
     brainSection !== "todos" && brainSection !== "news" && brainSection !== "map";
-  const isIntelChatPage = pathname === "/dashboard/intel";
+  const isIntelPage =
+    pathname === "/dashboard/intel" ||
+    pathname.startsWith("/dashboard/intel/");
   const [open, setOpen] = useState(true);
   const [dashboardAgentChecked, setDashboardAgentChecked] = useState(!isDashboardWorkbench);
   const [hasEmbeddedWorkbenchAgent, setHasEmbeddedWorkbenchAgent] = useState(false);
@@ -132,13 +135,14 @@ export function AgentChatWidget() {
     const active =
       open &&
       !suppressedByWorkbenchAgent &&
+      !isLoadWorkspace &&
       !isCompanyBrainPage &&
-      !isIntelChatPage;
+      !isIntelPage;
     document.documentElement.classList.toggle("agent-dock-open", active);
     return () => {
       document.documentElement.classList.remove("agent-dock-open");
     };
-  }, [open, suppressedByWorkbenchAgent, isCompanyBrainPage, isIntelChatPage]);
+  }, [open, suppressedByWorkbenchAgent, isLoadWorkspace, isCompanyBrainPage, isIntelPage]);
 
   function setDockOpen(next: boolean) {
     setOpen(next);
@@ -151,7 +155,8 @@ export function AgentChatWidget() {
   }
 
   // The Company Brain chat view IS the chat - the floating dock would duplicate it.
-  if (isCompanyBrainPage || isIntelChatPage) return null;
+  if (isCompanyBrainPage || isIntelPage) return null;
+  if (isLoadWorkspace) return null;
 
   // The dashboard root sometimes has a permanent embedded agent. Suppress the
   // global dock only in that state; the empty dashboard still needs an agent.

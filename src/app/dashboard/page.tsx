@@ -24,8 +24,9 @@ import { buildReferenceDealOperatorPlaybook, getReferenceDealDecisions, getRefer
 import { listDecisionQueueItems, type DecisionQueueItem } from "@/lib/decision-queue";
 import { buildDecisionQueueBrief, type DecisionQueueBrief } from "@/lib/decision-queue-brief";
 import { operatorToolLabel } from "@/lib/operator-action-labels";
-import { buildRouteViewport, routeZoomPanels } from "@/lib/route-map-viewport";
-import { flagEmoji, modeSummary, routeLegPoints, routeMapPoint, transitSummary } from "@/lib/workbench-route-map";
+import { LoadRouteMap } from "@/components/load-route-map";
+import { buildLoadRoutePlan } from "@/lib/load-route-map";
+import { flagEmoji, modeSummary, transitSummary } from "@/lib/workbench-route-map";
 import { parseQuoteLines } from "@/lib/quote-lines";
 import { displayParty, isWhatsAppAddress } from "@/lib/whatsapp-display";
 import { createRfqFromReferenceDeal } from "./reference-deal-actions";
@@ -887,20 +888,13 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
     ? `${job.origin} → ${job.destination}`
     : "Route TBD";
   const modeLabel = job.mode ? (MODE_LABEL[job.mode] ?? job.mode) : "Mode TBD";
-  const routeOrigin = routeMapPoint(job.origin, "origin");
-  const routeDestination = routeMapPoint(job.destination, "destination");
-  const routePoints = routeLegPoints(routeOrigin, routeDestination, job.mode);
-  const routeOverview = buildRouteViewport("overview", routePoints, {
-    minZoom: 2,
-    maxZoom: 5,
-    maxTiles: 18,
-    aspectRatio: 2.88,
-    paddingRatio: 0.18,
+  const routePlan = buildLoadRoutePlan({
+    origin: job.origin,
+    destination: job.destination,
+    mode: job.mode,
   });
-  const routeWaypoints = routeOverview.points.slice(1, -1);
-  const routeZoomSections = routeZoomPanels(routePoints);
-  const originFlag = flagEmoji(routeOrigin.countryCode);
-  const destinationFlag = flagEmoji(routeDestination.countryCode);
+  const originFlag = flagEmoji(routePlan.origin.point?.countryCode ?? null);
+  const destinationFlag = flagEmoji(routePlan.destination.point?.countryCode ?? null);
   const originTimingLabel = job.etd ? `ETD ${fmt(job.etd)}` : "ETD TBD";
   const destinationTimingLabel = job.eta ? `ETA ${fmt(job.eta)}` : "ETA TBD";
   const transitLabel = transitSummary(job.etd, job.eta);
@@ -945,7 +939,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           <div className="ops-route-summary-strip" aria-label="Route summary">
             <div className="ops-route-summary-card origin">
               <span>Origin</span>
-              <strong>{originFlag && <em>{originFlag}</em>}{routeOrigin.label}</strong>
+              <strong>{originFlag && <em>{originFlag}</em>}{routePlan.origin.label}</strong>
               <small>{originTimingLabel}</small>
             </div>
             <div className="ops-route-summary-mode">
@@ -959,71 +953,19 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
             </div>
             <div className="ops-route-summary-card destination">
               <span>Destination</span>
-              <strong>{destinationFlag && <em>{destinationFlag}</em>}{routeDestination.label}</strong>
+              <strong>{destinationFlag && <em>{destinationFlag}</em>}{routePlan.destination.label}</strong>
               <small>{destinationTimingLabel}</small>
             </div>
           </div>
 
-          <div className={`ops-route-visual ${routeZoomSections.length ? "has-route-zoom" : ""}`} aria-label={`Route map for ${routeLabel}`}>
-            <div className="ops-route-overview" aria-label="Route overview map">
-              <div className="ops-route-map-tiles" aria-hidden="true">
-                {routeOverview.tiles.map((tile) => (
-                  <img key={tile.key} src={tile.src} alt="" style={tile.style} />
-                ))}
-              </div>
-              <svg className="ops-route-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                <path className="ops-route-waterway-shadow" d={routeOverview.path} />
-                <path className="ops-route-waterway" d={routeOverview.path} />
-              </svg>
-              {routeWaypoints.map((waypoint, index) => (
-                <div key={waypoint.label} className={`ops-route-waypoint waypoint-${index}`} style={waypoint.markerStyle}>
-                  <span />
-                  <em>{waypoint.label}</em>
-                </div>
-              ))}
-              <div className="ops-route-marker ops-route-marker-origin" style={routeOverview.points[0].markerStyle}>
-                <span className="ops-route-marker-dot" />
-              </div>
-              <div className="ops-route-marker ops-route-marker-destination" style={routeOverview.points[routeOverview.points.length - 1].markerStyle}>
-                <span className="ops-route-marker-dot" />
-              </div>
-              <div className="ops-route-transit-chip">
-                <Icon name={job.mode === "AIR" ? "plane" : job.mode === "ROAD" ? "truck" : "ship"} size={14} strokeWidth={2} />
-                <span>{modeLabel}</span>
-                <strong>{nextMilestoneLabel}</strong>
-              </div>
-              <div className="ops-route-map-attribution">© OpenStreetMap contributors</div>
-            </div>
-            {routeZoomSections.length > 0 && (
-              <div className="ops-route-zoom-panels" aria-label="Route zoom sections">
-                {routeZoomSections.map((panel) => (
-                  <div key={panel.key} className={`ops-route-zoom-panel ${panel.key}`}>
-                    <div className="ops-route-zoom-tiles" aria-hidden="true">
-                      {panel.viewport.tiles.map((tile) => (
-                        <img key={tile.key} src={tile.src} alt="" style={tile.style} />
-                      ))}
-                    </div>
-                    <svg className="ops-route-zoom-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                      <path className="ops-route-zoom-line-shadow" d={panel.viewport.path} />
-                      <path className="ops-route-zoom-line" d={panel.viewport.path} />
-                    </svg>
-                    {panel.viewport.points.map((point, index) => (
-                      <span
-                        key={`${panel.key}-${point.label}-${index}`}
-                        className={`ops-route-zoom-marker ${index === 0 ? "start" : index === panel.viewport.points.length - 1 ? "end" : "mid"}`}
-                        style={point.markerStyle}
-                        aria-hidden="true"
-                      />
-                    ))}
-                    <div className="ops-route-zoom-copy">
-                      <span>{panel.eyebrow}</span>
-                      <strong>{panel.title}</strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <LoadRouteMap
+            origin={job.origin}
+            destination={job.destination}
+            mode={job.mode}
+            etdLabel={originTimingLabel}
+            etaLabel={destinationTimingLabel}
+            nextMilestoneLabel={nextMilestoneLabel}
+          />
 
           <div className="ops-brief-stats">
             <div className="ops-brief-stat">

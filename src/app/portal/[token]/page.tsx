@@ -36,7 +36,7 @@ const jobPortalInclude = {
   company: { select: { name: true } },
   milestones: { orderBy: { createdAt: "asc" } },
   documents: {
-    where: { status: { in: ["APPROVED", "UPLOADED"] } },
+    where: { status: "APPROVED", customerVisible: true },
     orderBy: { createdAt: "asc" },
   },
   office: { select: { name: true } },
@@ -67,8 +67,8 @@ export default async function PortalPage({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const workflowMilestones = job.milestones.filter(
-    (m) => !["ETD", "ETA", "CUSTOMS_ENTRY", "CUSTOMS_RELEASE"].includes(m.type),
+  const workflowMilestones = job.milestones.filter((milestone) =>
+    Object.prototype.hasOwnProperty.call(MILESTONE_LABEL, milestone.type)
   );
   const totalMs = workflowMilestones.length;
   const doneMs = workflowMilestones.filter((m) => m.actualAt).length;
@@ -116,7 +116,7 @@ export default async function PortalPage({
               <div id="portal-status-title" className="portal-section-title">
                 Current status
               </div>
-              <div className="portal-section-copy">Live shipment progression from the operating workbench.</div>
+              <div className="portal-section-copy">Current shipment status published by the Derya operations desk.</div>
             </div>
             <div className="portal-status-chip">{currentStatusLabel}</div>
           </div>
@@ -144,6 +144,8 @@ export default async function PortalPage({
             { label: "Status", value: currentStatusLabel },
             { label: "Reference", value: job.reference },
             { label: "Progress", value: totalMs > 0 ? `${doneMs} / ${totalMs}` : "Pending" },
+            { label: "ETD", value: fmt(job.etd) },
+            { label: "ETA", value: fmt(job.eta) },
           ].map((metric) => (
             <div key={metric.label} className="portal-metric-card">
               <div className="portal-metric-label">{metric.label}</div>
@@ -214,12 +216,17 @@ export default async function PortalPage({
                     <div>
                       <div className="portal-row-title">{document.name}</div>
                       <div className="portal-row-sub">
-                        {document.status === "APPROVED" ? "Approved" : "Uploaded"} - {fmt(document.updatedAt)}
+                        Approved - {fmt(document.updatedAt)}
                       </div>
                     </div>
                   </div>
                   {document.url && !document.url.includes("placeholder") ? (
-                    <a className="portal-document-link" href={document.url} target="_blank" rel="noreferrer">
+                    <a
+                      className="portal-document-link"
+                      href={`/api/portal/documents/${document.id}?token=${encodeURIComponent(token)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       Open
                     </a>
                   ) : (
@@ -232,7 +239,7 @@ export default async function PortalPage({
         )}
 
         <footer className="portal-footer">
-          Questions? Reply to your forwarder's latest email. This page is read-only and updates as the shipment moves.
+          Questions? Reply to your forwarder's latest email. For all company shipments and quote actions, <a href="/portal">sign in to the customer workspace</a>.
         </footer>
       </main>
     </div>

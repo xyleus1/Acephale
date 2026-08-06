@@ -534,7 +534,11 @@ export async function updateDocStatus(docId: string, status: string) {
   if (!doc) return;
   await prisma.jobDocument.updateMany({
     where: { id: docId, officeId: session.officeId },
-    data: { status, url: status === "UPLOADED" ? (doc.url ?? "#placeholder") : doc.url },
+    data: {
+      status,
+      url: status === "UPLOADED" ? (doc.url ?? "#placeholder") : doc.url,
+      ...(status === "APPROVED" ? { customerRequested: false } : { customerVisible: false }),
+    },
   });
   await recordMemoryEvent({
     officeId: session.officeId,
@@ -569,6 +573,84 @@ export async function updateDocStatus(docId: string, status: string) {
     }).catch(() => null);
   }
   revalidatePath(`/dashboard/jobs/${doc.jobId}`);
+  revalidatePath("/portal/workspace");
+}
+
+export async function updateDocumentPortalPolicy(
+  docId: string,
+  field: "customerVisible" | "customerRequested",
+  enabled: boolean,
+): Promise<void> {
+  const session = await requireSession();
+  const document = await prisma.jobDocument.findFirst({
+    where: { id: docId, officeId: session.officeId },
+    select: {
+      id: true,
+      officeId: true,
+      jobId: true,
+      name: true,
+      docType: true,
+      status: true,
+      url: true,
+      customerVisible: true,
+      customerRequested: true,
+    },
+  });
+  if (!document) return;
+  if (
+    field === "customerVisible"
+    && enabled
+    && (document.status !== "APPROVED" || !document.url || document.url.includes("placeholder"))
+  ) {
+    return;
+  }
+  if (field === "customerRequested" && enabled && document.status === "APPROVED") {
+    return;
+  }
+
+  await prisma.jobDocument.updateMany({
+    where: { id: document.id, officeId: session.officeId },
+    data: field === "customerVisible"
+      ? { customerVisible: enabled }
+      : { customerRequested: enabled },
+  });
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "DOCUMENT",
+    sourceExternalId: `job_document:${document.id}`,
+    eventType: field === "customerVisible"
+      ? "job_document.customer_visibility_updated"
+      : "job_document.customer_request_updated",
+    entityType: "job_document",
+    entityId: document.id,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload: {
+      documentId: document.id,
+      jobId: document.jobId,
+      name: document.name,
+      docType: document.docType,
+      field,
+      enabled,
+      previousValue: field === "customerVisible"
+        ? document.customerVisible
+        : document.customerRequested,
+    },
+    provenance: {
+      source: "document",
+      operation: field,
+      path: "src/app/dashboard/jobs/[jobId]/actions.ts",
+      function: "updateDocumentPortalPolicy",
+      sourceRecordId: document.id,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `job_document:${document.id}:${field}:${enabled}:${Date.now()}`,
+  }).catch(() => null);
+  revalidatePath(`/dashboard/jobs/${document.jobId}`);
+  revalidatePath("/portal/workspace");
 }
 
 export async function uploadJobDocument(docId: string, formData: FormData) {
@@ -598,6 +680,8 @@ export async function uploadJobDocument(docId: string, formData: FormData) {
       url: stored.url,
       status: "UPLOADED",
       uploadedByUserId: session.userId,
+      uploadedByPortalUserId: null,
+      customerVisible: false,
       aiSummary: null,
       aiFlags: null,
       aiKeyFields: null,
@@ -637,6 +721,7 @@ export async function uploadJobDocument(docId: string, formData: FormData) {
 
   revalidatePath(`/dashboard/jobs/${doc.jobId}`);
   revalidatePath("/dashboard");
+  revalidatePath("/portal/workspace");
 }
 
 export async function addDocument(jobId: string, formData: FormData) {

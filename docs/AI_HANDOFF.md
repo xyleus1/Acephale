@@ -4,77 +4,7 @@
 
 ## Date
 
-2026-08-05
-
-## Branch
-
-crm-status-structure
-
-## Commit
-
-see git log
-
-## Task implemented
-
-### Standalone Derya Supply OS v0.5 prototype
-
-Added a public, nonpersistent prototype at `/supply-os` for testing the
-supplier-intelligence and automated-logistics product thesis without coupling
-it to the existing dashboard, database, authentication, or operational action
-paths.
-
-- The Command Center turns one synthetic supply need into a recommended
-  supplier, route, customs-review, partner-RFQ, and delivery plan.
-- The Supply Map shows product movement, alternate sources, route paths,
-  concentration risk, modeled cost, and evidence coverage.
-- Supplier Intelligence provides selectable supplier passports with response,
-  cargo-ready, document, price, risk, and evidence signals.
-- The Quote Room compares existing forwarders and Derya-network options, keeps
-  total plan cost and reliability visible, and records only local prototype
-  approval state.
-- The Execution Room shows handoffs, documents, conversations, and the human
-  approval boundary before booking.
-- Derya Control exposes five operating modes plus granular permissions,
-  commercial limits, and explicit ownership of existing partner relationships.
-- All companies, rates, scores, sources, and events are labeled synthetic.
-  Nothing sends, books, files, posts, persists, or calls an external provider.
-
-## Files changed
-
-- `src/app/supply-os/page.tsx`
-- `src/app/supply-os/supply-os-prototype.tsx`
-- `src/app/supply-os/supply-os.module.css`
-- `scripts/supply-os-prototype.test.ts`
-- `package.json`
-- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
-
-## Verification passed
-
-- `npm run test:supply-os-prototype`
-- `npx tsc --noEmit --incremental false`
-- production `npm run build` with non-secret local placeholders
-- `git diff --check`
-- changed-text em dash check
-- Browser smoke test in local Chrome at 1440px and 390px. All six views,
-  supply-plan rebuild, map layer, supplier selection, quote selection and
-  approval, execution state, authority mode, and permission toggle passed.
-  There was no page overflow or browser console error.
-
-## Caveats
-
-- This is a product prototype, not a second production application. It has no
-  database schema, office-scoped records, provider adapters, or live data.
-- The route is intentionally outside `/dashboard` and has no navigation link
-  from the existing freight OS.
-- Production implementation should reuse canonical office-scoped supplier,
-  product, partner, quote, shipment, evidence, risk, and approval records
-  instead of preserving this in-component demo dataset.
-
-## Previous Update
-
-## Date
-
-2026-07-27
+2026-08-06
 
 ## Branch
 
@@ -85,6 +15,461 @@ crm-status-structure, merged with current main
 see git log
 
 ## Task implemented
+
+### Supply OS sidebar launch
+
+The existing Supply OS v0.5 prototype is now discoverable from the authenticated
+Derya product instead of requiring a direct URL.
+
+- The non-employee dashboard sidebar includes `Supply OS` under Commercial
+  Workflow with the existing layers icon.
+- The sidebar item opens `/supply-os`, the standalone six-workspace prototype
+  for command center, supply map, supplier intelligence, quote comparison,
+  execution, and operating authority.
+- The prototype remains isolated from Prisma, tenant data, external providers,
+  server actions, and operational writes. It is still synthetic and sends,
+  books, files, and persists nothing.
+- The focused regression test now protects both the standalone safety boundary
+  and the product navigation entry point.
+- The branch was reconciled with current `origin/main` before release so the
+  customer operations workspace, portal, load workspace, and health changes
+  remain intact.
+
+## Files changed
+
+- `src/app/dashboard/layout.tsx`
+- `scripts/supply-os-prototype.test.ts`
+- `src/app/supply-os/page.tsx`
+- `src/app/supply-os/supply-os-prototype.tsx`
+- `src/app/supply-os/supply-os.module.css`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`
+
+## Verification passed
+
+- `npm run test:supply-os-prototype`
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- production `npm run build` with non-secret local placeholders
+- `git diff --check`
+- changed-text em dash check
+
+The first TypeScript invocation used stale generated Next route types from
+before the main merge and rejected the new portal routes. The production build
+regenerated the route map, then the same TypeScript command passed without a
+source change.
+
+## Caveats
+
+- The authenticated app sidebar is the entry point, but `/supply-os` keeps its
+  own prototype sidebar and page shell. It is not nested inside the operational
+  dashboard layout.
+- The prototype is a review surface, not production supply-chain execution.
+  Live implementation still requires canonical office-scoped records,
+  provider adapters, provenance, and approval-gated actions.
+
+## Previous Update
+
+## Date
+
+2026-08-04
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Public customer design sandbox
+
+`/customer` is now a no-login review surface for iterating on the customer
+workspace without Vercel preview protection or customer authentication.
+
+- The overview contains fictional active, quoted, customs, delivered, RFQ,
+  quote-action, and document-request states.
+- Shipment rows open shareable detail states such as
+  `/customer?shipment=dry-2608-014`, and the detail view returns to the same
+  overview.
+- The sandbox uses the real customer portal stylesheet, typography, status
+  order, milestone labels, and deterministic customer shipment projection.
+- Quote, upload, and document controls are visible but disabled. The page does
+  not import Prisma, portal authentication, or customer workspace loaders.
+- The route is marked `noindex, nofollow` and says plainly that its data is
+  fictional.
+- The authenticated product remains `/portal`. `/customer` is a design and
+  feedback harness, not a second customer data surface.
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- HTTP 200 for `/customer`
+- HTTP 200 for `/customer?shipment=dry-2608-014`
+- rendered output contains the development label, fictional company, shipment
+  overview, and `noindex`
+
+## Local review
+
+Run the app on the Conductor workspace port and open `/customer`. For this
+workspace the current URL is `http://127.0.0.1:55050/customer`.
+
+## Deployment note
+
+No schema, migration, environment, or dependency change is required. The route
+will be publicly reachable at `/customer` after this branch is merged and
+deployed. It must never be connected to live customer records without a new
+authenticated design.
+
+## Prior update
+
+## Date
+
+2026-08-03
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Customer-facing portal design and clear staff access
+
+The portal now reads as a real freight operations workspace instead of a
+generic generated dashboard.
+
+- `/portal` is a dedicated customer sign-in surface with customer-specific
+  copy, a passwordless email-code form, a new-shipment email link, and an
+  explicit route back to internal Derya sign-in.
+- The internal `/login` page now sends customers to `/portal` instead of
+  leaving the two audiences ambiguous.
+- The customer workspace uses a compact operating summary, shipment rows,
+  document requests, and direct status language. Decorative icon tiles,
+  gradients, shadows, and nested rounded cards were removed.
+- Shipment detail is organized as a record with separated facts, milestones,
+  quote actions, and documents. It still says tracking comes from Derya
+  milestones, not live GPS or vessel position.
+- `/dashboard/customer-portal` now gives staff a generic customer sign-in URL,
+  company-scoped `View as customer` controls, and member-specific sign-in
+  links. The access form has visible labels.
+- Staff preview remains read-only and office-scoped. This design pass adds no
+  schema, dependency, membership, authentication, or shipment-state change.
+- Portal entry-point tests now protect the customer login, staff login, and
+  staff preview routes.
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- `npx prisma validate`
+- `npm run test:security`
+- `npm run test:docs`
+- `npm run audit:tenant-scope`
+- `npm run build`
+- authenticated browser review of the customer login, workspace, shipment
+  detail, and staff access page at desktop and mobile widths
+- no horizontal overflow at 390 pixels
+- customer quote and upload controls remain disabled in staff preview
+
+The non-strict tenant audit exits successfully and still reports nine known
+warnings in unrelated agent, search, login-code, RFQ, thread, and WhatsApp
+paths. Browser automation added temporary inline style attributes while
+inspecting disabled form controls, which produced hydration mismatch messages;
+no application exception was observed.
+
+## Deployment note
+
+No migration or environment change is required. Customers enter at `/portal`.
+Admins and managers enter at `/dashboard/customer-portal`, where they can
+grant access, copy a sign-in link, or open the same workspace with `View as
+customer`.
+
+## Prior update
+
+## Date
+
+2026-08-03
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Read-only preview of the actual customer workspace
+
+Internal admins and managers can now inspect the customer-facing product
+without creating a fake customer account or stopping at the sign-in page.
+
+- `/dashboard/customer-portal` has a company picker that opens the real
+  customer shipment dashboard in read-only preview mode.
+- Preview uses the existing customer-safe workspace and shipment projection
+  over current same-office company data. It does not maintain a second mock or
+  copy shipment records.
+- Preview identity comes from the authenticated internal session and is limited
+  to `ADMIN` and `MANAGER`. Company selection is scoped by `officeId`; invalid
+  company or shipment IDs return 404.
+- Workspace, action-queue, active-load, delivered-load, and shipment-detail
+  links preserve preview context.
+- Quote decisions and requested-document controls remain visible so operators
+  can see the member experience, but all of those controls are disabled.
+  Customer server actions still require a real customer portal session.
+- Published document links use the existing internal, office-scoped document
+  route during preview. Real customers still use the customer portal document
+  route.
+- No schema, migration, dependency, customer identity, membership, login code,
+  or customer session is added by preview.
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- `npx prisma validate`
+- `npm run test:security`
+- `npm run test:docs`
+- `npm run audit:tenant-scope`
+- `npm run build`
+- all migrations applied to a disposable PostgreSQL database
+- authenticated browser QA of the admin launcher, customer dashboard, and
+  shipment detail at desktop, tablet, and mobile widths
+- no horizontal overflow or console errors
+- preview quote, textarea, file, and upload controls verified disabled
+- anonymous preview redirects to internal login, non-manager preview redirects
+  to the dashboard, valid same-office preview returns 200, and invalid company
+  scope returns 404
+
+The non-strict tenant audit exits successfully and still reports nine known
+warnings in unrelated agent, search, login-code, RFQ, thread, and WhatsApp
+paths. The new preview query is office-scoped and adds no finding.
+
+## Deployment note
+
+No migration or environment change is required. After deployment, sign in as
+an admin or manager, open `/dashboard/customer-portal`, choose a company, and
+click View as customer.
+
+## Prior update
+
+## Date
+
+2026-08-03
+
+## Branch
+
+customer-logistics-dashboard
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Customer shipment control tower and tracking detail
+
+The authenticated customer workspace now starts with an operations dashboard
+and gives every visible load a dedicated shipment page.
+
+- `/portal/workspace` shows counts for in-progress, in-transit, action-needed,
+  and delivered shipments, plus a consolidated quote and document action queue.
+- Active shipment cards show the customer-safe route, current stage, milestone
+  progress, ETD, ETA, and next recorded milestone.
+- `/portal/shipments/[jobId]` shows the full customer-safe timeline, shipment
+  facts, quote lines, requested uploads, and explicitly published documents.
+- The shipment page says plainly that it reflects recorded milestones and does
+  not claim live GPS or vessel position.
+- Detail reads require an authenticated portal session, the same `officeId`,
+  and an active membership in the shipment's company. Missing or unauthorized
+  shipment IDs return 404.
+- Quote approval remains a pending operator action. Browser verification proved
+  the approval notice appears while the canonical job remains `QUOTED`.
+- The release review removed the legacy internal-note fallback from customer
+  quote lines. Portal document downloads now reject arbitrary remote URLs and
+  accept only Derya-managed storage, Gmail attachments, or embedded demo files.
+
+## Files changed
+
+- `src/app/portal/workspace/page.tsx`
+- `src/app/portal/shipments/[jobId]/page.tsx`
+- `src/app/portal/portal-workspace.module.css`
+- `src/lib/customer-portal-auth.ts`
+- `src/lib/customer-portal-data.ts`
+- `src/lib/customer-portal-security.ts`
+- `src/lib/customer-portal-view.ts`
+- `src/app/api/portal/documents/[id]/route.ts`
+- `scripts/customer-portal.test.ts`
+- customer portal architecture and handoff documentation
+
+## Verification
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- Prisma schema validation and all migrations on disposable PostgreSQL
+- `npm run test:security`
+- `npm run test:docs`
+- `npm run audit:tenant-scope`
+- `npm run build`
+- Authenticated browser QA at desktop, tablet, and mobile widths with no
+  horizontal overflow or console errors
+- Runtime checks for login, legacy `?job=` redirects, unauthenticated detail
+  redirects, inaccessible shipment 404s, and pending quote approval
+- Release-review regression tests for internal-note isolation and portal
+  document source restrictions
+
+## Deployment note
+
+Apply migration `20260729000100_customer_portal_workspace` before deploying.
+Portal access still requires an operator to grant company membership and send
+the deployed `/portal` URL. Tracking is milestone-based until a carrier or
+telematics source is explicitly integrated and its data quality is defined.
+
+## Prior update
+
+## Date
+
+2026-07-29
+
+## Branch
+
+customer-portal-strategy
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Email-first customer portal and operator control plane
+
+Derya now has an authenticated, company-scoped customer workspace on top of
+the existing Freight OS records.
+
+- External customer identities, login codes, sessions, and company
+  memberships are separate from internal operator authentication.
+- Customers can see their company's RFQs, active and completed shipments,
+  quote lines, customer milestones, and explicitly published documents.
+- Customers can accept a quote, request quote changes, and upload only
+  documents that an operator requested.
+- Every customer write creates a pending operator-review action. No portal
+  action books freight, changes job status, approves a document, or sends an
+  external message.
+- Operators manage access and customer actions at
+  `/dashboard/customer-portal`.
+- Job document controls now distinguish request, upload, approval, and
+  customer publication. Existing documents remain hidden after migration.
+- The guest shipment page remains read-only, now shows ETD, ETA, and customs
+  milestones, and serves only explicitly customer-visible approved files
+  through an authorized proxy.
+- The company-brain delivery contract and durable architecture decision now
+  record the email, portal, and human operating model.
+
+## Files changed
+
+- `prisma/schema.prisma` and
+  `prisma/migrations/20260729000100_customer_portal_workspace/migration.sql`
+- `src/app/portal`, `src/app/api/portal`, and customer portal libraries
+- `src/app/dashboard/customer-portal`
+- job document actions, controls, and download response helper
+- `scripts/customer-portal.test.ts` and `package.json`
+- company brain, decisions, product context, ideas, handoff, and engineering log
+
+## Verification
+
+- Prisma schema validation
+- Prisma client generation
+- TypeScript no-emit check
+- Customer portal unit test
+- Production build, docs check, tenant audit, and final diff checks
+
+## Deployment note
+
+Apply the new Prisma migration before deploying the application. Portal access
+does not send an invitation automatically. An operator grants access and sends
+the deployed `/portal` URL to the customer through the normal approved channel.
+
+## Prior update
+
+## Date
+
+2026-07-29
+
+## Branch
+
+find-hardware-import-data, merged with current main
+
+## Commit
+
+see git log
+
+## Task implemented
+
+### Production health severity fix
+
+The public `/api/health` route no longer reports the entire application as
+down because one recoverable background job exhausted its retries.
+
+- Database reachability and checked Prisma schema fields remain critical. Any
+  failure in those checks still returns HTTP 500 with `status=unhealthy`.
+- Background-job backlog is now an operational warning. Failed or stale jobs
+  return HTTP 200 with `status=degraded`, while the authorized diagnostic
+  still includes the failed check, severity, and redacted counts.
+- The public response remains shallow. It exposes only `ok`, `status`, and a
+  timestamp, with no environment values, queue counts, model names, or errors.
+- Production evidence before the patch showed the app, Gmail cron,
+  background-job cron, Google Sheets sync, and pentest repair route returning
+  successfully while only `/api/health` returned 500.
+
+Verification used a fresh disposable PostgreSQL database with one intentionally
+failed background job. The public route returned HTTP 200 and
+`status=degraded`; the authorized diagnostic retained
+`backgroundJob_backlog ok=false`, `severity=warning`, and the fixture count.
+The disposable database was removed after verification.
+
+### Olympian load dossier and unified load workspace
+
+The dashboard now has one office-scoped, idempotent Olympian Motors import for
+reference `OM-O1-AUG2026-SHA-LAX`.
+
+- An ADMIN can add or reopen the load from `/dashboard/jobs`. The importer
+  creates one company link, inquiry, job, deduplicated sanitized conversation,
+  required-document list, milestone plan, issue tasks, audit event, and memory
+  event. Re-running it returns the same load and repairs missing fixture-owned
+  messages, documents, tasks, milestones, audit evidence, and memory evidence.
+- The imported facts describe two prototype Model O1 Coupe EVs in one 40HC,
+  Shanghai origin, a requested Los Angeles-area ocean arrival, Irvine final
+  delivery, installed batteries, August 27 cargo-ready target, and the
+  requested August 31 through September 2 vessel window.
+- Missing weights, VINs, commercial value, currency, HTS, Incoterm, broker,
+  confirmed booking, ETD, ETA, carrier acceptance, and port authorization stay
+  unresolved. The April 30 rate revision is visible only as historical source
+  evidence. It does not create a carrier quote, cost, revenue, or target.
+- The primary load page is now a unified control surface with an ordered issue
+  brief, action queue, evidence-state dossier, document and conversation
+  counts, load-scoped chat, and a working offline route map. Dense legacy
+  commercial, document, security, and operating controls remain available in
+  one collapsed supporting section.
+- The Shanghai to Irvine plan renders a coarse, date-line-safe city-area
+  corridor because neither exact port is confirmed. It does not invent
+  Yangshan, the Port of Los Angeles, or drayage handoffs. Explicit ports render
+  only when the load names them. The map is planned, not live tracking.
+- `Review this load in Intel` opens `/dashboard/intel/load?jobId=...` with a
+  privacy-safe, office-scoped structured brief. The operator must review and
+  click Build shipment report. No analysis starts automatically and nothing
+  is persisted. `Research lane risks` prefills the main Intel chat without
+  sending the question.
+
+Local verification created the load in the disposable QA office. Production
+creation still requires the authenticated ADMIN action after deployment.
 
 ### Recontact support and eight fresh hardware prospects
 
@@ -188,10 +573,11 @@ operator can ask a question.
 - The hardware tool returns deterministic facts from the validated Census
   snapshot plus explicit provider gaps. ImportGenius, TradeAtlas, and Trademo
   remain labeled as not connected.
-- The exact Intel page suppresses the duplicate floating agent dock, recent
-  job focus, job and customer memory injection, price prefetch, and pasted-RFQ
-  ingestion. Questions and answers are not written to the agent event log.
-  Actual shipment review stays at `/dashboard/intel/load`.
+- Every `/dashboard/intel` route suppresses the duplicate floating agent dock.
+  The main Intel desk also suppresses recent job focus, job and customer memory
+  injection, price prefetch, and pasted-RFQ ingestion. Questions and answers
+  are not written to the agent event log. Actual shipment review stays at
+  `/dashboard/intel/load`.
 
 ### GPT-5.6 and Intel shipment review
 All active application reasoning paths now use OpenAI GPT-5.6 through the
@@ -4873,3 +5259,62 @@ Verification:
   rendered, horizontal overflow stayed false, and the console remained clean.
 - Browser QA found and fixed unequal question-card stretching on the desktop
   report.
+
+## Customer freight operations desk, August 4
+
+Status:
+
+- Implemented on `customer-logistics-dashboard`.
+- Production deployment remains pending until this branch is merged to `main`.
+
+What changed:
+
+- Replaced the generic customer KPI strip and alert card with an operations
+  desk organized around customer actions, one next recorded event per active
+  shipment, active load records, recent shared activity, open RFQs, and the
+  delivered archive.
+- Added a deterministic customer-safe operations brief derived only from the
+  existing portal shipment projection. It summarizes overdue and upcoming
+  recorded milestones, approved document publication, requested uploads under
+  review, quote responses, and document counts.
+- Moved the overview presentation into one shared server component used by the
+  authenticated `/portal/workspace` and fictional `/customer` sandbox. Design
+  feedback can no longer improve the sandbox while leaving the real customer
+  workspace behind.
+- Preserved the compact shipment tracking page and added customer-specific
+  browser titles plus `aria-current` navigation state.
+- Date-only freight milestones now render in UTC so a planned calendar date
+  does not shift to the previous day in a West Coast development environment.
+
+Safety:
+
+- No schema, dependency, membership, session, upload, quote-action, or job
+  status behavior changed.
+- The operations brief consumes only the allowlisted customer portal view
+  model. It does not add Prisma reads or expose internal notes, cost, margin,
+  supplier messages, or hidden documents.
+- `/customer` remains fictional, noindex, and independent of portal auth and
+  live tenant data.
+
+Verification completed before release:
+
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- `git diff --check`
+- Browser checks at 1440px, 820px, and 390px with no horizontal overflow or
+  console errors.
+- Quote and document action links opened the correct sample shipment anchors.
+- Shipment detail remained readable at desktop and mobile widths.
+
+Design result:
+
+- Design score improved from B- to A-.
+- AI slop score improved from C+ to A.
+- Full local report:
+  `~/.gstack/projects/mmturna-derya-crm/designs/design-audit-20260804/design-audit-customer.md`.
+
+Release note:
+
+- No migration or environment change is required. After merge, verify
+  `/customer`, `/portal`, and one authenticated or staff-preview shipment on
+  the deployed domain.

@@ -6,6 +6,13 @@ import { Icon } from "@/components/icon";
 import { JobsBoard } from "@/components/jobs-board";
 import { JobsTable } from "@/components/jobs-table";
 import { cleanNotes } from "@/lib/quote-lines";
+import { SubmitButton } from "@/components/submit-button";
+import {
+  importOlympianLoad,
+  OLYMPIAN_LOAD_SOURCE_KEY,
+} from "@/lib/olympian-load";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 export const metadata = { title: "Pipeline" };
 
@@ -19,6 +26,26 @@ const STATUSES = [
 ] as const;
 
 type StatusKey = typeof STATUSES[number]["key"];
+
+async function importOlympianLoadAction() {
+  "use server";
+
+  const session = await requireSession();
+  if (session.role !== "ADMIN") {
+    throw new Error("Only ADMIN users can import the Olympian shipment dossier.");
+  }
+
+  const result = await importOlympianLoad({
+    officeId: session.officeId,
+    actor: {
+      userId: session.userId,
+      email: session.email,
+    },
+  });
+  revalidatePath("/dashboard/jobs");
+  revalidatePath(`/dashboard/jobs/${result.job.id}`);
+  redirect(`/dashboard/jobs/${result.job.id}`);
+}
 
 export default async function JobsPage({
   searchParams,
@@ -74,6 +101,21 @@ export default async function JobsPage({
   const activeCount = jobs.filter(
     (j) => !["DELIVERED", "CANCELLED"].includes(j.status)
   ).length;
+  const olympianJob = jobs.find((job) => job.reference === OLYMPIAN_LOAD_SOURCE_KEY)
+    ?? (session.role === "ADMIN"
+      ? await prisma.job.findUnique({
+          where: {
+            officeId_reference: {
+              officeId: session.officeId,
+              reference: OLYMPIAN_LOAD_SOURCE_KEY,
+            },
+          },
+          select: {
+            id: true,
+            reference: true,
+          },
+        })
+      : null);
 
   const serialized = jobs.map((j) => ({
     id: j.id,
@@ -159,6 +201,19 @@ export default async function JobsPage({
           </div>
           {!isEmployee && (
             <>
+              {session.role === "ADMIN" && (
+                olympianJob ? (
+                  <Link href={`/dashboard/jobs/${olympianJob.id}`} className="btn btn-secondary">
+                    Open Olympian load
+                  </Link>
+                ) : (
+                  <form action={importOlympianLoadAction}>
+                    <SubmitButton className="btn btn-secondary" pendingLabel="Adding Olympian load...">
+                      Add Olympian load
+                    </SubmitButton>
+                  </form>
+                )
+              )}
               <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
                 From RFQ
               </Link>

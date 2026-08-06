@@ -9,7 +9,6 @@ Loosely ordered by impact-per-effort. Effort is rough hours; treat as relative.
 ## Quick demo wins (≤4 hours each)
 
 - **AI counter-offer on carrier rates:** Each rate row in the INQUIRY stage gets a `Counter` button. Click it and GPT-5.6 drafts a polite "can you sharpen this to $X" email using rate and lane history context. The existing email pipeline logs it.
-- **Customer portal magic-link** — `/portal/[token]` route, read-only. Customer sees their job status, milestones, ETA, docs available, contact info. Big trust win and stops "where's my container?" emails. Token = job.id for now; upgrade to signed token later. ✅ shipping this turn.
 - **Stage handoff suggestions** — When user changes status (e.g. QUOTED → BOOKED), surface 2 suggested emails side-by-side ("notify carrier", "notify customer") with AI drafts ready to send. One click each.
 - **Tracking number to milestone fill:** Paste a container or BL number. Do not let GPT-5.6 invent milestones. Use a real tracking provider such as Project44 or Sealogix, then let GPT-5.6 explain provider-backed events.
 - **Document drag-and-drop classify:** Drop a PDF on the workbench, upload it, extract its text, and let GPT-5.6 propose the correct checklist slot (BL, invoice, packing list, COO, or customs).
@@ -78,7 +77,6 @@ Loosely ordered by impact-per-effort. Effort is rough hours; treat as relative.
 
 ## Nice-to-have / wild
 
-- **Customer portal write-back** — Customer can confirm/decline the quote directly in the portal (and we get a webhook).
 - **Auto-rate-card generation** — From historical wins, generate a public rate card per lane + season + carrier.
 - **Forecast widget** — "You'll likely have $X in revenue settled this month based on jobs in transit and historical conversion."
 - **Carrier negotiation coach** — When you're typing a counter-offer, AI suggests "Try 4% below their offer; on this lane they accept that 71% of the time."
@@ -90,6 +88,10 @@ Loosely ordered by impact-per-effort. Effort is rough hours; treat as relative.
 
 ## Shipped
 
+- 2026-07-29: Authenticated company customer workspace with passwordless
+  access, quote response write-back, requested document uploads, operator
+  action review, and explicit approved-document publication. The strong-token
+  read-only shipment link remains available.
 - 2026-05-02 — Recommended/BEST badge on cheapest carrier rate
 - 2026-05-02 — Layout reorder: stage workbench right under stages; carrier/docs/financials collapsible underneath
 - 2026-05-02 — Stage email panel with AI draft + outbound logging

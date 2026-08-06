@@ -615,8 +615,14 @@ function FieldPathList({
   );
 }
 
-export function ChinaImportLoadReview() {
-  const [sourceText, setSourceText] = useState("");
+export function ChinaImportLoadReview({
+  initialSourceText = "",
+  sourceLabel,
+}: {
+  initialSourceText?: string;
+  sourceLabel?: string;
+} = {}) {
+  const [sourceText, setSourceText] = useState(initialSourceText);
   const [fields, setFields] =
     useState<ChinaHardwareLoadInputV1 | null>(null);
   const [assessment, setAssessment] =
@@ -886,6 +892,18 @@ export function ChinaImportLoadReview() {
             maxLength={12000}
             rows={10}
           />
+          {sourceLabel ? (
+            <div className={styles.note} role="status">
+              <Icon name="copy" size={16} />
+              <div>
+                <strong>{sourceLabel}</strong>
+                <p>
+                  Review and edit this privacy-safe brief before building the
+                  report. Nothing has been analyzed or saved.
+                </p>
+              </div>
+            </div>
+          ) : null}
           <div className={styles.intakeActions}>
             <button
               type="button"

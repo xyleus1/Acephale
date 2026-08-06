@@ -39,12 +39,14 @@ function nextMessageId(role: ChatMsg["role"]) {
 export function IntelChatDesk({
   report,
   domesticTool,
+  initialQuestion = "",
 }: {
   report: ReactNode;
   domesticTool: ReactNode;
+  initialQuestion?: string;
 }) {
   const [messages, setMessages] = useState<IntelChatItem[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialQuestion);
   const [busy, setBusy] = useState(false);
   const [reportMessageId, setReportMessageId] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
