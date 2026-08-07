@@ -3,16 +3,13 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   AttributionControl,
-  Layer,
   Map,
   Marker,
   NavigationControl,
   Popup,
   ScaleControl,
-  Source,
   type MapRef,
 } from "@vis.gl/react-maplibre";
-import type { FeatureCollection, LineString } from "geojson";
 import type { StyleSpecification } from "maplibre-gl";
 import {
   Boxes,
@@ -101,31 +98,6 @@ function markerOffset(kind: SupplyCommandObjectKind): [number, number] | undefin
   return undefined;
 }
 
-function routeFeatureCollection(
-  commandMap: SupplyCommandMap,
-  selectedObject: SupplyCommandObject | null,
-): FeatureCollection<LineString> {
-  return {
-    type: "FeatureCollection",
-    features: commandMap.routes.map((route) => ({
-      type: "Feature",
-      id: route.id,
-      properties: {
-        stage: route.stage,
-        basis: route.basis,
-        selected: route.edgeId === selectedObject?.edgeId,
-      },
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [route.from.longitude, route.from.latitude],
-          [route.to.longitude, route.to.latitude],
-        ],
-      },
-    })),
-  };
-}
-
 function HoverObjectCard({ object }: { object: SupplyCommandObject }) {
   const Icon = objectIcon(object);
   return (
@@ -139,6 +111,19 @@ function HoverObjectCard({ object }: { object: SupplyCommandObject }) {
         <i data-status={object.status}>{object.statusLabel}</i>
       </header>
       <p>{object.location}</p>
+      {object.priority ? (
+        <div className={styles.hoverPriority}>
+          <span>P{String(object.priority.priority).padStart(2, "0")}</span>
+          <strong>{object.priority.title}</strong>
+        </div>
+      ) : null}
+      {object.rateEstimate ? (
+        <div className={styles.hoverRate}>
+          <span>{object.rateEstimate.distanceMiles.toLocaleString()} road mi</span>
+          <strong>${object.rateEstimate.low.toLocaleString()} to ${object.rateEstimate.high.toLocaleString()}</strong>
+          <small>Modeled range, live quote required</small>
+        </div>
+      ) : null}
       {object.contacts.length ? (
         <div className={styles.hoverContacts}>
           <span>{object.kind === "supplier" ? "Candidates" : "Local contacts"}</span>
@@ -147,7 +132,7 @@ function HoverObjectCard({ object }: { object: SupplyCommandObject }) {
           ))}
         </div>
       ) : null}
-      <footer>Click for full operating detail</footer>
+      <footer>{object.kind === "movement" ? "Click the lane for carrier and cost comparison" : "Click for full operating detail"}</footer>
     </div>
   );
 }
@@ -165,14 +150,34 @@ export function SupplyOsCommandMap({
   const fallbackPendingRef = useRef(false);
   const basemapReadyRef = useRef(false);
   const [hoveredObject, setHoveredObject] = useState<SupplyCommandObject | null>(null);
+  const [hoveredRouteId, setHoveredRouteId] = useState<string | null>(null);
+  const [mapRevision, setMapRevision] = useState(0);
   const [basemapIndex, setBasemapIndex] = useState(0);
   const [basemapState, setBasemapState] = useState<"loading" | "ready" | "retrying" | "failed">("loading");
   const [mapCapability, setMapCapability] = useState<"checking" | "ready" | "unavailable">("checking");
   const basemap = BASEMAPS[basemapIndex] ?? BASEMAPS[0];
-  const routes = useMemo(
-    () => routeFeatureCollection(commandMap, selectedObject),
-    [commandMap, selectedObject],
-  );
+  const projectedRoutes = useMemo(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return [];
+    return commandMap.routes.map((route) => ({
+      route,
+      from: map.project([route.from.longitude, route.from.latitude]),
+      to: map.project([route.to.longitude, route.to.latitude]),
+    }));
+  }, [basemapState, commandMap.routes, mapRevision]);
+  const hoveredRouteObject = hoveredRouteId
+    ? commandMap.objects.find((object) => object.kind === "movement" && `route:${object.edgeId}` === hoveredRouteId) ?? null
+    : null;
+  const popupCandidate = hoveredObject ?? hoveredRouteObject;
+  const popupObject = popupCandidate?.id === selectedObject?.id ? null : popupCandidate;
+
+  const selectRoute = useCallback((routeId: string) => {
+    const route = commandMap.routes.find((candidate) => candidate.id === routeId);
+    const object = route
+      ? commandMap.objects.find((candidate) => candidate.kind === "movement" && candidate.edgeId === route.edgeId)
+      : null;
+    if (object) onSelectObject(object);
+  }, [commandMap.objects, commandMap.routes, onSelectObject]);
 
   const fitNetwork = useCallback((animate = true) => {
     const coordinates = commandMap.objects.map((object) => object.coordinates);
@@ -189,7 +194,7 @@ export function SupplyOsCommandMap({
     mapRef.current.fitBounds([[west, south], [east, north]], {
       padding: compact
         ? { top: 88, right: 70, bottom: 84, left: 70 }
-        : { top: 86, right: 372, bottom: 82, left: 300 },
+        : { top: 86, right: 410, bottom: 82, left: 300 },
       maxZoom: 6.4,
       duration: animate ? 450 : 0,
     });
@@ -259,7 +264,12 @@ export function SupplyOsCommandMap({
         mapStyle={basemap.style}
         attributionControl={false}
         cooperativeGestures
-        onLoad={markBasemapReady}
+        onLoad={() => {
+          setMapRevision((current) => current + 1);
+          markBasemapReady();
+        }}
+        onMove={() => setMapRevision((current) => current + 1)}
+        onResize={() => setMapRevision((current) => current + 1)}
         onSourceData={(event) => {
           if (
             basemap.id === "carto-raster"
@@ -273,30 +283,6 @@ export function SupplyOsCommandMap({
           if (!basemapReadyRef.current) setBasemapState("loading");
         }}
       >
-        <Source id="supply-routes" type="geojson" data={routes}>
-          <Layer
-            id="supply-route-casing"
-            type="line"
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{
-              "line-color": "#ffffff",
-              "line-opacity": 0.92,
-              "line-width": ["case", ["boolean", ["get", "selected"], false], 7, 5],
-            }}
-          />
-          <Layer
-            id="supply-route-line"
-            type="line"
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{
-              "line-color": "#29485c",
-              "line-opacity": ["case", ["boolean", ["get", "selected"], false], 0.95, 0.62],
-              "line-width": ["case", ["boolean", ["get", "selected"], false], 3.5, 2],
-              "line-dasharray": [2, 1.5],
-            }}
-          />
-        </Source>
-
         {commandMap.objects.map((object) => {
           const Icon = objectIcon(object);
           return (
@@ -325,23 +311,27 @@ export function SupplyOsCommandMap({
                 onBlur={() => setHoveredObject((current) => current?.id === object.id ? null : current)}
               >
                 <Icon size={object.kind === "movement" ? 14 : 16} strokeWidth={1.9} />
+                {object.kind === "movement" ? <span className={styles.routeMarkerText}>Open lane</span> : null}
+                {object.priority ? (
+                  <span className={styles.mapPriorityBadge}>P{object.priority.priority}</span>
+                ) : null}
                 <span className={styles.markerStatusDot} />
               </button>
             </Marker>
           );
         })}
 
-        {hoveredObject ? (
+        {popupObject ? (
           <Popup
-            longitude={hoveredObject.coordinates.longitude}
-            latitude={hoveredObject.coordinates.latitude}
+            longitude={popupObject.coordinates.longitude}
+            latitude={popupObject.coordinates.latitude}
             anchor="bottom"
             offset={26}
             closeButton={false}
             closeOnClick={false}
             className={styles.commandMapPopup}
           >
-            <HoverObjectCard object={hoveredObject} />
+            <HoverObjectCard object={popupObject} />
           </Popup>
         ) : null}
 
@@ -349,6 +339,47 @@ export function SupplyOsCommandMap({
         <ScaleControl position="bottom-left" unit="imperial" />
         <AttributionControl position="bottom-right" compact />
       </Map>
+
+      <svg className={styles.routeOverlay} aria-hidden="true">
+        {projectedRoutes.map(({ route, from, to }) => (
+          <g
+            key={route.id}
+            className={styles.routeGeometry}
+            data-active={route.edgeId === selectedObject?.edgeId}
+            data-hovered={route.id === hoveredRouteId}
+          >
+            <line className={styles.routeGeometryCasing} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
+            <line className={styles.routeGeometryLine} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
+          </g>
+        ))}
+      </svg>
+
+      {projectedRoutes.map(({ route, from, to }) => {
+        const deltaX = to.x - from.x;
+        const deltaY = to.y - from.y;
+        const length = Math.max(24, Math.hypot(deltaX, deltaY) - 40);
+        const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
+        return (
+          <button
+            key={`hit:${route.id}`}
+            type="button"
+            className={styles.routePathButton}
+            data-active={route.edgeId === selectedObject?.edgeId}
+            aria-label={`Open transport leg: ${route.label}`}
+            style={{
+              left: (from.x + to.x) / 2,
+              top: (from.y + to.y) / 2,
+              width: length,
+              transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+            }}
+            onMouseEnter={() => setHoveredRouteId(route.id)}
+            onMouseLeave={() => setHoveredRouteId((current) => current === route.id ? null : current)}
+            onFocus={() => setHoveredRouteId(route.id)}
+            onBlur={() => setHoveredRouteId((current) => current === route.id ? null : current)}
+            onClick={() => selectRoute(route.id)}
+          />
+        );
+      })}
 
       <Tooltip.Provider delayDuration={250}>
         <Tooltip.Root>

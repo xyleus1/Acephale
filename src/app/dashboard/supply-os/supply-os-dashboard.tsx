@@ -11,6 +11,7 @@ import {
   Factory,
   ListChecks,
   MapPin,
+  Phone,
   Plus,
   ShieldAlert,
   Truck,
@@ -20,11 +21,26 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Sankey,
+  Tooltip as ChartTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   upsertSupplyCase,
   type SupplyCaseDashboard,
   type SupplyEngagementScope,
 } from "@/lib/supply-os-case-model";
-import { buildSupplyCommandMap, type SupplyCommandObject } from "@/lib/supply-os-command-map";
+import {
+  buildSupplyCommandMap,
+  type SupplyCommandObject,
+  type SupplyCommandRateEstimate,
+  type SupplyCommandRoute,
+} from "@/lib/supply-os-command-map";
 import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
 import { companyNameHint } from "@/lib/supply-os-company-identity";
 import { buildSupplyOptimizationModel } from "@/lib/supply-os-optimization-engine";
@@ -121,6 +137,132 @@ function orderedNetworkObjects(objects: SupplyCommandObject[]) {
   return objects
     .filter((object) => object.kind !== "movement")
     .sort((left, right) => order[left.kind] - order[right.kind]);
+}
+
+function orderedTransportObjects(objects: SupplyCommandObject[]) {
+  return objects
+    .filter((object) => object.kind === "movement")
+    .sort((left, right) => (left.edgeId ?? "").localeCompare(right.edgeId ?? ""));
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function RouteFlowChart({ route }: { route: SupplyCommandRoute }) {
+  const data = {
+    nodes: [
+      { name: route.fromLabel },
+      { name: route.mode },
+      { name: route.toLabel },
+    ],
+    links: [
+      { source: 0, target: 1, value: 1 },
+      { source: 1, target: 2, value: 1 },
+    ],
+  };
+  return (
+    <div className={styles.routeFlowPanel} aria-label={`${route.fromLabel} to ${route.toLabel} transport flow`}>
+      <div className={styles.routeFlowChart}>
+        <ResponsiveContainer width="100%" height="100%">
+          <Sankey
+            data={data}
+            nodePadding={18}
+            nodeWidth={8}
+            margin={{ top: 8, right: 12, bottom: 8, left: 12 }}
+            link={{ stroke: "#aeb7bd", fill: "none", strokeOpacity: 0.52 }}
+            node={{ fill: "#29485c", stroke: "#172027", strokeWidth: 1 }}
+          >
+            <ChartTooltip />
+          </Sankey>
+        </ResponsiveContainer>
+      </div>
+      <div className={styles.routeFlowLabels} aria-hidden="true">
+        <span><small>Origin</small><strong>{route.fromLabel}</strong></span>
+        <span><small>Mode</small><strong>{route.mode}</strong></span>
+        <span><small>Destination</small><strong>{route.toLabel}</strong></span>
+      </div>
+    </div>
+  );
+}
+
+function RateEnvelopeChart({ estimate }: { estimate: SupplyCommandRateEstimate }) {
+  const data = [
+    { label: "Planning low", cost: estimate.low },
+    { label: "Planning high", cost: estimate.high },
+  ];
+  return (
+    <div className={styles.rateEnvelopeChart} aria-label="Modeled transportation cost range">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, bottom: 2, left: 4 }}>
+          <CartesianGrid stroke="#dfe4e6" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fill: "#6d7880", fontSize: 8 }}
+            tickFormatter={(value) => `$${Math.round(Number(value) / 100) * 100}`}
+            axisLine={{ stroke: "#d5dadd" }}
+            tickLine={false}
+          />
+          <YAxis
+            type="category"
+            dataKey="label"
+            width={74}
+            tick={{ fill: "#3f4c55", fontSize: 8 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <ChartTooltip formatter={(value) => formatCurrency(Number(value))} />
+          <Bar dataKey="cost" fill="#29485c" barSize={10} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function NetworkFlowChart({ model }: { model: ReturnType<typeof buildSupplyOptimizationModel> }) {
+  const availableNodes = model.nodes.filter((node) => node.coordinates);
+  const nodeIndex = new Map(availableNodes.map((node, index) => [node.id, index]));
+  const data = {
+    nodes: availableNodes.map((node) => ({ name: node.label })),
+    links: model.edges.flatMap((edge) => {
+      const source = nodeIndex.get(edge.fromNodeId);
+      const target = nodeIndex.get(edge.toNodeId);
+      return source === undefined || target === undefined ? [] : [{ source, target, value: 1 }];
+    }),
+  };
+  if (!data.links.length) return null;
+  const flowLabels = availableNodes.length <= 3
+    ? availableNodes
+    : [availableNodes[0], availableNodes.find((node) => node.kind === "processing_site"), availableNodes.at(-1)]
+      .filter((node): node is (typeof availableNodes)[number] => Boolean(node));
+  return (
+    <section className={styles.networkFlowPanel}>
+      <h3>Network flow</h3>
+      <div className={styles.networkFlowChart} aria-label="Supplier to factory to customer flow">
+        <div>
+          <ResponsiveContainer width="100%" height="100%">
+            <Sankey
+              data={data}
+              nodePadding={12}
+              nodeWidth={7}
+              margin={{ top: 5, right: 10, bottom: 5, left: 10 }}
+              link={{ stroke: "#aeb7bd", fill: "none", strokeOpacity: 0.48 }}
+              node={{ fill: "#29485c", stroke: "#172027", strokeWidth: 1 }}
+            >
+              <ChartTooltip />
+            </Sankey>
+          </ResponsiveContainer>
+        </div>
+        <div className={styles.networkFlowLabels} aria-hidden="true">
+          {flowLabels.map((node) => <span key={node.id}>{node.label}</span>)}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function workspaceForObject(
@@ -267,6 +409,7 @@ function CaseCommandCenter({
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const selectedObject = commandMap.objects.find((object) => object.id === selectedObjectId) ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(commandMap.objects), [commandMap.objects]);
+  const transportObjects = useMemo(() => orderedTransportObjects(commandMap.objects), [commandMap.objects]);
   const supplierCount = commandMap.objects.filter((object) => object.kind === "supplier").length;
   const customsCount = commandMap.objects.filter((object) => object.kind === "customs").length;
   const logoUrl = companyLogoUrl(dashboard);
@@ -283,6 +426,11 @@ function CaseCommandCenter({
   function selectNetworkObject(object: SupplyCommandObject) {
     setSelectedObjectId(object.id);
     setInspectorMode("object");
+  }
+
+  function focusOptimizationAction(actionId: string) {
+    const related = commandMap.objects.find((object) => object.optimizationIds.includes(actionId));
+    if (related) setSelectedObjectId(related.id);
   }
 
   return (
@@ -346,7 +494,7 @@ function CaseCommandCenter({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className={styles.commandMenu} align="end" alignOffset={348} sideOffset={7} avoidCollisions={false}>
+              <DropdownMenu.Content className={styles.commandMenu} align="end" alignOffset={388} sideOffset={7} avoidCollisions={false}>
                 <DropdownMenu.Label>Derya coverage</DropdownMenu.Label>
                 {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
                   <DropdownMenu.Item
@@ -380,9 +528,10 @@ function CaseCommandCenter({
         <aside className={styles.routeRail} aria-label="Operating network objects">
           <header>
             <span>Network</span>
-            <small>{networkObjects.length} points</small>
+            <small>{networkObjects.length} points, {transportObjects.length} legs</small>
           </header>
           <div className={styles.routeRailList}>
+            <div className={styles.routeRailGroupLabel}>Operating points</div>
             {networkObjects.map((object) => {
               const Icon = objectIcon(object.kind);
               return (
@@ -404,6 +553,29 @@ function CaseCommandCenter({
                 </button>
               );
             })}
+            {transportObjects.length ? <div className={styles.routeRailGroupLabel}>Clickable transport legs</div> : null}
+            {transportObjects.map((object) => {
+              const Icon = objectIcon(object.kind);
+              return (
+                <button
+                  key={object.id}
+                  type="button"
+                  className={styles.routeRailLeg}
+                  data-active={object.id === selectedObject?.id}
+                  data-status={object.status}
+                  aria-pressed={object.id === selectedObject?.id}
+                  onClick={() => selectNetworkObject(object)}
+                >
+                  <span className={styles.routeRailIcon}><Icon size={15} strokeWidth={1.8} /></span>
+                  <span className={styles.routeRailCopy}>
+                    <small>{object.location}</small>
+                    <strong>{object.label}</strong>
+                    <em>{object.rateEstimate ? `${object.rateEstimate.distanceMiles.toLocaleString()} mi, ${formatCurrency(object.rateEstimate.low)} to ${formatCurrency(object.rateEstimate.high)}` : "Open for carrier comparison"}</em>
+                  </span>
+                  {object.priority ? <i className={styles.routeRailPriority}>P{object.priority.priority}</i> : <i className={styles.routeRailStatus} />}
+                </button>
+              );
+            })}
           </div>
         </aside>
 
@@ -412,8 +584,10 @@ function CaseCommandCenter({
             dashboard={modelDashboard}
             model={model}
             object={selectedObject}
+            route={commandMap.routes.find((route) => route.edgeId === selectedObject.edgeId) ?? null}
             mode={inspectorMode}
             onModeChange={setInspectorMode}
+            onFocusAction={focusOptimizationAction}
           />
         ) : null}
 
@@ -436,18 +610,23 @@ function CommandInspector({
   dashboard,
   model,
   object,
+  route,
   mode,
   onModeChange,
+  onFocusAction,
 }: {
   dashboard: SupplyCaseDashboard;
   model: ReturnType<typeof buildSupplyOptimizationModel>;
   object: SupplyCommandObject;
+  route: SupplyCommandRoute | null;
   mode: "object" | "optimization";
   onModeChange: (mode: "object" | "optimization") => void;
+  onFocusAction: (actionId: string) => void;
 }) {
   const Icon = objectIcon(object.kind);
   const workspace = workspaceForObject(object, model);
-  const action = model.actions.find((candidate) => candidate.workstreamId === object.workstreamId)
+  const action = model.actions.find((candidate) => candidate.id === object.priority?.id)
+    ?? model.actions.find((candidate) => candidate.workstreamId === object.workstreamId)
     ?? model.actions[0]
     ?? null;
   const [selectedActionId, setSelectedActionId] = useState(model.actions[0]?.id ?? "");
@@ -470,7 +649,7 @@ function CommandInspector({
         onValueChange={(value) => onModeChange(value as "object" | "optimization")}
       >
         <Tabs.List className={styles.inspectorTabsList} aria-label="Inspector view">
-          <Tabs.Trigger value="object">Selected object</Tabs.Trigger>
+          <Tabs.Trigger value="object">{object.kind === "movement" ? "Transport leg" : "Selected object"}</Tabs.Trigger>
           <Tabs.Trigger value="optimization">Optimization priorities <small>{model.actions.length}</small></Tabs.Trigger>
         </Tabs.List>
 
@@ -488,10 +667,30 @@ function CommandInspector({
             <p className={styles.inspectorLocation}>{object.location}</p>
             <p className={styles.inspectorDetail}>{object.detail}</p>
 
+            {route ? <RouteFlowChart route={route} /> : null}
+
             <dl className={styles.inspectorFacts}>
               <div><dt>Cargo</dt><dd>{object.cargo}</dd></div>
-              <div><dt>Confidence</dt><dd>{object.confidence}</dd></div>
+              <div><dt>{object.rateEstimate ? "Road distance" : "Confidence"}</dt><dd>{object.rateEstimate ? `${object.rateEstimate.distanceMiles.toLocaleString()} mi estimated` : object.confidence}</dd></div>
             </dl>
+
+            {object.rateEstimate ? (
+              <section className={styles.inspectorRatePlan}>
+                <header>
+                  <span><small>Planning range</small><strong>{formatCurrency(object.rateEstimate.low)} to {formatCurrency(object.rateEstimate.high)}</strong></span>
+                  <span><small>Rate model</small><strong>${object.rateEstimate.ratePerMileLow.toFixed(2)} to ${object.rateEstimate.ratePerMileHigh.toFixed(2)} / mi</strong></span>
+                </header>
+                <RateEnvelopeChart estimate={object.rateEstimate} />
+                <p>{object.rateEstimate.basis}</p>
+                <a href={object.rateEstimate.sourceUrl} target="_blank" rel="noreferrer">{object.rateEstimate.sourceLabel} <ExternalLink size={11} /></a>
+                <small>Modeled, not a live quote. {object.rateEstimate.exclusions.join(". ")}.</small>
+              </section>
+            ) : route ? (
+              <section className={styles.inspectorRatePending}>
+                <strong>Live quote required</strong>
+                <p>Dimensions, weight, ready date, Incoterm, service level, exact addresses, and cargo restrictions are required before Derya can compare a defensible price.</p>
+              </section>
+            ) : null}
 
             {object.checks.length ? (
               <section className={styles.inspectorChecks}>
@@ -504,19 +703,25 @@ function CommandInspector({
 
             {object.contacts.length ? (
               <section className={styles.inspectorContacts}>
-                <h3>{object.kind === "supplier" ? "Supplier candidates" : "Provider contacts"}</h3>
-                {object.contacts.slice(0, 3).map((contact) => (
+                <h3>{object.kind === "supplier" ? "Supplier candidates" : object.kind === "movement" ? "Carrier candidates" : "Provider contacts"}</h3>
+                {object.contacts.slice(0, object.kind === "movement" ? 5 : 3).map((contact) => (
                   <div key={contact.id} className={styles.inspectorContact}>
                     <span><strong>{contact.name}</strong><small>{contact.role}</small></span>
+                    {contact.proximity ? <b>{contact.proximity}</b> : null}
                     <p>{contact.fit}</p>
-                    {contact.url ? <a href={contact.url} target="_blank" rel="noreferrer" aria-label={`Open ${contact.name}`}><ExternalLink size={13} /></a> : null}
+                    {contact.location ? <address>{contact.location}</address> : null}
+                    <div className={styles.inspectorContactActions}>
+                      {contact.phone ? <a href={`tel:${contact.phone.replace(/[^+\d]/g, "")}`} aria-label={`Call ${contact.name}`}><Phone size={12} /> {contact.phone}</a> : null}
+                      {contact.url ? <a href={contact.url} target="_blank" rel="noreferrer" aria-label={`Open ${contact.name}`}><ExternalLink size={12} /> {contact.sourceLabel ?? "Source"}</a> : null}
+                    </div>
                   </div>
                 ))}
               </section>
             ) : null}
 
             <section className={styles.inspectorAction}>
-              <h3>Next action</h3>
+              <h3>{object.priority ? `Map priority P${String(object.priority.priority).padStart(2, "0")}` : "Next action"}</h3>
+              {object.priority ? <strong>{object.priority.title}</strong> : null}
               <p>{action?.recommendation ?? object.nextAction}</p>
               <small>{object.nextAction}</small>
             </section>
@@ -545,6 +750,8 @@ function CommandInspector({
               <p>{model.networkSummary}</p>
             </section>
 
+            <NetworkFlowChart model={model} />
+
             <div className={styles.analysisPriorityList} aria-label="Ranked optimization priorities">
               {model.actions.map((candidate) => (
                 <button
@@ -552,7 +759,10 @@ function CommandInspector({
                   type="button"
                   data-active={candidate.id === selectedAction?.id}
                   aria-pressed={candidate.id === selectedAction?.id}
-                  onClick={() => setSelectedActionId(candidate.id)}
+                  onClick={() => {
+                    setSelectedActionId(candidate.id);
+                    onFocusAction(candidate.id);
+                  }}
                 >
                   <small>{String(candidate.priority).padStart(2, "0")}</small>
                   <span><strong>{candidate.title}</strong><em>{candidate.measure}</em></span>

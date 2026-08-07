@@ -720,6 +720,29 @@ function routeNodeFor(dashboard: SupplyCaseDashboard, kind: "headquarters" | "so
   return dashboard.routeNodes.find((node) => node.kind === kind) ?? null;
 }
 
+const KNOWN_LOCATION_COORDINATES: ReadonlyArray<{
+  aliases: RegExp;
+  coordinates: SupplyCoordinate;
+}> = [
+  { aliases: /\bmontreal\b/i, coordinates: { latitude: 45.5019, longitude: -73.5674 } },
+  { aliases: /\bphoenix\b|\bgoodyear,? arizona\b/i, coordinates: { latitude: 33.4484, longitude: -112.074 } },
+  { aliases: /\btulsa\b|\boklahoma city\b/i, coordinates: { latitude: 36.154, longitude: -95.9928 } },
+  { aliases: /\bwichita\b/i, coordinates: { latitude: 37.6872, longitude: -97.3301 } },
+  { aliases: /\blos angeles\b|\blong beach\b|\bsouthern california\b/i, coordinates: { latitude: 33.7701, longitude: -118.1937 } },
+  { aliases: /\bsan francisco\b|\bbay area\b/i, coordinates: { latitude: 37.7749, longitude: -122.4194 } },
+  { aliases: /\bdetroit\b|\bferndale\b/i, coordinates: { latitude: 42.4606, longitude: -83.1346 } },
+  { aliases: /\btoronto\b|\bsouthern ontario\b|\bhamilton\b/i, coordinates: { latitude: 43.2557, longitude: -79.8711 } },
+  { aliases: /\baustin\b/i, coordinates: { latitude: 30.2672, longitude: -97.7431 } },
+  { aliases: /\bboston\b/i, coordinates: { latitude: 42.3601, longitude: -71.0589 } },
+  { aliases: /\bnew york\b|\bnew jersey\b/i, coordinates: { latitude: 40.7128, longitude: -74.006 } },
+  { aliases: /\bnashville\b/i, coordinates: { latitude: 36.1627, longitude: -86.7816 } },
+];
+
+function knownCoordinates(location: string | null | undefined): SupplyCoordinate | null {
+  if (!location) return null;
+  return KNOWN_LOCATION_COORDINATES.find((candidate) => candidate.aliases.test(location))?.coordinates ?? null;
+}
+
 function facilityNode(dashboard: SupplyCaseDashboard, profile: OptimizationProfile): SupplyOptimizationNode {
   const researchLocation = dashboard.research?.company.locations.find((location) =>
     ["manufacturing", "assembly", "warehouse"].includes(location.role),
@@ -736,7 +759,7 @@ function facilityNode(dashboard: SupplyCaseDashboard, profile: OptimizationProfi
     kind: "processing_site",
     label: dashboard.companyName ? `${dashboard.companyName} operating site` : "Company operating site",
     location: label,
-    coordinates: researchLocation?.coordinates ?? routeNode?.coordinates ?? null,
+    coordinates: researchLocation?.coordinates ?? routeNode?.coordinates ?? knownCoordinates(label),
     basis: researchBasis?.basis ?? (dashboard.productionLocation || dashboard.companyLocation ? "customer_stated" : "inferred"),
     confidence: researchBasis?.confidence ?? (routeNode?.coordinates ? "medium" : "low"),
     detail: profile.facilityActivity,
@@ -765,7 +788,7 @@ function explicitNodes(
       kind: kind === "source" ? "supplier_cluster" as const : "customer_cluster" as const,
       label: kind === "source" ? `${value} suppliers` : `${value} customers`,
       location: value,
-      coordinates: routeNode?.coordinates ?? null,
+      coordinates: routeNode?.coordinates ?? knownCoordinates(value),
       ...basis,
       detail: kind === "source"
         ? `Supplier geography carried from the customer brief or public research for ${naturalList(dashboard.sourcingNeeds, "inputs to confirm")}.`
@@ -821,6 +844,32 @@ function buildEdges(
   profile: OptimizationProfile,
 ): SupplyOptimizationEdge[] {
   const edges: SupplyOptimizationEdge[] = [];
+
+  function countryForLocation(location: string): "US" | "CA" | "CN" | "MX" | "GB" | "EU" | null {
+    const value = location.toLowerCase();
+    if (/china|shenzhen|dongguan|guangzhou|shanghai|taiwan|pearl river/.test(value)) return "CN";
+    if (/canada|canadian|ontario|toronto|hamilton|windsor|montreal|quebec/.test(value)) return "CA";
+    if (/united states|u\.s\.|usa|arizona|california|michigan|oklahoma|texas|ohio|iowa|washington|pennsylvania|phoenix|tulsa|detroit|wichita|midwest|great lakes|nationwide|national/.test(value)) return "US";
+    if (/mexico|mexican|monterrey|tijuana|juarez|laredo/.test(value)) return "MX";
+    if (/united kingdom|\buk\b|england|britain|british/.test(value)) return "GB";
+    if (/europe|european|\beu\b|germany|france|netherlands/.test(value)) return "EU";
+    return null;
+  }
+
+  function modeForEndpoints(from: SupplyOptimizationNode, to: SupplyOptimizationNode, fallback: string) {
+    const fromCountry = countryForLocation(from.location);
+    const toCountry = countryForLocation(to.location);
+    if (fromCountry && fromCountry === toCountry && (fromCountry === "US" || fromCountry === "CA")) {
+      return /plate|metal|structure|equipment/i.test(from.cargo)
+        ? "Dedicated truck, flatbed, or LTL"
+        : "Regional truck, dedicated, or LTL";
+    }
+    if (new Set([fromCountry, toCountry]).has("US") && new Set([fromCountry, toCountry]).has("CA")) {
+      return "Cross-border truck or LTL";
+    }
+    return fallback;
+  }
+
   for (const [index, source] of sources.entries()) {
     const cluster = profile.sourceClusters[index] ?? profile.sourceClusters[0];
     edges.push({
@@ -828,7 +877,7 @@ function buildEdges(
       fromNodeId: source.id,
       toNodeId: facility.id,
       stage: "inbound",
-      mode: cluster?.mode ?? "Mode and provider to confirm",
+      mode: modeForEndpoints(source, facility, cluster?.mode ?? "Mode and provider to confirm"),
       cargo: source.cargo,
       basis: edgeBasis(source, facility),
       confidence: edgeConfidence(source, facility),
@@ -842,7 +891,7 @@ function buildEdges(
       fromNodeId: facility.id,
       toNodeId: customer.id,
       stage: "outbound",
-      mode: cluster?.mode ?? "Delivery mode and provider to confirm",
+      mode: modeForEndpoints(facility, customer, cluster?.mode ?? "Delivery mode and provider to confirm"),
       cargo: customer.cargo,
       basis: edgeBasis(facility, customer),
       confidence: edgeConfidence(facility, customer),

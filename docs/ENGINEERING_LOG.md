@@ -3649,3 +3649,36 @@ Use this file for chronological implementation notes that future agents should s
   model. The separate headless browser correctly retained the no-WebGL fallback.
 - Safety: No schema, secret, external supplier action, booking, customs filing,
   message, or spend mutation was introduced.
+
+### 2026-08-07 - Add selectable transport paths and lane decision support
+
+- Branch: `feat/supply-os-route-intelligence`, targeting `main`.
+- Fixed route loss when public research supplied a recognizable operating city
+  without normalized coordinates. The fallback is bounded to known cities and
+  preserves the original evidence basis and confidence.
+- Added endpoint-aware domestic and cross-border road modes so a robotics or
+  hardware profile cannot label Phoenix-to-Tulsa as air or ocean freight.
+- Promoted each movement into a first-class route object with a mapped
+  optimization priority, carrier candidates, and an optional deterministic
+  road-cost envelope.
+- Added official public candidate records for Stewart Transport, Knight
+  Transportation, Dependable Supply Chain Services, Universal Logistics, Old
+  Dominion Freight Line, and C.A.T., plus existing global forwarder, truck,
+  and customs candidates. Cards expose source links, phone numbers, addresses,
+  capabilities, and endpoint relevance.
+- Added projected route geometry over the maintained MapLibre basemap. Solid
+  route lines update on map move and resize. A narrow native button follows
+  each line, preserves map panning outside the lane, supports keyboard focus,
+  and opens the matching movement dossier.
+- Added Recharts Sankey and bar views for network flow, lane flow, and modeled
+  price range. No custom geography, map symbol set, or proprietary visual asset
+  was introduced.
+- Verification: ten Supply OS suites, TypeScript, optimized production build,
+  and GPU browser QA at 1280 and 2048 pixels passed. Browser QA confirmed lane
+  click selection, pointer affordance, local contact detail, zero viewport
+  overflow, and zero console errors.
+- Tooling note: scoped ESLint is blocked by the repository's ESLint 9 plus
+  legacy config mismatch and duplicate Next plugin resolution inside the nested
+  Conductor worktree.
+- Safety: No schema, tenant scope, secret, outbound message, live quote,
+  booking, customs filing, supplier award, or spend mutation was introduced.

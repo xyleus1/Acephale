@@ -1695,3 +1695,43 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: Derya adopts an approved self-hosted basemap, durable
   office-scoped company master data, or connected procurement and shipment
   evidence that can replace the current outside-in operating model.
+
+### 2026-08-07 - Supply OS lanes are selectable planning objects
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: The command map displayed movement markers but did not reliably
+  preserve a route when research omitted coordinates, did not make the path
+  itself selectable, and did not turn a movement into a usable carrier and cost
+  decision. Generic global providers also failed the local pickup and delivery
+  question.
+- Decision: Treat each modeled edge as a first-class route with endpoints,
+  cargo, mode, confidence, mapped optimization priority, local candidate
+  contacts, and an optional deterministic rate envelope. Normalize only a
+  bounded list of known place names when coordinates are absent, without
+  changing provenance. Project solid route geometry over the maintained
+  MapLibre basemap and align a 24 pixel native button to the path for pointer
+  and keyboard selection. Use Recharts for network flow and rate comparisons.
+- Pricing boundary: A road-rate envelope may be shown only when both endpoints
+  and a road-compatible mode exist. It must state its mileage method, source
+  benchmark, exclusions, and that a live quote is required. It may not imply
+  capacity, equipment availability, accessorial acceptance, or an awarded
+  carrier.
+- Provider boundary: A local carrier card requires an official public source,
+  location, phone number where available, relevant capability, and endpoint
+  relevance. It remains a qualification candidate until Derya receives and a
+  human approves current capacity, insurance, operating authority, service,
+  and price.
+- Rationale: The customer should be able to click the exact supply-chain leg
+  that needs work and immediately see what Derya would compare, who could serve
+  it, what it might cost, what remains unknown, and which optimization action
+  belongs there.
+- Consequences: The map can now support a one-minute customer demo without
+  pretending that public evidence is an operating record. Added chart and map
+  interaction code increases the Supply OS client bundle, currently 311 kB
+  first load in the production build. This is acceptable for the authenticated
+  planning surface and should be revisited when connected data makes the page
+  substantially denser.
+- Revisit when: connected office-scoped TMS, ERP, procurement, broker, rate,
+  telematics, and shipment events can replace planning envelopes and candidate
+  providers with measured lane performance and executable options.

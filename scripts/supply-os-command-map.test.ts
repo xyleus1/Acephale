@@ -83,7 +83,52 @@ const model: SupplyOptimizationModel = {
       detail: "Local delivery after cutting and certification release.",
     },
   ],
-  actions: [],
+  actions: [
+    {
+      id: "source-control",
+      priority: 1,
+      workstreamId: "procurement",
+      title: "Qualify the source",
+      currentCondition: "Source is inferred.",
+      recommendation: "Confirm capability and commercial scope.",
+      decision: "Approve the source shortlist.",
+      requiredInput: "SKU and supplier file",
+      measure: "Approved source coverage",
+    },
+    {
+      id: "lane-control",
+      priority: 3,
+      workstreamId: "shipment_planning",
+      title: "Quote the lane",
+      currentCondition: "The lane has no live quote.",
+      recommendation: "Compare local and national carriers on one scope.",
+      decision: "Approve the tender list.",
+      requiredInput: "Addresses, dimensions, weight, and dates",
+      measure: "All-in cost and delivery reliability",
+    },
+    {
+      id: "customs-control",
+      priority: 4,
+      workstreamId: "customs",
+      title: "Pre-clear the crossing",
+      currentCondition: "The broker is not assigned.",
+      recommendation: "Build the entry packet and obtain broker acceptance.",
+      decision: "Approve the broker.",
+      requiredInput: "Invoice, classification, origin, and parties",
+      measure: "Pre-arrival acceptance",
+    },
+    {
+      id: "delivery-control",
+      priority: 5,
+      workstreamId: "fulfillment",
+      title: "Set the delivery rule",
+      currentCondition: "Delivery constraints are unknown.",
+      recommendation: "Match the service to the receiving requirement.",
+      decision: "Approve the delivery service.",
+      requiredInput: "Ship-to and appointment details",
+      measure: "On-time delivery",
+    },
+  ],
   workspaces: [],
   customerSegments: [],
   assumptions: [],
@@ -108,12 +153,15 @@ assert.deepEqual(customs?.checks.map((check) => check.label), [
 
 const inboundMovement = commandMap.objects.find((object) => object.id === "movement:ontario-ferndale");
 assert.deepEqual(inboundMovement?.contacts.map((contact) => contact.name), [
+  "Universal Logistics",
+  "Old Dominion Freight Line",
   "DHL Global Forwarding",
   "Uber Freight",
-  "Livingston International",
-  "Farrow",
 ]);
 assert.equal(inboundMovement?.statusLabel, "Lane to quote");
+assert.equal(inboundMovement?.priority?.id, "lane-control");
+assert.equal(inboundMovement?.rateEstimate?.distanceMiles > 150, true);
+assert.equal(inboundMovement?.rateEstimate?.low < (inboundMovement?.rateEstimate?.high ?? 0), true);
 
 const supplier = commandMap.objects.find((object) => object.id === "node:supplier-ontario");
 assert.equal(supplier?.statusLabel, "Inferred, verify");
@@ -123,9 +171,9 @@ assert.equal(supplier?.workstreamId, "procurement");
 const factory = commandMap.objects.find((object) => object.id === "node:factory-ferndale");
 assert.equal(factory?.statusLabel, "Official evidence");
 assert.deepEqual(factory?.contacts.map((contact) => contact.name), [
+  "Universal Logistics",
+  "Old Dominion Freight Line",
   "Uber Freight",
-  "DHL Global Forwarding",
-  "Livingston International",
 ]);
 
 const usMexicoModel: SupplyOptimizationModel = {
@@ -165,7 +213,6 @@ const usMexicoMovement = usMexicoMap.objects.find((object) => object.kind === "m
 assert.deepEqual(usMexicoMovement?.contacts.map((contact) => contact.name), [
   "DHL Global Forwarding",
   "Uber Freight",
-  "Expeditors",
 ]);
 
 const domesticModel: SupplyOptimizationModel = {
@@ -181,7 +228,7 @@ const domesticMap = buildSupplyCommandMap(domesticModel, dashboard);
 assert.equal(domesticMap.objects.some((object) => object.kind === "customs"), false);
 assert.deepEqual(
   domesticMap.objects.find((object) => object.id === "node:factory-ferndale")?.contacts.map((contact) => contact.name),
-  ["Uber Freight"],
+  ["Universal Logistics", "Old Dominion Freight Line", "Uber Freight"],
   "a domestic operating site must not receive an irrelevant customs broker",
 );
 
@@ -221,9 +268,9 @@ const losAngelesDistribution = chinaOceanMap.objects.find((object) => object.id 
 assert.equal(losAngelesDistribution?.kind, "distribution");
 assert.equal(losAngelesDistribution?.statusLabel, "Customer input");
 assert.deepEqual(losAngelesDistribution?.contacts.map((contact) => contact.name), [
+  "Dependable Supply Chain Services",
   "Uber Freight",
   "DHL Global Forwarding",
-  "Expeditors",
 ]);
 assert.equal(
   chinaOceanMap.objects.find((object) => object.kind === "customs")?.label,
@@ -231,7 +278,7 @@ assert.equal(
 );
 assert.deepEqual(
   chinaOceanMap.objects.find((object) => object.kind === "movement")?.contacts.map((contact) => contact.name),
-  ["DHL Global Forwarding", "Expeditors"],
+  ["Dependable Supply Chain Services", "DHL Global Forwarding", "Expeditors"],
   "an ocean movement must not include domestic truck capacity or a Canada-only broker",
 );
 
@@ -262,5 +309,43 @@ assert.deepEqual(
   ukUsMap.objects.find((object) => object.kind === "customs")?.contacts.map((contact) => contact.name),
   ["DHL Global Forwarding", "Expeditors"],
 );
+
+const phoenixModel: SupplyOptimizationModel = {
+  ...model,
+  nodes: [
+    {
+      ...model.nodes[0],
+      id: "supplier-tulsa",
+      label: "Tulsa component supplier",
+      location: "Tulsa, Oklahoma, United States",
+      coordinates: { latitude: 36.154, longitude: -95.9928 },
+      qualificationTargets: [],
+    },
+    {
+      ...model.nodes[1],
+      id: "factory-phoenix",
+      label: "Phoenix assembly site",
+      location: "Phoenix, Arizona, United States",
+      coordinates: { latitude: 33.4484, longitude: -112.074 },
+    },
+  ],
+  edges: [{
+    ...model.edges[0],
+    id: "tulsa-phoenix",
+    fromNodeId: "supplier-tulsa",
+    toNodeId: "factory-phoenix",
+    mode: "Dedicated truck or LTL",
+  }],
+};
+const phoenixMap = buildSupplyCommandMap(phoenixModel, dashboard);
+const phoenixMovement = phoenixMap.objects.find((object) => object.kind === "movement");
+assert.deepEqual(phoenixMovement?.contacts.slice(0, 3).map((contact) => contact.name), [
+  "Stewart Transport",
+  "Knight Transportation",
+  "Dependable Supply Chain Services",
+]);
+assert.equal(phoenixMovement?.contacts[0]?.phone, "(602) 242-1800");
+assert.match(phoenixMovement?.contacts[0]?.location ?? "", /Phoenix/);
+assert.equal(phoenixMap.routes[0]?.rateEstimate?.sourceLabel, "2026 ATRI operating-cost benchmark");
 
 console.log("Supply OS command map checks passed");

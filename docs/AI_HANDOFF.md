@@ -6185,3 +6185,58 @@ Trust boundary:
 - No candidate provider, supplier, route, classification, rate, or program
   relationship becomes an operating fact without connected records and human
   approval.
+
+## Supply OS clickable lane intelligence, August 7
+
+Status:
+
+- Implemented on `feat/supply-os-route-intelligence`, targeting `main`.
+- No database migration, secret, external message, quote request, booking,
+  customs filing, supplier award, or spend mutation is required.
+
+Customer result:
+
+- Supplier, factory, and customer points are now joined by visible solid paths
+  over the CARTO basemap. Every lane has a 24 pixel native button target, an
+  `Open lane` marker, and a matching item in the left network rail.
+- Clicking a lane opens one decision surface with cargo, estimated road miles,
+  a modeled low and high cost range, modeled cost per mile, required checks,
+  and carrier candidates at the relevant endpoint.
+- The inspector uses Recharts for a labeled supplier-to-mode-to-destination
+  flow and a planning-range bar chart. The optimization tab has a labeled
+  whole-network flow view.
+- Ranked optimization priorities now appear on the relevant map point or lane.
+  Selecting a priority focuses the associated object without leaving the map.
+- The current regional candidate set includes official public contact details
+  for Phoenix, Los Angeles, Detroit, and Quebec operators. Each card states the
+  endpoint it can serve, official phone number, official address, capability,
+  and source page.
+
+Model and evidence boundary:
+
+- Known-location normalization keeps a researched factory in the graph when
+  the source names a supported city but omits coordinates. It does not upgrade
+  the source basis or claim that a movement occurred.
+- Domestic U.S. and Canada movements use road modes instead of inheriting an
+  industry profile's international air or ocean default.
+- Road costs are deterministic planning envelopes, not live quotes. The model
+  uses estimated road miles, transparent mode and cross-border buffers, and
+  the current ATRI operating-cost benchmark. It excludes duties, taxes,
+  insurance, storage, exams, accessorials, live capacity, equipment, exact
+  addresses, and appointments.
+- Candidate carriers are public capability matches. They are not connected
+  capacity, awarded providers, or evidence of a commercial relationship.
+
+Verification:
+
+- All ten Supply OS regression suites passed.
+- `npx tsc --noEmit --incremental false` passed.
+- The optimized production build passed and generated all 57 static pages.
+- GPU-enabled Chrome QA passed at 1280 by 720 and 2048 by 720. The lane path
+  showed a pointer cursor, opened the correct transport inspector, retained a
+  visible supplier endpoint, produced no document overflow, and logged no
+  console errors.
+- Scoped ESLint could not run because this repository uses a legacy
+  `.eslintrc.json` with ESLint 9 and the nested Conductor worktree resolves two
+  copies of `@next/next`. This is a repository tooling issue. Type checking,
+  focused regression tests, browser QA, and the production build all passed.

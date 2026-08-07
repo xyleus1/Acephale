@@ -1,6 +1,7 @@
 import type { SupplyCaseDashboard, SupplyCoordinate } from "./supply-os-case-model";
 import type {
   SupplyOptimizationBasis,
+  SupplyOptimizationAction,
   SupplyOptimizationConfidence,
   SupplyOptimizationEdge,
   SupplyOptimizationModel,
@@ -22,6 +23,28 @@ export type SupplyCommandContact = {
   role: string;
   fit: string;
   url?: string;
+  phone?: string;
+  location?: string;
+  sourceLabel?: string;
+  proximity?: string;
+};
+
+export type SupplyCommandPriority = Pick<
+  SupplyOptimizationAction,
+  "id" | "priority" | "title" | "workstreamId"
+>;
+
+export type SupplyCommandRateEstimate = {
+  currency: "USD";
+  distanceMiles: number;
+  low: number;
+  high: number;
+  ratePerMileLow: number;
+  ratePerMileHigh: number;
+  basis: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  exclusions: string[];
 };
 
 export type SupplyCommandCheck = {
@@ -45,6 +68,9 @@ export type SupplyCommandObject = {
   workstreamId: SupplyOptimizationWorkstreamId;
   contacts: SupplyCommandContact[];
   checks: SupplyCommandCheck[];
+  priority: SupplyCommandPriority | null;
+  optimizationIds: string[];
+  rateEstimate?: SupplyCommandRateEstimate | null;
   nodeId?: string;
   edgeId?: string;
 };
@@ -54,9 +80,16 @@ export type SupplyCommandRoute = {
   edgeId: string;
   from: SupplyCoordinate;
   to: SupplyCoordinate;
+  fromLabel: string;
+  toLabel: string;
+  label: string;
+  mode: string;
+  cargo: string;
   stage: SupplyOptimizationEdge["stage"];
   basis: SupplyOptimizationEdge["basis"];
   confidence: SupplyOptimizationConfidence;
+  priority: SupplyCommandPriority | null;
+  rateEstimate: SupplyCommandRateEstimate | null;
 };
 
 export type SupplyCommandMap = {
@@ -70,6 +103,7 @@ const DHL_GLOBAL_FORWARDING: SupplyCommandContact = {
   role: "International forwarder",
   fit: "Air, ocean, road, customs coordination, and shipment visibility for international lanes.",
   url: "https://www.dhl.com/us-en/home/global-forwarding.html",
+  sourceLabel: "Official service page",
 };
 
 const UBER_FREIGHT: SupplyCommandContact = {
@@ -78,6 +112,84 @@ const UBER_FREIGHT: SupplyCommandContact = {
   role: "Domestic truck capacity",
   fit: "Instant FTL and LTL quoting, booking, and tracking for U.S. pickup and delivery legs.",
   url: "https://www.uberfreight.com/en-US/technology/instant-freight-quote",
+  sourceLabel: "Official quote product page",
+};
+
+const STEWART_TRANSPORT: SupplyCommandContact = {
+  id: "stewart-transport-phoenix",
+  name: "Stewart Transport",
+  role: "Phoenix fleet and brokerage",
+  fit: "Phoenix-based dry van, refrigerated, dedicated, and auto or aviation-kit transportation. The company advertises a dedicated Phoenix-to-Southern-California lane.",
+  url: "https://www.stewarttransport.com/",
+  phone: "(602) 242-1800",
+  location: "8164 W Buckeye Rd, Phoenix, AZ",
+  sourceLabel: "Official company site",
+};
+
+const KNIGHT_PHOENIX: SupplyCommandContact = {
+  id: "knight-phoenix",
+  name: "Knight Transportation",
+  role: "Phoenix truckload terminal",
+  fit: "Phoenix-based dry van, refrigerated, and port capacity with a published Arizona-to-California operating lane.",
+  url: "https://www.knighttrans.com/locations/phoenix-az/",
+  phone: "(602) 512-3284",
+  location: "5601 W Buckeye Rd, Phoenix, AZ",
+  sourceLabel: "Official Phoenix terminal page",
+};
+
+const DEPENDABLE_PHOENIX: SupplyCommandContact = {
+  id: "dependable-phoenix",
+  name: "Dependable Supply Chain Services",
+  role: "Phoenix 3PL and truckload office",
+  fit: "Goodyear office offering full truckload, expedited ground, warehousing, cross-dock, air and ocean handoffs, and supply-chain management.",
+  url: "https://www.godependable.com/contact/find-a-location/",
+  phone: "(602) 278-4401",
+  location: "250 N Litchfield Rd, Goodyear, AZ",
+  sourceLabel: "Official location directory",
+};
+
+const DEPENDABLE_LOS_ANGELES: SupplyCommandContact = {
+  id: "dependable-los-angeles",
+  name: "Dependable Supply Chain Services",
+  role: "Los Angeles drayage and distribution office",
+  fit: "Commerce and Los Angeles locations offering harbor drayage, intermodal, transload, cross-dock, full truckload, air and ocean, and warehouse services.",
+  url: "https://www.godependable.com/contact/find-a-location/",
+  phone: "(310) 522-4111",
+  location: "5950 S Eastern Ave, Commerce, CA",
+  sourceLabel: "Official location directory",
+};
+
+const UNIVERSAL_MICHIGAN: SupplyCommandContact = {
+  id: "universal-logistics-michigan",
+  name: "Universal Logistics",
+  role: "Detroit-area transportation network",
+  fit: "Warren-based truckload, brokerage, intermodal, dedicated, and value-added logistics candidate for Michigan plant and customer moves.",
+  url: "https://www.universallogistics.com/en-US/contact",
+  phone: "(586) 920-0100",
+  location: "12755 E 9 Mile Rd, Warren, MI",
+  sourceLabel: "Official contact page",
+};
+
+const OLD_DOMINION_DETROIT: SupplyCommandContact = {
+  id: "old-dominion-detroit",
+  name: "Old Dominion Freight Line",
+  role: "Detroit LTL service center",
+  fit: "Troy service center covering Detroit-area manufacturers and acting as a gateway for freight moving across the Canadian border into Ontario.",
+  url: "https://www.odfl.com/us/en/tools/service-center-locator/MI/DET.html",
+  phone: "(248) 457-0498",
+  location: "1310 E Big Beaver Rd, Troy, MI",
+  sourceLabel: "Official Detroit service-center page",
+};
+
+const CAT_QUEBEC: SupplyCommandContact = {
+  id: "cat-quebec",
+  name: "C.A.T. Inc.",
+  role: "Quebec cross-border truckload fleet",
+  fit: "Quebec-based truckload and logistics network serving domestic and cross-border Canada, United States, and Mexico lanes.",
+  url: "https://cat.ca/contact/",
+  phone: "(800) 363-5313",
+  location: "4 Rue du Transport, Coteau-du-Lac, QC",
+  sourceLabel: "Official contact page",
 };
 
 const LIVINGSTON: SupplyCommandContact = {
@@ -86,6 +198,7 @@ const LIVINGSTON: SupplyCommandContact = {
   role: "U.S.-Canada customs broker",
   fit: "Brokerage and clearance support across U.S.-Canada border points, including shipment status support.",
   url: "https://www.livingstonintl.com/contact-us/",
+  sourceLabel: "Official contact page",
 };
 
 const FARROW: SupplyCommandContact = {
@@ -94,6 +207,7 @@ const FARROW: SupplyCommandContact = {
   role: "Windsor-Detroit customs broker",
   fit: "Windsor-based customs brokerage, trade consulting, PAPS support, and cross-border logistics.",
   url: "https://farrow.com/customs-brokerage/",
+  sourceLabel: "Official customs-service page",
 };
 
 const EXPEDITORS: SupplyCommandContact = {
@@ -102,6 +216,7 @@ const EXPEDITORS: SupplyCommandContact = {
   role: "International customs broker and forwarder",
   fit: "Customs brokerage, trade compliance, air and ocean forwarding, and handoff coordination for international production and service movements.",
   url: "https://www.expeditors.com/services/customs-and-compliance",
+  sourceLabel: "Official customs-service page",
 };
 
 function nodeKind(node: SupplyOptimizationNode): SupplyCommandObjectKind {
@@ -128,6 +243,124 @@ function addContact(contacts: SupplyCommandContact[], contact: SupplyCommandCont
   if (!contacts.some((candidate) => candidate.id === contact.id)) contacts.push(contact);
 }
 
+function actionPriority(
+  model: SupplyOptimizationModel,
+  workstreamId: SupplyOptimizationWorkstreamId,
+): SupplyCommandPriority | null {
+  const action = [...model.actions]
+    .sort((left, right) => left.priority - right.priority)
+    .find((candidate) => candidate.workstreamId === workstreamId);
+  if (!action) return null;
+  return {
+    id: action.id,
+    priority: action.priority,
+    title: action.title,
+    workstreamId: action.workstreamId,
+  };
+}
+
+function optimizationIds(
+  model: SupplyOptimizationModel,
+  workstreamIds: readonly SupplyOptimizationWorkstreamId[],
+) {
+  const included = new Set(workstreamIds);
+  return model.actions
+    .filter((action) => included.has(action.workstreamId))
+    .sort((left, right) => left.priority - right.priority)
+    .map((action) => action.id);
+}
+
+function nodeWorkstreams(node: SupplyOptimizationNode): SupplyOptimizationWorkstreamId[] {
+  if (node.kind === "supplier_cluster") return ["procurement", "supplier_outreach"];
+  if (node.kind === "processing_site") return ["shipment_planning", "procurement"];
+  if (node.kind === "distribution") return ["fulfillment", "shipment_planning"];
+  return ["fulfillment"];
+}
+
+function regionalContactsForLocation(location: string): SupplyCommandContact[] {
+  const value = location.toLowerCase();
+  const contacts: SupplyCommandContact[] = [];
+  if (/phoenix|arizona|goodyear/.test(value)) {
+    contacts.push(STEWART_TRANSPORT, KNIGHT_PHOENIX, DEPENDABLE_PHOENIX);
+  }
+  if (/los angeles|long beach|southern california|commerce, ca/.test(value)) {
+    contacts.push(DEPENDABLE_LOS_ANGELES);
+  }
+  if (/ferndale|detroit|michigan|troy, mi|warren, mi/.test(value)) {
+    contacts.push(UNIVERSAL_MICHIGAN, OLD_DOMINION_DETROIT);
+  }
+  if (/quebec|montreal|coteau-du-lac/.test(value)) {
+    contacts.push(CAT_QUEBEC);
+  }
+  return contacts;
+}
+
+function regionalContactsForLane(
+  from: SupplyOptimizationNode,
+  to: SupplyOptimizationNode,
+): SupplyCommandContact[] {
+  const contacts: SupplyCommandContact[] = [];
+  for (const contact of regionalContactsForLocation(from.location)) {
+    addContact(contacts, { ...contact, proximity: `Origin-area terminal, ${from.location}` });
+  }
+  for (const contact of regionalContactsForLocation(to.location)) {
+    addContact(contacts, { ...contact, proximity: `Destination-area terminal, ${to.location}` });
+  }
+  return contacts;
+}
+
+function haversineMiles(from: SupplyCoordinate, to: SupplyCoordinate) {
+  const radians = (value: number) => value * Math.PI / 180;
+  const latitudeDelta = radians(to.latitude - from.latitude);
+  const longitudeDelta = radians(to.longitude - from.longitude);
+  const left = Math.sin(latitudeDelta / 2) ** 2;
+  const right = Math.cos(radians(from.latitude))
+    * Math.cos(radians(to.latitude))
+    * Math.sin(longitudeDelta / 2) ** 2;
+  return 3958.8 * 2 * Math.asin(Math.sqrt(left + right));
+}
+
+function roundedDollars(value: number) {
+  return Math.max(50, Math.round(value / 50) * 50);
+}
+
+function rateEstimateFor(
+  edge: SupplyOptimizationEdge,
+  from: SupplyOptimizationNode,
+  to: SupplyOptimizationNode,
+): SupplyCommandRateEstimate | null {
+  const mode = edge.mode.toLowerCase();
+  if (!/truck|road|ltl|flatbed|courier/.test(mode)) return null;
+
+  const distanceMiles = Math.max(1, Math.round(haversineMiles(from.coordinates!, to.coordinates!) * 1.18));
+  let ratePerMileLow = distanceMiles < 75 ? 3.75 : distanceMiles < 250 ? 2.95 : 2.55;
+  let ratePerMileHigh = distanceMiles < 75 ? 5.75 : distanceMiles < 250 ? 4.25 : 3.45;
+  if (/flatbed|dedicated/.test(mode)) {
+    ratePerMileLow += 0.25;
+    ratePerMileHigh += 0.5;
+  }
+  const crossBorderBufferLow = isCrossBorder(from, to) ? 350 : 0;
+  const crossBorderBufferHigh = isCrossBorder(from, to) ? 900 : 0;
+
+  return {
+    currency: "USD",
+    distanceMiles,
+    low: roundedDollars(Math.max(350, distanceMiles * ratePerMileLow) + crossBorderBufferLow),
+    high: roundedDollars(Math.max(650, distanceMiles * ratePerMileHigh) + crossBorderBufferHigh),
+    ratePerMileLow,
+    ratePerMileHigh,
+    basis: isCrossBorder(from, to)
+      ? "One full-truckload planning case with a cross-border handoff allowance. Road miles are estimated from straight-line distance and require routing confirmation."
+      : "One full-truckload planning case. Road miles are estimated from straight-line distance and require routing confirmation.",
+    sourceLabel: "2026 ATRI operating-cost benchmark",
+    sourceUrl: "https://truckingresearch.org/",
+    exclusions: [
+      "Duties, taxes, insurance, storage, exams, and unquoted accessorials",
+      "Live capacity, fuel program, equipment, exact addresses, and appointments",
+    ],
+  };
+}
+
 function providerContactsForNode(
   node: SupplyOptimizationNode,
   model: SupplyOptimizationModel,
@@ -139,10 +372,12 @@ function providerContactsForNode(
       role: "Supplier candidate",
       fit: target.fit,
       url: target.url,
+      sourceLabel: target.url ? "Public capability source" : undefined,
     }));
   }
 
-  const contacts: SupplyCommandContact[] = countryFor(node.location) === "US" ? [UBER_FREIGHT] : [];
+  const contacts: SupplyCommandContact[] = regionalContactsForLocation(node.location);
+  if (countryFor(node.location) === "US") addContact(contacts, UBER_FREIGHT);
   const nodes = new Map(model.nodes.map((candidate) => [candidate.id, candidate]));
   for (const edge of model.edges) {
     if (edge.fromNodeId !== node.id && edge.toNodeId !== node.id) continue;
@@ -194,12 +429,14 @@ function movementContacts(
   to: SupplyOptimizationNode,
 ) {
   const mode = edge.mode.toLowerCase();
-  const contacts: SupplyCommandContact[] = [];
+  const contacts: SupplyCommandContact[] = regionalContactsForLane(from, to);
   const crossBorder = isCrossBorder(from, to);
-  if (/air|ocean|international|cross-border/.test(mode) || crossBorder) contacts.push(DHL_GLOBAL_FORWARDING);
+  if (/air|ocean|international|cross-border/.test(mode) || crossBorder) addContact(contacts, DHL_GLOBAL_FORWARDING);
   if (/truck|ltl|flatbed|road|courier/.test(mode) || !contacts.length) addContact(contacts, UBER_FREIGHT);
-  for (const contact of borderContacts(from, to)) addContact(contacts, contact);
-  return contacts;
+  if (/air|ocean|international/.test(mode)) {
+    for (const contact of borderContacts(from, to)) addContact(contacts, contact);
+  }
+  return contacts.slice(0, 6);
 }
 
 function customsProfile(from: SupplyOptimizationNode, to: SupplyOptimizationNode, fallback: SupplyCoordinate) {
@@ -253,6 +490,7 @@ function nodeObjects(model: SupplyOptimizationModel): SupplyCommandObject[] {
   return model.nodes.flatMap((node) => {
     if (!node.coordinates) return [];
     const basisStatus = statusForBasis(node.basis);
+    const workstreams = nodeWorkstreams(node);
     return [{
       id: `node:${node.id}`,
       nodeId: node.id,
@@ -270,6 +508,8 @@ function nodeObjects(model: SupplyOptimizationModel): SupplyCommandObject[] {
       workstreamId: nodeWorkstream(node),
       contacts: providerContactsForNode(node, model),
       checks: [],
+      priority: actionPriority(model, workstreams[0]),
+      optimizationIds: optimizationIds(model, workstreams),
     } satisfies SupplyCommandObject];
   });
 }
@@ -285,15 +525,24 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
     if (!from?.coordinates || !to?.coordinates) continue;
     const routeMidpoint = midpoint(from.coordinates, to.coordinates);
     const crossBorder = isCrossBorder(from, to);
+    const routePriority = actionPriority(model, "shipment_planning");
+    const rateEstimate = rateEstimateFor(edge, from, to);
 
     routes.push({
       id: `route:${edge.id}`,
       edgeId: edge.id,
       from: from.coordinates,
       to: to.coordinates,
+      fromLabel: from.label,
+      toLabel: to.label,
+      label: `${from.label} to ${to.label}`,
+      mode: edge.mode,
+      cargo: edge.cargo,
       stage: edge.stage,
       basis: edge.basis,
       confidence: edge.confidence,
+      priority: routePriority,
+      rateEstimate,
     });
 
     objects.push({
@@ -317,6 +566,9 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
         { label: "Transit and capacity", status: "review" },
         { label: "Pickup and delivery constraints", status: "review" },
       ],
+      priority: routePriority,
+      optimizationIds: optimizationIds(model, ["shipment_planning"]),
+      rateEstimate,
     });
 
     if (crossBorder) {
@@ -343,6 +595,8 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
           { label: "Commercial invoice", status: "review" },
           { label: "Pre-arrival acceptance", status: "missing" },
         ],
+        priority: actionPriority(model, "customs"),
+        optimizationIds: optimizationIds(model, ["customs"]),
       });
     }
   }

@@ -242,4 +242,46 @@ assert.equal(publicModel.nodes.find((node) => node.kind === "customer_cluster")?
 assert.equal(publicModel.nodes.find((node) => node.kind === "processing_site")?.basis, "public");
 assert.ok(publicModel.edges.every((edge) => edge.basis === "inferred"), "public endpoints do not prove an observed route");
 
+const montrealResearch: SupplyCompanyResearch = {
+  ...noxResearch,
+  company: {
+    ...noxResearch.company,
+    name: claim("AON3D", "official", "high", ["https://www.aon3d.com/"]),
+    website: "https://www.aon3d.com/",
+    description: claim("AON3D builds industrial additive manufacturing systems.", "official", "high", ["https://www.aon3d.com/"]),
+    industry: claim("Industrial additive manufacturing", "official", "high", ["https://www.aon3d.com/"]),
+    headquarters: claim("Montreal", "official", "high", ["https://www.aon3d.com/"]),
+    locations: [{
+      ...claim("Montreal", "official", "high", ["https://www.aon3d.com/"]),
+      role: "assembly",
+      coordinates: null,
+    }],
+    likelySourceRegions: [],
+    likelyDestinations: [],
+  },
+};
+const montrealModel = buildSupplyOptimizationModel(
+  generateSupplyCase("AON3D", new Date(researchedAt), "full_operation", montrealResearch),
+);
+assert.deepEqual(
+  montrealModel.nodes.find((node) => node.kind === "processing_site")?.coordinates,
+  { latitude: 45.5019, longitude: -73.5674 },
+  "a verified Montreal label must remain drawable when the research provider omits coordinates",
+);
+assert.ok(montrealModel.edges.length > 0, "known factory geography must not discard every connected lane");
+
+const phoenixCase = generateSupplyCase(
+  "Company: Acme Robotics\nLocated: Phoenix, Arizona\nProduction: Phoenix, Arizona\nIndustrial robotics manufacturer\nNeeds: controls and machined components\nSources: Tulsa, Oklahoma\nShips to: Los Angeles, California",
+  new Date(researchedAt),
+);
+const phoenixModel = buildSupplyOptimizationModel(phoenixCase);
+assert.deepEqual(
+  phoenixModel.nodes.find((node) => node.kind === "processing_site")?.coordinates,
+  { latitude: 33.4484, longitude: -112.074 },
+);
+assert.ok(
+  phoenixModel.edges.every((edge) => /truck|ltl/i.test(edge.mode)),
+  "known domestic endpoints must not inherit an international profile mode",
+);
+
 console.log("supply OS optimization engine checks passed");
