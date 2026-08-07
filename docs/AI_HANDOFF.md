@@ -12,6 +12,76 @@ crm-status-structure, targeting main
 
 ## Task implemented
 
+### Split Supply OS into generation and saved dashboard pages
+
+Supply OS now has one page for creating a customer case and a separate page
+for browsing saved customer dashboards.
+
+- `/dashboard/supply-os` contains the saved-customer browser and the selected
+  customer's operational dashboard.
+- `/dashboard/supply-os/new` contains only the company prompt, extracted input
+  review, missing information, and `Save and open dashboard` action.
+- Saving merges against the latest office-and-user-scoped browser state, writes
+  the selected case, then returns to the dashboard page. Storage failure keeps
+  the operator on the generator and reports the error.
+- The default dashboard now shows the customer, lane selector, real Natural
+  Earth map, recommended gateway, expected cost range, transit assumption,
+  three next actions, a compact door-to-door plan, customs, and risks to verify.
+- The page no longer renders the anchor strip, duplicated prompt facts,
+  scenario cards, raw source requirements, connector catalog, field-by-field
+  invoice guidance, provider request and verification text, generic supplier
+  profiles, or duplicate readiness sections.
+- The detailed movement engine remains unchanged. Existing version 1 browser
+  cases continue to work, and no database schema, provider call, booking,
+  filing, outbound message, or approval path changed.
+
+## Files changed
+
+- `src/app/dashboard/supply-os/page.tsx`
+- `src/app/dashboard/supply-os/new/page.tsx`
+- `src/app/dashboard/supply-os/supply-os-dashboard.tsx`
+- `src/app/dashboard/supply-os/supply-os-generator.tsx`
+- `src/app/dashboard/supply-os/supply-os-storage.ts`
+- `src/app/dashboard/supply-os/supply-os-workspace.module.css`
+- `scripts/supply-os-prototype.test.ts`
+- `scripts/supply-os-enterprise-design.test.ts`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
+
+## Verification passed
+
+- `npm run test:supply-os-prototype`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-case-model`
+- `npm run test:supply-os-operating-plan`
+- `npm run test:supply-os-command-model`
+- `npx tsc --noEmit --incremental false`
+- `npm run build`
+- Authenticated browser flow from empty state to generator, generated review,
+  save, selected dashboard, movement switch, reload, and responsive layouts
+- Browser widths at 1440, 1024, and 390 pixels with no page overflow or console
+  errors
+
+## Caveats
+
+- Customer dashboards remain local to one browser. They are namespaced by
+  office and user but are not shared, server-persisted, or customer-published.
+- Costs, transit, providers, and routes remain deterministic planning outputs,
+  not live quotes, capacity, customs decisions, or bookings.
+- The removed details still exist in the planning engine for a future operator
+  drill-down. They are intentionally absent from the default customer view.
+
+## Prior Update
+
+## Date
+
+2026-08-06
+
+## Branch
+
+crm-status-structure, targeting main
+
+## Task implemented
+
 ### Movement-scoped customs and door-to-door operating plan
 
 Each generated customer case now expands into a separate operating plan for

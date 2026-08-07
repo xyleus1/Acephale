@@ -3324,3 +3324,35 @@ Use this file for chronological implementation notes that future agents should s
   server-created provenance, explicit CRM linking, and customer-safe projection.
 - Follow-up: validate the demo with customers before adding shared persistence
   or live supplier, rate, customs, and forwarder adapters.
+
+### 2026-08-06 - Split and simplify Supply OS customer cases
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Separate case generation from saved customer dashboards and remove
+  planning internals from the default customer-facing view.
+- Files changed: separate dashboard, generator, and browser-storage modules;
+  new authenticated generator route; simplified shared stylesheet; updated
+  Supply OS UI regression tests; decisions, engineering log, and handoff.
+- Behavior: `/dashboard/supply-os/new` builds and reviews a customer case, then
+  saves and opens it. `/dashboard/supply-os` browses saved customers and shows
+  only the selected route, map, expected cost and transit, end-to-end legs,
+  customs, risks to verify, and three next actions.
+- Data compatibility: the version 1 case serializer and movement-scoped
+  operating-plan engine were not changed. Existing scoped browser saves remain
+  readable. Detailed provider, connector, evidence, invoice, and supplier data
+  stays available in the engine but is no longer dumped into the customer page.
+- Verification: Supply OS prototype, design, case-model, operating-plan, and
+  command-model tests pass. TypeScript and the production build pass.
+  Authenticated browser QA covered
+  the empty state, separate generator, example extraction, save and reopen,
+  movement switching, desktop, tablet, and mobile layouts, page overflow, and
+  console errors.
+- Failed/skipped checks: no live provider, customs, carrier, terminal, rate,
+  booking, or customer-publication path was exercised because this remains a
+  deterministic browser-saved prototype.
+- Caveats: the dashboard is not a server-enforced customer projection and does
+  not persist outside the current browser. Human approval and existing
+  operational trust boundaries are unchanged.
+- Follow-up: validate the simpler hierarchy with customers before adding a
+  separate operator evidence drill-down or shared office-scoped persistence.

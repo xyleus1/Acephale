@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth";
-import { SupplyOsWorkspace } from "./supply-os-workspace";
+import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
 import styles from "./supply-os-workspace.module.css";
 
 export const metadata: Metadata = {
   title: "Supply OS",
-  description: "Build and save customer supply maps with sourcing, freight, customs, and risk checks.",
+  description: "Open saved customer supply chain dashboards.",
 };
 
 export default async function SupplyOsPage() {
   const session = await requireSession();
   return (
     <div className={styles.pageFrame}>
-      <SupplyOsWorkspace storageScope={`${session.officeId}:${session.userId}`} />
+      <SupplyOsDashboardWorkspace storageScope={`${session.officeId}:${session.userId}`} />
     </div>
   );
 }

@@ -16,6 +16,35 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-06 - Separate customer generation from saved Supply OS dashboards
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first customer-case version placed the prompt, saved customer
+  browser, map, provider research, evidence records, customs integrations,
+  execution details, and open checks in one very long page. The data model was
+  useful, but the presentation made a customer perform two jobs at once and
+  exposed planning internals that belong in operator tooling or settings.
+- Decision: Keep `/dashboard/supply-os` for saved customer dashboards and add
+  `/dashboard/supply-os/new` for case generation and input review. The saved
+  dashboard shows only the selected lane, map, recommended gateway, expected
+  range, transit assumption, door-to-door steps, compact customs and risk
+  summaries, and three next actions. Keep detailed provider requests,
+  evidence references, connector setup, invoice guidance, and generic supplier
+  profiles in the deterministic engine, but do not render them in the default
+  customer dashboard.
+- Rationale: One page should answer one question. The generator answers what
+  should be modeled. The saved dashboard answers what route is recommended,
+  what it may cost, what can block it, and what the operator needs next.
+- Consequences: Existing version 1 browser saves and movement-scoped planning
+  remain compatible. The route split changes no database schema, tenant scope,
+  provider connection, booking, customs filing, message, or approval boundary.
+  The single-scroll presentation described in the prior customer-case decision
+  is superseded, but its deterministic case model and browser-storage contract
+  remain in force.
+- Revisit when: Detailed operator evidence receives a separate authenticated
+  drill-down, or shared office-scoped case persistence replaces browser saves.
+
 ### 2026-08-06 - Supply OS operating plans are movement-scoped and evidence-gated
 
 - Status: accepted
