@@ -16,6 +16,46 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-06 - Customer Supply OS leads with operational ownership and a production handoff
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The saved customer dashboard treated a robotics company's sourced
+  components and finished-goods deliveries as one direct freight lane. In the
+  Atlas example, that sent Shenzhen components to Detroit and Nashville while
+  skipping the Austin production site. The page also made unqualified
+  providers, modeled costs, and static gateway order look more certain than
+  the available cargo facts supported.
+- Decision: Add a deterministic customer-engagement layer above the detailed
+  movement engine. The default offer is full operational ownership, with
+  modular starting points for supplier sourcing, inbound logistics, customs,
+  and finished-goods delivery. Model the customer network as inbound
+  components into the stated production or receiving site and outbound
+  finished goods from that site to customers. Store that site separately from
+  company headquarters when the prompt distinguishes them. Keep named
+  providers, prices, broker candidates, and gateway rankings out of the
+  default customer view until current evidence supports a decision. Persist
+  the selected coverage with the version 1 browser case,
+  while accepting older version 1 cases that do not contain the optional field.
+- Rationale: The one-minute demo must answer what the customer can hand to
+  Derya before it explains freight mechanics. Separating the production
+  handoff prevents a false supply-chain topology, and suppressing unsupported
+  precision protects trust.
+- Consequences: The customer view now presents five concrete workstreams,
+  three scope-specific kickoff inputs, an inbound and outbound network, a
+  customs boundary that distinguishes domestic, unknown, and import movements,
+  and collapsed execution depth. Multi-source inputs do not assign every
+  component to every region without source allocation evidence. Customs scope
+  follows each side of the production handoff, and a headquarters fallback
+  remains an explicit confirmation item. The existing detailed
+  movement planner remains available as an internal deterministic engine and
+  no database schema, dependency, provider call, message, booking, or customs
+  filing path changes. The prior decision to show gateway, price, transit, and
+  eight execution legs by default is superseded.
+- Revisit when: Office-scoped cases, BOM records, supplier candidates, live
+  quotes, broker responses, or bookings can replace the browser-local scoping
+  plan with attributable operational evidence.
+
 ### 2026-08-06 - Separate customer generation from saved Supply OS dashboards
 
 - Status: accepted

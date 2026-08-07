@@ -8,8 +8,10 @@ import {
   SAMPLE_SUPPLY_CASE_PROMPT,
   generateSupplyCase,
   upsertSupplyCase,
+  type SupplyEngagementScope,
   type SupplyCaseDashboard,
 } from "@/lib/supply-os-case-model";
+import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
 import {
   loadSupplyCases,
   persistSupplyCases,
@@ -26,6 +28,7 @@ function listOrMissing(values: readonly string[]) {
 export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
+  const [engagementScope, setEngagementScope] = useState<SupplyEngagementScope>("full_operation");
   const [generatedCase, setGeneratedCase] = useState<SupplyCaseDashboard | null>(null);
   const [state, setState] = useState<GeneratorState>("idle");
   const [message, setMessage] = useState("Describe the company and the movement you want to plan.");
@@ -34,7 +37,11 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
     removeLegacySupplyCaseStorage();
   }, []);
 
-  const canSave = Boolean(generatedCase && prompt.trim() === generatedCase.sourcePrompt);
+  const canSave = Boolean(
+    generatedCase
+      && prompt.trim() === generatedCase.sourcePrompt
+      && engagementScope === (generatedCase.engagementScope ?? "full_operation"),
+  );
 
   function buildCase() {
     const normalizedPrompt = prompt.trim();
@@ -44,7 +51,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
       return;
     }
 
-    const nextCase = generateSupplyCase(normalizedPrompt, new Date());
+    const nextCase = generateSupplyCase(normalizedPrompt, new Date(), engagementScope);
     setPrompt(nextCase.sourcePrompt);
     setGeneratedCase(nextCase);
     setState("ready");
@@ -52,7 +59,11 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
   }
 
   function saveAndOpen() {
-    if (!generatedCase || prompt.trim() !== generatedCase.sourcePrompt) {
+    if (
+      !generatedCase
+      || prompt.trim() !== generatedCase.sourcePrompt
+      || engagementScope !== (generatedCase.engagementScope ?? "full_operation")
+    ) {
       setState("error");
       setMessage("Build the edited description before saving.");
       return;
@@ -85,8 +96,31 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
         <section className={styles.generatorCard} aria-labelledby="case-builder-title">
           <header className={styles.simpleHeader}>
             <h2 id="case-builder-title">Describe the customer</h2>
-            <p>Include what they make, where they operate, what they source, and where goods need to go.</p>
+            <p>Include what they make, where production happens, what they source, and where finished goods need to go.</p>
           </header>
+
+          <fieldset className={styles.scopeFieldset}>
+            <legend>How should Derya help?</legend>
+            <p>Run the full supply chain, or choose one place to start.</p>
+            <div className={styles.scopeOptions}>
+              {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  data-active={engagementScope === option.id}
+                  aria-pressed={engagementScope === option.id}
+                  onClick={() => {
+                    setEngagementScope(option.id);
+                    setGeneratedCase(null);
+                    setState("idle");
+                    setMessage("Build the case to preview this level of support.");
+                  }}
+                >
+                  {option.shortLabel}
+                </button>
+              ))}
+            </div>
+          </fieldset>
 
           <label className={styles.composerLabel} htmlFor="supply-case-prompt">
             Company and supply chain
@@ -110,6 +144,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
               className={styles.textButton}
               onClick={() => {
                 setPrompt(SAMPLE_SUPPLY_CASE_PROMPT);
+                setEngagementScope("full_operation");
                 setGeneratedCase(null);
                 setState("idle");
                 setMessage("Example loaded. Build it to review the extracted inputs.");
@@ -132,7 +167,10 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
                 <h2>{generatedCase.companyName ?? "Customer details"}</h2>
               </header>
               <dl className={styles.extractedFacts}>
-                <div><dt>Location</dt><dd>{generatedCase.companyLocation ?? "Not provided"}</dd></div>
+                <div><dt>Production or receiving</dt><dd>{generatedCase.productionLocation ?? "Not provided"}</dd></div>
+                {generatedCase.companyLocation && generatedCase.companyLocation !== generatedCase.productionLocation ? (
+                  <div><dt>Company location</dt><dd>{generatedCase.companyLocation}</dd></div>
+                ) : null}
                 <div><dt>Sources</dt><dd>{listOrMissing(generatedCase.sourcingNeeds)}</dd></div>
                 <div><dt>Origin</dt><dd>{listOrMissing(generatedCase.sourceRegions)}</dd></div>
                 <div><dt>Destinations</dt><dd>{listOrMissing(generatedCase.destinations)}</dd></div>

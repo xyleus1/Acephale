@@ -13,19 +13,22 @@ for (const required of [
   ".customerBrowser",
   ".customerList",
   ".caseDashboard",
-  ".movementSelector",
+  ".engagementSection",
+  ".scopeSelector",
+  ".workstreamRail",
   ".planGrid",
   ".mapPanel",
-  ".recommendedPlan",
-  ".executionList",
+  ".workstreamDetail",
+  ".executionDetail",
   ".decisionGrid",
   ".summaryPanel",
   ".generatorMain",
   ".generatorCard",
   ".reviewPanel",
-  "Recommended plan",
-  "Door-to-door plan",
-  "Planning ranges and routes are estimates.",
+  "What Derya takes over",
+  "Operating network",
+  "Derya needs these 3 things",
+  "This case is a scoping plan.",
 ]) {
   assert.equal(source.includes(required), true, `simplified customer dashboard is missing: ${required}`);
 }
@@ -46,6 +49,10 @@ for (const forbidden of [
   "Supplier search briefs",
   "Official integration paths",
   "Modeled USD range",
+  "Expected cost",
+  "Broker to qualify",
+  "Recommended plan",
+  "Door-to-door plan",
   "Current finding",
   "Freshness target",
   "Needs your input",
@@ -105,7 +112,7 @@ const topBarStyles = styles.slice(styles.indexOf(".topBar {"), styles.indexOf(".
 assert.equal(topBarStyles.includes("position: sticky"), false, "Supply OS must not place a second sticky bar behind the app header");
 
 const tabletStyles = styles.slice(styles.indexOf("@media (max-width: 1040px)"), styles.indexOf("@media (max-width: 760px)"));
-for (const rule of [".main", "padding: 20px", ".executionList article", "grid-template-columns"]) {
+for (const rule of [".main", "padding: 20px", ".workstreamRail", "grid-template-columns"]) {
   assert.equal(tabletStyles.includes(rule), true, `tablet layout is missing: ${rule}`);
 }
 

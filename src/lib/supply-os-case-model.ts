@@ -2,10 +2,16 @@ export const SUPPLY_CASE_SCHEMA_VERSION = 1 as const;
 export const SUPPLY_CASE_STORAGE_KEY = "derya:supply-case-dashboards:v1";
 
 export const SAMPLE_SUPPLY_CASE_PROMPT =
-  "Company: Atlas Robotics\nLocated: Austin, Texas\nSources: servo motors, machine-vision cameras, and aluminum housings from Shenzhen, China\nShips to: factories in Detroit, Michigan and Nashville, Tennessee";
+  "Atlas Robotics builds warehouse robots in Austin, Texas. It sources servo motors, machine-vision cameras, and aluminum housings from Shenzhen, China, then ships finished systems to factories in Detroit, Michigan and Nashville, Tennessee.";
 
 export type SupplyCaseStatus = "ready" | "verify" | "needs_confirmation";
 export type SupplyEvidenceStatus = SupplyCaseStatus;
+export type SupplyEngagementScope =
+  | "full_operation"
+  | "supplier_sourcing"
+  | "inbound_logistics"
+  | "customs"
+  | "finished_goods_delivery";
 
 export type SupplyCaseFact<T> = {
   value: T | null;
@@ -95,15 +101,18 @@ export type SupplyCaseDashboard = {
   generatedAt: string;
   updatedAt: string;
   archivedAt?: string;
+  engagementScope?: SupplyEngagementScope;
   companyName: string | null;
   companyDescription: string;
   companyLocation: string | null;
+  productionLocation?: string | null;
   sourcingNeeds: string[];
   sourceRegions: string[];
   destinations: string[];
   company: {
     name: SupplyCaseFact<string>;
     headquarters: SupplyCaseFact<string>;
+    productionSite?: SupplyCaseFact<string>;
     industry: SupplyCaseFact<string>;
     sourcingNeeds: Array<SupplyCaseFact<string>>;
     sourceRegions: Array<SupplyCaseFact<string>>;
@@ -448,7 +457,7 @@ const LOCATIONS: readonly LocationEntry[] = [
     importGatewayCoordinates: { latitude: 39.8283, longitude: -98.5795 },
   },
   {
-    aliases: ["austin", "texas"],
+    aliases: ["austin"],
     label: "Austin, Texas",
     coordinates: { latitude: 30.2672, longitude: -97.7431 },
     exportGateway: "Port Houston",
@@ -457,7 +466,7 @@ const LOCATIONS: readonly LocationEntry[] = [
     importGatewayCoordinates: { latitude: 29.7305, longitude: -95.2651 },
   },
   {
-    aliases: ["detroit", "michigan"],
+    aliases: ["detroit"],
     label: "Detroit, Michigan",
     coordinates: { latitude: 42.3314, longitude: -83.0458 },
     exportGateway: "Detroit intermodal ramp",
@@ -466,7 +475,7 @@ const LOCATIONS: readonly LocationEntry[] = [
     importGatewayCoordinates: { latitude: 33.7361, longitude: -118.2637 },
   },
   {
-    aliases: ["nashville", "tennessee"],
+    aliases: ["nashville"],
     label: "Nashville, Tennessee",
     coordinates: { latitude: 36.1627, longitude: -86.7816 },
     exportGateway: "Savannah gateway",
@@ -475,7 +484,7 @@ const LOCATIONS: readonly LocationEntry[] = [
     importGatewayCoordinates: { latitude: 32.0809, longitude: -81.0912 },
   },
   {
-    aliases: ["los angeles", "long beach", "california"],
+    aliases: ["los angeles", "long beach"],
     label: "Los Angeles, California",
     coordinates: { latitude: 34.0522, longitude: -118.2437 },
     exportGateway: "Port of Los Angeles and Long Beach",
@@ -502,7 +511,7 @@ const LOCATIONS: readonly LocationEntry[] = [
     importGatewayCoordinates: { latitude: 37.7955, longitude: -122.2787 },
   },
   {
-    aliases: ["boston", "massachusetts"],
+    aliases: ["boston"],
     label: "Boston, Massachusetts",
     coordinates: { latitude: 42.3601, longitude: -71.0589 },
     exportGateway: "Port of Boston",
@@ -511,7 +520,7 @@ const LOCATIONS: readonly LocationEntry[] = [
     importGatewayCoordinates: { latitude: 42.36, longitude: -71.05 },
   },
   {
-    aliases: ["chicago", "illinois"],
+    aliases: ["chicago"],
     label: "Chicago, Illinois",
     coordinates: { latitude: 41.8781, longitude: -87.6298 },
     exportGateway: "Chicago rail ramp",
@@ -556,8 +565,8 @@ function fact<T>(value: T | null, status: SupplyEvidenceStatus, evidence: string
   return { value, status, evidence };
 }
 
-function extractLabel(input: string, label: "Company" | "Located" | "Sources" | "Ships to"): string | null {
-  const normalized = input.replace(/\s+(?=(?:Company|Located|Sources|Ships\s+to)\s*:)/gi, "\n");
+function extractLabel(input: string, label: "Company" | "Located" | "Production" | "Sources" | "Ships to"): string | null {
+  const normalized = input.replace(/\s+(?=(?:Company|Located|Production|Sources|Ships\s+to)\s*:)/gi, "\n");
   const escaped = label === "Ships to" ? "Ships\\s+to" : label;
   const match = normalized.match(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*:\\s*([^\\n]+)`, "i"));
   return match ? cleanPhrase(match[1]) : null;
@@ -570,6 +579,18 @@ function extractCompanyName(input: string): SupplyCaseFact<string> {
   const sentence = input.match(/^\s*([A-Z][A-Za-z0-9&.' -]{1,70}?)(?=\s+(?:is|builds|makes|manufactures|designs|develops|produces)\b)/);
   if (sentence) return fact(cleanPhrase(sentence[1]), "ready", "Parsed from the company description.");
   return fact<string>(null, "needs_confirmation", "Company name was not provided.");
+}
+
+function directOperatingLocation(value: string): string | null {
+  const candidate = cleanPhrase(value);
+  const resolved = resolveLocation(candidate);
+  if (!resolved) return null;
+  const normalized = candidate.toLowerCase();
+  const directMatch = [...resolved.aliases, resolved.label].some((locationName) => {
+    const location = locationName.toLowerCase();
+    return normalized === location || normalized.startsWith(`${location},`);
+  });
+  return directMatch ? candidate : null;
 }
 
 function extractHeadquarters(input: string): SupplyCaseFact<string> {
@@ -585,9 +606,42 @@ function extractHeadquarters(input: string): SupplyCaseFact<string> {
     /\b(?:builds?|makes?|manufactures?|designs?|develops?|produces?|operates?)\b[^.;\n]{0,100}?\s+in\s+(.+?)(?=(?:\s+(?:and\s+)?(?:sources?|procures?|imports?|buys?|needs?|requires?|ships?|exports?|delivers?)\b)|[.;\n]|$)/i,
   );
   if (operatingSentence) {
-    return fact(cleanPhrase(operatingSentence[1]), "ready", "Parsed from the company description.");
+    const location = directOperatingLocation(operatingSentence[1]);
+    if (location) return fact(location, "ready", "Parsed from the company description.");
   }
   return fact<string>(null, "needs_confirmation", "Headquarters or operating location was not provided.");
+}
+
+function extractProductionSite(
+  input: string,
+  companyLocation: SupplyCaseFact<string>,
+): SupplyCaseFact<string> {
+  const labeled = extractLabel(input, "Production");
+  if (labeled) return fact(labeled, "ready", "Provided in the Production field.");
+
+  const facilitySentence = input.match(
+    /\b(?:production|factory|assembly|manufacturing)\s+(?:site\s+|facility\s+|operations?\s+)?(?:is|are|runs?|happens?)?\s*(?:in|at)\s+(.+?)(?=(?:\s+(?:and|then)\s+)|[.;\n]|$)/i,
+  );
+  if (facilitySentence) {
+    return fact(cleanPhrase(facilitySentence[1]), "ready", "Parsed from the stated production site.");
+  }
+
+  const operatingSentence = input.match(
+    /\b(?:builds?|makes?|manufactures?|assembles?|produces?)\b[^.;\n]{0,100}?\s+in\s+(.+?)(?=(?:\s+(?:and\s+)?(?:sources?|procures?|imports?|buys?|needs?|requires?|ships?|exports?|delivers?)\b)|[.;\n]|$)/i,
+  );
+  if (operatingSentence) {
+    const location = directOperatingLocation(operatingSentence[1]);
+    if (location) return fact(location, "ready", "Parsed from where the company builds or manufactures goods.");
+  }
+
+  if (companyLocation.value) {
+    return fact(
+      companyLocation.value,
+      "verify",
+      "Using the stated company location as the receiving or production site until confirmed.",
+    );
+  }
+  return fact<string>(null, "needs_confirmation", "Production or component-receiving location was not provided.");
 }
 
 function detectIndustry(input: string): { fact: SupplyCaseFact<string>; profile: IndustryProfile } {
@@ -639,6 +693,15 @@ function cleanLocationCandidate(value: string): string {
   ));
 }
 
+const LOCATION_QUALIFIERS = new Set([
+  "california",
+  "illinois",
+  "massachusetts",
+  "michigan",
+  "tennessee",
+  "texas",
+]);
+
 function extractLocationCandidates(value: string): string[] {
   const candidates: string[] = [];
   const groups = value.split(/\s+and\s+|\s*;\s*/i);
@@ -655,6 +718,7 @@ function extractLocationCandidates(value: string): string[] {
         candidates.push(...knownInComponent);
       } else {
         const candidate = cleanLocationCandidate(component);
+        if (knownInGroup.length > 0 && LOCATION_QUALIFIERS.has(candidate.toLowerCase())) continue;
         if (candidate) candidates.push(candidate);
       }
     }
@@ -732,9 +796,11 @@ function extractDestinations(input: string): Array<SupplyCaseFact<string>> {
 function resolveLocation(label: string | null): LocationEntry | null {
   if (!label) return null;
   if (/\bnorth\s+korea\b/i.test(label)) return null;
-  return LOCATIONS.find((entry) =>
-    entry.aliases.some((alias) => locationAliasAppears(label, alias)) || locationAliasAppears(label, entry.label)
-  ) ?? null;
+  const matches = LOCATIONS.flatMap((entry) => [...entry.aliases, entry.label]
+    .filter((alias) => locationAliasAppears(label, alias))
+    .map((alias) => ({ entry, specificity: alias.replace(/[^a-z0-9]/gi, "").length }))
+  );
+  return matches.sort((left, right) => right.specificity - left.specificity)[0]?.entry ?? null;
 }
 
 const UNITED_STATES_LOCATION_LABELS = new Set([
@@ -904,7 +970,7 @@ function pushUniqueNode(nodes: SupplyRouteNode[], input: SupplyRouteNodeInput): 
 }
 
 function buildRoute(
-  headquarters: SupplyCaseFact<string>,
+  operatingSite: SupplyCaseFact<string>,
   sourceRegions: Array<SupplyCaseFact<string>>,
   destinations: Array<SupplyCaseFact<string>>,
   requestedMode: RequestedInternationalMode,
@@ -912,15 +978,15 @@ function buildRoute(
   const nodes: SupplyRouteNode[] = [];
   const segments: SupplyRouteSegment[] = [];
 
-  if (headquarters.value) {
-    const resolved = resolveLocation(headquarters.value);
+  if (operatingSite.value) {
+    const resolved = resolveLocation(operatingSite.value);
     pushUniqueNode(nodes, {
-      id: `hq-${slug(headquarters.value)}`,
+      id: `hq-${slug(operatingSite.value)}`,
       kind: "headquarters",
-      label: headquarters.value,
+      label: operatingSite.value,
       coordinates: resolved?.coordinates ?? null,
-      status: headquarters.status,
-      note: resolved ? "Company location supplied by the user." : "Location supplied by the user, coordinates need normalization.",
+      status: operatingSite.status,
+      note: resolved ? "Production or receiving site supplied by the user." : "Operating site supplied by the user, coordinates need normalization.",
     });
   }
 
@@ -1184,6 +1250,7 @@ function buildRisks(
   profile: IndustryProfile,
   route: SupplyCaseDashboard["route"],
   regions: Array<SupplyCaseFact<string>>,
+  productionSite: SupplyCaseFact<string>,
   destinations: Array<SupplyCaseFact<string>>,
 ): SupplyRiskItem[] {
   const sourceNodeIds = route.nodes.filter((node) => node.kind === "source").map((node) => node.id);
@@ -1222,7 +1289,7 @@ function buildRisks(
   }
 
   const regionText = regions.map((region) => region.value ?? "").join(" ").toLowerCase();
-  const hasUnitedStatesDestination = destinations.some((destination) =>
+  const hasUnitedStatesDestination = [productionSite, ...destinations].some((destination) =>
     customsTerritory(resolveLocation(destination.value)) === "United States"
   );
   if (/china|shenzhen|shanghai/.test(regionText)) {
@@ -1242,26 +1309,50 @@ function buildRisks(
   return result;
 }
 
-function determineCustomsScope(
-  sourceRegions: Array<SupplyCaseFact<string>>,
-  destinations: Array<SupplyCaseFact<string>>,
-): CustomsScope {
-  const sources = sourceRegions.flatMap((item) => (item.value ? [item.value] : []));
-  const shipTo = destinations.flatMap((item) => (item.value ? [item.value] : []));
-  if (!sources.length || !shipTo.length) return "unknown";
+type CustomsTopology = {
+  scope: CustomsScope;
+  importDestinations: Array<SupplyCaseFact<string>>;
+};
 
-  let hasUnknownPair = false;
-  for (const source of sources) {
-    for (const destination of shipTo) {
-      const pairScope = laneCustomsScope(resolveLocation(source), resolveLocation(destination));
-      if (pairScope === "unknown") {
-        hasUnknownPair = true;
-      } else if (pairScope === "import") {
-        return "import";
-      }
+function determineCustomsTopology(
+  sourceRegions: Array<SupplyCaseFact<string>>,
+  productionSite: SupplyCaseFact<string>,
+  destinations: Array<SupplyCaseFact<string>>,
+): CustomsTopology {
+  const sources = sourceRegions.filter((item): item is SupplyCaseFact<string> & { value: string } => Boolean(item.value));
+  const shipTo = destinations.filter((item): item is SupplyCaseFact<string> & { value: string } => Boolean(item.value));
+  const importDestinations = new Map<string, SupplyCaseFact<string>>();
+  let hasKnownLeg = false;
+  let hasUnknownLeg = false;
+
+  function evaluate(from: SupplyCaseFact<string> & { value: string }, to: SupplyCaseFact<string> & { value: string }) {
+    hasKnownLeg = true;
+    const legScope = laneCustomsScope(resolveLocation(from.value), resolveLocation(to.value));
+    if (legScope === "import") importDestinations.set(to.value, to);
+    if (legScope === "unknown") hasUnknownLeg = true;
+  }
+
+  const productionIsConfirmed = Boolean(productionSite.value && productionSite.status === "ready");
+  if (productionIsConfirmed && productionSite.value) {
+    const production = productionSite as SupplyCaseFact<string> & { value: string };
+    for (const source of sources) evaluate(source, production);
+    for (const destination of shipTo) evaluate(production, destination);
+  } else {
+    hasUnknownLeg = true;
+    for (const source of sources) {
+      for (const destination of shipTo) evaluate(source, destination);
     }
   }
-  return hasUnknownPair ? "unknown" : "domestic";
+  const incompleteNetwork = !sources.length || !shipTo.length || !productionIsConfirmed;
+  if (incompleteNetwork) hasUnknownLeg = true;
+
+  if (importDestinations.size) {
+    return { scope: "import", importDestinations: [...importDestinations.values()] };
+  }
+  return {
+    scope: hasKnownLeg && !hasUnknownLeg ? "domestic" : "unknown",
+    importDestinations: [],
+  };
 }
 
 function buildCustomsChecks(
@@ -1334,7 +1425,7 @@ function buildCustomsChecks(
 
 function buildOpenQuestions(
   name: SupplyCaseFact<string>,
-  headquarters: SupplyCaseFact<string>,
+  productionSite: SupplyCaseFact<string>,
   industry: SupplyCaseFact<string>,
   needs: Array<SupplyCaseFact<string>>,
   regions: Array<SupplyCaseFact<string>>,
@@ -1342,7 +1433,11 @@ function buildOpenQuestions(
 ): string[] {
   const questions: string[] = [];
   if (!name.value) questions.push("What is the company name?");
-  if (!headquarters.value) questions.push("Where is the company headquartered or operating?");
+  if (!productionSite.value) {
+    questions.push("Where are components received or production completed?");
+  } else if (productionSite.status !== "ready") {
+    questions.push(`Confirm whether ${productionSite.value} is the production or component-receiving site.`);
+  }
   if (!industry.value) questions.push("What does the company make or sell?");
   if (!needs.some((need) => need.status === "ready" && need.value)) {
     questions.push("Which exact materials, components, or finished goods need suppliers?");
@@ -1396,18 +1491,23 @@ function bestNextStepFor(questions: string[]): string {
   return "Confirm expected volume, dimensions, weight, Incoterm, cargo-ready date, and delivery date before requesting live offers.";
 }
 
-export function generateSupplyCase(prompt: string, now: Date = new Date()): SupplyCaseDashboard {
+export function generateSupplyCase(
+  prompt: string,
+  now: Date = new Date(),
+  engagementScope: SupplyEngagementScope = "full_operation",
+): SupplyCaseDashboard {
   const sourcePrompt = normalizeText(prompt);
   const timestamp = now.toISOString();
   const name = extractCompanyName(sourcePrompt);
   const headquarters = extractHeadquarters(sourcePrompt);
+  const productionSite = extractProductionSite(sourcePrompt, headquarters);
   const industryResult = detectIndustry(sourcePrompt);
   const sourcing = extractSourcing(sourcePrompt, industryResult.profile);
   const destinations = extractDestinations(sourcePrompt);
-  const route = buildRoute(headquarters, sourcing.regions, destinations, requestedInternationalMode(sourcePrompt));
+  const route = buildRoute(productionSite, sourcing.regions, destinations, requestedInternationalMode(sourcePrompt));
   const openQuestions = buildOpenQuestions(
     name,
-    headquarters,
+    productionSite,
     industryResult.fact,
     sourcing.needs,
     sourcing.regions,
@@ -1419,11 +1519,12 @@ export function generateSupplyCase(prompt: string, now: Date = new Date()): Supp
   const flatNeeds = sourcing.needs.flatMap((item) => (item.value ? [item.value] : []));
   const flatRegions = sourcing.regions.flatMap((item) => (item.value ? [item.value] : []));
   const flatDestinations = destinations.flatMap((item) => (item.value ? [item.value] : []));
-  const risks = buildRisks(industryResult.profile, route, sourcing.regions, destinations);
+  const risks = buildRisks(industryResult.profile, route, sourcing.regions, productionSite, destinations);
+  const customsTopology = determineCustomsTopology(sourcing.regions, productionSite, destinations);
   const customsChecks = buildCustomsChecks(
     industryResult.profile,
-    determineCustomsScope(sourcing.regions, destinations),
-    destinations,
+    customsTopology.scope,
+    customsTopology.importDestinations,
   );
   const bestNextStep = bestNextStepFor(openQuestions);
   const overview = buildSummary(name, industryResult.fact, sourcing.needs, sourcing.regions, destinations);
@@ -1437,15 +1538,18 @@ export function generateSupplyCase(prompt: string, now: Date = new Date()): Supp
     createdAt: timestamp,
     generatedAt: timestamp,
     updatedAt: timestamp,
+    engagementScope,
     companyName: name.value,
     companyDescription: industryResult.fact.value ?? "Company activity needs confirmation",
     companyLocation: headquarters.value,
+    productionLocation: productionSite.value,
     sourcingNeeds: flatNeeds,
     sourceRegions: flatRegions,
     destinations: flatDestinations,
     company: {
       name,
       headquarters,
+      productionSite,
       industry: industryResult.fact,
       sourcingNeeds: sourcing.needs,
       sourceRegions: sourcing.regions,
@@ -1569,13 +1673,22 @@ export function validateSupplyCaseDashboard(value: unknown): value is SupplyCase
   if (!["ready", "verify", "needs_confirmation"].includes(String(value.status))) return false;
   if (!isString(value.createdAt) || !isString(value.generatedAt) || !isString(value.updatedAt)) return false;
   if (value.archivedAt !== undefined && !isString(value.archivedAt)) return false;
+  if (value.engagementScope !== undefined && ![
+    "full_operation",
+    "supplier_sourcing",
+    "inbound_logistics",
+    "customs",
+    "finished_goods_delivery",
+  ].includes(String(value.engagementScope))) return false;
   if (value.companyName !== null && !isString(value.companyName)) return false;
   if (!isString(value.companyDescription) || (value.companyLocation !== null && !isString(value.companyLocation))) return false;
+  if (value.productionLocation !== undefined && value.productionLocation !== null && !isString(value.productionLocation)) return false;
   if (![value.sourcingNeeds, value.sourceRegions, value.destinations, value.openQuestions].every(
     (items) => Array.isArray(items) && items.every(isString),
   )) return false;
   if (!isRecord(value.company)) return false;
   if (!isFact(value.company.name) || !isFact(value.company.headquarters) || !isFact(value.company.industry)) return false;
+  if (value.company.productionSite !== undefined && !isFact(value.company.productionSite)) return false;
   if (![value.company.sourcingNeeds, value.company.sourceRegions, value.company.destinations].every(
     (items) => Array.isArray(items) && items.every(isFact),
   )) return false;
