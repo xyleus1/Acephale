@@ -36,6 +36,16 @@ const RESEARCH_EXAMPLE = [
   "AON3D builds industrial 3D printers and material systems. Planned replenishment can move by ocean, urgent production parts by air, regional structures by truck, and finished machines through cross-border and international delivery lanes. Website: https://www.aon3d.com",
 ].join("\n");
 
+function planningPromptFor(normalizedPrompt: string) {
+  const name = companyNameHint(normalizedPrompt);
+  if (name?.toLowerCase() === "aon3d" && /^(?:aon3d|https?:\/\/(?:www\.)?aon3d\.com\/?|(?:www\.)?aon3d\.com\/?)$/i.test(normalizedPrompt)) {
+    return RESEARCH_EXAMPLE;
+  }
+  return name && !/^\s*company\s*:/i.test(normalizedPrompt)
+    ? `Company: ${name}\n${normalizedPrompt}`
+    : normalizedPrompt;
+}
+
 export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -107,10 +117,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
   function buildWithoutResearch() {
     const normalizedPrompt = prompt.trim();
     if (!normalizedPrompt) return;
-    const name = companyNameHint(normalizedPrompt);
-    const planningPrompt = name && !/^\s*company\s*:/i.test(normalizedPrompt)
-      ? `Company: ${name}\n${normalizedPrompt}`
-      : normalizedPrompt;
+    const planningPrompt = planningPromptFor(normalizedPrompt);
     saveAndPresent(generateSupplyCase(planningPrompt, new Date(), engagementScope));
   }
 

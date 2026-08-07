@@ -402,5 +402,42 @@ assert.equal(aon3dModel.nodes.filter((node) => node.kind === "customer_cluster")
 assert.equal(aon3dMap.routes.length, 4);
 assert.deepEqual([...aon3dSegmentModes].sort(), ["air", "customs", "ocean", "road"]);
 assert.equal(aon3dMap.routes.flatMap((route) => route.segments).length >= 10, true);
+for (const route of aon3dMap.routes) {
+  const customsSegment = route.segments.find((segment) => segment.mode === "customs");
+  if (!customsSegment) continue;
+  const customsObject = aon3dMap.objects.find((object) => object.id === `customs:${route.edgeId}`);
+  assert.deepEqual(customsObject?.coordinates, customsSegment.to);
+}
+
+const taiwanModel: SupplyOptimizationModel = {
+  ...model,
+  nodes: [
+    {
+      ...model.nodes[0],
+      id: "supplier-taiwan",
+      label: "Taiwan electronics supplier",
+      location: "Taoyuan, Taiwan",
+      coordinates: { latitude: 25.012, longitude: 121.2148 },
+      qualificationTargets: [],
+    },
+    {
+      ...model.nodes[1],
+      id: "factory-montreal",
+      label: "Montreal production site",
+      location: "Montreal, Quebec, Canada",
+      coordinates: { latitude: 45.5019, longitude: -73.5674 },
+    },
+  ],
+  edges: [{
+    ...model.edges[0],
+    id: "taiwan-montreal",
+    fromNodeId: "supplier-taiwan",
+    toNodeId: "factory-montreal",
+    mode: "Ocean freight",
+  }],
+};
+const taiwanMap = buildSupplyCommandMap(taiwanModel, dashboard);
+assert.equal(taiwanMap.routes[0]?.segments[0]?.toLabel, "Port of Kaohsiung, confirm terminal");
+assert.equal(taiwanMap.routes[0]?.segments[1]?.mode, "ocean");
 
 console.log("Supply OS command map checks passed");

@@ -3720,3 +3720,15 @@ Use this file for chronological implementation notes that future agents should s
 - GPU browser QA at 1440 by 900 and 2048 by 900 confirmed a live basemap, six
   direction markers for two lanes, direct line selection, nine Tulsa-to-Phoenix
   carrier candidates, no viewport overflow, and no console errors.
+
+### 2026-08-07 - Supply OS gateway marker correction
+
+- Aligned customs dossier coordinates with the rendered customs handoff for
+  ocean, air, and cross-border road routes.
+- Moved lane controls onto the primary transport segment to avoid overlap with
+  border controls.
+- Added Taiwan gateway routing for Kaohsiung and Taoyuan.
+- Preserved the complete AON3D fallback when the user enters only the company
+  name or official domain.
+- Verified the command-map regression suite, TypeScript, optimized production
+  build, diff hygiene, and the repository em-dash prohibition.

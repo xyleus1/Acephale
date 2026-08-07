@@ -6345,3 +6345,13 @@ Verification:
   `.eslintrc.json` with ESLint 9 and the nested Conductor worktree resolves two
   copies of `@next/next`. This is a repository tooling issue. Type checking,
   focused regression tests, browser QA, and the production build all passed.
+
+Follow-up release check:
+
+- Customs dossier markers now use the same clearance coordinates as the
+  rendered port or airport customs segment, instead of a generic lane midpoint.
+- Taiwan is classified separately from mainland China so Kaohsiung and Taoyuan
+  gateways are reachable planning paths.
+- Entering only `AON3D` or `aon3d.com` still produces the complete demo if
+  public research is unavailable.
+- Command-map regression tests, TypeScript, and the production build passed.

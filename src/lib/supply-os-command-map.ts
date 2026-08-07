@@ -529,8 +529,9 @@ function providerContactsForNode(
   return contacts.slice(0, 3);
 }
 
-function countryFor(location: string): "US" | "CA" | "CN" | "MX" | "GB" | "EU" | "OM" | "FJ" | null {
+function countryFor(location: string): "US" | "CA" | "CN" | "TW" | "MX" | "GB" | "EU" | "OM" | "FJ" | null {
   const value = location.toLowerCase();
+  if (/taiwan|taipei|taoyuan|kaohsiung/.test(value)) return "TW";
   if (/china|shenzhen|dongguan|guangzhou|shanghai|pearl river/.test(value)) return "CN";
   if (/canada|canadian|ontario|toronto|hamilton|windsor|montreal|edmonton|vancouver/.test(value)) return "CA";
   if (/united states|u\.s\.|usa|detroit|michigan|ohio|iowa|west virginia|washington|pennsylvania|texas|california|austin|chicago|midwest|great lakes|nationwide|national/.test(value)) return "US";
@@ -571,15 +572,17 @@ type PlanningGateway = {
 function originGatewayFor(node: SupplyOptimizationNode, mode: "ocean" | "air"): PlanningGateway {
   const country = countryFor(node.location);
   const value = node.location.toLowerCase();
+  if (country === "TW" && mode === "ocean") {
+    return { label: "Port of Kaohsiung, confirm terminal", coordinates: { latitude: 22.6163, longitude: 120.2923 } };
+  }
+  if (country === "TW") {
+    return { label: "Taiwan Taoyuan Airport, confirm handling", coordinates: { latitude: 25.0797, longitude: 121.2342 } };
+  }
   if (country === "CN" && mode === "ocean") {
-    return /taiwan/.test(value)
-      ? { label: "Port of Kaohsiung, confirm terminal", coordinates: { latitude: 22.6163, longitude: 120.2923 } }
-      : { label: "Yantian Port, confirm terminal", coordinates: { latitude: 22.576, longitude: 114.272 } };
+    return { label: "Yantian Port, confirm terminal", coordinates: { latitude: 22.576, longitude: 114.272 } };
   }
   if (country === "CN") {
-    return /taiwan/.test(value)
-      ? { label: "Taiwan Taoyuan Airport, confirm handling", coordinates: { latitude: 25.0797, longitude: 121.2342 } }
-      : { label: "Shenzhen Bao'an Airport, confirm handling", coordinates: { latitude: 22.6393, longitude: 113.8107 } };
+    return { label: "Shenzhen Bao'an Airport, confirm handling", coordinates: { latitude: 22.6393, longitude: 113.8107 } };
   }
   if (country === "CA") {
     return mode === "ocean"
@@ -819,7 +822,13 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
     const from = nodes.get(edge.fromNodeId);
     const to = nodes.get(edge.toNodeId);
     if (!from?.coordinates || !to?.coordinates) continue;
-    const routeMidpoint = midpoint(from.coordinates, to.coordinates);
+    const segments = routeSegmentsFor(edge, from, to);
+    const primaryTransport = segments.find((segment) => segment.mode === "ocean" || segment.mode === "air")
+      ?? segments.find((segment) => segment.mode === "road")
+      ?? segments[0];
+    const routeMidpoint = primaryTransport
+      ? midpoint(primaryTransport.from, primaryTransport.to)
+      : midpoint(from.coordinates, to.coordinates);
     const crossBorder = isCrossBorder(from, to);
     const routePriority = actionPriority(model, "shipment_planning");
     const rateEstimate = rateEstimateFor(edge, from, to);
@@ -839,7 +848,7 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
       confidence: edge.confidence,
       priority: routePriority,
       rateEstimate,
-      segments: routeSegmentsFor(edge, from, to),
+      segments,
     });
 
     objects.push({
@@ -869,7 +878,11 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
     });
 
     if (crossBorder) {
-      const profile = customsProfile(from, to, routeMidpoint);
+      const customsSegment = segments.find((segment) => segment.mode === "customs");
+      const roadCustomsHandoff = segments.length > 1 && segments.every((segment) => segment.mode === "road")
+        ? segments[0]?.to
+        : undefined;
+      const profile = customsProfile(from, to, customsSegment?.to ?? roadCustomsHandoff ?? routeMidpoint);
       objects.push({
         id: `customs:${edge.id}`,
         edgeId: edge.id,
