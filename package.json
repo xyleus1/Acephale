@@ -14,6 +14,7 @@
     "test:supply-os-enterprise-design": "tsx scripts/supply-os-enterprise-design.test.ts",
     "test:supply-os-command-model": "tsx scripts/supply-os-command-model.test.ts",
     "test:supply-os-case-model": "tsx scripts/supply-os-case-model.test.ts",
+    "test:supply-os-company-research": "tsx scripts/supply-os-company-research.test.ts",
     "test:supply-os-engagement-plan": "tsx scripts/supply-os-engagement-plan.test.ts",
     "test:supply-os-operating-plan": "tsx scripts/supply-os-operating-plan.test.ts",
     "test:memory": "tsx scripts/memory-write-smoke.test.ts",

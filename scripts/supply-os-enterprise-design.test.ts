@@ -24,10 +24,14 @@ for (const required of [
   ".summaryPanel",
   ".generatorMain",
   ".generatorCard",
-  ".reviewPanel",
+  ".researchMethod",
+  ".researchSummary",
+  ".companyLogo",
+  ".findingList",
   "What Derya takes over",
   "Operating network",
   "Derya needs these 3 things",
+  "Send BOM or upcoming shipment",
   "This case is a scoping plan.",
 ]) {
   assert.equal(source.includes(required), true, `simplified customer dashboard is missing: ${required}`);

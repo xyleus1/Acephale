@@ -3410,3 +3410,37 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: validate the operating-ownership framing with robotics founders,
   then persist office-scoped cases before connecting live supplier, quote,
   broker, and shipment records.
+
+### 2026-08-06 - Add evidence-backed company research to Supply OS
+
+- Branch: supply-os-company-research, targeting main
+- Commit: see git log
+- Task: Turn a company name, website, or operating description into a sourced
+  customer presentation instead of changing only the displayed company name.
+- Files changed: new authenticated company-research API and research service,
+  optional research provenance on the browser case, generator and presentation
+  flow, company identity and research surfaces, presentation-mode shell rules,
+  regression tests, package scripts, decisions, handoff, and engineering log.
+- Verification: company-research, case-model, prototype, enterprise-design,
+  engagement-plan, operating-plan, and command-model tests pass. TypeScript and
+  the production build pass. Authenticated browser QA covered the unavailable
+  research state, explicit local fallback, full-width 1440-pixel presentation,
+  official company logo, source disclosure, inferred inputs, real map, and a
+  390-pixel layout with no horizontal overflow.
+- Trust boundary: provider-attributed URLs are the citation allow-list. Public
+  research cannot confirm suppliers, lanes, rates, customs treatment, or
+  providers unless a retained source directly supports the claim. Operational
+  hypotheses remain `verify` facts and all commitments retain human approval.
+- Security: the metadata fetch occurs only after the official website matches
+  a returned web-search source. It rejects credentials, local or private
+  address resolution, unsafe redirects, non-HTML responses, over-large bodies,
+  and cross-domain logo candidates.
+- Failed/skipped checks: no live research request ran locally because the local
+  server did not have `OPENAI_API_KEY`. No supplier, provider, broker, customs,
+  booking, filing, rate, or message action was called.
+- Caveats: research is a bounded useful-company brief rather than a complete
+  mirror of every public page. Saved customer cases are still scoped browser
+  records, not shared or durable server records.
+- Follow-up: configure the deployment key, verify one live company request in
+  production, then persist the sourced research packet as an office-scoped
+  record before enabling customer publishing.

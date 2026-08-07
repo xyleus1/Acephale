@@ -1464,3 +1464,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: real office-scoped customer records and provider events are
   connected, or when customer testing shows that a specific data layer needs a
   different default hierarchy.
+
+### 2026-08-06 - Public company research is evidence, not operating truth
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A useful one-minute customer demo cannot rely on the operator to
+  manually restate every company fact, but a public website also does not prove
+  actual suppliers, active lanes, customs treatment, freight rates, or current
+  operational relationships.
+- Decision: Start Supply OS case generation with one authenticated web-search
+  research packet. Verify the official website against provider-attributed
+  sources, retain source URLs on every supported claim, and extract bounded
+  same-domain homepage metadata for the logo. Store the packet with the
+  browser case. Treat likely inputs, source regions, and destinations as
+  hypotheses with explicit uncertainty. Keep deterministic case logic and
+  human approval responsible for route, customs, supplier, spend, and booking
+  decisions. If research is unavailable, offer an explicit description-only
+  fallback that does not claim public verification.
+- Rationale: The customer should recognize their company immediately and see a
+  credible supply-chain starting point, while Derya remains honest about the
+  difference between public context and the records needed to run logistics.
+  Provider-source filtering makes provenance auditable and limits fabricated
+  citations. The bounded metadata fetch adds identity without creating a broad
+  crawler or weakening the research trust boundary.
+- Consequences: `OPENAI_API_KEY` powers company discovery. Research latency is
+  part of new-case generation, research failures stay visible, and unsupported
+  facts cannot silently graduate to confirmed workflow data. Cases remain
+  browser-local until a later office-scoped persistence design is approved.
+- Revisit when: production evaluation shows the public brief misses material
+  company facts, or when office-scoped persistence and customer publishing need
+  a versioned research refresh policy.

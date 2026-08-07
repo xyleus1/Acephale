@@ -19,6 +19,57 @@ export type SupplyCaseFact<T> = {
   evidence: string;
 };
 
+export type SupplyResearchClaim = {
+  value: string;
+  basis: "official" | "public" | "inferred";
+  confidence: "high" | "medium" | "low";
+  sourceUrls: string[];
+};
+
+export type SupplyResearchLocation = SupplyResearchClaim & {
+  role: "headquarters" | "manufacturing" | "assembly" | "warehouse" | "office" | "customer_market" | "unknown";
+  coordinates: SupplyCoordinate | null;
+};
+
+export type SupplyResearchEvidence = {
+  url: string;
+  title: string;
+  sourceType: "official_website" | "public_source";
+  accessedAt: string;
+};
+
+export type SupplyResearchFinding = {
+  title: string;
+  detail: string;
+  implication: string;
+  basis: "official" | "public" | "inferred";
+  confidence: "high" | "medium" | "low";
+  sourceUrls: string[];
+};
+
+export type SupplyCompanyResearch = {
+  status: "verified" | "partial";
+  query: string;
+  researchedAt: string;
+  company: {
+    name: SupplyResearchClaim;
+    website: string;
+    logoUrl: string | null;
+    description: SupplyResearchClaim;
+    industry: SupplyResearchClaim;
+    headquarters: SupplyResearchClaim | null;
+    locations: SupplyResearchLocation[];
+    products: SupplyResearchClaim[];
+    customerMarkets: SupplyResearchClaim[];
+    likelyInputs: SupplyResearchClaim[];
+    likelySourceRegions: SupplyResearchClaim[];
+    likelyDestinations: SupplyResearchClaim[];
+  };
+  findings: SupplyResearchFinding[];
+  evidence: SupplyResearchEvidence[];
+  warnings: string[];
+};
+
 export type SupplyCoordinate = {
   latitude: number;
   longitude: number;
@@ -102,6 +153,7 @@ export type SupplyCaseDashboard = {
   updatedAt: string;
   archivedAt?: string;
   engagementScope?: SupplyEngagementScope;
+  research?: SupplyCompanyResearch;
   companyName: string | null;
   companyDescription: string;
   companyLocation: string | null;
@@ -569,7 +621,13 @@ function extractLabel(input: string, label: "Company" | "Located" | "Production"
   const normalized = input.replace(/\s+(?=(?:Company|Located|Production|Sources|Ships\s+to)\s*:)/gi, "\n");
   const escaped = label === "Ships to" ? "Ships\\s+to" : label;
   const match = normalized.match(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*:\\s*([^\\n]+)`, "i"));
-  return match ? cleanPhrase(match[1]) : null;
+  if (!match) return null;
+  const value = cleanPhrase(match[1]);
+  if (label !== "Located" && label !== "Production") return value;
+  const companySentence = value.match(
+    /^(.+)(?=\s+[A-Z][A-Za-z0-9&.' -]{1,70}\s+(?:is|builds|makes|manufactures|designs|develops|produces|operates)\b)/,
+  );
+  return cleanPhrase(companySentence?.[1] ?? value);
 }
 
 function extractCompanyName(input: string): SupplyCaseFact<string> {
@@ -1491,20 +1549,111 @@ function bestNextStepFor(questions: string[]): string {
   return "Confirm expected volume, dimensions, weight, Incoterm, cargo-ready date, and delivery date before requesting live offers.";
 }
 
+function researchPromptLines(research: SupplyCompanyResearch): string[] {
+  const company = research.company;
+  const production = company.locations.find((location) =>
+    ["manufacturing", "assembly", "warehouse"].includes(location.role),
+  );
+  const products = company.products.map((item) => item.value).slice(0, 5);
+  const inputs = company.likelyInputs.map((item) => item.value).slice(0, 6);
+  const origins = company.likelySourceRegions.map((item) => item.value).slice(0, 4);
+  const destinations = company.likelyDestinations.map((item) => item.value).slice(0, 4);
+  const lines = [
+    `Company: ${company.name.value}`,
+    company.headquarters?.value ? `Located: ${company.headquarters.value}` : "",
+    production?.value ? `Production: ${production.value}` : "",
+    [company.description.value, company.industry.value, products.length ? `Products include ${products.join(", ")}.` : ""]
+      .filter(Boolean)
+      .join(" "),
+  ];
+  if (inputs.length) {
+    lines.push(`Sources: ${inputs.join(", ")}${origins.length ? ` from ${origins.join(" and ")}` : ""}`);
+  }
+  if (destinations.length) lines.push(`Ships to: ${destinations.join(" and ")}`);
+  return lines.filter(Boolean);
+}
+
+function researchClaimEvidence(claim: SupplyResearchClaim) {
+  const sourceLabel = claim.sourceUrls.length
+    ? `Public research: ${claim.sourceUrls.join(", ")}`
+    : "Public research hypothesis. Confirm with the customer.";
+  return claim.basis === "inferred" ? `Inferred from public company context. ${sourceLabel}` : sourceLabel;
+}
+
+function applyResearchFactStatuses(
+  dashboard: SupplyCaseDashboard,
+  research: SupplyCompanyResearch,
+): SupplyCaseDashboard {
+  const company = research.company;
+  const inputClaims = new Map(company.likelyInputs.map((claim) => [claim.value.toLowerCase(), claim]));
+  const originClaims = new Map(company.likelySourceRegions.map((claim) => [claim.value.toLowerCase(), claim]));
+  const destinationClaims = new Map(company.likelyDestinations.map((claim) => [claim.value.toLowerCase(), claim]));
+  const markClaims = (facts: Array<SupplyCaseFact<string>>, claims: Map<string, SupplyResearchClaim>) => facts.map((item) => {
+    if (!item.value) return item;
+    const claim = claims.get(item.value.toLowerCase());
+    return claim ? fact(item.value, "verify", researchClaimEvidence(claim)) : item;
+  });
+  const sourcingNeeds = markClaims(dashboard.company.sourcingNeeds, inputClaims);
+  const sourceRegions = markClaims(dashboard.company.sourceRegions, originClaims);
+  const destinations = markClaims(dashboard.company.destinations, destinationClaims);
+  const researchedNodeLabels = new Set([
+    ...company.likelySourceRegions.map((claim) => claim.value.toLowerCase()),
+    ...company.likelyDestinations.map((claim) => claim.value.toLowerCase()),
+  ]);
+  const researchedCoordinates = new Map(company.locations.flatMap((location) => location.coordinates
+    ? [[location.value.toLowerCase(), location.coordinates] as const]
+    : []));
+  const routeNodes = dashboard.routeNodes.map((node) => (
+    researchedNodeLabels.has(node.label.toLowerCase()) || researchedCoordinates.has(node.label.toLowerCase())
+      ? {
+          ...node,
+          status: "verify" as const,
+          coordinates: researchedCoordinates.get(node.label.toLowerCase()) ?? node.coordinates,
+          lat: researchedCoordinates.get(node.label.toLowerCase())?.latitude ?? node.lat,
+          lng: researchedCoordinates.get(node.label.toLowerCase())?.longitude ?? node.lng,
+        }
+      : node
+  ));
+  return {
+    ...dashboard,
+    research,
+    companyName: company.name.value,
+    companyDescription: company.industry.value || dashboard.companyDescription,
+    companyLocation: company.headquarters?.value ?? dashboard.companyLocation,
+    company: {
+      ...dashboard.company,
+      name: fact(company.name.value, "ready", researchClaimEvidence(company.name)),
+      headquarters: company.headquarters
+        ? fact(company.headquarters.value, company.headquarters.basis === "inferred" ? "verify" : "ready", researchClaimEvidence(company.headquarters))
+        : dashboard.company.headquarters,
+      industry: fact(company.industry.value, company.industry.basis === "inferred" ? "verify" : "ready", researchClaimEvidence(company.industry)),
+      sourcingNeeds,
+      sourceRegions,
+      destinations,
+    },
+    route: { ...dashboard.route, nodes: routeNodes },
+    routeNodes,
+  };
+}
+
 export function generateSupplyCase(
   prompt: string,
   now: Date = new Date(),
   engagementScope: SupplyEngagementScope = "full_operation",
+  research?: SupplyCompanyResearch,
 ): SupplyCaseDashboard {
   const sourcePrompt = normalizeText(prompt);
+  const planningInput = research
+    ? normalizeText(`${researchPromptLines(research).join("\n")}\n${sourcePrompt}`)
+    : sourcePrompt;
   const timestamp = now.toISOString();
-  const name = extractCompanyName(sourcePrompt);
-  const headquarters = extractHeadquarters(sourcePrompt);
-  const productionSite = extractProductionSite(sourcePrompt, headquarters);
-  const industryResult = detectIndustry(sourcePrompt);
-  const sourcing = extractSourcing(sourcePrompt, industryResult.profile);
-  const destinations = extractDestinations(sourcePrompt);
-  const route = buildRoute(productionSite, sourcing.regions, destinations, requestedInternationalMode(sourcePrompt));
+  const name = extractCompanyName(planningInput);
+  const headquarters = extractHeadquarters(planningInput);
+  const productionSite = extractProductionSite(planningInput, headquarters);
+  const industryResult = detectIndustry(planningInput);
+  const sourcing = extractSourcing(planningInput, industryResult.profile);
+  const destinations = extractDestinations(planningInput);
+  const route = buildRoute(productionSite, sourcing.regions, destinations, requestedInternationalMode(planningInput));
   const openQuestions = buildOpenQuestions(
     name,
     productionSite,
@@ -1529,7 +1678,7 @@ export function generateSupplyCase(
   const bestNextStep = bestNextStepFor(openQuestions);
   const overview = buildSummary(name, industryResult.fact, sourcing.needs, sourcing.regions, destinations);
 
-  return {
+  const dashboard: SupplyCaseDashboard = {
     schemaVersion: SUPPLY_CASE_SCHEMA_VERSION,
     id: `supply-case-${slug(titleName)}-${stableHash(idBasis)}`,
     status: requiredQuestions.length ? "needs_confirmation" : "verify",
@@ -1572,6 +1721,7 @@ export function generateSupplyCase(
     openQuestions,
     bestNextStep,
   };
+  return research ? applyResearchFactStatuses(dashboard, research) : dashboard;
 }
 
 function isString(value: unknown): value is string {
@@ -1667,6 +1817,55 @@ function isCustomsCheck(value: unknown): value is SupplyCustomsCheck {
     && value.status === "needs_confirmation";
 }
 
+function isResearchClaim(value: unknown): value is SupplyResearchClaim {
+  return isRecord(value)
+    && isString(value.value)
+    && ["official", "public", "inferred"].includes(String(value.basis))
+    && ["high", "medium", "low"].includes(String(value.confidence))
+    && Array.isArray(value.sourceUrls)
+    && value.sourceUrls.every(isString);
+}
+
+function isCompanyResearch(value: unknown): value is SupplyCompanyResearch {
+  if (!isRecord(value)
+    || !["verified", "partial"].includes(String(value.status))
+    || !isString(value.query)
+    || !isString(value.researchedAt)
+    || !isRecord(value.company)
+    || !Array.isArray(value.findings)
+    || !Array.isArray(value.evidence)
+    || !Array.isArray(value.warnings)
+    || !value.warnings.every(isString)) return false;
+  const company = value.company;
+  if (!isResearchClaim(company.name)
+    || !isString(company.website)
+    || (company.logoUrl !== null && !isString(company.logoUrl))
+    || !isResearchClaim(company.description)
+    || !isResearchClaim(company.industry)
+    || (company.headquarters !== null && !isResearchClaim(company.headquarters))) return false;
+  if (![company.locations, company.products, company.customerMarkets, company.likelyInputs, company.likelySourceRegions, company.likelyDestinations]
+    .every(Array.isArray)) return false;
+  if (!(company.locations as unknown[]).every((location) => {
+    if (!isRecord(location)) return false;
+    const role = location.role;
+    const coordinates = location.coordinates;
+    return isResearchClaim(location)
+      && ["headquarters", "manufacturing", "assembly", "warehouse", "office", "customer_market", "unknown"].includes(String(role))
+      && (coordinates === null || isCoordinate(coordinates));
+  })) return false;
+  if (![company.products, company.customerMarkets, company.likelyInputs, company.likelySourceRegions, company.likelyDestinations]
+    .every((items) => (items as unknown[]).every(isResearchClaim))) return false;
+  if (!value.findings.every((finding) => isRecord(finding)
+    && [finding.title, finding.detail, finding.implication].every(isString)
+    && ["official", "public", "inferred"].includes(String(finding.basis))
+    && ["high", "medium", "low"].includes(String(finding.confidence))
+    && Array.isArray(finding.sourceUrls)
+    && finding.sourceUrls.every(isString))) return false;
+  return value.evidence.every((evidence) => isRecord(evidence)
+    && [evidence.url, evidence.title, evidence.accessedAt].every(isString)
+    && ["official_website", "public_source"].includes(String(evidence.sourceType)));
+}
+
 export function validateSupplyCaseDashboard(value: unknown): value is SupplyCaseDashboard {
   if (!isRecord(value) || value.schemaVersion !== SUPPLY_CASE_SCHEMA_VERSION) return false;
   if (!isString(value.id) || !isString(value.title) || !isString(value.sourcePrompt)) return false;
@@ -1680,6 +1879,7 @@ export function validateSupplyCaseDashboard(value: unknown): value is SupplyCase
     "customs",
     "finished_goods_delivery",
   ].includes(String(value.engagementScope))) return false;
+  if (value.research !== undefined && !isCompanyResearch(value.research)) return false;
   if (value.companyName !== null && !isString(value.companyName)) return false;
   if (!isString(value.companyDescription) || (value.companyLocation !== null && !isString(value.companyLocation))) return false;
   if (value.productionLocation !== undefined && value.productionLocation !== null && !isString(value.productionLocation)) return false;

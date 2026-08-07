@@ -8,11 +8,19 @@ export const metadata: Metadata = {
   description: "Open saved customer supply chain dashboards.",
 };
 
-export default async function SupplyOsPage() {
+export default async function SupplyOsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ present?: string }>;
+}) {
   const session = await requireSession();
+  const params = await searchParams;
   return (
     <div className={styles.pageFrame}>
-      <SupplyOsDashboardWorkspace storageScope={`${session.officeId}:${session.userId}`} />
+      <SupplyOsDashboardWorkspace
+        storageScope={`${session.officeId}:${session.userId}`}
+        presentationMode={params.present === "1"}
+      />
     </div>
   );
 }

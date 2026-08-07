@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
 import {
-  SAMPLE_SUPPLY_CASE_PROMPT,
   generateSupplyCase,
   upsertSupplyCase,
   type SupplyEngagementScope,
   type SupplyCaseDashboard,
 } from "@/lib/supply-os-case-model";
 import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
+import { requestCompanyResearch } from "./supply-os-research-client";
 import {
   loadSupplyCases,
   persistSupplyCases,
@@ -19,65 +19,56 @@ import {
 } from "./supply-os-storage";
 import styles from "./supply-os-workspace.module.css";
 
-type GeneratorState = "idle" | "ready" | "error";
+type GeneratorState = "idle" | "researching" | "error";
 
-function listOrMissing(values: readonly string[]) {
-  return values.length ? values.join(", ") : "Not provided";
-}
+const RESEARCH_EXAMPLE = "AON3D builds industrial additive-manufacturing hardware, software, and material systems in Montreal and serves customers globally. Website: https://www.aon3d.com";
 
 export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [engagementScope, setEngagementScope] = useState<SupplyEngagementScope>("full_operation");
-  const [generatedCase, setGeneratedCase] = useState<SupplyCaseDashboard | null>(null);
   const [state, setState] = useState<GeneratorState>("idle");
-  const [message, setMessage] = useState("Describe the company and the movement you want to plan.");
+  const [message, setMessage] = useState("Enter a company name, website, or the operating context you already know.");
 
   useEffect(() => {
     removeLegacySupplyCaseStorage();
   }, []);
 
-  const canSave = Boolean(
-    generatedCase
-      && prompt.trim() === generatedCase.sourcePrompt
-      && engagementScope === (generatedCase.engagementScope ?? "full_operation"),
-  );
+  function saveAndPresent(dashboard: SupplyCaseDashboard) {
+    const latest = loadSupplyCases(storageScope).cases;
+    const nextCases = upsertSupplyCase(latest, dashboard);
+    if (!persistSupplyCases(storageScope, nextCases, dashboard.id)) {
+      setState("error");
+      setMessage("Browser storage is unavailable. The dashboard was not saved.");
+      return;
+    }
+    router.push("/dashboard/supply-os?present=1");
+  }
 
-  function buildCase() {
+  async function researchAndBuild() {
     const normalizedPrompt = prompt.trim();
     if (!normalizedPrompt) {
       setState("error");
-      setMessage("Add the company, location, sourcing needs, or destination first.");
+      setMessage("Add a company name, website, or operating description first.");
       return;
     }
 
-    const nextCase = generateSupplyCase(normalizedPrompt, new Date(), engagementScope);
-    setPrompt(nextCase.sourcePrompt);
-    setGeneratedCase(nextCase);
-    setState("ready");
-    setMessage("Review the extracted inputs, then save the customer dashboard.");
+    setState("researching");
+    setMessage("Finding the official website, company facts, operating locations, products, and public supply signals...");
+    try {
+      const research = await requestCompanyResearch(normalizedPrompt);
+      const dashboard = generateSupplyCase(normalizedPrompt, new Date(), engagementScope, research);
+      saveAndPresent(dashboard);
+    } catch (error) {
+      setState("error");
+      setMessage(error instanceof Error ? error.message : "Company research failed.");
+    }
   }
 
-  function saveAndOpen() {
-    if (
-      !generatedCase
-      || prompt.trim() !== generatedCase.sourcePrompt
-      || engagementScope !== (generatedCase.engagementScope ?? "full_operation")
-    ) {
-      setState("error");
-      setMessage("Build the edited description before saving.");
-      return;
-    }
-
-    const latest = loadSupplyCases(storageScope).cases;
-    const nextCases = upsertSupplyCase(latest, generatedCase);
-    if (!persistSupplyCases(storageScope, nextCases, generatedCase.id)) {
-      setState("error");
-      setMessage("Browser storage is unavailable. This dashboard was not saved.");
-      return;
-    }
-
-    router.push("/dashboard/supply-os");
+  function buildWithoutResearch() {
+    const normalizedPrompt = prompt.trim();
+    if (!normalizedPrompt) return;
+    saveAndPresent(generateSupplyCase(normalizedPrompt, new Date(), engagementScope));
   }
 
   return (
@@ -95,13 +86,13 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
       <main className={`${styles.main} ${styles.generatorMain}`}>
         <section className={styles.generatorCard} aria-labelledby="case-builder-title">
           <header className={styles.simpleHeader}>
-            <h2 id="case-builder-title">Describe the customer</h2>
-            <p>Include what they make, where production happens, what they source, and where finished goods need to go.</p>
+            <span className={styles.eyebrow}>Company research</span>
+            <h2 id="case-builder-title">Build the customer picture</h2>
+            <p>Derya finds the official site and relevant public evidence, then maps what the company makes, what it may source, and how goods could move.</p>
           </header>
 
-          <fieldset className={styles.scopeFieldset}>
-            <legend>How should Derya help?</legend>
-            <p>Run the full supply chain, or choose one place to start.</p>
+          <fieldset className={styles.scopeFieldset} disabled={state === "researching"}>
+            <legend>Where should Derya start?</legend>
             <div className={styles.scopeOptions}>
               {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
                 <button
@@ -109,12 +100,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
                   type="button"
                   data-active={engagementScope === option.id}
                   aria-pressed={engagementScope === option.id}
-                  onClick={() => {
-                    setEngagementScope(option.id);
-                    setGeneratedCase(null);
-                    setState("idle");
-                    setMessage("Build the case to preview this level of support.");
-                  }}
+                  onClick={() => setEngagementScope(option.id)}
                 >
                   {option.shortLabel}
                 </button>
@@ -123,77 +109,57 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
           </fieldset>
 
           <label className={styles.composerLabel} htmlFor="supply-case-prompt">
-            Company and supply chain
+            Company name, website, or context
           </label>
           <textarea
             id="supply-case-prompt"
             className={styles.composer}
             value={prompt}
+            disabled={state === "researching"}
             onChange={(event) => {
               setPrompt(event.target.value);
               setState("idle");
-              setMessage("Build the edited description to review it.");
+              setMessage("Derya will verify the company before building the dashboard.");
             }}
-            rows={8}
-            placeholder="Example: Atlas Robotics builds warehouse robots in Austin. It sources motors, cameras, and aluminum housings from Shenzhen, then ships finished systems to factories in Detroit and Nashville."
+            rows={7}
+            placeholder="Example: AON3D, aon3d.com. They build industrial 3D printers in Montreal and sell globally. Show where Derya can take over sourcing, inbound logistics, customs, and delivery."
           />
 
           <div className={styles.composerFooter}>
             <button
               type="button"
               className={styles.textButton}
+              disabled={state === "researching"}
               onClick={() => {
-                setPrompt(SAMPLE_SUPPLY_CASE_PROMPT);
+                setPrompt(RESEARCH_EXAMPLE);
                 setEngagementScope("full_operation");
-                setGeneratedCase(null);
                 setState("idle");
-                setMessage("Example loaded. Build it to review the extracted inputs.");
+                setMessage("Example loaded. Research it to build an evidence-backed dashboard.");
               }}
             >
-              Use example
+              Use AON3D example
             </button>
-            <button type="button" className={styles.primaryButton} onClick={buildCase}>
-              Build case <Icon name="arrow-right" size={14} />
+            <button type="button" className={styles.primaryButton} onClick={researchAndBuild} disabled={state === "researching"}>
+              {state === "researching" ? "Researching company..." : "Research and build dashboard"}
+              <Icon name="arrow-right" size={14} />
             </button>
           </div>
           <p className={styles.statusLine} data-state={state} aria-live="polite">{message}</p>
+          {state === "error" && prompt.trim() ? (
+            <button type="button" className={styles.fallbackButton} onClick={buildWithoutResearch}>
+              Build from my description without public research
+            </button>
+          ) : null}
         </section>
 
-        <aside className={styles.reviewPanel} aria-live="polite">
-          {generatedCase ? (
-            <>
-              <header className={styles.simpleHeader}>
-                <span className={styles.eyebrow}>Review</span>
-                <h2>{generatedCase.companyName ?? "Customer details"}</h2>
-              </header>
-              <dl className={styles.extractedFacts}>
-                <div><dt>Production or receiving</dt><dd>{generatedCase.productionLocation ?? "Not provided"}</dd></div>
-                {generatedCase.companyLocation && generatedCase.companyLocation !== generatedCase.productionLocation ? (
-                  <div><dt>Company location</dt><dd>{generatedCase.companyLocation}</dd></div>
-                ) : null}
-                <div><dt>Sources</dt><dd>{listOrMissing(generatedCase.sourcingNeeds)}</dd></div>
-                <div><dt>Origin</dt><dd>{listOrMissing(generatedCase.sourceRegions)}</dd></div>
-                <div><dt>Destinations</dt><dd>{listOrMissing(generatedCase.destinations)}</dd></div>
-              </dl>
-              {generatedCase.openQuestions.length ? (
-                <div className={styles.missingPreview}>
-                  <h3>Still needed</h3>
-                  <ul>
-                    {generatedCase.openQuestions.slice(0, 4).map((question) => <li key={question}>{question}</li>)}
-                  </ul>
-                </div>
-              ) : null}
-              <button type="button" className={styles.primaryButton} onClick={saveAndOpen} disabled={!canSave}>
-                Save and open dashboard <Icon name="arrow-right" size={14} />
-              </button>
-            </>
-          ) : (
-            <div className={styles.reviewEmpty}>
-              <Icon name="file-check" size={20} />
-              <h2>Review before saving</h2>
-              <p>The extracted company, origin, destination, and missing inputs will appear here.</p>
-            </div>
-          )}
+        <aside className={styles.researchMethod}>
+          <span className={styles.eyebrow}>What gets built</span>
+          <ol>
+            <li><strong>Verified company profile</strong><span>Official website, logo, products, locations, markets, and source links.</span></li>
+            <li><strong>Supply-chain hypothesis</strong><span>Likely inputs, source regions, receiving points, and finished-goods markets, clearly marked for confirmation.</span></li>
+            <li><strong>Operating handoff</strong><span>What Derya can run now, what the customer approves, and the three inputs needed to start.</span></li>
+          </ol>
+          <p>Public research is evidence, not permission to book freight, file customs entries, award suppliers, or commit spend.</p>
         </aside>
       </main>
     </div>

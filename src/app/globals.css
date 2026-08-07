@@ -36107,3 +36107,26 @@ summary:focus-visible,
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Supply OS presentation mode removes internal operator chrome for customer demos. */
+body.supply-os-presentation .app-shell > .sidebar,
+body.supply-os-presentation .content > .topbar,
+body.supply-os-presentation .agent-fab,
+body.supply-os-presentation .agent-panel,
+body.supply-os-presentation .live-event-toast {
+  display: none;
+}
+
+body.supply-os-presentation .app-shell > .content {
+  width: 100% !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+  flex-basis: 100% !important;
+}
+
+body.supply-os-presentation .page-container {
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+}

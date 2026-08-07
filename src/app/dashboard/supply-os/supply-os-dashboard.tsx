@@ -7,6 +7,7 @@ import { WORLD_MAP_LAND_PATHS, WORLD_MAP_VIEWBOX } from "@/lib/market-intelligen
 import {
   upsertSupplyCase,
   type SupplyCaseDashboard,
+  type SupplyCompanyResearch,
   type SupplyCoordinate,
   type SupplyEngagementScope,
 } from "@/lib/supply-os-case-model";
@@ -49,6 +50,14 @@ function scopeLabel(scope: SupplyEngagementScope | undefined) {
 
 function countLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function websiteLabel(value: string) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return "Official website";
+  }
 }
 
 function project(coordinates: SupplyCoordinate | null) {
@@ -96,7 +105,13 @@ function scopeWorkstream(scope: SupplyEngagementScope): SupplyWorkstreamId {
   return "supplier_sourcing";
 }
 
-export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: string }) {
+export function SupplyOsDashboardWorkspace({
+  storageScope,
+  presentationMode = false,
+}: {
+  storageScope: string;
+  presentationMode?: boolean;
+}) {
   const keys = useMemo(() => supplyCaseStorageKeys(storageScope), [storageScope]);
   const [savedCases, setSavedCases] = useState<SupplyCaseDashboard[]>([]);
   const [activeCase, setActiveCase] = useState<SupplyCaseDashboard | null>(null);
@@ -123,6 +138,17 @@ export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: str
     return () => window.removeEventListener("storage", handleStorage);
   }, [keys.cases, keys.selected, storageScope]);
 
+  useEffect(() => {
+    if (!presentationMode) return;
+    const agentDockWasOpen = document.documentElement.classList.contains("agent-dock-open");
+    document.documentElement.classList.remove("agent-dock-open");
+    document.body.classList.add("supply-os-presentation");
+    return () => {
+      document.body.classList.remove("supply-os-presentation");
+      if (agentDockWasOpen) document.documentElement.classList.add("agent-dock-open");
+    };
+  }, [presentationMode]);
+
   const visibleCases = useMemo(() => visibleSupplyCases(savedCases), [savedCases]);
 
   function openDashboard(item: SupplyCaseDashboard) {
@@ -142,15 +168,18 @@ export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: str
   }
 
   return (
-    <div className={`${styles.workspace} supply-os-workspace`}>
+    <div className={`${styles.workspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>
       <header className={styles.topBar}>
         <div className={styles.brandBlock}>
-          <h1>Supply OS</h1>
+          <h1>{presentationMode ? "Derya" : "Supply OS"}</h1>
           <span>{activeCase ? dashboardName(activeCase) : "Customer dashboards"}</span>
         </div>
-        <Link className={styles.primaryButton} href="/dashboard/supply-os/new">
-          <Icon name="plus" size={14} /> New customer
-        </Link>
+        <div className={styles.topBarActions}>
+          {presentationMode ? <Link className={styles.secondaryButton} href="/dashboard/supply-os">All customers</Link> : null}
+          <Link className={styles.primaryButton} href="/dashboard/supply-os/new">
+            <Icon name="plus" size={14} /> New customer
+          </Link>
+        </div>
       </header>
 
       <main className={styles.main}>
@@ -158,7 +187,7 @@ export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: str
           <section className={styles.emptyResult}><p>Loading customer dashboards...</p></section>
         ) : visibleCases.length ? (
           <>
-            <section className={styles.customerBrowser} aria-labelledby="saved-cases-title">
+            {!presentationMode ? <section className={styles.customerBrowser} aria-labelledby="saved-cases-title">
               <header>
                 <h2 id="saved-cases-title">Customers</h2>
                 <span>{visibleCases.length} saved in this browser</span>
@@ -180,7 +209,7 @@ export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: str
                   </button>
                 ))}
               </div>
-            </section>
+            </section> : null}
             {activeCase ? (
               <CaseDashboard
                 key={activeCase.id}
@@ -237,14 +266,39 @@ function CaseDashboard({
   return (
     <article className={styles.caseDashboard} aria-labelledby="active-case-title">
       <header className={styles.caseHeader}>
-        <div>
-          <span className={styles.eyebrow}>{dashboardLocation(dashboard)}</span>
-          <h2 id="active-case-title">{dashboardName(dashboard)}</h2>
-          <p>
-            {dashboard.companyDescription} · {countLabel(dashboard.sourcingNeeds.length, "component group")} · {countLabel(dashboard.sourceRegions.length, "source region")} · {countLabel(dashboard.destinations.length, "customer destination")}
-          </p>
+        <div className={styles.companyIdentity}>
+          <CompanyLogo dashboard={dashboard} />
+          <div>
+            <span className={styles.eyebrow}>{dashboardLocation(dashboard)}</span>
+            <h2 id="active-case-title">{dashboardName(dashboard)}</h2>
+            <p>{dashboard.companyDescription}</p>
+            {dashboard.research ? (
+              <div className={styles.companyMeta}>
+                <a href={dashboard.research.company.website} target="_blank" rel="noreferrer">
+                  {websiteLabel(dashboard.research.company.website)}
+                </a>
+                <span>{countLabel(dashboard.research.evidence.length, "public source")}</span>
+                <span>Researched {formatTimestamp(dashboard.research.researchedAt)}</span>
+              </div>
+            ) : (
+              <div className={styles.companyMeta}><span>Built from customer description</span></div>
+            )}
+          </div>
         </div>
+        <a className={styles.primaryButton} href={`mailto:mert@usederya.com?subject=${encodeURIComponent(`${dashboardName(dashboard)} supply chain kickoff`)}`}>
+          Send BOM or upcoming shipment
+        </a>
       </header>
+
+      <div className={styles.planGrid}>
+        <SupplyNetworkMap
+          dashboard={dashboard}
+          plan={plan}
+          selectedFlowId={selectedFlowId}
+          setSelectedFlowId={setSelectedFlowId}
+        />
+        <CompanyResearchSummary research={dashboard.research} dashboard={dashboard} />
+      </div>
 
       <section className={styles.engagementSection} aria-labelledby="engagement-title">
         <div className={styles.engagementPromise}>
@@ -300,15 +354,7 @@ function CaseDashboard({
         </div>
       </section>
 
-      <div className={styles.planGrid}>
-        <SupplyNetworkMap
-          dashboard={dashboard}
-          plan={plan}
-          selectedFlowId={selectedFlowId}
-          setSelectedFlowId={setSelectedFlowId}
-        />
-        {selectedWorkstream ? <WorkstreamDetail workstream={selectedWorkstream} /> : null}
-      </div>
+      {selectedWorkstream ? <WorkstreamDetail workstream={selectedWorkstream} /> : null}
 
       <div className={styles.decisionGrid}>
         <CustomsBoundary dashboard={dashboard} />
@@ -319,6 +365,82 @@ function CaseDashboard({
 
       <p className={styles.disclaimer}>This case is a scoping plan. Exact suppliers, routes, prices, capacity, customs treatment, and bookings require current evidence and approval.</p>
     </article>
+  );
+}
+
+function CompanyLogo({ dashboard }: { dashboard: SupplyCaseDashboard }) {
+  const [failed, setFailed] = useState(false);
+  const logoUrl = dashboard.research?.company.logoUrl;
+  const initial = dashboardName(dashboard).slice(0, 1).toUpperCase();
+  return (
+    <div className={styles.companyLogo} aria-label={`${dashboardName(dashboard)} logo`}>
+      <span>{initial}</span>
+      {logoUrl && !failed ? (
+        <img src={logoUrl} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+      ) : null}
+    </div>
+  );
+}
+
+function CompanyResearchSummary({
+  research,
+  dashboard,
+}: {
+  research?: SupplyCompanyResearch;
+  dashboard: SupplyCaseDashboard;
+}) {
+  if (!research) {
+    return (
+      <aside className={styles.researchSummary}>
+        <header><span className={styles.eyebrow}>Customer input</span><h2>What we can map now</h2></header>
+        <div className={styles.researchFactList}>
+          <article><strong>{countLabel(dashboard.sourcingNeeds.length, "input")}</strong><span>Materials or components named</span></article>
+          <article><strong>{countLabel(dashboard.sourceRegions.length, "source region")}</strong><span>Origins named</span></article>
+          <article><strong>{countLabel(dashboard.destinations.length, "destination")}</strong><span>Delivery markets named</span></article>
+        </div>
+        <p>Official website research was not attached to this case. Confirm the company facts before using the map operationally.</p>
+      </aside>
+    );
+  }
+  const findings = research.findings.slice(0, 3);
+  const inputs = research.company.likelyInputs.slice(0, 5);
+  return (
+    <aside className={styles.researchSummary}>
+      <header>
+        <span className={styles.eyebrow}>Public company picture</span>
+        <h2>What matters for the supply chain</h2>
+      </header>
+      <div className={styles.findingList}>
+        {findings.map((finding) => (
+          <article key={finding.title}>
+            <div><strong>{finding.title}</strong><span data-basis={finding.basis}>{finding.basis}</span></div>
+            <p>{finding.detail}</p>
+            <small>{finding.implication}</small>
+          </article>
+        ))}
+      </div>
+      {inputs.length ? (
+        <div className={styles.inputHypotheses}>
+          <span>Inputs to confirm</span>
+          <p>{inputs.map((item) => item.value).join(", ")}</p>
+        </div>
+      ) : null}
+      <details className={styles.researchEvidence}>
+        <summary>Company research and {countLabel(research.evidence.length, "source")}</summary>
+        <div>
+          <p>{research.company.description.value}</p>
+          {research.company.products.length ? <p><strong>Products:</strong> {research.company.products.map((item) => item.value).join(", ")}</p> : null}
+          {research.company.locations.length ? <p><strong>Locations:</strong> {research.company.locations.map((item) => `${item.value} (${item.role})`).join(", ")}</p> : null}
+          {research.company.customerMarkets.length ? <p><strong>Markets:</strong> {research.company.customerMarkets.map((item) => item.value).join(", ")}</p> : null}
+          <ul>
+            {research.evidence.map((source) => (
+              <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a><span>{source.sourceType === "official_website" ? "Official" : "Public"}</span></li>
+            ))}
+          </ul>
+          {research.warnings.length ? <p><strong>Confirm:</strong> {research.warnings.join(" ")}</p> : null}
+        </div>
+      </details>
+    </aside>
   );
 }
 

@@ -12,6 +12,89 @@ supply-os-operating-ownership, targeting main
 
 ## Task implemented
 
+### Turn a company name or website into an evidence-backed customer dashboard
+
+- The new-customer page now accepts a company name, official URL, or operating
+  description and runs one authenticated public-research request before it
+  builds the Supply OS case.
+- Research finds and verifies the official website, extracts a same-domain
+  logo, and structures the useful public company picture: description,
+  industry, headquarters, operating locations, products, customer markets,
+  and a short set of supply-chain findings.
+- Every official or public claim retains its attributable source URLs. The
+  normalizer discards model citations that were not returned by the web-search
+  provider and does not let unsupported public claims survive as facts.
+- Likely inputs, source regions, and destination markets stay labeled as
+  hypotheses. They cannot silently become confirmed suppliers, lanes, customs
+  treatment, providers, rates, or bookings.
+- Official-site metadata fetching is limited to verified public HTTP(S)
+  domains, rejects private-address resolution and unsafe redirects, uses a
+  timeout and response-size cap, and loads only same-domain logo candidates.
+- The generated dashboard opens in a dedicated presentation mode that hides
+  the internal application chrome. It shows the company logo and profile,
+  official-source count, operating map, three research findings, inputs to
+  confirm, the work Derya can take over, and the three items needed to start.
+- Company research failure is explicit. The operator can build from their own
+  description, but the resulting dashboard states that public research is not
+  attached instead of pretending it is verified.
+- Compact labeled input now stops location fields before a following company
+  sentence, so one-line prompts do not turn a city into a paragraph.
+
+## Files changed
+
+- `src/lib/supply-os-company-research.ts`
+- `src/lib/supply-os-case-model.ts`
+- `src/app/api/supply-os/company-research/route.ts`
+- `src/app/dashboard/supply-os/page.tsx`
+- `src/app/dashboard/supply-os/supply-os-research-client.ts`
+- Supply OS generator, dashboard, scoped stylesheet, and presentation globals
+- Company-research, prototype, enterprise-design, and case-model regression
+  tests
+- `package.json`, `docs/DECISIONS.md`, `docs/ENGINEERING_LOG.md`, and this handoff
+
+## Verification passed
+
+- `npm run test:supply-os-company-research`
+- `npm run test:supply-os-case-model`
+- `npm run test:supply-os-prototype`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-engagement-plan`
+- `npm run test:supply-os-operating-plan`
+- `npm run test:supply-os-command-model`
+- `npx tsc --noEmit --incremental false`
+- `npm run build` with the local test database configuration
+- Authenticated browser flow for research failure, explicit description-only
+  fallback, save, presentation-mode navigation, and responsive rendering
+- Evidence-backed AON3D presentation fixture with official logo, public source
+  links, three findings, inferred inputs, full-width desktop rendering, and
+  390-pixel rendering with no horizontal overflow
+
+## Caveats
+
+- Live research requires `OPENAI_API_KEY` in the deployed environment. Local
+  browser QA verified the honest unavailable state because the local server did
+  not have a key.
+- Research is a bounded public discovery brief, not a blind full-site crawl.
+  It intentionally omits marketing repetition, private data, login or paywall
+  content, and personal contact details.
+- Cases remain office-and-user-scoped browser records. They are not shared,
+  backed up, customer-published, or server-persisted.
+- Public context can propose discovery questions, but a BOM, purchase orders,
+  supplier records, shipment documents, live quotes, and approvals are still
+  required before operational commitments.
+
+## Prior Update
+
+## Date
+
+2026-08-06
+
+## Branch
+
+supply-os-company-research, targeting main
+
+## Task implemented
+
 ### Reframe Supply OS around full or modular operational ownership
 
 The customer case now answers what Derya can take over before exposing any
