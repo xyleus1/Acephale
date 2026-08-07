@@ -3444,3 +3444,39 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: configure the deployment key, verify one live company request in
   production, then persist the sourced research packet as an office-scoped
   record before enabling customer publishing.
+
+### 2026-08-07 - Repair Supply OS controls and make company research resilient
+
+- Branch: supply-os-light-gray, targeting main
+- Commits: cc487dc, 2ee2011, 8114746
+- Task: Fix collapsed generator buttons, lighten the Supply OS palette, expose
+  meaningful company-research progress, and stop provider outages from killing
+  website-backed demos.
+- UI: the engagement grid now clears its floated legend and measures at full
+  card width. The palette uses a lighter neutral graphite scale with deliberate
+  borders and no decorative highlights. The generator renders a compact trace
+  for verified, active, inferred, and failed research steps.
+- Research transport: the authenticated route streams newline-delimited JSON
+  progress and result events. The browser client incrementally publishes those
+  events to the active generator and preserves the existing research-first
+  planning order.
+- Resilience: an explicit public website enables a same-domain fallback when
+  the OpenAI key is absent, the provider call fails, no attributable sources
+  return, or structured normalization fails. The fallback reads at most four
+  selected official pages and returns a partial, sourced research packet.
+- Extraction: official metadata and JSON-LD provide identity, descriptions,
+  logos, addresses, and products. Product page titles add bounded product
+  context without treating marketing headings as products. Deterministic
+  industry patterns generate likely-input hypotheses.
+- Safety: SSRF checks, public DNS validation, same-domain redirects, HTML-only
+  responses, byte caps, timeouts, source limits, and the existing human
+  approval boundary remain in force. Prompt-provided locations are inferred,
+  not relabeled as verified facilities.
+- Verification: all Supply OS tests, the new research-progress regression test,
+  TypeScript, and the production build passed. Authenticated browser QA covered
+  AON3D website-only success, actionable no-website failure, desktop and mobile
+  scope controls, official source disclosure, logo extraction, and customer
+  location confirmation.
+- Caveat: provider-backed live public search was not exercised locally because
+  the disposable server intentionally had no `OPENAI_API_KEY`. That absence was
+  used to verify the new official-site fallback end to end.

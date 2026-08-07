@@ -1495,3 +1495,47 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: production evaluation shows the public brief misses material
   company facts, or when office-scoped persistence and customer publishing need
   a versioned research refresh policy.
+
+### 2026-08-07 - Company research degrades to verified official-site evidence
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The original company-research request failed closed when the model
+  provider was unavailable and exposed no useful intermediate state. That made
+  a customer demo look broken even when the operator supplied the official
+  company website.
+- Decision: Stream evidence-oriented research milestones to the generator. If
+  public search cannot produce a valid attributable packet and the prompt has
+  an explicit public website, review a maximum of four relevant pages on that
+  verified domain and return a partial research packet. Extract only bounded
+  official metadata, JSON-LD, product-page titles, and source links. Mark
+  deterministic supply inputs and prompt-provided locations as inferred.
+  Continue to offer a description-only plan when no website is available.
+- Rationale: The demo should remain useful during a provider outage without
+  pretending that a homepage proves a real supply chain. Visible milestones
+  let the customer distinguish facts, assumptions, and blockers.
+- Consequences: `OPENAI_API_KEY` remains the richer company-discovery path, but
+  an explicit website is now sufficient for a partial sourced profile. The
+  fallback remains subject to SSRF checks, same-domain limits, byte and page
+  caps, timeouts, and human approval. It cannot confirm suppliers, lanes,
+  rates, customs treatment, providers, or external actions.
+- Revisit when: connected company systems provide authoritative facility,
+  supplier, shipment, and customs records, or when measured fallback quality
+  justifies a broader allow-listed source strategy.
+
+### 2026-08-07 - Supply OS uses a lighter graphite customer surface
+
+- Status: accepted
+- Owner: product and design
+- Context: Customer feedback found the command-center palette too close to
+  black and the visual hierarchy too flat.
+- Decision: Keep the scoped enterprise language but derive page and panel
+  surfaces from a lighter neutral graphite scale. Use borders, spacing, and
+  typography for hierarchy instead of highlights, gradients, or random colors.
+- Rationale: The product should retain operational density without feeling
+  oppressive or hiding controls in low-contrast surfaces.
+- Consequences: The Supply OS remains visually distinct from the internal app,
+  but its controls and evidence panels are easier to scan. Existing mobile,
+  palette, and global-style isolation tests continue to guard the boundary.
+- Revisit when: customer testing supports a full light theme or a shared
+  application-wide token system.

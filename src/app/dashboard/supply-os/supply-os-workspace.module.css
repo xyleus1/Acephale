@@ -3,16 +3,16 @@
 }
 
 .workspace {
-  --surface-base: #0f1316;
-  --surface-deep: #111518;
-  --surface-panel: #14191d;
-  --surface-raised: #191f23;
-  --surface-soft: #222a2f;
-  --line: #2b343a;
-  --line-strong: #3c474e;
+  --surface-base: color-mix(in srgb, #2b343a 88%, #e8ebed);
+  --surface-deep: color-mix(in srgb, #2b343a 84%, #e8ebed);
+  --surface-panel: color-mix(in srgb, #3c474e 82%, #e8ebed);
+  --surface-raised: color-mix(in srgb, #3c474e 76%, #e8ebed);
+  --surface-soft: color-mix(in srgb, #3c474e 70%, #e8ebed);
+  --line: #7b858c;
+  --line-strong: #92a7b2;
   --text: #e8ebed;
-  --text-soft: #a7afb4;
-  --text-dim: #7b858c;
+  --text-soft: color-mix(in srgb, #e8ebed 78%, #a7afb4);
+  --text-dim: #a7afb4;
   --accent: #92a7b2;
   --critical: #cf6e74;
   --stable: #789487;
@@ -440,6 +440,7 @@
   color: var(--text-dim);
   background: var(--surface-base);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .scopeSelector button:hover,
@@ -1139,9 +1140,12 @@
 }
 
 .scopeOptions {
+  clear: both;
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+  padding-top: 12px;
 }
 
 .scopeOptions button:first-child {
@@ -1213,6 +1217,103 @@
 
 .statusLine[data-state="researching"] {
   color: var(--accent);
+}
+
+.researchTrace {
+  padding: 0 24px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.traceHeader {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.traceHeader strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.traceHeader span {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.researchTrace ol {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  list-style: none;
+}
+
+.researchTrace li {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-panel);
+}
+
+.researchTrace li:first-child {
+  border-top: 0;
+}
+
+.traceMarker {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.researchTrace li[data-status="complete"] .traceMarker {
+  color: var(--stable);
+  border-color: var(--stable);
+}
+
+.researchTrace li[data-status="active"] .traceMarker {
+  color: var(--accent);
+}
+
+.researchTrace li[data-status="error"] .traceMarker {
+  color: var(--critical);
+  border-color: var(--critical);
+}
+
+.researchTrace li > span:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.researchTrace li strong {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.researchTrace li small {
+  overflow-wrap: anywhere;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .fallbackButton {
@@ -1451,6 +1552,10 @@
   }
 
   .statusLine {
+    padding-inline: 16px;
+  }
+
+  .researchTrace {
     padding-inline: 16px;
   }
 

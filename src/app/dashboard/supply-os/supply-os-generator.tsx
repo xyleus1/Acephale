@@ -11,7 +11,11 @@ import {
   type SupplyCaseDashboard,
 } from "@/lib/supply-os-case-model";
 import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
-import { requestCompanyResearch } from "./supply-os-research-client";
+import type { SupplyResearchProgress } from "@/lib/supply-os-company-research";
+import {
+  requestCompanyResearch,
+  SUPPLY_RESEARCH_PROGRESS_EVENT,
+} from "./supply-os-research-client";
 import {
   loadSupplyCases,
   persistSupplyCases,
@@ -29,6 +33,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
   const [engagementScope, setEngagementScope] = useState<SupplyEngagementScope>("full_operation");
   const [state, setState] = useState<GeneratorState>("idle");
   const [message, setMessage] = useState("Enter a company name, website, or the operating context you already know.");
+  const [researchProgress, setResearchProgress] = useState<SupplyResearchProgress[]>([]);
 
   useEffect(() => {
     removeLegacySupplyCaseStorage();
@@ -54,14 +59,37 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
     }
 
     setState("researching");
-    setMessage("Finding the official website, company facts, operating locations, products, and public supply signals...");
+    setResearchProgress([]);
+    setMessage("Research started. Verified facts and assumptions will appear below as they are found.");
+    const handleProgress = (rawEvent: Event) => {
+      const event = (rawEvent as CustomEvent<SupplyResearchProgress>).detail;
+      if (!event) return;
+      setResearchProgress((current) => {
+        const existing = current.findIndex((item) => item.id === event.id);
+        if (existing < 0) return [...current, event];
+        return current.map((item, index) => index === existing ? event : item);
+      });
+      setMessage(event.detail || event.label);
+    };
+    window.addEventListener(SUPPLY_RESEARCH_PROGRESS_EVENT, handleProgress);
     try {
       const research = await requestCompanyResearch(normalizedPrompt);
       const dashboard = generateSupplyCase(normalizedPrompt, new Date(), engagementScope, research);
+      setMessage("Research complete. Saving the evidence-backed customer dashboard.");
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
       saveAndPresent(dashboard);
     } catch (error) {
+      const detail = error instanceof Error ? error.message : "Company research failed.";
       setState("error");
-      setMessage(error instanceof Error ? error.message : "Company research failed.");
+      setMessage(detail);
+      setResearchProgress((current) => [...current.filter((item) => item.id !== "dashboard"), {
+        id: "dashboard",
+        label: "Research could not complete",
+        detail,
+        status: "error",
+      }]);
+    } finally {
+      window.removeEventListener(SUPPLY_RESEARCH_PROGRESS_EVENT, handleProgress);
     }
   }
 
@@ -119,6 +147,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
             onChange={(event) => {
               setPrompt(event.target.value);
               setState("idle");
+              setResearchProgress([]);
               setMessage("Derya will verify the company before building the dashboard.");
             }}
             rows={7}
@@ -134,6 +163,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
                 setPrompt(RESEARCH_EXAMPLE);
                 setEngagementScope("full_operation");
                 setState("idle");
+                setResearchProgress([]);
                 setMessage("Example loaded. Research it to build an evidence-backed dashboard.");
               }}
             >
@@ -145,6 +175,27 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
             </button>
           </div>
           <p className={styles.statusLine} data-state={state} aria-live="polite">{message}</p>
+          {researchProgress.length ? (
+            <section className={styles.researchTrace} aria-label="Company research progress">
+              <div className={styles.traceHeader}>
+                <strong>Research progress</strong>
+                <span>{researchProgress.filter((item) => item.status === "complete").length} verified</span>
+              </div>
+              <ol>
+                {researchProgress.map((item) => (
+                  <li key={item.id} data-status={item.status}>
+                    <span className={styles.traceMarker} aria-hidden="true">
+                      {item.status === "complete" ? "✓" : item.status === "active" ? "…" : item.status === "error" ? "!" : "?"}
+                    </span>
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.detail}</small>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
           {state === "error" && prompt.trim() ? (
             <button type="button" className={styles.fallbackButton} onClick={buildWithoutResearch}>
               Build from my description without public research

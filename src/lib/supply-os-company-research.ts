@@ -14,6 +14,38 @@ const MAX_QUERY_LENGTH = 4_000;
 const MAX_SOURCE_COUNT = 12;
 const MAX_HTML_BYTES = 1_000_000;
 const FETCH_TIMEOUT_MS = 8_000;
+const MAX_OFFICIAL_PAGE_COUNT = 4;
+
+export type SupplyResearchProgress = {
+  id: "website" | "profile" | "operations" | "assumptions" | "dashboard";
+  label: string;
+  detail: string;
+  status: "active" | "complete" | "assumption" | "error";
+};
+
+export type SupplyResearchProgressHandler = (progress: SupplyResearchProgress) => void;
+
+export class SupplyCompanyResearchError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "invalid_query"
+      | "research_unavailable"
+      | "official_site_failed"
+      | "no_public_sources"
+      | "invalid_response",
+  ) {
+    super(message);
+    this.name = "SupplyCompanyResearchError";
+  }
+}
+
+function progress(
+  handler: SupplyResearchProgressHandler | undefined,
+  event: SupplyResearchProgress,
+) {
+  handler?.(event);
+}
 
 const COMPANY_RESEARCH_SCHEMA = {
   type: "object",
@@ -143,6 +175,14 @@ function validPublicHttpUrl(value: unknown): string | null {
   }
 }
 
+export function extractWebsiteFromQuery(query: string): string | null {
+  const fullUrl = query.match(/https?:\/\/[^\s,;)}\]]+/i)?.[0];
+  const domain = fullUrl ?? query.match(/(?:^|\s)((?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\/[^\s,;)}\]]*)?)/i)?.[1];
+  if (!domain) return null;
+  const cleaned = domain.replace(/[.!?:]+$/, "");
+  return validPublicHttpUrl(/^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`);
+}
+
 function isPrivateAddress(address: string) {
   const normalized = address.toLowerCase();
   if (normalized === "::1" || normalized === "::" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true;
@@ -192,7 +232,7 @@ async function readTextCapped(response: Response) {
   return new TextDecoder().decode(body);
 }
 
-async function fetchOfficialHomepage(website: string, fetchImpl: typeof fetch = fetch) {
+async function fetchOfficialPage(website: string, officialWebsite = website, fetchImpl: typeof fetch = fetch) {
   let current = new URL(website);
   for (let redirect = 0; redirect < 4; redirect += 1) {
     await assertResolvesPublicly(current);
@@ -207,6 +247,7 @@ async function fetchOfficialHomepage(website: string, fetchImpl: typeof fetch = 
       if (!location) throw new Error("Official website redirect is missing a destination.");
       const next = new URL(location, current);
       if (!validPublicHttpUrl(next.toString())) throw new Error("Official website redirect is not public.");
+      if (!sameDomain(next.toString(), officialWebsite)) throw new Error("Official website redirected to another domain.");
       current = next;
       continue;
     }
@@ -218,9 +259,106 @@ async function fetchOfficialHomepage(website: string, fetchImpl: typeof fetch = 
   throw new Error("Official website redirected too many times.");
 }
 
+async function fetchOfficialHomepage(website: string, fetchImpl: typeof fetch = fetch) {
+  return fetchOfficialPage(website, website, fetchImpl);
+}
+
 function attribute(tag: string, name: string) {
   const match = tag.match(new RegExp(`${name}\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))`, "i"));
   return stringValue(match?.[1] ?? match?.[2] ?? match?.[3]);
+}
+
+function decodeHtml(value: string) {
+  const named: Record<string, string> = {
+    amp: "&",
+    apos: "'",
+    gt: ">",
+    hellip: "...",
+    lt: "<",
+    nbsp: " ",
+    quot: '"',
+  };
+  return value
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&([a-z]+);/gi, (match, entity: string) => named[entity.toLowerCase()] ?? match);
+}
+
+function plainText(value: string) {
+  return decodeHtml(value.replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function metadata(html: string, key: string) {
+  const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
+  for (const tag of tags) {
+    const label = (attribute(tag, "property") || attribute(tag, "name")).toLowerCase();
+    if (label === key.toLowerCase()) return decodeHtml(attribute(tag, "content"));
+  }
+  return "";
+}
+
+function documentTitle(html: string) {
+  return plainText(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+}
+
+function officialPageLinks(html: string, pageUrl: string) {
+  const preferred = /about|company|product|solution|technology|industr|location|contact|manufactur|facilit|hylo|basis/i;
+  const links = new Map<string, number>();
+  for (const tag of html.match(/<a\b[^>]*>/gi) ?? []) {
+    const href = attribute(tag, "href");
+    if (!href) continue;
+    try {
+      const url = new URL(href, pageUrl);
+      url.hash = "";
+      if (!validPublicHttpUrl(url.toString()) || !sameDomain(url.toString(), pageUrl)) continue;
+      if (/\.(?:pdf|zip|jpe?g|png|svg|webp)$/i.test(url.pathname)) continue;
+      const score = preferred.test(`${url.pathname} ${url.search}`) ? 1 : 0;
+      links.set(url.toString(), Math.max(score, links.get(url.toString()) ?? 0));
+    } catch {
+      continue;
+    }
+  }
+  return [...links.entries()]
+    .filter(([url]) => new URL(url).pathname !== new URL(pageUrl).pathname)
+    .sort((left, right) => right[1] - left[1])
+    .map(([url]) => url)
+    .slice(0, MAX_OFFICIAL_PAGE_COUNT - 1);
+}
+
+function jsonLdRecords(html: string) {
+  const records: Record<string, unknown>[] = [];
+  const scripts = html.match(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) ?? [];
+  for (const script of scripts) {
+    const source = script.replace(/^<script\b[^>]*>/i, "").replace(/<\/script>$/i, "").trim();
+    try {
+      const parsed = JSON.parse(decodeHtml(source));
+      const queue: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+      while (queue.length) {
+        const item = record(queue.shift());
+        if (!Object.keys(item).length) continue;
+        records.push(item);
+        if (Array.isArray(item["@graph"])) queue.push(...item["@graph"]);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return records;
+}
+
+function jsonLdType(item: Record<string, unknown>) {
+  return (Array.isArray(item["@type"]) ? item["@type"] : [item["@type"]]).map(String);
+}
+
+function addressValue(value: unknown) {
+  if (typeof value === "string") return stringValue(value);
+  const address = record(value);
+  return [address.streetAddress, address.addressLocality, address.addressRegion, address.postalCode, address.addressCountry]
+    .map((item) => stringValue(item))
+    .filter(Boolean)
+    .join(", ");
 }
 
 export function extractLogoFromHtml(html: string, pageUrl: string): string | null {
@@ -446,13 +584,268 @@ async function homepageMetadata(website: string) {
   }
 }
 
-export async function researchCompany(queryInput: string): Promise<SupplyCompanyResearch> {
+type OfficialDocument = { url: string; html: string };
+
+function researchClaim(
+  value: string,
+  basis: SupplyResearchClaim["basis"],
+  confidence: SupplyResearchClaim["confidence"],
+  sourceUrls: string[],
+): SupplyResearchClaim {
+  return { value, basis, confidence, sourceUrls };
+}
+
+function inferredInputNames(text: string) {
+  const normalized = text.toLowerCase();
+  if (/3d print|additive manufactur/.test(normalized)) {
+    return ["motion-control components", "industrial electronics", "high-temperature polymers and composites"];
+  }
+  if (/robot|autonomous|automation/.test(normalized)) {
+    return ["motors and actuators", "machine-vision components", "industrial electronics", "machined structures"];
+  }
+  if (/medical|surgical|diagnostic/.test(normalized)) {
+    return ["medical-grade electronics", "precision components", "validated packaging"];
+  }
+  if (/chemical|polymer|coating|resin/.test(normalized)) {
+    return ["chemical feedstocks", "compliant packaging", "batch-testing materials"];
+  }
+  if (/aerospace|satellite|spacecraft|defen[cs]e/.test(normalized)) {
+    return ["precision machined parts", "controlled electronics", "composite structures"];
+  }
+  if (/manufactur|hardware|equipment|machine/.test(normalized)) {
+    return ["production components", "industrial electronics", "protective packaging"];
+  }
+  return ["production inputs to confirm"];
+}
+
+function industryName(text: string) {
+  const normalized = text.toLowerCase();
+  if (/3d print|additive manufactur/.test(normalized)) return "Industrial additive manufacturing";
+  if (/robot|autonomous/.test(normalized)) return "Robotics and automation";
+  if (/medical|surgical|diagnostic/.test(normalized)) return "Medical devices";
+  if (/chemical|polymer|coating|resin/.test(normalized)) return "Chemicals and materials";
+  if (/aerospace|satellite|spacecraft/.test(normalized)) return "Aerospace";
+  if (/manufactur|hardware|equipment|machine/.test(normalized)) return "Industrial hardware";
+  return "Industry needs confirmation";
+}
+
+function customerMarkets(text: string) {
+  const candidates: Array<[RegExp, string]> = [
+    [/aerospace/i, "Aerospace"],
+    [/automotive/i, "Automotive"],
+    [/defen[cs]e/i, "Defense"],
+    [/medical|healthcare/i, "Medical and healthcare"],
+    [/research|r&d/i, "Research and development"],
+    [/industrial|manufactur/i, "Industrial manufacturing"],
+  ];
+  return candidates.filter(([pattern]) => pattern.test(text)).map(([, label]) => label).slice(0, 6);
+}
+
+function operatingLocationFromQuery(query: string) {
+  const direct = query.match(
+    /\b(?:based|headquartered|located)\s+in\s+(.+?)(?=(?:\s+(?:and|that|which|serves|sources|ships|sells)\b)|[.;\n]|$)/i,
+  );
+  const production = query.match(
+    /\b(?:builds?|makes?|manufactures?|assembles?|produces?)\b[^.;\n]{0,120}?\s+in\s+(.+?)(?=(?:\s+(?:and|that|which|serves|sources|ships|sells)\b)|[.;\n]|$)/i,
+  );
+  return stringValue(direct?.[1] ?? production?.[1]);
+}
+
+export function buildOfficialSiteResearch(input: {
+  query: string;
+  website: string;
+  documents: OfficialDocument[];
+  researchedAt: string;
+}): SupplyCompanyResearch {
+  const homepage = input.documents[0];
+  if (!homepage) throw new SupplyCompanyResearchError("The official website could not be read.", "official_site_failed");
+  const allText = input.documents.map((document) => `${documentTitle(document.html)} ${metadata(document.html, "description")} ${plainText(document.html)}`).join(" ");
+  const records = input.documents.flatMap((document) => jsonLdRecords(document.html).map((item) => ({ item, url: document.url })));
+  const organization = records.find(({ item }) => jsonLdType(item).some((type) => /Organization|Corporation|LocalBusiness/i.test(type)));
+  const siteName = metadata(homepage.html, "og:site_name");
+  const title = metadata(homepage.html, "og:title") || documentTitle(homepage.html);
+  const name = stringValue(organization?.item.name)
+    || siteName
+    || title.split(/\s[-|:]\s/)[0]?.trim()
+    || new URL(input.website).hostname.replace(/^www\./, "");
+  const description = metadata(homepage.html, "og:description")
+    || metadata(homepage.html, "description")
+    || stringValue(organization?.item.description)
+    || "Company description needs confirmation";
+  const officialUrls = input.documents.map((document) => document.url);
+  const organizationUrl = stringValue(organization?.item.url, homepage.url);
+  const officialAddresses = records.flatMap(({ item, url }) => {
+    const value = addressValue(item.address);
+    if (!value) return [];
+    const types = jsonLdType(item).join(" ");
+    const role: SupplyResearchLocation["role"] = /Manufactur|Factory/i.test(types) ? "manufacturing" : "headquarters";
+    return [{
+      ...researchClaim(value, "official", "high", [url]),
+      role,
+      coordinates: null,
+    }];
+  }).filter((location, index, locations) => locations.findIndex((candidate) => candidate.value === location.value) === index).slice(0, 8);
+  const providedLocation = operatingLocationFromQuery(input.query);
+  const addresses: SupplyResearchLocation[] = officialAddresses.length
+    ? officialAddresses
+    : providedLocation
+      ? [{
+        ...researchClaim(providedLocation, "inferred", "medium", []),
+        role: "unknown",
+        coordinates: null,
+      }]
+      : [];
+  const productClaims = records.flatMap(({ item, url }) => {
+    if (!jsonLdType(item).some((type) => /Product|Service/i.test(type))) return [];
+    const value = stringValue(item.name);
+    return value ? [researchClaim(value, "official", "high", [url])] : [];
+  });
+  const productPageClaims = input.documents.slice(1).flatMap((document) => {
+    if (!/product|solution|technology|hylo|basis/i.test(new URL(document.url).pathname)) return [];
+    const titleValue = (metadata(document.html, "og:title") || documentTitle(document.html))
+      .split(/\s[-|]\s/)[0]
+      ?.replace(new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*`, "i"), "")
+      .trim();
+    return titleValue ? [researchClaim(titleValue, "official", "medium", [document.url])] : [];
+  });
+  const products = [...productClaims, ...productPageClaims]
+    .filter((claim, index, claims) => claims.findIndex((candidate) => candidate.value.toLowerCase() === claim.value.toLowerCase()) === index)
+    .slice(0, 10);
+  const inferredInputs = inferredInputNames(`${title} ${description} ${allText.slice(0, 20_000)}`);
+  const markets = customerMarkets(`${description} ${allText.slice(0, 20_000)}`);
+  const evidence: SupplyResearchEvidence[] = input.documents.map((document) => ({
+    url: document.url,
+    title: metadata(document.html, "og:title") || documentTitle(document.html) || new URL(document.url).hostname,
+    sourceType: "official_website",
+    accessedAt: input.researchedAt,
+  }));
+  const locationFinding: SupplyResearchFinding[] = addresses.length ? [{
+    title: addresses[0].basis === "official"
+      ? addresses[0].role === "manufacturing" ? "Manufacturing location found" : "Company location found"
+      : "Operating location provided for confirmation",
+    detail: addresses[0].value,
+    implication: "Confirm which products and shipment flows use this site before routing freight.",
+    basis: addresses[0].basis,
+    confidence: addresses[0].confidence,
+    sourceUrls: addresses[0].sourceUrls,
+  }] : [];
+  return {
+    status: "partial",
+    query: input.query,
+    researchedAt: input.researchedAt,
+    company: {
+      name: researchClaim(name, "official", "high", [organizationUrl]),
+      website: homepage.url,
+      logoUrl: extractLogoFromHtml(homepage.html, homepage.url),
+      description: researchClaim(description, "official", "high", [homepage.url]),
+      industry: researchClaim(industryName(`${title} ${description}`), "inferred", "medium", []),
+      headquarters: addresses[0] ?? null,
+      locations: addresses,
+      products,
+      customerMarkets: markets.map((value) => researchClaim(value, "official", "medium", officialUrls)),
+      likelyInputs: inferredInputs.map((value) => researchClaim(value, "inferred", value.includes("confirm") ? "low" : "medium", [])),
+      likelySourceRegions: [],
+      likelyDestinations: [],
+    },
+    findings: [{
+      title: "Official company site verified",
+      detail: description,
+      implication: "Use the verified product and operating context to scope supply, freight, customs, and delivery discovery.",
+      basis: "official",
+      confidence: "high",
+      sourceUrls: [homepage.url],
+    }, ...locationFinding],
+    evidence,
+    warnings: [
+      "Public search was unavailable, so this brief uses the official company website only.",
+      "Likely inputs are hypotheses for customer confirmation, not observed purchase or shipment records.",
+      "Source countries, lanes, rates, customs treatment, and destination demand require customer or connected-system data.",
+    ],
+  };
+}
+
+async function officialSiteFallback(
+  query: string,
+  website: string,
+  researchedAt: string,
+  onProgress?: SupplyResearchProgressHandler,
+) {
+  progress(onProgress, {
+    id: "website",
+    label: "Checking the official website",
+    detail: new URL(website).hostname,
+    status: "active",
+  });
+  let homepage: OfficialDocument;
+  try {
+    homepage = await fetchOfficialHomepage(website);
+  } catch {
+    throw new SupplyCompanyResearchError("The official website could not be reached. Check the address and try again.", "official_site_failed");
+  }
+  progress(onProgress, {
+    id: "website",
+    label: "Verified official website",
+    detail: new URL(homepage.url).hostname,
+    status: "complete",
+  });
+  const linkedPages = officialPageLinks(homepage.html, homepage.url);
+  progress(onProgress, {
+    id: "profile",
+    label: "Reading company and product pages",
+    detail: linkedPages.length ? `${linkedPages.length + 1} official pages selected` : "Homepage selected",
+    status: "active",
+  });
+  const linkedResults = await Promise.allSettled(linkedPages.map((url) => fetchOfficialPage(url, homepage.url)));
+  const documents = [homepage, ...linkedResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : [])];
+  const research = buildOfficialSiteResearch({ query, website: homepage.url, documents, researchedAt });
+  progress(onProgress, {
+    id: "profile",
+    label: "Company profile found",
+    detail: [research.company.name.value, research.company.products.slice(0, 3).map((item) => item.value).join(", ")].filter(Boolean).join(": "),
+    status: "complete",
+  });
+  progress(onProgress, {
+    id: "operations",
+    label: research.company.locations[0]?.basis === "official"
+      ? "Operating location found"
+      : research.company.locations.length ? "Operating location taken from your brief" : "Operating location needs confirmation",
+    detail: research.company.locations[0]?.value ?? "Connect ERP, TMS, email, or procurement data to locate facilities",
+    status: research.company.locations.length ? "complete" : "assumption",
+  });
+  progress(onProgress, {
+    id: "assumptions",
+    label: "Supply needs inferred for confirmation",
+    detail: research.company.likelyInputs.slice(0, 4).map((item) => item.value).join(", "),
+    status: "assumption",
+  });
+  return research;
+}
+
+export async function researchCompany(
+  queryInput: string,
+  onProgress?: SupplyResearchProgressHandler,
+): Promise<SupplyCompanyResearch> {
   const query = queryInput.replace(/\s+/g, " ").trim().slice(0, MAX_QUERY_LENGTH);
-  if (query.length < 2) throw new Error("Add a company name, website, or operating description.");
-  if (!process.env.OPENAI_API_KEY) throw new Error("Company research is not configured.");
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60_000, maxRetries: 1 });
+  if (query.length < 2) throw new SupplyCompanyResearchError("Add a company name, website, or operating description.", "invalid_query");
+  const explicitWebsite = extractWebsiteFromQuery(query);
   const researchedAt = new Date().toISOString();
-  const response = await client.responses.create({
+  if (!process.env.OPENAI_API_KEY) {
+    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
+    throw new SupplyCompanyResearchError(
+      "Public search is unavailable. Add the company website to continue, or build from your description.",
+      "research_unavailable",
+    );
+  }
+  progress(onProgress, {
+    id: "website",
+    label: "Searching public sources",
+    detail: explicitWebsite ? `Starting with ${new URL(explicitWebsite).hostname}` : "Finding and verifying the official company website",
+    status: "active",
+  });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60_000, maxRetries: 1 });
+  let response: Awaited<ReturnType<typeof client.responses.create>>;
+  try {
+    response = await client.responses.create({
     model: DERYA_AI_MODEL,
     tools: [{ type: "web_search", search_context_size: "high" }],
     tool_choice: "required",
@@ -480,19 +873,61 @@ export async function researchCompany(queryInput: string): Promise<SupplyCompany
     ].join("\n"),
     input: `Company to research: ${query}`,
     store: false,
-  });
+    });
+  } catch {
+    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
+    throw new SupplyCompanyResearchError(
+      "Public search could not complete. Add the company website to retry from official sources, or build from your description.",
+      "research_unavailable",
+    );
+  }
   const webSourceUrls = collectWebSourceUrls(response);
-  if (!webSourceUrls.length) throw new Error("Company research returned no attributable public sources.");
+  if (!webSourceUrls.length) {
+    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
+    throw new SupplyCompanyResearchError("Company research returned no attributable public sources.", "no_public_sources");
+  }
+  progress(onProgress, {
+    id: "website",
+    label: "Public sources found",
+    detail: `${webSourceUrls.length} attributable sources selected`,
+    status: "complete",
+  });
   let raw: unknown;
   try {
     raw = JSON.parse(response.output_text);
   } catch {
-    throw new Error("Company research returned an invalid structured response.");
+    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
+    throw new SupplyCompanyResearchError("Company research returned an invalid structured response.", "invalid_response");
   }
   const candidateWebsite = validPublicHttpUrl(record(record(raw).company).website);
   const verifiedWebsite = candidateWebsite && webSourceUrls.some((source) => sameDomain(source, candidateWebsite))
     ? candidateWebsite
     : null;
   const homepage = verifiedWebsite ? await homepageMetadata(verifiedWebsite) : null;
-  return normalizeCompanyResearch({ raw, query, researchedAt, webSourceUrls, homepage });
+  let research: SupplyCompanyResearch;
+  try {
+    research = normalizeCompanyResearch({ raw, query, researchedAt, webSourceUrls, homepage });
+  } catch {
+    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
+    throw new SupplyCompanyResearchError("Company research could not verify an official website.", "invalid_response");
+  }
+  progress(onProgress, {
+    id: "profile",
+    label: "Company profile verified",
+    detail: [research.company.name.value, research.company.products.slice(0, 3).map((item) => item.value).join(", ")].filter(Boolean).join(": "),
+    status: "complete",
+  });
+  progress(onProgress, {
+    id: "operations",
+    label: research.company.locations.length ? "Operating locations found" : "Operating locations need confirmation",
+    detail: research.company.locations.slice(0, 3).map((item) => item.value).join(", ") || "No attributable facility location found",
+    status: research.company.locations.length ? "complete" : "assumption",
+  });
+  progress(onProgress, {
+    id: "assumptions",
+    label: "Supply needs inferred for confirmation",
+    detail: research.company.likelyInputs.slice(0, 4).map((item) => item.value).join(", ") || "Connect operating data to identify exact inputs",
+    status: "assumption",
+  });
+  return research;
 }

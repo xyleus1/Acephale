@@ -5842,3 +5842,60 @@ Release note:
 - No migration or environment change is required. After merge, verify
   `/customer`, `/portal`, and one authenticated or staff-preview shipment on
   the deployed domain.
+
+## Supply OS generator repair and resilient research, August 7
+
+Status:
+
+- Implemented on `supply-os-light-gray`, targeting `main`.
+- No database migration or new environment variable is required.
+
+What changed:
+
+- Restored the five engagement-scope buttons. The floated fieldset legend had
+  collapsed their grid to zero width.
+- Lifted Supply OS from near-black to a lighter neutral graphite scale while
+  retaining the restrained enterprise design language.
+- Added an inline research trace that reports website verification, company and
+  product discovery, operating-location evidence, supply assumptions, and
+  dashboard generation.
+- Company research now streams progress as newline-delimited JSON instead of
+  returning one opaque blocking response.
+- When public search is unavailable or returns unusable output, a prompt with
+  an explicit website falls back to a bounded review of up to four relevant
+  pages on the verified official domain.
+- The official-site fallback extracts the company name, description, logo,
+  structured locations, product page titles, customer markets, evidence links,
+  and deterministic likely-input hypotheses.
+- Customer-provided operating locations remain inferred and visibly require
+  confirmation. An official structured facility address can be shown as found.
+- A prompt without a website now receives an actionable recovery message and
+  retains the description-only build option.
+
+Trust boundary:
+
+- The official-site fallback stays on the user-supplied public domain, rejects
+  local or private addresses, caps response size, limits redirects and page
+  count, and does not read login or paywalled content.
+- Public pages do not confirm suppliers, source countries, lanes, rates,
+  customs treatment, providers, or customer demand. Likely inputs remain
+  hypotheses and external commitments retain human approval.
+
+Verification:
+
+- All eight Supply OS regression suites passed.
+- `npx tsc --noEmit` passed.
+- The production Next.js build passed against the disposable local Postgres
+  database.
+- Authenticated browser QA passed for the AON3D official-site fallback, the
+  no-website recovery path, full-width scope buttons, the resulting sourced
+  dashboard, and the 390-pixel layout.
+- Design score improved from D to B and AI slop score improved from B to A.
+- Full report:
+  `~/.gstack/projects/mmturna-derya-crm/designs/design-audit-20260807-supply-os-light-gray/design-audit-20260807-supply-os-light-gray.md`.
+
+Caveat:
+
+- Cases remain browser-local. The fallback improves demo resilience but is not
+  a replacement for office-scoped persistence or connected ERP, TMS,
+  procurement, customs, rate, and shipment data.
