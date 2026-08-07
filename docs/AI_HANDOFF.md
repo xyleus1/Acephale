@@ -12,6 +12,142 @@ crm-status-structure, targeting main
 
 ## Task implemented
 
+### Movement-scoped customs and door-to-door operating plan
+
+Each generated customer case now expands into a separate operating plan for
+every source-to-destination movement. The existing prompt, map, saved case,
+supplier, and risk flow remains intact while the result adds port selection,
+customs preparation, current-condition checks, detailed providers, handoffs,
+and expected cost ranges through final delivery.
+
+- A movement selector scopes the map, port ranking, customs plan, intelligence
+  checks, provider sequence, quote blockers, and cost range. A case with two
+  source regions and two destinations creates four isolated movements rather
+  than mixing their evidence or quotes.
+- Import movements rank practical receiving gateways with fit, tradeoffs,
+  inland implications, and verification requirements. Domestic and intra-EU
+  movements correctly omit import clearance, broker, and customs connector
+  workflows.
+- Port ranking uses ordered candidates and stated tradeoffs without fabricated
+  precision scores. Mexico-US road movements use a land-border plan and do not
+  inherit ocean terminals, vessels, port drayage, or carrier schedule feeds.
+  The same Laredo handoff logic applies in both directions, so a US-to-Mexico
+  road case cannot inherit a US source's default ocean export gateway.
+- Current-condition checks are attached to the relevant commodity, source,
+  terminal, gateway, customs point, or delivery market. The UI states the
+  current finding is unknown until a listed callback or source is checked and
+  shows the decision rule, freshness target, and evidence requirement.
+- Mixed known and unsupported source or destination lists retain every stated
+  location. Unsupported names stay visible as confirmation blockers instead of
+  being dropped or borrowed from a partial match. In particular, North Korea
+  cannot normalize to South Korea or produce a Busan route and numeric total.
+- The customs plan covers pre-classification, commercial invoice preparation,
+  broker handoff, entry review, release, and audit retention. Invoice guidance
+  identifies the missing fields that block a defensible entry packet.
+- Broker candidates and customs technology connectors are presented as
+  evaluation paths, not endorsements or connected services. Zonos, Digicust,
+  Descartes CustomsInfo, Customs4trade, and Avalara are represented with exact
+  intended roles and connection requirements.
+- The execution plan covers origin pickup, origin handling, international
+  linehaul, customs clearance, destination handling, drayage, inland transport,
+  and last mile. Each leg names candidate providers or services, the request to
+  send, the facts to verify, handoffs, and a modeled cost range.
+- Road, cross-border, inland, and final-mile quote requests are generated from
+  the exact endpoints of their own execution leg. Provider records use unique
+  leg-scoped identifiers so a request cannot silently retain another leg's
+  origin or destination.
+- Domestic, intra-EU, land-border, US ocean-import, and non-US ocean-import
+  movements use separate service, authority, broker, drayage, and inland
+  templates. Drayage, hub-to-hub transport, and final delivery have explicit
+  non-overlapping handoffs.
+- Port-local ocean deliveries omit the duplicate hub-to-hub inland leg and
+  hand the recovered cargo directly into final delivery. Explicit air-freight
+  prompts use air-cargo gateways, air providers, flight and warehouse checks,
+  air handling, customs release, and airport recovery without ocean carriers,
+  vessel data, container equipment, port ranking, or drayage.
+- China to US examples include DHL Ocean Freight FCL coordination and a Maersk
+  TP6 schedule candidate. Both remain published candidates until a current
+  provider response confirms route, capacity, equipment, dates, and price.
+  The DHL request is scoped to the priced port-to-port leg and explicitly
+  excludes the separately modeled pickup, handling, drayage, inland, and final
+  delivery legs.
+- Totals are deterministic demo estimates in USD, exclude duties and taxes,
+  and disappear when geography is unresolved. No rate, schedule, terminal
+  condition, customs decision, capacity, booking, or provider response is
+  presented as live.
+- Battery, chemical, and other recognized dangerous-goods prompts withhold the
+  numeric total until SDS, transport classification, and carrier acceptance
+  are confirmed. Multi-source, multi-commodity cases require an explicit
+  source-to-item assignment instead of copying every commodity to every lane.
+- Existing version 1 browser-saved cases remain compatible because operating
+  plans are derived at render time. No database schema, dependency, server
+  action, external request, or customer-visible write path was added.
+- A prompt with no complete movement returns a verification state rather than
+  claiming that an empty plan is modeled.
+- The door-to-door execution table becomes a labeled ledger below 560 pixels,
+  so providers, quote instructions, transit, cost, and status stay visible
+  without horizontal scrolling. Map controls and primary actions use a
+  44-pixel minimum interaction target.
+- A neutral page frame lets the scoped dark workspace fill the dashboard
+  viewport at desktop, tablet, and mobile widths without changing shared shell
+  CSS.
+
+## Files changed
+
+- `src/lib/supply-os-operating-plan.ts`
+- `src/lib/supply-os-case-model.ts`
+- `src/app/dashboard/supply-os/page.tsx`
+- `src/app/dashboard/supply-os/supply-os-workspace.tsx`
+- `src/app/dashboard/supply-os/supply-os-workspace.module.css`
+- `scripts/supply-os-operating-plan.test.ts`
+- `scripts/supply-os-prototype.test.ts`
+- `scripts/supply-os-enterprise-design.test.ts`
+- `package.json`
+- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
+
+## Verification passed
+
+- `npm run test:supply-os-case-model`
+- `npm run test:supply-os-operating-plan`
+- `npm run test:supply-os-prototype`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-command-model`
+- `npx tsc --noEmit --incremental false`
+- `DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/derya_build' AUTH_SECRET='local-build-secret-only' npm run build`
+- Browser generation, movement switching, source-link inspection, and cost
+  scoping at desktop, tablet, and mobile widths
+- Browser keyboard-focus, overflow, and clean-console checks
+- At 390 pixels, the execution table width and scroll width both resolve to
+  360 pixels, all seven row labels remain visible, and page overflow is zero
+
+## Caveats
+
+- Saved dashboards are local to one browser and namespaced by office and user.
+  They are not shared, backed up, protected by server-enforced tenant records,
+  linked to CRM companies, or customer-visible.
+- This is deterministic planning, not live supplier discovery, rate retrieval,
+  legal or customs advice, provider execution, or a booking path.
+- CBP entry preparation and filing must remain under a licensed customs broker
+  or authorized importer workflow. A technology connector does not replace the
+  direct importer-to-broker authorization or human review boundary.
+- A production version needs office-scoped `SupplyCase` records with immutable
+  snapshots, server-created provenance, explicit CRM linking, and an allowlisted
+  customer projection. Live adapters need normalized evidence records,
+  provider timestamps, expiry rules, and human approval for outbound or
+  operational actions.
+
+## Previous Update
+
+## Date
+
+2026-08-06
+
+## Branch
+
+crm-status-structure, targeting main
+
+## Task implemented
+
 ### Supply OS customer-case builder and saved dashboard flow
 
 Supply OS now starts with the customer instead of a prebuilt fictional command
@@ -29,63 +165,18 @@ The page generates one coherent case and scrolls to the result.
 - Missing facts fail closed as `needs_confirmation`. Inferred supplier
   profiles, gateways, forwarder choices, schedules, prices, and customs checks
   never present themselves as confirmed or live.
-- DHL Global Forwarding, Kuehne+Nagel, and DSV appear only as indicative
-  comparison options. The page states that no rate, capacity, schedule,
-  reliability result, provider response, or booking is connected.
 - Generated dashboards can be saved, reopened, and browsed from versioned
-  browser storage namespaced by the signed-in office and user. Saving does not
-  create a CRM company, link a tenant record, publish anything to a customer
-  portal, or write to the server.
-- Free-form parsing covers the natural-language example, direct and tentative
-  ship-to phrases, city and state pairs, and missing fields. Unknown geography
-  stays unmodeled instead of becoming a false international lane.
-- Route generation wraps Pacific paths at the date line, uses source-aware
-  gateways, separates domestic, intra-EU, cross-border road, and import lanes,
-  and limits US-specific customs and tariff checks to US-bound cases.
-- The page is one scrollable customer flow with route, suppliers, shipping,
-  and customs and risk anchors. Empty product tabs and disabled controls are
-  gone.
+  browser storage namespaced by the signed-in office and user.
+- Route generation uses source-aware gateways and separates domestic,
+  intra-EU, cross-border road, and import lanes.
 - The graphite visual system, limited semantic palette, real Natural Earth
-  geography, scoped form-control styling, and desktop, tablet, and mobile
-  layouts remain.
-
-## Files changed
-
-- `src/lib/supply-os-case-model.ts`
-- `src/app/dashboard/supply-os/supply-os-workspace.tsx`
-- `src/app/dashboard/supply-os/supply-os-workspace.module.css`
-- `src/app/dashboard/supply-os/page.tsx`
-- `scripts/supply-os-case-model.test.ts`
-- `scripts/supply-os-prototype.test.ts`
-- `scripts/supply-os-enterprise-design.test.ts`
-- `package.json`
-- `docs/AI_HANDOFF.md`, `docs/ENGINEERING_LOG.md`, `docs/DECISIONS.md`
-
-## Verification passed
-
-- `npm run test:supply-os-case-model`
-- `npm run test:supply-os-prototype`
-- `npm run test:supply-os-enterprise-design`
-- `npm run test:supply-os-command-model`
-- `npx tsc --noEmit --incremental false`
-- `DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/derya_build' AUTH_SECRET='local-build-secret-only' npm run build`
-- Browser generation from the example and a separate medtech prompt
-- Browser save, second-case save, saved-case switching, and reload persistence
-- Browser incomplete-input behavior with explicit missing questions
-- Browser layout and overflow checks at 1440, 1024, and 390 pixel widths
-- Browser keyboard-focus and clean-console checks
+  geography, and responsive layouts remain.
 
 ## Caveats
 
-- Saved dashboards are local to one browser and namespaced by office and user.
-  They are not shared, backed up, protected by server-enforced tenant records,
-  linked to CRM companies, or customer-visible.
-- This is deterministic demo generation, not live supplier discovery, rate
-  retrieval, customs advice, or provider execution.
-- A production version needs office-scoped `SupplyCase` records with immutable
-  snapshots, server-created provenance, explicit CRM linking, and an allowlisted
-  customer projection. It must preserve human approval for outbound or
-  operational actions.
+- Saved dashboards remain local browser records and are not shared or backed
+  by server-enforced tenant records.
+- This remains deterministic demo generation with no external provider calls.
 
 ## Previous Update
 

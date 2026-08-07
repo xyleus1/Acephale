@@ -1,3 +1,7 @@
+.pageFrame {
+  min-width: 0;
+}
+
 .workspace {
   --surface-base: #0f1316;
   --surface-deep: #111518;
@@ -108,7 +112,7 @@
 .primaryButton,
 .secondaryButton,
 .textButton {
-  min-height: 42px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -541,6 +545,135 @@
   -webkit-line-clamp: 2;
 }
 
+.movementPanel {
+  scroll-margin-top: 76px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.movementHeader {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.movementHeader h2 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+}
+
+.movementSelector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.movementButton {
+  min-width: 0;
+  min-height: 88px;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 12px 16px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  color: var(--text-soft);
+  background: var(--surface-deep);
+  text-align: left;
+  cursor: pointer;
+}
+
+.movementButton:hover,
+.movementButton[data-active="true"] {
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.movementButton[data-active="true"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.movementButton > span,
+.movementButton > small,
+.scenarioStrip dt,
+.planFacts dt,
+.executionSummary > div > span,
+.compactChecks > span,
+.requirementLinks > span,
+.portOption > header > span:first-child,
+.connectorGrid article > span,
+.blockerSection > header > span {
+  color: var(--text-dim);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.movementButton strong {
+  width: 100%;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movementButton small {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenarioStrip,
+.planFacts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.scenarioStrip > div,
+.planFacts > div {
+  min-width: 0;
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 16px;
+  border-right: 1px solid var(--line);
+}
+
+.scenarioStrip > div:last-child,
+.planFacts > div:last-child {
+  border-right: 0;
+}
+
+.scenarioStrip dd,
+.planFacts dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.currentConditions {
+  scroll-margin-top: 76px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-panel);
+}
+
 .primaryGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.9fr) minmax(320px, 0.7fr);
@@ -617,25 +750,60 @@
   stroke-dasharray: 7 6;
 }
 
-.mapNode circle {
+.routePaths path {
+  transition: opacity 140ms ease;
+}
+
+.routePaths path[data-active="false"] {
+  opacity: 0.16;
+}
+
+.mapNode {
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+
+.mapNode[data-active="false"] {
+  opacity: 0.24;
+}
+
+.mapNode > circle:not(.mapSignalRing):not(.mapNodeHitArea) {
   fill: var(--accent);
   stroke: var(--surface-deep);
   stroke-width: 3;
   transition: r 120ms ease, fill 120ms ease, stroke-width 120ms ease;
 }
 
-.mapNode[data-status="verify"] circle {
+.mapNode[data-status="verify"] > circle:not(.mapSignalRing):not(.mapNodeHitArea) {
   fill: var(--watch);
 }
 
-.mapNode[data-status="needs_confirmation"] circle {
+.mapNode[data-status="needs_confirmation"] > circle:not(.mapSignalRing):not(.mapNodeHitArea) {
   fill: var(--critical);
 }
 
-.mapNode[data-selected="true"] circle {
+.mapNode[data-selected="true"] > circle:not(.mapSignalRing):not(.mapNodeHitArea) {
   fill: var(--text);
   stroke: var(--line-strong);
   stroke-width: 4;
+}
+
+.mapNodeHitArea {
+  fill: transparent;
+  pointer-events: all;
+  stroke: none;
+}
+
+.mapNode:focus-visible > circle:not(.mapSignalRing):not(.mapNodeHitArea) {
+  stroke: var(--text);
+  stroke-width: 5;
+}
+
+.mapSignalRing {
+  fill: none;
+  stroke: var(--watch);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
 }
 
 .mapNode text {
@@ -716,6 +884,12 @@
 
 .mapLegend i[data-kind="destination"] {
   background: var(--accent);
+}
+
+.mapLegend i[data-kind="signal"] {
+  border-color: var(--watch);
+  border-radius: 0;
+  transform: rotate(45deg);
 }
 
 .mapPanel figcaption {
@@ -858,6 +1032,467 @@
   border: 1px solid var(--watch);
 }
 
+.portRankList {
+  display: flex;
+  flex-direction: column;
+}
+
+.portOption {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.portOption > header,
+.conditionCard > header,
+.guidanceList article > header,
+.brokerList article > header,
+.connectorGrid article > header,
+.blockerGrid article > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portOption h3,
+.conditionCard h3,
+.connectorSection h3,
+.blockerSection h3 {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 620;
+}
+
+.portOption > small {
+  color: var(--text-dim);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+}
+
+.portOption > p,
+.conditionCard > p,
+.guidanceList article > p,
+.brokerList article > p,
+.connectorGrid article > p,
+.blockerGrid article > p {
+  margin: 8px 0;
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.portOption dl,
+.conditionCard dl,
+.workflowList dl,
+.connectorGrid dl {
+  margin: 0;
+}
+
+.portOption dl > div,
+.conditionCard dl > div,
+.workflowList dl > div,
+.connectorGrid dl > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.3fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.portOption dt,
+.portOption dd,
+.conditionCard dt,
+.conditionCard dd,
+.workflowList dt,
+.workflowList dd,
+.connectorGrid dt,
+.connectorGrid dd {
+  margin: 0;
+  font-size: 10px;
+}
+
+.portOption dt,
+.conditionCard dt,
+.workflowList dt,
+.connectorGrid dt {
+  color: var(--text-dim);
+}
+
+.portOption dd,
+.conditionCard dd,
+.workflowList dd,
+.connectorGrid dd {
+  color: var(--text-soft);
+}
+
+.compactChecks {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.compactChecks ul,
+.brokerList ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.sourceLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.sourceLinks a,
+.requirementLinks a,
+.brokerList a,
+.connectorGrid a,
+.providerStack a {
+  color: var(--text-soft);
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.sourceLinks a:hover,
+.requirementLinks a:hover,
+.brokerList a:hover,
+.connectorGrid a:hover,
+.providerStack a:hover {
+  color: var(--text);
+}
+
+.sourceLinks a {
+  padding: 3px 5px;
+  border: 1px solid var(--line);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+}
+
+.sourceEmpty {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+}
+
+.conditionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.conditionCard {
+  min-width: 0;
+  padding: 16px 18px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-panel);
+}
+
+.conditionCard:nth-child(2n) {
+  border-right: 0;
+}
+
+.conditionCard[data-status="connection_required"] {
+  box-shadow: inset 2px 0 0 var(--watch);
+}
+
+.conditionCard > header > span:first-child {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.conditionQuestion {
+  min-height: 48px;
+}
+
+.requirementLinks {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.requirementLinks a,
+.requirementRecord {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+}
+
+.requirementLinks a:first-of-type,
+.requirementRecord:first-of-type {
+  border-top: 0;
+}
+
+.requirementLinks a strong,
+.requirementRecord strong {
+  font-weight: 560;
+}
+
+.requirementLinks a small,
+.requirementRecord small {
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.requirementRecord {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.planFacts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.customsPlanGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.planColumn {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+
+.planColumn:last-child {
+  border-right: 0;
+}
+
+.planColumn > h3 {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-soft);
+  background: var(--surface-deep);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workflowList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflowList > li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 11px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sequenceNumber {
+  width: 25px;
+  height: 25px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  color: var(--text-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+}
+
+.workflowList li > div > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflowList li > div > header strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workflowList li > div > p {
+  margin: 7px 0;
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.guidanceList article,
+.brokerList article {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.guidanceList article > header strong,
+.brokerList article > header a,
+.connectorGrid article > header a,
+.blockerGrid article > header strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.guidanceList article > small,
+.brokerList article > strong,
+.blockerGrid article > small {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.connectorSection,
+.blockerSection {
+  background: var(--surface-panel);
+}
+
+.connectorSection > header,
+.blockerSection > header {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.connectorSection > header p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+  text-align: right;
+}
+
+.connectorGrid,
+.blockerGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.connectorGrid article,
+.blockerGrid article {
+  min-width: 0;
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.connectorGrid article:nth-child(3n),
+.blockerGrid article:nth-child(3n) {
+  border-right: 0;
+}
+
+.planEmpty {
+  margin: 0;
+  padding: 18px;
+  color: var(--text-dim);
+  background: var(--surface-deep);
+  font-size: 11px;
+}
+
+.executionTable {
+  min-width: 1320px;
+}
+
+.executionTable th:nth-child(1) { width: 5%; }
+.executionTable th:nth-child(2) { width: 12%; }
+.executionTable th:nth-child(3) { width: 24%; }
+.executionTable th:nth-child(4) { width: 24%; }
+.executionTable th:nth-child(5) { width: 11%; }
+.executionTable th:nth-child(6) { width: 15%; }
+.executionTable th:nth-child(7) { width: 9%; }
+
+.providerStack,
+.providerStack > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.providerStack {
+  gap: 9px;
+}
+
+.providerStack > span {
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.providerStack > span:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.providerStack a,
+.providerStack > span > strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.executionSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.executionSummary > div {
+  min-width: 0;
+  min-height: 98px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+}
+
+.executionSummary > div:last-child {
+  border-right: 0;
+}
+
+.executionSummary strong {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.executionSummary small {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.blockerSection > header > span {
+  white-space: nowrap;
+}
+
+.openQuestionBlock {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
 .dataSection {
   scroll-margin-top: 76px;
   border-bottom: 1px solid var(--line);
@@ -961,6 +1596,11 @@
   color: var(--stable);
 }
 
+.statusPill[data-status="modeled"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .statusPill[data-status="verify"] {
   border-color: var(--watch);
   color: var(--watch);
@@ -969,6 +1609,11 @@
 .statusPill[data-status="needs_confirmation"] {
   border-color: var(--critical);
   color: var(--critical);
+}
+
+.statusPill[data-status="connection_required"] {
+  border-color: var(--watch);
+  color: var(--watch);
 }
 
 .riskGrid {
@@ -1141,6 +1786,21 @@
     border-top: 1px solid var(--line);
     border-left: 0;
   }
+
+  .connectorGrid,
+  .blockerGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .connectorGrid article:nth-child(3n),
+  .blockerGrid article:nth-child(3n) {
+    border-right: 1px solid var(--line);
+  }
+
+  .connectorGrid article:nth-child(2n),
+  .blockerGrid article:nth-child(2n) {
+    border-right: 0;
+  }
 }
 
 @media (max-width: 1040px) {
@@ -1158,18 +1818,32 @@
   }
 
   .routeBrief {
-    display: grid;
+    display: block;
+  }
+
+  .routeBrief > header {
+    border-right: 0;
+  }
+
+  .customsPlanGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .planColumn {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .executionSummary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .routeBrief > header,
-  .briefBlock {
-    border-right: 1px solid var(--line);
+  .executionSummary > div:nth-child(2) {
+    border-right: 0;
   }
 
-  .routeBrief > header,
-  .briefBlock:last-child {
-    border-right: 0;
+  .executionSummary > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
   }
 
   .summaryStrip {
@@ -1248,6 +1922,47 @@
   }
 
   .sectionTitle p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .scenarioStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scenarioStrip > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .scenarioStrip > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .conditionGrid,
+  .connectorGrid,
+  .blockerGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .conditionCard,
+  .conditionCard:nth-child(2n),
+  .connectorGrid article,
+  .connectorGrid article:nth-child(2n),
+  .connectorGrid article:nth-child(3n),
+  .blockerGrid article,
+  .blockerGrid article:nth-child(2n),
+  .blockerGrid article:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .connectorSection > header,
+  .blockerSection > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .connectorSection > header p {
     max-width: none;
     text-align: left;
   }
@@ -1340,6 +2055,136 @@
 
   .summaryStrip > div:last-child {
     border-bottom: 0;
+  }
+
+  .movementHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .movementSelector {
+    grid-auto-columns: minmax(270px, 86vw);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
+  }
+
+  .movementButton {
+    border-bottom: 0;
+  }
+
+  .scenarioStrip,
+  .planFacts,
+  .executionSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .scenarioStrip > div,
+  .scenarioStrip > div:nth-child(2),
+  .planFacts > div,
+  .executionSummary > div,
+  .executionSummary > div:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .scenarioStrip > div:last-child,
+  .planFacts > div:last-child,
+  .executionSummary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .portOption dl > div,
+  .conditionCard dl > div,
+  .workflowList dl > div,
+  .connectorGrid dl > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .requirementLinks a,
+  .requirementRecord {
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .requirementLinks a small,
+  .requirementRecord small {
+    text-align: left;
+  }
+
+  .executionTable {
+    min-width: 0;
+    display: block;
+  }
+
+  .executionTable thead {
+    display: none;
+  }
+
+  .executionTable tbody {
+    display: block;
+  }
+
+  .executionTable tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 0 14px 14px;
+    border-bottom: 1px solid var(--line-strong);
+    background: var(--surface-panel);
+  }
+
+  .executionTable tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .executionTable tbody tr:hover {
+    background: var(--surface-panel);
+  }
+
+  .executionTable td {
+    min-width: 0;
+    padding: 12px 0 0;
+    border: 0;
+  }
+
+  .executionTable td:nth-child(2),
+  .executionTable td:nth-child(6) {
+    padding-left: 14px;
+    border-left: 1px solid var(--line);
+  }
+
+  .executionTable td:nth-child(3),
+  .executionTable td:nth-child(4),
+  .executionTable td:nth-child(7) {
+    grid-column: 1 / -1;
+  }
+
+  .executionTable td:nth-child(3),
+  .executionTable td:nth-child(4) {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .executionTable td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-dim);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .executionTable .numeric {
+    white-space: normal;
+  }
+
+  .executionTable .numeric > strong {
+    white-space: nowrap;
   }
 
   .mapCanvas,

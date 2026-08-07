@@ -17,6 +17,58 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-06 - Add movement-scoped customs and execution planning
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Extend generated Supply OS customer cases with isolated port, customs,
+  current-condition, provider, handoff, and end-to-end cost plans for every
+  source-to-destination movement.
+- Files changed: new operating-plan domain model and tests, Supply OS workspace
+  and scoped stylesheet, prototype and enterprise design regression tests,
+  package scripts, decisions, engineering log, and handoff.
+- Verification: case-model, operating-plan, prototype, enterprise-design, and
+  command-model tests pass. TypeScript, production build, diff whitespace, and
+  changed-file U+2014 checks pass. Browser QA covers movement switching, scoped
+  map emphasis, port ranking, customs records, source requirements, leg costs,
+  provider details, desktop, tablet, mobile, overflow, focus, and console state.
+- Adversarial review added regression coverage for non-overlapping service
+  handoffs, US versus non-US providers and authority sources, ground versus
+  ocean intelligence, Mexico-US land-border topology, structured US territory
+  resolution, dangerous-goods price suppression, source-specific agricultural
+  data, map keyboard interaction, and non-public connector records.
+- A release-blocking provider-scope review found reused road quote text on
+  downstream legs. Road provider candidates now receive each leg's exact
+  origin and destination and have unique leg-scoped IDs; domestic, intra-EU,
+  and Mexico-US regressions assert both endpoints in every road request.
+- The same review removed overlapping door-to-door language from DHL's
+  port-to-port linehaul request and corrected US-to-Mexico routing so both
+  cross-border directions hand off at Laredo rather than a default US ocean
+  gateway.
+- Final release review added fail-closed geography handling for North Korea,
+  retained mixed known and unsupported source and destination lists, removed
+  duplicate inland charges for port-local imports, corrected empty-plan status,
+  and introduced an explicit air-freight topology that does not inherit ocean
+  providers, ports, containers, vessels, or drayage.
+- Air mode now requires explicit routing language such as `by air` or `via
+  air`, so a company that makes air-cargo products cannot trigger it. Air
+  linehaul requests are airport-to-airport only and exclude the separately
+  priced pickup, handling, customs, storage, and final-recovery legs.
+- Authenticated design QA fixed four responsive and interaction defects in
+  separate commits: the mobile execution ledger, 44-pixel action and map
+  targets, numeric cost wrapping, and the blank strip caused by a direct-child
+  dashboard width override. Rechecks at 1440, 1024, and 390 pixels found zero
+  page overflow and no console errors after interaction.
+- Failed/skipped checks: no provider, customs, terminal, rate, broker, ERP, TMS,
+  or procurement callback was executed because this change adds no live adapter
+  or external write path.
+- Caveats: current findings and costs are deterministic modeled records. Duties
+  and taxes are excluded. A technology connector does not replace a licensed
+  broker or direct importer-to-broker authorization for customs entry work.
+- Follow-up: persist office-scoped case snapshots, then add read-only provider
+  adapters with provenance, freshness, and expiry before enabling approved
+  outbound or execution actions.
+
 ### 2026-08-06 - Remove decorative color and flatten Supply OS hierarchy
 
 - Branch: crm-status-structure, targeting main

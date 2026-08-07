@@ -34,7 +34,7 @@ export type SupplyRouteSegment = {
   id: string;
   fromNodeId: string;
   toNodeId: string;
-  mode: "road" | "ocean" | "air_or_ocean" | "last_mile" | "to_confirm";
+  mode: "road" | "ocean" | "air" | "air_or_ocean" | "last_mile" | "to_confirm";
   label: string;
   status: "verify";
   note: string;
@@ -56,7 +56,7 @@ export type SupplyShippingOption = {
   provider: "DHL Global Forwarding" | "Kuehne+Nagel" | "DSV";
   service: string;
   route: string;
-  mode: "Air or ocean, to confirm" | "Road, to confirm" | "Mode to confirm";
+  mode: "Air freight" | "Air or ocean, to confirm" | "Road, to confirm" | "Mode to confirm";
   transit: "Live schedule required";
   indicativeCost: "Live quote required";
   reliability: "Live service data required";
@@ -618,7 +618,9 @@ function extractKnownLocations(value: string): string[] {
   const matches: Array<{ index: number; label: string }> = [];
   for (const entry of LOCATIONS) {
     const indexes = entry.aliases
-      .map((alias) => locationAliasIndex(value, alias))
+      .map((alias) => entry.label === "South Korea" && alias === "korea" && /\bnorth\s+korea\b/i.test(value)
+        ? -1
+        : locationAliasIndex(value, alias))
       .filter((index) => index >= 0);
     if (!indexes.length) continue;
     matches.push({ index: Math.min(...indexes), label: entry.label });
@@ -628,6 +630,37 @@ function extractKnownLocations(value: string): string[] {
     .map((match) => match.label)
     .filter((label, _index, labels) => label !== "China" || !labels.some((candidate) => candidate.endsWith(", China")));
   return unique(ordered);
+}
+
+function cleanLocationCandidate(value: string): string {
+  return cleanPhrase(value.replace(
+    /^(?:factories|customers|warehouses|distributors|suppliers|vendors|ports?)\s+(?:in|across|near)\s+/i,
+    "",
+  ));
+}
+
+function extractLocationCandidates(value: string): string[] {
+  const candidates: string[] = [];
+  const groups = value.split(/\s+and\s+|\s*;\s*/i);
+  for (const group of groups) {
+    const knownInGroup = extractKnownLocations(group);
+    if (knownInGroup.length === 0) {
+      const candidate = cleanLocationCandidate(group);
+      if (candidate) candidates.push(candidate);
+      continue;
+    }
+    for (const component of group.split(/\s*,\s*/)) {
+      const knownInComponent = extractKnownLocations(component);
+      if (knownInComponent.length > 0) {
+        candidates.push(...knownInComponent);
+      } else {
+        const candidate = cleanLocationCandidate(component);
+        if (candidate) candidates.push(candidate);
+      }
+    }
+  }
+  const ordered = unique(candidates);
+  return ordered.filter((label) => label !== "China" || !ordered.some((candidate) => candidate.endsWith(", China")));
 }
 
 function locationAliasIndex(value: string, alias: string): number {
@@ -659,16 +692,18 @@ function extractSourcing(input: string, profile: IndustryProfile): {
   const needsText = fromMatch?.[1] ?? clause;
   const regionText = fromMatch?.[2] ?? clause;
   const needs = splitNeeds(needsText);
-  const knownRegions = extractKnownLocations(regionText);
-  const fallbackRegion = fromMatch && knownRegions.length === 0 ? cleanPhrase(fromMatch[2]) : null;
+  const regions = extractLocationCandidates(regionText);
 
   return {
     needs: (needs.length ? needs : profile.suggestedNeeds).map((need) =>
       fact(need, needs.length ? "ready" : "verify", needs.length ? "Parsed from the stated sourcing need." : "Suggested from the industry profile."),
     ),
-    regions: (knownRegions.length ? knownRegions : fallbackRegion ? [fallbackRegion] : [null]).map((region) =>
-      fact(region, region ? "ready" : "needs_confirmation", region ? "Parsed from the stated source region." : "No source region was provided."),
-    ),
+    regions: (regions.length ? regions : [null]).map((region) => {
+      if (!region) return fact<string>(null, "needs_confirmation", "No source region was provided.");
+      return resolveLocation(region)
+        ? fact(region, "ready", "Parsed from the stated source region.")
+        : fact(region, "needs_confirmation", "Location was preserved from the prompt but needs geographic normalization.");
+    }),
   };
 }
 
@@ -688,15 +723,15 @@ function extractDestinations(input: string): Array<SupplyCaseFact<string>> {
   }
   if (!clause) return [fact<string>(null, "needs_confirmation", "No ship-to market or destination was provided.")];
 
-  const known = extractKnownLocations(clause);
-  const destinations = known.length
-    ? known
-    : unique(clause.replace(/^(?:factories|customers|warehouses|distributors)\s+in\s+/i, "").split(/\s+and\s+|\s*;\s*/i));
-  return destinations.map((destination) => fact(destination, "ready", "Parsed from the stated ship-to destination."));
+  const destinations = extractLocationCandidates(clause);
+  return destinations.map((destination) => resolveLocation(destination)
+    ? fact(destination, "ready", "Parsed from the stated ship-to destination.")
+    : fact(destination, "needs_confirmation", "Location was preserved from the prompt but needs geographic normalization."));
 }
 
 function resolveLocation(label: string | null): LocationEntry | null {
   if (!label) return null;
+  if (/\bnorth\s+korea\b/i.test(label)) return null;
   return LOCATIONS.find((entry) =>
     entry.aliases.some((alias) => locationAliasAppears(label, alias)) || locationAliasAppears(label, entry.label)
   ) ?? null;
@@ -729,6 +764,11 @@ const ASIA_LOCATION_LABELS = new Set([
 const EUROPEAN_UNION_LOCATION_LABELS = new Set(["Germany", "Netherlands"]);
 
 type CustomsScope = "import" | "domestic" | "unknown";
+type RequestedInternationalMode = "air" | "unspecified";
+
+function requestedInternationalMode(input: string): RequestedInternationalMode {
+  return /\b(?:by|via|using)\s+air(?:\s+(?:freight|cargo))?\b/i.test(input) ? "air" : "unspecified";
+}
 
 function customsTerritory(location: LocationEntry | null): string | null {
   if (!location) return null;
@@ -738,6 +778,10 @@ function customsTerritory(location: LocationEntry | null): string | null {
   return location.label;
 }
 
+export function resolveSupplyCustomsTerritory(label: string | null): string | null {
+  return customsTerritory(resolveLocation(label));
+}
+
 function laneCustomsScope(source: LocationEntry | null, destination: LocationEntry | null): CustomsScope {
   const sourceTerritory = customsTerritory(source);
   const destinationTerritory = customsTerritory(destination);
@@ -745,12 +789,34 @@ function laneCustomsScope(source: LocationEntry | null, destination: LocationEnt
   return sourceTerritory === destinationTerritory ? "domestic" : "import";
 }
 
-function modeledOriginGateway(source: LocationEntry | null, scope: CustomsScope) {
+function modeledOriginGateway(
+  source: LocationEntry | null,
+  destination: LocationEntry | null,
+  scope: CustomsScope,
+  requestedMode: RequestedInternationalMode,
+) {
   if (!source || scope === "unknown") return null;
   if (scope === "domestic") {
     return {
       label: `Origin hub near ${source.label}`,
       coordinates: source.coordinates,
+    };
+  }
+  if (requestedMode === "air") {
+    return {
+      label: `Air cargo gateway near ${source.label}`,
+      coordinates: source.coordinates,
+    };
+  }
+  const sourceTerritory = customsTerritory(source);
+  const destinationTerritory = customsTerritory(destination);
+  if (
+    (sourceTerritory === "Mexico" && destinationTerritory === "United States")
+    || (sourceTerritory === "United States" && destinationTerritory === "Mexico")
+  ) {
+    return {
+      label: "Laredo border crossing",
+      coordinates: { latitude: 27.5064, longitude: -99.5075 },
     };
   }
   return {
@@ -759,7 +825,11 @@ function modeledOriginGateway(source: LocationEntry | null, scope: CustomsScope)
   };
 }
 
-function modeledReceivingGateway(source: LocationEntry | null, destination: LocationEntry | null) {
+function modeledReceivingGateway(
+  source: LocationEntry | null,
+  destination: LocationEntry | null,
+  requestedMode: RequestedInternationalMode,
+) {
   if (!destination) return null;
   const sourceTerritory = customsTerritory(source);
   const destinationTerritory = customsTerritory(destination);
@@ -769,7 +839,16 @@ function modeledReceivingGateway(source: LocationEntry | null, destination: Loca
       coordinates: destination.coordinates,
     };
   }
-  if (sourceTerritory === "Mexico" && destinationTerritory === "United States") {
+  if (requestedMode === "air") {
+    return {
+      label: `Air cargo gateway near ${destination.label}`,
+      coordinates: destination.coordinates,
+    };
+  }
+  if (
+    (sourceTerritory === "Mexico" && destinationTerritory === "United States")
+    || (sourceTerritory === "United States" && destinationTerritory === "Mexico")
+  ) {
     return {
       label: "Laredo border crossing",
       coordinates: { latitude: 27.5064, longitude: -99.5075 },
@@ -828,6 +907,7 @@ function buildRoute(
   headquarters: SupplyCaseFact<string>,
   sourceRegions: Array<SupplyCaseFact<string>>,
   destinations: Array<SupplyCaseFact<string>>,
+  requestedMode: RequestedInternationalMode,
 ): SupplyCaseDashboard["route"] {
   const nodes: SupplyRouteNode[] = [];
   const segments: SupplyRouteSegment[] = [];
@@ -883,14 +963,14 @@ function buildRoute(
       const sourceTerritory = customsTerritory(sourceLocation);
       const destinationTerritory = customsTerritory(destinationLocation);
       const scope = laneCustomsScope(sourceLocation, destinationLocation);
-      const crossBorderRoad = scope === "import" && (
+      const crossBorderRoad = scope === "import" && requestedMode !== "air" && (
         (sourceTerritory === "Mexico" && destinationTerritory === "United States")
         || (sourceTerritory === "United States" && destinationTerritory === "Mexico")
       );
       const intraEu = scope === "domestic"
         && sourceTerritory === "European Union"
         && sourceLocation?.label !== destinationLocation?.label;
-      const originGatewayModel = modeledOriginGateway(sourceLocation, scope);
+      const originGatewayModel = modeledOriginGateway(sourceLocation, destinationLocation, scope, requestedMode);
       const originGateway = pushUniqueNode(nodes, {
         id: `origin-gateway-${slug(source.value)}-${slug(destination.value)}`,
         kind: "origin_gateway",
@@ -910,7 +990,7 @@ function buildRoute(
         status: "verify",
         note: "Modeled supplier pickup. Equipment, address, and cargo-ready date are not confirmed.",
       });
-      const receivingGatewayModel = scope === "unknown" ? null : modeledReceivingGateway(sourceLocation, destinationLocation);
+      const receivingGatewayModel = scope === "unknown" ? null : modeledReceivingGateway(sourceLocation, destinationLocation, requestedMode);
       const receivingGateway = pushUniqueNode(nodes, {
         id: `receiving-gateway-${slug(source.value)}-${slug(destination.value)}`,
         kind: "receiving_gateway",
@@ -935,9 +1015,11 @@ function buildRoute(
         id: `segment-${originGateway.id}-${receivingGateway.id}`,
         fromNodeId: originGateway.id,
         toNodeId: receivingGateway.id,
-        mode: scope === "unknown" ? "to_confirm" : scope === "import" && !crossBorderRoad ? "air_or_ocean" : "road",
+        mode: scope === "unknown" ? "to_confirm" : requestedMode === "air" && scope === "import" ? "air" : scope === "import" && !crossBorderRoad ? "air_or_ocean" : "road",
         label: scope === "unknown"
           ? "Freight mode to confirm"
+          : requestedMode === "air" && scope === "import"
+            ? "International air freight"
           : crossBorderRoad
             ? "Cross-border road freight"
             : scope === "import"
@@ -946,7 +1028,9 @@ function buildRoute(
                 ? "Intra-EU freight"
                 : "Domestic freight",
         status: "verify",
-        note: crossBorderRoad
+        note: requestedMode === "air" && scope === "import"
+          ? "Modeled international air leg from the stated request. Airports, carrier, service, chargeable weight, schedule, rate, and capacity require live offers."
+          : crossBorderRoad
           ? "Modeled cross-border road leg. Carrier, equipment, border crossing, schedule, and rate require live offers."
           : scope === "import"
             ? "Modeled international leg. Mode, carrier, schedule, rate, and capacity require live offers."
@@ -1039,6 +1123,7 @@ function buildShippingOptions(route: SupplyCaseDashboard["route"]): SupplyShippi
   const routeAssumption = `${source} to ${destination}`;
   const linehaul = route.segments.find((segment) =>
     segment.label === "International freight"
+      || segment.label === "International air freight"
       || segment.label === "Cross-border road freight"
       || segment.label === "Intra-EU freight"
       || segment.label === "Domestic freight"
@@ -1046,6 +1131,8 @@ function buildShippingOptions(route: SupplyCaseDashboard["route"]): SupplyShippi
   );
   const modeledMode: SupplyShippingOption["mode"] = linehaul?.mode === "road"
     ? "Road, to confirm"
+    : linehaul?.mode === "air"
+      ? "Air freight"
     : linehaul?.mode === "air_or_ocean" || linehaul?.mode === "ocean"
       ? "Air or ocean, to confirm"
       : "Mode to confirm";
@@ -1262,9 +1349,19 @@ function buildOpenQuestions(
   }
   if (!regions.some((region) => region.value)) {
     questions.push("Which supplier cities or countries should be evaluated?");
+  } else {
+    const unresolvedRegions = regions.filter((region) => region.status === "needs_confirmation" && region.value);
+    if (unresolvedRegions.length > 0) {
+      questions.push(`Confirm the exact supplier geography for: ${unresolvedRegions.map((region) => region.value).join(", ")}.`);
+    }
   }
   if (!destinations.some((destination) => destination.value)) {
     questions.push("Where will the goods clear customs and be delivered?");
+  } else {
+    const unresolvedDestinations = destinations.filter((destination) => destination.status === "needs_confirmation" && destination.value);
+    if (unresolvedDestinations.length > 0) {
+      questions.push(`Confirm the exact delivery geography for: ${unresolvedDestinations.map((destination) => destination.value).join(", ")}.`);
+    }
   }
   questions.push("What are the expected volume, dimensions, weight, shipment frequency, Incoterm, cargo-ready date, and required delivery date?");
   return questions;
@@ -1307,7 +1404,7 @@ export function generateSupplyCase(prompt: string, now: Date = new Date()): Supp
   const industryResult = detectIndustry(sourcePrompt);
   const sourcing = extractSourcing(sourcePrompt, industryResult.profile);
   const destinations = extractDestinations(sourcePrompt);
-  const route = buildRoute(headquarters, sourcing.regions, destinations);
+  const route = buildRoute(headquarters, sourcing.regions, destinations, requestedInternationalMode(sourcePrompt));
   const openQuestions = buildOpenQuestions(
     name,
     headquarters,
@@ -1418,7 +1515,7 @@ function isRouteSegment(value: unknown): value is SupplyRouteSegment {
   return isString(value.id)
     && isString(value.fromNodeId)
     && isString(value.toNodeId)
-    && ["road", "ocean", "air_or_ocean", "last_mile", "to_confirm"].includes(String(value.mode))
+    && ["road", "ocean", "air", "air_or_ocean", "last_mile", "to_confirm"].includes(String(value.mode))
     && isString(value.label)
     && value.status === "verify"
     && isString(value.note);
@@ -1440,7 +1537,7 @@ function isShippingOption(value: unknown): value is SupplyShippingOption {
   return isString(value.id)
     && ["DHL Global Forwarding", "Kuehne+Nagel", "DSV"].includes(String(value.provider))
     && [value.service, value.route, value.bestFor, value.basis].every(isString)
-    && ["Air or ocean, to confirm", "Road, to confirm", "Mode to confirm"].includes(String(value.mode))
+    && ["Air freight", "Air or ocean, to confirm", "Road, to confirm", "Mode to confirm"].includes(String(value.mode))
     && value.transit === "Live schedule required"
     && value.indicativeCost === "Live quote required"
     && value.reliability === "Live service data required"

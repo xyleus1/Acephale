@@ -15,6 +15,13 @@ import {
   type SupplyCaseStatus,
   type SupplyRouteNode,
 } from "@/lib/supply-os-case-model";
+import {
+  buildSupplyOperatingPlan,
+  type PlanningClaimStatus,
+  type SupplyCostRange,
+  type SupplyEvidenceRef,
+  type SupplyMovementPlan,
+} from "@/lib/supply-os-operating-plan";
 import styles from "./supply-os-workspace.module.css";
 
 type ComposerState = "idle" | "ready" | "error" | "saved";
@@ -80,27 +87,61 @@ function initialRouteNodeId(dashboard: SupplyCaseDashboard) {
     ?? null;
 }
 
-function primaryRouteSequence(dashboard: SupplyCaseDashboard) {
-  const nodesById = new Map(dashboard.routeNodes.map((node) => [node.id, node]));
-  const firstSegmentByNode = new Map<string, SupplyCaseDashboard["routeSegments"][number]>();
-  for (const segment of dashboard.routeSegments) {
-    if (!firstSegmentByNode.has(segment.fromNodeId)) firstSegmentByNode.set(segment.fromNodeId, segment);
-  }
-
-  const sequence: SupplyRouteNode[] = [];
-  const visited = new Set<string>();
-  let current = dashboard.routeNodes.find((node) => node.kind === "source") ?? null;
-  while (current && !visited.has(current.id) && sequence.length < 7) {
-    sequence.push(current);
-    visited.add(current.id);
-    const nextId = firstSegmentByNode.get(current.id)?.toNodeId;
-    current = nextId ? nodesById.get(nextId) ?? null : null;
-  }
-  return sequence;
-}
-
 function scrollBehavior(): ScrollBehavior {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
+function planningStatusLabel(status: PlanningClaimStatus) {
+  if (status === "modeled") return "Modeled";
+  if (status === "connection_required") return "Connection required";
+  return "Verify";
+}
+
+function movementLabel(movement: SupplyMovementPlan) {
+  const source = movement.source?.label ?? movement.originGateway.label;
+  const destination = movement.destination?.label ?? movement.receivingGateway?.label ?? "Destination to confirm";
+  return `${source} to ${destination}`;
+}
+
+function formatUsdRange(cost: SupplyCostRange | null) {
+  if (!cost) return "Range withheld";
+  const formatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: cost.currency,
+    maximumFractionDigits: 0,
+  });
+  return `${formatter.format(cost.low)} - ${formatter.format(cost.high)}`;
+}
+
+function ownerLabel(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function isPublicSourceUrl(value: string) {
+  return value.startsWith("https://") || value.startsWith("http://");
+}
+
+function EvidenceLinks({
+  evidenceIds,
+  evidenceRefs,
+}: {
+  evidenceIds: readonly string[];
+  evidenceRefs: readonly SupplyEvidenceRef[];
+}) {
+  const sources = evidenceIds.flatMap((id) => {
+    const source = evidenceRefs.find((item) => item.id === id);
+    return source ? [source] : [];
+  });
+  if (!sources.length) return <span className={styles.sourceEmpty}>No source connected</span>;
+  return (
+    <span className={styles.sourceLinks}>
+      {sources.map((source) => (
+        <a key={source.id} href={source.url} target="_blank" rel="noreferrer">
+          {source.publisher}: {source.title}
+        </a>
+      ))}
+    </span>
+  );
 }
 
 function project(lat: number | null, lng: number | null) {
@@ -362,6 +403,7 @@ export function SupplyOsWorkspace({ storageScope }: { storageScope: string }) {
         <div ref={resultsRef} className={styles.resultsAnchor}>
           {activeCase ? (
             <CaseDashboard
+              key={activeCase.id}
               dashboard={activeCase}
               selectedNodeId={selectedNodeId}
               setSelectedNodeId={setSelectedNodeId}
@@ -394,7 +436,18 @@ function CaseDashboard({
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string) => void;
 }) {
-  const primaryRouteNodes = primaryRouteSequence(dashboard);
+  const operatingPlan = useMemo(() => buildSupplyOperatingPlan(dashboard), [dashboard]);
+  const [selectedMovementId, setSelectedMovementId] = useState(
+    operatingPlan.movements[0]?.movementId ?? "",
+  );
+  const selectedMovement = operatingPlan.movements.find(
+    (movement) => movement.movementId === selectedMovementId,
+  ) ?? operatingPlan.movements[0] ?? null;
+
+  function selectMovement(movement: SupplyMovementPlan) {
+    setSelectedMovementId(movement.movementId);
+    setSelectedNodeId(movement.source?.nodeId ?? movement.originGateway.nodeId);
+  }
 
   return (
     <article className={styles.caseDashboard} aria-labelledby="active-case-title">
@@ -412,10 +465,11 @@ function CaseDashboard({
       </header>
 
       <nav className={styles.caseNav} aria-label={`${dashboardName(dashboard)} dashboard sections`}>
-        <a href="#supply-route">Route</a>
+        <a href="#current-conditions">Current conditions</a>
+        <a href="#port-customs-plan">Port and customs plan</a>
+        <a href="#door-to-door-execution">Door-to-door execution</a>
         <a href="#supplier-search">Suppliers</a>
-        <a href="#shipping-options">Shipping</a>
-        <a href="#customs-risks">Customs and risks</a>
+        <a href="#open-checks">Open checks</a>
       </nav>
 
       <section className={styles.summaryStrip} aria-label="Case inputs">
@@ -425,138 +479,411 @@ function CaseDashboard({
         <div><span>Ships to</span><strong>{listOrConfirmation(dashboard.destinations)}</strong></div>
       </section>
 
-      <section id="supply-route" className={styles.primaryGrid}>
+      <section className={styles.movementPanel} aria-labelledby="movement-selector-title">
+        <header className={styles.movementHeader}>
+          <div>
+            <span className={styles.eyebrow}>Movement scope</span>
+            <h2 id="movement-selector-title">Select one lane before reviewing the plan</h2>
+          </div>
+          <span className={styles.statusPill} data-status={operatingPlan.status}>
+            {planningStatusLabel(operatingPlan.status)}
+          </span>
+        </header>
+        {operatingPlan.movements.length ? (
+          <div className={styles.movementSelector}>
+            {operatingPlan.movements.map((movement, index) => (
+              <button
+                key={movement.movementId}
+                type="button"
+                className={styles.movementButton}
+                data-active={movement.movementId === selectedMovement?.movementId}
+                aria-pressed={movement.movementId === selectedMovement?.movementId}
+                aria-controls="current-conditions"
+                onClick={() => selectMovement(movement)}
+              >
+                <span>Movement {index + 1}</span>
+                <strong>{movementLabel(movement)}</strong>
+                <small>{ownerLabel(movement.scope)} · {movement.originGateway.label}</small>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.planEmpty}>No complete movement could be derived. Confirm source, gateway, and destination geography first.</p>
+        )}
+        <dl className={styles.scenarioStrip}>
+          <div><dt>Planning unit</dt><dd>{operatingPlan.scenario.equipment}</dd></div>
+          <div><dt>Cargo profile</dt><dd>{operatingPlan.scenario.cargoProfile}</dd></div>
+          <div><dt>Commercial term</dt><dd>{operatingPlan.scenario.commercialTerm}</dd></div>
+          <div><dt>Pricing boundary</dt><dd>{operatingPlan.scenario.exclusions}</dd></div>
+        </dl>
+      </section>
+
+      <CurrentConditions
+        dashboard={dashboard}
+        movement={selectedMovement}
+        selectedNodeId={selectedNodeId}
+        setSelectedNodeId={setSelectedNodeId}
+      />
+      <PortAndCustomsPlan movement={selectedMovement} connectors={operatingPlan.customsConnectors} />
+      <DoorToDoorExecution movement={selectedMovement} />
+      <SupplierSearch dashboard={dashboard} />
+      <OpenChecks dashboard={dashboard} movement={selectedMovement} />
+    </article>
+  );
+}
+
+function CurrentConditions({
+  dashboard,
+  movement,
+  selectedNodeId,
+  setSelectedNodeId,
+}: {
+  dashboard: SupplyCaseDashboard;
+  movement: SupplyMovementPlan | null;
+  selectedNodeId: string | null;
+  setSelectedNodeId: (id: string) => void;
+}) {
+  return (
+    <section
+      id="current-conditions"
+      className={styles.currentConditions}
+      data-movement-id={movement?.movementId}
+    >
+      <header className={styles.sectionTitle}>
+        <div><span className={styles.eyebrow}>Current conditions</span><h2>What must be checked for this movement</h2></div>
+        <p>Every finding remains source-bound. No terminal, carrier, commodity, rate, or customs callback is connected.</p>
+      </header>
+      <div className={styles.primaryGrid}>
         <SupplyMap
           dashboard={dashboard}
+          movement={movement}
           selectedNodeId={selectedNodeId}
           setSelectedNodeId={setSelectedNodeId}
         />
         <aside className={styles.routeBrief}>
           <header>
-            <span className={styles.eyebrow}>Recommended first move</span>
-            <h2>{dashboard.summary.recommendedAction}</h2>
+            <span className={styles.eyebrow}>Ranked gateway options</span>
+            <h2>{movement ? movementLabel(movement) : "Movement geography needed"}</h2>
           </header>
-          <div className={styles.briefBlock}>
-            <span>Supply pattern</span>
-            <p>{dashboard.summary.supplyPattern}</p>
-          </div>
-          <div className={styles.briefBlock}>
-            <span>Route sequence</span>
-            <ol>
-              {primaryRouteNodes.map((node) => (
-                <li key={node.id}>
-                  <button
-                    type="button"
-                    aria-pressed={selectedNodeId === node.id}
-                    aria-controls="supply-map-node-inspector"
-                    onClick={() => setSelectedNodeId(node.id)}
-                  >
-                    <i data-status={node.status} />
-                    <span><strong>{node.label}</strong><small>{node.detail}</small></span>
-                    <span className={styles.srOnly}>{statusLabel(node.status)}</span>
-                  </button>
-                </li>
+          {movement?.portOptions.length ? (
+            <div className={styles.portRankList}>
+              {movement.portOptions.map((option) => (
+                <article key={option.id} className={styles.portOption}>
+                  <header>
+                    <span>Rank {option.rank}</span>
+                    <span className={styles.statusPill} data-status={option.status}>{planningStatusLabel(option.status)}</span>
+                  </header>
+                  <h3>{option.port}</h3>
+                  <p>{option.bestFor}</p>
+                  <dl>
+                    <div><dt>Tradeoffs</dt><dd>{option.tradeoffs}</dd></div>
+                    <div><dt>Inland plan</dt><dd>{option.inlandPlan}</dd></div>
+                  </dl>
+                  <div className={styles.compactChecks}>
+                    <span>Check before selection</span>
+                    <ul>{option.checksBeforeSelection.map((check) => <li key={check}>{check}</li>)}</ul>
+                  </div>
+                  <EvidenceLinks evidenceIds={option.evidenceRefIds} evidenceRefs={movement.evidenceRefs} />
+                </article>
               ))}
-            </ol>
-          </div>
-          <div className={styles.briefBlock}>
-            <span>Questions to close</span>
-            <ul className={styles.questionList}>
-              {dashboard.openQuestions.map((question) => <li key={question}>{question}</li>)}
-            </ul>
-          </div>
+            </div>
+          ) : (
+            <p className={styles.planEmpty}>No import-port ranking applies to this movement, or the gateway geography is not complete enough to rank.</p>
+          )}
         </aside>
-      </section>
+      </div>
 
-      <section id="supplier-search" className={styles.dataSection}>
-        <header className={styles.sectionTitle}>
-          <div><span className={styles.eyebrow}>Sourcing</span><h2 id="supplier-search-title">Supplier search briefs</h2></div>
-          <p>Profiles to validate, not claimed supplier relationships.</p>
-        </header>
-        <div className={styles.tableWrap} role="region" aria-labelledby="supplier-search-title" tabIndex={0}>
-          <table className={styles.dataTable}>
-            <thead><tr><th>Search profile</th><th>Region</th><th>Capability</th><th>Why it fits</th><th>Lead time</th><th>Status</th></tr></thead>
-            <tbody>
-              {dashboard.supplierOptions.map((option) => (
-                <tr key={option.id}>
-                  <td><strong>{option.title}</strong><small>{option.basis}</small></td>
-                  <td>{option.region}</td>
-                  <td>{option.capability}</td>
-                  <td>{option.fitReason}</td>
-                  <td>{option.leadTime}</td>
-                  <td><span className={styles.statusPill} data-status={option.status}>{statusLabel(option.status)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <div className={styles.conditionGrid}>
+        {movement?.intelligenceChecks.length ? movement.intelligenceChecks.map((check) => (
+          <article key={check.id} className={styles.conditionCard} data-status={check.status}>
+            <header>
+              <span>{check.commodities.length ? check.commodities.join(", ") : "Movement check"}</span>
+              <span className={styles.statusPill} data-status={check.status}>{planningStatusLabel(check.status)}</span>
+            </header>
+            <h3>{check.title}</h3>
+            <p className={styles.conditionQuestion}>{check.question}</p>
+            <dl>
+              <div><dt>Current finding</dt><dd>{check.currentFinding}</dd></div>
+              <div><dt>Why it changes the plan</dt><dd>{check.whyItChangesThePlan}</dd></div>
+              <div><dt>Decision rule</dt><dd>{check.decisionRule}</dd></div>
+              <div><dt>Freshness target</dt><dd>{check.freshnessTarget}</dd></div>
+            </dl>
+            <div className={styles.requirementLinks}>
+              <span>Required sources</span>
+              {check.sourceRequirements.length ? check.sourceRequirements.map((source) => {
+                const content = <><strong>{source.label}</strong><small>{source.freshnessTarget}</small></>;
+                return isPublicSourceUrl(source.url) ? (
+                  <a key={`${check.id}-${source.id}`} href={source.url} target="_blank" rel="noreferrer">
+                    {content}
+                  </a>
+                ) : (
+                  <span key={`${check.id}-${source.id}`} className={styles.requirementRecord}>
+                    {content}
+                  </span>
+                );
+              }) : <span className={styles.sourceEmpty}>No authoritative feed selected yet</span>}
+            </div>
+          </article>
+        )) : (
+          <p className={styles.planEmpty}>Select a derived movement to review prompt-specific intelligence checks.</p>
+        )}
+      </div>
+    </section>
+  );
+}
 
-      <section id="shipping-options" className={styles.dataSection}>
-        <header className={styles.sectionTitle}>
-          <div><span className={styles.eyebrow}>Freight</span><h2 id="shipping-options-title">Indicative shipping options</h2></div>
-          <p>Modeled for comparison. No provider response or booking is connected.</p>
-        </header>
-        <div className={styles.tableWrap} role="region" aria-labelledby="shipping-options-title" tabIndex={0}>
-          <table className={styles.dataTable}>
-            <thead><tr><th>Provider</th><th>Service</th><th>Route</th><th>Transit</th><th>Indicative cost</th><th>Reliability</th><th>Best for</th><th>Status</th></tr></thead>
-            <tbody>
-              {dashboard.shippingOptions.map((option) => (
-                <tr key={option.id}>
-                  <td><strong>{option.provider}</strong><small>{option.basis}</small></td>
-                  <td>{option.service}<small>{option.mode}</small></td>
-                  <td>{option.route}</td>
-                  <td>{option.transit}</td>
-                  <td className={styles.numeric}>{option.indicativeCost}</td>
-                  <td>{option.reliability}</td>
-                  <td>{option.bestFor}</td>
-                  <td><span className={styles.statusPill} data-status={option.status}>{statusLabel(option.status)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+function PortAndCustomsPlan({
+  movement,
+  connectors,
+}: {
+  movement: SupplyMovementPlan | null;
+  connectors: ReturnType<typeof buildSupplyOperatingPlan>["customsConnectors"];
+}) {
+  const plan = movement?.customsPlan ?? null;
+  const movementConnectors = plan
+    ? connectors.filter((connector) => plan.connectorIds.includes(connector.id))
+    : [];
+  return (
+    <section
+      id="port-customs-plan"
+      className={styles.dataSection}
+      data-movement-id={movement?.movementId}
+    >
+      <header className={styles.sectionTitle}>
+        <div><span className={styles.eyebrow}>Port and customs plan</span><h2>Broker-controlled entry workflow</h2></div>
+        <p>{plan?.note ?? "Select a movement to resolve the customs boundary."}</p>
+      </header>
+      {plan ? (
+        <>
+          <dl className={styles.planFacts}>
+            <div><dt>Import required</dt><dd>{plan.importRequired === null ? "Confirm" : plan.importRequired ? "Yes" : "No"}</dd></div>
+            <div><dt>Entry gateway</dt><dd>{plan.recommendedEntryGateway ?? "Not applicable or not resolved"}</dd></div>
+            <div><dt>Status</dt><dd>{planningStatusLabel(plan.status)}</dd></div>
+          </dl>
+          <div className={styles.customsPlanGrid}>
+            <div className={styles.planColumn}>
+              <h3>Customs workflow</h3>
+              {plan.workflow.length ? (
+                <ol className={styles.workflowList}>
+                  {plan.workflow.map((step) => (
+                    <li key={`${movement?.movementId}-${step.sequence}`}>
+                      <span className={styles.sequenceNumber}>{step.sequence}</span>
+                      <div>
+                        <header><strong>{step.title}</strong><span className={styles.statusPill} data-status={step.status}>{planningStatusLabel(step.status)}</span></header>
+                        <p>{step.gate}</p>
+                        <dl><div><dt>Owner</dt><dd>{ownerLabel(step.owner)}</dd></div><div><dt>Output</dt><dd>{step.output}</dd></div></dl>
+                        <EvidenceLinks evidenceIds={step.evidenceRefIds} evidenceRefs={movement?.evidenceRefs ?? []} />
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : <p className={styles.planEmpty}>No import filing workflow is modeled for this movement. Confirm the customs territory before relying on that assumption.</p>}
+            </div>
+            <div className={styles.planColumn}>
+              <h3>Commercial invoice guidance</h3>
+              {plan.invoiceGuidance.length ? (
+                <div className={styles.guidanceList}>
+                  {plan.invoiceGuidance.map((item) => (
+                    <article key={item.id}>
+                      <header><strong>{item.field}</strong><span className={styles.statusPill} data-status={item.status}>{planningStatusLabel(item.status)}</span></header>
+                      <p>{item.instruction}</p>
+                      <small>{item.validation}</small>
+                      <EvidenceLinks evidenceIds={item.evidenceRefIds} evidenceRefs={movement?.evidenceRefs ?? []} />
+                    </article>
+                  ))}
+                </div>
+              ) : <p className={styles.planEmpty}>Commercial invoice guidance appears when an import movement is resolved.</p>}
 
-      <section id="customs-risks" className={styles.dataSection}>
-        <header className={styles.sectionTitle}>
-          <div><span className={styles.eyebrow}>Review</span><h2>Customs and risk checks</h2></div>
-          <p>Items to confirm before requesting quotes or moving goods.</p>
-        </header>
-        <div className={styles.riskGrid}>
-          <div className={styles.riskList}>
-            <h3>Operating risks</h3>
-            {dashboard.risks.map((risk) => (
-              <article key={risk.id} className={styles.riskRow} data-severity={risk.severity}>
-                <div><span>{risk.category}</span><strong>{risk.title}</strong></div>
-                <p>{risk.why}</p>
-                <dl><div><dt>Check</dt><dd>{risk.check}</dd></div></dl>
-                <span className={styles.statusPill} data-status={risk.status}>{statusLabel(risk.status)}</span>
+              <h3>Broker options to qualify</h3>
+              {plan.brokerOptions.length ? (
+                <div className={styles.brokerList}>
+                  {plan.brokerOptions.map((broker) => (
+                    <article key={broker.id}>
+                      <header><a href={broker.url} target="_blank" rel="noreferrer">{broker.firm}</a><span className={styles.statusPill} data-status={broker.status}>{planningStatusLabel(broker.status)}</span></header>
+                      <strong>{broker.service}</strong>
+                      <p>{broker.selectionReason}</p>
+                      <ul>{broker.qualificationChecks.map((check) => <li key={check}>{check}</li>)}</ul>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className={styles.planEmpty}>No broker is implied for a non-import movement. Verify the destination customs boundary.</p>}
+            </div>
+          </div>
+          <div className={styles.connectorSection}>
+            <header>
+              <div><span className={styles.eyebrow}>Connector readiness</span><h3>Official integration paths, not active connections</h3></div>
+              <p>Each connector needs commercial entitlement, jurisdiction checks, and an approval-safe implementation.</p>
+            </header>
+            {movementConnectors.length ? (
+              <div className={styles.connectorGrid}>
+                {movementConnectors.map((connector) => (
+                  <article key={connector.id}>
+                    <header><a href={connector.url} target="_blank" rel="noreferrer">{connector.name}</a><span className={styles.statusPill} data-status={connector.status}>{planningStatusLabel(connector.status)}</span></header>
+                    <span>{ownerLabel(connector.category)}</span>
+                    <p>{connector.useInDerya}</p>
+                    <dl><div><dt>Integration</dt><dd>{connector.integrationMode}</dd></div><div><dt>Boundary</dt><dd>{connector.approvalBoundary}</dd></div></dl>
+                  </article>
+                ))}
+              </div>
+            ) : <p className={styles.planEmpty}>No customs connector is assigned to this movement.</p>}
+          </div>
+        </>
+      ) : <p className={styles.planEmpty}>No movement is selected.</p>}
+    </section>
+  );
+}
+
+function DoorToDoorExecution({ movement }: { movement: SupplyMovementPlan | null }) {
+  const execution = movement?.executionPlan ?? null;
+  return (
+    <section
+      id="door-to-door-execution"
+      className={styles.dataSection}
+      data-movement-id={movement?.movementId}
+    >
+      <header className={styles.sectionTitle}>
+        <div><span className={styles.eyebrow}>Door-to-door execution</span><h2>Ordered service and provider plan</h2></div>
+        <p>Amounts are deterministic demo fixtures. They are not provider rates, capacity, bookings, or delivered-duty quotes.</p>
+      </header>
+      {execution?.legs.length ? (
+        <>
+          <div className={styles.tableWrap} role="region" aria-labelledby="execution-plan-title" tabIndex={0}>
+            <table className={`${styles.dataTable} ${styles.executionTable}`}>
+              <caption id="execution-plan-title" className={styles.srOnly}>Movement-specific execution legs</caption>
+              <thead><tr><th>Seq.</th><th>Service leg</th><th>Route and instruction</th><th>Provider candidates</th><th>Transit assumption</th><th>Modeled USD range</th><th>Status</th></tr></thead>
+              <tbody>
+                {execution.legs.map((leg) => (
+                  <tr key={`${movement?.movementId}-${leg.id}`}>
+                    <td className={styles.numeric} data-label="Sequence">{leg.sequence}</td>
+                    <td data-label="Service leg"><strong>{ownerLabel(leg.type)}</strong><small>{leg.mode}</small></td>
+                    <td data-label="Route and instruction"><strong>{leg.from} to {leg.to}</strong><small>{leg.instruction}</small><small>Quote inputs: {leg.quoteInputs.join(", ")}</small><small>Handoff: {leg.handoff}</small></td>
+                    <td data-label="Provider candidates">
+                      <span className={styles.providerStack}>
+                        {leg.providers.length ? leg.providers.map((provider) => (
+                          <span key={provider.id}>
+                            {isPublicSourceUrl(provider.url) ? (
+                              <a href={provider.url} target="_blank" rel="noreferrer">{provider.provider}</a>
+                            ) : (
+                              <strong>{provider.provider}</strong>
+                            )}
+                            <small>{provider.service}</small>
+                            <small>Request: {provider.request}</small>
+                            <small>Verify: {provider.verification}</small>
+                          </span>
+                        )) : <small>Provider selection required</small>}
+                      </span>
+                    </td>
+                    <td data-label="Transit assumption">{leg.transitAssumption}</td>
+                    <td className={styles.numeric} data-label="Modeled USD range"><strong>{formatUsdRange(leg.costRange)}</strong><small>{leg.costRange?.basis ?? "Inputs required before modeling"}</small></td>
+                    <td data-label="Status"><span className={styles.statusPill} data-status={leg.status}>{planningStatusLabel(leg.status)}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className={styles.executionSummary}>
+            <div><span>Total planning range</span><strong>{formatUsdRange(execution.total)}</strong><small>{execution.totalLabel}</small></div>
+            <div><span>Scenario</span><strong>{execution.scenario?.equipment ?? "Scenario withheld"}</strong><small>{execution.scenario?.cargoProfile ?? "Resolve route geography and cargo profile"}</small></div>
+            <div><span>Commercial term</span><strong>{execution.scenario?.commercialTerm ?? "Confirm"}</strong><small>{execution.scenario?.quantityBasis ?? "Quantity basis needed"}</small></div>
+            <div><span>Excluded</span><strong>Not in total</strong><small>{execution.total?.exclusions.join(", ") ?? "No numeric total is available"}</small></div>
+          </div>
+        </>
+      ) : <p className={styles.planEmpty}>The movement does not have enough resolved geography for an ordered numeric execution plan.</p>}
+
+      <div className={styles.blockerSection}>
+        <header><div><span className={styles.eyebrow}>Quote blockers</span><h3>Inputs required before a real quote request</h3></div><span>{movement?.quoteBlockers.length ?? 0} open</span></header>
+        {movement?.quoteBlockers.length ? (
+          <div className={styles.blockerGrid}>
+            {movement.quoteBlockers.map((blocker) => (
+              <article key={blocker.id}>
+                <header><strong>{blocker.field}</strong><span className={styles.statusPill} data-status={blocker.status}>{planningStatusLabel(blocker.status)}</span></header>
+                <p>{blocker.reason}</p>
+                <small>Owner: {ownerLabel(blocker.owner)}</small>
               </article>
             ))}
           </div>
-          <div className={styles.customsList}>
-            <h3>Customs readiness</h3>
-            {dashboard.customsChecks.map((check) => (
-              <article key={check.id} className={styles.customsRow}>
-                <div><i data-status={check.status} /><span><strong>{check.label}</strong><small>{check.detail}</small></span></div>
-                <p>{check.needed.join(", ")}</p>
-                <span className={styles.statusPill} data-status={check.status}>{statusLabel(check.status)}</span>
-              </article>
+        ) : <p className={styles.planEmpty}>No movement-specific quote blockers are available.</p>}
+      </div>
+    </section>
+  );
+}
+
+function SupplierSearch({ dashboard }: { dashboard: SupplyCaseDashboard }) {
+  return (
+    <section id="supplier-search" className={styles.dataSection}>
+      <header className={styles.sectionTitle}>
+        <div><span className={styles.eyebrow}>Suppliers</span><h2 id="supplier-search-title">Supplier search briefs</h2></div>
+        <p>Profiles to validate, not claimed supplier relationships.</p>
+      </header>
+      <div className={styles.tableWrap} role="region" aria-labelledby="supplier-search-title" tabIndex={0}>
+        <table className={styles.dataTable}>
+          <thead><tr><th>Search profile</th><th>Region</th><th>Capability</th><th>Why it fits</th><th>Lead time</th><th>Status</th></tr></thead>
+          <tbody>
+            {dashboard.supplierOptions.map((option) => (
+              <tr key={option.id}>
+                <td><strong>{option.title}</strong><small>{option.basis}</small></td>
+                <td>{option.region}</td>
+                <td>{option.capability}</td>
+                <td>{option.fitReason}</td>
+                <td>{option.leadTime}</td>
+                <td><span className={styles.statusPill} data-status={option.status}>{statusLabel(option.status)}</span></td>
+              </tr>
             ))}
-          </div>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function OpenChecks({ dashboard, movement }: { dashboard: SupplyCaseDashboard; movement: SupplyMovementPlan | null }) {
+  return (
+    <section id="open-checks" className={styles.dataSection} data-movement-id={movement?.movementId}>
+      <header className={styles.sectionTitle}>
+        <div><span className={styles.eyebrow}>Open checks</span><h2>Case risks and missing inputs</h2></div>
+        <p>These checks remain unresolved even when a movement plan can be modeled.</p>
+      </header>
+      <div className={styles.riskGrid}>
+        <div className={styles.riskList}>
+          <h3>Operating risks</h3>
+          {dashboard.risks.map((risk) => (
+            <article key={risk.id} className={styles.riskRow} data-severity={risk.severity}>
+              <div><span>{risk.category}</span><strong>{risk.title}</strong></div>
+              <p>{risk.why}</p>
+              <dl><div><dt>Check</dt><dd>{risk.check}</dd></div></dl>
+              <span className={styles.statusPill} data-status={risk.status}>{statusLabel(risk.status)}</span>
+            </article>
+          ))}
         </div>
-      </section>
-    </article>
+        <div className={styles.customsList}>
+          <h3>Case readiness</h3>
+          {dashboard.customsChecks.map((check) => (
+            <article key={check.id} className={styles.customsRow}>
+              <div><i data-status={check.status} /><span><strong>{check.label}</strong><small>{check.detail}</small></span></div>
+              <p>{check.needed.join(", ")}</p>
+              <span className={styles.statusPill} data-status={check.status}>{statusLabel(check.status)}</span>
+            </article>
+          ))}
+          {dashboard.openQuestions.length ? (
+            <div className={styles.openQuestionBlock}>
+              <span className={styles.eyebrow}>Questions from the prompt</span>
+              <ul className={styles.questionList}>{dashboard.openQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }
 
 function SupplyMap({
   dashboard,
+  movement,
   selectedNodeId,
   setSelectedNodeId,
 }: {
   dashboard: SupplyCaseDashboard;
+  movement: SupplyMovementPlan | null;
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string) => void;
 }) {
@@ -565,12 +892,21 @@ function SupplyMap({
     () => new Map(dashboard.routeNodes.map((node) => [node.id, node])),
     [dashboard.routeNodes],
   );
+  const activeSegmentIds = new Set(movement?.pathSegmentIds ?? []);
+  const activeNodeIds = new Set([
+    movement?.source?.nodeId,
+    movement?.originGateway.nodeId,
+    movement?.receivingGateway?.nodeId,
+    movement?.customsNode?.nodeId,
+    movement?.destination?.nodeId,
+  ].flatMap((id) => id ? [id] : []));
+  const signalNodeIds = new Set(movement?.intelligenceChecks.flatMap((check) => check.relatedNodeIds) ?? []);
 
   return (
     <figure className={styles.mapPanel} aria-labelledby="supply-map-title">
       <header className={styles.panelHeader}>
         <div><span className={styles.eyebrow}>Route</span><h2 id="supply-map-title">Supply map</h2></div>
-        <span>{dashboard.routeSegments.length} modeled legs</span>
+        <span>{movement ? `${movement.pathSegmentIds.length} selected path segments` : "Movement selection required"}</span>
       </header>
       <div className={styles.mapCanvas}>
         <svg className={styles.mapSvg} viewBox={WORLD_MAP_VIEWBOX} role="img" aria-labelledby="supply-map-svg-title">
@@ -589,7 +925,7 @@ function SupplyMap({
               const to = nodesById.get(segment.toNodeId);
               if (!from || !to) return null;
               const path = routePath(from, to);
-              return path ? <path key={segment.id} d={path} /> : null;
+              return path ? <path key={segment.id} d={path} data-active={!movement || activeSegmentIds.has(segment.id)} /> : null;
             })}
           </g>
           <g>
@@ -597,14 +933,29 @@ function SupplyMap({
               const point = project(node.lat, node.lng);
               if (!point) return null;
               const isSelected = selectedNode?.id === node.id;
+              const hasSignal = signalNodeIds.has(node.id);
               return (
                 <g
                   key={node.id}
                   className={styles.mapNode}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Inspect ${node.label}`}
                   data-kind={node.kind}
                   data-status={node.status}
                   data-selected={isSelected}
+                  data-active={!movement || activeNodeIds.has(node.id)}
+                  data-signal={hasSignal}
+                  onClick={() => setSelectedNodeId(node.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedNodeId(node.id);
+                    }
+                  }}
                 >
+                  <circle className={styles.mapNodeHitArea} cx={point.x} cy={point.y} r={22} />
+                  {hasSignal ? <circle className={styles.mapSignalRing} cx={point.x} cy={point.y} r={isSelected ? 12 : 10} /> : null}
                   <circle cx={point.x} cy={point.y} r={isSelected ? 7 : 5} />
                   {node.kind === "source" || node.kind === "receiving_gateway" || isSelected
                     ? <text x={point.x + 10} y={point.y - 8}>{node.label}</text>
@@ -627,9 +978,10 @@ function SupplyMap({
           <span><i data-kind="origin_gateway" /> Gateway</span>
           <span><i data-kind="customs" /> Customs</span>
           <span><i data-kind="destination" /> Destination</span>
+          <span><i data-kind="signal" /> Check required</span>
         </div>
       </div>
-      <figcaption>Natural Earth geography. Routes and checkpoints are generated for this demo and are not live tracking.</figcaption>
+      <figcaption>Natural Earth geography. The selected movement is emphasized; routes, signals, and checkpoints are modeled and are not live tracking.</figcaption>
     </figure>
   );
 }

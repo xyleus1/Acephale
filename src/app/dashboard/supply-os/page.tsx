@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth";
 import { SupplyOsWorkspace } from "./supply-os-workspace";
+import styles from "./supply-os-workspace.module.css";
 
 export const metadata: Metadata = {
   title: "Supply OS",
@@ -9,5 +10,9 @@ export const metadata: Metadata = {
 
 export default async function SupplyOsPage() {
   const session = await requireSession();
-  return <SupplyOsWorkspace storageScope={`${session.officeId}:${session.userId}`} />;
+  return (
+    <div className={styles.pageFrame}>
+      <SupplyOsWorkspace storageScope={`${session.officeId}:${session.userId}`} />
+    </div>
+  );
 }

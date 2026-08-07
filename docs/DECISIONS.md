@@ -16,6 +16,42 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-06 - Supply OS operating plans are movement-scoped and evidence-gated
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A generated customer case could describe several source regions and
+  delivery markets, but one shared shipping section could mix ports, customs
+  requirements, provider options, and cost assumptions across different lanes.
+  The product also needs detailed guidance without pretending a directory,
+  published schedule, index, or stale terminal page is a live quote or current
+  operating condition.
+- Decision: Derive one operating plan for each source-to-destination movement
+  from the versioned saved case. Scope all port rankings, customs workflows,
+  intelligence checks, execution legs, candidate providers, quote inputs,
+  costs, and evidence to that movement identifier. Model unknown current
+  conditions explicitly and require a named source callback with freshness
+  before changing a decision. Customs technology may prepare and validate
+  source facts, but broker-controlled entry review and filing remain human
+  gated.
+- Rationale: Movement isolation prevents one lane's evidence or price from
+  leaking into another. Evidence gates let the UI be useful at planning time
+  without manufacturing live rates, capacity, terminal status, classification,
+  admissibility, or customs release.
+- Consequences: Existing browser-saved cases stay compatible because the plan
+  is derived at render time. All costs remain labeled demo estimates and omit
+  duties and taxes. Dangerous-goods prompts withhold totals until source facts
+  and carrier acceptance are confirmed. Domestic, intra-EU, land-border, US
+  ocean-import, and non-US ocean-import templates cannot borrow jurisdiction or
+  mode-specific providers from each other. Provider and customs connector
+  records are integration candidates until a real adapter returns attributable,
+  timestamped evidence.
+  A production implementation needs office-scoped persisted cases, immutable
+  plan snapshots, expiry rules, authorized provider callbacks, and explicit
+  human approval before messages, bookings, filings, or spend commitments.
+- Revisit when: Derya adds an approved live rate, terminal, carrier, drayage,
+  broker, customs, ERP, TMS, or procurement adapter.
+
 ### 2026-08-06 - Supply OS demos start from a generated customer case
 
 - Status: accepted

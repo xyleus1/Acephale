@@ -142,6 +142,32 @@ const unknownCityState = generateSupplyCase(
 );
 assert.deepEqual(unknownCityState.destinations, ["Cleveland, Ohio"]);
 
+const mixedKnownAndUnresolvedLocations = generateSupplyCase(
+  "Company: Mixed Foods\nLocated: Germany\nSources: soybeans from China and Brazil\nShips to: Germany and Poland",
+  fixedNow,
+);
+assert.deepEqual(mixedKnownAndUnresolvedLocations.sourceRegions, ["China", "Brazil"]);
+assert.deepEqual(mixedKnownAndUnresolvedLocations.destinations, ["Germany", "Poland"]);
+assert.equal(
+  mixedKnownAndUnresolvedLocations.company.sourceRegions.find((region) => region.value === "Brazil")?.status,
+  "needs_confirmation",
+);
+assert.equal(
+  mixedKnownAndUnresolvedLocations.company.destinations.find((destination) => destination.value === "Poland")?.status,
+  "needs_confirmation",
+);
+assert.ok(mixedKnownAndUnresolvedLocations.openQuestions.some((question) => /Brazil/.test(question)));
+assert.ok(mixedKnownAndUnresolvedLocations.openQuestions.some((question) => /Poland/.test(question)));
+
+const northKoreaLocation = generateSupplyCase(
+  "Company: Restricted Geography Test\nLocated: Germany\nSources: components from North Korea\nShips to: Germany",
+  fixedNow,
+);
+assert.deepEqual(northKoreaLocation.sourceRegions, ["North Korea"]);
+assert.equal(northKoreaLocation.company.sourceRegions[0]?.status, "needs_confirmation");
+assert.equal(northKoreaLocation.routeNodes.some((node) => /South Korea|Busan/.test(node.label)), false);
+assert.ok(northKoreaLocation.openQuestions.some((question) => /North Korea/.test(question)));
+
 const domesticChina = generateSupplyCase(
   "Company: Delta Robotics\nLocated: Shanghai\nSources: motors from Shenzhen\nShips to: Shanghai",
   fixedNow,
@@ -163,6 +189,21 @@ assert.ok(
   mexicoToDetroit.routeSegments.some((segment) => segment.label === "Cross-border road freight" && segment.mode === "road"),
 );
 assert.ok(mexicoToDetroit.shippingOptions.every((option) => option.mode === "Road, to confirm"));
+
+const austinToMexico = generateSupplyCase(
+  "Company: Southbound Parts\nLocated: Mexico\nSources: automotive components from Austin, Texas\nShips to: Mexico",
+  fixedNow,
+);
+assert.ok(
+  austinToMexico.routeNodes.some((node) => node.kind === "origin_gateway" && node.label === "Laredo border crossing"),
+  "US-to-Mexico road freight must not detour through the source's default ocean gateway",
+);
+assert.ok(
+  austinToMexico.routeNodes.some((node) => node.kind === "receiving_gateway" && node.label === "Laredo border crossing"),
+);
+assert.ok(
+  austinToMexico.routeSegments.some((segment) => segment.label === "Cross-border road freight" && segment.mode === "road"),
+);
 
 const intraEuropeanUnion = generateSupplyCase(
   "Company: Rhine Robotics\nLocated: Germany\nSources: motors from Germany\nShips to: Netherlands",
@@ -188,6 +229,28 @@ const chinaToGermany = generateSupplyCase(
 assert.ok(chinaToGermany.risks.some((risk) => risk.title === "China origin and trade-policy exposure"));
 assert.equal(chinaToGermany.risks.some((risk) => /Section 301/.test(risk.check)), false);
 assert.equal(chinaToGermany.customsChecks.some((check) => check.needed.includes("Customs bond status")), false);
+
+const explicitAirCase = generateSupplyCase(
+  "Company: Air Components\nLocated: Detroit, Michigan\nSources: precision parts from Germany by air freight\nShips to: Detroit, Michigan",
+  fixedNow,
+);
+assert.ok(explicitAirCase.routeSegments.some((segment) => segment.mode === "air" && segment.label === "International air freight"));
+assert.ok(explicitAirCase.routeNodes.some((node) => node.kind === "origin_gateway" && /Air cargo gateway near Germany/.test(node.label)));
+assert.ok(explicitAirCase.routeNodes.some((node) => node.kind === "receiving_gateway" && /Air cargo gateway near Detroit/.test(node.label)));
+assert.ok(explicitAirCase.shippingOptions.every((option) => option.mode === "Air freight"));
+assert.equal(explicitAirCase.routeNodes.some((node) => /Port of|Port Houston|ocean/i.test(node.label)), false);
+assert.equal(validateSupplyCaseDashboard(explicitAirCase), true);
+assert.deepEqual(parseStoredSupplyCases(serializeSupplyCases([explicitAirCase])), [explicitAirCase]);
+
+const airCargoProductCase = generateSupplyCase(
+  "Company: CargoBox makes air cargo containers\nLocated: Austin, Texas\nSources: aluminum housings from China\nShips to: Austin, Texas",
+  fixedNow,
+);
+assert.equal(
+  airCargoProductCase.routeSegments.some((segment) => segment.mode === "air"),
+  false,
+  "an air-cargo product description must not silently select air freight as the transport mode",
+);
 
 const industryCases: Array<[string, string]> = [
   ["Orbital Works builds aerospace avionics.", "Aerospace and defense"],

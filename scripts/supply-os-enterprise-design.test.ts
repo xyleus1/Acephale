@@ -7,13 +7,24 @@ const workspace = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os
 const styles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workspace.module.css"), "utf8");
 const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
 const caseModel = readFileSync(join(root, "src/lib/supply-os-case-model.ts"), "utf8");
-const source = `${workspace}\n${styles}\n${caseModel}`;
+const operatingPlan = readFileSync(join(root, "src/lib/supply-os-operating-plan.ts"), "utf8");
+const source = `${workspace}\n${styles}\n${caseModel}\n${operatingPlan}`;
 
 for (const required of [
   ".caseBuilder",
   ".savedSection",
   ".caseDashboard",
   ".summaryStrip",
+  ".movementPanel",
+  ".movementSelector",
+  ".conditionGrid",
+  ".portRankList",
+  ".customsPlanGrid",
+  ".workflowList",
+  ".connectorGrid",
+  ".executionTable",
+  ".executionSummary",
+  ".blockerGrid",
   ".primaryGrid",
   ".mapPanel",
   ".routeBrief",
@@ -22,6 +33,8 @@ for (const required of [
   ".riskGrid",
   ".customsList",
   "Demo data",
+  "Door-to-door execution",
+  "Amounts are deterministic demo fixtures.",
   "Supplier profiles, rates, transit times, risks, and customs checks are indicative.",
 ]) {
   assert.equal(source.includes(required), true, `enterprise case dashboard is missing: ${required}`);
