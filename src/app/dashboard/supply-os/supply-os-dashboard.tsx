@@ -703,8 +703,11 @@ function CommandInspector({
 
             {object.contacts.length ? (
               <section className={styles.inspectorContacts}>
-                <h3>{object.kind === "supplier" ? "Supplier candidates" : object.kind === "movement" ? "Carrier candidates" : "Provider contacts"}</h3>
-                {object.contacts.slice(0, object.kind === "movement" ? 5 : 3).map((contact) => (
+                <h3>
+                  {object.kind === "supplier" ? "Supplier candidates" : object.kind === "movement" ? "Carrier shortlist" : "Provider contacts"}
+                  <span>{object.contacts.length} options</span>
+                </h3>
+                {object.contacts.slice(0, object.kind === "movement" ? 9 : 3).map((contact) => (
                   <div key={contact.id} className={styles.inspectorContact}>
                     <span><strong>{contact.name}</strong><small>{contact.role}</small></span>
                     {contact.proximity ? <b>{contact.proximity}</b> : null}

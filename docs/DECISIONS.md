@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-07 - Supply OS route corridors are continuous, directional, and directly selectable
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Straight route strokes and isolated midpoint labels did not make the
+  supplier-to-factory-to-customer flow visually obvious. Small provider lists
+  also made the lane inspector look like a generic recommendation widget.
+- Decision: Render every modeled movement as a continuous curved corridor over
+  the maintained MapLibre basemap. Use repeated Lucide direction markers,
+  persistent white casing, and selected-lane emphasis. Keep a wide native
+  pointer target along the route curve and preserve the route rail as the
+  keyboard-accessible control. Build lane shortlists from endpoint-specific
+  official candidates first, followed by national alternatives, with no claim
+  of live capacity or award.
+- Rationale: A customer should understand physical flow before reading detail,
+  and an operator should be able to open the exact lane directly from the map.
+  Local and national alternatives make the next quote action useful without
+  pretending Derya has already tendered freight.
+- Consequences: Curves are planning geometry, not turn-by-turn routes. Provider
+  expansion must keep official-source provenance and clearly separate candidate
+  fit from live price, capacity, and performance.
+- Revisit when: Live route engines, carrier APIs, quote ingestion, or a dynamic
+  endpoint provider-search service replaces deterministic planning candidates.
+
 ### 2026-08-06 - Customer Supply OS leads with operational ownership and a production handoff
 
 - Status: accepted

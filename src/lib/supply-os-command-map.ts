@@ -115,6 +115,80 @@ const UBER_FREIGHT: SupplyCommandContact = {
   sourceLabel: "Official quote product page",
 };
 
+const SCHNEIDER_FREIGHT: SupplyCommandContact = {
+  id: "schneider-freight",
+  name: "Schneider",
+  role: "Truckload and intermodal network",
+  fit: "National truckload, intermodal, brokerage, and dedicated-capacity alternative for repeat plant and customer lanes.",
+  url: "https://schneider.com/freight-shipping",
+  sourceLabel: "Official shipper service page",
+};
+
+const JB_HUNT: SupplyCommandContact = {
+  id: "jb-hunt-shippers",
+  name: "J.B. Hunt",
+  role: "Truckload and intermodal network",
+  fit: "National truckload, intermodal, final-mile, and managed transportation alternative for scheduled production freight.",
+  url: "https://www.jbhunt.com/shippers",
+  sourceLabel: "Official shipper service page",
+};
+
+const ARCBEST: SupplyCommandContact = {
+  id: "arcbest",
+  name: "ArcBest",
+  role: "LTL and managed transportation",
+  fit: "ABF LTL capacity plus truckload, expedited, and managed transportation for mixed shipment sizes and time-critical exceptions.",
+  url: "https://arcb.com/solutions",
+  sourceLabel: "Official solutions page",
+};
+
+const MELTON_TULSA: SupplyCommandContact = {
+  id: "melton-tulsa",
+  name: "Melton Truck Lines",
+  role: "Tulsa flatbed carrier",
+  fit: "Tulsa-based flatbed specialist for machinery, fabricated assemblies, and over-dimensional or securement-sensitive freight.",
+  url: "https://meltontruck.com/ship-with-us/",
+  location: "808 N 161st E Ave, Tulsa, OK",
+  sourceLabel: "Official shipper page",
+};
+
+const SWIFT_PHOENIX: SupplyCommandContact = {
+  id: "swift-phoenix",
+  name: "Swift Transportation",
+  role: "Phoenix truckload network",
+  fit: "Phoenix-headquartered dry van, refrigerated, flatbed, intermodal, and dedicated capacity for regional and national moves.",
+  url: "https://www.swifttrans.com/",
+  location: "2200 S 75th Ave, Phoenix, AZ",
+  sourceLabel: "Official company site",
+};
+
+const PORT_X_LOS_ANGELES: SupplyCommandContact = {
+  id: "port-x-los-angeles",
+  name: "Port X Logistics",
+  role: "Los Angeles and Long Beach drayage",
+  fit: "Port-focused drayage, transload, and final-mile coordination candidate for container freight moving through Los Angeles or Long Beach.",
+  url: "https://portxlogistics.com/",
+  sourceLabel: "Official company site",
+};
+
+const GROUPE_ROBERT: SupplyCommandContact = {
+  id: "groupe-robert",
+  name: "Groupe Robert",
+  role: "Quebec transport and distribution network",
+  fit: "Quebec-based truckload, LTL, specialized transport, distribution, and cross-border alternative for Montreal operating lanes.",
+  url: "https://www.robert.ca/en/",
+  sourceLabel: "Official company site",
+};
+
+const CHALLENGER: SupplyCommandContact = {
+  id: "challenger-motor-freight",
+  name: "Challenger Motor Freight",
+  role: "Ontario cross-border carrier",
+  fit: "Ontario-based truckload, LTL, intermodal, and logistics alternative for Canada-United States plant and customer movements.",
+  url: "https://challenger.com/",
+  sourceLabel: "Official company site",
+};
+
 const STEWART_TRANSPORT: SupplyCommandContact = {
   id: "stewart-transport-phoenix",
   name: "Stewart Transport",
@@ -281,16 +355,22 @@ function regionalContactsForLocation(location: string): SupplyCommandContact[] {
   const value = location.toLowerCase();
   const contacts: SupplyCommandContact[] = [];
   if (/phoenix|arizona|goodyear/.test(value)) {
-    contacts.push(STEWART_TRANSPORT, KNIGHT_PHOENIX, DEPENDABLE_PHOENIX);
+    contacts.push(STEWART_TRANSPORT, KNIGHT_PHOENIX, SWIFT_PHOENIX, DEPENDABLE_PHOENIX);
+  }
+  if (/tulsa|oklahoma/.test(value)) {
+    contacts.push(MELTON_TULSA);
   }
   if (/los angeles|long beach|southern california|commerce, ca/.test(value)) {
-    contacts.push(DEPENDABLE_LOS_ANGELES);
+    contacts.push(PORT_X_LOS_ANGELES, DEPENDABLE_LOS_ANGELES);
   }
   if (/ferndale|detroit|michigan|troy, mi|warren, mi/.test(value)) {
     contacts.push(UNIVERSAL_MICHIGAN, OLD_DOMINION_DETROIT);
   }
   if (/quebec|montreal|coteau-du-lac/.test(value)) {
-    contacts.push(CAT_QUEBEC);
+    contacts.push(GROUPE_ROBERT, CAT_QUEBEC);
+  }
+  if (/ontario|toronto|hamilton|windsor|cambridge/.test(value)) {
+    contacts.push(CHALLENGER);
   }
   return contacts;
 }
@@ -433,10 +513,15 @@ function movementContacts(
   const crossBorder = isCrossBorder(from, to);
   if (/air|ocean|international|cross-border/.test(mode) || crossBorder) addContact(contacts, DHL_GLOBAL_FORWARDING);
   if (/truck|ltl|flatbed|road|courier/.test(mode) || !contacts.length) addContact(contacts, UBER_FREIGHT);
+  if (/truck|ltl|flatbed|road|courier/.test(mode)) {
+    addContact(contacts, SCHNEIDER_FREIGHT);
+    addContact(contacts, JB_HUNT);
+    addContact(contacts, ARCBEST);
+  }
   if (/air|ocean|international/.test(mode)) {
     for (const contact of borderContacts(from, to)) addContact(contacts, contact);
   }
-  return contacts.slice(0, 6);
+  return contacts.slice(0, 9);
 }
 
 function customsProfile(from: SupplyOptimizationNode, to: SupplyOptimizationNode, fallback: SupplyCoordinate) {

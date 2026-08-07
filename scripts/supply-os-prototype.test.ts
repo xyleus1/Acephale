@@ -116,7 +116,7 @@ assert.match(commandMapUi, /onMouseEnter=\{\(\) => setHoveredObject\(object\)\}/
 assert.match(commandMapUi, /Click for full operating detail/, "hover cards must lead into the selected object inspector");
 assert.match(commandMapUi, /getContext\("webgl2"/, "the real map must fail closed when WebGL 2 is unavailable");
 assert.match(commandMapUi, /Map renderer unavailable/, "map failure must preserve the rest of the customer command center");
-assert.match(commandMapUi, /routePathButton/, "transport paths must expose a direct map hit target");
+assert.match(commandMapUi, /routePathSegment/, "curved transport paths must expose direct map hit targets");
 assert.match(commandMapUi, /selectRoute\(route\.id\)/, "clicking route geometry must open the matching transport leg");
 assert.match(dashboard, /aria-pressed=\{object\.id === selectedObject\?\.id\}/, "network objects must expose selection state");
 assert.match(dashboard, /<RateEnvelopeChart estimate=\{object\.rateEstimate\}/, "selected road legs must show a planning-range chart");
@@ -124,7 +124,7 @@ assert.match(dashboard, /Routes and providers are candidates until records, quot
 assert.match(optimizationEngine, /Supplier clusters are inferred/, "inferred suppliers must remain explicit hypotheses");
 assert.match(optimizationEngine, /Every route shown is a planning hypothesis/, "unobserved routes must not look operational");
 
-for (const provider of ["DHL Global Forwarding", "Uber Freight", "Livingston International", "Farrow", "Stewart Transport", "Knight Transportation", "Dependable Supply Chain Services"]) {
+for (const provider of ["DHL Global Forwarding", "Uber Freight", "Livingston International", "Farrow", "Stewart Transport", "Knight Transportation", "Dependable Supply Chain Services", "Melton Truck Lines", "Schneider", "J.B. Hunt", "ArcBest"]) {
   assert.equal(commandMapModel.includes(provider), true, `command map is missing provider candidate: ${provider}`);
 }
 for (const workspaceId of ["procurement", "supplier_outreach", "shipment_planning", "customs", "fulfillment"]) {

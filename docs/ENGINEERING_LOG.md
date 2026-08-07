@@ -3682,3 +3682,20 @@ Use this file for chronological implementation notes that future agents should s
   Conductor worktree.
 - Safety: No schema, tenant scope, secret, outbound message, live quote,
   booking, customs filing, supplier award, or spend mutation was introduced.
+### 2026-08-07 - Supply OS directional route corridors and carrier depth
+
+- Replaced straight route presentation with 33-point quadratic corridors that
+  stay connected during map movement and resize.
+- Added a MapLibre GeoJSON route source plus visible projected casing and core
+  geometry, repeated Lucide direction markers, and 24-pixel direct hit segments.
+- Curved route clicks select the exact movement object and update the existing
+  transport-leg inspector.
+- Expanded deterministic carrier candidates for Tulsa, Phoenix, Los Angeles and
+  Long Beach, Quebec, and Ontario. Added broader Schneider, J.B. Hunt, and
+  ArcBest road alternatives.
+- Updated command-map, prototype, and enterprise-design regression tests for
+  connected curved geometry, direct hit targets, direction markers, and carrier
+  depth.
+- GPU browser QA at 1440 by 900 and 2048 by 900 confirmed a live basemap, six
+  direction markers for two lanes, direct line selection, nine Tulsa-to-Phoenix
+  carrier candidates, no viewport overflow, and no console errors.

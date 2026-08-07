@@ -4,6 +4,58 @@
 
 ## Date
 
+2026-08-07
+
+## Branch
+
+feat/supply-os-marine-routes, targeting main
+
+## Task implemented
+
+### Make Supply OS lanes read and behave like transport corridors
+
+- Supplier, factory, and customer points are now connected by continuous curved
+  route corridors instead of straight overlay strokes.
+- Every corridor has repeated direction markers, a white casing that keeps it
+  legible over the basemap, selected and hover emphasis, and direct pointer
+  targets along the full curve.
+- Clicking any visible part of a corridor opens the matching transport leg.
+  The route list remains the keyboard-accessible equivalent.
+- Movement labels now sit on the curved route rather than the old straight-line
+  midpoint.
+- Road lanes can expose up to nine official carrier candidates. The shortlist
+  now mixes local or endpoint specialists with national capacity alternatives.
+- Added Tulsa, Phoenix, Los Angeles and Long Beach, Quebec, and Ontario options,
+  plus broader Schneider, J.B. Hunt, and ArcBest alternatives. Each candidate
+  retains an official service or company source and remains a candidate until
+  a live quote and operating scope are confirmed.
+
+## Verification passed
+
+- All ten Supply OS regression suites
+- `npx tsc --noEmit --incremental false`
+- `npm run build` with the local test database configuration
+- GPU-backed browser QA at 1440 by 900 and 2048 by 900
+- Direct clicks on curved route geometry opened the matching transport leg
+- Both browser sizes stayed within the viewport with no console errors
+- The Tulsa to Phoenix lane displayed nine alternatives, including Melton,
+  Stewart, Knight, Swift, Schneider, J.B. Hunt, and ArcBest
+
+## Caveats
+
+- Corridors are planning geometry, not turn-by-turn road routing or observed
+  vessel tracks.
+- Carrier entries are researched candidates, not live capacity, contracted
+  providers, or awarded loads. Rates remain modeled until comparable quotes
+  are returned.
+- Provider coverage is currently deterministic for known demo regions. A
+  production provider-search service still needs to resolve local candidates
+  for arbitrary endpoints.
+
+## Prior Update
+
+## Date
+
 2026-08-06
 
 ## Branch

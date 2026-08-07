@@ -2100,48 +2100,64 @@
   pointer-events: none;
 }
 
-.routeGeometry {
+.routeGeometry,
+.routeGeometryCasing,
+.routeGeometryLine {
   pointer-events: none;
 }
 
 .routeGeometryCasing,
 .routeGeometryLine {
   fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
 
 .routeGeometryCasing {
   stroke: var(--panel);
-  stroke-linecap: round;
-  stroke-width: 10px;
+  stroke-width: 9px;
 }
 
 .routeGeometryLine {
   stroke: var(--navy);
-  stroke-linecap: round;
   stroke-width: 4px;
+  opacity: 0.84;
 }
 
 .routeGeometry[data-active="true"] .routeGeometryLine,
-.routeGeometry[data-hovered="true"] .routeGeometryLine,
-.routeGeometry:focus-within .routeGeometryLine {
+.routeGeometry[data-hovered="true"] .routeGeometryLine {
   stroke-width: 6px;
+  opacity: 1;
 }
 
-.routePathButton {
+.routePathSegment {
   height: 24px;
   position: absolute;
   z-index: 3;
   padding: 0;
   border: 0;
   border-radius: 0;
-  outline: 0;
   background: transparent;
   cursor: pointer;
 }
 
-.routePathButton:focus-visible {
-  border: 1px dashed var(--navy);
+.routeDirectionMarker {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  color: var(--panel);
+  background: var(--navy);
+  opacity: 0.82;
+  pointer-events: none;
+}
+
+.routeDirectionMarker[data-active="true"],
+.routeDirectionMarker[data-hovered="true"] {
+  opacity: 1;
 }
 
 .commandMap :global(.maplibregl-marker) {
@@ -2914,6 +2930,20 @@
   font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.inspectorContacts h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inspectorContacts h3 span {
+  color: var(--ink-soft);
+  font-size: 7px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .inspectorChecks > div {

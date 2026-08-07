@@ -32,7 +32,7 @@ for (const required of [
   "Open {workspace.shortLabel}",
   "Routes and providers are candidates",
   "Clickable transport legs",
-  "Carrier candidates",
+  "Carrier shortlist",
   "Modeled, not a live quote",
   "Execution workspace reserved",
 ]) {
@@ -90,14 +90,18 @@ assert.match(dashboard, /@radix-ui\/react-tabs/, "object detail and optimization
 assert.match(dashboard, /from "recharts"/, "operating flows and cost ranges must use a maintained chart library");
 assert.match(dashboard, /<Sankey/, "the inspector must visualize supplier-to-factory flow");
 assert.match(dashboard, /<BarChart/, "the selected lane must visualize its modeled planning range");
-assert.match(commandMap, /<svg className=\{styles\.routeOverlay\} aria-hidden="true">/, "route geometry must stay a non-semantic overlay on the maintained basemap");
+assert.match(commandMap, /<Source id="supply-routes" type="geojson"/, "route geometry must render inside the maintained MapLibre map");
+assert.match(commandMap, /<Layer[\s\S]*id="supply-route-core"/, "the map must render a visible connected route layer");
+assert.match(commandMap, /routeDirectionMarker/, "route corridors must show repeated directional markers");
 assert.match(commandMap, /offset=\{markerOffset\(object\.kind\)\}/, "movement and customs markers must remain separately selectable");
 assert.match(styles, /maplibregl-canvas:focus-visible/, "the interactive map canvas needs a visible keyboard focus state");
 assert.match(commandMap, /basemaps\.cartocdn\.com\/gl\/positron-gl-style\/style\.json/, "the live map needs the maintained CARTO Positron basemap");
 assert.match(commandMap, /carto-raster/, "the live map needs a low-dependency raster fallback");
-assert.match(commandMap, /className=\{styles\.routePathButton\}/, "route geometry must expose a direct native-button hit target");
-assert.match(styles, /\.routePathButton \{[^}]*height: 24px/s, "route geometry needs a forgiving pointer hit target");
-assert.match(styles, /\.routePathButton \{[^}]*cursor: pointer/s, "clickable routes must advertise pointer interaction");
+assert.match(commandMap, /id=\{ROUTE_HIT_LAYER_ID\}/, "route geometry must expose a dedicated hit layer");
+assert.match(commandMap, /"line-width": 24/, "route geometry needs a forgiving pointer hit target");
+assert.match(commandMap, /canvas\.style\.cursor = routeId \? "pointer" : ""/, "clickable routes must advertise pointer interaction");
+assert.match(styles, /\.routePathSegment \{[^}]*height: 24px/s, "curved route segments need a forgiving direct hit target");
+assert.match(styles, /\.routePathSegment \{[^}]*cursor: pointer/s, "curved route segments must advertise pointer interaction");
 assert.equal(commandMap.includes("WEBGL_lose_context"), false, "capability detection must not explicitly discard a browser graphics context");
 assert.match(dashboard, /alignOffset=\{3[0-9]{2}\}/, "the coverage menu must open clear of the right-side inspector");
 assert.match(dashboard, /avoidCollisions=\{false\}/, "coverage-menu positioning must not be pulled back over the inspector");

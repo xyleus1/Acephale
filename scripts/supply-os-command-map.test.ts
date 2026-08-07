@@ -153,10 +153,14 @@ assert.deepEqual(customs?.checks.map((check) => check.label), [
 
 const inboundMovement = commandMap.objects.find((object) => object.id === "movement:ontario-ferndale");
 assert.deepEqual(inboundMovement?.contacts.map((contact) => contact.name), [
+  "Challenger Motor Freight",
   "Universal Logistics",
   "Old Dominion Freight Line",
   "DHL Global Forwarding",
   "Uber Freight",
+  "Schneider",
+  "J.B. Hunt",
+  "ArcBest",
 ]);
 assert.equal(inboundMovement?.statusLabel, "Lane to quote");
 assert.equal(inboundMovement?.priority?.id, "lane-control");
@@ -213,6 +217,9 @@ const usMexicoMovement = usMexicoMap.objects.find((object) => object.kind === "m
 assert.deepEqual(usMexicoMovement?.contacts.map((contact) => contact.name), [
   "DHL Global Forwarding",
   "Uber Freight",
+  "Schneider",
+  "J.B. Hunt",
+  "ArcBest",
 ]);
 
 const domesticModel: SupplyOptimizationModel = {
@@ -268,9 +275,9 @@ const losAngelesDistribution = chinaOceanMap.objects.find((object) => object.id 
 assert.equal(losAngelesDistribution?.kind, "distribution");
 assert.equal(losAngelesDistribution?.statusLabel, "Customer input");
 assert.deepEqual(losAngelesDistribution?.contacts.map((contact) => contact.name), [
+  "Port X Logistics",
   "Dependable Supply Chain Services",
   "Uber Freight",
-  "DHL Global Forwarding",
 ]);
 assert.equal(
   chinaOceanMap.objects.find((object) => object.kind === "customs")?.label,
@@ -278,7 +285,7 @@ assert.equal(
 );
 assert.deepEqual(
   chinaOceanMap.objects.find((object) => object.kind === "movement")?.contacts.map((contact) => contact.name),
-  ["Dependable Supply Chain Services", "DHL Global Forwarding", "Expeditors"],
+  ["Port X Logistics", "Dependable Supply Chain Services", "DHL Global Forwarding", "Expeditors"],
   "an ocean movement must not include domestic truck capacity or a Canada-only broker",
 );
 
@@ -339,13 +346,15 @@ const phoenixModel: SupplyOptimizationModel = {
 };
 const phoenixMap = buildSupplyCommandMap(phoenixModel, dashboard);
 const phoenixMovement = phoenixMap.objects.find((object) => object.kind === "movement");
-assert.deepEqual(phoenixMovement?.contacts.slice(0, 3).map((contact) => contact.name), [
+assert.deepEqual(phoenixMovement?.contacts.slice(0, 4).map((contact) => contact.name), [
+  "Melton Truck Lines",
   "Stewart Transport",
   "Knight Transportation",
-  "Dependable Supply Chain Services",
+  "Swift Transportation",
 ]);
-assert.equal(phoenixMovement?.contacts[0]?.phone, "(602) 242-1800");
-assert.match(phoenixMovement?.contacts[0]?.location ?? "", /Phoenix/);
+assert.equal(phoenixMovement?.contacts[1]?.phone, "(602) 242-1800");
+assert.match(phoenixMovement?.contacts[1]?.location ?? "", /Phoenix/);
+assert.equal(phoenixMovement?.contacts.some((contact) => contact.name === "ArcBest"), true);
 assert.equal(phoenixMap.routes[0]?.rateEstimate?.sourceLabel, "2026 ATRI operating-cost benchmark");
 
 console.log("Supply OS command map checks passed");
