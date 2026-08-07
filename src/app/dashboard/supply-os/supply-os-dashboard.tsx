@@ -1,6 +1,7 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Tabs from "@radix-ui/react-tabs";
 import {
   ArrowRight,
   Boxes,
@@ -8,6 +9,7 @@ import {
   ChevronDown,
   ExternalLink,
   Factory,
+  ListChecks,
   MapPin,
   Plus,
   ShieldAlert,
@@ -24,6 +26,7 @@ import {
 } from "@/lib/supply-os-case-model";
 import { buildSupplyCommandMap, type SupplyCommandObject } from "@/lib/supply-os-command-map";
 import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
+import { companyNameHint } from "@/lib/supply-os-company-identity";
 import { buildSupplyOptimizationModel } from "@/lib/supply-os-optimization-engine";
 import {
   loadSupplyCases,
@@ -37,7 +40,32 @@ import { SupplyOsCommandMap } from "./supply-os-command-map";
 import styles from "./supply-os-workspace.module.css";
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
-  return dashboard.companyName ?? "Unnamed customer";
+  const storedName = dashboard.companyName?.trim();
+  const hintedName = companyNameHint(dashboard.sourcePrompt);
+  if (
+    storedName
+    && hintedName
+    && storedName.toLowerCase().startsWith(`${hintedName.toLowerCase()}:`)
+  ) {
+    return hintedName;
+  }
+  return storedName || "Unnamed customer";
+}
+
+function companyLogoUrl(dashboard: SupplyCaseDashboard) {
+  const logoUrl = dashboard.research?.company.logoUrl;
+  if (!logoUrl) return null;
+  try {
+    const url = new URL(logoUrl);
+    const file = url.pathname.split("/").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    const company = dashboardName(dashboard).toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (company && file.includes(company)) return url.toString();
+    if (/^(?:logo|brandlogo|headerlogo|sitelogo|favicon|icon|wordmark)/.test(file)) return url.toString();
+    const website = new URL(dashboard.research?.company.website ?? "");
+    return website.hostname === url.hostname ? new URL("/logo.svg", website).toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function dashboardLocation(dashboard: SupplyCaseDashboard) {
@@ -225,17 +253,23 @@ function CaseCommandCenter({
 }) {
   const selectedScope = dashboard.engagementScope ?? "full_operation";
   const [scopeError, setScopeError] = useState("");
-  const model = useMemo(() => buildSupplyOptimizationModel(dashboard), [dashboard]);
-  const commandMap = useMemo(() => buildSupplyCommandMap(model, dashboard), [dashboard, model]);
+  const modelDashboard = useMemo(() => {
+    const name = dashboardName(dashboard);
+    return name === dashboard.companyName ? dashboard : { ...dashboard, companyName: name };
+  }, [dashboard]);
+  const model = useMemo(() => buildSupplyOptimizationModel(modelDashboard), [modelDashboard]);
+  const commandMap = useMemo(() => buildSupplyCommandMap(model, modelDashboard), [model, modelDashboard]);
   const initialObject = commandMap.objects.find((object) => object.kind === "factory")
     ?? commandMap.objects.find((object) => object.kind === "supplier")
     ?? commandMap.objects[0]
     ?? null;
   const [selectedObjectId, setSelectedObjectId] = useState(initialObject?.id ?? "");
+  const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const selectedObject = commandMap.objects.find((object) => object.id === selectedObjectId) ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(commandMap.objects), [commandMap.objects]);
   const supplierCount = commandMap.objects.filter((object) => object.kind === "supplier").length;
   const customsCount = commandMap.objects.filter((object) => object.kind === "customs").length;
+  const logoUrl = companyLogoUrl(dashboard);
 
   function selectScope(scope: SupplyEngagementScope) {
     if (scope === selectedScope) return;
@@ -246,13 +280,18 @@ function CaseCommandCenter({
     setScopeError("");
   }
 
+  function selectNetworkObject(object: SupplyCommandObject) {
+    setSelectedObjectId(object.id);
+    setInspectorMode("object");
+  }
+
   return (
     <article className={styles.commandCenter} aria-labelledby="supply-command-title">
       <header className={styles.commandHeader}>
         <div className={styles.commandIdentity}>
-          {dashboard.research?.company.logoUrl ? (
+          {logoUrl ? (
             <img
-              src={dashboard.research.company.logoUrl}
+              src={logoUrl}
               alt=""
               onError={(event) => { event.currentTarget.hidden = true; }}
             />
@@ -284,7 +323,7 @@ function CaseCommandCenter({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className={styles.commandMenu} align="end" sideOffset={7}>
+              <DropdownMenu.Content className={styles.commandMenu} align="end" sideOffset={7} collisionPadding={12}>
                 <DropdownMenu.Label>Customer dashboards</DropdownMenu.Label>
                 {savedCases.map((item) => (
                   <DropdownMenu.Item
@@ -307,7 +346,7 @@ function CaseCommandCenter({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className={styles.commandMenu} align="end" sideOffset={7}>
+              <DropdownMenu.Content className={styles.commandMenu} align="end" alignOffset={348} sideOffset={7} avoidCollisions={false}>
                 <DropdownMenu.Label>Derya coverage</DropdownMenu.Label>
                 {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
                   <DropdownMenu.Item
@@ -335,7 +374,7 @@ function CaseCommandCenter({
         <SupplyOsCommandMap
           commandMap={commandMap}
           selectedObject={selectedObject}
-          onSelectObject={(object) => setSelectedObjectId(object.id)}
+          onSelectObject={selectNetworkObject}
         />
 
         <aside className={styles.routeRail} aria-label="Operating network objects">
@@ -353,7 +392,7 @@ function CaseCommandCenter({
                   data-active={object.id === selectedObject?.id}
                   data-status={object.status}
                   aria-pressed={object.id === selectedObject?.id}
-                  onClick={() => setSelectedObjectId(object.id)}
+                  onClick={() => selectNetworkObject(object)}
                 >
                   <span className={styles.routeRailIcon}><Icon size={15} strokeWidth={1.8} /></span>
                   <span className={styles.routeRailCopy}>
@@ -368,7 +407,15 @@ function CaseCommandCenter({
           </div>
         </aside>
 
-        {selectedObject ? <CommandInspector dashboard={dashboard} model={model} object={selectedObject} /> : null}
+        {selectedObject ? (
+          <CommandInspector
+            dashboard={modelDashboard}
+            model={model}
+            object={selectedObject}
+            mode={inspectorMode}
+            onModeChange={setInspectorMode}
+          />
+        ) : null}
 
         <footer className={styles.commandMapFooter}>
           <div className={styles.commandLegend} aria-label="Map legend">
@@ -389,71 +436,151 @@ function CommandInspector({
   dashboard,
   model,
   object,
+  mode,
+  onModeChange,
 }: {
   dashboard: SupplyCaseDashboard;
   model: ReturnType<typeof buildSupplyOptimizationModel>;
   object: SupplyCommandObject;
+  mode: "object" | "optimization";
+  onModeChange: (mode: "object" | "optimization") => void;
 }) {
   const Icon = objectIcon(object.kind);
   const workspace = workspaceForObject(object, model);
   const action = model.actions.find((candidate) => candidate.workstreamId === object.workstreamId)
     ?? model.actions[0]
     ?? null;
+  const [selectedActionId, setSelectedActionId] = useState(model.actions[0]?.id ?? "");
+  const selectedAction = model.actions.find((candidate) => candidate.id === selectedActionId)
+    ?? model.actions[0]
+    ?? null;
+  const actionWorkspace = selectedAction
+    ? model.workspaces.find((candidate) => candidate.id === selectedAction.workstreamId) ?? null
+    : null;
+
+  useEffect(() => {
+    setSelectedActionId(model.actions[0]?.id ?? "");
+  }, [model]);
 
   return (
     <aside className={styles.commandInspector} aria-live="polite">
-      <header className={styles.inspectorHeader}>
-        <span className={styles.inspectorIcon} data-kind={object.kind}><Icon size={17} strokeWidth={1.8} /></span>
-        <span>
-          <small>{objectKindLabel(object.kind)}</small>
-          <h2>{object.label}</h2>
-        </span>
-        <i data-status={object.status}>{object.statusLabel}</i>
-      </header>
+      <Tabs.Root
+        className={styles.inspectorTabsRoot}
+        value={mode}
+        onValueChange={(value) => onModeChange(value as "object" | "optimization")}
+      >
+        <Tabs.List className={styles.inspectorTabsList} aria-label="Inspector view">
+          <Tabs.Trigger value="object">Selected object</Tabs.Trigger>
+          <Tabs.Trigger value="optimization">Optimization priorities <small>{model.actions.length}</small></Tabs.Trigger>
+        </Tabs.List>
 
-      <div className={styles.inspectorBody}>
-        <p className={styles.inspectorLocation}>{object.location}</p>
-        <p className={styles.inspectorDetail}>{object.detail}</p>
+        <Tabs.Content value="object" className={styles.inspectorTabPanel}>
+          <header className={styles.inspectorHeader}>
+            <span className={styles.inspectorIcon} data-kind={object.kind}><Icon size={17} strokeWidth={1.8} /></span>
+            <span>
+              <small>{objectKindLabel(object.kind)}</small>
+              <h2>{object.label}</h2>
+            </span>
+            <i data-status={object.status}>{object.statusLabel}</i>
+          </header>
 
-        <dl className={styles.inspectorFacts}>
-          <div><dt>Cargo</dt><dd>{object.cargo}</dd></div>
-          <div><dt>Confidence</dt><dd>{object.confidence}</dd></div>
-        </dl>
+          <div className={styles.inspectorBody}>
+            <p className={styles.inspectorLocation}>{object.location}</p>
+            <p className={styles.inspectorDetail}>{object.detail}</p>
 
-        {object.checks.length ? (
-          <section className={styles.inspectorChecks}>
-            <h3>Required checks</h3>
-            {object.checks.map((check) => (
-              <div key={check.label}><i data-check={check.status} /><span>{check.label}</span><small>{check.status}</small></div>
-            ))}
-          </section>
-        ) : null}
+            <dl className={styles.inspectorFacts}>
+              <div><dt>Cargo</dt><dd>{object.cargo}</dd></div>
+              <div><dt>Confidence</dt><dd>{object.confidence}</dd></div>
+            </dl>
 
-        {object.contacts.length ? (
-          <section className={styles.inspectorContacts}>
-            <h3>{object.kind === "supplier" ? "Supplier candidates" : "Provider contacts"}</h3>
-            {object.contacts.slice(0, 3).map((contact) => (
-              <div key={contact.id} className={styles.inspectorContact}>
-                <span><strong>{contact.name}</strong><small>{contact.role}</small></span>
-                <p>{contact.fit}</p>
-                {contact.url ? <a href={contact.url} target="_blank" rel="noreferrer" aria-label={`Open ${contact.name}`}><ExternalLink size={13} /></a> : null}
-              </div>
-            ))}
-          </section>
-        ) : null}
+            {object.checks.length ? (
+              <section className={styles.inspectorChecks}>
+                <h3>Required checks</h3>
+                {object.checks.map((check) => (
+                  <div key={check.label}><i data-check={check.status} /><span>{check.label}</span><small>{check.status}</small></div>
+                ))}
+              </section>
+            ) : null}
 
-        <section className={styles.inspectorAction}>
-          <h3>Next action</h3>
-          <p>{action?.recommendation ?? object.nextAction}</p>
-          <small>{object.nextAction}</small>
-        </section>
-      </div>
+            {object.contacts.length ? (
+              <section className={styles.inspectorContacts}>
+                <h3>{object.kind === "supplier" ? "Supplier candidates" : "Provider contacts"}</h3>
+                {object.contacts.slice(0, 3).map((contact) => (
+                  <div key={contact.id} className={styles.inspectorContact}>
+                    <span><strong>{contact.name}</strong><small>{contact.role}</small></span>
+                    <p>{contact.fit}</p>
+                    {contact.url ? <a href={contact.url} target="_blank" rel="noreferrer" aria-label={`Open ${contact.name}`}><ExternalLink size={13} /></a> : null}
+                  </div>
+                ))}
+              </section>
+            ) : null}
 
-      {workspace ? (
-        <Link className={styles.inspectorWorkspaceLink} href={{ pathname: workspace.route, query: { case: dashboard.id } }}>
-          Open {workspace.shortLabel} <ArrowRight size={14} />
-        </Link>
-      ) : null}
+            <section className={styles.inspectorAction}>
+              <h3>Next action</h3>
+              <p>{action?.recommendation ?? object.nextAction}</p>
+              <small>{object.nextAction}</small>
+            </section>
+          </div>
+
+          {workspace ? (
+            <Link className={styles.inspectorWorkspaceLink} href={{ pathname: workspace.route, query: { case: dashboard.id } }}>
+              Open {workspace.shortLabel} <ArrowRight size={14} />
+            </Link>
+          ) : null}
+        </Tabs.Content>
+
+        <Tabs.Content value="optimization" className={`${styles.inspectorTabPanel} ${styles.optimizationInspector}`}>
+          <header className={styles.inspectorHeader}>
+            <span className={styles.inspectorIcon}><ListChecks size={17} strokeWidth={1.8} /></span>
+            <span>
+              <small>Company analysis</small>
+              <h2>{model.profile}</h2>
+            </span>
+            <i>{model.actions.length} priorities</i>
+          </header>
+
+          <div className={styles.analysisBody}>
+            <section className={styles.analysisThesis}>
+              <h3>Operating model</h3>
+              <p>{model.networkSummary}</p>
+            </section>
+
+            <div className={styles.analysisPriorityList} aria-label="Ranked optimization priorities">
+              {model.actions.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  data-active={candidate.id === selectedAction?.id}
+                  aria-pressed={candidate.id === selectedAction?.id}
+                  onClick={() => setSelectedActionId(candidate.id)}
+                >
+                  <small>{String(candidate.priority).padStart(2, "0")}</small>
+                  <span><strong>{candidate.title}</strong><em>{candidate.measure}</em></span>
+                </button>
+              ))}
+            </div>
+
+            {selectedAction ? (
+              <section className={styles.analysisDetail}>
+                <header><small>Priority {String(selectedAction.priority).padStart(2, "0")}</small><strong>{selectedAction.title}</strong></header>
+                <dl>
+                  <div><dt>Condition</dt><dd>{selectedAction.currentCondition}</dd></div>
+                  <div><dt>Derya move</dt><dd>{selectedAction.recommendation}</dd></div>
+                  <div><dt>Decision</dt><dd>{selectedAction.decision}</dd></div>
+                  <div><dt>Start with</dt><dd>{selectedAction.requiredInput}</dd></div>
+                </dl>
+                <p><strong>Track</strong>{selectedAction.measure}</p>
+              </section>
+            ) : null}
+          </div>
+
+          {actionWorkspace ? (
+            <Link className={styles.inspectorWorkspaceLink} href={{ pathname: actionWorkspace.route, query: { case: dashboard.id } }}>
+              Open {actionWorkspace.shortLabel} <ArrowRight size={14} />
+            </Link>
+          ) : null}
+        </Tabs.Content>
+      </Tabs.Root>
     </aside>
   );
 }

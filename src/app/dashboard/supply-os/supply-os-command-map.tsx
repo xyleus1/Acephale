@@ -13,6 +13,7 @@ import {
   type MapRef,
 } from "@vis.gl/react-maplibre";
 import type { FeatureCollection, LineString } from "geojson";
+import type { StyleSpecification } from "maplibre-gl";
 import {
   Boxes,
   Factory,
@@ -33,7 +34,45 @@ import type {
 } from "@/lib/supply-os-command-map";
 import styles from "./supply-os-workspace.module.css";
 
+const CARTO_POSITRON_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 const OPEN_FREE_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+
+const CARTO_RASTER_STYLE: StyleSpecification = {
+  version: 8,
+  name: "carto-raster",
+  sources: {
+    "carto-raster": {
+      type: "raster",
+      tiles: [
+        "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+        "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+        "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+      ],
+      tileSize: 512,
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    },
+  },
+  layers: [
+    {
+      id: "carto-background",
+      type: "background",
+      paint: { "background-color": "#f2f4f5" },
+    },
+    {
+      id: "carto-raster",
+      type: "raster",
+      source: "carto-raster",
+      minzoom: 0,
+      maxzoom: 20,
+    },
+  ],
+};
+
+const BASEMAPS = [
+  { id: "carto-raster", label: "CARTO raster", style: CARTO_RASTER_STYLE },
+  { id: "carto-positron", label: "CARTO Positron", style: CARTO_POSITRON_STYLE },
+  { id: "openfreemap-positron", label: "OpenFreeMap Positron", style: OPEN_FREE_MAP_STYLE },
+] as const;
 
 function objectIcon(object: SupplyCommandObject): LucideIcon {
   if (object.kind === "supplier") return Boxes;
@@ -123,9 +162,13 @@ export function SupplyOsCommandMap({
   onSelectObject: (object: SupplyCommandObject) => void;
 }) {
   const mapRef = useRef<MapRef | null>(null);
+  const fallbackPendingRef = useRef(false);
+  const basemapReadyRef = useRef(false);
   const [hoveredObject, setHoveredObject] = useState<SupplyCommandObject | null>(null);
-  const [mapError, setMapError] = useState(false);
+  const [basemapIndex, setBasemapIndex] = useState(0);
+  const [basemapState, setBasemapState] = useState<"loading" | "ready" | "retrying" | "failed">("loading");
   const [mapCapability, setMapCapability] = useState<"checking" | "ready" | "unavailable">("checking");
+  const basemap = BASEMAPS[basemapIndex] ?? BASEMAPS[0];
   const routes = useMemo(
     () => routeFeatureCollection(commandMap, selectedObject),
     [commandMap, selectedObject],
@@ -158,10 +201,42 @@ export function SupplyOsCommandMap({
 
   useEffect(() => {
     const canvas = document.createElement("canvas");
-    const context = canvas.getContext("webgl2");
+    const context = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
     setMapCapability(context ? "ready" : "unavailable");
-    context?.getExtension("WEBGL_lose_context")?.loseContext();
   }, []);
+
+  const advanceBasemap = useCallback(() => {
+    if (fallbackPendingRef.current || basemapState === "ready") return;
+    fallbackPendingRef.current = true;
+    if (basemapIndex >= BASEMAPS.length - 1) {
+      setBasemapState("failed");
+      return;
+    }
+    setBasemapState("retrying");
+    window.setTimeout(() => {
+      setBasemapIndex((current) => Math.min(current + 1, BASEMAPS.length - 1));
+      setBasemapState("loading");
+    }, 120);
+  }, [basemapIndex, basemapState]);
+
+  useEffect(() => {
+    fallbackPendingRef.current = false;
+    basemapReadyRef.current = false;
+  }, [basemapIndex]);
+
+  const markBasemapReady = useCallback(() => {
+    if (basemapReadyRef.current) return;
+    basemapReadyRef.current = true;
+    fallbackPendingRef.current = false;
+    setBasemapState("ready");
+    fitNetwork(false);
+  }, [fitNetwork]);
+
+  useEffect(() => {
+    if (mapCapability !== "ready" || basemapReadyRef.current || basemapState === "failed") return;
+    const timeout = window.setTimeout(advanceBasemap, 6500);
+    return () => window.clearTimeout(timeout);
+  }, [advanceBasemap, basemapIndex, basemapState, mapCapability]);
 
   if (mapCapability !== "ready") {
     return (
@@ -178,14 +253,25 @@ export function SupplyOsCommandMap({
   return (
     <div className={styles.commandMap} aria-label="Supplier, factory, customs, and delivery network">
       <Map
+        key={basemap.id}
         ref={mapRef}
         initialViewState={{ longitude: -93, latitude: 40, zoom: 3.1 }}
-        mapStyle={OPEN_FREE_MAP_STYLE}
+        mapStyle={basemap.style}
         attributionControl={false}
         cooperativeGestures
-        reuseMaps
-        onLoad={() => fitNetwork(false)}
-        onError={() => setMapError(true)}
+        onLoad={markBasemapReady}
+        onSourceData={(event) => {
+          if (
+            basemap.id === "carto-raster"
+            && event.sourceId === "carto-raster"
+            && event.sourceDataType === "content"
+          ) {
+            markBasemapReady();
+          }
+        }}
+        onError={() => {
+          if (!basemapReadyRef.current) setBasemapState("loading");
+        }}
       >
         <Source id="supply-routes" type="geojson" data={routes}>
           <Layer
@@ -280,7 +366,13 @@ export function SupplyOsCommandMap({
         </Tooltip.Root>
       </Tooltip.Provider>
 
-      {mapError ? <div className={styles.mapError}>Basemap connection failed. Network objects remain available in the route list.</div> : null}
+      {basemapState !== "ready" ? (
+        <div className={styles.mapError} data-state={basemapState} aria-live="polite">
+          {basemapState === "failed"
+            ? "Basemap unavailable. Network objects remain available in the route list."
+            : `${basemapState === "retrying" ? "Switching to" : "Loading"} ${basemap.label}`}
+        </div>
+      ) : null}
     </div>
   );
 }

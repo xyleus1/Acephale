@@ -96,6 +96,14 @@ const FARROW: SupplyCommandContact = {
   url: "https://farrow.com/customs-brokerage/",
 };
 
+const EXPEDITORS: SupplyCommandContact = {
+  id: "expeditors-customs",
+  name: "Expeditors",
+  role: "International customs broker and forwarder",
+  fit: "Customs brokerage, trade compliance, air and ocean forwarding, and handoff coordination for international production and service movements.",
+  url: "https://www.expeditors.com/services/customs-and-compliance",
+};
+
 function nodeKind(node: SupplyOptimizationNode): SupplyCommandObjectKind {
   if (node.kind === "supplier_cluster") return "supplier";
   if (node.kind === "processing_site") return "factory";
@@ -134,7 +142,7 @@ function providerContactsForNode(
     }));
   }
 
-  const contacts: SupplyCommandContact[] = [UBER_FREIGHT];
+  const contacts: SupplyCommandContact[] = countryFor(node.location) === "US" ? [UBER_FREIGHT] : [];
   const nodes = new Map(model.nodes.map((candidate) => [candidate.id, candidate]));
   for (const edge of model.edges) {
     if (edge.fromNodeId !== node.id && edge.toNodeId !== node.id) continue;
@@ -146,12 +154,16 @@ function providerContactsForNode(
   return contacts.slice(0, 3);
 }
 
-function countryFor(location: string): "US" | "CA" | "CN" | "MX" | null {
+function countryFor(location: string): "US" | "CA" | "CN" | "MX" | "GB" | "EU" | "OM" | "FJ" | null {
   const value = location.toLowerCase();
   if (/china|shenzhen|dongguan|guangzhou|shanghai|pearl river/.test(value)) return "CN";
   if (/canada|canadian|ontario|toronto|hamilton|windsor|montreal|edmonton|vancouver/.test(value)) return "CA";
   if (/united states|u\.s\.|usa|detroit|michigan|ohio|iowa|west virginia|washington|pennsylvania|texas|california|austin|chicago|midwest|great lakes|nationwide|national/.test(value)) return "US";
   if (/mexico|mexican|monterrey|tijuana|juarez|laredo/.test(value)) return "MX";
+  if (/united kingdom|\buk\b|england|britain|british|birmingham|coventry/.test(value)) return "GB";
+  if (/europe|european|\beu\b|frankfurt|germany|france|netherlands/.test(value)) return "EU";
+  if (/oman|muscat|\bgcc\b|gulf/.test(value)) return "OM";
+  if (/fiji|suva|pacific operating|island operating/.test(value)) return "FJ";
   return null;
 }
 
@@ -164,7 +176,8 @@ function isCrossBorder(from: SupplyOptimizationNode, to: SupplyOptimizationNode)
 function borderContacts(from: SupplyOptimizationNode, to: SupplyOptimizationNode) {
   const countries = new Set([countryFor(from.location), countryFor(to.location)]);
   if (countries.has("CA") && countries.has("US")) return [LIVINGSTON, FARROW];
-  if (countries.size > 1 && !countries.has(null)) return [LIVINGSTON];
+  if (countries.has("US") && countries.size > 1 && !countries.has(null)) return [EXPEDITORS];
+  if (countries.size > 1 && !countries.has(null)) return [DHL_GLOBAL_FORWARDING];
   return [];
 }
 
@@ -206,7 +219,7 @@ function customsProfile(from: SupplyOptimizationNode, to: SupplyOptimizationNode
       location: "Receiving gateway to confirm",
       coordinates: fallback,
       detail: "The receiving port is not confirmed. Select the gateway only after cargo readiness, mode, final destination, tariff treatment, broker coverage, and inland cost are compared.",
-      contacts: [DHL_GLOBAL_FORWARDING, LIVINGSTON],
+      contacts: [DHL_GLOBAL_FORWARDING, EXPEDITORS],
     };
   }
   if (countries.has("MX") && countries.has("US")) {
@@ -215,7 +228,16 @@ function customsProfile(from: SupplyOptimizationNode, to: SupplyOptimizationNode
       location: "Port of entry to confirm",
       coordinates: fallback,
       detail: "The road path needs a named U.S. broker, Mexican export coordination, commercial documents, classification, origin support, and pre-arrival release confirmation.",
-      contacts: [DHL_GLOBAL_FORWARDING, LIVINGSTON],
+      contacts: [DHL_GLOBAL_FORWARDING, EXPEDITORS],
+    };
+  }
+  if (countries.has("US") && countries.size > 1 && !countries.has(null)) {
+    return {
+      label: "International customs handoff",
+      location: "Export and import gateways to confirm",
+      coordinates: fallback,
+      detail: "Assign both export and import owners, confirm classification and licensing, choose the entry model, validate dangerous-goods or temporary-admission scope, and obtain broker acceptance before tender.",
+      contacts: [DHL_GLOBAL_FORWARDING, EXPEDITORS],
     };
   }
   return {
@@ -223,7 +245,7 @@ function customsProfile(from: SupplyOptimizationNode, to: SupplyOptimizationNode
     location: "Gateway to confirm",
     coordinates: fallback,
     detail: "Assign the importer, broker, port, classification, origin support, valuation method, and pre-arrival filing owner before tender.",
-      contacts: [DHL_GLOBAL_FORWARDING, LIVINGSTON],
+      contacts: [DHL_GLOBAL_FORWARDING, EXPEDITORS],
   };
 }
 

@@ -71,11 +71,12 @@ Panels sit over the map instead of pushing it into a card. At narrower widths, t
 Use maintained components instead of drawing map chrome or operational symbols in application code:
 
 - MapLibre GL JS through React MapLibre for the map, route layers, markers, popups, scale, navigation, and attribution.
-- OpenFreeMap Positron for the neutral vector basemap.
+- CARTO raster tiles for the first neutral basemap, with CARTO Positron and
+  OpenFreeMap Positron as fallbacks.
 - Lucide for supplier, factory, warehouse, movement, customs, and location symbols.
 - Radix primitives for menus and tooltips.
 
-Do not add a hand-drawn SVG geography, invented pictograms, decorative map widgets, or proprietary copied assets. If WebGL 2 is unavailable, keep the object rail and dossier usable and show a bounded renderer notice in the map canvas.
+Do not add a hand-drawn SVG geography, invented pictograms, decorative map widgets, or proprietary copied assets. If WebGL is unavailable, keep the object rail and dossier usable and show a bounded renderer notice in the map canvas. A partial provider failure must not leave markers floating over an empty canvas.
 
 Every node must be one of:
 
@@ -90,7 +91,7 @@ The map zooms to the current network. Routes remain dashed while they are planni
 
 ## Operating action
 
-The selected-object dossier contains only information required to understand and advance that part of the network:
+The right dossier has two maintained Radix tabs. `Selected object` contains only information required to understand and advance that part of the network. `Optimization priorities` contains the ranked company operating analysis, its measurable outcome, and the linked workstream.
 
 1. Object type, place, status, and evidence basis
 2. Cargo or operational scope

@@ -2243,13 +2243,18 @@
   top: 12px;
   left: 50%;
   padding: 7px 9px;
-  border: 1px solid var(--danger);
+  border: 1px solid var(--line-strong);
   border-radius: 3px;
-  color: var(--danger);
+  color: var(--ink-soft);
   background: var(--panel);
   font-size: 9px;
   transform: translateX(-50%);
   z-index: 5;
+}
+
+.mapError[data-state="failed"] {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .mapUnavailable {
@@ -2434,6 +2439,62 @@
 .commandInspector {
   right: 12px;
   width: 332px;
+  overflow: hidden;
+}
+
+.inspectorTabsRoot {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 34px minmax(0, 1fr);
+}
+
+.inspectorTabsList {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--panel-subtle);
+}
+
+.inspectorTabsList button {
+  min-width: 0;
+  padding: 0 9px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  overflow: hidden;
+  color: var(--ink-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspectorTabsList button:last-child {
+  border-right: 0;
+}
+
+.inspectorTabsList button[data-state="active"] {
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.inspectorTabsList button:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -2px;
+}
+
+.inspectorTabsList small {
+  margin-left: 4px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+}
+
+.inspectorTabPanel {
+  min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
@@ -2702,6 +2763,155 @@
   background: var(--panel-selected);
 }
 
+.analysisBody {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 11px;
+  overflow: hidden;
+}
+
+.analysisThesis h3,
+.analysisDetail dt {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.analysisThesis p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.analysisPriorityList {
+  display: grid;
+  border: 1px solid var(--line);
+}
+
+.analysisPriorityList button {
+  min-width: 0;
+  min-height: 29px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  text-align: left;
+}
+
+.analysisPriorityList button:last-child {
+  border-bottom: 0;
+}
+
+.analysisPriorityList button:hover,
+.analysisPriorityList button[data-active="true"] {
+  color: var(--ink);
+  background: var(--panel-selected);
+}
+
+.analysisPriorityList button > small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+}
+
+.analysisPriorityList button span,
+.analysisPriorityList button strong {
+  min-width: 0;
+  display: block;
+}
+
+.analysisPriorityList button strong {
+  overflow: hidden;
+  font-size: 8px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysisPriorityList button em {
+  display: none;
+}
+
+.analysisDetail {
+  min-height: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-strong);
+  overflow: hidden;
+}
+
+.analysisDetail > header small,
+.analysisDetail > header strong {
+  display: block;
+}
+
+.analysisDetail > header small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.analysisDetail > header strong {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysisDetail dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 9px;
+  margin-top: 7px;
+}
+
+.analysisDetail dd {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 8px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.analysisDetail > p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 8px;
+  color: var(--ink-soft);
+  font-size: 8px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.analysisDetail > p strong {
+  margin-right: 6px;
+  color: var(--ink);
+}
+
 .commandMapFooter {
   height: 32px;
   position: absolute;
@@ -2857,6 +3067,15 @@
     grid-template-rows: 1fr;
   }
 
+  .inspectorTabsRoot {
+    grid-template-rows: 30px minmax(0, 1fr);
+  }
+
+  .inspectorTabPanel {
+    grid-template-columns: 210px minmax(0, 1fr) 110px;
+    grid-template-rows: 1fr;
+  }
+
   .inspectorHeader {
     grid-template-columns: 32px minmax(0, 1fr);
     align-content: start;
@@ -2901,6 +3120,25 @@
     border-top: 0;
     border-left: 1px solid var(--line-strong);
     text-align: center;
+  }
+
+  .optimizationInspector .analysisBody {
+    display: block;
+    padding: 9px 10px;
+  }
+
+  .optimizationInspector .analysisThesis,
+  .optimizationInspector .analysisPriorityList {
+    display: none;
+  }
+
+  .optimizationInspector .analysisDetail {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .optimizationInspector .analysisDetail dl {
+    margin-top: 6px;
   }
 
   .fitMapButton {
@@ -2965,6 +3203,20 @@
     grid-template-columns: 132px minmax(0, 1fr);
   }
 
+  .inspectorTabsRoot {
+    grid-template-rows: 28px minmax(0, 1fr);
+  }
+
+  .inspectorTabPanel {
+    grid-template-columns: 132px minmax(0, 1fr);
+    grid-template-rows: 1fr;
+  }
+
+  .inspectorTabsList button {
+    padding: 0 5px;
+    font-size: 7px;
+  }
+
   .inspectorHeader {
     padding: 8px;
   }
@@ -2983,6 +3235,11 @@
 
   .inspectorContacts,
   .inspectorWorkspaceLink {
+    display: none;
+  }
+
+  .optimizationInspector .analysisDetail dl div:nth-child(n + 3),
+  .optimizationInspector .analysisDetail > p {
     display: none;
   }
 

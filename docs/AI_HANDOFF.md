@@ -6132,3 +6132,56 @@ Trust boundary:
   introduced.
 - Existing browser-local, office/user-scoped customer-case storage and explicit
   evidence labels remain unchanged.
+
+## Supply OS resilient map, company identity, and deep analysis, August 7
+
+Status:
+
+- Implemented on `fix/supply-os-map-analysis-v2`, targeting `main`.
+- No database migration, secret, external message, booking, customs filing, or
+  spend mutation is required.
+
+Customer result:
+
+- The map now opens on a real neutral CARTO raster basemap. If that source does
+  not produce usable content, the component remounts with CARTO Positron and
+  then OpenFreeMap Positron. WebGL-unavailable environments retain the network
+  rail and inspector.
+- The coverage menu opens 18 pixels clear of the right inspector at 1280
+  pixels instead of covering its contents.
+- Company identity prefers structured data and visible official brand assets.
+  It rejects social-preview photographs and unlabelled customer-logo carousel
+  images. Existing saved SEO titles collapse back to the company name, and a
+  suspicious saved hero image can use the official site's conventional logo
+  path before hiding on error.
+- The right inspector now separates selected-object detail from optimization
+  priorities using Radix tabs. Every action includes condition, Derya move,
+  customer decision, starting input, measured result, and a linked workstream.
+- The advanced-aircraft model now maps U.S. structures and special processes,
+  UK and European propulsion electronics, North American avionics and mission
+  systems, final integration, customs, and program or deployment markets. It
+  exposes eight operating controls: multi-tier BOM, demand gates,
+  serial-number kits, prototype and production lanes, supplier readiness,
+  customs passports, gateway variability, and field spares.
+
+Verification:
+
+- All ten Supply OS regression suites pass.
+- `npx tsc --noEmit --incremental false` passes.
+- GPU-enabled Chrome QA shows the CARTO basemap at 1280 by 720 and 2048 by
+  1100, with no document overflow and no console errors.
+- Coverage-menu geometry measured `[588, 918]` against inspector geometry
+  `[936, 1268]`, so the surfaces do not intersect.
+- A live Odys Aviation research run resolved `https://www.odysaviation.com/logo.svg`,
+  displayed `Odys Aviation`, built six network objects and four lanes, and
+  exposed eight advanced-aircraft priorities.
+- Design audit:
+  `~/.gstack/projects/mmturna-derya-crm/designs/design-audit-20260807-supply-os-map-analysis/design-audit.md`.
+
+Trust boundary:
+
+- The richer network and recommendations remain outside-in planning
+  hypotheses. Public evidence, customer input, and inference stay distinct.
+- No candidate provider, supplier, route, classification, rate, or program
+  relationship becomes an operating fact without connected records and human
+  approval.

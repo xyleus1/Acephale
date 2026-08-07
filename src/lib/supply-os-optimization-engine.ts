@@ -55,6 +55,7 @@ export type SupplyOptimizationAction = {
   recommendation: string;
   decision: string;
   requiredInput: string;
+  measure: string;
 };
 
 export type SupplyOptimizationWorkspace = {
@@ -533,6 +534,105 @@ const PROFILES: OptimizationProfile[] = [
   },
 ];
 
+function advancedAircraftProfile(text: string): OptimizationProfile {
+  const customerClusters: Cluster[] = [
+    {
+      label: "U.S. certification and mission-program sites",
+      location: "United States aerospace and defense corridor",
+      coordinates: { latitude: 38.9072, longitude: -77.0369 },
+      detail: "Likely movement to certification, flight-test, defense, and integration programs where configuration, custody, appointments, and export status matter as much as transit time.",
+      cargo: "Aircraft, propulsion modules, mission kits, test equipment, and serialized spares",
+      mode: "Dedicated truck, secure air freight, charter, or purpose-built transport fixture",
+      confidence: "medium",
+      confirmNext: "Separate firm program deliveries from demonstrations and provisional demand, then map configuration, custody, site access, and required-on-site dates.",
+    },
+  ];
+
+  if (/oman|gcc|gulf/.test(text)) {
+    customerClusters.push({
+      label: "GCC deployment and support network",
+      location: "Muscat and operating sites in Oman",
+      coordinates: { latitude: 23.588, longitude: 58.3829 },
+      detail: "Remote and offshore operations imply deployment kits, regional spares, controlled return flows, field support, and environmental packaging beyond the aircraft delivery itself.",
+      cargo: "Aircraft, ground-control equipment, deployment kits, service parts, and repair returns",
+      mode: "Ocean for planned ground equipment, air for aircraft-on-ground and build-critical material",
+      confidence: "medium",
+      confirmNext: "Confirm the actual operating bases, import party, temporary or permanent entry model, support stock, repair route, and target availability.",
+    });
+  }
+
+  if (/fiji|pacific|island/.test(text)) {
+    customerClusters.push({
+      label: "Pacific operating and spares network",
+      location: "Suva and remote operating sites in Fiji",
+      coordinates: { latitude: -18.1248, longitude: 178.4501 },
+      detail: "Island operations turn spare fill rate, dangerous-goods acceptance, return packaging, and replenishment frequency into mission-availability constraints.",
+      cargo: "Aircraft deployment equipment, line-replaceable units, batteries, tools, and repair returns",
+      mode: "Scheduled ocean replenishment with priority air recovery",
+      confidence: "medium",
+      confirmNext: "Confirm installed assets, failure-critical spares, local receiving capability, aviation dangerous-goods scope, and repair turnaround target.",
+    });
+  }
+
+  if (/europe|european|eu\b|verti-go/.test(text)) {
+    customerClusters.push({
+      label: "European demonstration and regulatory programs",
+      location: "Central European aerospace corridor",
+      coordinates: { latitude: 50.1109, longitude: 8.6821 },
+      detail: "Demonstration and regulatory programs need temporary-import planning, controlled technical equipment, return deadlines, and one owner for every handoff.",
+      cargo: "Demonstration aircraft, payloads, ground equipment, tools, and temporary-import inventory",
+      mode: "Air freight, charter, or dedicated road with temporary admission controls",
+      confidence: "low",
+      confirmNext: "Confirm demonstration country, consignee, temporary-import procedure, re-export date, carnet suitability, and local handling plan.",
+    });
+  }
+
+  return {
+    id: "aerospace",
+    label: "Advanced aircraft and propulsion OEM",
+    facilityActivity: "Control vehicle architecture, integrate propulsion and mission systems, assemble serialized aircraft, test configurations, and support deployed fleets",
+    sourceClusters: [
+      {
+        label: "U.S. flight structures and special-process supply",
+        location: "Southern California, Wichita, and central U.S. aerospace corridor",
+        coordinates: { latitude: 37.6872, longitude: -97.3301 },
+        detail: "A likely network for composite structures, machined hardpoints, sheet metal, landing gear, actuation, heat treatment, coatings, welding, and nondestructive inspection.",
+        cargo: "Serialized structures, machined flight hardware, composite assemblies, actuation, and certified material",
+        mode: "Scheduled dedicated truck, controlled LTL, or air for build-critical shortages",
+        confidence: "medium",
+        confirmNext: "Map every flight-critical part to the actual manufacturing site, special process, first-article status, tooling owner, capacity, and recovery plan.",
+      },
+      {
+        label: "UK and European propulsion electronics",
+        location: "United Kingdom and European aerospace technology corridor",
+        coordinates: { latitude: 52.4862, longitude: -1.8904 },
+        detail: "Hybrid aircraft can depend on tightly coupled inverters, silicon-carbide devices, motors, controllers, cooling interfaces, and proprietary software whose failure stops the build.",
+        cargo: "Power electronics, inverters, controllers, motors, cooling hardware, and calibrated propulsion modules",
+        mode: "Priority air for production modules, consolidated air or ocean for planned equipment and spares",
+        confidence: "medium",
+        confirmNext: "Confirm the actual supplier, site, interface baseline, repair path, obsolescence notice, support term, buffer policy, and future alternate design.",
+      },
+      {
+        label: "North American avionics and mission-system supply",
+        location: "Phoenix and U.S. aerospace electronics corridor",
+        coordinates: { latitude: 33.4484, longitude: -112.074 },
+        detail: "Mission-specific radios, sensors, EO/IR, radar, flight computers, data links, and ground-control equipment should remain modular rather than destabilize the baseline aircraft BOM.",
+        cargo: "Avionics, mission sensors, communications, flight computers, and ground-control equipment",
+        mode: "Secure parcel, air freight, or dedicated truck with serialized custody",
+        confidence: "medium",
+        confirmNext: "Separate baseline avionics from customer-furnished mission kits and confirm configuration, export status, custody, and required-on-dock date by serial number.",
+      },
+    ],
+    customerClusters,
+    customerSegments: [
+      "Defense and government mission programs",
+      "Cargo, offshore, and remote logistics operators",
+      "Certification, demonstration, and integration partners",
+      "Regional field-service and depot organizations",
+    ],
+  };
+}
+
 function slug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "node";
 }
@@ -559,6 +659,8 @@ function researchText(dashboard: SupplyCaseDashboard) {
     ...(research?.company.products.map((item) => item.value) ?? []),
     ...(research?.company.customerMarkets.map((item) => item.value) ?? []),
     ...(research?.company.likelyInputs.map((item) => item.value) ?? []),
+    ...(research?.findings.flatMap((item) => [item.title, item.detail, item.implication]) ?? []),
+    ...(research?.warnings ?? []),
   ].filter(Boolean).join(" ").trim();
   const fallbackText = [dashboard.companyDescription, ...dashboard.sourcingNeeds].filter(Boolean).join(" ");
   return (evidenceText || fallbackText).toLowerCase();
@@ -566,21 +668,31 @@ function researchText(dashboard: SupplyCaseDashboard) {
 
 function profileFor(dashboard: SupplyCaseDashboard) {
   const text = researchText(dashboard);
-  const id: OptimizationProfile["id"] = /metal|aluminum|aluminium|steel|plate|alloy|mill cert/.test(text)
-    ? "metals"
-    : /3d print|additive manufactur/.test(text)
+  const identityText = [
+    dashboard.sourcePrompt,
+    dashboard.companyName,
+    dashboard.research?.company.description.value,
+    dashboard.research?.company.industry.value,
+    ...(dashboard.research?.company.products.map((item) => item.value) ?? []),
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (/vtol|aircraft|aviation|hybrid[- ]electric propulsion|hybrid power system|unmanned aerial|\buav\b/.test(identityText)) {
+    return advancedAircraftProfile(text);
+  }
+  const id: OptimizationProfile["id"] = /3d print|additive manufactur/.test(identityText)
       ? "additive"
-      : /robot|autonomous|automation/.test(text)
+      : /robot|autonomous|automation/.test(identityText)
         ? "robotics"
-        : /aerospace|satellite|spacecraft|defen[cs]e|avionics/.test(text)
+        : /aerospace|satellite|spacecraft|defen[cs]e|avionics/.test(identityText)
           ? "aerospace"
-          : /medical|medtech|surgical|diagnostic|clinical/.test(text)
+          : /medical|medtech|surgical|diagnostic|clinical/.test(identityText)
             ? "medical"
-            : /chemical|polymer|coating|resin|solvent|reagent/.test(text)
+            : /chemical|polymer|coating|resin|solvent|reagent/.test(identityText)
               ? "chemicals"
-              : /automotive|vehicle|mobility|ev\b/.test(text)
+              : /automotive|vehicle|mobility|ev\b/.test(identityText)
                 ? "automotive"
-                : "industrial";
+                : /metal|aluminum|aluminium|steel|plate|alloy|mill cert/.test(identityText)
+                  ? "metals"
+                  : "industrial";
   return PROFILES.find((profile) => profile.id === id) ?? PROFILES.at(-1)!;
 }
 
@@ -761,6 +873,7 @@ function actionsFor(
         recommendation: "Map the top SKUs to current mills and distributors, then qualify one alternate for each critical grade and thickness. Compare availability, mill certs, melt and cast origin, MOQ, lead time, and delivered cost.",
         decision: "Approve a primary and alternate source for every high-volume or production-critical SKU.",
         requiredInput: "Top 20 SKUs or 90 days of purchase orders and stockouts",
+        measure: "Critical-SKU source coverage, sole-source exposure, stockout hours, and risk-weighted lead time",
       },
       {
         id: "metals-release-control",
@@ -771,6 +884,7 @@ function actionsFor(
         recommendation: "Have Derya contact each supplier against the same readiness checklist, surface short allocations early, and combine compatible releases into one pickup plan.",
         decision: "Set the next two replenishment windows and escalate any uncovered grade before customer demand consumes stock.",
         requiredInput: "Open purchase orders, supplier contacts, target receipt dates, and current forwarder or carrier",
+        measure: "Supplier promise accuracy, purchase-order lateness, uncovered grades, and release-to-pickup time",
       },
       {
         id: "metals-inbound-consolidation",
@@ -781,6 +895,7 @@ function actionsFor(
         recommendation: "Create two service rules: scheduled consolidated replenishment by region, plus an urgent lane for production or customer shortages. Tender flatbed, dedicated, and LTL on the same all-in scope.",
         decision: "Choose a weekly inbound cadence and the exact trigger for an expedite.",
         requiredInput: "Shipment history with origin ZIP, weight, dimensions, accessorials, and required receipt date",
+        measure: "Inbound cost per pound, premium-freight share, damage rate, and receipt-date variability",
       },
       {
         id: "metals-cross-border",
@@ -791,6 +906,7 @@ function actionsFor(
         recommendation: "Build a broker-reviewed product packet for each candidate alloy and form. Capture HTS, country of origin, melt and cast evidence, commercial value, and any trade-remedy scope before the first urgent order.",
         decision: "Decide which Canadian sources are approved for normal replenishment, emergency use only, or not economical.",
         requiredInput: "Product descriptions, alloy and form, origin evidence, values, Incoterm, and importer details",
+        measure: "Broker-ready SKU coverage, release time, duty and remedy variance, and border exception rate",
       },
       {
         id: "metals-delivery-policy",
@@ -801,11 +917,112 @@ function actionsFor(
         recommendation: "Segment orders by size, value, damage exposure, and promised lead time. Pre-qualify local courier, LTL, dedicated, and flatbed options with packaging and proof-of-delivery standards.",
         decision: "Publish the service level and carrier class for each order profile.",
         requiredInput: "Customer ship-to history, order dimensions, delivery promises, claims, and receiving constraints",
+        measure: "On-time delivery, claims, cost per order profile, and proof-of-delivery completion",
       },
     ];
   }
 
-  const regulated = profile.id === "medical" || profile.id === "aerospace" || profile.id === "chemicals";
+  if (profile.id === "aerospace") {
+    const products = naturalList(
+      dashboard.research?.company.products.map((item) => item.value) ?? [],
+      "aircraft, propulsion modules, and mission systems",
+    );
+    const publicDemandNeedsGating = /firm|provisional|purchase interest|order book|backlog|orders?/.test(researchText(dashboard));
+    return [
+      {
+        id: "aerospace-critical-bom",
+        priority: 1,
+        workstreamId: "procurement",
+        title: "Control the critical BOM below Tier 1",
+        currentCondition: `${company} appears to be an integration-led OEM for ${products}. The public picture names products and selected partners, but it cannot show the manufacturing site, Tier-2 source, tooling ownership, demonstrated lead time, first-article status, or recovery plan for each build-stopping part.`,
+        recommendation: "Create a critical-parts control tower that links every red part to the supplier site, lower-tier source, country and export class, lead time, MOQ, capacity, tooling owner, quality status, shelf life, affected serial numbers, and approved alternate or repair path.",
+        decision: "Approve the first 50 part families and define which missing alternate or continuity plans block a production release.",
+        requiredInput: "Engineering BOM, approved-vendor list, open purchase orders, serial-number build plan, and shortage list",
+        measure: "Critical BOM with Tier-2 visibility, sole-source exposure, risk-weighted lead time, and parts without a recovery plan",
+      },
+      {
+        id: "aerospace-demand-gates",
+        priority: 2,
+        workstreamId: "supplier_outreach",
+        title: "Gate supplier commitments against validated program demand",
+        currentCondition: publicDemandNeedsGating
+          ? `${company}'s public demand picture mixes firm programs with provisional or earlier-stage demand. Buying long-lead, configuration-sensitive material against the headline pipeline can strand inventory while still missing the parts required for the next aircraft.`
+          : `${company}'s public product picture does not reveal which aircraft, propulsion, and customer configurations are firm enough to authorize non-cancelable material or reserved capacity.`,
+        recommendation: "Maintain committed, probable, and upside build plans. Reserve supplier capacity early, but release non-cancelable material only against a named customer, certification, flight-test, or configuration-lock gate. Have Derya chase each supplier against that authorization matrix.",
+        decision: "Set the material-authorization gate for standard, common long-lead, customer-specific, and proprietary modules.",
+        requiredInput: "Program backlog by confidence, deposits or contractual gates, configuration status, long-lead list, and cancellation terms",
+        measure: "Non-cancelable inventory versus firm demand, capacity reserved, expedite spend, and monthly schedule volatility",
+      },
+      {
+        id: "aerospace-serial-kits",
+        priority: 3,
+        workstreamId: "procurement",
+        title: "Pre-kit every aircraft by serial number and station",
+        currentCondition: `A low-rate aircraft program can show enough total inventory while still missing one fastener, harness, certificate, or revision-correct LRU for the next build. The public picture cannot show whether material is allocated to the serial number and work station that actually needs it.`,
+        recommendation: "Create serial-number shipsets and station kits with the exact parts, consumables, certificates, drawings, tools, shortage status, and revision effectivity. Run the completeness check before the kit reaches the line, and generate the field-spares kit from the same as-built configuration.",
+        decision: "Choose the first aircraft or propulsion build for a kit-completeness pilot and set the no-release conditions.",
+        requiredInput: "Manufacturing BOM, build sequence, serial numbers, station plan, inventory allocation, shortage list, and certificate requirements",
+        measure: "Kit completeness at release, line stops, search time, wrong-revision discoveries, and shortages found before station need",
+      },
+      {
+        id: "aerospace-production-lanes",
+        priority: 4,
+        workstreamId: "shipment_planning",
+        title: "Separate prototype freight from production shipsets",
+        currentCondition: `Fast engineering changes and low-rate production are likely sharing inbound parts, documents, and recovery freight into ${location}. Without serial-number shipsets, one late component or wrong revision can stop the line while unrelated inventory looks available.`,
+        recommendation: "Create separate prototype, production, and service lanes. Pre-kit each aircraft by serial number and station, run a digital shortage check before release, consolidate planned inbound material by supplier region, and reserve air freight for explicit line-stop or aircraft-on-ground triggers.",
+        decision: "Approve the production-kit release rule, shortage review horizon, consolidation cadence, and premium-freight authority.",
+        requiredInput: "Serial-number build schedule, manufacturing BOM, station plan, part dimensions, ready dates, revision effectivity, and current inbound history",
+        measure: "Kit completeness at release, line stops from shortages, late-change rework, premium-freight share, and inbound variability",
+      },
+      {
+        id: "aerospace-supplier-industrialization",
+        priority: 5,
+        workstreamId: "supplier_outreach",
+        title: "Gate flight-critical suppliers for production readiness",
+        currentCondition: "A technically capable prototype supplier is not automatically ready for repeatable aerospace production. Capacity, tooling, special processes, first-article status, inspection data, and corrective-action closure can fail after the purchase order is already late.",
+        recommendation: "Run a common launch gate for every flight-critical supplier: requirements, manufacturability, process flow, tooling and inspection readiness, first article, process qualification, rate demonstration, and ongoing surveillance. Collect the evidence against each part and supplier site, not in a disconnected document folder.",
+        decision: "Approve the supplier gates that block production release and identify which suppliers need an on-site readiness review first.",
+        requiredInput: "Critical supplier list, part families, quality clauses, first-article records, special-process approvals, capacity plan, and open corrective actions",
+        measure: "First-article right-first-time rate, supplier escapes, incoming acceptance, corrective-action age, and demonstrated capacity versus build rate",
+      },
+      {
+        id: "aerospace-product-passports",
+        priority: 6,
+        workstreamId: "customs",
+        title: "Create part-level customs and export passports",
+        currentCondition: "Aircraft programs combine commercial parts, controlled hardware, customer-furnished equipment, temporary demonstration assets, dangerous goods, and repair returns. A shipment-level document check is too late to decide classification, licensing, valuation, temporary admission, or broker scope.",
+        recommendation: "Build a reusable passport for every internationally moved part family: engineering description, HTS, Schedule B, country of origin, export classification, value method, agency scope, dangerous-goods status, repair or return treatment, approved brokers, and supporting documents. Require broker review before tender.",
+        decision: "Assign the importer, exporter, broker, and approval owner for production, demonstration, repair, and field-spares movements.",
+        requiredInput: "Part master, technical descriptions, origin evidence, export classifications, values, parties, Incoterms, and known licenses or exemptions",
+        measure: "Passport coverage, broker-approved classifications, pre-arrival acceptance, clearance exceptions, and temporary-entry closure",
+      },
+      {
+        id: "aerospace-gateway-network",
+        priority: 7,
+        workstreamId: "shipment_planning",
+        title: "Choose gateways and factory lanes on variability, not rate alone",
+        currentCondition: `${company} may be moving from prototype integration toward a repeatable production footprint. A cheap average freight rate can still lose if the gateway, drayage, special handling, customs timing, or supplier distance creates line-stop variability.`,
+        recommendation: "Model each credible factory and gateway combination against supplier ship-from sites, shipment dimensions, service frequency, flight-test access, customs path, special handling, drayage, damage exposure, and recovery options. Reserve air for build-critical parts, schedule consolidated inbound lanes, and route bulky or planned ground equipment by ocean or truck.",
+        decision: "Select the lanes to validate first and the service-level threshold that outweighs a lower spot rate.",
+        requiredInput: "Candidate facilities, supplier sites, 90 days of shipments, dimensions and weights, Incoterms, build dates, freight spend, and delay history",
+        measure: "Total landed cost per build, receipt variability, premium-freight share, supplier distance, inventory days, and inbound damage",
+      },
+      {
+        id: "aerospace-field-logistics",
+        priority: 8,
+        workstreamId: "fulfillment",
+        title: "Stage deployment spares before aircraft delivery",
+        currentCondition: `${company} appears to target defense, remote logistics, and international operating programs. Delivering the aircraft without the line-replaceable units, tools, return packaging, local import model, and repair route makes mission availability depend on emergency freight after failure.`,
+        recommendation: "Design a field-level swap and depot-repair network before delivery. Generate each deployment kit from the as-built configuration, position critical spares near actual operating regions, define failed-unit return routes, and feed removal and repair data back into replenishment.",
+        decision: "Approve the first deployment hubs, target availability, field-replaceable list, repair depots, and inventory ownership model.",
+        requiredInput: "Installed-asset plan, failure-critical parts, service BOM, expected removal rates, repair locations, and customer response commitments",
+        measure: "Mission availability, aircraft-on-ground response, spare fill rate, repair turnaround, and no-fault-found removals",
+      },
+    ];
+  }
+
+  const regulated = profile.id === "medical" || profile.id === "chemicals";
   return [
     {
       id: `${profile.id}-source-control`,
@@ -816,6 +1033,7 @@ function actionsFor(
       recommendation: "Build a part-to-supplier matrix with site, capability, MOQ, lead time, quality evidence, landed cost, and alternate status. Prioritize parts that can stop production or delay a customer deployment.",
       decision: "Approve the first supplier search and the parts that require a second source now.",
       requiredInput: "BOM, approved-vendor list, open purchase orders, and the next production deadline",
+      measure: "Critical parts with site visibility, approved alternates, risk-weighted lead time, and landed-cost variance",
     },
     {
       id: `${profile.id}-supplier-control`,
@@ -826,6 +1044,7 @@ function actionsFor(
       recommendation: "Let Derya run the readiness cadence, normalize every response, flag late or incomplete items, and assemble one pickup and document plan.",
       decision: "Confirm which suppliers Derya should contact directly and which relationships the customer retains.",
       requiredInput: "Supplier contacts, open POs, expected ready dates, and communication authority",
+      measure: "Supplier response time, promise accuracy, late releases, missing documents, and confirmed pickup readiness",
     },
     {
       id: `${profile.id}-movement-control`,
@@ -836,6 +1055,7 @@ function actionsFor(
       recommendation: "Group compatible releases, compare air, ocean, parcel, and truck against the same door-to-door scope, then choose the cheapest plan that protects the production or install date.",
       decision: "Approve the consolidation window, service level, and provider tender list.",
       requiredInput: "Pickup sites, packages, dimensions, weight, ready dates, Incoterm, and required delivery date",
+      measure: "Door-to-door cost, transit variability, consolidation savings, premium-freight share, and on-time receipt",
     },
     {
       id: `${profile.id}-customs-control`,
@@ -848,6 +1068,7 @@ function actionsFor(
       recommendation: "Build a product-level evidence packet, compare licensed brokers, record open questions, and require broker approval before filing or promising clearance.",
       decision: "Assign the importer and broker, approve the product packet, and close the entry blockers.",
       requiredInput: "Product specifications, proposed HTS, origin, value, parties, Incoterm, and expected entry date",
+      measure: "Broker-ready products, classification coverage, pre-arrival acceptance, clearance time, and exception rate",
     },
     {
       id: `${profile.id}-delivery-control`,
@@ -858,6 +1079,7 @@ function actionsFor(
       recommendation: "Segment finished-goods and service-part deliveries, pre-qualify the required carrier or 3PL service, and manage appointments, proof of delivery, returns, and exceptions in one workflow.",
       decision: "Approve the customer service levels and the facilities that need special handling.",
       requiredInput: "Customer ship-to list, product dimensions and value, receiving rules, delivery promises, and returns policy",
+      measure: "On-time delivery, appointment success, claims, proof-of-delivery completion, and return-cycle time",
     },
   ];
 }

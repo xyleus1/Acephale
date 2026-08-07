@@ -159,13 +159,13 @@ assert.equal(usMexicoCustoms?.label, "U.S.-Mexico customs");
 assert.equal(usMexicoCustoms?.statusLabel, "Broker not assigned");
 assert.deepEqual(usMexicoCustoms?.contacts.map((contact) => contact.name), [
   "DHL Global Forwarding",
-  "Livingston International",
+  "Expeditors",
 ]);
 const usMexicoMovement = usMexicoMap.objects.find((object) => object.kind === "movement");
 assert.deepEqual(usMexicoMovement?.contacts.map((contact) => contact.name), [
   "DHL Global Forwarding",
   "Uber Freight",
-  "Livingston International",
+  "Expeditors",
 ]);
 
 const domesticModel: SupplyOptimizationModel = {
@@ -223,7 +223,7 @@ assert.equal(losAngelesDistribution?.statusLabel, "Customer input");
 assert.deepEqual(losAngelesDistribution?.contacts.map((contact) => contact.name), [
   "Uber Freight",
   "DHL Global Forwarding",
-  "Livingston International",
+  "Expeditors",
 ]);
 assert.equal(
   chinaOceanMap.objects.find((object) => object.kind === "customs")?.label,
@@ -231,8 +231,36 @@ assert.equal(
 );
 assert.deepEqual(
   chinaOceanMap.objects.find((object) => object.kind === "movement")?.contacts.map((contact) => contact.name),
-  ["DHL Global Forwarding", "Livingston International"],
+  ["DHL Global Forwarding", "Expeditors"],
   "an ocean movement must not include domestic truck capacity or a Canada-only broker",
+);
+
+const ukUsModel: SupplyOptimizationModel = {
+  ...model,
+  nodes: [
+    {
+      ...model.nodes[0],
+      id: "supplier-birmingham",
+      label: "UK propulsion electronics",
+      location: "Birmingham, United Kingdom",
+      coordinates: { latitude: 52.4862, longitude: -1.8904 },
+      qualificationTargets: [],
+    },
+    model.nodes[1],
+  ],
+  edges: [{
+    ...model.edges[0],
+    id: "birmingham-ferndale",
+    fromNodeId: "supplier-birmingham",
+    toNodeId: "factory-ferndale",
+    mode: "Priority air freight",
+  }],
+};
+const ukUsMap = buildSupplyCommandMap(ukUsModel, dashboard);
+assert.equal(ukUsMap.objects.find((object) => object.kind === "customs")?.label, "International customs handoff");
+assert.deepEqual(
+  ukUsMap.objects.find((object) => object.kind === "customs")?.contacts.map((contact) => contact.name),
+  ["DHL Global Forwarding", "Expeditors"],
 );
 
 console.log("Supply OS command map checks passed");

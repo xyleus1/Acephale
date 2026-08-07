@@ -3612,3 +3612,40 @@ Use this file for chronological implementation notes that future agents should s
   the live map path remained build and test verified.
 - Safety: No database schema, secret, environment, supplier, booking, customs
   filing, message, or spend mutation was introduced.
+
+### 2026-08-07 - Restore the Supply OS basemap and deepen company analysis
+
+- Branch: `fix/supply-os-map-analysis-v2`, targeting `main`.
+- Root causes: the map depended on one nested vector-style resource graph and
+  did not recover from partial style failures; Radix collision handling pulled
+  the coverage menu back over the right inspector; logo extraction treated a
+  social image or generic `company-logo` carousel as company identity; the map
+  view discarded most fields from the optimization engine.
+- Map fix: made CARTO raster the first provider, added bounded remount fallback
+  through CARTO Positron and OpenFreeMap Positron, marked the raster ready on
+  source content, preserved the WebGL fallback, and retained the route and
+  provider planning boundary.
+- UI fix: moved the coverage menu fully left of the inspector with a stable
+  Radix alignment offset, added Radix tabs for object detail and company
+  optimization, and kept the fixed one-viewport layout at 1280 by 720 and 2048
+  by 1100.
+- Identity fix: ranked JSON-LD and visible brand assets above icons, ignored
+  social-preview images and unlabelled customer-logo carousels, corrected empty
+  HTML attribute parsing, and normalized saved SEO-tagline names before model
+  generation.
+- Analysis fix: added measured outcomes to every action and expanded the
+  advanced-aircraft profile to eight controls across BOM, demand, serial kits,
+  production lanes, supplier industrialization, customs, gateway selection,
+  and field logistics. Added UK or European propulsion supply, U.S. mission
+  systems, international customs handoffs, and conditional Oman, Fiji, and
+  European deployment nodes.
+- Regression coverage: exact Odys hero-photo versus logo fixture, customer-logo
+  carousel versus favicon, SEO-title normalization, advanced-aircraft network
+  and action set, international broker selection, Radix analysis surface,
+  basemap fallback, and menu positioning contract.
+- Browser QA: GPU-enabled Chrome rendered the real CARTO basemap, zero document
+  overflow, zero console errors, and a non-overlapping coverage menu. A live
+  Odys research run returned the official logo and the eight-priority operating
+  model. The separate headless browser correctly retained the no-WebGL fallback.
+- Safety: No schema, secret, external supplier action, booking, customs filing,
+  message, or spend mutation was introduced.

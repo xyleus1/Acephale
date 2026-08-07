@@ -1661,3 +1661,37 @@ Use this log for durable product and engineering decisions. Do not put every imp
   unchanged.
 - Revisit when: Derya has live shipment, AIS, rate, broker, and provider data,
   or when an approved self-hosted basemap is required for offline operation.
+
+### 2026-08-07 - Supply OS basemaps fail over and analysis stays actionable
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: One vector-style provider could leave working markers over an empty
+  canvas when any nested style resource was slow or unavailable. The right
+  dossier also collapsed a complete company analysis into one truncated
+  recommendation, and saved social-preview images could appear as logos.
+- Decision: Load the low-dependency CARTO raster basemap first and treat the
+  first raster source content as ready. Fall back to CARTO Positron and then
+  OpenFreeMap Positron only when no usable source arrives within the bounded
+  load window. Keep the object rail usable when WebGL is unavailable. Separate
+  selected-object detail from ranked optimization priorities with maintained
+  Radix tabs. Every priority must state the condition, Derya intervention,
+  customer decision, starting input, measurable operating result, and linked
+  workstream. Rank structured or visible official brand assets above icons,
+  and never treat a social-preview photograph or customer-logo carousel as the
+  company logo.
+- Rationale: The map is the product's primary working surface, so a visible
+  real basemap is more valuable than a fragile richer style. Company analysis
+  must remain inspectable and operational inside the same viewport instead of
+  being hidden behind a summary sentence.
+- Consequences: Advanced-aircraft profiles expose eight measurable controls
+  covering multi-tier BOM visibility, demand gates, serial-number kits,
+  prototype and production lanes, supplier industrialization, customs and
+  export passports, gateway variability, and deployment spares. Existing
+  browser-local cases collapse SEO taglines back to the customer name and
+  reject obvious hero images as identity assets. Candidate suppliers, routes,
+  brokers, and recommendations remain hypotheses until connected records and
+  human approval exist.
+- Revisit when: Derya adopts an approved self-hosted basemap, durable
+  office-scoped company master data, or connected procurement and shipment
+  evidence that can replace the current outside-in operating model.

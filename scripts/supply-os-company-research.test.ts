@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  buildOfficialSiteResearch,
   extractLogoFromHtml,
   extractUsPostalAddressesFromHtml,
   normalizeCompanyResearch,
@@ -66,6 +67,33 @@ assert.equal(
   null,
   "official-page logo discovery must not turn a third-party URL into client-loaded content",
 );
+assert.equal(
+  extractLogoFromHtml(
+    '<meta name="twitter:image" content="https://www.odysaviation.com/Home/splashhangar.jpg"><link rel="icon" href="/favicon.png"><img alt="Logo" src="/logo.svg">',
+    "https://www.odysaviation.com/",
+  ),
+  "https://www.odysaviation.com/logo.svg",
+  "a social preview photo must not outrank the official on-page logo",
+);
+assert.equal(
+  extractLogoFromHtml(
+    '<img src="/uploads/Locomation-Logo-White.png" alt="" class="company-logo"><link rel="icon" href="/uploads/AON3D_Favicon.jpg">',
+    "https://www.aon3d.com/",
+  ),
+  "https://www.aon3d.com/uploads/AON3D_Favicon.jpg",
+  "a customer-logo carousel must not become the researched company identity",
+);
+const odysResearch = buildOfficialSiteResearch({
+  query: "Odys Aviation builds hybrid-electric VTOL aircraft in Long Beach. Website: https://www.odysaviation.com",
+  website: "https://www.odysaviation.com/",
+  researchedAt,
+  documents: [{
+    url: "https://www.odysaviation.com/",
+    html: '<html><head><title>Odys Aviation: One platform. Two Aircraft. Infinite Missions</title><meta property="og:site_name" content="Odys Aviation: One platform. Two Aircraft. Infinite Missions"><meta name="description" content="Hybrid-electric VTOL aircraft"><meta name="twitter:image" content="/Home/splashhangar.jpg"></head><body><img alt="Logo" src="/logo.svg"><main>Aircraft manufacturing for cargo and defense missions.</main></body></html>',
+  }],
+});
+assert.equal(odysResearch.company.name.value, "Odys Aviation", "the customer name must not inherit the website SEO tagline");
+assert.equal(odysResearch.company.logoUrl, "https://www.odysaviation.com/logo.svg");
 assert.deepEqual(
   extractUsPostalAddressesFromHtml("<p>5083 plate</p><footer>1350 Jarvis St, Ferndale, MI 48220</footer><p>2703 23rd Street, Detroit, MI 48216</p>"),
   ["1350 Jarvis St, Ferndale, MI 48220", "2703 23rd Street, Detroit, MI 48216"],

@@ -361,7 +361,7 @@ async function fetchOfficialHomepage(website: string, fetchImpl: typeof fetch = 
 }
 
 function attribute(tag: string, name: string) {
-  const match = tag.match(new RegExp(`${name}\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))`, "i"));
+  const match = tag.match(new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>"']+))`, "i"));
   return stringValue(match?.[1] ?? match?.[2] ?? match?.[3]);
 }
 
@@ -465,19 +465,47 @@ function addressValue(value: unknown) {
 }
 
 export function extractLogoFromHtml(html: string, pageUrl: string): string | null {
-  const tags = html.match(/<(?:link|meta)\b[^>]*>/gi) ?? [];
-  const candidates: string[] = [];
-  for (const tag of tags) {
+  const structuredCandidates: string[] = [];
+  const visibleCandidates: string[] = [];
+  const metadataCandidates: string[] = [];
+  const touchIconCandidates: string[] = [];
+  const faviconCandidates: string[] = [];
+
+  const jsonLogo = html.match(/"logo"\s*:\s*(?:"([^"]+)"|\{[^{}]*(?:"url"|"contentUrl")\s*:\s*"([^"]+)")/i);
+  if (jsonLogo) structuredCandidates.push(jsonLogo[1] ?? jsonLogo[2]);
+
+  for (const tag of html.match(/<img\b[^>]*>/gi) ?? []) {
+    const alt = attribute(tag, "alt");
+    const ariaLabel = attribute(tag, "aria-label");
+    const className = attribute(tag, "class");
+    const source = attribute(tag, "src") || attribute(tag, "data-src");
+    const identity = [alt, ariaLabel, className, attribute(tag, "id")]
+      .join(" ")
+      .toLowerCase();
+    if (!/\b(?:logo|wordmark|brandmark|brand-mark)\b/.test(identity)) continue;
+    if (/\b(?:company|client|customer|partner|portfolio)-logo\b/i.test(className) && !alt && !ariaLabel) continue;
+    visibleCandidates.push(source);
+  }
+
+  for (const tag of html.match(/<(?:link|meta)\b[^>]*>/gi) ?? []) {
     const rel = attribute(tag, "rel").toLowerCase();
     const property = (attribute(tag, "property") || attribute(tag, "name")).toLowerCase();
-    if (rel.includes("icon")) candidates.push(attribute(tag, "href"));
-    if (["og:logo", "twitter:image"].includes(property)) candidates.push(attribute(tag, "content"));
+    const itemProp = attribute(tag, "itemprop").toLowerCase();
+    if (rel.includes("apple-touch-icon") || rel.includes("mask-icon")) touchIconCandidates.push(attribute(tag, "href"));
+    else if (rel.includes("icon")) faviconCandidates.push(attribute(tag, "href"));
+    if (property === "og:logo" || itemProp === "logo") metadataCandidates.push(attribute(tag, "content") || attribute(tag, "href"));
   }
-  const jsonLogo = html.match(/"logo"\s*:\s*(?:"([^"]+)"|\{[^{}]*"url"\s*:\s*"([^"]+)")/i);
-  if (jsonLogo) candidates.unshift(jsonLogo[1] ?? jsonLogo[2]);
+
+  const candidates = [
+    ...structuredCandidates,
+    ...visibleCandidates,
+    ...metadataCandidates,
+    ...touchIconCandidates,
+    ...faviconCandidates,
+  ];
   for (const candidate of candidates.filter(Boolean)) {
     try {
-      const resolved = new URL(candidate.replace(/\\\//g, "/"), pageUrl);
+      const resolved = new URL(decodeHtml(candidate).replace(/\\\//g, "/"), pageUrl);
       if (validPublicHttpUrl(resolved.toString()) && sameDomain(resolved.toString(), pageUrl)) return resolved.toString();
     } catch {
       continue;
@@ -769,9 +797,11 @@ export function buildOfficialSiteResearch(input: {
   const organization = records.find(({ item }) => jsonLdType(item).some((type) => /Organization|Corporation|LocalBusiness/i.test(type)));
   const siteName = metadata(homepage.html, "og:site_name");
   const title = metadata(homepage.html, "og:title") || documentTitle(homepage.html);
+  const hintedName = companyNameHint(input.query);
   const name = stringValue(organization?.item.name)
-    || siteName
-    || title.split(/\s[-|:]\s/)[0]?.trim()
+    || hintedName
+    || siteName.split(/\s*(?:[|:]|\s-\s)\s*/)[0]?.trim()
+    || title.split(/\s*(?:[|:]|\s-\s)\s*/)[0]?.trim()
     || new URL(input.website).hostname.replace(/^www\./, "");
   const description = metadata(homepage.html, "og:description")
     || metadata(homepage.html, "description")

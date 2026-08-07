@@ -73,6 +73,7 @@ for (const dependency of [
   '"@vis.gl/react-maplibre"',
   '"lucide-react"',
   '"@radix-ui/react-dropdown-menu"',
+  '"@radix-ui/react-tabs"',
   '"@radix-ui/react-tooltip"',
 ]) {
   assert.equal(packageJson.includes(dependency), true, `Supply OS is missing maintained UI dependency: ${dependency}`);
@@ -81,9 +82,18 @@ assert.match(commandMap, /@vis\.gl\/react-maplibre/, "map rendering must come fr
 assert.match(commandMap, /lucide-react/, "map symbols must come from Lucide");
 assert.match(commandMap, /@radix-ui\/react-tooltip/, "map controls must use an accessible tooltip primitive");
 assert.match(dashboard, /@radix-ui\/react-dropdown-menu/, "customer and scope menus must use an accessible dropdown primitive");
+assert.match(dashboard, /@radix-ui\/react-tabs/, "object detail and optimization analysis must use an accessible tabs primitive");
 assert.equal(commandMap.includes("<svg"), false, "the product must not draw its own geography or symbols");
 assert.match(commandMap, /offset=\{markerOffset\(object\.kind\)\}/, "movement and customs markers must remain separately selectable");
 assert.match(styles, /maplibregl-canvas:focus-visible/, "the interactive map canvas needs a visible keyboard focus state");
+assert.match(commandMap, /basemaps\.cartocdn\.com\/gl\/positron-gl-style\/style\.json/, "the live map needs the maintained CARTO Positron basemap");
+assert.match(commandMap, /carto-raster/, "the live map needs a low-dependency raster fallback");
+assert.equal(commandMap.includes("WEBGL_lose_context"), false, "capability detection must not explicitly discard a browser graphics context");
+assert.match(dashboard, /alignOffset=\{3[0-9]{2}\}/, "the coverage menu must open clear of the right-side inspector");
+assert.match(dashboard, /avoidCollisions=\{false\}/, "coverage-menu positioning must not be pulled back over the inspector");
+assert.match(dashboard, /Optimization priorities/, "the inspector must expose the complete optimization analysis");
+assert.match(dashboard, /companyNameHint\(dashboard\.sourcePrompt\)/, "saved SEO taglines must collapse back to the researched company name");
+assert.match(dashboard, /function companyLogoUrl/, "saved dashboards must reject obvious hero and customer images as company logos");
 
 const paletteSource = `${styles}\n${workstreamStyles}\n${commandMap}`;
 const colorTokens = new Set([
