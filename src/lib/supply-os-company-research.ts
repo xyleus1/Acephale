@@ -387,6 +387,12 @@ function plainText(value: string) {
     .trim();
 }
 
+export function extractUsPostalAddressesFromHtml(html: string) {
+  const text = plainText(html);
+  const pattern = /\b\d{1,6}\s+(?:(?!\d+\s)[A-Za-z0-9#.'-]+\s+){1,8}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Way|Highway|Hwy)\.?[,]?\s+[A-Za-z][A-Za-z .'-]{1,40},\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/g;
+  return [...new Set((text.match(pattern) ?? []).map((value) => value.replace(/\s+/g, " ").trim()))].slice(0, 8);
+}
+
 function metadata(html: string, key: string) {
   const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
   for (const tag of tags) {
@@ -784,9 +790,21 @@ export function buildOfficialSiteResearch(input: {
       coordinates: null,
     }];
   }).filter((location, index, locations) => locations.findIndex((candidate) => candidate.value === location.value) === index).slice(0, 8);
+  const visibleAddresses: SupplyResearchLocation[] = input.documents.flatMap((document) => {
+    const pathname = new URL(document.url).pathname.toLowerCase();
+    if (pathname !== "/" && !/about|company|contact|location|facilit/.test(pathname)) return [];
+    return extractUsPostalAddressesFromHtml(document.html).map((value) => ({
+      ...researchClaim(value, "official", "high", [document.url]),
+      role: "headquarters" as const,
+      coordinates: null,
+    }));
+  });
   const providedLocation = operatingLocationFromQuery(input.query);
-  const addresses: SupplyResearchLocation[] = officialAddresses.length
-    ? officialAddresses
+  const observedAddresses = [...visibleAddresses, ...officialAddresses]
+    .filter((location, index, locations) => locations.findIndex((candidate) => candidate.value.toLowerCase() === location.value.toLowerCase()) === index)
+    .slice(0, 8);
+  const addresses: SupplyResearchLocation[] = observedAddresses.length
+    ? observedAddresses
     : providedLocation
       ? [{
         ...researchClaim(providedLocation, "inferred", "medium", []),
@@ -857,6 +875,7 @@ export function buildOfficialSiteResearch(input: {
     evidence,
     warnings: [
       "This brief uses the official company website only. Public trade and third-party sources were not included.",
+      ...(addresses.length > 1 ? ["Official pages expose more than one company address. Confirm which site receives inventory, processes goods, and ships customer orders."] : []),
       "Likely inputs are hypotheses for customer confirmation, not observed purchase or shipment records.",
       "Source countries, lanes, rates, customs treatment, and destination demand require customer or connected-system data.",
     ],

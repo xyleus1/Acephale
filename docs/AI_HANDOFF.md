@@ -5982,3 +5982,84 @@ Caveat:
 - Likely-domain discovery is deliberately bounded and heuristic. Ambiguous
   company names can still require an explicit website, but failure can no
   longer prevent the user from receiving a dashboard.
+
+## Supply OS company network optimization engine, August 7
+
+Status:
+
+- Implemented on `feat/supply-os-optimization-engine`, targeting `main`.
+- No database migration, dependency, secret, or new environment variable is
+  required.
+
+Customer result:
+
+- The Supply OS dashboard is now a light, restrained operating surface with no
+  corner logo tile, decorative underline selection, gradients, or random
+  highlight colors.
+- The page order is company evidence, operating scope, one working network
+  summary, interactive supplier-to-customer network, ranked improvement queue,
+  first-input handoff, then evidence and assumptions.
+- The map zooms to the customer's network. A stage rail selects each source,
+  operating site, and buyer market, while the adjacent dossier shows cargo,
+  likely movement, confidence, evidence basis, qualification targets, and the
+  next fact to confirm.
+- The ranked queue provides a current condition, recommended change, customer
+  decision, required input, and linked workstream for procurement, supplier
+  contact, shipment planning, customs, and fulfillment or 3PL.
+- Each linked workstream route carries the customer case context and shows a
+  customer-specific starting point. The routes explicitly state that no
+  supplier, booking, filing, or spend action is active.
+
+NOX Metals model:
+
+- The network now models direct U.S. aerospace plate mills, Great Lakes
+  service-center buffer stock, a Southern Ontario alternate, the official
+  operating site, Southeast Michigan production buyers, and nationwide
+  aerospace, defense, and new-space buyers.
+- Qualification targets include Arconic Davenport Works, Constellium
+  Ravenswood, Kaiser Aluminum Trentwood, ICI Metals, Yarde Metals, and Samuel
+  Service Center. These are capability matches to investigate, not claimed NOX
+  suppliers.
+- The first five actions cover grade-level source control, supplier release
+  cadence, urgent versus planned inbound, Canadian customs pre-clearance, and
+  delivery policy by plate and order profile.
+
+Research quality:
+
+- Official-site research now extracts visible U.S. postal addresses from
+  relevant pages in addition to JSON-LD. The parser rejects a second pure
+  numeric token, preventing an alloy number such as 5083 from becoming part of
+  a street address.
+- A fresh authenticated `do nox metals` run resolved `noxmetals.co`, retained
+  four official sources, and produced the clean official Ferndale address.
+
+Verification:
+
+- All nine Supply OS regression suites passed.
+- `npx tsc --noEmit` passed.
+- Scoped lint passed with no warnings or errors. The repository-wide lint still
+  fails on the existing unrelated backlog in inbox, jobs, RFQ, agent, and
+  portal files.
+- The optimized Next.js production build passed against the disposable local
+  Postgres database.
+- Authenticated browser QA passed at 1440 by 1000, 1024 by 900, and 390 by 844.
+  It covered fresh NOX research, stage selection, qualification links, action
+  disclosure, workstream routing, presentation mode, and horizontal overflow.
+- Design system: `DESIGN.md`.
+- Design audit:
+  `~/.gstack/projects/mmturna-derya-crm/designs/supply-os-optimization-20260807/design-audit.md`.
+
+Trust boundary:
+
+- Official, third-party public, customer-stated, and inferred node evidence now
+  retain distinct labels. A route is customer-stated only when both endpoints
+  came from customer input; known or researched endpoints alone do not prove a
+  shipment occurred.
+- Profile selection reads the original customer prompt before the legacy
+  fallback industry label, so an explicit additive, robotics, medical,
+  aerospace, chemical, or automotive description is not overwritten by a
+  generic classification.
+- Inferred nodes and dashed routes remain planning hypotheses. Candidate
+  suppliers and buyer profiles are not known relationships. The dashboard
+  still needs office-scoped ERP, procurement, CRM, shipment, and broker records
+  before it can represent the customer's actual operating network.

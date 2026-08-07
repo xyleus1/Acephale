@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { extractLogoFromHtml, normalizeCompanyResearch } from "../src/lib/supply-os-company-research";
+import {
+  extractLogoFromHtml,
+  extractUsPostalAddressesFromHtml,
+  normalizeCompanyResearch,
+} from "../src/lib/supply-os-company-research";
 import { generateSupplyCase, parseStoredSupplyCases, serializeSupplyCases } from "../src/lib/supply-os-case-model";
 
 const official = "https://www.aon3d.com/about/";
@@ -61,6 +65,11 @@ assert.equal(
   extractLogoFromHtml('<meta name="twitter:image" content="https://unverified.example/logo.png">', official),
   null,
   "official-page logo discovery must not turn a third-party URL into client-loaded content",
+);
+assert.deepEqual(
+  extractUsPostalAddressesFromHtml("<p>5083 plate</p><footer>1350 Jarvis St, Ferndale, MI 48220</footer><p>2703 23rd Street, Detroit, MI 48216</p>"),
+  ["1350 Jarvis St, Ferndale, MI 48220", "2703 23rd Street, Detroit, MI 48216"],
+  "visible official-site addresses must be available even when JSON-LD is stale or absent",
 );
 
 const research = normalizeCompanyResearch({

@@ -11,14 +11,14 @@ import {
   type SupplyCoordinate,
   type SupplyEngagementScope,
 } from "@/lib/supply-os-case-model";
+import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
 import {
-  buildSupplyEngagementPlan,
-  SUPPLY_ENGAGEMENT_OPTIONS,
-  type SupplyEngagementPlan,
-  type SupplyNetworkFlow,
-  type SupplyWorkstream,
-  type SupplyWorkstreamId,
-} from "@/lib/supply-os-engagement-plan";
+  buildSupplyOptimizationModel,
+  type SupplyOptimizationBasis,
+  type SupplyOptimizationEdge,
+  type SupplyOptimizationModel,
+  type SupplyOptimizationNode,
+} from "@/lib/supply-os-optimization-engine";
 import {
   loadSupplyCases,
   persistSupplyCases,
@@ -34,7 +34,7 @@ function dashboardName(dashboard: SupplyCaseDashboard) {
 }
 
 function dashboardLocation(dashboard: SupplyCaseDashboard) {
-  return dashboard.companyLocation ?? "Location needed";
+  return dashboard.productionLocation ?? dashboard.companyLocation ?? "Operating site needed";
 }
 
 function formatTimestamp(value: string) {
@@ -75,9 +75,9 @@ function routePath(from: SupplyCoordinate | null, to: SupplyCoordinate | null) {
   const directDistance = Math.abs(end.x - start.x);
   const wrappedEndX = directDistance > 500 ? end.x + (start.x > end.x ? 1000 : -1000) : end.x;
   const distance = Math.abs(wrappedEndX - start.x);
-  const lift = Math.min(88, Math.max(24, distance * 0.14));
+  const lift = Math.min(70, Math.max(13, distance * 0.1));
   const middleX = (start.x + wrappedEndX) / 2;
-  const middleY = Math.max(28, Math.min(start.y, end.y) - lift);
+  const middleY = Math.max(18, Math.min(start.y, end.y) - lift);
   if (directDistance <= 500) {
     return `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} Q ${middleX.toFixed(1)} ${middleY.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
   }
@@ -95,6 +95,49 @@ function routePath(from: SupplyCoordinate | null, to: SupplyCoordinate | null) {
     `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} Q ${firstControl.x.toFixed(1)} ${firstControl.y.toFixed(1)} ${edge.x.toFixed(1)} ${edge.y.toFixed(1)}`,
     `M ${(boundaryX + wrapShift).toFixed(1)} ${edge.y.toFixed(1)} Q ${(secondControl.x + wrapShift).toFixed(1)} ${secondControl.y.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`,
   ].join(" ");
+}
+
+function mapViewBox(nodes: readonly SupplyOptimizationNode[]) {
+  const points = nodes.flatMap((node) => {
+    const point = project(node.coordinates);
+    return point ? [point] : [];
+  });
+  if (points.length < 2) return WORLD_MAP_VIEWBOX;
+
+  let minX = Math.min(...points.map((point) => point.x));
+  let maxX = Math.max(...points.map((point) => point.x));
+  let minY = Math.min(...points.map((point) => point.y));
+  let maxY = Math.max(...points.map((point) => point.y));
+  let width = Math.max(145, maxX - minX + 72);
+  let height = Math.max(92, maxY - minY + 56);
+  const targetRatio = 1.72;
+  if (width / height < targetRatio) width = height * targetRatio;
+  if (width / height > targetRatio) height = width / targetRatio;
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  minX = Math.max(0, Math.min(1000 - width, centerX - width / 2));
+  minY = Math.max(0, Math.min(500 - height, centerY - height / 2));
+  maxX = minX + Math.min(width, 1000);
+  maxY = minY + Math.min(height, 500);
+  return `${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX - minX).toFixed(1)} ${(maxY - minY).toFixed(1)}`;
+}
+
+function basisLabel(basis: SupplyOptimizationBasis) {
+  if (basis === "official") return "Official evidence";
+  if (basis === "public") return "Public evidence";
+  if (basis === "customer_stated") return "Customer input";
+  return "Inferred pattern";
+}
+
+function confidenceLabel(value: SupplyOptimizationNode["confidence"]) {
+  return `${value[0]?.toUpperCase()}${value.slice(1)} confidence`;
+}
+
+function nodeKindLabel(kind: SupplyOptimizationNode["kind"]) {
+  if (kind === "supplier_cluster") return "Source market";
+  if (kind === "processing_site") return "Operating site";
+  if (kind === "distribution") return "Distribution";
+  return "Customer market";
 }
 
 export function SupplyOsDashboardWorkspace({
@@ -195,7 +238,7 @@ export function SupplyOsDashboardWorkspace({
                     onClick={() => openDashboard(item)}
                   >
                     <span><strong>{dashboardName(item)}</strong><small>{dashboardLocation(item)}</small></span>
-                    <span><strong>{scopeLabel(item.engagementScope)}</strong><small>3 kickoff inputs</small></span>
+                    <span><strong>{scopeLabel(item.engagementScope)}</strong><small>Optimization case</small></span>
                     <time>{formatTimestamp(item.updatedAt)}</time>
                     <Icon name="chevron-right" size={14} />
                   </button>
@@ -215,7 +258,7 @@ export function SupplyOsDashboardWorkspace({
             <Icon name="layers" size={22} />
             <div>
               <h2>No customer dashboards</h2>
-              <p>Create a customer case to see what Derya can take over from suppliers through customer delivery.</p>
+              <p>Create a customer case to infer the operating network and identify the first supply-chain improvements.</p>
               <Link className={styles.primaryButton} href="/dashboard/supply-os/new">Create first customer</Link>
             </div>
           </section>
@@ -233,19 +276,8 @@ function CaseDashboard({
   onScopeChange: (scope: SupplyEngagementScope) => boolean;
 }) {
   const selectedScope = dashboard.engagementScope ?? "full_operation";
-  const [selectedWorkstreamId, setSelectedWorkstreamId] = useState<SupplyWorkstreamId | null>(null);
   const [scopeError, setScopeError] = useState("");
-  const plan = useMemo(
-    () => buildSupplyEngagementPlan(dashboard, selectedScope),
-    [dashboard, selectedScope],
-  );
-  const selectedWorkstream = plan.workstreams.find((item) => item.id === selectedWorkstreamId) ?? null;
-  const [selectedFlowId, setSelectedFlowId] = useState(plan.flows[0]?.id ?? "");
-
-  useEffect(() => {
-    setSelectedWorkstreamId(null);
-    setScopeError("");
-  }, [selectedScope]);
+  const model = useMemo(() => buildSupplyOptimizationModel(dashboard), [dashboard]);
 
   function selectScope(scope: SupplyEngagementScope) {
     if (scope === selectedScope) return;
@@ -258,401 +290,383 @@ function CaseDashboard({
     <article className={styles.caseDashboard} aria-labelledby="active-case-title">
       <header className={styles.caseHeader}>
         <div className={styles.companyIdentity}>
-          <CompanyLogo dashboard={dashboard} />
-          <div>
-            <span className={styles.eyebrow}>{dashboardLocation(dashboard)}</span>
-            <h2 id="active-case-title">{dashboardName(dashboard)}</h2>
-            <p>{dashboard.companyDescription}</p>
+          <span className={styles.eyebrow}>{dashboardLocation(dashboard)}</span>
+          <h2 id="active-case-title">{dashboardName(dashboard)}</h2>
+          <p>{dashboard.research?.company.description.value ?? dashboard.companyDescription}</p>
+          <div className={styles.companyMeta}>
+            <span>{model.profile}</span>
             {dashboard.research ? (
-              <div className={styles.companyMeta}>
+              <>
                 <a href={dashboard.research.company.website} target="_blank" rel="noreferrer">
-                  {websiteLabel(dashboard.research.company.website)}
+                  {websiteLabel(dashboard.research.company.website)} <span aria-hidden="true">↗</span>
                 </a>
                 <span>{countLabel(dashboard.research.evidence.length, "source")}</span>
-                <span>Researched {formatTimestamp(dashboard.research.researchedAt)}</span>
-              </div>
-            ) : (
-              <div className={styles.companyMeta}><span>Built from customer description</span></div>
-            )}
+                <span>Updated {formatTimestamp(dashboard.research.researchedAt)}</span>
+              </>
+            ) : <span>Built from customer input</span>}
           </div>
         </div>
-        <a className={styles.primaryButton} href={`mailto:mert@usederya.com?subject=${encodeURIComponent(`${dashboardName(dashboard)} supply chain kickoff`)}`}>
-          Send BOM or upcoming shipment
-        </a>
+        <div className={styles.caseHeaderActions}>
+          <a className={styles.primaryButton} href={`mailto:mert@usederya.com?subject=${encodeURIComponent(`${dashboardName(dashboard)} supply chain kickoff`)}`}>
+            Start with BOM or shipment <Icon name="arrow-right" size={14} />
+          </a>
+        </div>
       </header>
 
-      <div className={styles.planGrid}>
-        <SupplyNetworkMap
-          dashboard={dashboard}
-          plan={plan}
-          selectedFlowId={selectedFlowId}
-          setSelectedFlowId={setSelectedFlowId}
-        />
-        <CompanyResearchSummary research={dashboard.research} dashboard={dashboard} />
-      </div>
-
-      <section className={styles.engagementSection} aria-labelledby="engagement-title">
-        <div className={styles.engagementPromise}>
-          <span className={styles.eyebrow}>Derya coverage</span>
-          <h2 id="engagement-title">{plan.headline}</h2>
-          <p>{plan.summary}</p>
-          <div className={styles.scopeSelector} aria-label="Choose Derya coverage">
-            {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                data-active={option.id === selectedScope}
-                aria-pressed={option.id === selectedScope}
-                onClick={() => selectScope(option.id)}
-              >
-                {option.shortLabel}
-              </button>
-            ))}
-          </div>
-          {scopeError ? <p className={styles.scopeError} role="alert">{scopeError}</p> : null}
+      <section className={styles.scopeBar} aria-label="Derya operating scope">
+        <div>
+          <span className={styles.eyebrow}>Operating scope</span>
+          <strong>{scopeLabel(selectedScope)}</strong>
+          <small>Choose where Derya starts. The optimization model stays visible across the full operation.</small>
         </div>
-        <aside className={styles.kickoffPanel}>
-          <span className={styles.eyebrow}>Start today</span>
-          <h2>Derya needs these 3 things</h2>
-          <ol>
-            {plan.kickoffInputs.map((item) => <li key={item}>{item}</li>)}
-          </ol>
-          <p>{plan.kickoffNote}</p>
-        </aside>
-      </section>
-
-      <section className={styles.workstreamSection} aria-labelledby="workstreams-title">
-        <header className={styles.sectionHeader}>
-          <h2 id="workstreams-title">What Derya takes over</h2>
-          <span>{plan.scopeLabel}</span>
-        </header>
-        <div className={styles.workstreamRail}>
-          {plan.workstreams.map((workstream) => (
+        <div className={styles.scopeSelector}>
+          {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
             <button
-              key={workstream.id}
+              key={option.id}
               type="button"
-              data-covered={workstream.state !== "available"}
-              data-selected={workstream.id === selectedWorkstream?.id}
-              aria-expanded={workstream.id === selectedWorkstream?.id}
-              aria-controls="supply-workstream-detail"
-              onClick={() => setSelectedWorkstreamId((current) => current === workstream.id ? null : workstream.id)}
+              data-active={option.id === selectedScope}
+              aria-pressed={option.id === selectedScope}
+              onClick={() => selectScope(option.id)}
             >
-              <span className={styles.workstreamNumber}>{workstream.number}</span>
-              <small>{workstream.stateLabel}</small>
-              <strong>{workstream.label}</strong>
-              <p>{workstream.outcome}</p>
+              {option.shortLabel}
             </button>
           ))}
         </div>
+        {scopeError ? <p className={styles.scopeError} role="alert">{scopeError}</p> : null}
       </section>
 
-      {selectedWorkstream ? <WorkstreamDetail workstream={selectedWorkstream} /> : null}
+      <section className={styles.operatingBrief}>
+        <div>
+          <span className={styles.eyebrow}>Inferred operating model</span>
+          <h2>{model.networkSummary}</h2>
+        </div>
+        <dl>
+          <div><dt>Mapped stages</dt><dd>{model.nodes.length}</dd></div>
+          <div><dt>Priority moves</dt><dd>{model.actions.length}</dd></div>
+          <div><dt>Official sources</dt><dd>{dashboard.research?.evidence.length ?? 0}</dd></div>
+        </dl>
+      </section>
 
-      <div className={styles.decisionGrid}>
-        <CustomsBoundary dashboard={dashboard} />
-        <CommitChecks dashboard={dashboard} />
-      </div>
+      <SupplyNetworkWorkspace dashboard={dashboard} model={model} />
+      <OptimizationQueue dashboard={dashboard} model={model} />
+      <KickoffStrip dashboard={dashboard} model={model} />
+      <CompanyEvidence research={dashboard.research} model={model} dashboard={dashboard} />
 
-      <ExecutionDetail plan={plan} />
-
-      <p className={styles.disclaimer}>This case is a scoping plan. Exact suppliers, routes, prices, capacity, customs treatment, and bookings require current evidence and approval.</p>
+      <p className={styles.disclaimer}>Official facts, customer inputs, and inferred operating patterns are kept separate. Supplier awards, routes, rates, customs treatment, bookings, and spend still require current evidence and approval.</p>
     </article>
   );
 }
 
-function CompanyLogo({ dashboard }: { dashboard: SupplyCaseDashboard }) {
-  const [failed, setFailed] = useState(false);
-  const logoUrl = dashboard.research?.company.logoUrl;
-  const initial = dashboardName(dashboard).slice(0, 1).toUpperCase();
+function SupplyNetworkWorkspace({
+  dashboard,
+  model,
+}: {
+  dashboard: SupplyCaseDashboard;
+  model: SupplyOptimizationModel;
+}) {
+  const firstNode = model.nodes.find((node) => node.kind === "processing_site") ?? model.nodes[0] ?? null;
+  const [selectedNodeId, setSelectedNodeId] = useState(firstNode?.id ?? "");
+  const selectedNode = model.nodes.find((node) => node.id === selectedNodeId) ?? firstNode;
+  const nodesById = new Map(model.nodes.map((node) => [node.id, node]));
+  const viewBox = mapViewBox(model.nodes);
+  const viewBoxWidth = Number(viewBox.split(" ")[2]) || 1000;
+  const mapGlyphScale = Math.max(0.14, Math.min(1, viewBoxWidth / 1000));
+
+  function selectNode(node: SupplyOptimizationNode) {
+    setSelectedNodeId(node.id);
+  }
+
   return (
-    <div className={styles.companyLogo} aria-label={`${dashboardName(dashboard)} logo`}>
-      <span>{initial}</span>
-      {logoUrl && !failed ? (
-        <img src={logoUrl} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
-      ) : null}
-    </div>
+    <section className={styles.networkSection} aria-labelledby="supply-network-title">
+      <header className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Supplier to customer</span>
+          <h2 id="supply-network-title">Operating network</h2>
+        </div>
+        <div className={styles.mapLegend} aria-label="Network evidence legend">
+          <span data-basis="official">Official</span>
+          <span data-basis="public">Public</span>
+          <span data-basis="customer_stated">Customer input</span>
+          <span data-basis="inferred">Inferred</span>
+        </div>
+      </header>
+
+      <div className={styles.networkWorkspace}>
+        <nav className={styles.networkStageList} aria-label="Supply network stages">
+          {model.nodes.map((node, index) => (
+            <button
+              key={node.id}
+              type="button"
+              data-active={node.id === selectedNode?.id}
+              data-basis={node.basis}
+              aria-pressed={node.id === selectedNode?.id}
+              onClick={() => selectNode(node)}
+            >
+              <span className={styles.stageIndex}>{String(index + 1).padStart(2, "0")}</span>
+              <span>
+                <small>{nodeKindLabel(node.kind)}</small>
+                <strong>{node.label}</strong>
+                <em>{node.location}</em>
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        <figure className={styles.mapPanel}>
+          <div className={styles.mapCanvas}>
+            <svg className={styles.mapSvg} viewBox={viewBox} role="img" aria-labelledby="supply-map-svg-title">
+              <title id="supply-map-svg-title">Inferred supplier, operating-site, and customer network for {dashboardName(dashboard)}</title>
+              <defs>
+                <marker id="supply-route-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                  <path d="M 0 0 L 7 3.5 L 0 7 z" className={styles.mapArrow} />
+                </marker>
+              </defs>
+              <rect width="1000" height="500" className={styles.mapOcean} />
+              <g className={styles.mapGrid}>
+                {[125, 250, 375].map((y) => <path key={`lat-${y}`} d={`M 0 ${y} H 1000`} />)}
+                {[200, 400, 600, 800].map((x) => <path key={`lng-${x}`} d={`M ${x} 0 V 500`} />)}
+              </g>
+              <g className={styles.mapLand}>{WORLD_MAP_LAND_PATHS.map((path, index) => <path key={`land-${index}`} d={path} />)}</g>
+              <g className={styles.routePaths}>
+                {model.edges.map((edge) => {
+                  const from = nodesById.get(edge.fromNodeId);
+                  const to = nodesById.get(edge.toNodeId);
+                  const path = routePath(from?.coordinates ?? null, to?.coordinates ?? null);
+                  const active = edge.fromNodeId === selectedNode?.id || edge.toNodeId === selectedNode?.id;
+                  return path ? <path key={edge.id} d={path} data-basis={edge.basis} data-active={active} markerEnd="url(#supply-route-arrow)" /> : null;
+                })}
+              </g>
+              <g>
+                {model.nodes.map((node) => {
+                  const position = project(node.coordinates);
+                  if (!position) return null;
+                  return (
+                    <g
+                      key={node.id}
+                      className={styles.mapNode}
+                      data-kind={node.kind}
+                      data-basis={node.basis}
+                      data-active={node.id === selectedNode?.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${node.label}, ${basisLabel(node.basis)}`}
+                      onClick={() => selectNode(node)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          selectNode(node);
+                        }
+                      }}
+                    >
+                      <circle
+                        cx={position.x}
+                        cy={position.y}
+                        r={(node.kind === "processing_site" ? 6.5 : 4.8) * mapGlyphScale}
+                      />
+                      {node.id === selectedNode?.id ? (
+                        <text
+                          x={position.x + (9 * mapGlyphScale)}
+                          y={position.y - (7 * mapGlyphScale)}
+                          style={{ fontSize: `${Math.max(1.5, 10 * mapGlyphScale)}px` }}
+                        >
+                          {node.kind === "processing_site" ? dashboardName(dashboard) : node.label}
+                        </text>
+                      ) : null}
+                    </g>
+                  );
+                })}
+              </g>
+            </svg>
+          </div>
+          <figcaption>Routes are operating hypotheses. Connect supplier, purchase-order, and shipment records to replace inferred links with observed movements.</figcaption>
+        </figure>
+
+        {selectedNode ? <NetworkInspector node={selectedNode} edges={model.edges} nodesById={nodesById} /> : null}
+      </div>
+    </section>
   );
 }
 
-function CompanyResearchSummary({
+function NetworkInspector({
+  node,
+  edges,
+  nodesById,
+}: {
+  node: SupplyOptimizationNode;
+  edges: SupplyOptimizationEdge[];
+  nodesById: Map<string, SupplyOptimizationNode>;
+}) {
+  const related = edges.filter((edge) => edge.fromNodeId === node.id || edge.toNodeId === node.id);
+  return (
+    <aside className={styles.networkInspector} aria-live="polite">
+      <div className={styles.inspectorStatus}>
+        <span data-basis={node.basis}>{basisLabel(node.basis)}</span>
+        <span>{confidenceLabel(node.confidence)}</span>
+      </div>
+      <span className={styles.eyebrow}>{nodeKindLabel(node.kind)}</span>
+      <h3>{node.label}</h3>
+      <p className={styles.inspectorLocation}>{node.location}</p>
+      <p>{node.detail}</p>
+      <dl>
+        <div><dt>Likely cargo</dt><dd>{node.cargo}</dd></div>
+        {related.slice(0, 2).map((edge) => {
+          const otherId = edge.fromNodeId === node.id ? edge.toNodeId : edge.fromNodeId;
+          const other = nodesById.get(otherId);
+          return (
+            <div key={edge.id}>
+              <dt>{edge.stage === "inbound" ? "Inbound pattern" : "Outbound pattern"}</dt>
+              <dd>{edge.mode}{other ? `, ${other.location}` : ""}</dd>
+            </div>
+          );
+        })}
+      </dl>
+      {node.qualificationTargets.length ? (
+        <div className={styles.qualificationTargets}>
+          <span>{node.kind === "supplier_cluster" ? "Organizations to qualify" : "Buyer profiles to test"}</span>
+          <ul>
+            {node.qualificationTargets.map((target) => (
+              <li key={target.name}>
+                {target.url ? <a href={target.url} target="_blank" rel="noreferrer">{target.name}</a> : <strong>{target.name}</strong>}
+                <small>{target.fit}</small>
+              </li>
+            ))}
+          </ul>
+          <p>Inferred candidates, not known relationships.</p>
+        </div>
+      ) : null}
+      <div className={styles.confirmNext}>
+        <span>Confirm next</span>
+        <p>{node.confirmNext}</p>
+      </div>
+    </aside>
+  );
+}
+
+function OptimizationQueue({
+  dashboard,
+  model,
+}: {
+  dashboard: SupplyCaseDashboard;
+  model: SupplyOptimizationModel;
+}) {
+  return (
+    <section className={styles.optimizationSection} aria-labelledby="optimization-title">
+      <header className={styles.sectionHeader}>
+        <div>
+          <span className={styles.eyebrow}>Ordered by expected impact</span>
+          <h2 id="optimization-title">Where Derya can improve the operation</h2>
+        </div>
+        <span>{model.actions.length} workstreams</span>
+      </header>
+      <div className={styles.optimizationList}>
+        {model.actions.map((action) => {
+          const workspace = model.workspaces.find((item) => item.id === action.workstreamId);
+          return (
+            <details key={action.id} className={styles.optimizationRow} open={action.priority === 1 ? true : undefined}>
+              <summary>
+                <span className={styles.actionPriority}>{String(action.priority).padStart(2, "0")}</span>
+                <span className={styles.actionHeading}>
+                  <small>{workspace?.shortLabel ?? action.workstreamId}</small>
+                  <strong>{action.title}</strong>
+                  <p>{action.currentCondition}</p>
+                </span>
+                <Icon name="chevron-down" size={15} />
+              </summary>
+              <div className={styles.actionDetail}>
+                <div>
+                  <span>Recommended change</span>
+                  <p>{action.recommendation}</p>
+                </div>
+                <div>
+                  <span>Decision to make</span>
+                  <p>{action.decision}</p>
+                </div>
+                <div>
+                  <span>Input required</span>
+                  <p>{action.requiredInput}</p>
+                </div>
+                {workspace ? (
+                  <Link className={styles.workspaceLink} href={{ pathname: workspace.route, query: { case: dashboard.id } }}>
+                    Open {workspace.shortLabel} workspace <Icon name="arrow-right" size={14} />
+                  </Link>
+                ) : null}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function KickoffStrip({ dashboard, model }: { dashboard: SupplyCaseDashboard; model: SupplyOptimizationModel }) {
+  return (
+    <section className={styles.kickoffStrip} aria-labelledby="kickoff-title">
+      <div>
+        <span className={styles.eyebrow}>Start the first pass</span>
+        <h2 id="kickoff-title">Three inputs unlock the highest-priority work.</h2>
+        <p>Derya can begin with incomplete data, then replace assumptions as supplier, order, and shipment evidence arrives.</p>
+      </div>
+      <ol>
+        {model.actions.slice(0, 3).map((action) => <li key={action.id}>{action.requiredInput}</li>)}
+      </ol>
+      <a className={styles.primaryButton} href={`mailto:mert@usederya.com?subject=${encodeURIComponent(`${dashboardName(dashboard)} optimization kickoff`)}`}>
+        Send the first file <Icon name="arrow-right" size={14} />
+      </a>
+    </section>
+  );
+}
+
+function CompanyEvidence({
   research,
+  model,
   dashboard,
 }: {
   research?: SupplyCompanyResearch;
+  model: SupplyOptimizationModel;
   dashboard: SupplyCaseDashboard;
 }) {
-  if (!research) {
-    return (
-      <aside className={styles.researchSummary}>
-        <header><span className={styles.eyebrow}>Customer input</span><h2>What we can map now</h2></header>
-        <div className={styles.researchFactList}>
-          <article><strong>{countLabel(dashboard.sourcingNeeds.length, "input")}</strong><span>Materials or components named</span></article>
-          <article><strong>{countLabel(dashboard.sourceRegions.length, "source region")}</strong><span>Origins named</span></article>
-          <article><strong>{countLabel(dashboard.destinations.length, "destination")}</strong><span>Delivery markets named</span></article>
-        </div>
-        <p>Official website research was not attached to this case. Confirm the company facts before using the map operationally.</p>
-      </aside>
-    );
-  }
-  const findings = research.findings.slice(0, 3);
-  const inputs = research.company.likelyInputs.slice(0, 5);
   return (
-    <aside className={styles.researchSummary}>
-      <header>
-        <span className={styles.eyebrow}>Public company picture</span>
-        <h2>What matters for the supply chain</h2>
-      </header>
-      <div className={styles.findingList}>
-        {findings.map((finding) => (
-          <article key={finding.title}>
-            <div><strong>{finding.title}</strong><span data-basis={finding.basis}>{finding.basis}</span></div>
-            <p>{finding.detail}</p>
-            <small>{finding.implication}</small>
-          </article>
-        ))}
-      </div>
-      {inputs.length ? (
-        <div className={styles.inputHypotheses}>
-          <span>Inputs to confirm</span>
-          <p>{inputs.map((item) => item.value).join(", ")}</p>
-        </div>
-      ) : null}
-      <details className={styles.researchEvidence}>
-        <summary>Company research and {countLabel(research.evidence.length, "source")}</summary>
+    <section className={styles.evidenceSection} aria-labelledby="evidence-title">
+      <header className={styles.sectionHeader}>
         <div>
-          <p>{research.company.description.value}</p>
-          {research.company.products.length ? <p><strong>Products:</strong> {research.company.products.map((item) => item.value).join(", ")}</p> : null}
-          {research.company.locations.length ? <p><strong>Locations:</strong> {research.company.locations.map((item) => `${item.value} (${item.role})`).join(", ")}</p> : null}
-          {research.company.customerMarkets.length ? <p><strong>Markets:</strong> {research.company.customerMarkets.map((item) => item.value).join(", ")}</p> : null}
-          <ul>
-            {research.evidence.map((source) => (
-              <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a><span>{source.sourceType === "official_website" ? "Official" : "Public"}</span></li>
-            ))}
-          </ul>
-          {research.warnings.length ? <p><strong>Confirm:</strong> {research.warnings.join(" ")}</p> : null}
+          <span className={styles.eyebrow}>Traceability</span>
+          <h2 id="evidence-title">Evidence and assumptions</h2>
         </div>
-      </details>
-    </aside>
-  );
-}
-
-function WorkstreamDetail({ workstream }: { workstream: SupplyWorkstream }) {
-  return (
-    <aside className={styles.workstreamDetail} id="supply-workstream-detail">
-      <header>
-        <span className={styles.eyebrow}>{workstream.stateLabel}</span>
-        <h2>{workstream.label}</h2>
-        <p>{workstream.outcome}</p>
+        <span>{research ? countLabel(research.evidence.length, "official source") : "Customer input only"}</span>
       </header>
-      <div>
-        <h3>How Derya runs it</h3>
-        <ol>
-          {workstream.steps.map((step) => <li key={step}>{step}</li>)}
-        </ol>
-      </div>
-      <footer>Human approval stays at supplier awards, spend, customs treatment, and booking commitments.</footer>
-    </aside>
-  );
-}
-
-function CustomsBoundary({ dashboard }: { dashboard: SupplyCaseDashboard }) {
-  const domesticCheck = dashboard.customsChecks.find((check) => check.id === "domestic-regulatory-review");
-  const unknownCheck = dashboard.customsChecks.find((check) => check.id === "customs-scope-confirmation");
-  const productCheck = dashboard.customsChecks.find((check) => /classification|machine|part-level/i.test(check.label));
-  if (domesticCheck) {
-    return (
-      <section className={styles.summaryPanel}>
-        <header className={styles.sectionHeader}><h2>Regulatory handoff</h2><span>Domestic movement</span></header>
-        <div className={styles.boundaryList}>
-          <article>
-            <span>Derya confirms</span>
-            <strong>Origin, destination, commodity transport rules, carrier requirements, and receiving constraints</strong>
-          </article>
-          <article>
-            <span>Customer approves</span>
-            <strong>Product handling, commercial terms, delivery requirements, and carrier commitment</strong>
-          </article>
-          <p>{domesticCheck.detail}</p>
-        </div>
-      </section>
-    );
-  }
-  if (unknownCheck) {
-    return (
-      <section className={styles.summaryPanel}>
-        <header className={styles.sectionHeader}><h2>Customs scope</h2><span>Location needed</span></header>
-        <div className={styles.boundaryList}>
-          <article>
-            <span>Derya confirms</span>
-            <strong>Exact supplier country, destination country, border or gateway, commodity, and transaction facts</strong>
-          </article>
-          <article>
-            <span>Then</span>
-            <strong>Engage a licensed broker only if the confirmed movement requires an import entry</strong>
-          </article>
-          <p>{unknownCheck.detail}</p>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <section className={styles.summaryPanel}>
-      <header className={styles.sectionHeader}><h2>Customs handoff</h2><span>Broker controlled</span></header>
-      <div className={styles.boundaryList}>
-        <article>
-          <span>Derya prepares</span>
-          <strong>Product facts, document checks, classification candidates, broker comparison, and release follow-up</strong>
-        </article>
-        <article>
-          <span>Licensed broker approves</span>
-          <strong>Destination classification, entry treatment, admissibility, and filing</strong>
-        </article>
-        {productCheck ? <p>{productCheck.detail}</p> : null}
+      <div className={styles.evidenceGrid}>
+        <details>
+          <summary>Company facts used in this model <Icon name="chevron-down" size={14} /></summary>
+          <div>
+            <p>{research?.company.description.value ?? dashboard.companyDescription}</p>
+            {research?.company.products.length ? <p><strong>Products:</strong> {research.company.products.map((item) => item.value).join(", ")}</p> : null}
+            {research?.company.locations.length ? <p><strong>Known locations:</strong> {research.company.locations.map((item) => `${item.value} (${item.role})`).join(", ")}</p> : null}
+            {research?.evidence.length ? (
+              <ul>
+                {research.evidence.map((source) => (
+                  <li key={source.url}>
+                    <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a>
+                    <span>Official</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p>No public research is attached. Add the official website to ground the company profile.</p>}
+          </div>
+        </details>
+        <details>
+          <summary>Likely customer profile <Icon name="chevron-down" size={14} /></summary>
+          <div>
+            <ul className={styles.plainList}>{model.customerSegments.map((segment) => <li key={segment}>{segment}</li>)}</ul>
+          </div>
+        </details>
+        <details>
+          <summary>Model assumptions <Icon name="chevron-down" size={14} /></summary>
+          <div>
+            <ul className={styles.plainList}>{model.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
+          </div>
+        </details>
       </div>
     </section>
-  );
-}
-
-function CommitChecks({ dashboard }: { dashboard: SupplyCaseDashboard }) {
-  const checks = [
-    ...dashboard.risks.slice(0, 2).map((risk) => ({ title: risk.title, detail: risk.check })),
-    {
-      title: "Live route and provider acceptance",
-      detail: "Tender the same scope, compare current capacity and total delivered cost, then confirm the operating provider before booking.",
-    },
-  ].slice(0, 3);
-  return (
-    <section className={styles.summaryPanel}>
-      <header className={styles.sectionHeader}><h2>Checks before we commit</h2><span>{checks.length} checks</span></header>
-      <div className={styles.riskList}>
-        {checks.map((check) => (
-          <article key={check.title}><strong>{check.title}</strong><p>{check.detail}</p></article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ExecutionDetail({ plan }: { plan: SupplyEngagementPlan }) {
-  return (
-    <details className={styles.executionDetail}>
-      <summary>
-        <span><strong>Execution detail</strong><small>Show the operational handoffs behind the simple plan</small></span>
-        <Icon name="chevron-down" size={14} />
-      </summary>
-      <div className={styles.executionFlows}>
-        {plan.executionSections.map((section) => (
-          <article key={section.id}>
-            <span className={styles.eyebrow}>{section.label}</span>
-            <h3>{section.summary}</h3>
-            <ol>{section.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-          </article>
-        ))}
-      </div>
-    </details>
-  );
-}
-
-type NetworkPoint = {
-  label: string;
-  coordinates: SupplyCoordinate;
-  kind: "source" | "production" | "destination";
-};
-
-function pointsForFlows(flows: readonly SupplyNetworkFlow[], dashboard: SupplyCaseDashboard): NetworkPoint[] {
-  const points = new Map<string, NetworkPoint>();
-  function add(label: string, coordinates: SupplyCoordinate | null, kind: NetworkPoint["kind"]) {
-    if (!coordinates) return;
-    const existing = points.get(label);
-    if (existing?.kind === "production") return;
-    points.set(label, { label, coordinates, kind });
-  }
-  for (const flow of flows) {
-    add(flow.from.label, flow.from.coordinates, flow.kind === "inbound" ? "source" : "production");
-    add(flow.to.label, flow.to.coordinates, flow.kind === "inbound" ? "production" : "destination");
-  }
-  const operatingSite = dashboard.routeNodes.find((node) => node.kind === "headquarters" && node.coordinates);
-  if (operatingSite?.coordinates) add(operatingSite.label, operatingSite.coordinates, "production");
-  return [...points.values()];
-}
-
-function SupplyNetworkMap({
-  dashboard,
-  plan,
-  selectedFlowId,
-  setSelectedFlowId,
-}: {
-  dashboard: SupplyCaseDashboard;
-  plan: SupplyEngagementPlan;
-  selectedFlowId: string;
-  setSelectedFlowId: (id: string) => void;
-}) {
-  const points = pointsForFlows(plan.flows, dashboard);
-  const selectedFlow = plan.flows.find((flow) => flow.id === selectedFlowId) ?? plan.flows[0] ?? null;
-  const operatingSite = points.find((point) => point.kind === "production") ?? null;
-  return (
-    <figure className={styles.mapPanel} aria-labelledby="supply-map-title">
-      <header className={styles.mapHeader}>
-        <h2 id="supply-map-title">Operating network</h2>
-        <span>{plan.flows.length ? "Components in, finished goods out" : "Verified site, lanes to confirm"}</span>
-      </header>
-      {plan.flows.length ? <div className={styles.flowSelector} aria-label="Supply chain flows">
-        {plan.flows.map((flow) => (
-          <button
-            key={flow.id}
-            type="button"
-            data-active={flow.id === selectedFlow?.id}
-            aria-pressed={flow.id === selectedFlow?.id}
-            onClick={() => setSelectedFlowId(flow.id)}
-          >
-            <span>{flow.kind}</span>
-            <strong>{flow.from.label} to {flow.to.label}</strong>
-          </button>
-        ))}
-      </div> : null}
-      <div className={styles.mapCanvas}>
-        <svg className={styles.mapSvg} viewBox={WORLD_MAP_VIEWBOX} role="img" aria-labelledby="supply-map-svg-title">
-          <title id="supply-map-svg-title">Inbound and outbound supply network for {dashboardName(dashboard)}</title>
-          <rect width="1000" height="500" className={styles.mapOcean} />
-          <g className={styles.mapGrid}>
-            {[125, 250, 375].map((y) => <path key={`lat-${y}`} d={`M 0 ${y} H 1000`} />)}
-            {[200, 400, 600, 800].map((x) => <path key={`lng-${x}`} d={`M ${x} 0 V 500`} />)}
-          </g>
-          <g className={styles.mapLand}>{WORLD_MAP_LAND_PATHS.map((path, index) => <path key={`land-${index}`} d={path} />)}</g>
-          <g className={styles.routePaths}>
-            {plan.flows.map((flow) => {
-              const path = routePath(flow.from.coordinates, flow.to.coordinates);
-              return path ? <path key={flow.id} d={path} data-active={flow.id === selectedFlow?.id} /> : null;
-            })}
-          </g>
-          <g>
-            {points.map((point) => {
-              const position = project(point.coordinates);
-              if (!position) return null;
-              return (
-                <g key={point.label} className={styles.mapNode} data-kind={point.kind}>
-                  <circle cx={position.x} cy={position.y} r={point.kind === "production" ? 7 : 5} />
-                  <text x={position.x + 10} y={position.y - 8}>{point.label}</text>
-                </g>
-              );
-            })}
-          </g>
-        </svg>
-        {selectedFlow ? (
-          <div className={styles.nodeInspector} aria-live="polite">
-            <span>{selectedFlow.label}</span>
-            <strong>{selectedFlow.from.label} to {selectedFlow.to.label}</strong>
-            <p>{selectedFlow.detail}</p>
-          </div>
-        ) : operatingSite ? (
-          <div className={styles.nodeInspector} aria-live="polite">
-            <span>Verified operating site</span>
-            <strong>{operatingSite.label}</strong>
-            <p>Add a supplier location or customer destination to map the first real lane.</p>
-          </div>
-        ) : null}
-      </div>
-      <figcaption>Verified sites are shown now. Routes appear only after supplier or delivery locations are known.</figcaption>
-    </figure>
   );
 }

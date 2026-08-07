@@ -17,6 +17,7 @@
     "test:supply-os-company-research": "tsx scripts/supply-os-company-research.test.ts",
     "test:supply-os-research-progress": "tsx scripts/supply-os-research-progress.test.ts",
     "test:supply-os-engagement-plan": "tsx scripts/supply-os-engagement-plan.test.ts",
+    "test:supply-os-optimization-engine": "tsx scripts/supply-os-optimization-engine.test.ts",
     "test:supply-os-operating-plan": "tsx scripts/supply-os-operating-plan.test.ts",
     "test:memory": "tsx scripts/memory-write-smoke.test.ts",
     "test:memory-search": "tsx scripts/memory-search.test.ts",

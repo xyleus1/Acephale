@@ -3530,3 +3530,41 @@ Use this file for chronological implementation notes that future agents should s
 - Caveat: public domain discovery is a bounded heuristic, not a company master
   data service. The user can provide the official website when a name is
   ambiguous.
+
+### 2026-08-07 - Build the Supply OS company optimization engine
+
+- Branch: `feat/supply-os-optimization-engine`, targeting `main`
+- Product: Replaced the passive customer dashboard with a supplier-to-customer
+  network, selected-node dossier, ranked action queue, kickoff inputs, and
+  collapsed evidence section.
+- Design: Removed the corner logo tile, tab underlines, decorative effects, and
+  mixed highlight colors. Added a light neutral system with one operational
+  navy accent, flatter rows, deliberate dividers, and responsive map layouts.
+- Inference: Added deterministic profiles for metals, robotics, additive
+  manufacturing, aerospace, medical devices, chemicals, automotive, and
+  industrial hardware. Each profile supplies plausible source markets,
+  customer markets, cargo, movement modes, confirmation steps, and five
+  workstream actions.
+- NOX: Added capability-matched upstream candidates for aerospace plate mills,
+  Great Lakes buffer stock, and Southern Ontario alternates, plus regional and
+  national buyer profiles. Every candidate remains labeled as inferred and not
+  a known relationship.
+- Navigation: Added authenticated routes for procurement, supplier contact,
+  shipment planning, customs, and fulfillment or 3PL. Routes carry the
+  browser-local case identifier and contain no execution side effects.
+- Research: Added bounded visible-address extraction for relevant official
+  pages and protected the parser from treating an alloy number as the street
+  number.
+- Tests: Added `test:supply-os-optimization-engine`, rewrote the prototype and
+  enterprise-design assertions for the new product shape, and extended company
+  research coverage for visible addresses.
+- Review fixes: Preserved third-party public evidence as a separate provenance
+  class, kept all non-customer-confirmed movements inferred, and made the
+  original customer prompt authoritative for profile selection. Added profile
+  coverage for every deterministic industry branch.
+- Verification: Nine Supply OS suites, TypeScript, scoped lint, the optimized
+  production build, and authenticated desktop, tablet, and mobile browser QA
+  passed. Full-repository lint still reports the pre-existing unrelated lint
+  backlog.
+- Safety: No schema, dependency, secret, environment, supplier, booking,
+  customs filing, message, or spend mutation was introduced.

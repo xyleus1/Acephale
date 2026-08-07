@@ -1590,3 +1590,40 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: office-scoped asynchronous research can persist partial results
   across requests, or a connected company-data provider can resolve ambiguous
   legal entities without weakening provenance.
+
+### 2026-08-07 - Supply OS leads with an inferred network and ranked changes
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: The previous customer page exposed broad planning categories and a
+  route map, but it did not make a useful best-effort model of the customer's
+  supplier network, processing site, buyer profile, or first operational
+  improvement. Generic cards also made the product look assembled rather than
+  designed around a supply-chain decision.
+- Decision: Build a deterministic company-profile model that maps supplier
+  clusters, the operating site, customer clusters, likely cargo, movement
+  modes, confidence, and the next fact to confirm. Keep official evidence,
+  third-party public evidence, customer input, and inference as separate basis
+  values. Endpoint evidence does not prove a shipment; a movement is
+  customer-stated only when its endpoints came directly from customer input.
+  Lead the page with an interactive network and a ranked action queue. Each
+  action must state the current condition, recommended change, required
+  customer decision, required input, and the linked procurement,
+  supplier-contact, shipment, customs, or fulfillment workstream. Candidate
+  organizations may appear only as qualification targets with a direct
+  capability source and an explicit note that they are not known
+  relationships.
+- Rationale: An early customer demo needs to be immediately useful before ERP,
+  procurement, shipment, and broker systems are connected. A structured
+  hypothesis plus a concrete validation path creates value without pretending
+  to possess operational truth.
+- Consequences: The NOX Metals profile includes domestic aerospace plate mills,
+  Great Lakes buffer stock, a Southern Ontario alternate, a known operating
+  site, and regional plus national buyer profiles. The interface can link into
+  five reserved workstream routes, but those routes do not send messages, award
+  suppliers, book freight, file customs, or commit spend. Visible official-site
+  addresses are considered alongside structured metadata so stale or missing
+  JSON-LD does not silently suppress the current address.
+- Revisit when: connected office-scoped purchase orders, suppliers, customer
+  orders, shipments, and broker records can replace inferred nodes with
+  observed relationships and measured lane performance.
