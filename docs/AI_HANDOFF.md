@@ -8,6 +8,59 @@
 
 ## Branch
 
+feat/supply-os-full-network-demo, targeting main
+
+## Task implemented
+
+### Render the full multimodal chain and provide a complete AON3D demo
+
+- Every commercial lane now contains separate pickup, main-carriage, customs,
+  and final-delivery legs instead of one supplier-to-destination curve.
+- Road, ocean, air, and customs legs have distinct maintained Lucide symbols,
+  directional route lines, wide click targets, and labeled gateway markers.
+- Ocean and air planning adds explicit origin gateway, receiving gateway,
+  customs-release, and final-mile points. Cross-border truck planning splits
+  at the customs handoff.
+- Clicking any visible segment or gateway opens the parent transport dossier.
+  The dossier flow chart now follows every handoff rather than showing only
+  origin, a compound mode string, and destination.
+- The new-customer page includes a one-click `Open full AON3D demo` action. It
+  creates a Montreal production case with Shenzhen and Ontario sourcing plus
+  Detroit and Germany deliveries, exercising procurement, truck, ship, plane,
+  customs, and final-mile planning in one saved dashboard.
+- Added deterministic Montreal and Ontario geographic resolution so the demo
+  works without a research API response.
+- Ocean comparisons now include Maersk, MSC, CMA CGM, Kuehne+Nagel, DHL, and
+  relevant endpoint or customs candidates. Air comparisons add Kuehne+Nagel
+  and DSV alongside DHL. Every entry links to an official service source and
+  remains unawarded until a live quote is returned.
+
+## Verification passed
+
+- All ten Supply OS regression suites
+- `npx tsc --noEmit --incremental false`
+- `npm run build` with the local test database configuration
+- Regression coverage confirms the AON3D demo has two supplier clusters, two
+  customer clusters, four commercial lanes, at least ten operating legs, and
+  road, ocean, air, and customs modes
+
+## Caveats
+
+- Gateway choices, paths, and handoffs are inferred planning records, not
+  observed shipments, booked terminals, live schedules, broker acceptance, or
+  turn-by-turn road routing.
+- The in-app browser-control runtime was unavailable in this session, so visual
+  interaction was not rechecked through that surface. Static interaction tests,
+  TypeScript, and the production build passed.
+
+## Prior Update
+
+## Date
+
+2026-08-07
+
+## Branch
+
 feat/supply-os-marine-routes, targeting main
 
 ## Task implemented

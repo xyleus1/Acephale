@@ -90,6 +90,21 @@ export type SupplyCommandRoute = {
   confidence: SupplyOptimizationConfidence;
   priority: SupplyCommandPriority | null;
   rateEstimate: SupplyCommandRateEstimate | null;
+  segments: SupplyCommandRouteSegment[];
+};
+
+export type SupplyCommandTransportMode = "road" | "ocean" | "air" | "customs";
+
+export type SupplyCommandRouteSegment = {
+  id: string;
+  sequence: number;
+  mode: SupplyCommandTransportMode;
+  label: string;
+  from: SupplyCoordinate;
+  to: SupplyCoordinate;
+  fromLabel: string;
+  toLabel: string;
+  status: "inferred";
 };
 
 export type SupplyCommandMap = {
@@ -104,6 +119,51 @@ const DHL_GLOBAL_FORWARDING: SupplyCommandContact = {
   fit: "Air, ocean, road, customs coordination, and shipment visibility for international lanes.",
   url: "https://www.dhl.com/us-en/home/global-forwarding.html",
   sourceLabel: "Official service page",
+};
+
+const MAERSK_OCEAN: SupplyCommandContact = {
+  id: "maersk-ocean",
+  name: "Maersk",
+  role: "Ocean carrier",
+  fit: "Compare FCL, LCL, contract, and spot ocean options for planned production replenishment.",
+  url: "https://www.maersk.com/transportation-services/ocean-transport",
+  sourceLabel: "Official ocean-service page",
+};
+
+const MSC_OCEAN: SupplyCommandContact = {
+  id: "msc-ocean",
+  name: "MSC",
+  role: "Ocean carrier",
+  fit: "Compare dry-container capacity, equipment fit, sailing schedule, and inland handoff scope.",
+  url: "https://www.msc.com/en/solutions/dry-cargo",
+  sourceLabel: "Official dry-cargo page",
+};
+
+const CMA_CGM_OCEAN: SupplyCommandContact = {
+  id: "cma-cgm-ocean",
+  name: "CMA CGM",
+  role: "Ocean carrier",
+  fit: "Compare port-to-port service plus container and special-cargo equipment for industrial machinery and components.",
+  url: "https://www.cma-cgm.com/offers/maritime-solutions",
+  sourceLabel: "Official maritime-service page",
+};
+
+const KUEHNE_NAGEL: SupplyCommandContact = {
+  id: "kuehne-nagel",
+  name: "Kuehne+Nagel",
+  role: "Air and ocean forwarder",
+  fit: "Compare consolidated ocean, air, and sea-air options with one door-to-door operating scope.",
+  url: "https://home.kuehne-nagel.com/en/-/services/sea-freight",
+  sourceLabel: "Official sea-freight page",
+};
+
+const DSV_AIR: SupplyCommandContact = {
+  id: "dsv-air",
+  name: "DSV",
+  role: "Air freight forwarder",
+  fit: "Compare consolidation, direct, time-critical, and charter options for urgent production parts and service inventory.",
+  url: "https://www.dsv.com/en-gb/our-solutions/modes-of-transport/air-freight",
+  sourceLabel: "Official air-freight page",
 };
 
 const UBER_FREIGHT: SupplyCommandContact = {
@@ -503,6 +563,147 @@ function midpoint(from: SupplyCoordinate, to: SupplyCoordinate): SupplyCoordinat
   };
 }
 
+type PlanningGateway = {
+  label: string;
+  coordinates: SupplyCoordinate;
+};
+
+function originGatewayFor(node: SupplyOptimizationNode, mode: "ocean" | "air"): PlanningGateway {
+  const country = countryFor(node.location);
+  const value = node.location.toLowerCase();
+  if (country === "CN" && mode === "ocean") {
+    return /taiwan/.test(value)
+      ? { label: "Port of Kaohsiung, confirm terminal", coordinates: { latitude: 22.6163, longitude: 120.2923 } }
+      : { label: "Yantian Port, confirm terminal", coordinates: { latitude: 22.576, longitude: 114.272 } };
+  }
+  if (country === "CN") {
+    return /taiwan/.test(value)
+      ? { label: "Taiwan Taoyuan Airport, confirm handling", coordinates: { latitude: 25.0797, longitude: 121.2342 } }
+      : { label: "Shenzhen Bao'an Airport, confirm handling", coordinates: { latitude: 22.6393, longitude: 113.8107 } };
+  }
+  if (country === "CA") {
+    return mode === "ocean"
+      ? { label: "Port of Montreal, confirm terminal", coordinates: { latitude: 45.56, longitude: -73.52 } }
+      : { label: "Montreal Trudeau Airport, confirm handling", coordinates: { latitude: 45.4706, longitude: -73.7408 } };
+  }
+  if (country === "US") {
+    if (/los angeles|california/.test(value)) {
+      return mode === "ocean"
+        ? { label: "Port of Los Angeles, confirm terminal", coordinates: { latitude: 33.7405, longitude: -118.271 } }
+        : { label: "Los Angeles International Airport", coordinates: { latitude: 33.9416, longitude: -118.4085 } };
+    }
+    return mode === "ocean"
+      ? { label: "U.S. export port to confirm", coordinates: node.coordinates! }
+      : { label: "U.S. cargo airport to confirm", coordinates: node.coordinates! };
+  }
+  if (country === "EU") {
+    return mode === "ocean"
+      ? { label: "Port of Hamburg, confirm terminal", coordinates: { latitude: 53.5461, longitude: 9.9661 } }
+      : { label: "Frankfurt Airport, confirm handling", coordinates: { latitude: 50.0379, longitude: 8.5622 } };
+  }
+  return { label: `${mode === "ocean" ? "Origin port" : "Origin airport"} to confirm`, coordinates: node.coordinates! };
+}
+
+function receivingGatewayFor(node: SupplyOptimizationNode, mode: "ocean" | "air"): PlanningGateway {
+  const country = countryFor(node.location);
+  const value = node.location.toLowerCase();
+  if (country === "CA") {
+    return mode === "ocean"
+      ? { label: "Port of Montreal, confirm terminal", coordinates: { latitude: 45.56, longitude: -73.52 } }
+      : { label: "Montreal Trudeau Airport, confirm handling", coordinates: { latitude: 45.4706, longitude: -73.7408 } };
+  }
+  if (country === "US") {
+    if (/detroit|michigan|great lakes|midwest/.test(value)) {
+      return mode === "ocean"
+        ? { label: "Port of Detroit, confirm terminal", coordinates: { latitude: 42.318, longitude: -83.071 } }
+        : { label: "Detroit Metro Airport, confirm handling", coordinates: { latitude: 42.2162, longitude: -83.3554 } };
+    }
+    return mode === "ocean"
+      ? { label: "U.S. receiving port to confirm", coordinates: node.coordinates! }
+      : { label: "U.S. cargo airport to confirm", coordinates: node.coordinates! };
+  }
+  if (country === "EU") {
+    return mode === "ocean"
+      ? { label: "Port of Hamburg, confirm terminal", coordinates: { latitude: 53.5461, longitude: 9.9661 } }
+      : { label: "Frankfurt Airport, confirm handling", coordinates: { latitude: 50.0379, longitude: 8.5622 } };
+  }
+  return { label: `${mode === "ocean" ? "Receiving port" : "Receiving airport"} to confirm`, coordinates: node.coordinates! };
+}
+
+function customsPoint(gateway: PlanningGateway, destination: SupplyCoordinate): PlanningGateway {
+  const longitudeDirection = destination.longitude >= gateway.coordinates.longitude ? 1 : -1;
+  return {
+    label: "Customs release, broker to confirm",
+    coordinates: {
+      latitude: gateway.coordinates.latitude + 0.12,
+      longitude: gateway.coordinates.longitude + 0.16 * longitudeDirection,
+    },
+  };
+}
+
+function routeSegmentsFor(
+  edge: SupplyOptimizationEdge,
+  from: SupplyOptimizationNode,
+  to: SupplyOptimizationNode,
+): SupplyCommandRouteSegment[] {
+  const mode = edge.mode.toLowerCase();
+  const international = isCrossBorder(from, to);
+  const primaryMode: "ocean" | "air" | "road" = /ocean/.test(mode)
+    ? "ocean"
+    : /air/.test(mode) && international
+      ? "air"
+      : "road";
+
+  if (primaryMode === "road") {
+    const profile = international ? customsProfile(from, to, midpoint(from.coordinates!, to.coordinates!)) : null;
+    if (!profile) {
+      return [{
+        id: `${edge.id}:road`,
+        sequence: 1,
+        mode: "road",
+        label: edge.stage === "inbound" ? "Supplier pickup and linehaul" : "Customer delivery",
+        from: from.coordinates!,
+        to: to.coordinates!,
+        fromLabel: from.label,
+        toLabel: to.label,
+        status: "inferred",
+      }];
+    }
+    return [
+      {
+        id: `${edge.id}:road-origin`, sequence: 1, mode: "road", label: "Cross-border linehaul",
+        from: from.coordinates!, to: profile.coordinates, fromLabel: from.label, toLabel: profile.label, status: "inferred",
+      },
+      {
+        id: `${edge.id}:road-destination`, sequence: 2, mode: "road", label: "Released delivery",
+        from: profile.coordinates, to: to.coordinates!, fromLabel: profile.label, toLabel: to.label, status: "inferred",
+      },
+    ];
+  }
+
+  const originGateway = originGatewayFor(from, primaryMode);
+  const receivingGateway = receivingGatewayFor(to, primaryMode);
+  const clearance = customsPoint(receivingGateway, to.coordinates!);
+  return [
+    {
+      id: `${edge.id}:pickup`, sequence: 1, mode: "road", label: "Supplier pickup",
+      from: from.coordinates!, to: originGateway.coordinates, fromLabel: from.label, toLabel: originGateway.label, status: "inferred",
+    },
+    {
+      id: `${edge.id}:main`, sequence: 2, mode: primaryMode, label: primaryMode === "ocean" ? "Ocean main carriage" : "Air main carriage",
+      from: originGateway.coordinates, to: receivingGateway.coordinates, fromLabel: originGateway.label, toLabel: receivingGateway.label, status: "inferred",
+    },
+    {
+      id: `${edge.id}:customs`, sequence: 3, mode: "customs", label: "Customs release",
+      from: receivingGateway.coordinates, to: clearance.coordinates, fromLabel: receivingGateway.label, toLabel: clearance.label, status: "inferred",
+    },
+    {
+      id: `${edge.id}:delivery`, sequence: 4, mode: "road", label: "Final-mile delivery",
+      from: clearance.coordinates, to: to.coordinates!, fromLabel: clearance.label, toLabel: to.label, status: "inferred",
+    },
+  ];
+}
+
 function movementContacts(
   edge: SupplyOptimizationEdge,
   from: SupplyOptimizationNode,
@@ -512,6 +713,16 @@ function movementContacts(
   const contacts: SupplyCommandContact[] = regionalContactsForLane(from, to);
   const crossBorder = isCrossBorder(from, to);
   if (/air|ocean|international|cross-border/.test(mode) || crossBorder) addContact(contacts, DHL_GLOBAL_FORWARDING);
+  if (/ocean/.test(mode)) {
+    addContact(contacts, MAERSK_OCEAN);
+    addContact(contacts, MSC_OCEAN);
+    addContact(contacts, CMA_CGM_OCEAN);
+    addContact(contacts, KUEHNE_NAGEL);
+  }
+  if (/air/.test(mode)) {
+    addContact(contacts, KUEHNE_NAGEL);
+    addContact(contacts, DSV_AIR);
+  }
   if (/truck|ltl|flatbed|road|courier/.test(mode) || !contacts.length) addContact(contacts, UBER_FREIGHT);
   if (/truck|ltl|flatbed|road|courier/.test(mode)) {
     addContact(contacts, SCHNEIDER_FREIGHT);
@@ -628,6 +839,7 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
       confidence: edge.confidence,
       priority: routePriority,
       rateEstimate,
+      segments: routeSegmentsFor(edge, from, to),
     });
 
     objects.push({

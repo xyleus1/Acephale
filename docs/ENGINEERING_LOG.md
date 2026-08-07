@@ -17,6 +17,27 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-07 - Expand Supply OS lanes into multimodal legs
+
+- Branch: feat/supply-os-full-network-demo, targeting main
+- Commit: see git log
+- Task: Replace single compound route curves with explicit pickup, ocean or
+  air, customs, and final-mile planning legs, and add a complete one-click
+  AON3D reference dashboard. Expand ocean and air comparisons with official
+  carrier and forwarder candidates.
+- Files changed: Supply OS case geography, command-map domain model, map
+  renderer, dashboard lane flow, generator example, scoped styles, command-map
+  regression coverage, decisions, engineering log, and handoff.
+- Verification: all ten Supply OS regression suites, TypeScript, production
+  build, diff whitespace, and changed-file U+2014 checks pass.
+- Failed/skipped checks: in-app browser control was unavailable in this session,
+  so visual click-through was not rechecked there.
+- Caveats: gateway and route segments are inferred planning hypotheses. No live
+  route, schedule, booking, capacity, filing, broker acceptance, or rate is
+  claimed.
+- Follow-up: replace inferred legs one by one as shipment, schedule, provider,
+  terminal, broker, and route-engine integrations become available.
+
 ### 2026-08-06 - Add movement-scoped customs and execution planning
 
 - Branch: crm-status-structure, targeting main

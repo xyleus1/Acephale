@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { generateSupplyCase } from "../src/lib/supply-os-case-model";
 import { buildSupplyCommandMap } from "../src/lib/supply-os-command-map";
-import type { SupplyOptimizationModel } from "../src/lib/supply-os-optimization-engine";
+import {
+  buildSupplyOptimizationModel,
+  type SupplyOptimizationModel,
+} from "../src/lib/supply-os-optimization-engine";
 
 const dashboard = generateSupplyCase(
   "A metals processor in Ferndale, Michigan buys certified aluminum plate from Southern Ontario and sells cut material to Detroit manufacturers.",
@@ -270,6 +273,14 @@ const chinaOceanModel: SupplyOptimizationModel = {
   }],
 };
 const chinaOceanMap = buildSupplyCommandMap(chinaOceanModel, dashboard);
+assert.deepEqual(chinaOceanMap.routes[0]?.segments.map((segment) => segment.mode), [
+  "road",
+  "ocean",
+  "customs",
+  "road",
+]);
+assert.match(chinaOceanMap.routes[0]?.segments[1]?.fromLabel ?? "", /Yantian Port/);
+assert.match(chinaOceanMap.routes[0]?.segments[2]?.toLabel ?? "", /Customs release/);
 assert.equal(chinaOceanMap.objects.find((object) => object.id === "node:supplier-shenzhen")?.statusLabel, "Public evidence");
 const losAngelesDistribution = chinaOceanMap.objects.find((object) => object.id === "node:distribution-los-angeles");
 assert.equal(losAngelesDistribution?.kind, "distribution");
@@ -285,7 +296,16 @@ assert.equal(
 );
 assert.deepEqual(
   chinaOceanMap.objects.find((object) => object.kind === "movement")?.contacts.map((contact) => contact.name),
-  ["Port X Logistics", "Dependable Supply Chain Services", "DHL Global Forwarding", "Expeditors"],
+  [
+    "Port X Logistics",
+    "Dependable Supply Chain Services",
+    "DHL Global Forwarding",
+    "Maersk",
+    "MSC",
+    "CMA CGM",
+    "Kuehne+Nagel",
+    "Expeditors",
+  ],
   "an ocean movement must not include domestic truck capacity or a Canada-only broker",
 );
 
@@ -311,6 +331,12 @@ const ukUsModel: SupplyOptimizationModel = {
   }],
 };
 const ukUsMap = buildSupplyCommandMap(ukUsModel, dashboard);
+assert.deepEqual(ukUsMap.routes[0]?.segments.map((segment) => segment.mode), [
+  "road",
+  "air",
+  "customs",
+  "road",
+]);
 assert.equal(ukUsMap.objects.find((object) => object.kind === "customs")?.label, "International customs handoff");
 assert.deepEqual(
   ukUsMap.objects.find((object) => object.kind === "customs")?.contacts.map((contact) => contact.name),
@@ -356,5 +382,25 @@ assert.equal(phoenixMovement?.contacts[1]?.phone, "(602) 242-1800");
 assert.match(phoenixMovement?.contacts[1]?.location ?? "", /Phoenix/);
 assert.equal(phoenixMovement?.contacts.some((contact) => contact.name === "ArcBest"), true);
 assert.equal(phoenixMap.routes[0]?.rateEstimate?.sourceLabel, "2026 ATRI operating-cost benchmark");
+assert.deepEqual(phoenixMap.routes[0]?.segments.map((segment) => segment.mode), ["road"]);
+
+const aon3dDemo = generateSupplyCase([
+  "Company: AON3D",
+  "Located: Montreal, Quebec, Canada",
+  "Production: Montreal, Quebec, Canada",
+  "Needs: motion controls, industrial electronics, heaters, fabricated frames, machined parts, and service inventory",
+  "Sources: Shenzhen, China and Southern Ontario",
+  "Ships to: Detroit, Michigan and Germany",
+  "AON3D builds industrial 3D printers and material systems.",
+].join("\n"), new Date("2026-08-07T12:00:00.000Z"));
+const aon3dModel = buildSupplyOptimizationModel(aon3dDemo);
+const aon3dMap = buildSupplyCommandMap(aon3dModel, aon3dDemo);
+const aon3dSegmentModes = new Set(aon3dMap.routes.flatMap((route) => route.segments.map((segment) => segment.mode)));
+assert.equal(aon3dDemo.companyName, "AON3D");
+assert.equal(aon3dModel.nodes.filter((node) => node.kind === "supplier_cluster").length, 2);
+assert.equal(aon3dModel.nodes.filter((node) => node.kind === "customer_cluster").length, 2);
+assert.equal(aon3dMap.routes.length, 4);
+assert.deepEqual([...aon3dSegmentModes].sort(), ["air", "customs", "ocean", "road"]);
+assert.equal(aon3dMap.routes.flatMap((route) => route.segments).length >= 10, true);
 
 console.log("Supply OS command map checks passed");

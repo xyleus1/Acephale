@@ -16,6 +16,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-07 - Supply OS lanes expand into multimodal operating legs
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A continuous curve between a supplier and factory still hid the
+  actual operating chain. Pickup, port or airport handoff, main carriage,
+  customs release, and final delivery were stored only as words inside one
+  compound mode label, so the map could not render or select them.
+- Decision: Keep the commercial lane as the parent record, but deterministically
+  expand it into separately rendered road, ocean, air, customs, and final-mile
+  planning legs. Show maintained Lucide transport symbols and labeled gateway
+  markers on the MapLibre surface. A click on any leg continues to open the
+  parent lane dossier. Keep every generated gateway and route explicitly
+  inferred until shipment records or live provider responses confirm it.
+- Rationale: The customer needs to see the physical handoffs immediately while
+  Derya still needs one lane record for quoting, ownership, and approval.
+- Consequences: Route geometry and gateways are planning hypotheses. They do
+  not claim an observed truck path, booked terminal, vessel movement, flight,
+  broker acceptance, capacity, or price.
+- Revisit when: A routing engine, shipment feed, terminal API, airline or ocean
+  schedule, and broker integration can replace individual inferred legs with
+  current records.
+
 ### 2026-08-07 - Supply OS route corridors are continuous, directional, and directly selectable
 
 - Status: accepted

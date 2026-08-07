@@ -2125,6 +2125,15 @@
   opacity: 0.84;
 }
 
+.routeGeometry[data-mode="air"] .routeGeometryLine {
+  stroke-dasharray: 10 7;
+}
+
+.routeGeometry[data-mode="customs"] .routeGeometryLine {
+  stroke-width: 3px;
+  stroke-dasharray: 3 5;
+}
+
 .routeGeometry[data-active="true"] .routeGeometryLine,
 .routeGeometry[data-hovered="true"] .routeGeometryLine {
   stroke-width: 6px;
@@ -2158,6 +2167,67 @@
 .routeDirectionMarker[data-active="true"],
 .routeDirectionMarker[data-hovered="true"] {
   opacity: 1;
+}
+
+.routeDirectionMarker[data-mode="air"],
+.routeDirectionMarker[data-mode="ocean"] {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+.routeDirectionMarker[data-mode="customs"] {
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--ink);
+}
+
+.routeGatewayMarker {
+  width: 26px;
+  height: 26px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--navy);
+  border-radius: 3px;
+  color: var(--navy);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.routeGatewayMarker > span {
+  width: max-content;
+  max-width: 180px;
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  padding: 3px 5px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  font-weight: 600;
+  line-height: 1.25;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.routeGatewayMarker[data-mode="customs"] {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.routeGatewayMarker[data-active="true"] {
+  color: var(--panel);
+  background: var(--ink);
+}
+
+.routeGatewayMarker:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
 }
 
 .commandMap :global(.maplibregl-marker) {
@@ -2791,6 +2861,10 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   border-top: 1px solid var(--line);
   background: var(--panel);
+}
+
+.routeFlowLabels {
+  grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
 }
 
 .routeFlowLabels span {

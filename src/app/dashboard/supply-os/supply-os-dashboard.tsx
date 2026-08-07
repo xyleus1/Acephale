@@ -154,16 +154,10 @@ function formatCurrency(value: number) {
 }
 
 function RouteFlowChart({ route }: { route: SupplyCommandRoute }) {
+  const flowNodes = [route.segments[0]?.fromLabel ?? route.fromLabel, ...route.segments.map((segment) => segment.toLabel)];
   const data = {
-    nodes: [
-      { name: route.fromLabel },
-      { name: route.mode },
-      { name: route.toLabel },
-    ],
-    links: [
-      { source: 0, target: 1, value: 1 },
-      { source: 1, target: 2, value: 1 },
-    ],
+    nodes: flowNodes.map((name) => ({ name })),
+    links: flowNodes.slice(1).map((_, index) => ({ source: index, target: index + 1, value: 1 })),
   };
   return (
     <div className={styles.routeFlowPanel} aria-label={`${route.fromLabel} to ${route.toLabel} transport flow`}>
@@ -182,9 +176,9 @@ function RouteFlowChart({ route }: { route: SupplyCommandRoute }) {
         </ResponsiveContainer>
       </div>
       <div className={styles.routeFlowLabels} aria-hidden="true">
-        <span><small>Origin</small><strong>{route.fromLabel}</strong></span>
-        <span><small>Mode</small><strong>{route.mode}</strong></span>
-        <span><small>Destination</small><strong>{route.toLabel}</strong></span>
+        {route.segments.map((segment) => (
+          <span key={segment.id}><small>{segment.label}</small><strong>{segment.mode}</strong></span>
+        ))}
       </div>
     </div>
   );

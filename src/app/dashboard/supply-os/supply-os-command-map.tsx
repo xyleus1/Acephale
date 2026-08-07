@@ -15,7 +15,6 @@ import {
 import type { StyleSpecification } from "maplibre-gl";
 import {
   Boxes,
-  ChevronRight,
   Factory,
   LocateFixed,
   MapPin,
@@ -31,6 +30,7 @@ import type {
   SupplyCommandMap,
   SupplyCommandObject,
   SupplyCommandObjectKind,
+  SupplyCommandRouteSegment,
 } from "@/lib/supply-os-command-map";
 import styles from "./supply-os-workspace.module.css";
 
@@ -78,6 +78,7 @@ const ROUTE_HIT_LAYER_ID = "supply-route-hit";
 
 type RoutePath = {
   route: SupplyCommandMap["routes"][number];
+  segment: SupplyCommandRouteSegment;
   coordinates: Array<[number, number]>;
   directionPoints: Array<{ longitude: number; latitude: number; angle: number }>;
 };
@@ -95,13 +96,17 @@ function quadraticPoint(
   ];
 }
 
-function buildRoutePath(route: SupplyCommandMap["routes"][number], index: number): RoutePath {
-  const from: [number, number] = [route.from.longitude, route.from.latitude];
-  const to: [number, number] = [route.to.longitude, route.to.latitude];
+function buildRoutePath(
+  route: SupplyCommandMap["routes"][number],
+  segment: SupplyCommandRouteSegment,
+  index: number,
+): RoutePath {
+  const from: [number, number] = [segment.from.longitude, segment.from.latitude];
+  const to: [number, number] = [segment.to.longitude, segment.to.latitude];
   const deltaLongitude = to[0] - from[0];
   const deltaLatitude = to[1] - from[1];
   const span = Math.max(0.01, Math.hypot(deltaLongitude, deltaLatitude));
-  const bend = Math.min(10, Math.max(0.55, span * 0.085));
+  const bend = span < 1 ? span * 0.22 : Math.min(10, Math.max(0.35, span * 0.085));
   const northward = deltaLongitude >= 0 ? 1 : -1;
   const routeSeparation = index % 2 === 0 ? 1 : 0.82;
   const control: [number, number] = [
@@ -111,16 +116,23 @@ function buildRoutePath(route: SupplyCommandMap["routes"][number], index: number
   const coordinates = Array.from({ length: 33 }, (_, pointIndex) => (
     quadraticPoint(from, control, to, pointIndex / 32)
   ));
-  const directionPoints = [0.28, 0.5, 0.72].map((t) => {
+  const directionPoints = (segment.mode === "customs" ? [0.5] : [0.34, 0.66]).map((t) => {
     const point = quadraticPoint(from, control, to, t);
     const next = quadraticPoint(from, control, to, Math.min(1, t + 0.015));
     return {
       longitude: point[0],
       latitude: point[1],
-      angle: Math.atan2(-(next[1] - point[1]), next[0] - point[0]) * 180 / Math.PI,
+      angle: segment.mode === "customs" ? 0 : Math.atan2(-(next[1] - point[1]), next[0] - point[0]) * 180 / Math.PI,
     };
   });
-  return { route, coordinates, directionPoints };
+  return { route, segment, coordinates, directionPoints };
+}
+
+function segmentIcon(segment: SupplyCommandRouteSegment): LucideIcon {
+  if (segment.mode === "ocean") return Ship;
+  if (segment.mode === "air") return Plane;
+  if (segment.mode === "customs") return ShieldAlert;
+  return Truck;
 }
 
 function objectIcon(object: SupplyCommandObject): LucideIcon {
@@ -209,18 +221,22 @@ export function SupplyOsCommandMap({
   const [mapCapability, setMapCapability] = useState<"checking" | "ready" | "unavailable">("checking");
   const basemap = BASEMAPS[basemapIndex] ?? BASEMAPS[0];
   const routePaths = useMemo(
-    () => commandMap.routes.map((route, index) => buildRoutePath(route, index)),
+    () => commandMap.routes
+      .flatMap((route) => route.segments.map((segment) => ({ route, segment })))
+      .map(({ route, segment }, index) => buildRoutePath(route, segment, index)),
     [commandMap.routes],
   );
   const routeFeatures = useMemo(() => ({
     type: "FeatureCollection" as const,
-    features: routePaths.map(({ route, coordinates }) => ({
+    features: routePaths.map(({ route, segment, coordinates }) => ({
       type: "Feature" as const,
       properties: {
         routeId: route.id,
+        segmentId: segment.id,
+        mode: segment.mode,
         edgeId: route.edgeId,
         active: route.edgeId === selectedObject?.edgeId ? 1 : 0,
-        hovered: route.id === hoveredRouteId ? 1 : 0,
+        hovered: segment.id === hoveredRouteId ? 1 : 0,
       },
       geometry: { type: "LineString" as const, coordinates },
     })),
@@ -228,10 +244,11 @@ export function SupplyOsCommandMap({
   const projectedRoutePaths = useMemo(() => {
     const map = mapRef.current?.getMap();
     if (!map) return [];
-    return routePaths.map(({ route, coordinates }) => {
+    return routePaths.map(({ route, segment, coordinates }) => {
       const points = coordinates.map(([longitude, latitude]) => map.project([longitude, latitude]));
       return {
         route,
+        segment,
         points,
         path: points.map((point, index) => {
           return `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
@@ -240,13 +257,14 @@ export function SupplyOsCommandMap({
     });
   }, [basemapState, mapRevision, routePaths]);
   const hoveredRouteObject = hoveredRouteId
-    ? commandMap.objects.find((object) => object.kind === "movement" && `route:${object.edgeId}` === hoveredRouteId) ?? null
+    ? commandMap.objects.find((object) => object.kind === "movement"
+      && commandMap.routes.some((route) => route.edgeId === object.edgeId && route.segments.some((segment) => segment.id === hoveredRouteId))) ?? null
     : null;
   const popupCandidate = hoveredObject ?? hoveredRouteObject;
   const popupObject = popupCandidate?.id === selectedObject?.id ? null : popupCandidate;
 
   const selectRoute = useCallback((routeId: string) => {
-    const route = commandMap.routes.find((candidate) => candidate.id === routeId);
+    const route = commandMap.routes.find((candidate) => candidate.id === routeId || candidate.segments.some((segment) => segment.id === routeId));
     const object = route
       ? commandMap.objects.find((candidate) => candidate.kind === "movement" && candidate.edgeId === route.edgeId)
       : null;
@@ -346,7 +364,7 @@ export function SupplyOsCommandMap({
         onMove={() => setMapRevision((current) => current + 1)}
         onResize={() => setMapRevision((current) => current + 1)}
         onMouseMove={(event) => {
-          const routeId = event.features?.[0]?.properties?.routeId;
+          const routeId = event.features?.[0]?.properties?.segmentId;
           setHoveredRouteId(typeof routeId === "string" ? routeId : null);
           const canvas = mapRef.current?.getMap().getCanvas();
           if (canvas) canvas.style.cursor = routeId ? "pointer" : "";
@@ -357,7 +375,7 @@ export function SupplyOsCommandMap({
           if (canvas) canvas.style.cursor = "";
         }}
         onClick={(event) => {
-          const routeId = event.features?.[0]?.properties?.routeId;
+          const routeId = event.features?.[0]?.properties?.segmentId;
           if (typeof routeId === "string") selectRoute(routeId);
         }}
         onSourceData={(event) => {
@@ -407,29 +425,59 @@ export function SupplyOsCommandMap({
           />
         </Source>
 
-        {routePaths.flatMap(({ route, directionPoints }) => directionPoints.map((point, index) => (
+        {routePaths.flatMap(({ route, segment, directionPoints }) => directionPoints.map((point, index) => {
+          const DirectionIcon = segmentIcon(segment);
+          return (
           <Marker
-            key={`direction:${route.id}:${index}`}
+            key={`direction:${segment.id}:${index}`}
             longitude={point.longitude}
             latitude={point.latitude}
             anchor="center"
           >
             <span
               className={styles.routeDirectionMarker}
+              data-mode={segment.mode}
               data-active={route.edgeId === selectedObject?.edgeId}
-              data-hovered={route.id === hoveredRouteId}
+              data-hovered={segment.id === hoveredRouteId}
               style={{ transform: `rotate(${point.angle}deg)` }}
               aria-hidden="true"
             >
-              <ChevronRight size={13} strokeWidth={2.4} />
+              <DirectionIcon size={12} strokeWidth={2.2} />
             </span>
           </Marker>
-        )))}
+          );
+        }))}
+
+        {commandMap.routes.flatMap((route) => route.segments.slice(0, -1).map((segment, index) => {
+          const gatewayMode = segment.mode === "road" ? route.segments[index + 1]?.mode ?? "road" : segment.mode;
+          const GatewayIcon = gatewayMode === "ocean" ? Ship : gatewayMode === "air" ? Plane : gatewayMode === "customs" ? ShieldAlert : Truck;
+          return (
+            <Marker key={`gateway:${segment.id}`} longitude={segment.to.longitude} latitude={segment.to.latitude} anchor="center">
+              <button
+                type="button"
+                className={styles.routeGatewayMarker}
+                data-mode={gatewayMode}
+                data-active={route.edgeId === selectedObject?.edgeId}
+                aria-label={`${segment.toLabel}. Open ${route.label}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  selectRoute(segment.id);
+                }}
+                onMouseEnter={() => setHoveredRouteId(segment.id)}
+                onMouseLeave={() => setHoveredRouteId((current) => current === segment.id ? null : current)}
+              >
+                <GatewayIcon size={14} strokeWidth={1.9} />
+                <span>{segment.toLabel}</span>
+              </button>
+            </Marker>
+          );
+        }))}
 
         {commandMap.objects.map((object) => {
           const Icon = objectIcon(object);
           const routePath = object.kind === "movement"
-            ? routePaths.find(({ route }) => route.edgeId === object.edgeId)
+            ? routePaths.find(({ route, segment }) => route.edgeId === object.edgeId && (segment.mode === "ocean" || segment.mode === "air"))
+              ?? routePaths.find(({ route }) => route.edgeId === object.edgeId)
             : null;
           const routeMidpoint = routePath?.coordinates[Math.floor(routePath.coordinates.length / 2)];
           const coordinates = routeMidpoint
@@ -491,12 +539,13 @@ export function SupplyOsCommandMap({
       </Map>
 
       <svg className={styles.routeOverlay} aria-hidden="true">
-        {projectedRoutePaths.map(({ route, path }) => (
+        {projectedRoutePaths.map(({ route, segment, path }) => (
           <g
-            key={route.id}
+            key={segment.id}
             className={styles.routeGeometry}
+            data-mode={segment.mode}
             data-active={route.edgeId === selectedObject?.edgeId}
-            data-hovered={route.id === hoveredRouteId}
+            data-hovered={segment.id === hoveredRouteId}
           >
             <path className={styles.routeGeometryCasing} d={path} />
             <path className={styles.routeGeometryLine} d={path} />
@@ -504,13 +553,13 @@ export function SupplyOsCommandMap({
         ))}
       </svg>
 
-      {projectedRoutePaths.flatMap(({ route, points }) => points.slice(2, -3).map((point, index) => {
+      {projectedRoutePaths.flatMap(({ route, segment, points }) => points.slice(2, -3).map((point, index) => {
         const next = points[index + 3];
         const deltaX = next.x - point.x;
         const deltaY = next.y - point.y;
         return (
           <button
-            key={`route-hit:${route.id}:${index}`}
+            key={`route-hit:${segment.id}:${index}`}
             type="button"
             className={styles.routePathSegment}
             tabIndex={-1}
@@ -521,8 +570,8 @@ export function SupplyOsCommandMap({
               width: Math.max(18, Math.hypot(deltaX, deltaY) + 8),
               transform: `translate(-50%, -50%) rotate(${Math.atan2(deltaY, deltaX) * 180 / Math.PI}deg)`,
             }}
-            onMouseEnter={() => setHoveredRouteId(route.id)}
-            onMouseLeave={() => setHoveredRouteId((current) => current === route.id ? null : current)}
+            onMouseEnter={() => setHoveredRouteId(segment.id)}
+            onMouseLeave={() => setHoveredRouteId((current) => current === segment.id ? null : current)}
             onClick={() => selectRoute(route.id)}
           />
         );

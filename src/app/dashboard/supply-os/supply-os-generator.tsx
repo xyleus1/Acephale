@@ -26,7 +26,15 @@ import styles from "./supply-os-workspace.module.css";
 
 type GeneratorState = "idle" | "researching" | "fallback" | "error";
 
-const RESEARCH_EXAMPLE = "AON3D builds industrial additive-manufacturing hardware, software, and material systems in Montreal and serves customers globally. Website: https://www.aon3d.com";
+const RESEARCH_EXAMPLE = [
+  "Company: AON3D",
+  "Located: Montreal, Quebec, Canada",
+  "Production: Montreal, Quebec, Canada",
+  "Needs: motion controls, industrial electronics, heaters, fabricated frames, machined parts, and service inventory",
+  "Sources: Shenzhen, China and Southern Ontario",
+  "Ships to: Detroit, Michigan and Germany",
+  "AON3D builds industrial 3D printers and material systems. Planned replenishment can move by ocean, urgent production parts by air, regional structures by truck, and finished machines through cross-border and international delivery lanes. Website: https://www.aon3d.com",
+].join("\n");
 
 export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }) {
   const router = useRouter();
@@ -167,14 +175,15 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
               className={styles.textButton}
               disabled={state === "researching"}
               onClick={() => {
-                setPrompt(RESEARCH_EXAMPLE);
                 setEngagementScope("full_operation");
+                setPrompt(RESEARCH_EXAMPLE);
                 setState("idle");
                 setResearchProgress([]);
-                setMessage("Example loaded. Research it to build an evidence-backed dashboard.");
+                setMessage("Building the complete AON3D operating example.");
+                saveAndPresent(generateSupplyCase(RESEARCH_EXAMPLE, new Date(), "full_operation"));
               }}
             >
-              Use AON3D example
+              Open full AON3D demo
             </button>
             <button type="button" className={styles.primaryButton} onClick={researchAndBuild} disabled={state === "researching"}>
               {state === "researching" ? "Researching company..." : "Research and build dashboard"}
