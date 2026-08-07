@@ -3,6 +3,7 @@ import {
   buildOfficialSiteResearch,
   extractWebsiteFromQuery,
   researchCompany,
+  selectCompanyResearchStrategy,
   SupplyCompanyResearchError,
 } from "../src/lib/supply-os-company-research";
 
@@ -15,6 +16,13 @@ assert.equal(
   "https://www.example.com/products",
 );
 assert.equal(extractWebsiteFromQuery("Atlas Robotics in Austin, Texas"), null);
+assert.deepEqual(
+  selectCompanyResearchStrategy("AON3D website: https://www.aon3d.com", true),
+  { kind: "official_site", website: "https://www.aon3d.com/" },
+  "an explicit website must bypass the slower public-search provider",
+);
+assert.deepEqual(selectCompanyResearchStrategy("AON3D", true), { kind: "public_search" });
+assert.deepEqual(selectCompanyResearchStrategy("AON3D", false), { kind: "unavailable" });
 
 const homepage = `
   <html>

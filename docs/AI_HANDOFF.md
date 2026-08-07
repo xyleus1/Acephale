@@ -5899,3 +5899,30 @@ Caveat:
 - Cases remain browser-local. The fallback improves demo resilience but is not
   a replacement for office-scoped persistence or connected ERP, TMS,
   procurement, customs, rate, and shipment data.
+
+## Supply OS production research cutoff hotfix, August 7
+
+Status:
+
+- Implemented on `hotfix-supply-research-terminal`, targeting `main`.
+
+Root cause and fix:
+
+- Production selected the model-backed public-search path whenever
+  `OPENAI_API_KEY` existed, even when the prompt already contained the official
+  website. The deployed function was cut off while awaiting that upstream call,
+  after the first progress event but before a result or structured error.
+- Explicit websites now use the bounded official-site path first. If that site
+  is unreachable and public search is configured, the model path remains a
+  secondary recovery path.
+- Name-only public search now has a 20-second client timeout and no SDK retry,
+  so it can return a structured error before the deployment runtime closes the
+  response.
+
+Verification:
+
+- The strategy regression test proves that a prompt with `aon3d.com` chooses
+  `official_site` even when public search is configured.
+- A manual AON3D reproduction with a deliberately invalid provider key returned
+  four official sources and all six progress steps in 1.6 seconds, proving the
+  provider was bypassed.

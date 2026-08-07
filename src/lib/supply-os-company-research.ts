@@ -183,6 +183,20 @@ export function extractWebsiteFromQuery(query: string): string | null {
   return validPublicHttpUrl(/^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`);
 }
 
+export type SupplyCompanyResearchStrategy =
+  | { kind: "official_site"; website: string }
+  | { kind: "public_search" }
+  | { kind: "unavailable" };
+
+export function selectCompanyResearchStrategy(
+  query: string,
+  publicSearchConfigured: boolean,
+): SupplyCompanyResearchStrategy {
+  const website = extractWebsiteFromQuery(query);
+  if (website) return { kind: "official_site", website };
+  return publicSearchConfigured ? { kind: "public_search" } : { kind: "unavailable" };
+}
+
 function isPrivateAddress(address: string) {
   const normalized = address.toLowerCase();
   if (normalized === "::1" || normalized === "::" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true;
@@ -757,7 +771,7 @@ export function buildOfficialSiteResearch(input: {
     }, ...locationFinding],
     evidence,
     warnings: [
-      "Public search was unavailable, so this brief uses the official company website only.",
+      "This brief uses the official company website only. Public trade and third-party sources were not included.",
       "Likely inputs are hypotheses for customer confirmation, not observed purchase or shipment records.",
       "Source countries, lanes, rates, customs treatment, and destination demand require customer or connected-system data.",
     ],
@@ -827,10 +841,17 @@ export async function researchCompany(
 ): Promise<SupplyCompanyResearch> {
   const query = queryInput.replace(/\s+/g, " ").trim().slice(0, MAX_QUERY_LENGTH);
   if (query.length < 2) throw new SupplyCompanyResearchError("Add a company name, website, or operating description.", "invalid_query");
-  const explicitWebsite = extractWebsiteFromQuery(query);
   const researchedAt = new Date().toISOString();
-  if (!process.env.OPENAI_API_KEY) {
-    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
+  const strategy = selectCompanyResearchStrategy(query, Boolean(process.env.OPENAI_API_KEY));
+  if (strategy.kind === "official_site") {
+    try {
+      return await officialSiteFallback(query, strategy.website, researchedAt, onProgress);
+    } catch (error) {
+      const officialSiteFailed = error instanceof SupplyCompanyResearchError && error.code === "official_site_failed";
+      if (!officialSiteFailed || !process.env.OPENAI_API_KEY) throw error;
+    }
+  }
+  if (strategy.kind === "unavailable") {
     throw new SupplyCompanyResearchError(
       "Public search is unavailable. Add the company website to continue, or build from your description.",
       "research_unavailable",
@@ -839,10 +860,10 @@ export async function researchCompany(
   progress(onProgress, {
     id: "website",
     label: "Searching public sources",
-    detail: explicitWebsite ? `Starting with ${new URL(explicitWebsite).hostname}` : "Finding and verifying the official company website",
+    detail: "Finding and verifying the official company website",
     status: "active",
   });
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60_000, maxRetries: 1 });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 0 });
   let response: Awaited<ReturnType<typeof client.responses.create>>;
   try {
     response = await client.responses.create({
@@ -875,15 +896,13 @@ export async function researchCompany(
     store: false,
     });
   } catch {
-    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
     throw new SupplyCompanyResearchError(
-      "Public search could not complete. Add the company website to retry from official sources, or build from your description.",
+      "Public search did not finish in time. Add the company website to use official sources, or build from your description.",
       "research_unavailable",
     );
   }
   const webSourceUrls = collectWebSourceUrls(response);
   if (!webSourceUrls.length) {
-    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
     throw new SupplyCompanyResearchError("Company research returned no attributable public sources.", "no_public_sources");
   }
   progress(onProgress, {
@@ -896,7 +915,6 @@ export async function researchCompany(
   try {
     raw = JSON.parse(response.output_text);
   } catch {
-    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
     throw new SupplyCompanyResearchError("Company research returned an invalid structured response.", "invalid_response");
   }
   const candidateWebsite = validPublicHttpUrl(record(record(raw).company).website);
@@ -908,7 +926,6 @@ export async function researchCompany(
   try {
     research = normalizeCompanyResearch({ raw, query, researchedAt, webSourceUrls, homepage });
   } catch {
-    if (explicitWebsite) return officialSiteFallback(query, explicitWebsite, researchedAt, onProgress);
     throw new SupplyCompanyResearchError("Company research could not verify an official website.", "invalid_response");
   }
   progress(onProgress, {

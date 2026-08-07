@@ -1539,3 +1539,23 @@ Use this log for durable product and engineering decisions. Do not put every imp
   palette, and global-style isolation tests continue to guard the boundary.
 - Revisit when: customer testing supports a full light theme or a shared
   application-wide token system.
+
+### 2026-08-07 - Explicit company websites use official-site research first
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Model-backed public search can exceed a request's available runtime.
+  It also adds little value before reading a website the operator already gave
+  us.
+- Decision: When the prompt contains a valid public company website, run the
+  bounded official-site research path first regardless of model configuration.
+  Use model-backed public search first only for name-only prompts, or as a
+  secondary path when the supplied official site cannot be reached. Bound the
+  model call to 20 seconds without automatic SDK retries.
+- Rationale: Customer demos need a fast terminal result. Official-site evidence
+  is more attributable than a broad search and does not depend on model latency.
+- Consequences: Explicit-website briefs omit third-party public sources in the
+  first pass and disclose that limitation. Name-only discovery remains richer
+  but can return a structured timeout recovery message.
+- Revisit when: research runs asynchronously with durable office-scoped results,
+  where broader enrichment no longer blocks the customer request.

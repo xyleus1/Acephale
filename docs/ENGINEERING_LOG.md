@@ -3480,3 +3480,21 @@ Use this file for chronological implementation notes that future agents should s
 - Caveat: provider-backed live public search was not exercised locally because
   the disposable server intentionally had no `OPENAI_API_KEY`. That absence was
   used to verify the new official-site fallback end to end.
+
+### 2026-08-07 - Fix production Supply OS stream cutoff
+
+- Branch: hotfix-supply-research-terminal, targeting main
+- Symptom: the AON3D example emitted only `Searching public sources`, then the
+  browser reported that research ended without a dashboard result.
+- Root cause: a configured model key made explicit-website prompts enter the
+  slower public-search call first. The production function ended while waiting
+  on that upstream call, outside the route's normal result and error events.
+- Fix: select `official_site` before `public_search` whenever the prompt has a
+  valid public website. Retain public search as recovery if the official site is
+  unreachable, and cap name-only model calls at 20 seconds with zero SDK
+  retries.
+- Regression coverage: `selectCompanyResearchStrategy()` is tested for website,
+  name-only configured, and unavailable cases.
+- Fresh reproduction: an AON3D request with an intentionally invalid model key
+  returned the official name, website, four sources, and six progress events in
+  1.6 seconds.
