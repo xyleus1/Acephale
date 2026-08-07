@@ -11,6 +11,7 @@ const generator = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os
 const storage = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-storage.ts"), "utf8");
 const styles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workspace.module.css"), "utf8");
 const caseModel = readFileSync(join(root, "src/lib/supply-os-case-model.ts"), "utf8");
+const engagementPlan = readFileSync(join(root, "src/lib/supply-os-engagement-plan.ts"), "utf8");
 const operatingPlan = readFileSync(join(root, "src/lib/supply-os-operating-plan.ts"), "utf8");
 const dashboardLayout = readFileSync(join(root, "src/app/dashboard/layout.tsx"), "utf8");
 const uiSource = `${legacyPage}\n${dashboardPage}\n${generatorPage}\n${dashboard}\n${generator}\n${storage}\n${styles}`;
@@ -43,17 +44,20 @@ for (const required of [
   "Build case",
   "Save and open dashboard",
   "Review before saving",
+  "How should Derya help?",
+  "Run the full supply chain, or choose one place to start.",
   "SUPPLY_CASE_STORAGE_KEY",
   "parseStoredSupplyCases",
   "serializeSupplyCases",
   "resolveSelectedSupplyCase",
-  "buildSupplyOperatingPlan",
+  "buildSupplyEngagementPlan",
   "Customers",
-  "Supply map",
-  "Recommended plan",
-  "Door-to-door plan",
-  "Customs",
-  "Risks to verify",
+  "Derya needs these 3 things",
+  "What Derya takes over",
+  "Operating network",
+  "Customs handoff",
+  "Checks before we commit",
+  "Execution detail",
   "WORLD_MAP_LAND_PATHS",
 ]) {
   assert.equal(uiSource.includes(required), true, `Supply OS split flow is missing: ${required}`);
@@ -76,6 +80,11 @@ assert.match(dashboard, /href="\/dashboard\/supply-os\/new"/, "the dashboard mus
 assert.match(generator, /href="\/dashboard\/supply-os"/, "the generator must link back to saved customer dashboards");
 
 assert.match(generator, /prompt\.trim\(\) === generatedCase\.sourcePrompt/, "editing a generated prompt must disable stale saves");
+assert.match(generator, /engagementScope === \(generatedCase\.engagementScope \?\? "full_operation"\)/, "editing the engagement scope must disable stale saves");
+assert.ok(
+  generator.match(/engagementScope !== \(generatedCase\.engagementScope \?\? "full_operation"\)/g)?.length === 1,
+  "saveAndOpen must independently reject a stale engagement scope",
+);
 assert.match(generator, /loadSupplyCases\(storageScope\)\.cases/, "saving must merge against the latest browser state");
 assert.match(generator, /persistSupplyCases\(storageScope, nextCases, generatedCase\.id\)/, "saving must persist both the case list and selected case");
 assert.ok(
@@ -88,20 +97,39 @@ assert.match(storage, /previousCases[\s\S]*previousSelected[\s\S]*return false;/
 assert.match(storage, /filter\(\(item\) => !item\.archivedAt\)/, "archived dashboards must stay out of the customer browser");
 assert.match(storage, /b\.updatedAt\.localeCompare\(a\.updatedAt\)/, "saved dashboards must be newest first");
 assert.match(dashboard, /window\.addEventListener\("storage"/, "saved dashboards must refresh across browser tabs");
+assert.match(dashboard, /const latestCases = loadSupplyCases\(storageScope\)\.cases/, "dashboard scope saves must reload the current browser state");
+assert.match(dashboard, /latestCases\.find\(\(candidate\) => candidate\.id === item\.id\) \?\? item/, "dashboard scope saves must merge onto the latest same-customer record");
+assert.match(dashboard, /\{ \.\.\.latestItem, engagementScope, updatedAt:/, "scope saves must patch only the latest same-customer record");
+assert.match(dashboard, /upsertSupplyCase\(latestCases, updated\)/, "dashboard coverage changes must preserve concurrent customer saves");
+assert.match(dashboard, /persistSupplyCases\(storageScope, nextCases, updated\.id\)/, "dashboard coverage changes must survive reload");
+assert.match(dashboard, /const selectedScope = dashboard\.engagementScope \?\? "full_operation"/, "the persisted case must remain the scope source of truth");
+assert.match(dashboard, /if \(!onScopeChange\(scope\)\)/, "a failed scope save must not change the visible plan");
+assert.match(dashboard, /domestic-regulatory-review/, "domestic cases must not show an import broker handoff");
+assert.match(dashboard, /customs-scope-confirmation/, "unknown lanes must ask for locations before assigning a broker");
 
 assert.match(dashboard, /directDistance > 500/, "map routes must wrap across the date line");
-assert.match(dashboard, /movement\?\.pathSegmentIds/, "the map must stay scoped to the selected movement");
 assert.match(dashboard, /role="img" aria-labelledby="supply-map-svg-title"/, "the route must expose one labeled map image");
-assert.match(dashboard, /className=\{styles\.mapNode\}[\s\S]*role="button"[\s\S]*tabIndex=\{0\}[\s\S]*aria-label=\{`Inspect \$\{node\.label\}`\}/, "map nodes must be keyboard operable");
-assert.match(dashboard, /event\.key === "Enter" \|\| event\.key === " "/, "map nodes must support Enter and Space");
-assert.match(dashboard, /className=\{styles\.mapNodeHitArea\}[\s\S]*r=\{22\}/, "map nodes must expose a 44px target");
-assert.match(styles, /\.mapNode:focus-visible[\s\S]*stroke-width:\s*3/, "keyboard-focused map nodes must have a visible focus indicator");
 assert.match(dashboard, /aria-pressed=\{item\.id === activeCase\?\.id\}/, "customer buttons must expose the active dashboard");
-assert.match(dashboard, /aria-pressed=\{movement\.movementId === selectedMovement\?\.movementId\}/, "movement buttons must expose the active lane");
-assert.match(dashboard, /data-movement-id=\{selectedMovement\?\.movementId\}/, "the plan must stay movement scoped");
-assert.match(dashboard, /activeSegmentIds\.has\(segment\.id\)/, "the map must emphasize only the selected movement path");
+assert.match(dashboard, /aria-pressed=\{flow\.id === selectedFlow\?\.id\}/, "network-flow buttons must expose the active flow");
+assert.match(dashboard, /flow\.id === selectedFlow\?\.id/, "the map must emphasize only the selected supply-chain flow");
+assert.match(engagementPlan, /kind:\s*"inbound"/, "the engagement model must distinguish components entering production");
+assert.match(engagementPlan, /kind:\s*"outbound"/, "the engagement model must distinguish finished goods leaving production");
 
-for (const rawDetail of ["connectorGrid", "EvidenceLinks", "provider.request", "leg.quoteInputs", "leg.handoff", "invoiceGuidance.map", "supplierOptions.map", "Needs your input", "inputList"]) {
+for (const rawDetail of [
+  "connectorGrid",
+  "EvidenceLinks",
+  "provider.request",
+  "leg.quoteInputs",
+  "leg.handoff",
+  "invoiceGuidance.map",
+  "supplierOptions.map",
+  "Needs your input",
+  "inputList",
+  "leg.providers[0]",
+  "brokerOptions[0]",
+  "Expected cost",
+  "summary.openCheckCount",
+]) {
   assert.equal(dashboard.includes(rawDetail), false, `customer dashboard must not expose raw planning detail: ${rawDetail}`);
 }
 
@@ -115,6 +143,7 @@ assert.equal(
 );
 
 assert.ok(caseModel.length > 1000, "the stored case model must remain intact");
+assert.ok(engagementPlan.length > 1000, "the customer engagement model must remain deterministic and explicit");
 assert.ok(operatingPlan.length > 1000, "the operating-plan engine must remain intact");
 
 console.log("supply OS split-page checks passed");

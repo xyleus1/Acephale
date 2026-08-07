@@ -20,6 +20,8 @@ assert.equal(SUPPLY_CASE_SCHEMA_VERSION, 1);
 assert.equal(SUPPLY_CASE_STORAGE_KEY, "derya:supply-case-dashboards:v1");
 assert.equal(complete.companyName, "Atlas Robotics");
 assert.equal(complete.companyLocation, "Austin, Texas");
+assert.equal(complete.productionLocation, "Austin, Texas");
+assert.equal(complete.company.productionSite?.status, "ready");
 assert.equal(complete.companyDescription, "Robotics");
 assert.deepEqual(complete.sourceRegions, ["Shenzhen, China"]);
 assert.deepEqual(complete.destinations, ["Detroit, Michigan", "Nashville, Tennessee"]);
@@ -27,9 +29,22 @@ assert.deepEqual(complete.sourcingNeeds, ["servo motors", "machine-vision camera
 assert.equal(complete.status, "verify");
 assert.equal(complete.generatedAt, fixedNow.toISOString());
 assert.equal(complete.sourcePrompt, SAMPLE_SUPPLY_CASE_PROMPT);
+assert.equal(complete.engagementScope, "full_operation");
 assert.match(complete.summary.primaryLane, /Shenzhen, China to Detroit, Michigan/);
 assert.equal(complete.openQuestions.length, 1, "a complete company description still needs shipment details");
 assert.match(complete.bestNextStep, /expected volume/i);
+
+const customsOnly = generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, fixedNow, "customs");
+assert.equal(customsOnly.id, complete.id, "scope changes must update one customer case instead of duplicating it");
+assert.equal(customsOnly.engagementScope, "customs");
+const legacyWithoutScope = structuredClone(complete) as SupplyCaseDashboard;
+delete legacyWithoutScope.engagementScope;
+delete legacyWithoutScope.productionLocation;
+delete legacyWithoutScope.company.productionSite;
+assert.equal(validateSupplyCaseDashboard(legacyWithoutScope), true, "stored version 1 cases without a scope must remain valid");
+assert.deepEqual(parseStoredSupplyCases(serializeSupplyCases([legacyWithoutScope])), [legacyWithoutScope]);
+const invalidScope = { ...complete, engagementScope: "book_everything_without_approval" };
+assert.equal(validateSupplyCaseDashboard(invalidScope), false, "unknown engagement scopes must fail validation");
 
 assert.equal(complete.shippingOptions.length, 3);
 assert.deepEqual(
@@ -80,15 +95,18 @@ const missing = generateSupplyCase("Please map this supply chain.", fixedNow);
 assert.equal(missing.status, "needs_confirmation");
 assert.equal(missing.companyName, null);
 assert.equal(missing.companyLocation, null);
+assert.equal(missing.productionLocation, null);
 assert.deepEqual(missing.sourceRegions, []);
 assert.deepEqual(missing.destinations, []);
 assert.equal(missing.company.name.status, "needs_confirmation");
 assert.equal(missing.company.headquarters.status, "needs_confirmation");
+assert.equal(missing.company.productionSite?.status, "needs_confirmation");
 assert.equal(missing.company.industry.status, "needs_confirmation");
 assert.ok(missing.company.sourcingNeeds.every((need) => need.status === "verify"));
 assert.ok(missing.routeNodes.some((node) => node.id === "source-needed" && node.status === "needs_confirmation"));
 assert.ok(missing.routeNodes.some((node) => node.id === "destination-needed" && node.status === "needs_confirmation"));
 assert.ok(missing.openQuestions.includes("What is the company name?"));
+assert.ok(missing.openQuestions.includes("Where are components received or production completed?"));
 assert.ok(missing.openQuestions.includes("Which supplier cities or countries should be evaluated?"));
 assert.equal(missing.customsChecks[0]?.label, "Customs scope to confirm");
 
@@ -102,6 +120,22 @@ assert.equal(naturalLanguage.companyDescription, "Medical devices");
 assert.deepEqual(naturalLanguage.sourcingNeeds, ["sterile packaging"]);
 assert.deepEqual(naturalLanguage.sourceRegions, ["Germany"]);
 assert.deepEqual(naturalLanguage.destinations, ["New York and New Jersey"]);
+assert.ok(
+  naturalLanguage.openQuestions.some((question) => /Confirm whether Boston is the production/i.test(question)),
+  "headquarters-only prompts must expose the production-site assumption",
+);
+
+const sanFranciscoProduction = generateSupplyCase(
+  "Bay Robotics builds robots in San Francisco, California. It sources motors from China and ships systems to Detroit, Michigan.",
+  fixedNow,
+);
+const sanFranciscoNode = sanFranciscoProduction.routeNodes.find((node) => node.kind === "headquarters");
+assert.equal(sanFranciscoNode?.label, "San Francisco, California");
+assert.deepEqual(
+  sanFranciscoNode?.coordinates,
+  { latitude: 37.7749, longitude: -122.4194 },
+  "specific San Francisco input must not resolve to Los Angeles through the generic state name",
+);
 
 const placeholderLanguage = generateSupplyCase(
   "Atlas Robotics builds warehouse robots in Austin. It needs motors, LiDAR, batteries, and aluminum enclosures from China and Malaysia, then ships finished systems across the US and Germany.",
@@ -169,7 +203,7 @@ assert.equal(northKoreaLocation.routeNodes.some((node) => /South Korea|Busan/.te
 assert.ok(northKoreaLocation.openQuestions.some((question) => /North Korea/.test(question)));
 
 const domesticChina = generateSupplyCase(
-  "Company: Delta Robotics\nLocated: Shanghai\nSources: motors from Shenzhen\nShips to: Shanghai",
+  "Company: Delta Robotics\nLocated: Shanghai\nProduction: Shanghai\nSources: motors from Shenzhen\nShips to: Shanghai",
   fixedNow,
 );
 assert.equal(domesticChina.routeNodes.some((node) => node.kind === "customs"), false);
@@ -206,12 +240,56 @@ assert.ok(
 );
 
 const intraEuropeanUnion = generateSupplyCase(
-  "Company: Rhine Robotics\nLocated: Germany\nSources: motors from Germany\nShips to: Netherlands",
+  "Company: Rhine Robotics\nLocated: Germany\nProduction: Germany\nSources: motors from Germany\nShips to: Netherlands",
   fixedNow,
 );
 assert.equal(intraEuropeanUnion.routeNodes.some((node) => node.kind === "customs"), false);
 assert.ok(intraEuropeanUnion.routeSegments.some((segment) => segment.label === "Intra-EU freight"));
 assert.equal(intraEuropeanUnion.customsChecks[0]?.label, "Domestic movement confirmation");
+
+const customsThroughProduction = generateSupplyCase(
+  "Global Robotics builds robots in Austin, Texas. It sources motors from Germany and ships finished systems to Netherlands.",
+  fixedNow,
+);
+assert.equal(
+  customsThroughProduction.customsChecks.some((check) => check.id === "domestic-regulatory-review"),
+  false,
+  "customs must evaluate Germany to Austin and Austin to Netherlands instead of Germany directly to Netherlands",
+);
+assert.ok(customsThroughProduction.customsChecks.some((check) => /importer.*broker/i.test(check.label)));
+
+const productUseIsNotProduction = generateSupplyCase(
+  "Field Robotics builds robots used in warehouses in Detroit, Michigan.",
+  fixedNow,
+);
+assert.equal(productUseIsNotProduction.companyLocation, null);
+assert.equal(productUseIsNotProduction.productionLocation, null);
+assert.ok(productUseIsNotProduction.openQuestions.some((question) => /components received|production completed/i.test(question)));
+
+const unconfirmedHeadquartersTopology = generateSupplyCase(
+  "Company: Headquarters Robotics\nLocated: Austin, Texas\nSources: motors from Austin, Texas\nShips to: Detroit, Michigan",
+  fixedNow,
+);
+assert.equal(unconfirmedHeadquartersTopology.company.productionSite?.status, "verify");
+assert.equal(unconfirmedHeadquartersTopology.customsChecks[0]?.id, "customs-scope-confirmation");
+
+const unavoidableImportWithUnconfirmedProduction = generateSupplyCase(
+  "Company: Import Robotics\nLocated: Austin, Texas\nSources: motors from China\nShips to: Detroit, Michigan",
+  fixedNow,
+);
+assert.ok(unavoidableImportWithUnconfirmedProduction.customsChecks.some((check) => /importer.*broker/i.test(check.label)));
+
+const sourceOnlyTopology = generateSupplyCase(
+  "Company: Source Only Robotics\nProduction: Austin, Texas\nSources: motors from Austin, Texas",
+  fixedNow,
+);
+assert.equal(sourceOnlyTopology.customsChecks[0]?.id, "customs-scope-confirmation");
+
+const destinationOnlyTopology = generateSupplyCase(
+  "Company: Destination Only Robotics\nProduction: Austin, Texas\nShips to: Detroit, Michigan",
+  fixedNow,
+);
+assert.equal(destinationOnlyTopology.customsChecks[0]?.id, "customs-scope-confirmation");
 
 const unresolvedLane = generateSupplyCase(
   "Company: Midwest Robotics\nLocated: Cleveland, Ohio\nSources: motors from Columbus, Ohio\nShips to: Cleveland, Ohio",

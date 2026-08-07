@@ -4,14 +4,23 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/icon";
 import { WORLD_MAP_LAND_PATHS, WORLD_MAP_VIEWBOX } from "@/lib/market-intelligence/world-map-asset";
-import type { SupplyCaseDashboard, SupplyRouteNode } from "@/lib/supply-os-case-model";
 import {
-  buildSupplyOperatingPlan,
-  type SupplyCostRange,
-  type SupplyMovementPlan,
-} from "@/lib/supply-os-operating-plan";
+  upsertSupplyCase,
+  type SupplyCaseDashboard,
+  type SupplyCoordinate,
+  type SupplyEngagementScope,
+} from "@/lib/supply-os-case-model";
+import {
+  buildSupplyEngagementPlan,
+  SUPPLY_ENGAGEMENT_OPTIONS,
+  type SupplyEngagementPlan,
+  type SupplyNetworkFlow,
+  type SupplyWorkstream,
+  type SupplyWorkstreamId,
+} from "@/lib/supply-os-engagement-plan";
 import {
   loadSupplyCases,
+  persistSupplyCases,
   removeLegacySupplyCaseStorage,
   supplyCaseStorageKeys,
   visibleSupplyCases,
@@ -33,34 +42,26 @@ function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
 }
 
-function formatUsdRange(cost: SupplyCostRange | null) {
-  if (!cost) return "Input needed";
-  const formatter = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: cost.currency,
-    maximumFractionDigits: 0,
-  });
-  return `${formatter.format(cost.low)} - ${formatter.format(cost.high)}`;
+function scopeLabel(scope: SupplyEngagementScope | undefined) {
+  return SUPPLY_ENGAGEMENT_OPTIONS.find((option) => option.id === (scope ?? "full_operation"))?.shortLabel
+    ?? "Full operation";
 }
 
-function movementLabel(movement: SupplyMovementPlan) {
-  const source = movement.source?.label ?? movement.originGateway.label;
-  const destination = movement.destination?.label ?? movement.receivingGateway?.label ?? "Destination needed";
-  return `${source} to ${destination}`;
+function countLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function ownerLabel(value: string) {
-  return value.replaceAll("_", " ");
+function project(coordinates: SupplyCoordinate | null) {
+  if (!coordinates) return null;
+  return {
+    x: ((coordinates.longitude + 180) / 360) * 1000,
+    y: ((90 - coordinates.latitude) / 180) * 500,
+  };
 }
 
-function project(lat: number | null, lng: number | null) {
-  if (lat === null || lng === null) return null;
-  return { x: ((lng + 180) / 360) * 1000, y: ((90 - lat) / 180) * 500 };
-}
-
-function routePath(from: SupplyRouteNode, to: SupplyRouteNode) {
-  const start = project(from.lat, from.lng);
-  const end = project(to.lat, to.lng);
+function routePath(from: SupplyCoordinate | null, to: SupplyCoordinate | null) {
+  const start = project(from);
+  const end = project(to);
   if (!start || !end) return null;
   const directDistance = Math.abs(end.x - start.x);
   const wrappedEndX = directDistance > 500 ? end.x + (start.x > end.x ? 1000 : -1000) : end.x;
@@ -85,6 +86,14 @@ function routePath(from: SupplyRouteNode, to: SupplyRouteNode) {
     `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} Q ${firstControl.x.toFixed(1)} ${firstControl.y.toFixed(1)} ${edge.x.toFixed(1)} ${edge.y.toFixed(1)}`,
     `M ${(boundaryX + wrapShift).toFixed(1)} ${edge.y.toFixed(1)} Q ${(secondControl.x + wrapShift).toFixed(1)} ${secondControl.y.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`,
   ].join(" ");
+}
+
+function scopeWorkstream(scope: SupplyEngagementScope): SupplyWorkstreamId {
+  if (scope === "supplier_sourcing") return "supplier_sourcing";
+  if (scope === "inbound_logistics") return "inbound_logistics";
+  if (scope === "customs") return "customs";
+  if (scope === "finished_goods_delivery") return "finished_goods_delivery";
+  return "supplier_sourcing";
 }
 
 export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: string }) {
@@ -121,6 +130,17 @@ export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: str
     setActiveCase(item);
   }
 
+  function updateDashboardScope(item: SupplyCaseDashboard, engagementScope: SupplyEngagementScope): boolean {
+    const latestCases = loadSupplyCases(storageScope).cases;
+    const latestItem = latestCases.find((candidate) => candidate.id === item.id) ?? item;
+    const updated = { ...latestItem, engagementScope, updatedAt: new Date().toISOString() };
+    const nextCases = upsertSupplyCase(latestCases, updated);
+    if (!persistSupplyCases(storageScope, nextCases, updated.id)) return false;
+    setSavedCases(nextCases);
+    setActiveCase(updated);
+    return true;
+  }
+
   return (
     <div className={`${styles.workspace} supply-os-workspace`}>
       <header className={styles.topBar}>
@@ -154,21 +174,27 @@ export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: str
                     onClick={() => openDashboard(item)}
                   >
                     <span><strong>{dashboardName(item)}</strong><small>{dashboardLocation(item)}</small></span>
-                    <span><strong>{item.summary.primaryLane}</strong><small>{item.summary.openCheckCount} inputs needed</small></span>
+                    <span><strong>{scopeLabel(item.engagementScope)}</strong><small>3 kickoff inputs</small></span>
                     <time>{formatTimestamp(item.updatedAt)}</time>
                     <Icon name="chevron-right" size={14} />
                   </button>
                 ))}
               </div>
             </section>
-            {activeCase ? <CaseDashboard key={activeCase.id} dashboard={activeCase} /> : null}
+            {activeCase ? (
+              <CaseDashboard
+                key={activeCase.id}
+                dashboard={activeCase}
+                onScopeChange={(scope) => updateDashboardScope(activeCase, scope)}
+              />
+            ) : null}
           </>
         ) : (
           <section className={styles.emptyResult}>
             <Icon name="layers" size={22} />
             <div>
               <h2>No customer dashboards</h2>
-              <p>Create a customer case to map its route, costs, customs steps, and open inputs.</p>
+              <p>Create a customer case to see what Derya can take over from suppliers through customer delivery.</p>
               <Link className={styles.primaryButton} href="/dashboard/supply-os/new">Create first customer</Link>
             </div>
           </section>
@@ -178,19 +204,34 @@ export function SupplyOsDashboardWorkspace({ storageScope }: { storageScope: str
   );
 }
 
-function CaseDashboard({ dashboard }: { dashboard: SupplyCaseDashboard }) {
-  const operatingPlan = useMemo(() => buildSupplyOperatingPlan(dashboard), [dashboard]);
-  const [selectedMovementId, setSelectedMovementId] = useState(operatingPlan.movements[0]?.movementId ?? "");
-  const selectedMovement = operatingPlan.movements.find((item) => item.movementId === selectedMovementId)
-    ?? operatingPlan.movements[0]
-    ?? null;
-  const [selectedNodeId, setSelectedNodeId] = useState(
-    selectedMovement?.source?.nodeId ?? selectedMovement?.originGateway.nodeId ?? dashboard.routeNodes[0]?.id ?? null,
+function CaseDashboard({
+  dashboard,
+  onScopeChange,
+}: {
+  dashboard: SupplyCaseDashboard;
+  onScopeChange: (scope: SupplyEngagementScope) => boolean;
+}) {
+  const selectedScope = dashboard.engagementScope ?? "full_operation";
+  const [selectedWorkstreamId, setSelectedWorkstreamId] = useState<SupplyWorkstreamId>(scopeWorkstream(selectedScope));
+  const [scopeError, setScopeError] = useState("");
+  const plan = useMemo(
+    () => buildSupplyEngagementPlan(dashboard, selectedScope),
+    [dashboard, selectedScope],
   );
+  const selectedWorkstream = plan.workstreams.find((item) => item.id === selectedWorkstreamId)
+    ?? plan.workstreams[0];
+  const [selectedFlowId, setSelectedFlowId] = useState(plan.flows[0]?.id ?? "");
 
-  function selectMovement(movement: SupplyMovementPlan) {
-    setSelectedMovementId(movement.movementId);
-    setSelectedNodeId(movement.source?.nodeId ?? movement.originGateway.nodeId);
+  useEffect(() => {
+    setSelectedWorkstreamId(scopeWorkstream(selectedScope));
+    setScopeError("");
+  }, [selectedScope]);
+
+  function selectScope(scope: SupplyEngagementScope) {
+    if (scope === selectedScope) return;
+    if (!onScopeChange(scope)) {
+      setScopeError("Browser storage is unavailable. The coverage change was not saved.");
+    }
   }
 
   return (
@@ -199,160 +240,262 @@ function CaseDashboard({ dashboard }: { dashboard: SupplyCaseDashboard }) {
         <div>
           <span className={styles.eyebrow}>{dashboardLocation(dashboard)}</span>
           <h2 id="active-case-title">{dashboardName(dashboard)}</h2>
-          <p>{dashboard.overview}</p>
+          <p>
+            {dashboard.companyDescription} · {countLabel(dashboard.sourcingNeeds.length, "component group")} · {countLabel(dashboard.sourceRegions.length, "source region")} · {countLabel(dashboard.destinations.length, "customer destination")}
+          </p>
         </div>
       </header>
 
-      {operatingPlan.movements.length > 1 ? (
-        <div className={styles.movementSelector} aria-label="Customer movements">
-          {operatingPlan.movements.map((movement) => (
+      <section className={styles.engagementSection} aria-labelledby="engagement-title">
+        <div className={styles.engagementPromise}>
+          <span className={styles.eyebrow}>Derya coverage</span>
+          <h2 id="engagement-title">{plan.headline}</h2>
+          <p>{plan.summary}</p>
+          <div className={styles.scopeSelector} aria-label="Choose Derya coverage">
+            {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                data-active={option.id === selectedScope}
+                aria-pressed={option.id === selectedScope}
+                onClick={() => selectScope(option.id)}
+              >
+                {option.shortLabel}
+              </button>
+            ))}
+          </div>
+          {scopeError ? <p className={styles.scopeError} role="alert">{scopeError}</p> : null}
+        </div>
+        <aside className={styles.kickoffPanel}>
+          <span className={styles.eyebrow}>Start today</span>
+          <h2>Derya needs these 3 things</h2>
+          <ol>
+            {plan.kickoffInputs.map((item) => <li key={item}>{item}</li>)}
+          </ol>
+          <p>{plan.kickoffNote}</p>
+        </aside>
+      </section>
+
+      <section className={styles.workstreamSection} aria-labelledby="workstreams-title">
+        <header className={styles.sectionHeader}>
+          <h2 id="workstreams-title">What Derya takes over</h2>
+          <span>{plan.scopeLabel}</span>
+        </header>
+        <div className={styles.workstreamRail}>
+          {plan.workstreams.map((workstream) => (
             <button
-              key={movement.movementId}
+              key={workstream.id}
               type="button"
-              data-active={movement.movementId === selectedMovement?.movementId}
-              aria-pressed={movement.movementId === selectedMovement?.movementId}
-              onClick={() => selectMovement(movement)}
+              data-covered={workstream.state !== "available"}
+              data-selected={workstream.id === selectedWorkstream?.id}
+              aria-pressed={workstream.id === selectedWorkstream?.id}
+              onClick={() => setSelectedWorkstreamId(workstream.id)}
             >
-              {movementLabel(movement)}
+              <span className={styles.workstreamNumber}>{workstream.number}</span>
+              <small>{workstream.stateLabel}</small>
+              <strong>{workstream.label}</strong>
+              <p>{workstream.outcome}</p>
             </button>
           ))}
         </div>
-      ) : null}
+      </section>
 
-      <div className={styles.planGrid} data-movement-id={selectedMovement?.movementId}>
-        <SupplyMap
+      <div className={styles.planGrid}>
+        <SupplyNetworkMap
           dashboard={dashboard}
-          movement={selectedMovement}
-          selectedNodeId={selectedNodeId}
-          setSelectedNodeId={setSelectedNodeId}
+          plan={plan}
+          selectedFlowId={selectedFlowId}
+          setSelectedFlowId={setSelectedFlowId}
         />
-        <RecommendedPlan movement={selectedMovement} />
+        {selectedWorkstream ? <WorkstreamDetail workstream={selectedWorkstream} /> : null}
       </div>
-
-      <ExecutionPlan movement={selectedMovement} />
 
       <div className={styles.decisionGrid}>
-        <CustomsSummary movement={selectedMovement} />
-        <RiskSummary dashboard={dashboard} movement={selectedMovement} />
+        <CustomsBoundary dashboard={dashboard} />
+        <CommitChecks dashboard={dashboard} />
       </div>
 
-      <p className={styles.disclaimer}>Planning ranges and routes are estimates. Confirm live rates, capacity, customs treatment, and provider acceptance before execution.</p>
+      <ExecutionDetail plan={plan} />
+
+      <p className={styles.disclaimer}>This case is a scoping plan. Exact suppliers, routes, prices, capacity, customs treatment, and bookings require current evidence and approval.</p>
     </article>
   );
 }
 
-function RecommendedPlan({ movement }: { movement: SupplyMovementPlan | null }) {
-  const execution = movement?.executionPlan ?? null;
-  const gateway = movement?.portOptions[0] ?? null;
-  const linehaul = execution?.legs.find((leg) => leg.type === "international_linehaul" || leg.type === "domestic_linehaul");
-  const actions = movement?.quoteBlockers.slice(0, 3) ?? [];
-
+function WorkstreamDetail({ workstream }: { workstream: SupplyWorkstream }) {
   return (
-    <aside className={styles.recommendedPlan}>
-      <header><span className={styles.eyebrow}>Recommended plan</span><h2>{movement ? movementLabel(movement) : "Movement needed"}</h2></header>
-      <dl className={styles.planMetrics}>
-        <div><dt>Gateway</dt><dd>{gateway?.port ?? movement?.receivingGateway?.label ?? "Confirm route"}</dd></div>
-        <div><dt>Expected cost</dt><dd>{formatUsdRange(execution?.total ?? null)}</dd></div>
-        <div><dt>Transit</dt><dd>{linehaul?.transitAssumption ?? "Confirm schedule"}</dd></div>
-      </dl>
-      {gateway ? <p className={styles.planReason}>{gateway.bestFor}</p> : null}
-      <div className={styles.nextActions}>
-        <h3>Next actions</h3>
-        {actions.length ? (
-          <ol>{actions.map((item) => <li key={item.id}>{item.field}</li>)}</ol>
-        ) : <p>No planning actions are available.</p>}
+    <aside className={styles.workstreamDetail}>
+      <header>
+        <span className={styles.eyebrow}>{workstream.stateLabel}</span>
+        <h2>{workstream.label}</h2>
+        <p>{workstream.outcome}</p>
+      </header>
+      <div>
+        <h3>How Derya runs it</h3>
+        <ol>
+          {workstream.steps.map((step) => <li key={step}>{step}</li>)}
+        </ol>
       </div>
+      <footer>Human approval stays at supplier awards, spend, customs treatment, and booking commitments.</footer>
     </aside>
   );
 }
 
-function ExecutionPlan({ movement }: { movement: SupplyMovementPlan | null }) {
-  const legs = movement?.executionPlan.legs ?? [];
-  return (
-    <section className={styles.executionSection} data-movement-id={movement?.movementId}>
-      <header className={styles.sectionHeader}><h2>Door-to-door plan</h2><span>{legs.length} steps</span></header>
-      {legs.length ? (
-        <div className={styles.executionList}>
-          {legs.map((leg) => (
-            <article key={leg.id}>
-              <span className={styles.stepNumber}>{leg.sequence}</span>
-              <div className={styles.stepRoute}>
-                <strong>{ownerLabel(leg.type)}</strong>
-                <small>{leg.from} to {leg.to}</small>
-              </div>
-              <div><strong>{leg.providers[0]?.provider ?? "Provider needed"}</strong><small>{leg.mode}</small></div>
-              <div><strong>{leg.transitAssumption}</strong><small>Transit</small></div>
-              <div className={styles.numeric}><strong>{formatUsdRange(leg.costRange)}</strong><small>Expected cost</small></div>
-            </article>
-          ))}
+function CustomsBoundary({ dashboard }: { dashboard: SupplyCaseDashboard }) {
+  const domesticCheck = dashboard.customsChecks.find((check) => check.id === "domestic-regulatory-review");
+  const unknownCheck = dashboard.customsChecks.find((check) => check.id === "customs-scope-confirmation");
+  const productCheck = dashboard.customsChecks.find((check) => /classification|machine|part-level/i.test(check.label));
+  if (domesticCheck) {
+    return (
+      <section className={styles.summaryPanel}>
+        <header className={styles.sectionHeader}><h2>Regulatory handoff</h2><span>Domestic movement</span></header>
+        <div className={styles.boundaryList}>
+          <article>
+            <span>Derya confirms</span>
+            <strong>Origin, destination, commodity transport rules, carrier requirements, and receiving constraints</strong>
+          </article>
+          <article>
+            <span>Customer approves</span>
+            <strong>Product handling, commercial terms, delivery requirements, and carrier commitment</strong>
+          </article>
+          <p>{domesticCheck.detail}</p>
         </div>
-      ) : <p className={styles.sectionEmpty}>Add complete origin and destination details to build the route.</p>}
-    </section>
-  );
-}
-
-function CustomsSummary({ movement }: { movement: SupplyMovementPlan | null }) {
-  const plan = movement?.customsPlan;
+      </section>
+    );
+  }
+  if (unknownCheck) {
+    return (
+      <section className={styles.summaryPanel}>
+        <header className={styles.sectionHeader}><h2>Customs scope</h2><span>Location needed</span></header>
+        <div className={styles.boundaryList}>
+          <article>
+            <span>Derya confirms</span>
+            <strong>Exact supplier country, destination country, border or gateway, commodity, and transaction facts</strong>
+          </article>
+          <article>
+            <span>Then</span>
+            <strong>Engage a licensed broker only if the confirmed movement requires an import entry</strong>
+          </article>
+          <p>{unknownCheck.detail}</p>
+        </div>
+      </section>
+    );
+  }
   return (
-    <section className={styles.summaryPanel} data-movement-id={movement?.movementId}>
-      <header className={styles.sectionHeader}><h2>Customs</h2><span>{plan?.importRequired ? "Import" : "Review"}</span></header>
-      <dl className={styles.compactFacts}>
-        <div><dt>Entry gateway</dt><dd>{plan?.recommendedEntryGateway ?? "Confirm customs boundary"}</dd></div>
-        <div><dt>Broker to qualify</dt><dd>{plan?.brokerOptions[0]?.firm ?? "Not selected"}</dd></div>
-      </dl>
-      {plan?.workflow.length ? (
-        <ol className={styles.checklist}>
-          {plan.workflow.slice(0, 5).map((step) => <li key={step.sequence}>{step.title}</li>)}
-        </ol>
-      ) : <p className={styles.sectionEmpty}>No import workflow applies to this movement.</p>}
-    </section>
-  );
-}
-
-function RiskSummary({ dashboard, movement }: { dashboard: SupplyCaseDashboard; movement: SupplyMovementPlan | null }) {
-  const movementRisks = movement?.intelligenceChecks.slice(0, 2) ?? [];
-  const caseRisk = dashboard.risks[0];
-  return (
-    <section className={styles.summaryPanel} data-movement-id={movement?.movementId}>
-      <header className={styles.sectionHeader}><h2>Risks to verify</h2><span>{movementRisks.length + (caseRisk ? 1 : 0)} checks</span></header>
-      <div className={styles.riskList}>
-        {movementRisks.map((risk) => (
-          <article key={risk.id}><strong>{risk.title}</strong><p>{risk.decisionRule}</p></article>
-        ))}
-        {caseRisk ? <article><strong>{caseRisk.title}</strong><p>{caseRisk.check}</p></article> : null}
+    <section className={styles.summaryPanel}>
+      <header className={styles.sectionHeader}><h2>Customs handoff</h2><span>Broker controlled</span></header>
+      <div className={styles.boundaryList}>
+        <article>
+          <span>Derya prepares</span>
+          <strong>Product facts, document checks, classification candidates, broker comparison, and release follow-up</strong>
+        </article>
+        <article>
+          <span>Licensed broker approves</span>
+          <strong>Destination classification, entry treatment, admissibility, and filing</strong>
+        </article>
+        {productCheck ? <p>{productCheck.detail}</p> : null}
       </div>
     </section>
   );
 }
 
-function SupplyMap({
+function CommitChecks({ dashboard }: { dashboard: SupplyCaseDashboard }) {
+  const checks = [
+    ...dashboard.risks.slice(0, 2).map((risk) => ({ title: risk.title, detail: risk.check })),
+    {
+      title: "Live route and provider acceptance",
+      detail: "Tender the same scope, compare current capacity and total delivered cost, then confirm the operating provider before booking.",
+    },
+  ].slice(0, 3);
+  return (
+    <section className={styles.summaryPanel}>
+      <header className={styles.sectionHeader}><h2>Checks before we commit</h2><span>{checks.length} checks</span></header>
+      <div className={styles.riskList}>
+        {checks.map((check) => (
+          <article key={check.title}><strong>{check.title}</strong><p>{check.detail}</p></article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ExecutionDetail({ plan }: { plan: SupplyEngagementPlan }) {
+  return (
+    <details className={styles.executionDetail}>
+      <summary>
+        <span><strong>Execution detail</strong><small>Show the operational handoffs behind the simple plan</small></span>
+        <Icon name="chevron-down" size={14} />
+      </summary>
+      <div className={styles.executionFlows}>
+        {plan.executionSections.map((section) => (
+          <article key={section.id}>
+            <span className={styles.eyebrow}>{section.label}</span>
+            <h3>{section.summary}</h3>
+            <ol>{section.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+          </article>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+type NetworkPoint = {
+  label: string;
+  coordinates: SupplyCoordinate;
+  kind: "source" | "production" | "destination";
+};
+
+function pointsForFlows(flows: readonly SupplyNetworkFlow[]): NetworkPoint[] {
+  const points = new Map<string, NetworkPoint>();
+  function add(label: string, coordinates: SupplyCoordinate | null, kind: NetworkPoint["kind"]) {
+    if (!coordinates) return;
+    const existing = points.get(label);
+    if (existing?.kind === "production") return;
+    points.set(label, { label, coordinates, kind });
+  }
+  for (const flow of flows) {
+    add(flow.from.label, flow.from.coordinates, flow.kind === "inbound" ? "source" : "production");
+    add(flow.to.label, flow.to.coordinates, flow.kind === "inbound" ? "production" : "destination");
+  }
+  return [...points.values()];
+}
+
+function SupplyNetworkMap({
   dashboard,
-  movement,
-  selectedNodeId,
-  setSelectedNodeId,
+  plan,
+  selectedFlowId,
+  setSelectedFlowId,
 }: {
   dashboard: SupplyCaseDashboard;
-  movement: SupplyMovementPlan | null;
-  selectedNodeId: string | null;
-  setSelectedNodeId: (id: string) => void;
+  plan: SupplyEngagementPlan;
+  selectedFlowId: string;
+  setSelectedFlowId: (id: string) => void;
 }) {
-  const selectedNode = dashboard.routeNodes.find((node) => node.id === selectedNodeId) ?? dashboard.routeNodes[0];
-  const nodesById = useMemo(() => new Map(dashboard.routeNodes.map((node) => [node.id, node])), [dashboard.routeNodes]);
-  const activeSegmentIds = new Set(movement?.pathSegmentIds ?? []);
-  const activeNodeIds = new Set([
-    movement?.source?.nodeId,
-    movement?.originGateway.nodeId,
-    movement?.receivingGateway?.nodeId,
-    movement?.customsNode?.nodeId,
-    movement?.destination?.nodeId,
-  ].flatMap((id) => id ? [id] : []));
-
+  const points = pointsForFlows(plan.flows);
+  const selectedFlow = plan.flows.find((flow) => flow.id === selectedFlowId) ?? plan.flows[0] ?? null;
   return (
     <figure className={styles.mapPanel} aria-labelledby="supply-map-title">
-      <header className={styles.mapHeader}><h2 id="supply-map-title">Supply map</h2></header>
+      <header className={styles.mapHeader}>
+        <h2 id="supply-map-title">Operating network</h2>
+        <span>Components in, finished goods out</span>
+      </header>
+      <div className={styles.flowSelector} aria-label="Supply chain flows">
+        {plan.flows.map((flow) => (
+          <button
+            key={flow.id}
+            type="button"
+            data-active={flow.id === selectedFlow?.id}
+            aria-pressed={flow.id === selectedFlow?.id}
+            onClick={() => setSelectedFlowId(flow.id)}
+          >
+            <span>{flow.kind}</span>
+            <strong>{flow.from.label} to {flow.to.label}</strong>
+          </button>
+        ))}
+      </div>
       <div className={styles.mapCanvas}>
         <svg className={styles.mapSvg} viewBox={WORLD_MAP_VIEWBOX} role="img" aria-labelledby="supply-map-svg-title">
-          <title id="supply-map-svg-title">Supply route for {dashboardName(dashboard)}</title>
+          <title id="supply-map-svg-title">Inbound and outbound supply network for {dashboardName(dashboard)}</title>
           <rect width="1000" height="500" className={styles.mapOcean} />
           <g className={styles.mapGrid}>
             {[125, 250, 375].map((y) => <path key={`lat-${y}`} d={`M 0 ${y} H 1000`} />)}
@@ -360,55 +503,33 @@ function SupplyMap({
           </g>
           <g className={styles.mapLand}>{WORLD_MAP_LAND_PATHS.map((path, index) => <path key={`land-${index}`} d={path} />)}</g>
           <g className={styles.routePaths}>
-            {dashboard.routeSegments.map((segment) => {
-              const from = nodesById.get(segment.fromNodeId);
-              const to = nodesById.get(segment.toNodeId);
-              const path = from && to ? routePath(from, to) : null;
-              return path ? <path key={segment.id} d={path} data-active={!movement || activeSegmentIds.has(segment.id)} /> : null;
+            {plan.flows.map((flow) => {
+              const path = routePath(flow.from.coordinates, flow.to.coordinates);
+              return path ? <path key={flow.id} d={path} data-active={flow.id === selectedFlow?.id} /> : null;
             })}
           </g>
           <g>
-            {dashboard.routeNodes.map((node) => {
-              const point = project(node.lat, node.lng);
-              if (!point) return null;
-              const isSelected = selectedNode?.id === node.id;
+            {points.map((point) => {
+              const position = project(point.coordinates);
+              if (!position) return null;
               return (
-                <g
-                  key={node.id}
-                  className={styles.mapNode}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Inspect ${node.label}`}
-                  data-kind={node.kind}
-                  data-selected={isSelected}
-                  data-active={!movement || activeNodeIds.has(node.id)}
-                  onClick={() => setSelectedNodeId(node.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setSelectedNodeId(node.id);
-                    }
-                  }}
-                >
-                  <circle className={styles.mapNodeHitArea} cx={point.x} cy={point.y} r={22} />
-                  <circle cx={point.x} cy={point.y} r={isSelected ? 7 : 5} />
-                  {node.kind === "source" || node.kind === "receiving_gateway" || isSelected
-                    ? <text x={point.x + 10} y={point.y - 8}>{node.label}</text>
-                    : null}
+                <g key={point.label} className={styles.mapNode} data-kind={point.kind}>
+                  <circle cx={position.x} cy={position.y} r={point.kind === "production" ? 7 : 5} />
+                  <text x={position.x + 10} y={position.y - 8}>{point.label}</text>
                 </g>
               );
             })}
           </g>
         </svg>
-        {selectedNode ? (
+        {selectedFlow ? (
           <div className={styles.nodeInspector} aria-live="polite">
-            <span>{selectedNode.kind.replaceAll("_", " ")}</span>
-            <strong>{selectedNode.label}</strong>
-            <p>{selectedNode.detail}</p>
+            <span>{selectedFlow.label}</span>
+            <strong>{selectedFlow.from.label} to {selectedFlow.to.label}</strong>
+            <p>{selectedFlow.detail}</p>
           </div>
         ) : null}
       </div>
-      <figcaption>Modeled route. Confirm live schedules and operational conditions before execution.</figcaption>
+      <figcaption>Network intent only. Derya confirms supplier sites, live routes, gateways, and delivery constraints before execution.</figcaption>
     </figure>
   );
 }

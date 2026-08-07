@@ -8,6 +8,105 @@
 
 ## Branch
 
+supply-os-operating-ownership, targeting main
+
+## Task implemented
+
+### Reframe Supply OS around full or modular operational ownership
+
+The customer case now answers what Derya can take over before exposing any
+freight mechanics.
+
+- Case generation includes a saved coverage choice: full operation, supplier
+  sourcing, inbound logistics, customs preparation, or finished-goods
+  delivery.
+- The Atlas Robotics network now shows Shenzhen components entering Austin
+  production, then finished robots and spares leaving Austin for Detroit and
+  Nashville. It no longer presents components as if they move directly from a
+  supplier region to the finished-goods customer.
+- New cases keep the company location and production or receiving site as
+  separate facts. A company based in San Francisco but manufacturing in Austin
+  now routes components through Austin. Headquarters-only inputs remain visible
+  assumptions and create a production-site confirmation question.
+- Five customer-facing workstreams cover supplier search, supplier
+  coordination, component movement, customs, and finished-goods delivery.
+  Each exposes a concrete output and a short operational drill-down.
+- The dashboard asks for three kickoff inputs: BOM or component list, existing
+  supplier material if any, and the next production or delivery deadline for
+  full-operation cases. Modular cases replace those with three scope-specific
+  inputs for sourcing, inbound movement, customs, or finished-goods delivery.
+- Saved coverage changes persist in the same office-and-user-scoped browser
+  case and survive reload. Existing version 1 cases without a coverage field
+  or production-site field remain valid and default to the full operation.
+- Coverage writes merge against current scoped browser storage, failed writes
+  leave the visible plan unchanged, and same-case cross-tab updates use the
+  persisted scope.
+- Customer-facing modeled prices, transit claims, provider assignments,
+  gateway recommendations, and broker selections were removed. The page now
+  states a domestic, unknown, or import-specific customs boundary and keeps
+  deeper handoffs in one collapsed execution section.
+- The collapsed execution section includes only the selected modular scope, or
+  the complete handoff for full-operation cases. Domestic and unknown cases do
+  not inherit import broker or clearance steps.
+- Customs and tariff logic follows both supplier-to-production and
+  production-to-customer legs. Domestic and unknown cases no longer receive
+  import-specific broker copy or kickoff inputs. Incomplete networks remain
+  unknown unless the known endpoints make an international movement
+  unavoidable.
+- The detailed movement engine remains unchanged and available for future
+  operator tooling.
+
+## Files changed
+
+- `src/lib/supply-os-engagement-plan.ts`
+- `src/lib/supply-os-case-model.ts`
+- `src/app/dashboard/supply-os/supply-os-generator.tsx`
+- `src/app/dashboard/supply-os/supply-os-dashboard.tsx`
+- `src/app/dashboard/supply-os/supply-os-workspace.module.css`
+- `scripts/supply-os-engagement-plan.test.ts`
+- Supply OS model, prototype, and design regression tests
+- `package.json`, `docs/DECISIONS.md`, `docs/ENGINEERING_LOG.md`, and this handoff
+
+## Verification passed
+
+- `npm run test:supply-os-engagement-plan`
+- `npm run test:supply-os-case-model`
+- `npm run test:supply-os-prototype`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-operating-plan`
+- `npm run test:supply-os-command-model`
+- `npx tsc --noEmit --incremental false`
+- `npm run build` with the local test database configuration
+- Authenticated browser generation, modular scope save, reopen, full-scope
+  change, reload persistence, workstream selection, flow selection, and
+  collapsed execution-detail checks
+- Desktop and 390-pixel mobile visual review with no page overflow
+
+## Caveats
+
+- Cases and coverage remain browser-local and are not shared, backed up,
+  customer-published, or server-enforced records.
+- The new network is a truthful operating-intent map, not a live route. It
+  does not discover suppliers, tender providers, return quotes, select a
+  broker, file an entry, or book freight.
+- Multi-source cases keep component-to-source allocation explicitly
+  unconfirmed until supplier or purchase-order data establishes it.
+- City resolution prefers specific place names and no longer treats a state
+  name such as California as proof that the site is in Los Angeles.
+- Product-use language such as robots used in warehouses does not become a
+  confirmed production site.
+- Current provider, pricing, gateway, and customs detail remains modeled in the
+  internal engine and must not return to the default customer view without
+  attributable current evidence.
+
+## Prior Update
+
+## Date
+
+2026-08-06
+
+## Branch
+
 crm-status-structure, targeting main
 
 ## Task implemented

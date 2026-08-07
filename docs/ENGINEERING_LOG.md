@@ -3356,3 +3356,57 @@ Use this file for chronological implementation notes that future agents should s
   operational trust boundaries are unchanged.
 - Follow-up: validate the simpler hierarchy with customers before adding a
   separate operator evidence drill-down or shared office-scoped persistence.
+
+### 2026-08-06 - Make Supply OS sell operational ownership
+
+- Branch: supply-os-operating-ownership, targeting main
+- Commit: see git log
+- Task: Make the generated customer case immediately show that Derya can run
+  the full supply chain or one selected module, especially for robotics and
+  hardware startups.
+- Files changed: optional case engagement scope, new deterministic engagement
+  plan and test, generator scope selector, customer dashboard, scoped design,
+  Supply OS regression tests, package script, decisions, log, and handoff.
+- Behavior: the Atlas demo now maps inbound components from Shenzhen to Austin
+  production and outbound finished robots from Austin to Detroit and
+  Nashville. Five workstreams cover sourcing, supplier coordination, inbound
+  movement, customs, and finished-goods delivery. Coverage choices save to the
+  browser case and survive reload. The three kickoff inputs and offer copy
+  change with the selected module instead of presenting cosmetic scope buttons.
+- Topology: new cases separate company location from the production or
+  receiving site, including the San Francisco headquarters and Austin factory
+  case. Multi-source flows state that component allocation is unconfirmed.
+- Trust boundary: the customer page no longer shows modeled prices, first-in-
+  array provider assignments, static gateway recommendations, or a broker name
+  as if selected. It asks for three kickoff inputs, states the broker approval
+  boundary, and keeps operational handoffs collapsed by default.
+- Persistence and customs: scope changes merge against current browser state,
+  including the latest same-customer record. Failed writes do not alter the
+  visible plan, cross-tab scope changes sync,
+  and domestic or unknown lanes no longer display import-specific broker copy.
+  Customs scope evaluates supplier-to-production and production-to-customer
+  legs separately, and incomplete networks stay unknown unless an import is
+  unavoidable.
+- Location integrity: headquarters-only production assumptions create an open
+  confirmation question, and specific city aliases win over generic region
+  text so San Francisco does not inherit Los Angeles coordinates. Product-use
+  language does not become a confirmed production site.
+- Scope integrity: collapsed execution details include only the selected
+  module, while full-operation cases show both inbound and finished-goods
+  handoffs. Domestic and unknown cases omit import-only broker steps.
+- Verification: engagement-plan, case-model, prototype, enterprise-design,
+  operating-plan, and command-model tests pass. TypeScript passes. Authenticated
+  browser QA covered generator scope, save, reopen, scope persistence, network
+  flow selection, workstream drill-down, execution disclosure, desktop, and
+  390-pixel mobile with zero page overflow.
+- Build: the production Next.js build passes with the local test database
+  configuration.
+- Failed/skipped checks: no supplier, provider, broker, customs, rate, booking,
+  or messaging integration was called because this remains a browser-local
+  scoping prototype.
+- Caveats: detailed provider and cost models still exist in the internal
+  planning engine. They require current attributable evidence before any
+  customer-facing reuse.
+- Follow-up: validate the operating-ownership framing with robotics founders,
+  then persist office-scoped cases before connecting live supplier, quote,
+  broker, and shipment records.
