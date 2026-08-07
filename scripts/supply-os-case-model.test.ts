@@ -343,6 +343,34 @@ for (const [prompt, expectedIndustry] of industryCases) {
   assert.equal(generateSupplyCase(prompt, fixedNow).companyDescription, expectedIndustry);
 }
 
+const locationDescriptorCase = generateSupplyCase(
+  "NOX Metals is a Ferndale, Michigan metals service center that stocks and cuts certified aluminum plate.",
+  fixedNow,
+);
+assert.equal(locationDescriptorCase.companyLocation, "Ferndale, Michigan");
+assert.equal(locationDescriptorCase.productionLocation, "Ferndale, Michigan");
+assert.ok(
+  locationDescriptorCase.routeNodes.some((node) => node.coordinates?.latitude === 42.4606),
+  "a company described as a Ferndale operator must retain a mappable operating site",
+);
+
+const marketDescriptorCase = generateSupplyCase(
+  "Acme is a China-focused supplier of components.",
+  fixedNow,
+);
+assert.equal(marketDescriptorCase.companyLocation, null, "a target market must not become the company headquarters");
+assert.equal(marketDescriptorCase.productionLocation, null, "a target market must not become the production site");
+
+const ferndaleDomesticCase = generateSupplyCase(
+  "Company: Local Metals\nLocated: Ferndale, Michigan\nProduction: Ferndale, Michigan\nSources: aluminum from Detroit, Michigan\nShips to: Detroit, Michigan",
+  fixedNow,
+);
+assert.equal(
+  ferndaleDomesticCase.routeNodes.some((node) => node.kind === "customs"),
+  false,
+  "Ferndale must remain inside the United States customs territory",
+);
+
 assert.deepEqual(
   generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, fixedNow),
   complete,

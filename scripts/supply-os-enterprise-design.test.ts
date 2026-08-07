@@ -4,41 +4,48 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const dashboard = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
+const commandMap = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-command-map.tsx"), "utf8");
 const generator = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-generator.tsx"), "utf8");
 const styles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workspace.module.css"), "utf8");
 const workstreamShell = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream-shell.tsx"), "utf8");
 const workstreamStyles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream.module.css"), "utf8");
 const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
-const source = `${dashboard}\n${generator}\n${styles}\n${workstreamShell}\n${workstreamStyles}`;
+const packageJson = readFileSync(join(root, "package.json"), "utf8");
+const source = `${dashboard}\n${commandMap}\n${generator}\n${styles}\n${workstreamShell}\n${workstreamStyles}`;
 
 for (const required of [
-  ".customerBrowser",
-  ".caseDashboard",
-  ".scopeBar",
-  ".operatingBrief",
-  ".networkWorkspace",
-  ".networkStageList",
-  ".networkInspector",
-  ".qualificationTargets",
-  ".optimizationList",
-  ".optimizationRow",
-  ".workspaceLink",
-  ".kickoffStrip",
-  ".evidenceGrid",
-  ".generatorMain",
-  ".researchMethod",
-  "Operating network",
-  "Where Derya can improve the operation",
-  "Current condition",
-  "Recommended change",
-  "Decision to make",
-  "Input required",
-  "Open {workspace.shortLabel} workspace",
-  "Routes are operating hypotheses.",
-  "Inferred candidates, not known relationships.",
+  ".commandWorkspace",
+  ".commandHeader",
+  ".commandMapStage",
+  ".commandMap",
+  ".mapMarker",
+  ".mapHoverCard",
+  ".routeRail",
+  ".commandInspector",
+  ".inspectorContacts",
+  ".inspectorChecks",
+  ".commandMapFooter",
+  "Provider contacts",
+  "Supplier candidates",
+  "Required checks",
+  "Next action",
+  "Open {workspace.shortLabel}",
+  "Routes and providers are candidates",
   "Execution workspace reserved",
 ]) {
-  assert.equal(source.includes(required), true, `Supply OS action surface is missing: ${required}`);
+  assert.equal(source.includes(required), true, `Supply OS command surface is missing: ${required}`);
+}
+
+for (const removedSurface of [
+  "customerBrowser",
+  "operatingBrief",
+  "optimizationList",
+  "kickoffStrip",
+  "evidenceGrid",
+  "WORLD_MAP_LAND_PATHS",
+  "mapSvg",
+]) {
+  assert.equal(dashboard.includes(removedSurface), false, `legacy dashboard surface returned: ${removedSurface}`);
 }
 
 for (const forbidden of [
@@ -61,7 +68,24 @@ for (const forbidden of [
   assert.equal(source.includes(forbidden), false, `Supply OS must not contain: ${forbidden}`);
 }
 
-const paletteSource = `${styles}\n${workstreamStyles}`;
+for (const dependency of [
+  '"maplibre-gl"',
+  '"@vis.gl/react-maplibre"',
+  '"lucide-react"',
+  '"@radix-ui/react-dropdown-menu"',
+  '"@radix-ui/react-tooltip"',
+]) {
+  assert.equal(packageJson.includes(dependency), true, `Supply OS is missing maintained UI dependency: ${dependency}`);
+}
+assert.match(commandMap, /@vis\.gl\/react-maplibre/, "map rendering must come from React MapLibre");
+assert.match(commandMap, /lucide-react/, "map symbols must come from Lucide");
+assert.match(commandMap, /@radix-ui\/react-tooltip/, "map controls must use an accessible tooltip primitive");
+assert.match(dashboard, /@radix-ui\/react-dropdown-menu/, "customer and scope menus must use an accessible dropdown primitive");
+assert.equal(commandMap.includes("<svg"), false, "the product must not draw its own geography or symbols");
+assert.match(commandMap, /offset=\{markerOffset\(object\.kind\)\}/, "movement and customs markers must remain separately selectable");
+assert.match(styles, /maplibregl-canvas:focus-visible/, "the interactive map canvas needs a visible keyboard focus state");
+
+const paletteSource = `${styles}\n${workstreamStyles}\n${commandMap}`;
 const colorTokens = new Set([
   ...(paletteSource.match(/#[0-9a-fA-F]{6}/g) ?? []),
   ...(paletteSource.match(/rgba?\([^)]*\)/g) ?? []),
@@ -107,30 +131,29 @@ for (const control of ["button", "textarea"]) {
   );
 }
 assert.equal(globals.includes(":not(.supply-os-workspace"), false, "Supply OS exclusions must not raise global specificity");
-assert.equal(
-  globals.includes('[role="button"]:not(:where(.supply-os-workspace [role="button"])):focus-visible'),
-  true,
-  "global role-button focus styling must continue excluding Supply OS",
-);
 
-const topBarStyles = styles.slice(styles.indexOf(".topBar {"), styles.indexOf(".topBarActions {"));
-assert.equal(topBarStyles.includes("position: sticky"), false, "Supply OS must not place a second sticky bar behind the app header");
+const fixedViewport = styles.slice(styles.indexOf(".commandWorkspace {"), styles.indexOf(".presentationWorkspace {"));
+for (const rule of ["height: calc(100dvh - 56px)", "display: grid", "overflow: hidden"]) {
+  assert.equal(fixedViewport.includes(rule), true, `fixed command viewport is missing: ${rule}`);
+}
+const mapStage = styles.slice(styles.indexOf(".commandMapStage {"), styles.indexOf(".commandMap {"));
+assert.equal(mapStage.includes("overflow: hidden"), true, "map stage must not create document scrolling");
+assert.match(styles, /\.routeRail,[\s\S]*\.commandInspector[\s\S]*position: absolute/, "network rail and inspector must overlay the map");
+assert.match(styles, /\.commandMapFooter[\s\S]*position: absolute/, "status strip must stay inside the map viewport");
 
-const desktopNetwork = styles.slice(styles.indexOf(".networkWorkspace {"), styles.indexOf(".networkStageList {"));
-for (const rule of ["grid-template-columns: 230px minmax(420px, 1fr) 300px", "min-height: 520px"]) {
-  assert.equal(desktopNetwork.includes(rule), true, `desktop network workspace is missing: ${rule}`);
+const compactStyles = styles.slice(styles.indexOf("@media (max-width: 1180px)"), styles.indexOf("@media (max-width: 900px)"));
+for (const rule of [".routeRail", ".routeRailCopy", ".commandInspector"]) {
+  assert.equal(compactStyles.includes(rule), true, `compact command layout is missing: ${rule}`);
 }
 
-const tabletStyles = styles.slice(styles.indexOf("@media (max-width: 980px)"), styles.indexOf("@media (max-width: 680px)"));
-for (const rule of [".networkWorkspace", ".networkStageList", "overflow-x: auto", ".optimizationRow summary"]) {
-  assert.equal(tabletStyles.includes(rule), true, `tablet layout is missing: ${rule}`);
+const tabletStyles = styles.slice(styles.indexOf("@media (max-width: 900px)"), styles.lastIndexOf("@media (max-width: 680px)"));
+for (const rule of [".commandHeader", ".commandInspector", ".inspectorBody"]) {
+  assert.equal(tabletStyles.includes(rule), true, `tablet command layout is missing: ${rule}`);
 }
 
-const mobileStyles = styles.slice(styles.indexOf("@media (max-width: 680px)"), styles.indexOf("@media (prefers-reduced-motion"));
-for (const rule of [".topBar", ".customerButton", ".composerFooter", "flex-direction: column-reverse"]) {
-  assert.equal(mobileStyles.includes(rule), true, `mobile layout is missing: ${rule}`);
+const mobileStyles = styles.slice(styles.lastIndexOf("@media (max-width: 680px)"));
+for (const rule of [".commandWorkspace", ".commandHeader", ".routeRail", ".commandInspector", ".commandMapFooter"]) {
+  assert.equal(mobileStyles.includes(rule), true, `mobile command layout is missing: ${rule}`);
 }
-
-assert.equal(styles.includes("overflow-x: auto"), true, "network stages must scroll locally on narrow screens");
 
 console.log("Supply OS enterprise design checks passed");

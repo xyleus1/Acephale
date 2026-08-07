@@ -13,7 +13,7 @@ Supply OS is a working model of how a customer's physical operation may function
 3. What weakness is most likely to hurt cost, lead time, or continuity?
 4. What decision and input unlock the next action?
 
-The map is a working surface, not decoration. The action queue is the primary output, not a collection of metrics.
+The map is the working surface, not decoration. The selected object and its next action are the primary output, not a collection of metrics.
 
 ## Reference patterns
 
@@ -56,25 +56,26 @@ Use sentence case. Avoid slogans, model names, internal jargon, and inflated cla
 
 ## Layout
 
-The dashboard follows a fixed information order:
+The customer dashboard is one fixed-height operating view. The document must not scroll at supported desktop and presentation sizes.
 
-1. Customer identity and source recency
-2. Derya operating scope
-3. One-sentence working supply-chain model
-4. Operating network
-5. Ranked improvement queue
-6. First-input handoff
-7. Evidence and assumptions
+1. A compact header identifies the customer, operating site, scope, and evidence counts.
+2. A narrow left rail lists supplier, customs, factory, distribution, and customer objects in physical-flow order.
+3. A full-bleed map occupies the remaining canvas.
+4. A right dossier describes the selected object, local contacts, checks, and the single next action.
+5. A compact bottom strip explains status and the planning boundary.
 
-The operating network uses three desktop columns:
+Panels sit over the map instead of pushing it into a card. At narrower widths, the rail and dossier become smaller overlays. The new-customer builder remains a separate route because it is an input workflow, not part of the operating picture.
 
-- Stage rail: 230 px
-- Map: the remaining working width, never less than 420 px
-- Selected-node dossier: 300 px
+## Map, components, and provenance
 
-At tablet widths, the dossier moves below the map. On mobile, the stage rail scrolls horizontally and the dossier becomes a single column.
+Use maintained components instead of drawing map chrome or operational symbols in application code:
 
-## Map and provenance
+- MapLibre GL JS through React MapLibre for the map, route layers, markers, popups, scale, navigation, and attribution.
+- OpenFreeMap Positron for the neutral vector basemap.
+- Lucide for supplier, factory, warehouse, movement, customs, and location symbols.
+- Radix primitives for menus and tooltips.
+
+Do not add a hand-drawn SVG geography, invented pictograms, decorative map widgets, or proprietary copied assets. If WebGL 2 is unavailable, keep the object rail and dossier usable and show a bounded renderer notice in the map canvas.
 
 Every node must be one of:
 
@@ -85,19 +86,19 @@ Every node must be one of:
 
 Public evidence never becomes official evidence, and known endpoints never prove that a movement occurred. Inferred movement uses a dashed route, a hollow point, and explicit copy. Candidate suppliers and buyer profiles must say that they are qualification targets, not known relationships.
 
-The map zooms to the current network. Marker and label sizes must remain visually constant enough to avoid giant regional labels. Only the selected node receives a text label because nearby industrial locations often overlap.
+The map zooms to the current network. Routes remain dashed while they are planning hypotheses. Markers use one neutral shell, a standard symbol, and status color only. Hover or keyboard focus opens a compact contact card. Click selects the object and updates the persistent dossier.
 
-## Action queue
+## Operating action
 
-Each action contains exactly five elements:
+The selected-object dossier contains only information required to understand and advance that part of the network:
 
-1. Current condition
-2. Recommended change
-3. Decision to make
-4. Input required
-5. Link to the relevant workstream
+1. Object type, place, status, and evidence basis
+2. Cargo or operational scope
+3. Candidate contacts with role and fit
+4. Readiness checks when applicable
+5. One next action and one linked workstream
 
-The first action may open by default. Remaining actions stay collapsed so the page can be demonstrated in under one minute. A workstream link must carry the customer case identifier and must never imply that a supplier, booking, filing, or spend action is already live.
+A workstream link must carry the customer case identifier and must never imply that a supplier, booking, filing, or spend action is already live.
 
 ## Controls
 
@@ -122,6 +123,8 @@ Future workstream routes may be present before execution tools are connected. Th
 - Tab selection represented by a random bottom bar
 - Cards created only to fill space
 - Repeated summaries that do not change the next decision
+- Stacked report sections that force the customer dashboard to scroll
+- Custom-drawn maps, icons, or controls when a maintained library component exists
 - Generic provider lists without scope, evidence, or a customer-specific reason
 - Fake rates, shipment status, customers, suppliers, or system connections
 - Buzzword headings such as command center, modeled workspace, or decision intelligence

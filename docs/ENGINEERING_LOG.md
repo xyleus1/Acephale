@@ -3568,3 +3568,47 @@ Use this file for chronological implementation notes that future agents should s
   backlog.
 - Safety: No schema, dependency, secret, environment, supplier, booking,
   customs filing, message, or spend mutation was introduced.
+
+### 2026-08-07 - Replace the Supply OS report with a fixed command map
+
+- Branch: `feat/supply-os-command-map`, targeting `main`
+- Product: Replaced the scroll-based saved-customer report with a compact
+  header, physical-flow object rail, full map canvas, selected-object dossier,
+  and bottom status strip. The supported desktop and presentation view has no
+  document scroll.
+- Map: Added React MapLibre and MapLibre GL JS with the OpenFreeMap Positron
+  style. Routes use GeoJSON layers, map controls come from MapLibre, operational
+  symbols come from Lucide, and menus and tooltips come from Radix.
+- Interaction: Supplier, movement, customs, factory, distribution, and customer
+  objects expose hover contact cards and persistent click selection. The
+  selected dossier shows cargo, evidence basis, candidate providers, readiness
+  checks, one next action, and a case-scoped workstream link.
+- Network detail: Added deterministic candidate coverage for DHL Global
+  Forwarding, Uber Freight, Livingston International, and Farrow. Added an
+  explicit Windsor-Detroit customs object for inferred U.S.-Canada movements.
+  Provider selection now follows the actual modeled movement: Farrow appears
+  only on U.S.-Canada work, China ocean movement omits domestic truck capacity,
+  and domestic sites do not receive an irrelevant customs broker. All contacts
+  and lanes remain unassigned planning candidates.
+- Resilience: Added a WebGL 2 capability gate so unsupported browsers retain
+  the route list and dossier instead of entering the application error
+  boundary. Basemap connection failure also leaves the operating objects
+  available.
+- Case parsing: Added exact Ferndale, Michigan coordinates and descriptor
+  extraction for prompts such as `NOX Metals is a Ferndale, Michigan metals
+  service center`, which restores factory, lane, and customs generation in the
+  description-only fallback. Negative coverage prevents `China-focused
+  supplier` from becoming a false headquarters, keeps Ferndale inside the U.S.
+  customs territory, and classifies Laredo, Texas as U.S. geography before the
+  generic Mexico border alias.
+- Tests: Added `test:supply-os-command-map` and rewrote the prototype and design
+  assertions around the fixed map-first surface. Extended case-model coverage
+  for Ferndale extraction.
+- Browser QA: Authenticated NOX Metals creation produced three suppliers,
+  Windsor-Detroit customs, the Ferndale site, two customer clusters, provider
+  contacts, and workstream navigation. The page measured 720 pixels of content
+  in a 720 pixel viewport with no document scroll and no console errors after
+  reload. The headless browser lacks WebGL 2, so it verified the fallback while
+  the live map path remained build and test verified.
+- Safety: No database schema, secret, environment, supplier, booking, customs
+  filing, message, or spend mutation was introduced.

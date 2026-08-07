@@ -6063,3 +6063,72 @@ Trust boundary:
   suppliers and buyer profiles are not known relationships. The dashboard
   still needs office-scoped ERP, procurement, CRM, shipment, and broker records
   before it can represent the customer's actual operating network.
+
+## Supply OS fixed command map, August 7
+
+Status:
+
+- Implemented on `feat/supply-os-command-map`, targeting `main`.
+- No database migration, secret, environment variable, or external operating
+  action is required.
+
+Customer result:
+
+- The saved-customer dashboard is now one fixed-height page with no document
+  scrolling at supported desktop and presentation sizes.
+- A compact customer header, physical-flow object rail, live map, selected
+  dossier, and bottom status strip replace the prior stacked report sections.
+- Suppliers, movements, customs handoffs, factories, distribution points, and
+  customers are selectable. Map hover or keyboard focus shows a compact local
+  contact card. The dossier exposes provider candidates, readiness checks, one
+  next action, and the relevant workstream.
+- International and domestic movement candidates include DHL Global
+  Forwarding and Uber Freight. U.S.-Canada customs candidates include
+  Livingston International and Farrow. These are public capability matches,
+  not connected providers, live rates, or awarded work.
+
+Design and implementation:
+
+- The map uses React MapLibre and MapLibre GL JS with OpenFreeMap Positron.
+  Lucide supplies operational symbols, and Radix supplies menus and tooltips.
+  No hand-drawn geography, invented icon set, or copied proprietary asset is
+  included.
+- Color is limited to evidence and operating status. Selection uses border,
+  weight, and a quiet neutral background.
+- A WebGL 2 capability gate prevents the map engine from taking down the page.
+  Unsupported environments retain the object rail and dossier with a bounded
+  renderer notice.
+- Movement and customs markers use separate screen offsets when they share a
+  modeled coordinate, so both remain selectable without inventing a second
+  geographic location.
+- The location parser recognizes Ferndale, Michigan only when it appears as a
+  direct operating-location descriptor. Market language such as
+  `China-focused supplier` cannot become a false headquarters. Ferndale remains
+  in the U.S. customs territory.
+- Country matching gives explicit U.S. geography priority over the `Laredo`
+  border alias. Monterrey-to-Laredo movements now receive a U.S.-Mexico customs
+  handoff, while China ocean movements do not receive a Canada-only broker.
+
+Verification:
+
+- All ten Supply OS suites passed before the final documentation update.
+- The command-map coverage audit reached about 70 percent after adding Canada,
+  Mexico, China ocean, and domestic regression fixtures across evidence,
+  provider, movement, and customs branches.
+- TypeScript and the optimized production build passed with generated Prisma
+  client artifacts and a disposable local database URL.
+- Authenticated browser QA created a NOX Metals case and verified three supplier
+  objects, a customs handoff, the Ferndale operating site, customer clusters,
+  candidate contacts, workstream navigation, zero document scroll at 1280 by
+  720, and a clean console after reload.
+- The headless browser does not expose WebGL 2, so browser QA exercised the
+  graceful fallback. The live map path is covered by type checking, build, and
+  command-map tests but still needs a final GPU-browser production check.
+
+Trust boundary:
+
+- Public provider links are candidate contacts only. No live quote, booking,
+  customs filing, provider message, supplier award, or spend mutation was
+  introduced.
+- Existing browser-local, office/user-scoped customer-case storage and explicit
+  evidence labels remain unchanged.

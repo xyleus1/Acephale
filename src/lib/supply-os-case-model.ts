@@ -527,6 +527,15 @@ const LOCATIONS: readonly LocationEntry[] = [
     importGatewayCoordinates: { latitude: 33.7361, longitude: -118.2637 },
   },
   {
+    aliases: ["ferndale"],
+    label: "Ferndale, Michigan",
+    coordinates: { latitude: 42.4606, longitude: -83.1346 },
+    exportGateway: "Detroit intermodal ramp",
+    exportGatewayCoordinates: { latitude: 42.3314, longitude: -83.0458 },
+    importGateway: "Detroit-Windsor border crossing",
+    importGatewayCoordinates: { latitude: 42.3125, longitude: -83.0743 },
+  },
+  {
     aliases: ["nashville"],
     label: "Nashville, Tennessee",
     coordinates: { latitude: 36.1627, longitude: -86.7816 },
@@ -666,6 +675,15 @@ function extractHeadquarters(input: string): SupplyCaseFact<string> {
   if (operatingSentence) {
     const location = directOperatingLocation(operatingSentence[1]);
     if (location) return fact(location, "ready", "Parsed from the company description.");
+  }
+
+  const descriptor = input.match(
+    /\b(?:is|are)\s+(?:an?\s+)?(.+?)\s+(?:company|manufacturer|service\s+center|processor|supplier|distributor)\b/i,
+  );
+  if (descriptor) {
+    const directLocation = directOperatingLocation(descriptor[1]);
+    const location = resolveLocation(directLocation);
+    if (location) return fact(location.label, "ready", "Parsed from the company description.");
   }
   return fact<string>(null, "needs_confirmation", "Headquarters or operating location was not provided.");
 }
@@ -891,6 +909,7 @@ const UNITED_STATES_LOCATION_LABELS = new Set([
   "San Francisco Bay Area",
   "Boston, Massachusetts",
   "Chicago, Illinois",
+  "Ferndale, Michigan",
 ]);
 
 const ASIA_LOCATION_LABELS = new Set([

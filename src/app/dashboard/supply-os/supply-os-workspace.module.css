@@ -1715,3 +1715,1309 @@
     transition-duration: 0.01ms;
   }
 }
+
+/* Map-first customer command center. The generator keeps the document layout above. */
+.commandWorkspace {
+  height: calc(100dvh - 56px);
+  min-height: 0;
+  display: grid;
+  margin: -26px -30px;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+.presentationWorkspace {
+  height: 100dvh;
+  margin: 0;
+}
+
+.commandCenter {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr);
+  overflow: hidden;
+  border: 0;
+  background: var(--canvas);
+}
+
+.commandHeader {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  z-index: 8;
+}
+
+.commandIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.commandIdentity img {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
+}
+
+.commandIdentity > span {
+  min-width: 0;
+}
+
+.commandIdentity h1 {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 680;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandIdentity small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandMetrics {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.commandMetrics span {
+  padding: 0 10px;
+  border-left: 1px solid var(--line);
+}
+
+.commandMetrics strong {
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.commandActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.commandIconLink,
+.commandMenuButton,
+.commandPrimaryButton {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.commandIconLink {
+  width: 32px;
+  padding: 0;
+}
+
+.commandMenuButton:hover,
+.commandIconLink:hover {
+  border-color: var(--ink-muted);
+  color: var(--ink);
+  background: var(--panel-subtle);
+}
+
+.commandPrimaryButton {
+  border-color: var(--ink);
+  color: var(--panel);
+  background: var(--ink);
+}
+
+.commandPrimaryButton:hover {
+  border-color: var(--navy);
+  color: var(--panel);
+  background: var(--navy);
+}
+
+.commandMenu {
+  width: min(330px, calc(100vw - 24px));
+  max-height: min(480px, calc(100dvh - 80px));
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--ink);
+  background: var(--panel);
+  z-index: 120;
+}
+
+.commandMenu > [role="label"] {
+  display: block;
+  padding: 7px 9px 6px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.commandMenuItem {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 2px;
+  outline: 0;
+  cursor: pointer;
+}
+
+.commandMenuItem[data-highlighted] {
+  background: var(--panel-selected);
+}
+
+.commandMenuItem span,
+.commandMenuItem strong,
+.commandMenuItem small {
+  min-width: 0;
+  display: block;
+}
+
+.commandMenuItem strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandMenuItem small {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandError {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  z-index: 15;
+  padding: 8px 11px;
+  border: 1px solid var(--danger);
+  border-radius: 3px;
+  color: var(--danger);
+  background: var(--panel);
+  font-size: 10px;
+  transform: translateX(-50%);
+}
+
+.commandMapStage {
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+.commandMap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+.commandMap :global(.maplibregl-map) {
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.commandMap :global(.maplibregl-canvas) {
+  outline: 0;
+}
+
+.commandMap :global(.maplibregl-canvas:focus-visible) {
+  outline: 2px solid var(--navy);
+  outline-offset: -2px;
+}
+
+.commandMap :global(.maplibregl-ctrl-bottom-left) {
+  left: 276px;
+  bottom: 42px;
+}
+
+.commandMap :global(.maplibregl-ctrl-bottom-right) {
+  right: 356px;
+  bottom: 42px;
+}
+
+.commandMap :global(.maplibregl-ctrl-group) {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.commandMap :global(.maplibregl-ctrl-group button) {
+  background-color: var(--panel);
+}
+
+.commandMap :global(.maplibregl-ctrl-scale) {
+  border-color: var(--ink-muted);
+  color: var(--ink-soft);
+  background: var(--panel);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+}
+
+.commandMap :global(.maplibregl-ctrl-attrib) {
+  color: var(--ink-muted);
+  background: var(--panel);
+  font-size: 9px;
+}
+
+.mapMarker {
+  width: 30px;
+  height: 30px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ink-soft);
+  border-radius: 3px;
+  color: var(--ink);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.mapMarker[data-kind="movement"] {
+  width: 25px;
+  height: 25px;
+  border-color: var(--line-strong);
+  color: var(--ink-soft);
+}
+
+.mapMarker[data-kind="customs"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mapMarker[data-active="true"] {
+  border-color: var(--ink);
+  color: var(--panel);
+  background: var(--ink);
+}
+
+.mapMarker:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 3px;
+}
+
+.markerStatusDot {
+  width: 6px;
+  height: 6px;
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  border: 1px solid var(--panel);
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.mapMarker[data-status="verified"] .markerStatusDot {
+  background: var(--success);
+}
+
+.mapMarker[data-status="unassigned"] .markerStatusDot {
+  background: var(--danger);
+}
+
+.commandMapPopup :global(.maplibregl-popup-content) {
+  width: 294px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  box-shadow: none;
+  background: var(--panel);
+}
+
+.commandMapPopup :global(.maplibregl-popup-tip) {
+  border-top-color: var(--line-strong);
+}
+
+.mapHoverCard {
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.mapHoverCard > header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hoverObjectIcon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--ink-soft);
+}
+
+.hoverObjectIcon[data-kind="customs"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mapHoverCard header span:nth-child(2) {
+  min-width: 0;
+}
+
+.mapHoverCard header small,
+.mapHoverCard header strong {
+  display: block;
+}
+
+.mapHoverCard header small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.mapHoverCard header strong {
+  overflow: hidden;
+  margin-top: 1px;
+  font-size: 11px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapHoverCard header i,
+.inspectorHeader > i {
+  padding: 3px 5px;
+  border: 1px solid var(--warning);
+  border-radius: 2px;
+  color: var(--warning);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mapHoverCard header i[data-status="verified"],
+.inspectorHeader > i[data-status="verified"] {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.mapHoverCard header i[data-status="unassigned"],
+.inspectorHeader > i[data-status="unassigned"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mapHoverCard > p {
+  padding: 8px 10px;
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
+.hoverContacts {
+  padding: 0 10px 8px;
+}
+
+.hoverContacts > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.hoverContacts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+  font-size: 9px;
+}
+
+.hoverContacts strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.hoverContacts small {
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+.mapHoverCard footer {
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+}
+
+.fitMapButton {
+  width: 32px;
+  height: 32px;
+  position: absolute;
+  top: 12px;
+  right: 356px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  z-index: 6;
+}
+
+.fitMapButton:hover {
+  color: var(--ink);
+  background: var(--panel-subtle);
+}
+
+.mapTooltip {
+  padding: 5px 7px;
+  border-radius: 2px;
+  color: var(--panel);
+  background: var(--ink);
+  font-size: 9px;
+  z-index: 130;
+}
+
+.mapTooltipArrow {
+  fill: var(--ink);
+}
+
+.mapError {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  padding: 7px 9px;
+  border: 1px solid var(--danger);
+  border-radius: 3px;
+  color: var(--danger);
+  background: var(--panel);
+  font-size: 9px;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+.mapUnavailable {
+  width: min(360px, calc(100% - 120px));
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+  background: var(--panel);
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.mapUnavailable strong {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.mapUnavailable span {
+  color: var(--ink-muted);
+  font-size: 9px;
+}
+
+.routeRail,
+.commandInspector {
+  position: absolute;
+  top: 12px;
+  bottom: 48px;
+  z-index: 5;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+}
+
+.routeRail {
+  left: 12px;
+  width: 252px;
+  overflow: hidden;
+}
+
+.routeRail > header {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.routeRail > header span {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.routeRail > header small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+}
+
+.routeRailList {
+  height: calc(100% - 40px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.routeRailList > button {
+  min-height: 0;
+  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 8px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  text-align: left;
+}
+
+.routeRailList > button:last-child {
+  border-bottom: 0;
+}
+
+.routeRailList > button:hover {
+  background: var(--panel-subtle);
+}
+
+.routeRailList > button[data-active="true"] {
+  color: var(--ink);
+  background: var(--panel-selected);
+}
+
+.routeRailList > button[data-active="true"]::before {
+  width: 2px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--navy);
+  content: "";
+}
+
+.routeRailList > button {
+  position: relative;
+}
+
+.routeRailIcon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel);
+}
+
+.routeRailCopy {
+  min-width: 0;
+}
+
+.routeRailCopy small,
+.routeRailCopy strong,
+.routeRailCopy em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routeRailCopy small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.routeRailCopy strong {
+  margin-top: 1px;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.routeRailCopy em {
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 8px;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+.routeRailStatus {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.routeRailList > button[data-status="verified"] .routeRailStatus {
+  background: var(--success);
+}
+
+.routeRailList > button[data-status="unassigned"] .routeRailStatus {
+  background: var(--danger);
+}
+
+.commandInspector {
+  right: 12px;
+  width: 332px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.inspectorHeader {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspectorIcon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--ink-soft);
+}
+
+.inspectorIcon[data-kind="customs"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.inspectorHeader > span:nth-child(2) {
+  min-width: 0;
+}
+
+.inspectorHeader small {
+  display: block;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.inspectorHeader h2 {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspectorBody {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px;
+  overflow: hidden;
+}
+
+.inspectorLocation {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+}
+
+.inspectorDetail {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.inspectorFacts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  border: 1px solid var(--line);
+}
+
+.inspectorFacts > div {
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.inspectorFacts > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.inspectorFacts dt,
+.inspectorFacts dd {
+  margin: 0;
+}
+
+.inspectorFacts dt {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.inspectorFacts dd {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 9px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inspectorChecks,
+.inspectorContacts,
+.inspectorAction {
+  min-width: 0;
+}
+
+.inspectorChecks h3,
+.inspectorContacts h3,
+.inspectorAction h3 {
+  margin-bottom: 5px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.inspectorChecks > div {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+  font-size: 9px;
+}
+
+.inspectorChecks i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.inspectorChecks i[data-check="ready"] {
+  background: var(--success);
+}
+
+.inspectorChecks i[data-check="missing"] {
+  background: var(--danger);
+}
+
+.inspectorChecks small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.inspectorContact {
+  min-width: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  gap: 3px 6px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.inspectorContact > span {
+  min-width: 0;
+}
+
+.inspectorContact strong,
+.inspectorContact small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspectorContact strong {
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 680;
+}
+
+.inspectorContact small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+}
+
+.inspectorContact p {
+  display: -webkit-box;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 8px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inspectorContact a {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--ink-soft);
+}
+
+.inspectorContact a:hover {
+  border-color: var(--ink-muted);
+  color: var(--ink);
+}
+
+.inspectorAction {
+  padding-top: 8px;
+  border-top: 1px solid var(--line-strong);
+}
+
+.inspectorAction p {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 620;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inspectorAction small {
+  display: none;
+}
+
+.inspectorWorkspaceLink {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 11px;
+  border-top: 1px solid var(--line-strong);
+  color: var(--ink);
+  background: var(--panel-subtle);
+  font-size: 10px;
+  font-weight: 680;
+  text-decoration: none;
+}
+
+.inspectorWorkspaceLink:hover {
+  background: var(--panel-selected);
+}
+
+.commandMapFooter {
+  height: 32px;
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-muted);
+  background: var(--panel);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  z-index: 5;
+}
+
+.commandLegend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.commandLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.commandLegend i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+}
+
+.commandLegend i[data-kind="supplier"],
+.commandLegend i[data-kind="factory"],
+.commandLegend i[data-kind="customer"] {
+  background: var(--navy);
+}
+
+.commandLegend i[data-kind="customs"] {
+  background: var(--danger);
+}
+
+.commandMapFooter p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandState {
+  width: min(420px, calc(100% - 32px));
+  align-self: center;
+  justify-self: center;
+  padding: 26px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  background: var(--panel);
+  text-align: center;
+}
+
+.commandState h1 {
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 680;
+}
+
+.commandState p {
+  margin: 5px 0 14px;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 1180px) {
+  .commandHeader {
+    grid-template-columns: minmax(170px, auto) minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .commandMetrics span:nth-child(n + 3) {
+    display: none;
+  }
+
+  .routeRail {
+    width: 48px;
+  }
+
+  .routeRail > header {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .routeRail > header small,
+  .routeRailCopy,
+  .routeRailStatus {
+    display: none;
+  }
+
+  .routeRailList > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+  }
+
+  .commandInspector {
+    width: 308px;
+  }
+
+  .fitMapButton {
+    right: 332px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-left) {
+    left: 64px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-right) {
+    right: 332px;
+  }
+}
+
+@media (max-width: 900px) {
+  .commandHeader {
+    grid-template-columns: minmax(150px, 1fr) auto;
+  }
+
+  .commandMetrics,
+  .commandActions > .commandIconLink,
+  .commandActions > .commandMenuButton:first-of-type {
+    display: none;
+  }
+
+  .commandPrimaryButton {
+    width: 32px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .commandInspector {
+    top: auto;
+    right: 12px;
+    bottom: 48px;
+    left: 72px;
+    width: auto;
+    height: 210px;
+    grid-template-columns: 210px minmax(0, 1fr) 110px;
+    grid-template-rows: 1fr;
+  }
+
+  .inspectorHeader {
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-content: start;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+
+  .inspectorHeader > i {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .inspectorBody {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 7px 10px;
+  }
+
+  .inspectorDetail,
+  .inspectorLocation,
+  .inspectorFacts {
+    grid-column: 1;
+  }
+
+  .inspectorChecks,
+  .inspectorContacts {
+    grid-column: 2;
+  }
+
+  .inspectorAction {
+    display: none;
+  }
+
+  .inspectorContacts .inspectorContact:nth-of-type(n + 3),
+  .inspectorChecks > div:nth-of-type(n + 4) {
+    display: none;
+  }
+
+  .inspectorWorkspaceLink {
+    align-items: center;
+    justify-content: center;
+    border-top: 0;
+    border-left: 1px solid var(--line-strong);
+    text-align: center;
+  }
+
+  .fitMapButton {
+    right: 12px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-right) {
+    right: 12px;
+    bottom: 266px;
+  }
+}
+
+@media (max-width: 680px) {
+  .commandWorkspace {
+    height: calc(100dvh - 56px);
+    margin: -16px;
+  }
+
+  .presentationWorkspace {
+    height: 100dvh;
+    margin: 0;
+  }
+
+  .commandHeader {
+    height: 52px;
+    grid-template-columns: minmax(130px, 1fr) auto;
+    padding: 0 9px;
+  }
+
+  .commandCenter {
+    grid-template-rows: 52px minmax(0, 1fr);
+  }
+
+  .commandIdentity img {
+    display: none;
+  }
+
+  .commandActions .commandMenuButton {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .routeRail {
+    top: 8px;
+    bottom: 44px;
+    left: 8px;
+    width: 42px;
+  }
+
+  .routeRailIcon {
+    width: 25px;
+    height: 25px;
+  }
+
+  .commandInspector {
+    right: 8px;
+    bottom: 44px;
+    left: 58px;
+    height: 184px;
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+
+  .inspectorHeader {
+    padding: 8px;
+  }
+
+  .inspectorBody {
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
+
+  .inspectorLocation,
+  .inspectorDetail,
+  .inspectorFacts,
+  .inspectorChecks {
+    grid-column: 1;
+  }
+
+  .inspectorContacts,
+  .inspectorWorkspaceLink {
+    display: none;
+  }
+
+  .inspectorDetail {
+    -webkit-line-clamp: 2;
+  }
+
+  .inspectorChecks > div:nth-of-type(n + 3) {
+    display: none;
+  }
+
+  .commandMapFooter {
+    right: 8px;
+    bottom: 6px;
+    left: 8px;
+    height: 30px;
+  }
+
+  .commandLegend span:nth-child(n + 4),
+  .commandMapFooter p {
+    display: none;
+  }
+
+  .fitMapButton {
+    top: 8px;
+    right: 8px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-left) {
+    left: 52px;
+    bottom: 234px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-right) {
+    right: 8px;
+    bottom: 234px;
+  }
+}

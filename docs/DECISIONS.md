@@ -1627,3 +1627,37 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: connected office-scoped purchase orders, suppliers, customer
   orders, shipments, and broker records can replace inferred nodes with
   observed relationships and measured lane performance.
+
+### 2026-08-07 - Supply OS uses a fixed map-first command view
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: The report-style dashboard and checked-in Natural Earth SVG made the
+  network secondary, created document scrolling, and required application code
+  to imitate map controls and symbols. It did not meet the interaction quality
+  of established maritime operating products.
+- Decision: Make the saved-customer dashboard one fixed-height view with a
+  compact header, object rail, full map canvas, selected-object dossier, and
+  bottom status strip. Use MapLibre GL JS through React MapLibre, the
+  OpenFreeMap Positron vector style, Lucide operational symbols, and Radix
+  controls. Hover or focus exposes the contact card, click selects an object,
+  and every selected supplier, movement, customs handoff, factory,
+  distribution point, or customer exposes one next action. If WebGL 2 is not
+  available, preserve the object rail and dossier and show a bounded renderer
+  notice instead of crashing the page.
+- Supersedes: The checked-in Natural Earth map and scroll-based saved-customer
+  layout described in `Supply OS leads with an inferred network and ranked
+  changes`. The provenance and human-approval requirements from that decision
+  remain active.
+- Rationale: A logistics operating surface should lead with geography,
+  movement, selection, and local operating detail. Maintained map, icon, and
+  control libraries provide consistent behavior without proprietary copying or
+  custom-drawn visual language.
+- Consequences: The dashboard requires WebGL 2 and a network connection to the
+  OpenFreeMap style for the live basemap. Provider and broker entries remain
+  candidates with direct public links, not connected capacity or awarded work.
+  Routes remain inferred until supported by customer or connected operating
+  records. Browser-local customer storage and office/user scoping are
+  unchanged.
+- Revisit when: Derya has live shipment, AIS, rate, broker, and provider data,
+  or when an approved self-hosted basemap is required for offline operation.
