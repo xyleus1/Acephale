@@ -87,6 +87,25 @@ assert.equal(dashboard.company.destinations[0]?.status, "verify");
 const productionNode = dashboard.routeNodes.find((node) => node.kind === "headquarters");
 assert.deepEqual(productionNode?.coordinates, { latitude: 45.5019, longitude: -73.5674 });
 
+const noOriginResearch = {
+  ...research,
+  company: {
+    ...research.company,
+    likelyInputs: [claim("mill-sourced aluminum plate", "inferred", "medium", [])],
+    likelySourceRegions: [],
+    likelyDestinations: [],
+  },
+};
+const noOriginDashboard = generateSupplyCase("Nox Metals", new Date(researchedAt), "full_operation", noOriginResearch);
+assert.deepEqual(noOriginDashboard.sourcingNeeds, ["mill-sourced aluminum plate"]);
+assert.deepEqual(noOriginDashboard.sourceRegions, [], "materials must never become geographic source regions");
+assert.deepEqual(noOriginDashboard.destinations, []);
+assert.equal(
+  noOriginDashboard.routeNodes.some((node) => node.kind === "source" && node.label === "mill-sourced aluminum plate"),
+  false,
+  "the route model must wait for a real supplier location",
+);
+
 const compactFallback = generateSupplyCase(
   "Company: AON3D Located: Montreal, Quebec, Canada Production: Montreal, Quebec, Canada AON3D makes industrial printers. Sources: motion controls from Shenzhen, China Ships to: Detroit, Michigan",
   new Date(researchedAt),

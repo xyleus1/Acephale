@@ -5926,3 +5926,59 @@ Verification:
 - A manual AON3D reproduction with a deliberately invalid provider key returned
   four official sources and all six progress steps in 1.6 seconds, proving the
   provider was bypassed.
+
+## Supply OS name-only research and customer-result quality, August 7
+
+Status:
+
+- Implemented on `fix/supply-os-research-quality`, targeting `main`.
+- No database migration, dependency, or new environment variable is required.
+
+Root cause and fix:
+
+- The previous hotfix protected prompts with an explicit website, but a
+  name-only prompt still waited on model-backed public search before any useful
+  dashboard existed. Production could close that stream without a terminal
+  event.
+- Name-only research now derives a bounded set of likely public domains,
+  verifies company identity from official metadata and page content, rejects
+  parked or mismatched sites, and ranks the strongest official candidate.
+- Public model search is secondary enrichment with an eight-second bound. The
+  browser has a twelve-second total research deadline and automatically builds
+  a saved draft from the user input if enrichment cannot finish.
+- `do nox metals` resolves `noxmetals.co` instead of the unrelated legacy
+  `noxmetals.com` business and produces a sourced dashboard without an OpenAI
+  key.
+
+Planning quality:
+
+- Company materials and components now use a distinct `Needs` field. They are
+  never parsed as geographic source regions.
+- When supplier or customer geography is unknown, the map shows the verified
+  operating site and asks for one real endpoint instead of inventing a lane.
+- Metals delivery copy describes stock, cut-to-size orders, and replenishment
+  material rather than generic finished goods.
+
+Customer surface:
+
+- Supply OS now uses light-gray page surfaces, white working panels, and the
+  existing navy shell without gradients, decorative color, or visual noise.
+- The new-customer page is one compact form. Workstream details remain closed
+  until selected, and supplementary form explanation is removed on mobile.
+
+Verification:
+
+- All eight Supply OS suites, TypeScript, and the production Next.js build
+  passed.
+- Authenticated browser QA covered the exact `do nox metals` input, correct
+  official-site resolution, four retained official sources, the verified
+  Ferndale operating location, zero invented route origins, workstream
+  expand/collapse behavior, and clean 1440 by 1000 and 390 by 844 layouts.
+- A clean reload reported no browser console errors.
+- Design review improved the result from C to A- and AI slop from B to A-.
+
+Caveat:
+
+- Likely-domain discovery is deliberately bounded and heuristic. Ambiguous
+  company names can still require an explicit website, but failure can no
+  longer prevent the user from receiving a dashboard.

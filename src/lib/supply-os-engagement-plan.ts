@@ -78,6 +78,7 @@ function finishedGoodsLabel(industry: string): string {
   if (/medical/i.test(industry)) return "devices, accessories, and service parts";
   if (/automotive/i.test(industry)) return "production parts and service parts";
   if (/chemical/i.test(industry)) return "finished products and replenishment orders";
+  if (/metal/i.test(industry)) return "stock, cut-to-size orders, and replenishment material";
   return "finished goods and service parts";
 }
 

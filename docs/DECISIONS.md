@@ -1542,7 +1542,7 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ### 2026-08-07 - Explicit company websites use official-site research first
 
-- Status: accepted
+- Status: superseded by "Company research must produce a dashboard before enrichment"
 - Owner: product and engineering
 - Context: Model-backed public search can exceed a request's available runtime.
   It also adds little value before reading a website the operator already gave
@@ -1559,3 +1559,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
   but can return a structured timeout recovery message.
 - Revisit when: research runs asynchronously with durable office-scoped results,
   where broader enrichment no longer blocks the customer request.
+
+### 2026-08-07 - Company research must produce a dashboard before enrichment
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The explicit-website path was fast and bounded, but name-only
+  research still depended on one provider request. A runtime cutoff could leave
+  a customer with progress text and no terminal result. The same planning
+  bridge also overloaded `Sources` with both materials and geography, which
+  could turn a material into a false route origin.
+- Decision: Make the first useful dashboard independent of model-backed public
+  search. For a name-only input, derive a small set of likely public domains,
+  verify company identity against official metadata and page content, reject
+  parked or mismatched sites, and select the strongest official candidate.
+  Run broader public search only as bounded secondary enrichment. If every
+  research path stops, automatically save a draft from the user's input. Keep
+  materials in `Needs` and route origins in `Sources`; never draw a lane until
+  a real endpoint is known.
+- Supersedes: `Explicit company websites use official-site research first`.
+- Rationale: A customer demo must always end in a useful artifact. Official
+  evidence is fast, attributable, and sufficient for a first company picture.
+  Optional enrichment can improve that picture but cannot be a prerequisite.
+  Separating objects from places prevents polished but false maps.
+- Consequences: Ambiguous names may resolve only to a description-based draft
+  and ask for the official website. Domain discovery remains bounded by the
+  existing public-DNS, redirect, content-type, byte, page, and timeout controls.
+  Suppliers, lanes, customs treatment, rates, providers, and external actions
+  remain unconfirmed until connected evidence and human approval exist.
+- Revisit when: office-scoped asynchronous research can persist partial results
+  across requests, or a connected company-data provider can resolve ambiguous
+  legal entities without weakening provenance.

@@ -2,6 +2,11 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import OpenAI from "openai";
 import { DERYA_AI_MODEL } from "@/lib/gpt56-client";
+import {
+  companyNameHint,
+  identityTokens,
+  officialWebsiteCandidates,
+} from "@/lib/supply-os-company-identity";
 import type {
   SupplyCompanyResearch,
   SupplyResearchClaim,
@@ -15,6 +20,11 @@ const MAX_SOURCE_COUNT = 12;
 const MAX_HTML_BYTES = 1_000_000;
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_OFFICIAL_PAGE_COUNT = 4;
+const DISCOVERY_FETCH_TIMEOUT_MS = 3_500;
+
+export { companyNameHint, officialWebsiteCandidates } from "@/lib/supply-os-company-identity";
+
+export type OfficialDocument = { url: string; html: string };
 
 export type SupplyResearchProgress = {
   id: "website" | "profile" | "operations" | "assumptions" | "dashboard";
@@ -185,8 +195,76 @@ export function extractWebsiteFromQuery(query: string): string | null {
 
 export type SupplyCompanyResearchStrategy =
   | { kind: "official_site"; website: string }
-  | { kind: "public_search" }
-  | { kind: "unavailable" };
+  | { kind: "name_discovery"; publicSearchConfigured: boolean };
+
+export function officialSiteIdentityScore(query: string, document: OfficialDocument): number {
+  const name = companyNameHint(query);
+  if (!name || /domain\s+(?:is\s+)?for\s+sale|buy\s+this\s+domain|parked\s+domain/i.test(document.html)) return 0;
+  const expected = identityTokens(name);
+  if (!expected.length) return 0;
+  const records = jsonLdRecords(document.html);
+  const organizationNames = records.flatMap((item) =>
+    jsonLdType(item).some((type) => /Organization|Corporation|LocalBusiness/i.test(type))
+      ? [stringValue(item.name)]
+      : [],
+  );
+  const identity = [
+    metadata(document.html, "og:site_name"),
+    metadata(document.html, "og:title"),
+    documentTitle(document.html),
+    ...organizationNames,
+    new URL(document.url).hostname.replace(/^www\./, ""),
+  ].filter(Boolean).join(" ");
+  const actual = new Set(identityTokens(identity));
+  const hostnameCompact = new URL(document.url).hostname.replace(/^www\./, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const matched = expected.filter((token) => actual.has(token) || hostnameCompact.includes(token));
+  const required = expected.length === 1 ? 1 : Math.ceil(expected.length * 0.75);
+  if (matched.length < required) return 0;
+  const expectedCompact = expected.join("");
+  const bodyText = plainText(document.html);
+  const qualityScore = (metadata(document.html, "og:description") ? 4 : 0)
+    + (metadata(document.html, "og:site_name") ? 2 : 0)
+    + (organizationNames.filter(Boolean).length ? 3 : 0)
+    + Math.min(officialPageLinks(document.html, document.url).length, 4)
+    + (bodyText.length >= 500 ? 2 : 0)
+    + (/manufactur|product|material|supplier|customer|industr/i.test(bodyText) ? 2 : 0);
+  const legacyPenalty = /copyright[^<]{0,60}(?:200\d|201\d|202[0-1])/i.test(document.html) ? 6 : 0;
+  return matched.length * 10
+    + (hostnameCompact.startsWith(expectedCompact) ? 5 : 0)
+    + qualityScore
+    - legacyPenalty;
+}
+
+export async function discoverOfficialWebsite(
+  query: string,
+  onProgress?: SupplyResearchProgressHandler,
+  loadCandidate: (url: string) => Promise<OfficialDocument> = (url) => fetchOfficialHomepage(url, fetch, DISCOVERY_FETCH_TIMEOUT_MS),
+): Promise<string | null> {
+  const candidates = officialWebsiteCandidates(query);
+  const name = companyNameHint(query);
+  if (!candidates.length || !name) return null;
+  progress(onProgress, {
+    id: "website",
+    label: "Finding the official website",
+    detail: `Checking likely domains for ${name}`,
+    status: "active",
+  });
+  const settled = await Promise.allSettled(candidates.map((candidate) => loadCandidate(candidate)));
+  const matches = settled.flatMap((result, index) => {
+    if (result.status !== "fulfilled") return [];
+    const score = officialSiteIdentityScore(query, result.value);
+    return score > 0 ? [{ website: result.value.url, score, index }] : [];
+  }).sort((left, right) => right.score - left.score || left.index - right.index);
+  const match = matches[0];
+  if (!match) return null;
+  progress(onProgress, {
+    id: "website",
+    label: "Official website found",
+    detail: new URL(match.website).hostname,
+    status: "complete",
+  });
+  return match.website;
+}
 
 export function selectCompanyResearchStrategy(
   query: string,
@@ -194,7 +272,7 @@ export function selectCompanyResearchStrategy(
 ): SupplyCompanyResearchStrategy {
   const website = extractWebsiteFromQuery(query);
   if (website) return { kind: "official_site", website };
-  return publicSearchConfigured ? { kind: "public_search" } : { kind: "unavailable" };
+  return { kind: "name_discovery", publicSearchConfigured };
 }
 
 function isPrivateAddress(address: string) {
@@ -246,14 +324,19 @@ async function readTextCapped(response: Response) {
   return new TextDecoder().decode(body);
 }
 
-async function fetchOfficialPage(website: string, officialWebsite = website, fetchImpl: typeof fetch = fetch) {
+async function fetchOfficialPage(
+  website: string,
+  officialWebsite = website,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = FETCH_TIMEOUT_MS,
+) {
   let current = new URL(website);
   for (let redirect = 0; redirect < 4; redirect += 1) {
     await assertResolvesPublicly(current);
     const response = await fetchImpl(current, {
       redirect: "manual",
       cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { "user-agent": "DeryaCompanyResearch/1.0" },
     });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -273,8 +356,8 @@ async function fetchOfficialPage(website: string, officialWebsite = website, fet
   throw new Error("Official website redirected too many times.");
 }
 
-async function fetchOfficialHomepage(website: string, fetchImpl: typeof fetch = fetch) {
-  return fetchOfficialPage(website, website, fetchImpl);
+async function fetchOfficialHomepage(website: string, fetchImpl: typeof fetch = fetch, timeoutMs = FETCH_TIMEOUT_MS) {
+  return fetchOfficialPage(website, website, fetchImpl, timeoutMs);
 }
 
 function attribute(tag: string, name: string) {
@@ -598,8 +681,6 @@ async function homepageMetadata(website: string) {
   }
 }
 
-type OfficialDocument = { url: string; html: string };
-
 function researchClaim(
   value: string,
   basis: SupplyResearchClaim["basis"],
@@ -611,6 +692,9 @@ function researchClaim(
 
 function inferredInputNames(text: string) {
   const normalized = text.toLowerCase();
+  if (/metal service center|metals supplier|aluminum plate|aluminium plate|plate cutting|cut(?:s|ting)?\s+(?:metal|aluminum|aluminium)|steel stock|bar stock/.test(normalized)) {
+    return ["mill-sourced aluminum plate / block", "steel or specialty-alloy stock to confirm", "protective packaging materials"];
+  }
   if (/3d print|additive manufactur/.test(normalized)) {
     return ["motion-control components", "industrial electronics", "high-temperature polymers and composites"];
   }
@@ -634,6 +718,7 @@ function inferredInputNames(text: string) {
 
 function industryName(text: string) {
   const normalized = text.toLowerCase();
+  if (/metal service center|metals supplier|aluminum plate|aluminium plate|plate cutting|cut(?:s|ting)?\s+(?:metal|aluminum|aluminium)|steel stock|bar stock/.test(normalized)) return "Metals processing and distribution";
   if (/3d print|additive manufactur/.test(normalized)) return "Industrial additive manufacturing";
   if (/robot|autonomous/.test(normalized)) return "Robotics and automation";
   if (/medical|surgical|diagnostic/.test(normalized)) return "Medical devices";
@@ -851,9 +936,20 @@ export async function researchCompany(
       if (!officialSiteFailed || !process.env.OPENAI_API_KEY) throw error;
     }
   }
-  if (strategy.kind === "unavailable") {
+  if (strategy.kind === "name_discovery") {
+    const discoveredWebsite = await discoverOfficialWebsite(query, onProgress);
+    if (discoveredWebsite) {
+      try {
+        return await officialSiteFallback(query, discoveredWebsite, researchedAt, onProgress);
+      } catch (error) {
+        const officialSiteFailed = error instanceof SupplyCompanyResearchError && error.code === "official_site_failed";
+        if (!officialSiteFailed || !strategy.publicSearchConfigured) throw error;
+      }
+    }
+  }
+  if (strategy.kind === "name_discovery" && !strategy.publicSearchConfigured) {
     throw new SupplyCompanyResearchError(
-      "Public search is unavailable. Add the company website to continue, or build from your description.",
+      "The official website could not be verified quickly. Add the website for sourced research, or continue with a draft from your description.",
       "research_unavailable",
     );
   }
@@ -863,7 +959,7 @@ export async function researchCompany(
     detail: "Finding and verifying the official company website",
     status: "active",
   });
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 0 });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 8_000, maxRetries: 0 });
   let response: Awaited<ReturnType<typeof client.responses.create>>;
   try {
     response = await client.responses.create({
@@ -897,7 +993,7 @@ export async function researchCompany(
     });
   } catch {
     throw new SupplyCompanyResearchError(
-      "Public search did not finish in time. Add the company website to use official sources, or build from your description.",
+      "Public search did not finish quickly enough. Add the company website for sourced research, or continue with a draft from your description.",
       "research_unavailable",
     );
   }

@@ -32,6 +32,8 @@ for (const required of [
   "Operating network",
   "Derya needs these 3 things",
   "Send BOM or upcoming shipment",
+  "aria-expanded",
+  "Add a supplier location or customer destination",
   "This case is a scoping plan.",
 ]) {
   assert.equal(source.includes(required), true, `simplified customer dashboard is missing: ${required}`);

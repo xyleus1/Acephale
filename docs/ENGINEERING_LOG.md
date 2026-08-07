@@ -3498,3 +3498,35 @@ Use this file for chronological implementation notes that future agents should s
 - Fresh reproduction: an AON3D request with an intentionally invalid model key
   returned the official name, website, four sources, and six progress events in
   1.6 seconds.
+
+### 2026-08-07 - Make name-only company research terminal and correct
+
+- Branch: `fix/supply-os-research-quality`, targeting `main`
+- Commits: `de33b50`, `eb85d15`, `dc7e9e4`, `fa62a03`
+- Symptom: `do nox metals` emitted early progress, then production ended the
+  stream without a dashboard.
+- Root cause: name-only prompts still made provider-backed public search the
+  prerequisite for the first usable result. A host cutoff could therefore
+  occur outside the route's result and error handling.
+- Research fix: generate likely domains from the company name, inspect each
+  with bounded SSRF-safe official-site requests, score identity evidence,
+  reject parked or mismatched domains, and keep model search as optional
+  secondary enrichment. The browser also converts any remaining timeout or
+  malformed stream into a saved description-based dashboard.
+- Quality fix: split likely materials into `Needs` and geographic origins into
+  `Sources`. With no origin or destination, the map shows only the verified
+  facility and asks for a real endpoint.
+- Design fix: replace the dark graphite field with light-gray and white
+  surfaces, reduce the generator height, simplify explanatory copy, collapse
+  workstream details by default, and remove supplemental content on mobile.
+- Regression coverage: official-domain candidate generation and ranking,
+  parked-site rejection, Nox `.co` selection, research strategy ordering,
+  automatic fallback, metals inputs, source-region separation, and expandable
+  workstream semantics.
+- Verification: all eight Supply OS test scripts, `npx tsc --noEmit
+  --incremental false`, the optimized production build, and authenticated
+  desktop/mobile browser QA passed. Clean browser reload showed no console
+  errors.
+- Caveat: public domain discovery is a bounded heuristic, not a company master
+  data service. The user can provide the official website when a name is
+  ambiguous.

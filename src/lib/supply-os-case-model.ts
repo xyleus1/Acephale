@@ -617,7 +617,7 @@ function fact<T>(value: T | null, status: SupplyEvidenceStatus, evidence: string
   return { value, status, evidence };
 }
 
-function extractLabel(input: string, label: "Company" | "Located" | "Production" | "Sources" | "Ships to"): string | null {
+function extractLabel(input: string, label: "Company" | "Located" | "Production" | "Needs" | "Sources" | "Ships to"): string | null {
   const normalized = input.replace(/\s+(?=(?:Company|Located|Production|Sources|Ships\s+to)\s*:)/gi, "\n");
   const escaped = label === "Ships to" ? "Ships\\s+to" : label;
   const match = normalized.match(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*:\\s*([^\\n]+)`, "i"));
@@ -798,11 +798,28 @@ function extractSourcing(input: string, profile: IndustryProfile): {
   needs: Array<SupplyCaseFact<string>>;
   regions: Array<SupplyCaseFact<string>>;
 } {
-  const labeled = extractLabel(input, "Sources");
+  const labeledNeeds = extractLabel(input, "Needs");
+  const labeledSources = extractLabel(input, "Sources");
   const sentence = input.match(
     /\b(?:sources?|procures?|imports?|buys?|needs?|requires?)\s+(?:(?:to\s+)?(?:source|procure|import|buy)\s+)?(.+?)(?=(?:(?:,\s*|\s+)(?:(?:and|then)\s+)?(?:ships?|exports?|delivers?)\b)|[.;\n]|$)/i,
   )?.[1];
-  const clause = labeled ?? (sentence ? cleanPhrase(sentence) : null);
+  if (labeledNeeds) {
+    const needs = splitNeeds(labeledNeeds);
+    const regions = labeledSources ? extractLocationCandidates(labeledSources) : [];
+    return {
+      needs: (needs.length ? needs : profile.suggestedNeeds).map((need) =>
+        fact(need, needs.length ? "ready" : "verify", needs.length ? "Parsed from the stated sourcing need." : "Suggested from the industry profile."),
+      ),
+      regions: (regions.length ? regions : [null]).map((region) => {
+        if (!region) return fact<string>(null, "needs_confirmation", "No source region was provided.");
+        return resolveLocation(region)
+          ? fact(region, "ready", "Parsed from the stated source region.")
+          : fact(region, "needs_confirmation", "Location was preserved from the prompt but needs geographic normalization.");
+      }),
+    };
+  }
+
+  const clause = labeledSources ?? (sentence ? cleanPhrase(sentence) : null);
   if (!clause) {
     return {
       needs: profile.suggestedNeeds.map((need) => fact(need, "verify", "Suggested from the industry profile, not stated by the user.")),
@@ -811,10 +828,13 @@ function extractSourcing(input: string, profile: IndustryProfile): {
   }
 
   const fromMatch = clause.match(/^(.+?)\s+from\s+(.+)$/i);
-  const needsText = fromMatch?.[1] ?? clause;
-  const regionText = fromMatch?.[2] ?? clause;
-  const needs = splitNeeds(needsText);
-  const regions = extractLocationCandidates(regionText);
+  const possibleStandaloneRegions = !fromMatch && labeledSources
+    ? extractLocationCandidates(clause).filter((candidate) => resolveLocation(candidate))
+    : [];
+  const needsText = fromMatch?.[1] ?? (possibleStandaloneRegions.length ? "" : clause);
+  const regionText = fromMatch?.[2] ?? (possibleStandaloneRegions.length ? clause : "");
+  const needs = needsText ? splitNeeds(needsText) : [];
+  const regions = regionText ? extractLocationCandidates(regionText) : [];
 
   return {
     needs: (needs.length ? needs : profile.suggestedNeeds).map((need) =>
@@ -1566,9 +1586,8 @@ function researchPromptLines(research: SupplyCompanyResearch): string[] {
       .filter(Boolean)
       .join(" "),
   ];
-  if (inputs.length) {
-    lines.push(`Sources: ${inputs.join(", ")}${origins.length ? ` from ${origins.join(" and ")}` : ""}`);
-  }
+  if (inputs.length) lines.push(`Needs: ${inputs.join(", ")}`);
+  if (origins.length) lines.push(`Sources: ${origins.join(" and ")}`);
   if (destinations.length) lines.push(`Ships to: ${destinations.join(" and ")}`);
   return lines.filter(Boolean);
 }

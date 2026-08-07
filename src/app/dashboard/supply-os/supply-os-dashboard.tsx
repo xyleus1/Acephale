@@ -97,14 +97,6 @@ function routePath(from: SupplyCoordinate | null, to: SupplyCoordinate | null) {
   ].join(" ");
 }
 
-function scopeWorkstream(scope: SupplyEngagementScope): SupplyWorkstreamId {
-  if (scope === "supplier_sourcing") return "supplier_sourcing";
-  if (scope === "inbound_logistics") return "inbound_logistics";
-  if (scope === "customs") return "customs";
-  if (scope === "finished_goods_delivery") return "finished_goods_delivery";
-  return "supplier_sourcing";
-}
-
 export function SupplyOsDashboardWorkspace({
   storageScope,
   presentationMode = false,
@@ -241,18 +233,17 @@ function CaseDashboard({
   onScopeChange: (scope: SupplyEngagementScope) => boolean;
 }) {
   const selectedScope = dashboard.engagementScope ?? "full_operation";
-  const [selectedWorkstreamId, setSelectedWorkstreamId] = useState<SupplyWorkstreamId>(scopeWorkstream(selectedScope));
+  const [selectedWorkstreamId, setSelectedWorkstreamId] = useState<SupplyWorkstreamId | null>(null);
   const [scopeError, setScopeError] = useState("");
   const plan = useMemo(
     () => buildSupplyEngagementPlan(dashboard, selectedScope),
     [dashboard, selectedScope],
   );
-  const selectedWorkstream = plan.workstreams.find((item) => item.id === selectedWorkstreamId)
-    ?? plan.workstreams[0];
+  const selectedWorkstream = plan.workstreams.find((item) => item.id === selectedWorkstreamId) ?? null;
   const [selectedFlowId, setSelectedFlowId] = useState(plan.flows[0]?.id ?? "");
 
   useEffect(() => {
-    setSelectedWorkstreamId(scopeWorkstream(selectedScope));
+    setSelectedWorkstreamId(null);
     setScopeError("");
   }, [selectedScope]);
 
@@ -277,7 +268,7 @@ function CaseDashboard({
                 <a href={dashboard.research.company.website} target="_blank" rel="noreferrer">
                   {websiteLabel(dashboard.research.company.website)}
                 </a>
-                <span>{countLabel(dashboard.research.evidence.length, "public source")}</span>
+                <span>{countLabel(dashboard.research.evidence.length, "source")}</span>
                 <span>Researched {formatTimestamp(dashboard.research.researchedAt)}</span>
               </div>
             ) : (
@@ -342,8 +333,9 @@ function CaseDashboard({
               type="button"
               data-covered={workstream.state !== "available"}
               data-selected={workstream.id === selectedWorkstream?.id}
-              aria-pressed={workstream.id === selectedWorkstream?.id}
-              onClick={() => setSelectedWorkstreamId(workstream.id)}
+              aria-expanded={workstream.id === selectedWorkstream?.id}
+              aria-controls="supply-workstream-detail"
+              onClick={() => setSelectedWorkstreamId((current) => current === workstream.id ? null : workstream.id)}
             >
               <span className={styles.workstreamNumber}>{workstream.number}</span>
               <small>{workstream.stateLabel}</small>
@@ -446,7 +438,7 @@ function CompanyResearchSummary({
 
 function WorkstreamDetail({ workstream }: { workstream: SupplyWorkstream }) {
   return (
-    <aside className={styles.workstreamDetail}>
+    <aside className={styles.workstreamDetail} id="supply-workstream-detail">
       <header>
         <span className={styles.eyebrow}>{workstream.stateLabel}</span>
         <h2>{workstream.label}</h2>
@@ -567,7 +559,7 @@ type NetworkPoint = {
   kind: "source" | "production" | "destination";
 };
 
-function pointsForFlows(flows: readonly SupplyNetworkFlow[]): NetworkPoint[] {
+function pointsForFlows(flows: readonly SupplyNetworkFlow[], dashboard: SupplyCaseDashboard): NetworkPoint[] {
   const points = new Map<string, NetworkPoint>();
   function add(label: string, coordinates: SupplyCoordinate | null, kind: NetworkPoint["kind"]) {
     if (!coordinates) return;
@@ -579,6 +571,8 @@ function pointsForFlows(flows: readonly SupplyNetworkFlow[]): NetworkPoint[] {
     add(flow.from.label, flow.from.coordinates, flow.kind === "inbound" ? "source" : "production");
     add(flow.to.label, flow.to.coordinates, flow.kind === "inbound" ? "production" : "destination");
   }
+  const operatingSite = dashboard.routeNodes.find((node) => node.kind === "headquarters" && node.coordinates);
+  if (operatingSite?.coordinates) add(operatingSite.label, operatingSite.coordinates, "production");
   return [...points.values()];
 }
 
@@ -593,15 +587,16 @@ function SupplyNetworkMap({
   selectedFlowId: string;
   setSelectedFlowId: (id: string) => void;
 }) {
-  const points = pointsForFlows(plan.flows);
+  const points = pointsForFlows(plan.flows, dashboard);
   const selectedFlow = plan.flows.find((flow) => flow.id === selectedFlowId) ?? plan.flows[0] ?? null;
+  const operatingSite = points.find((point) => point.kind === "production") ?? null;
   return (
     <figure className={styles.mapPanel} aria-labelledby="supply-map-title">
       <header className={styles.mapHeader}>
         <h2 id="supply-map-title">Operating network</h2>
-        <span>Components in, finished goods out</span>
+        <span>{plan.flows.length ? "Components in, finished goods out" : "Verified site, lanes to confirm"}</span>
       </header>
-      <div className={styles.flowSelector} aria-label="Supply chain flows">
+      {plan.flows.length ? <div className={styles.flowSelector} aria-label="Supply chain flows">
         {plan.flows.map((flow) => (
           <button
             key={flow.id}
@@ -614,7 +609,7 @@ function SupplyNetworkMap({
             <strong>{flow.from.label} to {flow.to.label}</strong>
           </button>
         ))}
-      </div>
+      </div> : null}
       <div className={styles.mapCanvas}>
         <svg className={styles.mapSvg} viewBox={WORLD_MAP_VIEWBOX} role="img" aria-labelledby="supply-map-svg-title">
           <title id="supply-map-svg-title">Inbound and outbound supply network for {dashboardName(dashboard)}</title>
@@ -649,9 +644,15 @@ function SupplyNetworkMap({
             <strong>{selectedFlow.from.label} to {selectedFlow.to.label}</strong>
             <p>{selectedFlow.detail}</p>
           </div>
+        ) : operatingSite ? (
+          <div className={styles.nodeInspector} aria-live="polite">
+            <span>Verified operating site</span>
+            <strong>{operatingSite.label}</strong>
+            <p>Add a supplier location or customer destination to map the first real lane.</p>
+          </div>
         ) : null}
       </div>
-      <figcaption>Network intent only. Derya confirms supplier sites, live routes, gateways, and delivery constraints before execution.</figcaption>
+      <figcaption>Verified sites are shown now. Routes appear only after supplier or delivery locations are known.</figcaption>
     </figure>
   );
 }

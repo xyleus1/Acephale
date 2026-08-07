@@ -11,6 +11,7 @@ import {
   type SupplyCaseDashboard,
 } from "@/lib/supply-os-case-model";
 import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
+import { companyNameHint } from "@/lib/supply-os-company-identity";
 import type { SupplyResearchProgress } from "@/lib/supply-os-company-research";
 import {
   requestCompanyResearch,
@@ -23,7 +24,7 @@ import {
 } from "./supply-os-storage";
 import styles from "./supply-os-workspace.module.css";
 
-type GeneratorState = "idle" | "researching" | "error";
+type GeneratorState = "idle" | "researching" | "fallback" | "error";
 
 const RESEARCH_EXAMPLE = "AON3D builds industrial additive-manufacturing hardware, software, and material systems in Montreal and serves customers globally. Website: https://www.aon3d.com";
 
@@ -80,14 +81,16 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
       saveAndPresent(dashboard);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Company research failed.";
-      setState("error");
-      setMessage(detail);
+      setState("fallback");
+      setMessage("Public research stopped before verification. Building a draft from your input instead.");
       setResearchProgress((current) => [...current.filter((item) => item.id !== "dashboard"), {
         id: "dashboard",
-        label: "Research could not complete",
-        detail,
-        status: "error",
+        label: "Continuing with a draft",
+        detail: `${detail} You can add the official website later to attach sourced company facts.`,
+        status: "assumption",
       }]);
+      await new Promise((resolve) => window.setTimeout(resolve, 450));
+      buildWithoutResearch();
     } finally {
       window.removeEventListener(SUPPLY_RESEARCH_PROGRESS_EVENT, handleProgress);
     }
@@ -96,7 +99,11 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
   function buildWithoutResearch() {
     const normalizedPrompt = prompt.trim();
     if (!normalizedPrompt) return;
-    saveAndPresent(generateSupplyCase(normalizedPrompt, new Date(), engagementScope));
+    const name = companyNameHint(normalizedPrompt);
+    const planningPrompt = name && !/^\s*company\s*:/i.test(normalizedPrompt)
+      ? `Company: ${name}\n${normalizedPrompt}`
+      : normalizedPrompt;
+    saveAndPresent(generateSupplyCase(planningPrompt, new Date(), engagementScope));
   }
 
   return (
@@ -114,9 +121,9 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
       <main className={`${styles.main} ${styles.generatorMain}`}>
         <section className={styles.generatorCard} aria-labelledby="case-builder-title">
           <header className={styles.simpleHeader}>
-            <span className={styles.eyebrow}>Company research</span>
-            <h2 id="case-builder-title">Build the customer picture</h2>
-            <p>Derya finds the official site and relevant public evidence, then maps what the company makes, what it may source, and how goods could move.</p>
+            <span className={styles.eyebrow}>New customer</span>
+            <h2 id="case-builder-title">Map a company&apos;s supply chain</h2>
+            <p>Enter a company name. Derya verifies the business, identifies likely supply needs, and builds a first operating plan.</p>
           </header>
 
           <fieldset className={styles.scopeFieldset} disabled={state === "researching"}>
@@ -137,7 +144,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
           </fieldset>
 
           <label className={styles.composerLabel} htmlFor="supply-case-prompt">
-            Company name, website, or context
+            Company name, website, or what you know
           </label>
           <textarea
             id="supply-case-prompt"
@@ -151,7 +158,7 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
               setMessage("Derya will verify the company before building the dashboard.");
             }}
             rows={7}
-            placeholder="Example: AON3D, aon3d.com. They build industrial 3D printers in Montreal and sell globally. Show where Derya can take over sourcing, inbound logistics, customs, and delivery."
+            placeholder="Example: AON3D, aon3d.com, or a short description of what the company makes and where it operates."
           />
 
           <div className={styles.composerFooter}>
@@ -204,13 +211,13 @@ export function SupplyOsCaseGenerator({ storageScope }: { storageScope: string }
         </section>
 
         <aside className={styles.researchMethod}>
-          <span className={styles.eyebrow}>What gets built</span>
+          <span className={styles.eyebrow}>Your dashboard</span>
           <ol>
-            <li><strong>Verified company profile</strong><span>Official website, logo, products, locations, markets, and source links.</span></li>
-            <li><strong>Supply-chain hypothesis</strong><span>Likely inputs, source regions, receiving points, and finished-goods markets, clearly marked for confirmation.</span></li>
-            <li><strong>Operating handoff</strong><span>What Derya can run now, what the customer approves, and the three inputs needed to start.</span></li>
+            <li><strong>Company</strong><span>Official website, products, locations, and evidence.</span></li>
+            <li><strong>Supply plan</strong><span>Likely inputs, known sites, and the lanes still needing confirmation.</span></li>
+            <li><strong>First actions</strong><span>What Derya can run and what the customer needs to provide.</span></li>
           </ol>
-          <p>Public research is evidence, not permission to book freight, file customs entries, award suppliers, or commit spend.</p>
+          <p>No supplier award, booking, customs filing, or spend is committed without approval.</p>
         </aside>
       </main>
     </div>

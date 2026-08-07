@@ -147,4 +147,12 @@ const incompletePlan = buildSupplyEngagementPlan(incompleteDashboard);
 assert.deepEqual(incompletePlan.flows, [], "a production network needs a known company site");
 assert.match(incompletePlan.summary, /production site/i);
 
+const metalsDashboard = generateSupplyCase(
+  "Company: Nox Metals\nLocated: Detroit, Michigan\nNox Metals is a metals distributor.\nNeeds: aluminum plate",
+  fixedNow,
+);
+const metalsPlan = buildSupplyEngagementPlan(metalsDashboard);
+assert.match(metalsPlan.summary, /stock, cut-to-size orders, and replenishment material/i);
+assert.doesNotMatch(metalsPlan.summary, /finished goods and service parts/i);
+
 console.log("supply OS engagement-plan checks passed");

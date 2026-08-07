@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildOfficialSiteResearch,
+  companyNameHint,
+  discoverOfficialWebsite,
   extractWebsiteFromQuery,
-  researchCompany,
+  officialSiteIdentityScore,
+  officialWebsiteCandidates,
   selectCompanyResearchStrategy,
-  SupplyCompanyResearchError,
 } from "../src/lib/supply-os-company-research";
+
+const root = process.cwd();
+const researchClientSource = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-research-client.ts"), "utf8");
+const generatorSource = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-generator.tsx"), "utf8");
+assert.match(researchClientSource, /RESEARCH_REQUEST_TIMEOUT_MS = 12_000/, "the browser must stop waiting before a hosted stream can strand the generator");
+assert.match(generatorSource, /setState\("fallback"\)[\s\S]*buildWithoutResearch\(\)/, "research cutoff must continue into a usable draft instead of a dead error state");
 
 assert.equal(
   extractWebsiteFromQuery("Research Atlas Robotics at atlasrobotics.com before building the dashboard"),
@@ -21,8 +31,42 @@ assert.deepEqual(
   { kind: "official_site", website: "https://www.aon3d.com/" },
   "an explicit website must bypass the slower public-search provider",
 );
-assert.deepEqual(selectCompanyResearchStrategy("AON3D", true), { kind: "public_search" });
-assert.deepEqual(selectCompanyResearchStrategy("AON3D", false), { kind: "unavailable" });
+assert.deepEqual(selectCompanyResearchStrategy("AON3D", true), { kind: "name_discovery", publicSearchConfigured: true });
+assert.deepEqual(selectCompanyResearchStrategy("AON3D", false), { kind: "name_discovery", publicSearchConfigured: false });
+assert.equal(companyNameHint("do nox metals"), "Nox Metals");
+assert.equal(companyNameHint("Atlas Robotics in Austin, Texas"), "Atlas Robotics");
+assert.ok(officialWebsiteCandidates("do nox metals").includes("https://noxmetals.co/"));
+
+const noxHomepage = `
+  <html>
+    <head>
+      <title>NOX METALS | Aluminum Plate Cut to Size</title>
+      <meta property="og:site_name" content="NOX METALS">
+      <meta property="og:description" content="Nox Metals cuts aluminum plate to size from Detroit, MI.">
+      <script type="application/ld+json">
+        {"@type":"Organization","name":"NOX METALS","url":"https://noxmetals.co/"}
+      </script>
+    </head>
+  </html>
+`;
+assert.ok(
+  officialSiteIdentityScore("do nox metals", { url: "https://noxmetals.co/", html: noxHomepage }) > 0,
+  "the official Nox identity must match the terse customer input",
+);
+assert.equal(
+  officialSiteIdentityScore("do nox metals", { url: "https://noxmetals.com/", html: "<title>This domain is for sale</title>" }),
+  0,
+  "parked domains must never be accepted as the official company site",
+);
+const noxResearch = buildOfficialSiteResearch({
+  query: "do nox metals",
+  website: "https://noxmetals.co/",
+  documents: [{ url: "https://noxmetals.co/", html: noxHomepage }],
+  researchedAt: "2026-08-07T12:00:00.000Z",
+});
+assert.equal(noxResearch.company.industry.value, "Metals processing and distribution");
+assert.ok(noxResearch.company.likelyInputs.some((item) => item.value === "mill-sourced aluminum plate / block"));
+assert.equal(noxResearch.company.likelyInputs.some((item) => item.value === "precision machined parts"), false);
 
 const homepage = `
   <html>
@@ -94,18 +138,26 @@ assert.equal(promptLocationResearch.company.locations[0]?.basis, "inferred");
 assert.equal(promptLocationResearch.company.locations[0]?.role, "unknown");
 
 async function main() {
-  const previousKey = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  try {
-    await assert.rejects(
-      () => researchCompany("Atlas Robotics in Austin"),
-      (error: unknown) => error instanceof SupplyCompanyResearchError
-        && error.code === "research_unavailable"
-        && error.message.includes("Add the company website"),
-    );
-  } finally {
-    if (previousKey) process.env.OPENAI_API_KEY = previousKey;
-  }
+  const progressEvents: string[] = [];
+  const discovered = await discoverOfficialWebsite(
+    "do nox metals",
+    (event) => progressEvents.push(`${event.status}:${event.label}`),
+    async (url) => {
+      if (url === "https://noxmetals.co/") return { url, html: noxHomepage };
+      if (url === "https://noxmetals.com/") {
+        return {
+          url,
+          html: "<title>Nox Metals | Custom Metal Fabrication</title><p>Nox Metals is a welding shop in Montana.</p><p>Copyright 2012</p>",
+        };
+      }
+      throw new Error("candidate not found");
+    },
+  );
+  assert.equal(discovered, "https://noxmetals.co/");
+  assert.deepEqual(progressEvents, [
+    "active:Finding the official website",
+    "complete:Official website found",
+  ]);
 
   console.log("supply OS research progress checks passed");
 }
