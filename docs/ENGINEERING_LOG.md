@@ -3732,3 +3732,24 @@ Use this file for chronological implementation notes that future agents should s
   name or official domain.
 - Verified the command-map regression suite, TypeScript, optimized production
   build, diff hygiene, and the repository em-dash prohibition.
+
+### 2026-08-07 - Add evidence-gated steel supplier discovery
+
+- Branch: steel-supplier-finder, targeting main
+- Commit: see git log
+- Task: Add an authenticated Supplier Finder for steel-sector raw material,
+  fuel, semi-finished, and finished-product sourcing, with protected private
+  origin context and public-source evidence gates.
+- Files changed: supplier search domain and API route, dedicated dashboard
+  page and scoped styles, sidebar navigation, regression test, package script,
+  durable decision, engineering log, and handoff.
+- Verification: focused supplier-search regression, TypeScript, optimized
+  production build, diff hygiene, and changed-file U+2014 checks pass.
+- Failed/skipped checks: live public search was not executed because it depends
+  on the deployed `OPENAI_API_KEY` and would introduce changing external data
+  into a deterministic implementation check.
+- Caveats: candidates are not reliable, approved, sanctioned-clear,
+  financially verified, allocated, or ready to contract. Private notes are
+  browser-local and are not encrypted shared office storage.
+- Follow-up: add office-scoped candidate records and a reviewed diligence
+  workflow before enabling supplier outreach or award actions.

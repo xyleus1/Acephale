@@ -89,6 +89,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
               <NavLink href="/dashboard/supply-os" icon={<Icon name="layers" />}>Supply OS</NavLink>
 
+              <NavLink href="/dashboard/supplier-finder" icon={<Icon name="search" />}>Supplier Finder</NavLink>
+
               {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing, /dashboard/intelligence
                   and /dashboard/carriers stay reachable directly (the carrier bench is linked from the
                   Intelligence pre-flight results). */}

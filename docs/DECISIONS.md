@@ -16,6 +16,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-07 - Supplier discovery separates public evidence from private origin context
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Steel-sector users may need suppliers for raw materials, fuel,
+  semi-finished goods, or finished products while their current origins and
+  commercial relationships remain sensitive. A generic provider directory or
+  a model-generated reliability score would expose the wrong information and
+  overstate what public research can prove.
+- Decision: Add a dedicated Supplier Finder that sends only an explicit public
+  product brief to attributable web research. Keep current origin and supplier
+  notes in office-and-user-scoped browser storage and exclude them from the
+  request contract. Treat every result as an unvetted candidate. Normalize
+  public evidence into fixed identity, producer-status, product-capability,
+  quality-system, and export-market gates. Keep ownership, sanctions,
+  financial, reference, capacity, sample, inspection, authority, and contract
+  checks outside the public-evidence score and under human review.
+- Rationale: Supplier discovery can shorten the longlist without pretending
+  that public pages prove reliability, capacity, authority, or commercial
+  readiness. The privacy split lets the operator use sensitive context without
+  placing it in a public research query.
+- Consequences: The first version is read-only, browser-scoped, and makes no
+  supplier contact, award, purchase, booking, filing, or spend mutation. Live
+  search requires the existing OpenAI web-search configuration. Browser-local
+  notes are not encrypted shared records and should not hold formal secrets.
+- Revisit when: Derya has office-scoped supplier records, an approved diligence
+  provider, role-based secret storage, and a human-reviewed outreach workflow.
+
 ### 2026-08-07 - Supply OS lanes expand into multimodal operating legs
 
 - Status: accepted

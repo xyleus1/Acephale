@@ -8,6 +8,56 @@
 
 ## Branch
 
+steel-supplier-finder, targeting main
+
+## Task implemented
+
+### Add a steel-sector Supplier Finder tab
+
+- Added a dedicated authenticated `Supplier Finder` navigation tab for raw
+  materials, fuels, semi-finished products, and finished steel products.
+- The search brief separates product, grade or standard, volume, buying
+  market, target regions, commercial model, and required evidence.
+- Public research returns up to eight attributable producer, trader, or agent
+  candidates. Model-provided citations that were not returned by the web
+  search provider are removed before display.
+- Every candidate is measured against five public evidence gates: official
+  identity, producer status, product capability, quality system, and export
+  market evidence. Missing citations cannot remain `supported`.
+- The interface does not label candidates reliable or approved. Ownership,
+  sanctions, adverse media, financial references, capacity, samples,
+  inspection, and contracting remain explicit human verification work.
+- Sensitive current origins and supplier relationships have a separate private
+  note. That note is saved only in office-and-user-scoped browser storage and
+  is excluded from the public search request contract.
+- No database schema, dependency, supplier message, commercial award, freight
+  booking, customs filing, or spend action was added.
+
+## Verification passed
+
+- `npm run test:steel-supplier-search`
+- `npx tsc --noEmit --incremental false`
+- `npm run build` with a disposable local database URL
+- `git diff --check`
+- Changed-file U+2014 check
+
+## Caveats
+
+- Live public research requires `OPENAI_API_KEY` in the deployed environment.
+- Public-source evidence is only candidate discovery. Legal entity, ownership,
+  sanctions, financial standing, references, authority, allocation, quality,
+  samples, and site capability still require independent verification.
+- The private note is browser-local convenience storage, not encrypted shared
+  office storage or a formal secret-management system.
+
+## Prior Update
+
+## Date
+
+2026-08-07
+
+## Branch
+
 feat/supply-os-full-network-demo, targeting main
 
 ## Task implemented
