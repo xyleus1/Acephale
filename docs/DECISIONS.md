@@ -1810,3 +1810,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: connected office-scoped TMS, ERP, procurement, broker, rate,
   telematics, and shipment events can replace planning envelopes and candidate
   providers with measured lane performance and executable options.
+
+### 2026-08-07 - Map intelligence requires cited route relevance
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: A generic warning feed would make the map look richer while risking
+  false relevance. Commodity news, port events, and pricing commentary are not
+  useful unless the evidence applies to a material, location, or lane in the
+  customer's modeled network.
+- Decision: Show a public-research finding on the command map only when it has
+  an attributable URL, is not inferred, contains a decision-relevant cost,
+  capacity, customs, tariff, congestion, delay, or disruption signal, and
+  matches a displayed route by cargo or location. Cap the map at three current
+  signals. Every card must show its source and research date. Do not claim a
+  cost direction without a cited comparison, and do not claim a live rate
+  without a current lane-specific source.
+- Visual consequence: Keep alerts sparse and route-linked. Use flow charts
+  only for multimodal or meaningfully segmented routes, use the network flow
+  only when multiple movements exist, and show only unresolved checks.
+- Rationale: Evidence density is not intelligence. The customer needs a small
+  number of traceable exceptions that can change a shipment or sourcing
+  decision without obscuring the operating network.
+- Revisit when: connected rate histories, port events, customs records,
+  purchase orders, and shipment telemetry can provide deterministic joins and
+  measured severity instead of public-source matching.

@@ -21,14 +21,9 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
   ResponsiveContainer,
   Sankey,
   Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
 } from "recharts";
 import {
   upsertSupplyCase,
@@ -38,7 +33,6 @@ import {
 import {
   buildSupplyCommandMap,
   type SupplyCommandObject,
-  type SupplyCommandRateEstimate,
   type SupplyCommandRoute,
 } from "@/lib/supply-os-command-map";
 import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
@@ -184,37 +178,8 @@ function RouteFlowChart({ route }: { route: SupplyCommandRoute }) {
   );
 }
 
-function RateEnvelopeChart({ estimate }: { estimate: SupplyCommandRateEstimate }) {
-  const data = [
-    { label: "Planning low", cost: estimate.low },
-    { label: "Planning high", cost: estimate.high },
-  ];
-  return (
-    <div className={styles.rateEnvelopeChart} aria-label="Modeled transportation cost range">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, bottom: 2, left: 4 }}>
-          <CartesianGrid stroke="#dfe4e6" horizontal={false} />
-          <XAxis
-            type="number"
-            tick={{ fill: "#6d7880", fontSize: 8 }}
-            tickFormatter={(value) => `$${Math.round(Number(value) / 100) * 100}`}
-            axisLine={{ stroke: "#d5dadd" }}
-            tickLine={false}
-          />
-          <YAxis
-            type="category"
-            dataKey="label"
-            width={74}
-            tick={{ fill: "#3f4c55", fontSize: 8 }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <ChartTooltip formatter={(value) => formatCurrency(Number(value))} />
-          <Bar dataKey="cost" fill="#29485c" barSize={10} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
+function routeNeedsFlowChart(route: SupplyCommandRoute) {
+  return route.segments.length >= 3 || new Set(route.segments.map((segment) => segment.mode)).size > 1;
 }
 
 function NetworkFlowChart({ model }: { model: ReturnType<typeof buildSupplyOptimizationModel> }) {
@@ -587,13 +552,10 @@ function CaseCommandCenter({
 
         <footer className={styles.commandMapFooter}>
           <div className={styles.commandLegend} aria-label="Map legend">
-            <span><i data-kind="supplier" /> Supplier</span>
-            <span><i data-kind="factory" /> Factory</span>
-            <span><i data-kind="movement" /> Movement</span>
-            <span><i data-kind="customs" /> Customs</span>
-            <span><i data-kind="customer" /> Customer</span>
+            <span><i data-kind="node" /> Operating point</span>
+            <span><i data-kind="route" /> Planned route</span>
+            {commandMap.insights.length ? <span><i data-kind="insight" /> Sourced signal</span> : null}
           </div>
-          <p>Routes and providers are candidates until records, quotes, and appointments are connected.</p>
         </footer>
       </div>
     </article>
@@ -630,6 +592,7 @@ function CommandInspector({
   const actionWorkspace = selectedAction
     ? model.workspaces.find((candidate) => candidate.id === selectedAction.workstreamId) ?? null
     : null;
+  const openChecks = object.checks.filter((check) => check.status !== "ready");
 
   useEffect(() => {
     setSelectedActionId(model.actions[0]?.id ?? "");
@@ -661,7 +624,7 @@ function CommandInspector({
             <p className={styles.inspectorLocation}>{object.location}</p>
             <p className={styles.inspectorDetail}>{object.detail}</p>
 
-            {route ? <RouteFlowChart route={route} /> : null}
+            {route && routeNeedsFlowChart(route) ? <RouteFlowChart route={route} /> : null}
 
             <dl className={styles.inspectorFacts}>
               <div><dt>Cargo</dt><dd>{object.cargo}</dd></div>
@@ -674,7 +637,6 @@ function CommandInspector({
                   <span><small>Planning range</small><strong>{formatCurrency(object.rateEstimate.low)} to {formatCurrency(object.rateEstimate.high)}</strong></span>
                   <span><small>Rate model</small><strong>${object.rateEstimate.ratePerMileLow.toFixed(2)} to ${object.rateEstimate.ratePerMileHigh.toFixed(2)} / mi</strong></span>
                 </header>
-                <RateEnvelopeChart estimate={object.rateEstimate} />
                 <p>{object.rateEstimate.basis}</p>
                 <a href={object.rateEstimate.sourceUrl} target="_blank" rel="noreferrer">{object.rateEstimate.sourceLabel} <ExternalLink size={11} /></a>
                 <small>Modeled, not a live quote. {object.rateEstimate.exclusions.join(". ")}.</small>
@@ -686,10 +648,10 @@ function CommandInspector({
               </section>
             ) : null}
 
-            {object.checks.length ? (
+            {openChecks.length ? (
               <section className={styles.inspectorChecks}>
-                <h3>Required checks</h3>
-                {object.checks.map((check) => (
+                <h3>Open checks</h3>
+                {openChecks.map((check) => (
                   <div key={check.label}><i data-check={check.status} /><span>{check.label}</span><small>{check.status}</small></div>
                 ))}
               </section>
@@ -747,7 +709,7 @@ function CommandInspector({
               <p>{model.networkSummary}</p>
             </section>
 
-            <NetworkFlowChart model={model} />
+            {model.nodes.length >= 3 && model.edges.length >= 2 ? <NetworkFlowChart model={model} /> : null}
 
             <div className={styles.analysisPriorityList} aria-label="Ranked optimization priorities">
               {model.actions.map((candidate) => (

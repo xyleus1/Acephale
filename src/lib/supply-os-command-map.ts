@@ -110,6 +110,20 @@ export type SupplyCommandRouteSegment = {
 export type SupplyCommandMap = {
   objects: SupplyCommandObject[];
   routes: SupplyCommandRoute[];
+  insights: SupplyCommandInsight[];
+};
+
+export type SupplyCommandInsight = {
+  id: string;
+  title: string;
+  detail: string;
+  implication: string;
+  coordinates: SupplyCoordinate;
+  severity: "critical" | "watch";
+  sourceUrls: string[];
+  sourceLabel: string;
+  researchedAt: string;
+  routeId: string;
 };
 
 const DHL_GLOBAL_FORWARDING: SupplyCommandContact = {
@@ -924,11 +938,84 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
 
 export function buildSupplyCommandMap(
   model: SupplyOptimizationModel,
-  _dashboard: SupplyCaseDashboard,
+  dashboard: SupplyCaseDashboard,
 ): SupplyCommandMap {
   const edgeData = edgeObjects(model);
   return {
     objects: [...nodeObjects(model), ...edgeData.objects],
     routes: edgeData.routes,
+    insights: evidenceInsights(dashboard, edgeData.routes),
   };
+}
+
+const SIGNAL_PATTERN = /\b(price|prices|pricing|cost|costs|rate|rates|tariff|tariffs|duty|duties|congestion|delay|delays|delayed|shortage|shortages|capacity|detention|detentions|closure|closed|shutdown|strike|blocked|embargo|disruption|disrupted|war|attack)\b/i;
+const CRITICAL_SIGNAL_PATTERN = /\b(detention|detentions|closure|closed|shutdown|strike|blocked|embargo|war|attack|severe disruption)\b/i;
+const STOP_WORDS = new Set(["and", "the", "from", "into", "with", "for", "this", "that", "company", "supply", "route", "lane", "road", "ocean", "air"]);
+
+function signalTokens(value: string) {
+  return new Set(value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token)));
+}
+
+function sourceHostname(url: string) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "Public source";
+  }
+}
+
+function evidenceInsights(
+  dashboard: SupplyCaseDashboard,
+  routes: SupplyCommandRoute[],
+): SupplyCommandInsight[] {
+  const research = dashboard.research;
+  if (!research) return [];
+
+  return research.findings.flatMap((finding, findingIndex) => {
+    const text = `${finding.title} ${finding.detail} ${finding.implication}`;
+    if (
+      finding.basis === "inferred"
+      || !finding.sourceUrls.length
+      || !SIGNAL_PATTERN.test(text)
+    ) return [];
+
+    const findingTokens = signalTokens(text);
+    const rankedRoutes = routes
+      .map((route) => {
+        const routeTokens = signalTokens(`${route.fromLabel} ${route.toLabel} ${route.cargo} ${route.mode}`);
+        const score = [...routeTokens].filter((token) => findingTokens.has(token)).length;
+        return { route, score };
+      })
+      .sort((left, right) => right.score - left.score);
+    const match = rankedRoutes[0];
+    if (!match || match.score === 0) return [];
+
+    const normalizedText = text.toLowerCase();
+    const fromMatch = normalizedText.includes(match.route.fromLabel.toLowerCase());
+    const toMatch = normalizedText.includes(match.route.toLabel.toLowerCase());
+    const coordinates = fromMatch && !toMatch
+      ? match.route.from
+      : toMatch && !fromMatch
+        ? match.route.to
+        : midpoint(match.route.from, match.route.to);
+    const primaryUrl = finding.sourceUrls[0];
+    const evidence = research.evidence.find((item) => item.url === primaryUrl);
+
+    return [{
+      id: `insight:${findingIndex}:${match.route.id}`,
+      title: finding.title,
+      detail: finding.detail,
+      implication: finding.implication,
+      coordinates,
+      severity: CRITICAL_SIGNAL_PATTERN.test(text) ? "critical" as const : "watch" as const,
+      sourceUrls: finding.sourceUrls,
+      sourceLabel: evidence?.title ?? sourceHostname(primaryUrl),
+      researchedAt: research.researchedAt,
+      routeId: match.route.id,
+    }];
+  }).slice(0, 3);
 }

@@ -1979,17 +1979,6 @@
   bottom: 42px;
 }
 
-.commandMap :global(.maplibregl-ctrl-group) {
-  overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 3px;
-  box-shadow: none;
-}
-
-.commandMap :global(.maplibregl-ctrl-group button) {
-  background-color: var(--panel);
-}
-
 .commandMap :global(.maplibregl-ctrl-scale) {
   border-color: var(--ink-muted);
   color: var(--ink-soft);
@@ -2020,17 +2009,22 @@
 }
 
 .mapMarker[data-kind="movement"] {
-  width: auto;
-  min-width: 78px;
+  width: 30px;
   height: 30px;
-  gap: 5px;
-  padding: 0 9px;
+  padding: 0;
   border-color: var(--navy);
   color: var(--navy);
   font-family: "IBM Plex Mono", monospace;
   font-size: 8px;
   font-weight: 650;
   text-transform: uppercase;
+}
+
+.mapMarker[data-kind="movement"][data-active="true"] {
+  width: auto;
+  min-width: 82px;
+  gap: 5px;
+  padding: 0 9px;
 }
 
 .mapMarker[data-kind="customs"] {
@@ -2257,6 +2251,110 @@
 
 .commandMapPopup :global(.maplibregl-popup-tip) {
   border-top-color: var(--line-strong);
+}
+
+.mapInsightMarker {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  color: #513108;
+  background: var(--warning);
+  box-shadow: 0 0 0 1px #795016;
+  cursor: pointer;
+}
+
+.mapInsightMarker[data-severity="critical"] {
+  color: var(--panel);
+  background: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.mapInsightMarker:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.mapInsightCard {
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.mapInsightCard > header {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  color: #795016;
+}
+
+.mapInsightCard[data-severity="critical"] > header {
+  color: var(--danger);
+}
+
+.mapInsightCard header small,
+.mapInsightCard header strong {
+  display: block;
+}
+
+.mapInsightCard header small,
+.mapInsightCard > div strong {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.mapInsightCard header strong {
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.mapInsightCard > p,
+.mapInsightCard > div {
+  padding: 8px 10px;
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.mapInsightCard > div {
+  padding-top: 0;
+}
+
+.mapInsightCard > div span {
+  display: block;
+  margin-top: 3px;
+}
+
+.mapInsightCard > footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7px;
+}
+
+.mapInsightCard footer a {
+  overflow: hidden;
+  color: var(--navy);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapInsightCard footer time {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
 }
 
 .mapHoverCard {
@@ -3376,12 +3474,12 @@
 .commandMapFooter {
   height: 32px;
   position: absolute;
-  right: 12px;
+  right: auto;
   bottom: 8px;
   left: 12px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 0 9px;
   border: 1px solid var(--line-strong);
@@ -3412,20 +3510,20 @@
   background: var(--ink-muted);
 }
 
-.commandLegend i[data-kind="supplier"],
-.commandLegend i[data-kind="factory"],
-.commandLegend i[data-kind="customer"] {
+.commandLegend i[data-kind="node"] {
   background: var(--navy);
 }
 
-.commandLegend i[data-kind="customs"] {
-  background: var(--danger);
+.commandLegend i[data-kind="route"] {
+  width: 16px;
+  height: 2px;
+  border-radius: 0;
+  background: var(--navy);
 }
 
-.commandMapFooter p {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.commandLegend i[data-kind="insight"] {
+  background: var(--warning);
+  box-shadow: 0 0 0 1px #795016;
 }
 
 .commandState {
@@ -3713,15 +3811,10 @@
   }
 
   .commandMapFooter {
-    right: 8px;
+    right: auto;
     bottom: 6px;
     left: 8px;
     height: 30px;
-  }
-
-  .commandLegend span:nth-child(n + 4),
-  .commandMapFooter p {
-    display: none;
   }
 
   .fitMapButton {

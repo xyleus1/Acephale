@@ -6422,3 +6422,42 @@ Follow-up release check:
 - Entering only `AON3D` or `aon3d.com` still produces the complete demo if
   public research is unavailable.
 - Command-map regression tests, TypeScript, and the production build passed.
+
+## Supply OS evidence signals and relevant visuals, August 7
+
+Status:
+
+- Implemented on `feat/supply-os-evidence-insights`, targeting `main`.
+- No database migration, secret, outbound action, quote request, booking,
+  customs filing, supplier award, or spend mutation is required.
+
+Customer result:
+
+- The map can show up to three current material, lane, port, tariff, customs,
+  congestion, or capacity signals. A signal is shown only when it cites a
+  public source and matches a displayed route by material or location.
+- Signal cards state the sourced finding, operating implication, source, and
+  research date. Inferred or uncited findings never become map alerts.
+- Company research now continues from the verified official site into a
+  bounded public-source pass when an OpenAI key is configured. It asks for
+  dated evidence and rejects unsupported language about costs or live rates.
+  If that pass fails, the verified official-site result still builds the case.
+- Non-selected lanes now use compact transport markers instead of repeated
+  `Open lane` labels. The broken navigation control was removed, the scale and
+  fit controls remain, and the legend now explains only operating points,
+  planned routes, and sourced signals that are present.
+- The generic routes-and-providers footer sentence was removed. Single-mode
+  transport legs no longer render a flow chart, modeled price ranges no longer
+  render a redundant two-bar chart, and completed checks are omitted. The
+  whole-network flow appears only for a network with at least three points and
+  two movements.
+
+Verification:
+
+- `npx tsx scripts/supply-os-evidence-insights.test.ts` passed.
+- Command-map and company-research regression suites passed.
+- The optimized production build passed and generated all 57 static pages.
+- Local browser navigation reached the expected authentication boundary. A
+  post-change authenticated screenshot could not be captured with the local
+  placeholder database, so the user screenshots and source-level visual
+  contract test are the visual evidence for this patch.

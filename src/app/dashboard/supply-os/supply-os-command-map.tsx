@@ -6,7 +6,6 @@ import {
   Layer,
   Map,
   Marker,
-  NavigationControl,
   Popup,
   ScaleControl,
   Source,
@@ -14,6 +13,7 @@ import {
 } from "@vis.gl/react-maplibre";
 import type { StyleSpecification } from "maplibre-gl";
 import {
+  AlertTriangle,
   Boxes,
   Factory,
   LocateFixed,
@@ -28,6 +28,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   SupplyCommandMap,
+  SupplyCommandInsight,
   SupplyCommandObject,
   SupplyCommandObjectKind,
   SupplyCommandRouteSegment,
@@ -201,6 +202,23 @@ function HoverObjectCard({ object }: { object: SupplyCommandObject }) {
   );
 }
 
+function InsightCard({ insight }: { insight: SupplyCommandInsight }) {
+  return (
+    <div className={styles.mapInsightCard} data-severity={insight.severity}>
+      <header>
+        <AlertTriangle size={14} strokeWidth={1.9} />
+        <span><small>Sourced lane signal</small><strong>{insight.title}</strong></span>
+      </header>
+      <p>{insight.detail}</p>
+      <div><strong>Operating implication</strong><span>{insight.implication}</span></div>
+      <footer>
+        <a href={insight.sourceUrls[0]} target="_blank" rel="noreferrer">{insight.sourceLabel}</a>
+        <time dateTime={insight.researchedAt}>Checked {new Date(insight.researchedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</time>
+      </footer>
+    </div>
+  );
+}
+
 export function SupplyOsCommandMap({
   commandMap,
   selectedObject,
@@ -214,6 +232,7 @@ export function SupplyOsCommandMap({
   const fallbackPendingRef = useRef(false);
   const basemapReadyRef = useRef(false);
   const [hoveredObject, setHoveredObject] = useState<SupplyCommandObject | null>(null);
+  const [hoveredInsight, setHoveredInsight] = useState<SupplyCommandInsight | null>(null);
   const [hoveredRouteId, setHoveredRouteId] = useState<string | null>(null);
   const [mapRevision, setMapRevision] = useState(0);
   const [basemapIndex, setBasemapIndex] = useState(0);
@@ -261,7 +280,7 @@ export function SupplyOsCommandMap({
       && commandMap.routes.some((route) => route.edgeId === object.edgeId && route.segments.some((segment) => segment.id === hoveredRouteId))) ?? null
     : null;
   const popupCandidate = hoveredObject ?? hoveredRouteObject;
-  const popupObject = popupCandidate?.id === selectedObject?.id ? null : popupCandidate;
+  const popupObject = hoveredInsight || popupCandidate?.id === selectedObject?.id ? null : popupCandidate;
 
   const selectRoute = useCallback((routeId: string) => {
     const route = commandMap.routes.find((candidate) => candidate.id === routeId || candidate.segments.some((segment) => segment.id === routeId));
@@ -272,7 +291,10 @@ export function SupplyOsCommandMap({
   }, [commandMap.objects, commandMap.routes, onSelectObject]);
 
   const fitNetwork = useCallback((animate = true) => {
-    const coordinates = commandMap.objects.map((object) => object.coordinates);
+    const coordinates = [
+      ...commandMap.objects.map((object) => object.coordinates),
+      ...commandMap.insights.map((insight) => insight.coordinates),
+    ];
     if (!coordinates.length || !mapRef.current) return;
     const west = Math.min(...coordinates.map((point) => point.longitude));
     const east = Math.max(...coordinates.map((point) => point.longitude));
@@ -290,7 +312,7 @@ export function SupplyOsCommandMap({
       maxZoom: 6.4,
       duration: animate ? 450 : 0,
     });
-  }, [commandMap.objects]);
+  }, [commandMap.insights, commandMap.objects]);
 
   useEffect(() => {
     if (mapRef.current?.loaded()) fitNetwork(false);
@@ -509,7 +531,7 @@ export function SupplyOsCommandMap({
                 onBlur={() => setHoveredObject((current) => current?.id === object.id ? null : current)}
               >
                 <Icon size={object.kind === "movement" ? 14 : 16} strokeWidth={1.9} />
-                {object.kind === "movement" ? <span className={styles.routeMarkerText}>Open lane</span> : null}
+                {object.kind === "movement" && object.id === selectedObject?.id ? <span className={styles.routeMarkerText}>Lane detail</span> : null}
                 {object.priority ? (
                   <span className={styles.mapPriorityBadge}>P{object.priority.priority}</span>
                 ) : null}
@@ -518,6 +540,29 @@ export function SupplyOsCommandMap({
             </Marker>
           );
         })}
+
+        {commandMap.insights.map((insight) => (
+          <Marker
+            key={insight.id}
+            longitude={insight.coordinates.longitude}
+            latitude={insight.coordinates.latitude}
+            anchor="center"
+          >
+            <button
+              type="button"
+              className={styles.mapInsightMarker}
+              data-severity={insight.severity}
+              aria-label={`Sourced lane signal: ${insight.title}`}
+              onMouseEnter={() => setHoveredInsight(insight)}
+              onMouseLeave={() => setHoveredInsight((current) => current?.id === insight.id ? null : current)}
+              onFocus={() => setHoveredInsight(insight)}
+              onBlur={() => setHoveredInsight((current) => current?.id === insight.id ? null : current)}
+              onClick={() => window.open(insight.sourceUrls[0], "_blank", "noopener,noreferrer")}
+            >
+              <AlertTriangle size={13} strokeWidth={2.1} />
+            </button>
+          </Marker>
+        ))}
 
         {popupObject ? (
           <Popup
@@ -533,7 +578,20 @@ export function SupplyOsCommandMap({
           </Popup>
         ) : null}
 
-        <NavigationControl position="bottom-left" showCompass visualizePitch />
+        {hoveredInsight ? (
+          <Popup
+            longitude={hoveredInsight.coordinates.longitude}
+            latitude={hoveredInsight.coordinates.latitude}
+            anchor="bottom"
+            offset={20}
+            closeButton={false}
+            closeOnClick={false}
+            className={styles.commandMapPopup}
+          >
+            <InsightCard insight={hoveredInsight} />
+          </Popup>
+        ) : null}
+
         <ScaleControl position="bottom-left" unit="imperial" />
         <AttributionControl position="bottom-right" compact />
       </Map>

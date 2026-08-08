@@ -3766,3 +3766,24 @@ Use this file for chronological implementation notes that future agents should s
 - Added a regression for a NOX-style research result with no location data.
   The case now produces five connected lanes, visible route segments, and a
   customs handoff instead of zero lanes.
+
+### 2026-08-07 - Gate map signals by evidence and relevance
+
+- Added route-linked map insights derived only from official or public
+  research findings with attributable URLs. Matching requires a shared cargo
+  or location token with a rendered route, and the map is capped at three
+  signals to preserve legibility.
+- Expanded company research to request dated, current material, freight,
+  customs, port, tariff, congestion, and capacity evidence after official-site
+  verification. Cost direction requires a cited comparison or time series,
+  and live-rate language requires a current lane-specific source.
+- Preserved the official-site result as the fallback when public research
+  times out, returns no attributable sources, or fails normalization.
+- Removed repeated non-selected lane labels, the empty MapLibre navigation
+  control, the full-width disclaimer sentence, and the redundant rate bars.
+  Flow charts and warning lists now render only when their data shape warrants
+  them.
+- Added `scripts/supply-os-evidence-insights.test.ts` for provenance,
+  route-relevance, legend copy, chart gating, and map-control regressions.
+- Verification: new evidence test, command-map test, company-research test,
+  diff checks, em-dash scan, and optimized production build passed.
