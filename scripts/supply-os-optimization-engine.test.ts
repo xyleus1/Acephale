@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { generateSupplyCase, type SupplyCompanyResearch } from "../src/lib/supply-os-case-model";
+import { buildSupplyCommandMap } from "../src/lib/supply-os-command-map";
 import {
   buildSupplyOptimizationModel,
   SUPPLY_OPTIMIZATION_WORKSPACES,
@@ -269,6 +270,40 @@ assert.deepEqual(
   "a verified Montreal label must remain drawable when the research provider omits coordinates",
 );
 assert.ok(montrealModel.edges.length > 0, "known factory geography must not discard every connected lane");
+
+const unresolvedLocationResearch: SupplyCompanyResearch = {
+  ...noxResearch,
+  company: {
+    ...noxResearch.company,
+    headquarters: null,
+    locations: [],
+  },
+};
+const unresolvedLocationDashboard = generateSupplyCase(
+  "NOX Metals",
+  new Date(researchedAt),
+  "full_operation",
+  unresolvedLocationResearch,
+);
+const unresolvedLocationModel = buildSupplyOptimizationModel(unresolvedLocationDashboard);
+const unresolvedLocationMap = buildSupplyCommandMap(unresolvedLocationModel, unresolvedLocationDashboard);
+assert.ok(
+  unresolvedLocationModel.nodes.find((node) => node.kind === "processing_site")?.coordinates,
+  "missing facility geography must receive a clearly inferred map placement so the network remains connected",
+);
+assert.equal(
+  unresolvedLocationMap.routes.length,
+  unresolvedLocationModel.edges.length,
+  "research gaps must not silently erase every supplier and customer lane",
+);
+assert.ok(
+  unresolvedLocationMap.routes.every((route) => route.segments.length > 0),
+  "every generated lane needs at least one visible transport segment",
+);
+assert.ok(
+  unresolvedLocationMap.objects.some((object) => object.kind === "customs"),
+  "a profile-labeled cross-border lane must retain its customs handoff even when the facility country is unresolved",
+);
 
 const phoenixCase = generateSupplyCase(
   "Company: Acme Robotics\nLocated: Phoenix, Arizona\nProduction: Phoenix, Arizona\nIndustrial robotics manufacturer\nNeeds: controls and machined components\nSources: Tulsa, Oklahoma\nShips to: Los Angeles, California",

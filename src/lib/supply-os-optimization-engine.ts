@@ -743,6 +743,23 @@ function knownCoordinates(location: string | null | undefined): SupplyCoordinate
   return KNOWN_LOCATION_COORDINATES.find((candidate) => candidate.aliases.test(location))?.coordinates ?? null;
 }
 
+function provisionalCoordinateNear(coordinate: SupplyCoordinate | null | undefined, index = 0): SupplyCoordinate | null {
+  if (!coordinate) return null;
+  const latitudeOffset = 0.45 + (index % 3) * 0.16;
+  const longitudeOffset = -0.65 - (index % 3) * 0.22;
+  return {
+    latitude: Math.max(-85, Math.min(85, coordinate.latitude + latitudeOffset)),
+    longitude: Math.max(-175, Math.min(175, coordinate.longitude + longitudeOffset)),
+  };
+}
+
+function provisionalFacilityCoordinates(profile: OptimizationProfile): SupplyCoordinate | null {
+  return provisionalCoordinateNear(
+    profile.customerClusters.find((cluster) => cluster.coordinates)?.coordinates
+      ?? profile.sourceClusters.find((cluster) => cluster.coordinates)?.coordinates,
+  );
+}
+
 function facilityNode(dashboard: SupplyCaseDashboard, profile: OptimizationProfile): SupplyOptimizationNode {
   const researchLocation = dashboard.research?.company.locations.find((location) =>
     ["manufacturing", "assembly", "warehouse"].includes(location.role),
@@ -753,16 +770,21 @@ function facilityNode(dashboard: SupplyCaseDashboard, profile: OptimizationProfi
     ?? "Operating site to confirm";
   const routeNode = routeNodeFor(dashboard, "headquarters", label);
   const researchBasis = researchLocation ? basisForClaim(researchLocation) : null;
+  const resolvedCoordinates = researchLocation?.coordinates ?? routeNode?.coordinates ?? knownCoordinates(label);
+  const coordinates = resolvedCoordinates ?? provisionalFacilityCoordinates(profile);
+  const usesProvisionalPlacement = !resolvedCoordinates && Boolean(coordinates);
   return {
     id: "processing-site",
     sequence: 3,
     kind: "processing_site",
     label: dashboard.companyName ? `${dashboard.companyName} operating site` : "Company operating site",
     location: label,
-    coordinates: researchLocation?.coordinates ?? routeNode?.coordinates ?? knownCoordinates(label),
+    coordinates,
     basis: researchBasis?.basis ?? (dashboard.productionLocation || dashboard.companyLocation ? "customer_stated" : "inferred"),
-    confidence: researchBasis?.confidence ?? (routeNode?.coordinates ? "medium" : "low"),
-    detail: profile.facilityActivity,
+    confidence: usesProvisionalPlacement ? "low" : researchBasis?.confidence ?? (routeNode?.coordinates ? "medium" : "low"),
+    detail: usesProvisionalPlacement
+      ? `${profile.facilityActivity}. The map placement is provisional until the operating address is confirmed.`
+      : profile.facilityActivity,
     cargo: naturalList(dashboard.sourcingNeeds, "Production inputs and finished goods to confirm"),
     confirmNext: "Confirm which products, inventory, suppliers, and customer shipments actually move through this site.",
     qualificationTargets: [],
@@ -773,6 +795,7 @@ function explicitNodes(
   dashboard: SupplyCaseDashboard,
   kind: "source" | "destination",
   startSequence: number,
+  fallbackClusters: readonly Cluster[],
 ): SupplyOptimizationNode[] {
   const values = kind === "source" ? dashboard.sourceRegions : dashboard.destinations;
   const claims = kind === "source"
@@ -782,17 +805,22 @@ function explicitNodes(
     const claim = matchingResearchClaim(claims, value);
     const basis = basisForClaim(claim);
     const routeNode = routeNodeFor(dashboard, kind, value);
+    const resolvedCoordinates = routeNode?.coordinates ?? knownCoordinates(value);
+    const coordinates = resolvedCoordinates
+      ?? provisionalCoordinateNear(fallbackClusters[index]?.coordinates ?? fallbackClusters[0]?.coordinates, index + 1);
+    const usesProvisionalPlacement = !resolvedCoordinates && Boolean(coordinates);
     return {
       id: `${kind}-${slug(value)}-${index + 1}`,
       sequence: startSequence + index,
       kind: kind === "source" ? "supplier_cluster" as const : "customer_cluster" as const,
       label: kind === "source" ? `${value} suppliers` : `${value} customers`,
       location: value,
-      coordinates: routeNode?.coordinates ?? knownCoordinates(value),
+      coordinates,
       ...basis,
+      confidence: usesProvisionalPlacement ? "low" : basis.confidence,
       detail: kind === "source"
-        ? `Supplier geography carried from the customer brief or public research for ${naturalList(dashboard.sourcingNeeds, "inputs to confirm")}.`
-        : "Delivery geography carried from the customer brief or public research. Actual customers and service requirements remain unconfirmed.",
+        ? `Supplier geography carried from the customer brief or public research for ${naturalList(dashboard.sourcingNeeds, "inputs to confirm")}.${usesProvisionalPlacement ? " The map placement is provisional until the supplier city or address is confirmed." : ""}`
+        : `Delivery geography carried from the customer brief or public research. Actual customers and service requirements remain unconfirmed.${usesProvisionalPlacement ? " The map placement is provisional until the ship-to city or address is confirmed." : ""}`,
       cargo: kind === "source"
         ? naturalList(dashboard.sourcingNeeds, "Inputs to confirm")
         : "Finished goods, spares, or replenishment orders to confirm",
@@ -1136,8 +1164,8 @@ function actionsFor(
 export function buildSupplyOptimizationModel(dashboard: SupplyCaseDashboard): SupplyOptimizationModel {
   const profile = profileFor(dashboard);
   const facility = facilityNode(dashboard, profile);
-  const explicitSources = explicitNodes(dashboard, "source", 1);
-  const explicitCustomers = explicitNodes(dashboard, "destination", 10);
+  const explicitSources = explicitNodes(dashboard, "source", 1, profile.sourceClusters);
+  const explicitCustomers = explicitNodes(dashboard, "destination", 10, profile.customerClusters);
   const sources = explicitSources.length
     ? explicitSources
     : inferredClusterNodes(profile.sourceClusters, "supplier_cluster", 1);
