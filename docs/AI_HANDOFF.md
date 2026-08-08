@@ -2,6 +2,23 @@
 
 ## Latest Update
 
+### Generated Supply OS cases retain a connected operating network
+
+- Generated companies no longer lose every route when public research finds
+  products, supplier markets, and customer markets but cannot normalize the
+  operating-site address.
+- The optimization model now assigns a low-confidence provisional map
+  placement when a facility, source region, or destination lacks drawable
+  coordinates. The object detail explicitly says that placement must be
+  confirmed, and researched coordinates still take precedence.
+- Profile-labeled cross-border lanes retain their customs dossier even when
+  one endpoint country is still unresolved.
+- Existing saved dashboards benefit immediately because the operating model
+  is rebuilt when the dashboard renders. Regeneration is not required.
+- Regression coverage proves that a NOX-style name-only case produces a
+  processing site, one route per modeled edge, visible transport segments, and
+  a customs handoff.
+
 ## Date
 
 2026-08-07

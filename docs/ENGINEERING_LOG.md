@@ -3732,7 +3732,6 @@ Use this file for chronological implementation notes that future agents should s
   name or official domain.
 - Verified the command-map regression suite, TypeScript, optimized production
   build, diff hygiene, and the repository em-dash prohibition.
-
 ### 2026-08-07 - Add evidence-gated steel supplier discovery
 
 - Branch: steel-supplier-finder, targeting main
@@ -3753,3 +3752,17 @@ Use this file for chronological implementation notes that future agents should s
   browser-local and are not encrypted shared office storage.
 - Follow-up: add office-scoped candidate records and a reviewed diligence
   workflow before enabling supplier outreach or award actions.
+
+### 2026-08-07 - Keep generated Supply OS networks connected
+
+- Fixed the generated-company path that could show supplier and customer
+  points while silently dropping every lane because the operating site lacked
+  normalized coordinates.
+- Added low-confidence provisional map placement for unresolved facilities,
+  explicit source regions, and destinations. The placement remains labeled as
+  an assumption and never upgrades the underlying evidence basis.
+- Preserved customs objects for lanes whose modeled mode explicitly says
+  cross-border or international, even when one endpoint country is unknown.
+- Added a regression for a NOX-style research result with no location data.
+  The case now produces five connected lanes, visible route segments, and a
+  customs handoff instead of zero lanes.

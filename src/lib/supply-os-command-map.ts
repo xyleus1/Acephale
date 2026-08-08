@@ -549,6 +549,14 @@ function isCrossBorder(from: SupplyOptimizationNode, to: SupplyOptimizationNode)
   return Boolean(fromCountry && toCountry && fromCountry !== toCountry);
 }
 
+function edgeIsCrossBorder(
+  edge: SupplyOptimizationEdge,
+  from: SupplyOptimizationNode,
+  to: SupplyOptimizationNode,
+) {
+  return isCrossBorder(from, to) || /cross-border|international/i.test(edge.mode);
+}
+
 function borderContacts(from: SupplyOptimizationNode, to: SupplyOptimizationNode) {
   const countries = new Set([countryFor(from.location), countryFor(to.location)]);
   if (countries.has("CA") && countries.has("US")) return [LIVINGSTON, FARROW];
@@ -650,7 +658,7 @@ function routeSegmentsFor(
   to: SupplyOptimizationNode,
 ): SupplyCommandRouteSegment[] {
   const mode = edge.mode.toLowerCase();
-  const international = isCrossBorder(from, to);
+  const international = edgeIsCrossBorder(edge, from, to);
   const primaryMode: "ocean" | "air" | "road" = /ocean/.test(mode)
     ? "ocean"
     : /air/.test(mode) && international
@@ -829,7 +837,7 @@ function edgeObjects(model: SupplyOptimizationModel): { objects: SupplyCommandOb
     const routeMidpoint = primaryTransport
       ? midpoint(primaryTransport.from, primaryTransport.to)
       : midpoint(from.coordinates, to.coordinates);
-    const crossBorder = isCrossBorder(from, to);
+    const crossBorder = edgeIsCrossBorder(edge, from, to);
     const routePriority = actionPriority(model, "shipment_planning");
     const rateEstimate = rateEstimateFor(edge, from, to);
 
