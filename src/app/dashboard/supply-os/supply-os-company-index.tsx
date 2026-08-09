@@ -100,12 +100,9 @@ export function SupplyOsCompanyIndex({
   }
 
   return (
-    <section className={styles.index} aria-labelledby="supply-os-company-index-title">
+    <section className={styles.index} aria-label="Companies">
       <header>
-        <div>
-          <span>Operating workspaces</span>
-          <h2 id="supply-os-company-index-title">Companies</h2>
-        </div>
+        <span>{workspaces.length + 1} {workspaces.length ? "companies" : "company"}</span>
         <div className={styles.headerActions}>
           <button type="button" onClick={() => void load()} aria-label="Refresh companies" disabled={state === "loading"}>
             <RefreshCw size={15} />
