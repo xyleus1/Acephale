@@ -2,7 +2,7 @@
 
 ## Scope
 
-This system governs the customer-facing Supply OS dashboard, customer builder, and linked workstream shells. It does not replace the older internal CRM interface.
+This system governs the single internal Supply OS operator surface and its linked customer portal boundary.
 
 ## Product thesis
 
@@ -13,7 +13,7 @@ Supply OS is a working model of how a customer's physical operation may function
 3. What weakness is most likely to hurt cost, lead time, or continuity?
 4. What decision and input unlock the next action?
 
-The map is the working surface, not decoration. The selected object and its next action are the primary output, not a collection of metrics.
+The map is the stable center of geographic domain views, not page wallpaper. The selected object and its next action are the primary output, not a collection of metrics.
 
 ## Reference patterns
 
@@ -58,13 +58,14 @@ Use sentence case. Avoid slogans, model names, internal jargon, and inflated cla
 
 The customer dashboard is one fixed-height operating view. The document must not scroll at supported desktop and presentation sizes.
 
-1. A compact header identifies the customer, operating site, scope, and evidence counts.
-2. A narrow left rail lists supplier, customs, factory, distribution, and customer objects in physical-flow order.
-3. A full-bleed map occupies the remaining canvas.
-4. A right dossier describes the selected object, local contacts, checks, and the single next action.
-5. A compact bottom strip explains status and the planning boundary.
+1. A persistent top ribbon identifies the company, logo or monogram fallback, facility, data freshness, and active domain.
+2. A persistent left sidebar switches Supply, Logistics, Suppliers, Opportunities, and Tracking without changing product routes.
+3. The default entry state is a clean row-based company list. Admins create company workspaces inline from this list.
+4. A back arrow returns any selected company to the company list without opening a modal.
+5. Geographic domain views keep the map inside a bordered central box. Left, right, and lower context boxes change with the selected domain.
+6. A right dossier describes the selected object, evidence, checks, and the single next action.
 
-Panels sit over the map instead of pushing it into a card. At narrower widths, the rail and dossier become smaller overlays. The new-customer builder remains a separate route because it is an input workflow, not part of the operating picture.
+The map must not become the whole-page background. Side context may sit beside the map but must not become a stack of floating popups. At narrower widths, the company list and domain panels become full-width rows or sheets while the persistent domain navigation remains available.
 
 ## Map, components, and provenance
 
@@ -87,7 +88,7 @@ Every node must be one of:
 
 Public evidence never becomes official evidence, and known endpoints never prove that a movement occurred. Inferred movement uses a dashed route, a hollow point, and explicit copy. Candidate suppliers and buyer profiles must say that they are qualification targets, not known relationships.
 
-The map zooms to the current network. Routes remain dashed while they are planning hypotheses. Markers use one neutral shell, a standard symbol, and status color only. Hover or keyboard focus opens a compact contact card. Click selects the object and updates the persistent dossier.
+The map zooms to the current network. Routes remain dashed while they are planning hypotheses. Markers use one neutral shell, a standard symbol, and status color only. Click selects the object and updates the persistent dossier. Do not require hover popups to understand or operate the map.
 
 ## Operating action
 
@@ -110,9 +111,9 @@ A workstream link must carry the customer case identifier and must never imply t
 - Links inside evidence or candidate lists use navy text without an underline.
 - Disclosure rows use a chevron and full-row hit target.
 
-## Customer builder
+## Company entry
 
-The builder has one primary input and one primary action. Research progress reports what source is being checked and whether the result is verified or assumed. If public research fails, the builder must still produce a draft from the customer's description. It must never end on a dead result screen.
+The company directory uses rows, not cards. Admin creation is an inline form in the directory and creates an office-shared operating workspace. Selecting a row opens that company's current domain view. Data import and research progress must remain inline or in dedicated page regions, never modal-only workflows.
 
 ## Empty and future workstreams
 
@@ -125,6 +126,8 @@ Future workstream routes may be present before execution tools are connected. Th
 - Cards created only to fill space
 - Repeated summaries that do not change the next decision
 - Stacked report sections that force the customer dashboard to scroll
+- Full-background maps that erase the surrounding information hierarchy
+- Modal or popup workflows for company selection and creation
 - Custom-drawn maps, icons, or controls when a maintained library component exists
 - Generic provider lists without scope, evidence, or a customer-specific reason
 - Fake rates, shipment status, customers, suppliers, or system connections

@@ -44,6 +44,7 @@ type SupplyWorkspace = {
   version: number;
   updatedAt: string;
   company: { name: string; website: string | null } | null;
+  mediaAssets: Array<{ url: string }>;
   snapshots: PublishedSnapshot[];
 };
 
@@ -80,6 +81,7 @@ export type SupplyOsWorkspaceSelection = {
   workspaceName: string;
   snapshotId: string | null;
   snapshotVersion: number | null;
+  logoUrl: string | null;
 } | null;
 
 const FILE_LABELS: Record<CsvKind, { label: string; hint: string; required: boolean }> = {
@@ -175,6 +177,7 @@ export function SupplyOsSharedWorkspace({
       workspaceName: selectedWorkspace.name,
       snapshotId: latestSnapshot?.id ?? null,
       snapshotVersion: latestSnapshot?.version ?? null,
+      logoUrl: selectedWorkspace.mediaAssets[0]?.url ?? null,
     } : null);
   }, [
     latestSnapshot?.id,

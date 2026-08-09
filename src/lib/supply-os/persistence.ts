@@ -92,6 +92,12 @@ export async function listSupplyWorkspaces(context: SupplyAccessContext) {
       version: true,
       updatedAt: true,
       company: { select: { name: true, website: true } },
+      mediaAssets: {
+        where: { kind: "company_logo", isPrimary: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { url: true },
+      },
       snapshots: {
         where: { status: "PUBLISHED" },
         orderBy: { version: "desc" },

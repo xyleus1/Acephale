@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { requireSession } from "@/lib/auth";
-import { SupplyOsDecisionIntelligence } from "./supply-os-decision-intelligence";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
 import styles from "./supply-os-workspace.module.css";
 
@@ -23,11 +21,7 @@ export default async function SupplyOsPage({
         storageScope={`${session.officeId}:${session.userId}`}
         presentationMode={params.present === "1"}
         initialPanel={params.panel}
-        intelligencePanel={(
-          <Suspense fallback={null}>
-            <SupplyOsDecisionIntelligence officeId={session.officeId} />
-          </Suspense>
-        )}
+        canCreateCompany={session.role === "ADMIN"}
       />
     </div>
   );

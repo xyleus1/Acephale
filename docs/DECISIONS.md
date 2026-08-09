@@ -16,6 +16,31 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-08 - Supply OS uses a persistent company ribbon, domain sidebar, and boxed map
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The previous implementation mixed a full-background map, product
+  twin, supplier search, scenario analysis, and execution status without a
+  stable navigation hierarchy. Company selection and data controls were also
+  hidden behind menus and modal dialogs.
+- Decision: Keep the left Supply OS sidebar as the persistent domain switcher.
+  Keep a persistent top ribbon for company identity, attributable logo or
+  monogram fallback, facility, data freshness, and active domain. Make the
+  default state a row-based company directory with inline admin creation and a
+  back arrow from a selected company. Geographic views place the map in a
+  bordered central box while surrounding context changes by domain. Do not use
+  modal or hover-popup workflows for primary operation.
+- Rationale: Operators need stable spatial memory. Company context and domain
+  navigation should not move while the analysis changes. A bounded map keeps
+  geography important without allowing it to consume the full interface.
+- Consequences: Supply, Logistics, Suppliers, Opportunities, and Tracking are
+  views of one company workspace. Candidate and inferred map edges remain
+  dashed and evidence-labeled. Data import and future company setup must be
+  inline or use dedicated page regions.
+- Revisit when: observed operator sessions show that the persistent ribbon or
+  sidebar materially reduces usable space at supported desktop widths.
+
 ### 2026-08-08 - Supply OS uses PostgreSQL, relational graphs, and a typed capability DSL
 
 - Status: accepted

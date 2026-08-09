@@ -19,6 +19,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Only admins can create company workspaces." }, { status: 403 });
+  }
   const body = await request.json().catch(() => null) as {
     name?: unknown;
     companyId?: unknown;

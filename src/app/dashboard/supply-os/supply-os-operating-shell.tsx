@@ -1,8 +1,8 @@
 "use client";
 
 import {
+  ArrowLeft,
   Boxes,
-  Database,
   Factory,
   GitCompareArrows,
   Globe2,
@@ -11,14 +11,14 @@ import {
   Radio,
   ShieldCheck,
   Truck,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SteelSupplierFinder } from "../supplier-finder/steel-supplier-finder";
+import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
-import { SupplyOsSharedWorkspace, type SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
+import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import { SupplyOsSnapshotTwin } from "./supply-os-snapshot-twin";
 import { normalizeSupplyOsPanel, supplyOsPanelHref, type SupplyOsPanel } from "@/lib/supply-os/panel-routing";
 import styles from "./supply-os-operating-shell.module.css";
@@ -30,10 +30,10 @@ type PanelDefinition = {
 };
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", shortLabel: "Materials", icon: Boxes },
-  { id: "logistics", shortLabel: "Network", icon: Globe2 },
+  { id: "materials", shortLabel: "Supply", icon: Boxes },
+  { id: "logistics", shortLabel: "Logistics", icon: Globe2 },
   { id: "suppliers", shortLabel: "Suppliers", icon: PackageSearch },
-  { id: "scenarios", shortLabel: "Scenarios", icon: GitCompareArrows },
+  { id: "scenarios", shortLabel: "Opportunities", icon: GitCompareArrows },
   { id: "tracking", shortLabel: "Tracking", icon: Radio },
 ];
 
@@ -142,22 +142,27 @@ export function SupplyOsOperatingShell({
   storageScope,
   presentationMode,
   initialPanel,
-  intelligencePanel,
+  canCreateCompany,
 }: {
   storageScope: string;
   presentationMode: boolean;
   initialPanel?: string;
-  intelligencePanel?: ReactNode;
+  canCreateCompany: boolean;
 }) {
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
-  const [dataControlsOpen, setDataControlsOpen] = useState(false);
+  const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
-  const handleWorkspaceSelection = useCallback((selection: SupplyOsWorkspaceSelection) => {
+  const openWorkspace = useCallback((selection: SupplyOsWorkspaceSelection) => {
     setWorkspaceSelection(selection);
+    setCompanyIndexOpen(false);
   }, []);
   const publishedWorkspaceId = workspaceSelection?.snapshotId ? workspaceSelection.workspaceId : null;
   const activePanelDefinition = PANELS.find((panel) => panel.id === activePanel) ?? PANELS[0];
-  const ActivePanelIcon = activePanelDefinition.icon;
+  const companyName = workspaceSelection?.workspaceName ?? "Atlas Robotics";
+  const companyInitials = useMemo(
+    () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
+    [companyName],
+  );
 
   useEffect(() => {
     const syncPanelFromUrl = () => setActivePanel(panelFromCurrentUrl());
@@ -165,18 +170,10 @@ export function SupplyOsOperatingShell({
     return () => window.removeEventListener("popstate", syncPanelFromUrl);
   }, []);
 
-  useEffect(() => {
-    if (!dataControlsOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDataControlsOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [dataControlsOpen]);
-
   const selectPanel = useCallback((panel: SupplyOsPanel) => {
     window.history.pushState({}, "", supplyOsPanelHref(window.location.href, panel));
     setActivePanel(panel);
+    setCompanyIndexOpen(false);
   }, []);
 
   if (presentationMode) {
@@ -185,7 +182,7 @@ export function SupplyOsOperatingShell({
 
   return (
     <MotionConfig reducedMotion="user" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
-      <main className={`${styles.shell} supply-os-workspace`} data-panel={activePanel}>
+      <main className={`${styles.shell} supply-os-workspace`} data-panel={activePanel} data-company-index={companyIndexOpen}>
         <motion.aside
           className={styles.operatingSidebar}
           initial={{ x: -12, opacity: 0 }}
@@ -227,18 +224,25 @@ export function SupplyOsOperatingShell({
         <section className={styles.workspace}>
           <header className={styles.commandHeader}>
             <div className={styles.identity}>
-              <span className={styles.mark}><ActivePanelIcon size={18} /></span>
+              <span className={styles.companyAvatar} aria-hidden="true">
+                {companyIndexOpen ? "CO" : companyInitials}
+                {!companyIndexOpen && workspaceSelection?.logoUrl ? (
+                  <img src={workspaceSelection.logoUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />
+                ) : null}
+              </span>
               <div>
-                <h1>{workspaceSelection?.workspaceName ?? "Atlas Robotics"}</h1>
+                <small>{companyIndexOpen ? "Company directory" : activePanelDefinition.shortLabel}</small>
+                <h1>{companyIndexOpen ? "Companies" : companyName}</h1>
               </div>
             </div>
             <div className={styles.workspaceControls}>
               <dl>
-                <div><dt>Site</dt><dd>{workspaceSelection ? "Published locations" : "Austin"}</dd></div>
+                <div><dt>View</dt><dd>{companyIndexOpen ? "Company list" : activePanelDefinition.shortLabel}</dd></div>
+                <div><dt>Facility</dt><dd>{workspaceSelection ? "Published locations" : "Austin"}</dd></div>
                 <div><dt>Data</dt><dd>{workspaceSelection?.snapshotVersion ? `Snapshot v${workspaceSelection.snapshotVersion}` : "Demo"}</dd></div>
               </dl>
-              <motion.button type="button" onClick={() => setDataControlsOpen(true)} whileTap={{ scale: 0.98 }}>
-                <Database size={15} /> Data
+              <motion.button type="button" onClick={() => setCompanyIndexOpen(true)} whileTap={{ scale: 0.98 }} disabled={companyIndexOpen}>
+                <ArrowLeft size={15} /> Companies
               </motion.button>
             </div>
           </header>
@@ -251,7 +255,10 @@ export function SupplyOsOperatingShell({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -3 }}
             >
-              {activePanel === "materials" ? (
+              {companyIndexOpen ? (
+                <SupplyOsCompanyIndex canCreateCompany={canCreateCompany} onOpenWorkspace={openWorkspace} />
+              ) : null}
+              {!companyIndexOpen && activePanel === "materials" ? (
                 <SupplyOsSnapshotTwin
                   workspaceId={publishedWorkspaceId}
                   fallbackImageUrl={PRODUCT_MEDIA.src}
@@ -262,64 +269,24 @@ export function SupplyOsOperatingShell({
                   }}
                 />
               ) : null}
-              {activePanel === "suppliers" ? (
+              {!companyIndexOpen && activePanel === "suppliers" ? (
                 <div className={styles.embeddedPanel}>
                   <SteelSupplierFinder storageScope={storageScope} />
                 </div>
               ) : null}
-              {activePanel === "scenarios" ? (
+              {!companyIndexOpen && activePanel === "scenarios" ? (
                 <div className={styles.scenarioFrame}>
-                  {intelligencePanel}
-                  <SupplyOsSnapshotTwin
-                    workspaceId={publishedWorkspaceId}
-                    fallbackImageUrl={PRODUCT_MEDIA.src}
-                    fallbackImageAttribution={{
-                      href: PRODUCT_MEDIA.sourcePage,
-                      label: "Photo",
-                      title: `${PRODUCT_MEDIA.creator}, ${PRODUCT_MEDIA.license}. ${PRODUCT_MEDIA.dimensions}, original ${PRODUCT_MEDIA.originalDimensions}, retrieved ${PRODUCT_MEDIA.retrievedAt}`,
-                    }}
-                    view="scenarios"
-                  />
+                  <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode={false} />
                 </div>
               ) : null}
-              {activePanel === "logistics" ? (
+              {!companyIndexOpen && activePanel === "logistics" ? (
                 <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode={false} />
               ) : null}
-              {activePanel === "tracking" ? <TrackingAndCostPanel /> : null}
+              {!companyIndexOpen && activePanel === "tracking" ? <TrackingAndCostPanel /> : null}
             </motion.div>
           </AnimatePresence>
 
         </section>
-
-        <AnimatePresence>
-          {dataControlsOpen ? (
-            <motion.div
-              className={styles.dataOverlay}
-              role="presentation"
-              onMouseDown={() => setDataControlsOpen(false)}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <motion.section
-                className={styles.dataDialog}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="supply-os-data-dialog-title"
-                onMouseDown={(event) => event.stopPropagation()}
-                initial={{ opacity: 0, y: 14, scale: 0.99 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.995 }}
-              >
-                <header>
-                  <h2 id="supply-os-data-dialog-title">Data</h2>
-                  <button type="button" aria-label="Close data controls" autoFocus onClick={() => setDataControlsOpen(false)}><X size={17} /></button>
-                </header>
-                <div className={styles.dataDialogBody}><SupplyOsSharedWorkspace onSelectionChange={handleWorkspaceSelection} /></div>
-              </motion.section>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
       </main>
     </MotionConfig>
   );
