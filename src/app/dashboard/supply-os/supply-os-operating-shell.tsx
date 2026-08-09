@@ -6,6 +6,7 @@ import {
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LogoMark } from "@/components/logo-mark";
+import { SUPPLY_OS_DEMO_COMPANY } from "@/lib/supply-os/demo-company";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
@@ -48,7 +49,8 @@ export function SupplyOsOperatingShell({
     setWorkspaceSelection(selection);
     setCompanyIndexOpen(false);
   }, []);
-  const companyName = workspaceSelection?.workspaceName ?? "Atlas Robotics";
+  const companyName = workspaceSelection?.workspaceName ?? SUPPLY_OS_DEMO_COMPANY.name;
+  const companyLogoUrl = workspaceSelection ? workspaceSelection.logoUrl : SUPPLY_OS_DEMO_COMPANY.logoUrl;
   const companyInitials = useMemo(
     () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
     [companyName],
@@ -114,8 +116,8 @@ export function SupplyOsOperatingShell({
             <div className={styles.identity}>
               <span className={styles.companyAvatar} aria-hidden="true">
                 {companyIndexOpen ? "CO" : companyInitials}
-                {!companyIndexOpen && workspaceSelection?.logoUrl ? (
-                  <img src={workspaceSelection.logoUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />
+                {!companyIndexOpen && companyLogoUrl ? (
+                  <img src={companyLogoUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />
                 ) : null}
               </span>
               <div>

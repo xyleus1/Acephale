@@ -2,6 +2,7 @@
 
 import { ArrowRight, Building2, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { SUPPLY_OS_DEMO_COMPANY } from "@/lib/supply-os/demo-company";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import styles from "./supply-os-company-index.module.css";
 
@@ -139,8 +140,11 @@ export function SupplyOsCompanyIndex({
 
       <div className={styles.rows} aria-live="polite">
         <button type="button" className={styles.companyRow} onClick={() => onOpenWorkspace(null)}>
-          <span className={styles.companyMark}>AR</span>
-          <span className={styles.companyIdentity}><strong>Atlas Robotics</strong><small>Illustrative operating workspace</small></span>
+          <span className={styles.companyMark} aria-hidden="true">
+            AR
+            <img src={SUPPLY_OS_DEMO_COMPANY.logoUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />
+          </span>
+          <span className={styles.companyIdentity}><strong>{SUPPLY_OS_DEMO_COMPANY.name}</strong><small>Illustrative operating workspace</small></span>
           <span className={styles.companyFacts}><b>3 facilities</b><small>Demo data</small></span>
           <span className={styles.companyFacts}><b>5 network points</b><small>Supply and logistics</small></span>
           <ArrowRight size={16} />

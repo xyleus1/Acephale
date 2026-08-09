@@ -4113,3 +4113,24 @@ Use this file for chronological implementation notes that future agents should s
   dependency, or external action changed.
 - Follow-up: verify the authenticated production route after deployment when a
   valid production test session is available.
+
+### 2026-08-09 - Replace the Atlas Robotics monogram with an official logo
+
+- Branch: main
+- Commit: pending
+- Task: Replace the synthetic-looking `AR` company mark in the built-in Atlas
+  Robotics demo row and persistent company ribbon with a real company logo.
+- Files changed: demo company identity module, Supply OS operating shell,
+  company index and styles, company-navigation contract, handoff, and this log.
+- Source: the official Atlas Robotics site publishes
+  `https://www.atlas-robotics.com/icon.svg` and identifies it as the company
+  logo in same-domain structured metadata.
+- Verification: the official asset returned HTTP 200 with `image/svg+xml`;
+  company-navigation, product-copy, TypeScript, diff whitespace, and
+  changed-diff U+2014 checks pass.
+- Failed/skipped checks: the in-app browser had no attached tab, so desktop and
+  mobile rendered inspection was unavailable.
+- Caveats: initials remain as a broken-image fallback. The official demo logo
+  cannot leak into real workspaces that do not have stored media.
+- Follow-up: inspect the authenticated company index and ribbon in an attached
+  browser before the next production release.

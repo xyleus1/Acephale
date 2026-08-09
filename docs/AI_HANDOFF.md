@@ -2,6 +2,37 @@
 
 ## Latest Update
 
+### Atlas Robotics demo now uses its official logo
+
+- Replaced the visible `AR` monogram in the built-in Atlas Robotics company
+  row and persistent company ribbon with the official same-domain Atlas
+  Robotics icon from `https://www.atlas-robotics.com/icon.svg`.
+- Centralized the demo company name, logo URL, and official source URL in one
+  small module so the index and ribbon cannot drift.
+- Preserved initials as a load-error fallback. The demo logo is used only for
+  the built-in demo. A real workspace without stored media keeps its own
+  monogram and is never assigned the Atlas Robotics logo.
+- Added a company-navigation contract covering the ribbon image, company-row
+  image, and official same-domain asset URL.
+- No schema, dependency, tenant boundary, freight logic, approval rule, or
+  external action changed.
+
+Verification:
+
+- Official logo asset returned HTTP 200 with `image/svg+xml`
+- `npm run test:supply-os-company-navigation`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- `git diff --check`
+- Changed-diff U+2014 scan
+
+Skipped verification:
+
+- The in-app browser had no attached tab, so this checkout does not claim a
+  rendered screenshot pass. The image source and render path were verified,
+  but desktop and mobile visual inspection remains to be completed in an
+  attached authenticated session.
+
 ### Logistics page rewritten without legacy visual inheritance
 
 - Replaced the Logistics page's cascade-over-legacy approach with a dedicated
