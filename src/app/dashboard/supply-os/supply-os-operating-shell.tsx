@@ -4,7 +4,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogoMark } from "@/components/logo-mark";
 import { SUPPLY_OS_DEMO_COMPANY } from "@/lib/supply-os/demo-company";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
@@ -24,6 +24,7 @@ const PANELS: PanelDefinition[] = [
   { id: "suppliers", shortLabel: "Suppliers" },
   { id: "scenarios", shortLabel: "Opportunities" },
   { id: "tracking", shortLabel: "Tracking" },
+  { id: "automations", shortLabel: "Automations" },
 ];
 
 function panelFromCurrentUrl() {
@@ -45,6 +46,7 @@ export function SupplyOsOperatingShell({
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
+  const panelNavRef = useRef<HTMLElement>(null);
   const openWorkspace = useCallback((selection: SupplyOsWorkspaceSelection) => {
     setWorkspaceSelection(selection);
     setCompanyIndexOpen(false);
@@ -61,6 +63,18 @@ export function SupplyOsOperatingShell({
     window.addEventListener("popstate", syncPanelFromUrl);
     return () => window.removeEventListener("popstate", syncPanelFromUrl);
   }, []);
+
+  useEffect(() => {
+    const nav = panelNavRef.current;
+    const button = nav?.querySelector<HTMLButtonElement>(`button[data-panel-id="${activePanel}"]`);
+    if (!nav || !button) return;
+    const buttonStart = button.offsetLeft;
+    const buttonEnd = buttonStart + button.offsetWidth;
+    if (buttonStart < nav.scrollLeft) nav.scrollTo({ left: buttonStart });
+    else if (buttonEnd > nav.scrollLeft + nav.clientWidth) {
+      nav.scrollTo({ left: buttonEnd - nav.clientWidth });
+    }
+  }, [activePanel]);
 
   const selectPanel = useCallback((panel: SupplyOsPanel) => {
     window.history.pushState({}, "", supplyOsPanelHref(window.location.href, panel));
@@ -85,7 +99,7 @@ export function SupplyOsOperatingShell({
             <LogoMark mini />
             <strong>Derya</strong>
           </a>
-          <nav className={styles.panelNav} aria-label="Workspace sections">
+          <nav ref={panelNavRef} className={styles.panelNav} aria-label="Workspace sections">
             {PANELS.map((panel, index) => {
               const active = panel.id === activePanel;
               return (
@@ -94,6 +108,7 @@ export function SupplyOsOperatingShell({
                   type="button"
                   aria-pressed={active}
                   data-active={active}
+                  data-panel-id={panel.id}
                   onClick={() => selectPanel(panel.id)}
                   whileHover={{ x: 2 }}
                   whileTap={{ scale: 0.985 }}

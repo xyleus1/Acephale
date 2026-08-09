@@ -1,4 +1,4 @@
-export const SUPPLY_OS_PANELS = ["materials", "suppliers", "scenarios", "logistics", "tracking"] as const;
+export const SUPPLY_OS_PANELS = ["materials", "suppliers", "scenarios", "logistics", "tracking", "automations"] as const;
 
 export type SupplyOsPanel = (typeof SUPPLY_OS_PANELS)[number];
 

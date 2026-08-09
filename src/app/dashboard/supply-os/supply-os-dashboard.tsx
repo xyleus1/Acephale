@@ -42,7 +42,10 @@ import {
   visibleSupplyCases,
 } from "./supply-os-storage";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
+import { SupplyOsAutomations } from "./supply-os-automations";
 import styles from "./supply-os-logistics.module.css";
+
+type NetworkSupplyOsPanel = Exclude<SupplyOsPanel, "automations">;
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
   const storedName = dashboard.companyName?.trim();
@@ -196,7 +199,7 @@ const PRODUCT_MEDIA = {
   license: "CC BY-SA 4.0",
 } as const;
 
-const DOMAIN_CONFIG: Record<SupplyOsPanel, {
+const DOMAIN_CONFIG: Record<NetworkSupplyOsPanel, {
   railTitle: string;
   railSummary: string;
   objectKinds: SupplyCommandObject["kind"][];
@@ -234,7 +237,7 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
   },
 };
 
-const PANEL_FOCUS_KINDS: Record<SupplyOsPanel, SupplyCommandObject["kind"][]> = {
+const PANEL_FOCUS_KINDS: Record<NetworkSupplyOsPanel, SupplyCommandObject["kind"][]> = {
   materials: ["factory", "distribution", "supplier"],
   logistics: ["movement", "customs", "factory"],
   suppliers: ["supplier", "factory"],
@@ -242,7 +245,7 @@ const PANEL_FOCUS_KINDS: Record<SupplyOsPanel, SupplyCommandObject["kind"][]> = 
   tracking: ["movement", "customs", "customer"],
 };
 
-function preferredPanelObject(panel: SupplyOsPanel, objects: SupplyCommandObject[]) {
+function preferredPanelObject(panel: NetworkSupplyOsPanel, objects: SupplyCommandObject[]) {
   for (const kind of PANEL_FOCUS_KINDS[panel]) {
     const match = objects.find((object) => object.kind === kind);
     if (match) return match;
@@ -499,12 +502,16 @@ export function SupplyOsDashboardWorkspace({
       {!storageReady ? (
         <CommandState title="Loading customer network" detail="Opening saved customer data from this browser." />
       ) : currentCase ? (
-        <CaseCommandCenter
-          key={currentCase.id}
-          dashboard={currentCase}
-          presentationMode={presentationMode}
-          activePanel={activePanel}
-        />
+        activePanel === "automations" ? (
+          <SupplyOsAutomations key={currentCase.id} company={dashboardName(currentCase)} />
+        ) : (
+          <CaseCommandCenter
+            key={currentCase.id}
+            dashboard={currentCase}
+            presentationMode={presentationMode}
+            activePanel={activePanel}
+          />
+        )
       ) : null}
     </div>
   );
@@ -536,7 +543,7 @@ function CaseCommandCenter({
 }: {
   dashboard: SupplyCaseDashboard;
   presentationMode: boolean;
-  activePanel: SupplyOsPanel;
+  activePanel: NetworkSupplyOsPanel;
 }) {
   const modelDashboard = useMemo(() => {
     const name = dashboardName(dashboard);
