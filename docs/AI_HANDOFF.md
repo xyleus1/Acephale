@@ -7,6 +7,10 @@
 - Reverted PR #81's single revert commit on top of current `main`, restoring
   the exact PR #77 tree without overwriting concurrent uncommitted work in the
   primary checkout.
+- Merged the newer `main` commit from PR #82 after PR #83 opened. Every
+  modify-delete conflict under the retired Supply OS routes and tests was
+  resolved as deleted. Active Freight OS files kept the requested cleanup and
+  Supplier Finder image implementation from this branch.
 - Restored all requested follow-up commits that followed PR #77: sourced
   Supplier Finder company and product images, reduced navigation and copy, and
   secondary-action menus.

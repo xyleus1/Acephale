@@ -3229,3 +3229,16 @@ Use this file for chronological implementation notes that future agents should s
 - Verification passed: product-copy policy, customer portal test, supplier
   finder test, TypeScript, diff hygiene, changed-file U+2014 scan, and the
   optimized production build with disposable local database URLs.
+
+### 2026-08-08 - Reconcile PR #82 into the retirement branch
+
+- Branch: `reconcile-requested-changes`, targeting `main` in PR #83.
+- Merged `origin/main` at `258414c` after PR #82 landed while PR #83 was
+  building its first preview.
+- Resolved every modify-delete conflict for the retired Supply OS routes and
+  tests as deleted, consistent with the accepted founder product direction.
+- Kept the active Freight OS layout, metadata, product-copy enforcement, and
+  Supplier Finder implementation from the reconciliation branch. PR #82's
+  Supplier Finder edits were a parallel copy pass against the pre-retirement
+  tree and did not include the requested source-backed image gallery.
+- No unrelated primary-checkout changes were staged or overwritten.
