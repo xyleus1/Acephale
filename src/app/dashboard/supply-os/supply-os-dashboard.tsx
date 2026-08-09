@@ -47,8 +47,6 @@ import { SupplyOsCommandMap } from "./supply-os-command-map";
 import { SupplyOsAutomations } from "./supply-os-automations";
 import styles from "./supply-os-logistics.module.css";
 
-type NetworkSupplyOsPanel = Exclude<SupplyOsPanel, "automations">;
-
 function dashboardName(dashboard: SupplyCaseDashboard) {
   const storedName = dashboard.companyName?.trim();
   const hintedName = companyNameHint(dashboard.sourcePrompt);
@@ -201,7 +199,7 @@ const PRODUCT_MEDIA = {
   license: "CC BY-SA 4.0",
 } as const;
 
-const DOMAIN_CONFIG: Record<NetworkSupplyOsPanel, {
+const DOMAIN_CONFIG: Record<SupplyOsPanel, {
   railTitle: string;
   railSummary: string;
   objectKinds: SupplyCommandObject["kind"][];
@@ -237,17 +235,24 @@ const DOMAIN_CONFIG: Record<NetworkSupplyOsPanel, {
     objectKinds: ["movement", "customs", "factory", "customer"],
     defaultInspector: "object",
   },
+  automations: {
+    railTitle: "Automations",
+    railSummary: "Draft workflows",
+    objectKinds: [],
+    defaultInspector: "object",
+  },
 };
 
-const PANEL_FOCUS_KINDS: Record<NetworkSupplyOsPanel, SupplyCommandObject["kind"][]> = {
+const PANEL_FOCUS_KINDS: Record<SupplyOsPanel, SupplyCommandObject["kind"][]> = {
   materials: ["factory", "distribution", "supplier"],
   logistics: ["movement", "customs", "factory"],
   suppliers: ["supplier", "factory"],
   scenarios: ["customer", "distribution", "supplier"],
   tracking: ["movement", "customs", "customer"],
+  automations: [],
 };
 
-function preferredPanelObject(panel: NetworkSupplyOsPanel, objects: SupplyCommandObject[]) {
+function preferredPanelObject(panel: SupplyOsPanel, objects: SupplyCommandObject[]) {
   for (const kind of PANEL_FOCUS_KINDS[panel]) {
     const match = objects.find((object) => object.kind === kind);
     if (match) return match;
@@ -545,7 +550,7 @@ function CaseCommandCenter({
 }: {
   dashboard: SupplyCaseDashboard;
   presentationMode: boolean;
-  activePanel: NetworkSupplyOsPanel;
+  activePanel: SupplyOsPanel;
 }) {
   const modelDashboard = useMemo(() => {
     const name = dashboardName(dashboard);
