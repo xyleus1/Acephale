@@ -6,6 +6,7 @@ const root = process.cwd();
 const page = readFileSync(resolve(root, "src/app/dashboard/supply-os/page.tsx"), "utf8");
 const shell = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.tsx"), "utf8");
 const shellStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.module.css"), "utf8");
+const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const twin = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.tsx"), "utf8");
 const twinStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.module.css"), "utf8");
 const sharedWorkspace = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-shared-workspace.tsx"), "utf8");
@@ -22,16 +23,15 @@ for (const panel of ["materials", "suppliers", "scenarios", "logistics", "tracki
   assert.match(shell, new RegExp(`id: "${panel}"`), `the integrated shell is missing the ${panel} panel`);
 }
 
-assert.match(shell, /SteelSupplierFinder/, "supplier discovery must be embedded inside Supply OS");
 assert.match(shell, /SupplyOsDashboardWorkspace/, "the existing logistics and customs map must remain available inside Supply OS");
-assert.match(shell, /TrackingAndCostPanel/, "tracking and cost visibility must be part of the same page");
-assert.match(shell, /SupplyOsSharedWorkspace/, "shared office data controls must be part of the same page");
-assert.match(page, /SupplyOsDecisionIntelligence/, "office-scoped market intelligence must feed the scenario panel");
-assert.match(shell, /\/supply-os\/demo\/vector3dhd-amr\.jpg/, "the product twin must use a project-owned real robotics photo");
-assert.match(shell, /PattyK33/, "the product image must identify its creator");
-assert.match(shell, /CC BY-SA 4\.0/, "the product image must carry its exact license");
-assert.match(shell, /sourcePage/, "the product image must retain a source-page provenance link");
-assert.match(shell, /href: PRODUCT_MEDIA\.sourcePage/, "the rendered attribution must receive the recorded source page");
+assert.doesNotMatch(shell, /SteelSupplierFinder|SupplyOsSnapshotTwin|TrackingAndCostPanel/, "domain changes must not mount separate full-page tools");
+assert.match(dashboard, /DOMAIN_CONFIG/, "domain engines must feed one continuous operating workspace");
+assert.match(dashboard, /commandMap\.insights/, "sourced intelligence must appear in the continuous map context");
+assert.match(dashboard, /scenarios/, "opportunity mode must remain available inside the continuous workspace");
+assert.match(dashboard, /\/supply-os\/demo\/vector3dhd-amr\.jpg/, "the materials dossier must use a project-owned real robotics photo");
+assert.match(dashboard, /PattyK33/, "the product image must identify its creator");
+assert.match(dashboard, /CC BY-SA 4\.0/, "the product image must carry its exact license");
+assert.match(dashboard, /PRODUCT_MEDIA\.sourcePage/, "the product image must retain a source-page provenance link");
 assert.match(twin, /href=\{attribution\.href\}/, "the rendered attribution must link to the recorded source page");
 assert.deepEqual([...productPhoto.subarray(0, 3)], [0xff, 0xd8, 0xff], "the bundled product photo must be a valid JPEG asset");
 assert.ok(productPhoto.byteLength > 100_000, "the bundled product photo must not be an empty placeholder");
@@ -51,7 +51,7 @@ for (const copy of [
 
 assert.match(twin, /Math\.min\(\.\.\.BOM_ITEMS/, "buildability must be calculated from BOM constraints");
 assert.match(twin, /url\.protocol === "https:"/, "remote image sources must be restricted to HTTPS");
-assert.match(shell, /No booking, filing, invoice, or spend action is live\./, "tracking fixtures must not imply live execution");
+assert.match(dashboard, /Modeled, not a live quote/, "tracking fixtures must not imply live execution");
 assert.match(twin, /Demo only\. Nothing is approved or live\./, "product fixtures must keep their action boundary explicit");
 assert.match(shellStyles, /prefers-reduced-motion: reduce/, "shell animation must respect reduced motion");
 assert.match(sharedWorkspace, /\/api\/supply-os\/workspaces/, "shared controls must use the authenticated workspace API");

@@ -33,6 +33,7 @@ import type {
   SupplyCommandObjectKind,
   SupplyCommandRouteSegment,
 } from "@/lib/supply-os-command-map";
+import type { SupplyOsPanel } from "@/lib/supply-os/panel-routing";
 import styles from "./supply-os-workspace.module.css";
 
 const CARTO_POSITRON_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
@@ -223,10 +224,12 @@ export function SupplyOsCommandMap({
   commandMap,
   selectedObject,
   onSelectObject,
+  activePanel,
 }: {
   commandMap: SupplyCommandMap;
   selectedObject: SupplyCommandObject | null;
   onSelectObject: (object: SupplyCommandObject) => void;
+  activePanel: SupplyOsPanel;
 }) {
   const mapRef = useRef<MapRef | null>(null);
   const fallbackPendingRef = useRef(false);
@@ -239,6 +242,13 @@ export function SupplyOsCommandMap({
   const [basemapState, setBasemapState] = useState<"loading" | "ready" | "retrying" | "failed">("loading");
   const [mapCapability, setMapCapability] = useState<"checking" | "ready" | "unavailable">("checking");
   const basemap = BASEMAPS[basemapIndex] ?? BASEMAPS[0];
+  const visibleObjectKinds = useMemo<SupplyCommandObjectKind[]>(() => {
+    if (activePanel === "materials") return ["supplier", "factory", "distribution"];
+    if (activePanel === "suppliers") return ["supplier", "factory"];
+    if (activePanel === "logistics") return ["movement", "customs", "factory", "distribution", "customer"];
+    if (activePanel === "tracking") return ["movement", "customs", "factory", "customer"];
+    return ["supplier", "factory", "distribution", "customer", "customs", "movement"];
+  }, [activePanel]);
   const routePaths = useMemo(
     () => commandMap.routes
       .flatMap((route) => route.segments.map((segment) => ({ route, segment })))
@@ -370,7 +380,7 @@ export function SupplyOsCommandMap({
   }
 
   return (
-    <div className={styles.commandMap} aria-label="Supplier, factory, customs, and delivery network">
+    <div className={styles.commandMap} data-domain={activePanel} aria-label={`${activePanel} network map`}>
       <Map
         key={basemap.id}
         ref={mapRef}
@@ -437,6 +447,7 @@ export function SupplyOsCommandMap({
                 4,
               ],
               "line-opacity": ["case", ["==", ["get", "active"], 1], 1, 0.84],
+              "line-dasharray": activePanel === "logistics" || activePanel === "tracking" ? [1, 0] : [2, 2],
             }}
           />
           <Layer
@@ -495,7 +506,7 @@ export function SupplyOsCommandMap({
           );
         }))}
 
-        {commandMap.objects.map((object) => {
+        {commandMap.objects.filter((object) => visibleObjectKinds.includes(object.kind)).map((object) => {
           const Icon = objectIcon(object);
           const routePath = object.kind === "movement"
             ? routePaths.find(({ route, segment }) => route.edgeId === object.edgeId && (segment.mode === "ocean" || segment.mode === "air"))
@@ -541,7 +552,7 @@ export function SupplyOsCommandMap({
           );
         })}
 
-        {commandMap.insights.map((insight) => (
+        {(activePanel === "logistics" || activePanel === "scenarios" || activePanel === "tracking" ? commandMap.insights : []).map((insight) => (
           <Marker
             key={insight.id}
             longitude={insight.coordinates.longitude}

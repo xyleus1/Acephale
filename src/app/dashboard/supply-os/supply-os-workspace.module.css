@@ -1741,6 +1741,14 @@
   background: var(--canvas);
 }
 
+.commandCenter[data-embedded="true"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.commandCenter[data-embedded="true"] > .commandHeader {
+  display: none;
+}
+
 .commandHeader {
   min-width: 0;
   display: grid;
@@ -1962,6 +1970,12 @@
   inset: 0;
   overflow: hidden;
   background: var(--canvas);
+}
+
+.commandMap[data-domain="materials"] .routeGeometryLine,
+.commandMap[data-domain="suppliers"] .routeGeometryLine,
+.commandMap[data-domain="scenarios"] .routeGeometryLine {
+  stroke-dasharray: 7 7;
 }
 
 .commandMap :global(.maplibregl-map) {
@@ -2913,6 +2927,42 @@
   gap: 10px;
   padding: 11px;
   overflow: auto;
+}
+
+.inspectorProductMedia {
+  min-height: 96px;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--panel-subtle);
+}
+
+.inspectorProductMedia img {
+  width: 112px;
+  height: 96px;
+  object-fit: cover;
+  border-right: 1px solid var(--line);
+}
+
+.inspectorProductMedia figcaption {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px;
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.inspectorProductMedia a {
+  color: var(--navy);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  font-weight: 500;
+  text-decoration: none;
 }
 
 .inspectorLocation {
