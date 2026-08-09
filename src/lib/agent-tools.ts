@@ -433,7 +433,7 @@ export const TOOLS = [
   },
   {
     name: "list_pricing_commands",
-    description: "Return the ranked commercial pricing brain queue from persisted StrategyAssessment decision briefs: RFQs/jobs to mature, rate, review, quote, or park. Includes decision_quality, operator_playbook, and cached route_decision with selected route, alternatives, freshness, risk, and quote-gate safety so the agent can act without guessing. Use for pricing desk, commercial brain queue, RFQs to price, quote gate, or 'what should pricing do next'. Does not recompute strategy.",
+    description: "Return the ranked pricing queue from persisted StrategyAssessment decision briefs: RFQs/jobs to mature, rate, review, quote, or park. Includes decision_quality, operator_playbook, and cached route_decision with selected route, alternatives, freshness, risk, and quote-gate safety so the agent can act without guessing. Use for pricing desk, pricing queue, RFQs to price, quote gate, or 'what should pricing do next'. Does not recompute strategy.",
     input_schema: {
       type: "object",
       properties: {
@@ -487,7 +487,7 @@ export const TOOLS = [
   },
   {
     name: "inspect_brain",
-    description: "Read the canonical commercial brain packet for the focused job/RFQ before answering strategy, next-action, quote, risk, price, route, blocker, or 'why' questions. Returns the decision contract, proof gaps, command ledger, safe agent moves, forbidden moves, and visible page targets. This is the source of truth for what the agent should say and what it must not do.",
+    description: "Read the canonical commercial assessment for the focused job/RFQ before answering strategy, next-action, quote, risk, price, route, blocker, or 'why' questions. Returns the decision contract, proof gaps, command ledger, allowed agent moves, forbidden moves, and visible page targets. This is the source of truth for what the agent should say and what it must not do.",
     input_schema: {
       type: "object",
       properties: {
@@ -498,7 +498,7 @@ export const TOOLS = [
   },
   {
     name: "assess_strategy",
-    description: "Run the commercial decision brain for a job/RFQ: decision quality, price, route, risk, margin guardrails, win probability, and recommended next actions. Use for strategy, price, route, risk, margin, quote/no-quote, or negotiation questions.",
+    description: "Run the commercial assessment for a job/RFQ: decision quality, price, route, risk, margin guardrails, win probability, and recommended next actions. Use for strategy, price, route, risk, margin, quote/no-quote, or negotiation questions.",
     input_schema: {
       type: "object",
       properties: {
@@ -2963,7 +2963,7 @@ export async function dispatchTool(
       case "inspect_brain": {
         const inputInquiryId = typeof input.inquiry_id === "string" ? input.inquiry_id.trim() : "";
         const run = await loadCommercialStrategy();
-        if (!run) return { ok: false, error: "No job/RFQ found for commercial brain inspection" };
+        if (!run) return { ok: false, error: "No job/RFQ found for commercial assessment" };
         return {
           ok: true,
           result: buildAgentBrainPacket(run, {

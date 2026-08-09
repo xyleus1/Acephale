@@ -23,13 +23,6 @@
   letter-spacing: -0.01em;
 }
 
-.headerStatus {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-3);
-  font-size: 12px;
-}
-
 .shipmentLink {
   display: inline-flex;
   min-height: 44px;
@@ -65,28 +58,6 @@
 .emptyState {
   width: min(820px, 100%);
   margin: clamp(36px, 8vh, 92px) auto 0;
-}
-
-.emptyMark {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  margin-bottom: 20px;
-  place-items: center;
-  border: 1px solid var(--derya-blue-border);
-  border-radius: 10px;
-  color: var(--derya-navy);
-  background: var(--derya-blue-soft);
-}
-
-.emptyLabel {
-  display: block;
-  margin-bottom: 7px;
-  color: var(--text-3);
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .emptyState h2 {
@@ -218,18 +189,8 @@
   background: var(--surface);
 }
 
-.attachmentHeader span,
 .attachmentHeader strong {
   display: block;
-}
-
-.attachmentHeader span {
-  margin-bottom: 2px;
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
 }
 
 .attachmentHeader strong {
@@ -418,10 +379,6 @@
 
   .deskHeader {
     padding: 2px 0 16px;
-  }
-
-  .headerStatus {
-    max-width: 210px;
   }
 
   .shipmentLink {

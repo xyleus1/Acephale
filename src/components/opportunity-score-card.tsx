@@ -390,7 +390,7 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
           </div>
           <div className="strategy-cargo-note">
             {cargoMath.dimensionsPartial
-              ? `${cargoMath.completeRows}/${cargoMath.enteredRows} dimension rows complete. The brain should not trust CBM yet.`
+              ? `${cargoMath.completeRows}/${cargoMath.enteredRows} dimension rows complete. CBM remains unverified.`
               : cargoMath.chargeableCbm != null && cargoMath.physicalCbm != null && cargoMath.chargeableCbm > cargoMath.physicalCbm
                 ? "Non-stackable floor-space calculation is increasing the chargeable CBM."
                 : "Cargo volume is available for pricing checks."}

@@ -353,7 +353,7 @@ export function CarrierDetailView({
         </div>
       </Section>
 
-      <Section title="Scorecard" hint="Computed from completed loads once the quote flywheel is live - manual for now.">
+      <Section title="Scorecard" hint="Manual until completed loads provide enough performance history.">
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13 }}>
           <div><strong>{detail.loadsCompleted}</strong> loads</div>
           <div>On-time pickup: <strong>{detail.onTimePickupPct != null ? `${detail.onTimePickupPct}%` : "-"}</strong></div>

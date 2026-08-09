@@ -162,7 +162,7 @@ export function StageEmailPanel({
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Write your email - or click 'AI Draft' to generate a draft from job context."
+              placeholder="Write your email or generate a draft from job context."
               rows={8}
             />
           </div>
@@ -179,7 +179,7 @@ export function StageEmailPanel({
               className="btn btn-secondary btn-sm btn-inline-icon"
             >
               <Icon name="sparkles" size={12} />
-              {drafting ? "Drafting..." : "AI Draft"}
+              {drafting ? "Drafting..." : "Generate draft"}
             </button>
             <span className="stage-email-action-spacer" />
             <button

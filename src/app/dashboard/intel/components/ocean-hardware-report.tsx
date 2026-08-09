@@ -371,8 +371,8 @@ export function OceanHardwareReport({
           <p className={styles.heroOverline}>China origin + U.S. West Coast arrival geography</p>
           <h1 id="hardware-report-title">China hardware corridor watch</h1>
           <p className={styles.heroSummary}>
-            A cited operator report that turns official import aggregates into category-specific gateway research,
-            while keeping route recommendations and lead claims blocked until shipment evidence is available.
+            Official import aggregates by hardware category and U.S. arrival district.
+            Route and lead conclusions require shipment-level evidence.
           </p>
         </div>
 
@@ -1339,7 +1339,7 @@ export function OceanHardwareReport({
           </details>
 
           <details className={styles.methodDetails}>
-            <summary>Methodology, limits, and next data unlock</summary>
+            <summary>Methodology and limits</summary>
             <div className={styles.methodBody}>
               <div>
                 <h4>Official aggregate method</h4>
@@ -1357,7 +1357,7 @@ export function OceanHardwareReport({
                 </p>
               </div>
               <div>
-                <h4>Next unlock</h4>
+                <h4>Provider purchase gate</h4>
                 <p>
                   Refresh the keyless Census snapshot after each monthly release. Only buy a bill-of-lading provider after
                   a sample export passes importer identity, port, product, and historical coverage checks.
@@ -1367,7 +1367,6 @@ export function OceanHardwareReport({
           </details>
 
           <footer className={styles.reportFooter}>
-            <span>Derya Intel</span>
             <span>Data through {formatMonth(census.asOfMonth)}</span>
             <span>Snapshot built {formatTimestamp(census.generatedAt)}</span>
             <span>Latest source HTTP timestamp {formatTimestamp(census.latestSourceModifiedAt)}</span>

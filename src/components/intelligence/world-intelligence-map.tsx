@@ -83,7 +83,7 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
     <section style={shellStyle}>
       <div style={headerStyle}>
         <div>
-          <div style={eyebrowStyle}>Live intelligence map</div>
+          <div style={eyebrowStyle}>Market intelligence map</div>
           <h2 style={headingStyle}>Markets, lanes, and pending impact work</h2>
         </div>
         <div style={metricsStyle}>
@@ -117,8 +117,8 @@ export function WorldIntelligenceMap({ data }: { data: IntelligenceMapData }) {
                 <rect x="318" y="200" width="364" height="104" rx="14" fill="#020617" fillOpacity=".72" stroke="#d8e5ef" strokeOpacity=".58" />
                 <circle cx="350" cy="235" r="24" fill="#1d5b8f" opacity=".18" />
                 <circle cx="350" cy="235" r="10" fill="#1d5b8f" opacity=".72" />
-                <text x="382" y="232" fill="#f8fafc" stroke="#020617" strokeWidth="4" paintOrder="stroke" fontSize="16" fontWeight="900">Pull trusted market data to light up the map</text>
-                <text x="382" y="253" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12" fontWeight="700">Use official carrier, rate, customs, and port sources.</text>
+                <text x="382" y="232" fill="#f8fafc" stroke="#020617" strokeWidth="4" paintOrder="stroke" fontSize="16" fontWeight="900">No market data loaded</text>
+                <text x="382" y="253" fill="#dbeafe" stroke="#020617" strokeWidth="3" paintOrder="stroke" fontSize="12" fontWeight="700">Pull an approved carrier, rate, customs, or port source.</text>
                 {SOURCE_BUTTON_LABELS.map((label, index) => (
                   <g key={`empty-source-${label}`} transform={`translate(${382 + index * 72} 270)`}>
                     <rect width={index === 3 ? 64 : 58} height="20" rx="10" fill="#0f2a3d" stroke="#d8e5ef" strokeOpacity=".58" />

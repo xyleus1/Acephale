@@ -51,12 +51,10 @@ export function ActivityFeed({
   tasks,
   quotes,
   stale,
-  userName,
 }: {
   tasks: TaskCard[];
   quotes: QuoteCard[];
   stale: StaleCard[];
-  userName: string;
 }) {
   const [taskList, setTaskList] = useState(tasks);
   const [quoteList, setQuoteList] = useState(quotes);
@@ -87,8 +85,6 @@ export function ActivityFeed({
     setBusy(null);
   }
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const overdueTasks = taskList.filter((t) => t.isOverdue);
   const dueTodayTasks = taskList.filter((t) => !t.isOverdue);
   const allEmpty = taskList.length === 0 && quoteList.length === 0 && stale.length === 0;
@@ -98,8 +94,7 @@ export function ActivityFeed({
   return (
     <div className="activity-feed">
       <div className="activity-feed-header">
-        <h2 className="activity-feed-title">{greeting}, {userName.split(" ")[0]}.</h2>
-        {!allEmpty && <p className="activity-feed-subtitle">Here&apos;s what needs your attention.</p>}
+        <h2 className="activity-feed-title">Open work</h2>
       </div>
 
       {allEmpty && (

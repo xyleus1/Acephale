@@ -1280,7 +1280,7 @@ export function buildStrategyCommercialPriority(
       },
       {
         key: "margin",
-        label: "Margin unlock",
+        label: "Margin status",
         value: strategy.price.guardrailStatus.toLowerCase().replace(/_/g, " "),
         detail: marginDetail,
         tone: strategy.price.guardrailStatus === "PASS"

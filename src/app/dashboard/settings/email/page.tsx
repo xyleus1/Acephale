@@ -5,7 +5,6 @@ import { SyncAccountButton } from "@/components/sync-account-button";
 import { DisconnectAccountButton } from "@/components/disconnect-account-button";
 import { ResumeAccountButton } from "@/components/resume-account-button";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
-import { AppearanceToggle } from "@/components/appearance-toggle";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
 import { CheckWhatsAppStatusButton } from "@/components/check-whatsapp-status-button";
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
@@ -185,20 +184,8 @@ export default async function EmailSettingsPage({
         <div>
           <h1 className="page-title">Email & WhatsApp</h1>
           <p className="page-subtitle">
-            Connect customer channels. Inbound messages get classified and attached to the right RFQ automatically.
+            Connected channels, permissions, and message routing.
           </p>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 18 }}>
-        <div className="card-body appearance-card-body">
-          <div>
-            <div className="section-title" style={{ marginBottom: 6 }}>Appearance</div>
-            <p style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-              Keep the deal desk, agent, and pricing brain on the same operator interface.
-            </p>
-          </div>
-          <AppearanceToggle />
         </div>
       </div>
 
@@ -255,7 +242,7 @@ export default async function EmailSettingsPage({
         }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Reconnect to enable Send</div>
           <p style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 8 }}>
-            We added a Gmail Send permission for AI-drafted replies. Reconnect each inbox below to grant it. Read-only sync still works without this - but the Send button in draft modals will fail until you reconnect.
+            Generated replies need Gmail Send permission. Reconnect each inbox below to grant it. Read-only sync still works without this, but draft modals cannot send until you reconnect.
           </p>
           <div style={{ fontSize: 11, color: "var(--text-3)" }}>
             {needsReauth.map((a) => a.email).join(", ")}
@@ -271,34 +258,6 @@ export default async function EmailSettingsPage({
           OAuth error: <strong>{sp.oauth_error}</strong>. Check that the redirect URI in Google Cloud matches and that GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are set.
         </div>
       )}
-
-      {/* How it works */}
-      <div className="card" style={{ marginBottom: 18 }}>
-        <div className="card-body">
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 12 }}>
-            How it works
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-            {[
-              { step: "01", title: "Connect channel", desc: "Authorize Gmail or configure the WhatsApp Cloud API webhook." },
-              { step: "02", title: "AI classifies", desc: "Each inbound message is classified as RFQ, forwarder reply, customer reply, or other." },
-              { step: "03", title: "Auto-attached", desc: "RFQs become inquiries, forwarder prices update the pricing record, replies append to threads." },
-            ].map(({ step, title, desc }) => (
-              <div key={step} style={{ display: "flex", gap: 12 }}>
-                <div style={{
-                  width: 26, height: 26, borderRadius: 4, background: "var(--text)", color: "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800,
-                  flexShrink: 0, fontFamily: "ui-monospace, Menlo, monospace",
-                }}>{step}</div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>{title}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.5 }}>{desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body">

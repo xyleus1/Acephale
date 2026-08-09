@@ -10,7 +10,7 @@ import { DraftModal } from "@/components/draft-modal";
 export function InboxQuickReply({ threadId, threadSubject, channel = "email", composerEnabled = true }: {
   threadId: string;
   threadSubject: string;
-  /** "whatsapp" adds a plain-text quick composer next to the AI reply. */
+  /** "whatsapp" adds a plain-text quick composer next to the drafted reply. */
   channel?: "email" | "whatsapp";
   /** Hide the composer when CRM WhatsApp sending isn't configured. */
   composerEnabled?: boolean;
@@ -90,17 +90,17 @@ export function InboxQuickReply({ threadId, threadSubject, channel = "email", co
               onClick={() => go(false)}
               disabled={busy}
               className="inbox-action-btn soft-brand"
-              title="AI drafts a reply based on the latest message"
+              title="Draft a reply from the latest message"
             >
               <Icon name="sparkles" size={11} />
-              {busy ? "Drafting…" : "AI reply"}
+              {busy ? "Drafting…" : "Draft reply"}
             </button>
             <button
               type="button"
               onClick={() => setShowIntent(true)}
               disabled={busy}
               className="inbox-action-btn intent"
-              title="Tell the AI what stance to take"
+              title="Add guidance for the draft"
             >
               + intent
             </button>
