@@ -7,6 +7,7 @@ const page = readFileSync(resolve(root, "src/app/dashboard/supply-os/page.tsx"),
 const shell = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.tsx"), "utf8");
 const shellStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.module.css"), "utf8");
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
+const commandMap = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-command-map.tsx"), "utf8");
 const twin = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.tsx"), "utf8");
 const twinStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.module.css"), "utf8");
 const sharedWorkspace = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-shared-workspace.tsx"), "utf8");
@@ -19,14 +20,14 @@ assert.match(page, /session\.officeId/, "the shell must keep office-scoped persi
 assert.match(page, /session\.userId/, "browser-local compatibility state must remain user scoped");
 assert.match(shell, /: "materials"/, "materials must be the default operating panel");
 
-for (const panel of ["materials", "suppliers", "scenarios", "logistics", "tracking"]) {
+for (const panel of ["materials", "fulfillment", "scenarios", "logistics", "tracking"]) {
   assert.match(shell, new RegExp(`id: "${panel}"`), `the integrated shell is missing the ${panel} panel`);
 }
 
 assert.match(shell, /SupplyOsDashboardWorkspace/, "the existing logistics and customs map must remain available inside Supply OS");
 assert.doesNotMatch(shell, /SteelSupplierFinder|SupplyOsSnapshotTwin|TrackingAndCostPanel/, "domain changes must not mount separate full-page tools");
 assert.match(dashboard, /DOMAIN_CONFIG/, "domain engines must feed one continuous operating workspace");
-assert.match(dashboard, /commandMap\.insights/, "sourced intelligence must appear in the continuous map context");
+assert.match(commandMap, /commandMap\.insights/, "sourced intelligence must appear in the continuous map context");
 assert.match(dashboard, /scenarios/, "opportunity mode must remain available inside the continuous workspace");
 assert.match(dashboard, /\/supply-os\/demo\/vector3dhd-amr\.jpg/, "the materials dossier must use a project-owned real robotics photo");
 assert.match(dashboard, /PattyK33/, "the product image must identify its creator");

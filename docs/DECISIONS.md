@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-09 - Inventory and sourcing share one domain; fulfillment owns customer delivery
+
+- Status: accepted
+- Owner: product and design
+- Context: Separate Supply and Suppliers tabs split one procurement decision
+  across two nearly identical domains. Operators could not infer whether
+  Supply meant inventory, production inputs, or supplier discovery. Customer
+  delivery also lacked a clear operating domain of its own.
+- Decision: Consolidate inventory, demand, internal locations, shortages, and
+  supplier options under Inventory & sourcing. Replace the standalone
+  Suppliers tab with Fulfillment for allocation, outbound movements, delivery
+  readiness, and customer handoffs. Retired supplier URLs resolve to the
+  consolidated first domain.
+- Rationale: The procurement question is one loop: what is available, what is
+  missing, and where can it be sourced. Fulfillment is a different loop: what
+  has been allocated, what must move, and whether the customer commitment will
+  be met.
+- Consequences: Supplier research remains available against inventory and BOM
+  context. Fulfillment focuses customer and distribution geography without
+  replacing Logistics transport planning or Tracking execution history.
+- Revisit when: observed operators consistently need procurement qualification
+  separated from inventory planning or fulfillment duplicates execution
+  tracking.
+
 ### 2026-08-09 - Automations starts as a chat-edited draft workspace
 
 - Status: accepted

@@ -19,9 +19,9 @@ type PanelDefinition = {
 };
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", shortLabel: "Supply" },
+  { id: "materials", shortLabel: "Inventory & sourcing" },
   { id: "logistics", shortLabel: "Logistics" },
-  { id: "suppliers", shortLabel: "Suppliers" },
+  { id: "fulfillment", shortLabel: "Fulfillment" },
   { id: "scenarios", shortLabel: "Opportunities" },
   { id: "tracking", shortLabel: "Tracking" },
   { id: "automations", shortLabel: "Automations" },

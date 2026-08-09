@@ -206,8 +206,8 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
   defaultInspector: "object" | "optimization";
 }> = {
   materials: {
-    railTitle: "Supply network",
-    railSummary: "Sources and facilities",
+    railTitle: "Inventory & sourcing",
+    railSummary: "Stock, demand, and supply options",
     objectKinds: ["supplier", "factory", "distribution"],
     defaultInspector: "object",
   },
@@ -217,10 +217,10 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
     objectKinds: ["movement", "customs", "factory", "distribution", "customer"],
     defaultInspector: "object",
   },
-  suppliers: {
-    railTitle: "Supplier network",
-    railSummary: "Qualification targets",
-    objectKinds: ["supplier", "factory"],
+  fulfillment: {
+    railTitle: "Customer fulfillment",
+    railSummary: "Allocation and delivery readiness",
+    objectKinds: ["factory", "distribution", "customer", "movement"],
     defaultInspector: "object",
   },
   scenarios: {
@@ -246,7 +246,7 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
 const PANEL_FOCUS_KINDS: Record<SupplyOsPanel, SupplyCommandObject["kind"][]> = {
   materials: ["factory", "distribution", "supplier"],
   logistics: ["movement", "customs", "factory"],
-  suppliers: ["supplier", "factory"],
+  fulfillment: ["customer", "distribution", "movement", "factory"],
   scenarios: ["customer", "distribution", "supplier"],
   tracking: ["movement", "customs", "customer"],
   automations: [],

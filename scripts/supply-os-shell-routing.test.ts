@@ -5,7 +5,8 @@ import { normalizeSupplyOsPanel, supplyOsPanelHref } from "../src/lib/supply-os/
 
 assert.equal(normalizeSupplyOsPanel(undefined), "materials");
 assert.equal(normalizeSupplyOsPanel("garbage"), "materials");
-assert.equal(normalizeSupplyOsPanel("suppliers"), "suppliers");
+assert.equal(normalizeSupplyOsPanel("suppliers"), "materials", "retired supplier links must enter the consolidated inventory and sourcing domain");
+assert.equal(normalizeSupplyOsPanel("fulfillment"), "fulfillment");
 assert.equal(normalizeSupplyOsPanel("tracking"), "tracking");
 
 assert.equal(
@@ -16,7 +17,7 @@ assert.equal(
 assert.equal(
   supplyOsPanelHref("https://derya.test/dashboard/supply-os?panel=tracking#cost", "materials"),
   "/dashboard/supply-os#cost",
-  "the default Materials panel should use the canonical URL without a redundant query",
+  "the default inventory and sourcing panel should use the canonical URL without a redundant query",
 );
 
 const shell = readFileSync(
@@ -26,5 +27,8 @@ const shell = readFileSync(
 assert.match(shell, /window\.history\.pushState/);
 assert.match(shell, /window\.addEventListener\("popstate", syncPanelFromUrl\)/);
 assert.match(shell, /window\.removeEventListener\("popstate", syncPanelFromUrl\)/);
+assert.match(shell, /shortLabel: "Inventory & sourcing"/);
+assert.match(shell, /shortLabel: "Fulfillment"/);
+assert.doesNotMatch(shell, /shortLabel: "Supply"|shortLabel: "Suppliers"/);
 
 console.log("Supply OS shell routing contract passed.");

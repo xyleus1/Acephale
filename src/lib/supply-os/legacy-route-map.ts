@@ -7,9 +7,9 @@ type LegacyRouteRule = {
 
 const LEGACY_ROUTE_RULES: LegacyRouteRule[] = [
   { route: "/dashboard/domestic-pricing", panel: "logistics" },
-  { route: "/dashboard/supplier-finder", panel: "suppliers" },
+  { route: "/dashboard/supplier-finder", panel: "materials" },
   { route: "/dashboard/intelligence", panel: "scenarios" },
-  { route: "/dashboard/outreach", panel: "suppliers" },
+  { route: "/dashboard/outreach", panel: "materials" },
   { route: "/dashboard/pricing", panel: "scenarios" },
   { route: "/dashboard/reports", panel: "scenarios" },
   { route: "/dashboard/carriers", panel: "logistics" },
@@ -21,16 +21,16 @@ const LEGACY_ROUTE_RULES: LegacyRouteRule[] = [
   { route: "/dashboard/inbox", panel: "tracking" },
   { route: "/dashboard/loads", panel: "logistics" },
   { route: "/dashboard/jobs", panel: "logistics" },
-  { route: "/dashboard/rfq", panel: "suppliers" },
+  { route: "/dashboard/rfq", panel: "materials" },
   { route: "/dashboard/crm", panel: "materials" },
 ];
 
 const WORKSTREAM_PANELS: Record<string, SupplyOsPanel> = {
-  procurement: "suppliers",
-  "supplier-outreach": "suppliers",
+  procurement: "materials",
+  "supplier-outreach": "materials",
   "shipment-planning": "logistics",
   customs: "logistics",
-  fulfillment: "tracking",
+  fulfillment: "fulfillment",
 };
 
 function matchesRoute(pathname: string, route: string) {

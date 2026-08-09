@@ -244,7 +244,7 @@ export function SupplyOsCommandMap({
   const basemap = BASEMAPS[basemapIndex] ?? BASEMAPS[0];
   const visibleObjectKinds = useMemo<SupplyCommandObjectKind[]>(() => {
     if (activePanel === "materials") return ["supplier", "factory", "distribution"];
-    if (activePanel === "suppliers") return ["supplier", "factory"];
+    if (activePanel === "fulfillment") return ["factory", "distribution", "customer", "movement"];
     if (activePanel === "logistics") return ["movement", "customs", "factory", "distribution", "customer"];
     if (activePanel === "tracking") return ["movement", "customs", "factory", "customer"];
     return ["supplier", "factory", "distribution", "customer", "customs", "movement"];
@@ -370,9 +370,14 @@ export function SupplyOsCommandMap({
       if (object) focusObject(object, animate);
       return;
     }
-    if (activePanel === "suppliers") {
-      const suppliers = supplierFocusObjects.filter((object) => object.kind === "supplier");
-      fitCoordinates(suppliers.map((object) => object.coordinates), animate, 6.2, 5.8);
+    if (activePanel === "fulfillment") {
+      const customers = visibleMapObjects.filter((object) => object.kind === "customer");
+      if (customers.length) {
+        fitCoordinates(customers.map((object) => object.coordinates), animate, 8.2, 7.4);
+        return;
+      }
+      const distribution = visibleMapObjects.find((object) => object.kind === "distribution");
+      if (distribution) focusObject(distribution, animate);
       return;
     }
     if (activePanel === "scenarios") {
@@ -532,7 +537,7 @@ export function SupplyOsCommandMap({
                 4,
               ],
               "line-opacity": ["case", ["==", ["get", "active"], 1], 1, 0.84],
-              "line-dasharray": activePanel === "logistics" || activePanel === "tracking" ? [1, 0] : [2, 2],
+              "line-dasharray": activePanel === "logistics" || activePanel === "fulfillment" || activePanel === "tracking" ? [1, 0] : [2, 2],
             }}
           />
           <Layer
@@ -640,7 +645,7 @@ export function SupplyOsCommandMap({
           );
         })}
 
-        {(activePanel === "logistics" || activePanel === "scenarios" || activePanel === "tracking" ? commandMap.insights : []).map((insight) => (
+        {(activePanel === "logistics" || activePanel === "fulfillment" || activePanel === "scenarios" || activePanel === "tracking" ? commandMap.insights : []).map((insight) => (
           <Marker
             key={insight.id}
             longitude={insight.coordinates.longitude}

@@ -2534,7 +2534,7 @@
 }
 
 .commandMap[data-domain="materials"] .routeGeometryLine,
-.commandMap[data-domain="suppliers"] .routeGeometryLine,
+.commandMap[data-domain="fulfillment"] .routeGeometryLine,
 .commandMap[data-domain="scenarios"] .routeGeometryLine {
   stroke-dasharray: 7 7;
 }

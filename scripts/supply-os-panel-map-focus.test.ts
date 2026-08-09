@@ -13,9 +13,9 @@ const commandMap = readFileSync(
 );
 
 assert.match(dashboard, /materials: \["factory"/,
-  "Supply must select the factory as its default map subject");
-assert.match(dashboard, /suppliers: \["supplier"/,
-  "Suppliers must select a supplier as its default map subject");
+  "Inventory and sourcing must select the factory as its default map subject");
+assert.match(dashboard, /fulfillment: \["customer"/,
+  "Fulfillment must select customer demand as its default map subject");
 assert.match(dashboard, /scenarios: \["customer"/,
   "Opportunities must select customer demand as its default map subject");
 assert.match(dashboard, /logistics: \["movement"/,
@@ -27,7 +27,9 @@ assert.match(commandMap, /const focusActivePanel = useCallback/,
 assert.match(commandMap, /focusActivePanel\(true\)/,
   "selecting a tab must animate the camera to its operating context");
 assert.match(commandMap, /activePanel === "materials"[\s\S]*object\.kind === "factory"/,
-  "Supply camera focus must use factory coordinates");
+  "Inventory and sourcing camera focus must use factory coordinates");
+assert.match(commandMap, /activePanel === "fulfillment"[\s\S]*object\.kind === "customer"/,
+  "Fulfillment camera focus must use customer coordinates");
 assert.match(commandMap, /activePanel === "scenarios"[\s\S]*object\.kind === "customer"/,
   "Opportunity camera focus must use customer coordinates");
 assert.match(commandMap, /focusRoute\(object\.edgeId/,

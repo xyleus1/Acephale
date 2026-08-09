@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
 import styles from "./supply-os-logistics.module.css";
@@ -15,6 +16,9 @@ export default async function SupplyOsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  if (params.panel === "suppliers") {
+    redirect(params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
+  }
   return (
     <div className={styles.pageFrame}>
       <SupplyOsOperatingShell

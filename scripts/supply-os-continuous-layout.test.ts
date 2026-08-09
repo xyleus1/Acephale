@@ -17,7 +17,7 @@ assert.match(
 assert.doesNotMatch(shell, /key=\{activePanel\}/, "domain changes must not remount the workspace");
 assert.doesNotMatch(
   shell,
-  /activePanel === "(?:materials|logistics|suppliers|scenarios|tracking)"\s*\?\s*\(/,
+  /activePanel === "(?:materials|logistics|fulfillment|scenarios|tracking)"\s*\?\s*\(/,
   "domain changes must not swap page-sized components",
 );
 assert.doesNotMatch(shell, /SteelSupplierFinder|SupplyOsSnapshotTwin|TrackingAndCostPanel/);

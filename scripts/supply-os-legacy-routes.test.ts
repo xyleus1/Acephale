@@ -6,9 +6,9 @@ import { legacySupplyOsDestination } from "../src/lib/supply-os/legacy-route-map
 const expectedPanels = new Map([
   ["/dashboard/crm", "materials"],
   ["/dashboard/crm/companies/company-1", "materials"],
-  ["/dashboard/rfq", "suppliers"],
-  ["/dashboard/rfq/inquiry-1", "suppliers"],
-  ["/dashboard/outreach", "suppliers"],
+  ["/dashboard/rfq", "materials"],
+  ["/dashboard/rfq/inquiry-1", "materials"],
+  ["/dashboard/outreach", "materials"],
   ["/dashboard/intel", "scenarios"],
   ["/dashboard/intel/load", "scenarios"],
   ["/dashboard/intelligence", "scenarios"],
@@ -22,11 +22,11 @@ const expectedPanels = new Map([
   ["/dashboard/inbox", "tracking"],
   ["/dashboard/activity", "tracking"],
   ["/dashboard/supply-os/new", "materials"],
-  ["/dashboard/supply-os/workstreams/procurement", "suppliers"],
-  ["/dashboard/supply-os/workstreams/supplier-outreach", "suppliers"],
+  ["/dashboard/supply-os/workstreams/procurement", "materials"],
+  ["/dashboard/supply-os/workstreams/supplier-outreach", "materials"],
   ["/dashboard/supply-os/workstreams/shipment-planning", "logistics"],
   ["/dashboard/supply-os/workstreams/customs", "logistics"],
-  ["/dashboard/supply-os/workstreams/fulfillment", "tracking"],
+  ["/dashboard/supply-os/workstreams/fulfillment", "fulfillment"],
 ]);
 
 for (const [pathname, panel] of expectedPanels) {
@@ -61,7 +61,7 @@ const retiredPageStubs = new Map([
   ["src/app/dashboard/crm/page.tsx", "materials"],
   ["src/app/dashboard/domestic-pricing/page.tsx", "logistics"],
   ["src/app/dashboard/inbox/page.tsx", "tracking"],
-  ["src/app/dashboard/outreach/page.tsx", "suppliers"],
+  ["src/app/dashboard/outreach/page.tsx", "materials"],
   ["src/app/dashboard/pricing/page.tsx", "scenarios"],
   ["src/app/dashboard/reports/page.tsx", "scenarios"],
   ["src/app/dashboard/search/page.tsx", "materials"],

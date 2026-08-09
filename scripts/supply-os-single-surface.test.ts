@@ -65,8 +65,8 @@ assert.match(middleware, /pathname === "\/dashboard"/);
 assert.match(middleware, /new URL\("\/dashboard\/supply-os", req\.url\)/);
 assert.match(
   supplierFinderPage,
-  /redirect\("\/dashboard\/supply-os\?panel=suppliers"\)/,
-  "the standalone supplier finder should enter the integrated Supply OS supplier panel",
+  /redirect\("\/dashboard\/supply-os"\)/,
+  "the standalone supplier finder should enter consolidated inventory and sourcing",
 );
 assert.match(
   marketPage,

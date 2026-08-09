@@ -9,8 +9,13 @@ const dashboard = readFileSync(
 
 assert.match(
   dashboard,
-  /if \(activePanel === "suppliers"\) \{[\s\S]*object\.kind === "supplier"[\s\S]*setSelectedObjectId\(supplier\.id\)/,
-  "opening the Suppliers panel must select supplier context instead of leaving the factory selected",
+  /materials: \{[\s\S]*objectKinds: \["supplier", "factory", "distribution"\]/,
+  "inventory and sourcing must include supplier candidates beside internal stock locations",
+);
+assert.match(
+  dashboard,
+  /fulfillment: \{[\s\S]*objectKinds: \["factory", "distribution", "customer", "movement"\]/,
+  "fulfillment must connect allocation points to customer delivery movements",
 );
 
-console.log("Supply OS supplier panel focus contract passed.");
+console.log("Supply OS inventory, sourcing, and fulfillment contract passed.");
