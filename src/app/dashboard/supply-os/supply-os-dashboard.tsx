@@ -414,7 +414,7 @@ function CaseCommandCenter({
         </div>
 
         <div className={styles.commandMetrics} aria-label="Network coverage">
-          {isIllustrativeNetwork ? <span className={styles.commandFixtureBadge}>Illustrative network</span> : null}
+          {isIllustrativeNetwork ? <span className={styles.commandFixtureBadge}>Demo</span> : null}
           <span><strong>{supplierCount}</strong> suppliers</span>
           <span><strong>{commandMap.routes.length}</strong> lanes</span>
           <span><strong>{customsCount}</strong> customs</span>
@@ -514,7 +514,7 @@ function CaseCommandCenter({
                 </button>
               );
             })}
-            {transportObjects.length ? <div className={styles.routeRailGroupLabel}>Clickable transport legs</div> : null}
+            {transportObjects.length ? <div className={styles.routeRailGroupLabel}>Transport legs</div> : null}
             {transportObjects.map((object) => {
               const Icon = objectIcon(object.kind);
               return (
@@ -608,8 +608,8 @@ function CommandInspector({
         onValueChange={(value) => onModeChange(value as "object" | "optimization")}
       >
         <Tabs.List className={styles.inspectorTabsList} aria-label="Inspector view">
-          <Tabs.Trigger value="object">{object.kind === "movement" ? "Transport leg" : "Selected object"}</Tabs.Trigger>
-          <Tabs.Trigger value="optimization">Optimization priorities <small>{model.actions.length}</small></Tabs.Trigger>
+          <Tabs.Trigger value="object">{object.kind === "movement" ? "Transport leg" : "Details"}</Tabs.Trigger>
+          <Tabs.Trigger value="optimization">Priorities <small>{model.actions.length}</small></Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="object" className={styles.inspectorTabPanel}>
@@ -681,7 +681,7 @@ function CommandInspector({
             ) : null}
 
             <section className={styles.inspectorAction}>
-              <h3>{object.priority ? `Map priority P${String(object.priority.priority).padStart(2, "0")}` : "Next action"}</h3>
+              <h3>{object.priority ? `Priority P${String(object.priority.priority).padStart(2, "0")}` : "Next action"}</h3>
               {object.priority ? <strong>{object.priority.title}</strong> : null}
               <p>{action?.recommendation ?? object.nextAction}</p>
               <small>{object.nextAction}</small>
@@ -699,7 +699,6 @@ function CommandInspector({
           <header className={styles.inspectorHeader}>
             <span className={styles.inspectorIcon}><ListChecks size={17} strokeWidth={1.8} /></span>
             <span>
-              <small>Company analysis</small>
               <h2>{model.profile}</h2>
             </span>
             <i>{model.actions.length} priorities</i>
@@ -707,7 +706,6 @@ function CommandInspector({
 
           <div className={styles.analysisBody}>
             <section className={styles.analysisThesis}>
-              <h3>Operating model</h3>
               <p>{model.networkSummary}</p>
             </section>
 
@@ -736,9 +734,9 @@ function CommandInspector({
                 <header><small>Priority {String(selectedAction.priority).padStart(2, "0")}</small><strong>{selectedAction.title}</strong></header>
                 <dl>
                   <div><dt>Condition</dt><dd>{selectedAction.currentCondition}</dd></div>
-                  <div><dt>Derya move</dt><dd>{selectedAction.recommendation}</dd></div>
+                  <div><dt>Action</dt><dd>{selectedAction.recommendation}</dd></div>
                   <div><dt>Decision</dt><dd>{selectedAction.decision}</dd></div>
-                  <div><dt>Start with</dt><dd>{selectedAction.requiredInput}</dd></div>
+                  <div><dt>Needs</dt><dd>{selectedAction.requiredInput}</dd></div>
                 </dl>
                 <p><strong>Track</strong>{selectedAction.measure}</p>
               </section>

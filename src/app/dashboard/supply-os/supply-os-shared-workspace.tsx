@@ -338,14 +338,13 @@ export function SupplyOsSharedWorkspace({
         <div className={styles.headerIdentity}>
           <span className={styles.headerIcon}><Database size={18} aria-hidden="true" /></span>
           <div>
-            <span className={styles.eyebrow}>Office data plane</span>
-            <h2 id={`${instanceId}-title`}>Shared supply workspace</h2>
+            <h2 id={`${instanceId}-title`}>Workspaces</h2>
           </div>
         </div>
         <div className={styles.serverStatus}>
           <span data-state={workspaceState}>
             {workspaceState === "loading" ? <LoaderCircle size={13} className={styles.spin} /> : <LockKeyhole size={13} />}
-            {workspaceState === "loading" ? "Reading Postgres" : workspaceState === "error" ? "Connection error" : "Office-scoped Postgres"}
+            {workspaceState === "loading" ? "Loading" : workspaceState === "error" ? "Unavailable" : "Office shared"}
           </span>
           <button type="button" onClick={() => void loadWorkspaces()} disabled={workspaceState === "loading"} aria-label="Refresh shared workspaces">
             <RefreshCw size={14} aria-hidden="true" />
@@ -356,11 +355,11 @@ export function SupplyOsSharedWorkspace({
       <div className={styles.dataBoundary}>
         <div>
           <Database size={15} aria-hidden="true" />
-          <p><strong>Shared and persistent:</strong> workspace records, imports, and published snapshots are stored in office-scoped Postgres and visible to authorized office members.</p>
+          <p><strong>Shared:</strong> workspaces and published snapshots are office-scoped.</p>
         </div>
         <div>
           <FileSpreadsheet size={15} aria-hidden="true" />
-          <p><strong>Compatibility panels:</strong> current product, supplier, map, and tracking examples may still use illustrative or browser-local data. They are not promoted to shared truth until an adapter writes a published snapshot.</p>
+          <p><strong>Demo:</strong> other panels may use local or illustrative data.</p>
         </div>
       </div>
 
@@ -389,15 +388,13 @@ export function SupplyOsSharedWorkspace({
           setCreateError("");
           createDialogRef.current?.showModal();
         }}>
-          <Plus size={14} aria-hidden="true" /> Create workspace
+          <Plus size={14} aria-hidden="true" /> New
         </button>
       </div>
 
       <dialog ref={createDialogRef} className={styles.createDialog} aria-labelledby={`${instanceId}-create-title`}>
         <form method="dialog" onSubmit={(event) => void createWorkspace(event)}>
-          <span className={styles.eyebrow}>Office-shared record</span>
-          <h3 id={`${instanceId}-create-title`}>Create supply workspace</h3>
-          <p>Create one canonical workspace per operating company or product program. Access remains scoped to this office.</p>
+          <h3 id={`${instanceId}-create-title`}>New workspace</h3>
           <label htmlFor={`${instanceId}-workspace-name`}>
             Workspace name
             <input
@@ -427,7 +424,6 @@ export function SupplyOsSharedWorkspace({
           <section className={styles.snapshotPanel} aria-labelledby={`${instanceId}-snapshot-title`}>
             <header>
               <div>
-                <span className={styles.eyebrow}>Canonical read model</span>
                 <h3 id={`${instanceId}-snapshot-title`}>{selectedWorkspace.name}</h3>
                 <p>{selectedWorkspace.company?.name || "Independent supply program"}</p>
               </div>
@@ -451,8 +447,8 @@ export function SupplyOsSharedWorkspace({
               <div className={styles.emptySnapshot}>
                 <Database size={22} aria-hidden="true" />
                 <div>
-                  <strong>No canonical dataset has been published.</strong>
-                  <p>Stage a valid CSV bundle below. It stays a draft until you explicitly publish it.</p>
+                  <strong>No snapshot</strong>
+                  <p>Add CSV files, then publish.</p>
                 </div>
               </div>
             )}
@@ -461,9 +457,8 @@ export function SupplyOsSharedWorkspace({
           <form className={styles.importPanel} onSubmit={(event) => void stageImport(event)} aria-labelledby={`${instanceId}-import-title`}>
             <header>
               <div>
-                <span className={styles.eyebrow}>CSV adapter</span>
-                <h3 id={`${instanceId}-import-title`}>Stage the next snapshot</h3>
-                <p>Files are read in this browser, validated on the server, and written as one draft snapshot.</p>
+                <h3 id={`${instanceId}-import-title`}>Import</h3>
+                <p>Validated and saved as a draft.</p>
               </div>
               <button type="button" className={styles.clearButton} onClick={clearFiles} disabled={!CSV_KINDS.some((kind) => files[kind])}>Clear</button>
             </header>
@@ -553,15 +548,15 @@ export function SupplyOsSharedWorkspace({
       ) : workspaceState === "success" ? (
         <div className={styles.zeroState}>
           <Building2 size={28} aria-hidden="true" />
-          <h3>Create the first shared workspace</h3>
-          <p>There is no office-wide Supply OS record yet. Create one, then import the first canonical snapshot.</p>
+          <h3>No workspace</h3>
+          <p>Create one, then import a snapshot.</p>
           <button type="button" onClick={() => {
             setCreateError("");
             createDialogRef.current?.showModal();
-          }}><Plus size={14} /> Create workspace</button>
+          }}><Plus size={14} /> New workspace</button>
         </div>
       ) : (
-        <div className={styles.loadingState} aria-live="polite"><LoaderCircle size={18} className={styles.spin} /> Loading shared workspaces</div>
+        <div className={styles.loadingState} aria-live="polite"><LoaderCircle size={18} className={styles.spin} /> Loading</div>
       )}
     </section>
   );

@@ -2,6 +2,37 @@
 
 ## Latest Update
 
+### Supply OS copy and control cleanup
+
+- Kept Supply OS as the primary operator surface and removed its repeated
+  narration. The five sidebar destinations are now Materials, Network,
+  Suppliers, Scenarios, and Tracking with no descriptive sublabels.
+- Removed the duplicate map shortcut, command-header map button, scenario
+  instruction banner, and permanent five-item demo status ribbon. Data import
+  and workspace controls remain behind the Data dialog.
+- Moved the AMR photo credit onto the image, fixed the collapsed sidebar and
+  mobile demand display, and removed dead responsive selectors left by the
+  deleted copy.
+- Removed the dashboard-wide product tagline and reduced application metadata
+  to a direct freight-operations description.
+- Shortened the product, inventory, scenario, evidence, approval, tracking,
+  supplier-search, market-signal, snapshot, and shared-data language while
+  preserving demo, read-only, provenance, and human-approval boundaries.
+- Added `npm run check:product-copy` and updated Supply OS UI contracts so the
+  removed phrases and controls cannot return unnoticed.
+- No product behavior, database schema, dependency, approval rule, or external
+  action changed.
+
+Verification:
+
+- `npm run check:product-copy`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-operations-ui`
+- `npm run test:supply-os-snapshot-twin`
+- `npm run test:supply-os-scenario-viewport`
+- `npm run test:steel-supplier-search`
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/derya npm run build`
+
 ### Supply OS restored its operator sidebar and network map
 
 - Added a persistent Supply OS sidebar for Materials, Network Map, Suppliers,

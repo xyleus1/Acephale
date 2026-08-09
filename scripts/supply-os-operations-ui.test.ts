@@ -17,10 +17,9 @@ const twinStyles = readFileSync(
 );
 
 assert.match(shell, /className=\{`\$\{styles\.shell\} supply-os-workspace`\}/);
-assert.match(shell, /aria-label="Illustrative execution status"/);
-assert.match(shell, /Build release/);
-assert.match(shell, /Supplier award/);
-assert.match(shell, /Landed cost/);
+assert.match(shell, /<h2 id="supply-os-tracking-title">Tracking<\/h2>/);
+assert.match(shell, /Approval required/);
+assert.doesNotMatch(shell, /Build release|Supplier award|Landed cost/);
 
 assert.match(twin, /import \{ AnimatePresence, motion \} from "motion\/react"/);
 assert.match(twin, /layoutId="supply-os-tree-selection"/);

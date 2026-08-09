@@ -75,7 +75,8 @@
   object-fit: cover;
 }
 
-.productVisual > small {
+.productVisual > small,
+.productVisual > a {
   position: absolute;
   top: 7px;
   right: auto;
@@ -88,6 +89,7 @@
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   text-align: center;
+  text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -137,13 +139,6 @@
   font-weight: 680;
   letter-spacing: -0.035em;
   line-height: 1.05;
-}
-
-.productIdentity p {
-  max-width: 650px;
-  margin: 8px 0 0;
-  color: var(--twin-ink-soft);
-  font-size: 12px;
 }
 
 .identityMeta {
@@ -260,8 +255,7 @@
   font-weight: 680;
 }
 
-.panelHeader small,
-.canvasHeader small {
+.panelHeader small {
   color: var(--twin-ink-muted);
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
@@ -272,16 +266,6 @@
   display: flex;
   align-items: baseline;
   gap: 7px;
-}
-
-.fixtureBadge {
-  padding: 3px 6px;
-  border: 1px solid var(--twin-line-strong);
-  color: var(--twin-ink-soft);
-  background: var(--twin-panel);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-  text-transform: uppercase;
 }
 
 .productRoot {
@@ -308,18 +292,11 @@
   height: 31px;
 }
 
-.productRoot strong,
-.productRoot small {
+.productRoot strong {
   display: block;
 }
 
 .productRoot strong {
-  font-size: 11px;
-}
-
-.productRoot small {
-  margin-top: 1px;
-  color: var(--twin-ink-muted);
   font-size: 11px;
 }
 
@@ -538,7 +515,6 @@
   border-bottom: 1px solid var(--twin-line);
 }
 
-.graphHeading small,
 .inventorySection > header small,
 .scenarioSection > header small {
   color: var(--twin-ink-muted);
@@ -1323,11 +1299,6 @@
 
   .productIdentity {
     padding: 14px 16px;
-  }
-
-  .productIdentity p,
-  .identityMeta span:last-child {
-    display: none;
   }
 
   .buildMetrics div {

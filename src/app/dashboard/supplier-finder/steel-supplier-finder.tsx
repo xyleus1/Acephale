@@ -169,29 +169,26 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
     <main className={styles.page}>
       <header className={styles.hero}>
         <div>
-          <span className={styles.eyebrow}>Procurement intelligence</span>
-          <h1>Steel Supplier Finder</h1>
-          <p>Find evidence-backed candidates for raw materials, fuel, semi-finished goods, and finished steel products.</p>
+          <h1>Steel suppliers</h1>
         </div>
         <div className={styles.heroBoundary}>
           <ShieldCheck size={18} />
-          <span><strong>Candidate discovery only</strong> No supplier is approved, awarded, or called reliable by this search.</span>
+          <span><strong>Candidates only.</strong> No supplier is approved or awarded.</span>
         </div>
       </header>
 
       <section className={styles.privacyNotice}>
         <LockKeyhole size={18} />
-        <span><strong>Sensitive origin protection:</strong> private origin notes stay in this browser. Public research receives only the product brief.</span>
+        <span>Private notes stay in this browser and are never searched.</span>
       </section>
 
       <div className={styles.topGrid}>
         <form className={styles.searchCard} onSubmit={submitSearch}>
           <header className={styles.cardHeader}>
             <div>
-              <span>01</span>
-              <h2>Public search brief</h2>
+              <h2>Search</h2>
             </div>
-            <small>Sent to public-source research</small>
+            <small>Public sources</small>
           </header>
 
           <div className={styles.formGrid}>
@@ -218,7 +215,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               />
             </label>
             <label className={styles.fullField}>
-              <span>Grade, standard, and technical specification</span>
+              <span>Specification</span>
               <input
                 value={draft.specification}
                 onChange={(event) => setField("specification", event.target.value)}
@@ -226,7 +223,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               />
             </label>
             <label>
-              <span>Volume and cadence</span>
+              <span>Volume</span>
               <input value={draft.quantity} onChange={(event) => setField("quantity", event.target.value)} placeholder="Example: 40,000 mt quarterly" />
             </label>
             <label>
@@ -234,7 +231,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               <input required minLength={2} value={draft.targetMarket} onChange={(event) => setField("targetMarket", event.target.value)} />
             </label>
             <label className={styles.fullField}>
-              <span>Regions to search</span>
+              <span>Search regions</span>
               <input
                 value={draft.preferredRegions}
                 onChange={(event) => setField("preferredRegions", event.target.value)}
@@ -242,7 +239,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               />
             </label>
             <label className={styles.fullField}>
-              <span>Required evidence or certifications</span>
+              <span>Requirements</span>
               <textarea
                 value={draft.requirements}
                 onChange={(event) => setField("requirements", event.target.value)}
@@ -252,7 +249,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
           </div>
 
           <button className={styles.searchButton} type="submit" disabled={searching}>
-            <Search size={16} /> {searching ? "Searching attributable public sources..." : "Find supplier candidates"}
+            <Search size={16} /> {searching ? "Searching..." : "Find candidates"}
           </button>
         </form>
 
@@ -261,7 +258,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
             <header className={styles.cardHeader}>
               <div>
                 <span><LockKeyhole size={13} /></span>
-                <h2>Private origin context</h2>
+                <h2>Private notes</h2>
               </div>
               <small>Browser only</small>
             </header>
@@ -270,13 +267,12 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               onChange={(event) => setField("confidentialOriginNotes", event.target.value)}
               placeholder="Current origins, supplier relationships, sensitivities, or names that must never enter public research"
             />
-            <p>This field is saved under your office and user browser scope. It is never included in the search request.</p>
           </section>
 
           <section className={styles.gateCard}>
             <header className={styles.cardHeader}>
-              <div><span>02</span><h2>Reliability gate</h2></div>
-              <small>Before contact or award</small>
+              <div><h2>Approval checks</h2></div>
+              <small>Before award</small>
             </header>
             <ol>
               <li><Check size={14} /><span><strong>Public evidence</strong> Identity, producer status, capability, quality, export activity</span></li>
@@ -293,8 +289,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
       <section className={styles.resultsSection} aria-live="polite">
         <header className={styles.resultsHeader}>
           <div>
-            <span className={styles.eyebrow}>Candidate bench</span>
-            <h2>{result ? `${result.candidates.length} attributable candidates` : "No search run yet"}</h2>
+            <h2>{result ? `${result.candidates.length} candidates` : "No results"}</h2>
           </div>
           {result ? <small>Researched {new Date(result.searchedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
         </header>
@@ -302,8 +297,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
         {!result ? (
           <div className={styles.emptyState}>
             <Factory size={25} />
-            <h3>Start with the exact product, not a generic supplier category</h3>
-            <p>A steel mill, commodity trader, raw-material producer, and Türkiye representative are different counterparties. The brief keeps them separate.</p>
+            <h3>Enter a specific product</h3>
           </div>
         ) : (
           <>

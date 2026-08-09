@@ -35,20 +35,8 @@
   padding: 13px 16px;
 }
 
-.header > div > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--intel-navy);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .header h2 {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 18px;
   font-weight: 670;
   letter-spacing: -0.025em;

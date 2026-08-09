@@ -91,9 +91,8 @@ export async function SupplyOsDecisionIntelligence({ officeId }: { officeId: str
     <section className={styles.intelligence} aria-labelledby="supply-os-intelligence-title">
       <header className={styles.header}>
         <div>
-          <span><RadioTower size={14} /> Decision evidence</span>
-          <h2 id="supply-os-intelligence-title">Market intelligence attached to sourcing decisions</h2>
-          <p>Current office-scoped signals are ranked as decision inputs. They do not become conclusions, quotes, or execution authority.</p>
+          <h2 id="supply-os-intelligence-title">Market signals</h2>
+          <p>Inputs only. No quote or action is approved.</p>
         </div>
         <dl>
           <div><dt>Active signals</dt><dd>{signals.length}</dd></div>
@@ -132,8 +131,8 @@ export async function SupplyOsDecisionIntelligence({ officeId }: { officeId: str
         <div className={styles.emptyState}>
           <RadioTower size={22} />
           <div>
-            <strong>No active market signal is attached yet.</strong>
-            <p>Run an approved intelligence ingestion source, then review its relevance. Signals will appear here as sourcing evidence, not as a separate report product.</p>
+            <strong>No signals</strong>
+            <p>Add an approved source to show reviewed evidence here.</p>
           </div>
         </div>
       )}

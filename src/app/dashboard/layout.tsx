@@ -23,9 +23,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
               </span>
             </a>
           </div>
-          <div className="topbar-center">
-            <span className="topbar-product-label">Products, inventory, sourcing, and execution</span>
-          </div>
           <div className="topbar-right">
             <details className="topbar-menu">
               <summary aria-label="User menu">

@@ -7,7 +7,7 @@ import styles from "./supply-os-workspace.module.css";
 
 export const metadata: Metadata = {
   title: "Supply OS",
-  description: "Map products, inventory, suppliers, scenarios, logistics, and cost in one operating workspace.",
+  description: "Supply planning workspace.",
 };
 
 export default async function SupplyOsPage({

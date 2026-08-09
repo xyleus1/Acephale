@@ -19,14 +19,15 @@ assert.match(shell, /from "motion\/react"/);
 assert.match(shell, /<MotionConfig reducedMotion="user"/);
 assert.match(shell, /className=\{styles\.operatingSidebar\}/);
 assert.match(shell, /aria-label="Supply OS navigation"/);
-assert.match(shell, /shortLabel: "Network map"/);
-assert.match(shell, /onClick=\{\(\) => selectPanel\("logistics"\)\}/);
+assert.match(shell, /id: "logistics", shortLabel: "Network"/);
+assert.match(shell, /onClick=\{\(\) => selectPanel\(panel\.id\)\}/);
 assert.match(shell, /activePanel === "logistics"/);
 assert.match(shell, /<SupplyOsDashboardWorkspace storageScope=\{storageScope\} presentationMode=\{false\} \/>/);
 assert.ok(packageJson.dependencies?.motion, "Motion must be a production dependency");
 assert.doesNotMatch(shell, />Deal Desk<|>Incoming RFQs<|>CRM<|>Outreach<|>Intel</);
+assert.doesNotMatch(shell, /Network online|Open the live map|Suppliers to factory to delivery/);
 assert.match(dashboard, /generateSupplyCase\(SAMPLE_SUPPLY_CASE_PROMPT, ILLUSTRATIVE_NETWORK_DATE/);
-assert.match(dashboard, />Illustrative network</);
+assert.match(dashboard, />Demo</);
 assert.doesNotMatch(dashboard, /href="\/dashboard\/supply-os\/new"/);
 
 console.log("Supply OS sidebar and network-map contract passed.");

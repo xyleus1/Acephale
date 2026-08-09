@@ -217,7 +217,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: "current",
     label: "Current purchase plan",
-    description: "Use current stock and confirmed inbound receipts without changing suppliers.",
+    description: "Current stock and confirmed inbound.",
     unitCostDeltaUsd: 0,
     leadTimeDays: 42,
     buildableUnits: BUILDABLE_WITH_INBOUND,
@@ -227,7 +227,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: "assembled-vision",
     label: "Buy assembled vision module",
-    description: "Replace the camera, compute, radio, and harness buy with one qualified subassembly.",
+    description: "Buy one qualified subassembly.",
     unitCostDeltaUsd: 190,
     leadTimeDays: 34,
     buildableUnits: buildableWithVisionSupport(24),
@@ -237,7 +237,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: "alternate-camera",
     label: "Qualify alternate camera source",
-    description: "Keep the existing module design and replace only the constrained camera source.",
+    description: "Replace only the constrained camera source.",
     unitCostDeltaUsd: -65,
     leadTimeDays: 38,
     buildableUnits: buildableWithVisionSupport(23),
@@ -286,7 +286,13 @@ function statusLabel(item: SupplyOsTwinItem, demandUnits: number) {
   return `${demandUnits - projected} build${demandUnits - projected === 1 ? "" : "s"} short`;
 }
 
-function ProductVisual({ source, alt, label }: { source?: string | null; alt: string; label: string }) {
+export type SupplyOsPhotoAttribution = {
+  href: string;
+  label: string;
+  title: string;
+};
+
+function ProductVisual({ source, alt, label, attribution }: { source?: string | null; alt: string; label: string; attribution?: SupplyOsPhotoAttribution | null }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const safeSource = safeImageSource(source);
   const showImage = safeSource && safeSource !== failedSource;
@@ -307,13 +313,16 @@ function ProductVisual({ source, alt, label }: { source?: string | null; alt: st
           <span><ImageOff size={12} /> Safe image fallback</span>
         </div>
       )}
-      <small>{label}</small>
+      {showImage && attribution ? (
+        <a href={attribution.href} target="_blank" rel="noreferrer" title={attribution.title}>{attribution.label}</a>
+      ) : <small>{label}</small>}
     </div>
   );
 }
 
 export type SupplyOsProductTwinProps = {
   productImageUrl?: string | null;
+  productImageAttribution?: SupplyOsPhotoAttribution | null;
   className?: string;
   model?: SupplyOsTwinModel | null;
   view?: "materials" | "scenarios";
@@ -321,6 +330,7 @@ export type SupplyOsProductTwinProps = {
 
 export function SupplyOsProductTwin({
   productImageUrl,
+  productImageAttribution,
   className = "",
   model,
   view = "materials",
@@ -365,15 +375,14 @@ export function SupplyOsProductTwin({
           source={isPublishedSnapshot ? model.productImageUrl : productImageUrl}
           alt={`${productName} product image`}
           label={isPublishedSnapshot ? `Published snapshot v${model.snapshotVersion}` : "Illustrative"}
+          attribution={isPublishedSnapshot ? null : productImageAttribution}
         />
         <div className={styles.productIdentity}>
           <span className={styles.kicker}><Factory size={13} /> {productContext}</span>
           <h2 id={titleId}>{productName}</h2>
-          <p>{isPublishedSnapshot ? "Product, inventory, and demand model from the selected published snapshot." : "Product, inventory, and sourcing model for the next illustrative production wave."}</p>
           <div className={styles.identityMeta}>
-            <span>Product rev {productRevision}</span>
-            <span>{isPublishedSnapshot ? "Published demand" : "Demand fixture"}: {demandUnits} units</span>
-            <span>Calculated from {bomItems.length} controlled modules</span>
+            <span>Rev {productRevision}</span>
+            <span>Demand {demandUnits}</span>
           </div>
         </div>
         <dl className={styles.buildMetrics} aria-label="Calculated buildability">
@@ -399,12 +408,12 @@ export function SupplyOsProductTwin({
       <div className={styles.twinWorkspace}>
         <aside className={styles.bomNavigator} aria-label="Product bill of materials">
           <header className={styles.panelHeader}>
-            <span>Product structure</span>
+            <span>BOM</span>
             <small>{bomItems.length} modules</small>
           </header>
           <div className={styles.productRoot}>
             <span><Bot size={16} /></span>
-            <div><strong>{productNumber}</strong><small>{isPublishedSnapshot ? "Published product" : "Serialized product"}</small></div>
+            <div><strong>{productNumber}</strong></div>
           </div>
           <div className={styles.treeList}>
             {bomItems.map((item, index) => {
@@ -449,15 +458,13 @@ export function SupplyOsProductTwin({
 
         <main className={styles.analysisCanvas}>
           <header className={styles.canvasHeader}>
-            <span><strong>Product twin</strong><small>Quantity-backed assembly graph</small></span>
-            <span className={styles.fixtureBadge}>Illustrative data</span>
+            <span><strong>Assembly</strong></span>
           </header>
 
           <section className={styles.graphPanel} aria-labelledby={graphTitleId}>
             <div className={styles.graphHeading}>
               <span>
-                <small>Assembly graph</small>
-                <h3 id={graphTitleId}>What controls the next {demandUnits} builds</h3>
+                <h3 id={graphTitleId}>Build limits</h3>
               </span>
               <span className={styles.graphLegend}>
                 <i data-state="ready" /> Covered
@@ -471,7 +478,7 @@ export function SupplyOsProductTwin({
                 <span><Bot size={21} /></span>
                 <small>Final assembly</small>
                 <strong>{productNumber}</strong>
-                <em>{buildableWithInbound} of {demandUnits} under {isPublishedSnapshot ? "published" : "current"} plan</em>
+                <em>{buildableWithInbound} / {demandUnits} buildable</em>
               </div>
               <div className={styles.graphTrunk} aria-hidden="true" />
               <div className={styles.componentNodes}>
@@ -505,8 +512,8 @@ export function SupplyOsProductTwin({
 
           <section className={styles.inventorySection} aria-labelledby={inventoryTitleId}>
             <header>
-              <span><small>Inventory and buildability</small><h3 id={inventoryTitleId}>Current allocation by controlled module</h3></span>
-              <small>Confirmed inbound is separated from on-hand stock</small>
+              <span><h3 id={inventoryTitleId}>Inventory</h3></span>
+              <small>Inbound shown separately.</small>
             </header>
             <div className={styles.inventoryTableWrap}>
               <table className={styles.inventoryTable}>
@@ -531,8 +538,8 @@ export function SupplyOsProductTwin({
 
           {selectedScenario ? <section className={styles.scenarioSection} aria-labelledby={scenarioTitleId}>
             <header>
-              <span><small>Scenario comparison</small><h3 id={scenarioTitleId}>Change the vision-module sourcing plan</h3></span>
-              <small>Costs and lead times are demo fixture inputs</small>
+              <span><h3 id={scenarioTitleId}>Scenarios</h3></span>
+              <small>Demo inputs</small>
             </header>
             <div className={styles.scenarioTableWrap}>
               <table className={styles.scenarioTable}>
@@ -562,12 +569,12 @@ export function SupplyOsProductTwin({
           </section> : (
             <section className={styles.scenarioSection} aria-labelledby={scenarioTitleId}>
               <header>
-                <span><small>Scenario comparison</small><h3 id={scenarioTitleId}>No sourcing scenarios are published</h3></span>
-                <small>Costs, lead times, and alternatives are not inferred</small>
+                <span><h3 id={scenarioTitleId}>No scenarios</h3></span>
+                <small>Not published</small>
               </header>
               <div className={styles.scenarioEmpty}>
                 <ShieldCheck size={18} />
-                <p>The product twin shows the persisted baseline only. Add evidence-backed supplier and cost inputs before comparing a different sourcing plan.</p>
+                <p>Add supplier and cost evidence to compare plans.</p>
               </div>
             </section>
           )}
@@ -590,7 +597,7 @@ export function SupplyOsProductTwin({
               <span className={styles.dossierIcon} data-status={statusFor(selectedItem, demandUnits, buildableWithInbound)}>
                 <SelectedItemIcon size={18} />
               </span>
-              <span><small>Selected module</small><h3>{selectedItem.name}</h3><em>{selectedItem.partNumber}</em></span>
+              <span><small>Selected</small><h3>{selectedItem.name}</h3><em>{selectedItem.partNumber}</em></span>
               <i data-status={statusFor(selectedItem, demandUnits, buildableWithInbound)}>{statusLabel(selectedItem, demandUnits)}</i>
             </header>
 
@@ -605,12 +612,12 @@ export function SupplyOsProductTwin({
               </dl>
 
               <section className={styles.dossierRecommendation}>
-                <h4>Recommended intervention</h4>
+                <h4>Next action</h4>
                 <p>{selectedItem.recommendation}</p>
               </section>
 
               {selectedScenario ? <section className={styles.selectedScenario}>
-                <header><small>Selected scenario</small><strong>{selectedScenario.label}</strong></header>
+                <header><small>Plan</small><strong>{selectedScenario.label}</strong></header>
                 <dl>
                   <div><dt>Modeled unit cost</dt><dd>{formatCurrency(BASE_UNIT_COST_USD + selectedScenario.unitCostDeltaUsd)}</dd></div>
                   <div><dt>Buildable units</dt><dd>{selectedScenario.buildableUnits}</dd></div>
@@ -619,7 +626,7 @@ export function SupplyOsProductTwin({
               </section> : null}
 
               <section className={styles.evidenceSection}>
-                <header><h4>Evidence and boundaries</h4><span>{selectedItem.evidence.length}</span></header>
+                <header><h4>Evidence</h4><span>{selectedItem.evidence.length}</span></header>
                 {selectedItem.evidence.map((evidence) => (
                   <article key={evidence.label}>
                     <span>{evidence.basis === "Rule" ? <ShieldCheck size={14} /> : <CheckCircle2 size={14} />}</span>
@@ -630,7 +637,7 @@ export function SupplyOsProductTwin({
             </div>
 
             <footer className={styles.dossierFooter}>
-              <span><Clock3 size={13} /> Human approval required</span>
+              <span><Clock3 size={13} /> Approval required</span>
               <strong>{selectedItem.decision}</strong>
             </footer>
           </motion.div>
@@ -639,8 +646,8 @@ export function SupplyOsProductTwin({
       </div>
 
       <footer className={styles.dataBoundary}>
-        <span><ShieldCheck size={14} /> {isPublishedSnapshot ? `Published snapshot v${model.snapshotVersion}` : "Illustrative product twin"}</span>
-        <p>{isPublishedSnapshot ? "Every quantity is calculated from the selected immutable snapshot. This read-only view does not authorize a supplier, purchase order, shipment, filing, or spend action." : "Every quantity is calculated from the visible demo fixture. No supplier, purchase order, FCC clearance, shipment, or spend action is live."}</p>
+        <span><ShieldCheck size={14} /> {isPublishedSnapshot ? `Snapshot v${model.snapshotVersion}` : "Demo"}</span>
+        <p>{isPublishedSnapshot ? "Read only. No supplier, order, shipment, filing, or spend is approved." : "Demo only. Nothing is approved or live."}</p>
       </footer>
     </section>
   );

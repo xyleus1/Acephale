@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "ai:handoff": "tsx scripts/generate-ai-handoff.ts",
+    "check:product-copy": "tsx scripts/product-copy-policy.test.ts",
     "test:strategy": "tsx scripts/commercial-strategy.test.ts",
     "test:supply-os-prototype": "tsx scripts/supply-os-prototype.test.ts",
     "test:supply-os-single-surface": "tsx scripts/supply-os-single-surface.test.ts",

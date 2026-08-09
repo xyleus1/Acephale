@@ -3986,3 +3986,24 @@ Use this file for chronological implementation notes that future agents should s
   diff hygiene pass.
 - Bundle note: Supply OS first-load JavaScript increased from 312 kB to 354 kB,
   about 13.5 percent, which remains inside the prior 15 percent release limit.
+
+### 2026-08-08 - Remove Supply OS copy and control bloat
+
+- Branch: supply-os-copy-cleanup, targeting main
+- Commit: see git log
+- Task: Keep the restored Supply OS product surface while removing repeated
+  labels, generic narration, and redundant controls from its primary panels.
+- Files changed: dashboard and root layouts, Supply OS shell, product twin,
+  snapshot adapter, shared-data dialog, decision signals, supplier search,
+  scoped shell styles, product copy check, UI contracts, handoff, and
+  engineering log.
+- Verification: product copy, sidebar, operations UI, snapshot, scenario,
+  supplier search, production build, diff whitespace, and changed-file U+2014
+  checks pass.
+- Failed/skipped checks: no authenticated browser session was available for a
+  post-change click-through. The production build and source-level UI contracts
+  are the verification evidence.
+- Caveats: operational facts, warnings, provenance, demo status, and approval
+  boundaries remain visible. No behavior, schema, dependency, or external
+  action changed.
+- Follow-up: none.

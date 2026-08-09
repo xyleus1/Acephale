@@ -31,35 +31,36 @@ assert.match(shell, /\/supply-os\/demo\/vector3dhd-amr\.jpg/, "the product twin 
 assert.match(shell, /PattyK33/, "the product image must identify its creator");
 assert.match(shell, /CC BY-SA 4\.0/, "the product image must carry its exact license");
 assert.match(shell, /sourcePage/, "the product image must retain a source-page provenance link");
-assert.match(shell, /href=\{PRODUCT_MEDIA\.sourcePage\}/, "the rendered attribution must link to the recorded source page");
+assert.match(shell, /href: PRODUCT_MEDIA\.sourcePage/, "the rendered attribution must receive the recorded source page");
+assert.match(twin, /href=\{attribution\.href\}/, "the rendered attribution must link to the recorded source page");
 assert.deepEqual([...productPhoto.subarray(0, 3)], [0xff, 0xd8, 0xff], "the bundled product photo must be a valid JPEG asset");
 assert.ok(productPhoto.byteLength > 100_000, "the bundled product photo must not be an empty placeholder");
 
 for (const copy of [
   "AMR-240 warehouse robot",
-  "Product structure",
+  "BOM",
   "Buildable now",
   "Current-plan shortages",
   "Buy assembled vision module",
   "Qualify alternate camera source",
-  "Evidence and boundaries",
-  "Human approval required",
+  "Evidence",
+  "Approval required",
 ]) {
   assert.match(twin, new RegExp(copy), `the product twin is missing: ${copy}`);
 }
 
 assert.match(twin, /Math\.min\(\.\.\.BOM_ITEMS/, "buildability must be calculated from BOM constraints");
 assert.match(twin, /url\.protocol === "https:"/, "remote image sources must be restricted to HTTPS");
-assert.match(shell, /No carrier booking, filing, invoice, or spend action is live\./, "tracking fixtures must not imply live execution");
-assert.match(twin, /No supplier, purchase order, FCC clearance, shipment, or spend action is live\./, "product fixtures must keep their action boundary explicit");
+assert.match(shell, /No booking, filing, invoice, or spend action is live\./, "tracking fixtures must not imply live execution");
+assert.match(twin, /Demo only\. Nothing is approved or live\./, "product fixtures must keep their action boundary explicit");
 assert.match(shellStyles, /prefers-reduced-motion: reduce/, "shell animation must respect reduced motion");
 assert.match(sharedWorkspace, /\/api\/supply-os\/workspaces/, "shared controls must use the authenticated workspace API");
 assert.match(sharedWorkspace, /\/imports/, "shared controls must stage versioned imports");
 assert.match(sharedWorkspace, /\/publish/, "shared controls must require explicit publish");
-assert.match(sharedWorkspace, /Office-scoped Postgres/, "the UI must explain the shared persistence boundary");
-assert.match(sharedWorkspace, /browser-local data/, "the UI must disclose remaining compatibility state");
+assert.match(sharedWorkspace, /published snapshots are office-scoped/, "the UI must explain the shared persistence boundary");
+assert.match(sharedWorkspace, /local or illustrative data/, "the UI must disclose remaining compatibility state");
 assert.match(intelligence, /where: \{[\s\S]*officeId,/, "decision intelligence must remain office scoped");
-assert.match(intelligence, /They do not become conclusions, quotes, or execution authority\./, "market signals must remain advisory evidence");
+assert.match(intelligence, /No quote or action is approved\./, "market signals must remain advisory evidence");
 
 for (const forbidden of ["\u2014", "linear-gradient", "radial-gradient", "drop-shadow("]) {
   assert.equal(surface.includes(forbidden), false, `the Supply OS visual surface must not contain ${forbidden}`);
