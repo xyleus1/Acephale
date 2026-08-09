@@ -15,6 +15,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useId, useMemo, useState } from "react";
 import { calculateTwinBuildability } from "@/lib/supply-os/snapshot-twin";
 import styles from "./supply-os-product-twin.module.css";
@@ -315,12 +316,14 @@ export type SupplyOsProductTwinProps = {
   productImageUrl?: string | null;
   className?: string;
   model?: SupplyOsTwinModel | null;
+  view?: "materials" | "scenarios";
 };
 
 export function SupplyOsProductTwin({
   productImageUrl,
   className = "",
   model,
+  view = "materials",
 }: SupplyOsProductTwinProps) {
   const id = useId();
   const titleId = `${id}-title`;
@@ -356,7 +359,7 @@ export function SupplyOsProductTwin({
   const selectedPlanBuildable = selectedScenario?.buildableUnits ?? buildableWithInbound;
 
   return (
-    <section className={`${styles.twin} ${className}`.trim()} aria-labelledby={titleId}>
+    <section className={`${styles.twin} ${className}`.trim()} data-view={view} aria-labelledby={titleId}>
       <header className={styles.identityStrip}>
         <ProductVisual
           source={isPublishedSnapshot ? model.productImageUrl : productImageUrl}
@@ -408,14 +411,17 @@ export function SupplyOsProductTwin({
               const Icon = ITEM_ICONS[item.category];
               const active = item.id === selectedItem.id;
               return (
-                <button
+                <motion.button
                   key={item.id}
                   type="button"
                   data-active={active}
                   data-status={statusFor(item, demandUnits, buildableWithInbound)}
                   aria-pressed={active}
                   onClick={() => setSelectedItemId(item.id)}
+                  whileHover={{ x: 2 }}
+                  whileTap={{ scale: 0.99 }}
                 >
+                  {active ? <motion.span className={styles.treeActiveRail} layoutId="supply-os-tree-selection" /> : null}
                   <span className={styles.treeIndex}>{String(index + 1).padStart(2, "0")}</span>
                   <span className={styles.treeIcon}><Icon size={15} /></span>
                   <span className={styles.treeCopy}>
@@ -423,7 +429,7 @@ export function SupplyOsProductTwin({
                     <small>{item.quantityPerRobot} per {isPublishedSnapshot ? "product" : "robot"}, {item.partNumber}</small>
                   </span>
                   <i>{statusLabel(item, demandUnits)}</i>
-                </button>
+                </motion.button>
               );
             })}
           </div>
@@ -474,7 +480,7 @@ export function SupplyOsProductTwin({
                   const active = item.id === selectedItem.id;
                   const available = netAvailable(item, true);
                   return (
-                    <button
+                    <motion.button
                       key={item.id}
                       type="button"
                       className={styles.componentNode}
@@ -482,12 +488,15 @@ export function SupplyOsProductTwin({
                       data-status={statusFor(item, demandUnits, buildableWithInbound)}
                       aria-pressed={active}
                       onClick={() => setSelectedItemId(item.id)}
+                      whileHover={{ x: 3 }}
+                      whileTap={{ scale: 0.995 }}
                     >
+                      {active ? <motion.span className={styles.componentActiveRail} layoutId="supply-os-graph-selection" /> : null}
                       <span className={styles.componentIcon}><Icon size={16} /></span>
                       <span className={styles.componentName}><small>{item.partNumber}</small><strong>{item.name}</strong></span>
                       <span className={styles.componentInventory}><small>Available</small><strong>{available}</strong></span>
                       <span className={styles.componentSupport}><small>Supports</small><strong>{item.isOptional ? "Optional" : supportedBuilds(item, true)}</strong></span>
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
@@ -536,9 +545,9 @@ export function SupplyOsProductTwin({
                     return (
                       <tr key={scenario.id} data-selected={active}>
                         <th scope="row">
-                          <button type="button" aria-pressed={active} onClick={() => setSelectedScenarioId(scenario.id)}>
+                          <motion.button type="button" aria-pressed={active} onClick={() => setSelectedScenarioId(scenario.id)} whileTap={{ scale: 0.995 }}>
                             <span>{scenario.label}</span><small>{scenario.description}</small>
-                          </button>
+                          </motion.button>
                         </th>
                         <td><strong>{formatCurrency(BASE_UNIT_COST_USD + scenario.unitCostDeltaUsd)}</strong><small>{signedCurrency(scenario.unitCostDeltaUsd)}</small></td>
                         <td><strong>{scenario.leadTimeDays} days</strong><small>{scenario.leadTimeDays - SCENARIOS[0].leadTimeDays} day change</small></td>
@@ -568,7 +577,15 @@ export function SupplyOsProductTwin({
           <p className={styles.srOnly} aria-live="polite" aria-atomic="true">
             Selected {selectedItem.name}. {statusLabel(selectedItem, demandUnits)}. {selectedScenario ? `Scenario ${selectedScenario.label}, ${selectedScenario.buildableUnits} buildable units.` : `Published plan, ${buildableWithInbound} buildable units.`}
           </p>
-          <div key={`${selectedItem.id}:${selectedScenario?.id ?? model?.snapshotId ?? "published"}`} className={styles.dossierContent}>
+          <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`${selectedItem.id}:${selectedScenario?.id ?? model?.snapshotId ?? "published"}`}
+            className={styles.dossierContent}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -6 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
             <header className={styles.dossierHeader}>
               <span className={styles.dossierIcon} data-status={statusFor(selectedItem, demandUnits, buildableWithInbound)}>
                 <SelectedItemIcon size={18} />
@@ -616,7 +633,8 @@ export function SupplyOsProductTwin({
               <span><Clock3 size={13} /> Human approval required</span>
               <strong>{selectedItem.decision}</strong>
             </footer>
-          </div>
+          </motion.div>
+          </AnimatePresence>
         </aside>
       </div>
 

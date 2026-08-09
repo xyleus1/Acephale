@@ -36154,3 +36154,36 @@ body.supply-os-presentation .page-container {
   max-width: none;
   padding: 0;
 }
+
+/* The Supply OS sidebar is the visual anchor for the authenticated product.
+   Extend its graphite chrome across the global header so the operator shell
+   reads as one intentional frame instead of two stacked applications. */
+.app-shell-single-surface > .content > .topbar {
+  min-height: 58px;
+  height: 58px;
+  padding: 0 18px;
+  border-color: #263a45 !important;
+  color: #dce6ea !important;
+  background: #14242d !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-shell-single-surface .topbar-brand-text,
+.app-shell-single-surface .topbar-brand-text strong {
+  color: #f2f7f9 !important;
+}
+
+.app-shell-single-surface .topbar-product-label {
+  color: #93aab5 !important;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app-shell-single-surface .topbar-avatar {
+  border-color: #9ab9c6 !important;
+  color: #14242d !important;
+  background: #dce9ee !important;
+}

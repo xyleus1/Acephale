@@ -22,9 +22,11 @@ async function readWorkspaceResponse(response: Response) {
 export function SupplyOsSnapshotTwin({
   workspaceId,
   fallbackImageUrl,
+  view = "materials",
 }: {
   workspaceId: string | null;
   fallbackImageUrl?: string | null;
+  view?: "materials" | "scenarios";
 }) {
   const [state, setState] = useState<AdapterState>(workspaceId ? "loading" : "fallback");
   const [model, setModel] = useState<SupplyOsSnapshotTwinModel | null>(null);
@@ -81,7 +83,7 @@ export function SupplyOsSnapshotTwin({
         {state === "loading" ? <LoaderCircle size={14} className={styles.spin} /> : state === "error" ? <TriangleAlert size={14} /> : <Database size={14} />}
         <span>{message}</span>
       </div>
-      <SupplyOsProductTwin productImageUrl={fallbackImageUrl} model={model} />
+      <SupplyOsProductTwin productImageUrl={fallbackImageUrl} model={model} view={view} />
     </div>
   );
 }

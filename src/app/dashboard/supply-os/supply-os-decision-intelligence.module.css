@@ -9,7 +9,7 @@
   --intel-navy: #29485c;
   --intel-warning: #825f2f;
   width: min(1520px, calc(100% - 36px));
-  margin: 18px auto;
+  margin: 12px auto;
   border: 1px solid var(--intel-line-strong);
   color: var(--intel-ink);
   background: var(--intel-panel);
@@ -23,7 +23,7 @@
 }
 
 .header {
-  min-height: 86px;
+  min-height: 76px;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
@@ -212,7 +212,7 @@
 }
 
 .emptyState {
-  min-height: 112px;
+  min-height: 76px;
   display: flex;
   align-items: center;
   justify-content: center;

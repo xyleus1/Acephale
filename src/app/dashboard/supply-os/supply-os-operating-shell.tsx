@@ -2,6 +2,7 @@
 
 import {
   Boxes,
+  CircleDollarSign,
   CircleDot,
   Database,
   Factory,
@@ -74,6 +75,14 @@ const EXECUTION_ROWS = [
     progress: 82,
     tone: "ready",
   },
+] as const;
+
+const OPERATIONS_RIBBON = [
+  { label: "Build release", value: "21 / 24 units", tone: "attention", icon: Boxes },
+  { label: "Supplier award", value: "Approval needed", tone: "attention", icon: PackageSearch },
+  { label: "Customs", value: "Packet draft", tone: "neutral", icon: ShieldCheck },
+  { label: "Movement", value: "2 planned legs", tone: "moving", icon: Truck },
+  { label: "Landed cost", value: "$56.8k modeled", tone: "neutral", icon: CircleDollarSign },
 ] as const;
 
 function panelFromCurrentUrl() {
@@ -182,7 +191,7 @@ export function SupplyOsOperatingShell({
 
   return (
     <MotionConfig reducedMotion="user" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
-      <main className={styles.shell} data-panel={activePanel}>
+      <main className={`${styles.shell} supply-os-workspace`} data-panel={activePanel}>
         <motion.aside
           className={styles.operatingSidebar}
           initial={{ x: -12, opacity: 0 }}
@@ -291,7 +300,7 @@ export function SupplyOsOperatingShell({
                     <p>Select a sourcing plan in the scenario table, then inspect its evidence and human approval boundary.</p>
                   </div>
                   {intelligencePanel}
-                  <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} />
+                  <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} view="scenarios" />
                 </div>
               ) : null}
               {activePanel === "logistics" ? (
@@ -301,10 +310,27 @@ export function SupplyOsOperatingShell({
             </motion.div>
           </AnimatePresence>
 
-          <footer className={styles.sourceFooter}>
-            <span>Visual evidence</span>
+          <footer className={styles.operationsRibbon} aria-label="Illustrative execution status">
+            <ul>
+              {OPERATIONS_RIBBON.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <motion.li
+                    key={item.label}
+                    data-tone={item.tone}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.03 * index }}
+                  >
+                    <span><Icon size={14} /></span>
+                    <span><small>{item.label}</small><strong>{item.value}</strong></span>
+                  </motion.li>
+                );
+              })}
+            </ul>
             <a href="https://commons.wikimedia.org/wiki/File:Autonomous_Mobile_Robot_AMR.png" target="_blank" rel="noreferrer">
-              AMR image by Rlistmedia, CC BY 4.0
+              <span>Illustrative fixture</span>
+              <small>AMR image · CC BY 4.0</small>
             </a>
           </footer>
         </section>

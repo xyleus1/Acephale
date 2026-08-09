@@ -14,6 +14,8 @@
     "test:supply-os-single-surface": "tsx scripts/supply-os-single-surface.test.ts",
     "test:supply-os-shell-routing": "tsx scripts/supply-os-shell-routing.test.ts",
     "test:supply-os-sidebar-map": "tsx scripts/supply-os-sidebar-map.test.ts",
+    "test:supply-os-operations-ui": "tsx scripts/supply-os-operations-ui.test.ts",
+    "test:supply-os-scenario-viewport": "tsx scripts/supply-os-scenario-viewport.test.ts",
     "test:supply-os-legacy-routes": "tsx scripts/supply-os-legacy-routes.test.ts",
     "test:supply-os-product-twin": "tsx scripts/supply-os-product-twin.test.ts",
     "test:supply-os-snapshot-twin": "tsx scripts/supply-os-snapshot-twin.test.ts",
