@@ -437,10 +437,15 @@ function CaseCommandCenter({
 
   useEffect(() => {
     setInspectorMode(domain.defaultInspector);
+    if (activePanel === "suppliers") {
+      const supplier = domainObjects.find((object) => object.kind === "supplier");
+      if (supplier && selectedObject?.kind !== "supplier") setSelectedObjectId(supplier.id);
+      return;
+    }
     if (selectedObject && domain.objectKinds.includes(selectedObject.kind)) return;
     const nextObject = domainObjects.find((object) => object.kind === "factory") ?? domainObjects[0];
     if (nextObject) setSelectedObjectId(nextObject.id);
-  }, [domain.defaultInspector, domain.objectKinds, domainObjects, selectedObject]);
+  }, [activePanel, domain.defaultInspector, domain.objectKinds, domainObjects, selectedObject]);
 
   function selectScope(scope: SupplyEngagementScope) {
     if (scope === selectedScope) return;

@@ -232,6 +232,7 @@ export function SupplyOsCommandMap({
   const mapRef = useRef<MapRef | null>(null);
   const fallbackPendingRef = useRef(false);
   const basemapReadyRef = useRef(false);
+  const previousSelectedObjectIdRef = useRef(selectedObject?.id);
   const [hoveredObject, setHoveredObject] = useState<SupplyCommandObject | null>(null);
   const [hoveredInsight, setHoveredInsight] = useState<SupplyCommandInsight | null>(null);
   const [hoveredRouteId, setHoveredRouteId] = useState<string | null>(null);
@@ -247,6 +248,21 @@ export function SupplyOsCommandMap({
     if (activePanel === "tracking") return ["movement", "customs", "factory", "customer"];
     return ["supplier", "factory", "distribution", "customer", "customs", "movement"];
   }, [activePanel]);
+  const visibleMapObjects = useMemo(
+    () => commandMap.objects.filter((object) => visibleObjectKinds.includes(object.kind)),
+    [commandMap.objects, visibleObjectKinds],
+  );
+  const supplierFocusObjects = useMemo(
+    () => commandMap.objects
+      .filter((object) => object.kind === "supplier")
+      .sort((left, right) => (left.priority?.priority ?? 99) - (right.priority?.priority ?? 99))
+      .slice(0, 4),
+    [commandMap.objects],
+  );
+  const supplierFocusRanks = useMemo(
+    () => new globalThis.Map(supplierFocusObjects.map((object, index) => [object.id, index + 1])),
+    [supplierFocusObjects],
+  );
   const routePaths = useMemo(
     () => commandMap.routes
       .flatMap((route) => route.segments.map((segment) => ({ route, segment })))
@@ -299,9 +315,23 @@ export function SupplyOsCommandMap({
   }, [commandMap.objects, commandMap.routes, onSelectObject]);
 
   const fitNetwork = useCallback((animate = true) => {
+    const focusedObjects = activePanel === "suppliers"
+      ? [
+          ...supplierFocusObjects,
+          ...visibleMapObjects.filter((object) => object.kind === "factory").slice(0, 1),
+        ]
+      : activePanel === "materials"
+        ? [
+            ...supplierFocusObjects,
+            ...visibleMapObjects.filter((object) => object.kind !== "supplier"),
+          ]
+        : visibleMapObjects;
+    const visibleInsights = activePanel === "logistics" || activePanel === "scenarios" || activePanel === "tracking"
+      ? commandMap.insights
+      : [];
     const coordinates = [
-      ...commandMap.objects.map((object) => object.coordinates),
-      ...commandMap.insights.map((insight) => insight.coordinates),
+      ...focusedObjects.map((object) => object.coordinates),
+      ...visibleInsights.map((insight) => insight.coordinates),
     ];
     if (!coordinates.length || !mapRef.current) return;
     const west = Math.min(...coordinates.map((point) => point.longitude));
@@ -310,21 +340,38 @@ export function SupplyOsCommandMap({
     const north = Math.max(...coordinates.map((point) => point.latitude));
     const compact = window.innerWidth < 1180;
     if (west === east && south === north) {
-      mapRef.current.easeTo({ center: [west, south], zoom: 6, duration: animate ? 450 : 0 });
+      mapRef.current.easeTo({ center: [west, south], zoom: 5.6, duration: animate ? 450 : 0 });
       return;
     }
     mapRef.current.fitBounds([[west, south], [east, north]], {
       padding: compact
-        ? { top: 88, right: 70, bottom: 84, left: 70 }
-        : { top: 86, right: 410, bottom: 82, left: 300 },
-      maxZoom: 6.4,
+        ? { top: 60, right: 52, bottom: 60, left: 52 }
+        : { top: 68, right: 68, bottom: 68, left: 68 },
+      maxZoom: activePanel === "suppliers" ? 5.8 : 6.4,
       duration: animate ? 450 : 0,
     });
-  }, [commandMap.insights, commandMap.objects]);
+  }, [activePanel, commandMap.insights, supplierFocusObjects, visibleMapObjects]);
 
   useEffect(() => {
     if (mapRef.current?.loaded()) fitNetwork(false);
   }, [fitNetwork]);
+
+  useEffect(() => {
+    const previousId = previousSelectedObjectIdRef.current;
+    previousSelectedObjectIdRef.current = selectedObject?.id;
+    if (
+      !selectedObject
+      || previousId === selectedObject.id
+      || (activePanel !== "materials" && activePanel !== "suppliers")
+      || (selectedObject.kind !== "supplier" && selectedObject.kind !== "factory")
+      || !mapRef.current?.loaded()
+    ) return;
+    mapRef.current.easeTo({
+      center: [selectedObject.coordinates.longitude, selectedObject.coordinates.latitude],
+      zoom: selectedObject.kind === "supplier" ? 5.2 : 4.8,
+      duration: 420,
+    });
+  }, [activePanel, selectedObject]);
 
   useEffect(() => {
     const canvas = document.createElement("canvas");
@@ -504,8 +551,9 @@ export function SupplyOsCommandMap({
           );
         }))}
 
-        {commandMap.objects.filter((object) => visibleObjectKinds.includes(object.kind)).map((object) => {
+        {visibleMapObjects.map((object) => {
           const Icon = objectIcon(object);
+          const supplierFocusRank = supplierFocusRanks.get(object.id);
           const routePath = object.kind === "movement"
             ? routePaths.find(({ route, segment }) => route.edgeId === object.edgeId && (segment.mode === "ocean" || segment.mode === "air"))
               ?? routePaths.find(({ route }) => route.edgeId === object.edgeId)
@@ -528,7 +576,8 @@ export function SupplyOsCommandMap({
                 data-kind={object.kind}
                 data-status={object.status}
                 data-active={object.id === selectedObject?.id}
-                aria-label={`${objectKindLabel(object.kind)}: ${object.label}. ${object.statusLabel}`}
+                data-supplier-focus={supplierFocusRank ? "true" : undefined}
+                aria-label={`${objectKindLabel(object.kind)}: ${object.label}. ${object.statusLabel}${supplierFocusRank ? `. Supplier focus ${supplierFocusRank}` : ""}`}
                 aria-pressed={object.id === selectedObject?.id}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -540,6 +589,7 @@ export function SupplyOsCommandMap({
                 onBlur={() => setHoveredObject((current) => current?.id === object.id ? null : current)}
               >
                 <Icon size={object.kind === "movement" ? 14 : 16} strokeWidth={1.9} />
+                {supplierFocusRank ? <span className={styles.supplierFocusBadge} aria-hidden="true">S{supplierFocusRank}</span> : null}
                 {object.kind === "movement" && object.id === selectedObject?.id ? <span className={styles.routeMarkerText}>Lane detail</span> : null}
                 {object.priority ? (
                   <span className={styles.mapPriorityBadge}>P{object.priority.priority}</span>
@@ -621,13 +671,18 @@ export function SupplyOsCommandMap({
       <Tooltip.Provider delayDuration={250}>
         <Tooltip.Root>
           <Tooltip.Trigger asChild>
-            <button type="button" className={styles.fitMapButton} aria-label="Fit network on map" onClick={() => fitNetwork()}>
+            <button
+              type="button"
+              className={styles.fitMapButton}
+              aria-label={activePanel === "suppliers" ? "Fit supplier network on map" : "Fit network on map"}
+              onClick={() => fitNetwork()}
+            >
               <LocateFixed size={16} strokeWidth={1.8} />
             </button>
           </Tooltip.Trigger>
           <Tooltip.Portal>
             <Tooltip.Content className={styles.mapTooltip} side="left" sideOffset={8}>
-              Fit network
+              {activePanel === "suppliers" ? "Fit supplier network" : "Fit network"}
               <Tooltip.Arrow className={styles.mapTooltipArrow} />
             </Tooltip.Content>
           </Tooltip.Portal>
