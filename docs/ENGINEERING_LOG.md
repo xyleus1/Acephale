@@ -17,6 +17,30 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-08 - Add source-backed supplier and product image research
+
+- Branch: remove-retired-product-bloat
+- Commit: `a9f7d30`
+- Task: Add broad related-image discovery to Supplier Finder for candidate
+  companies, logos, facilities, factories, mines, mills, and requested goods.
+- Files changed: `src/lib/steel-supplier-search.ts`, Supplier Finder UI and CSS,
+  `scripts/steel-supplier-search.test.ts`, and durable docs.
+- Verification: `npm run test:steel-supplier-search`, `npm run
+  check:product-copy`, `npx tsc --noEmit`, `git diff --check`, changed-file
+  U+2014 scan, and the production build passed. The build used a disposable
+  local `DATABASE_URL` only to satisfy Prisma config loading.
+- Failed/skipped checks: The first build attempt stopped before compilation
+  because `DATABASE_URL` was missing. No live web search was run, because the
+  regression test uses provider-shaped fixtures and must not depend on live
+  internet or spend.
+- Caveats: Image results are transient public references and can expire or
+  reject hotlinking. Candidate attachment requires matching the source page to
+  the candidate's official or primary domain. It does not verify ownership or
+  what the image depicts.
+- Follow-up: After deployment, run one operator-reviewed search such as iron
+  ore and confirm returned image URLs render in the production browser. Add
+  persistence only with an explicit media licensing and approval design.
+
 ### 2026-07-29 - Separate liveness failures from queue degradation
 
 - Branch: find-hardware-import-data
