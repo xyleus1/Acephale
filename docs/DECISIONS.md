@@ -38,8 +38,8 @@ Use this log for durable product and engineering decisions. Do not put every imp
   document says it was approved is a change-control failure, not a product
   requirement.
 - Consequences: `scripts/retired-product-boundary.test.ts`, the product-copy
-  policy, the production build gate, and the Product boundary GitHub workflow
-  must remain in place. Historical Prisma migrations remain unchanged, while
+  policy, and the production build gate must remain in place. Historical
+  Prisma migrations remain unchanged, while
   the forward retirement migration removes the 26 retired tables and 18
   trigger functions without `CASCADE`. Product restoration cannot be hidden
   inside a refactor, visual cleanup, or conflict-resolution PR.

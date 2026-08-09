@@ -13,9 +13,8 @@
 - Added an explicit founder product-direction rule to `AGENTS.md` and a durable
   decision that supersedes the older entries used to justify restoring the
   retired prototype.
-- Added a pull-request and `main` GitHub check that requires the retirement
-  boundary and product-copy enforcement files, then runs both checks against
-  the proposed tree.
+- Extended the existing production build gate so every build requires the
+  retirement boundary and product-copy checks to pass.
 - No new product behavior, database model, dependency, tenant scope, sending,
   or approval path was introduced beyond the already approved PR #77 change.
 - Fresh verification passed: product copy, retirement boundary, Supplier

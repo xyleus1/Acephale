@@ -3176,13 +3176,13 @@ Use this file for chronological implementation notes that future agents should s
   checkout.
 - Integration: Reverted PR #81's single revert commit. The resulting tree
   matched merge commit `a91c9ec` exactly before adding the product-direction
-  lock and GitHub enforcement.
+  lock and build enforcement.
 - Product direction: Added an explicit founder rule to `AGENTS.md` and an
   accepted decision superseding every older decision that promoted the retired
   prototype as an active product.
-- Enforcement: Added `.github/workflows/product-boundary.yml`. Pull requests
-  and pushes to `main` must retain and pass the retirement boundary and product
-  copy checks.
+- Enforcement: The existing production build now requires both the retirement
+  boundary and product-copy checks. A dedicated GitHub workflow was omitted
+  because the repository OAuth token cannot modify workflow files.
 - Safety: No uncommitted file in the primary checkout was staged, changed, or
   deleted. The existing forward migration remains non-cascading and the five
   historical migrations remain unchanged.
