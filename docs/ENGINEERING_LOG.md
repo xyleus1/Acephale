@@ -3972,6 +3972,10 @@ Use this file for chronological implementation notes that future agents should s
   CRM, RFQ, Outreach, Intel, or other retired product navigation.
 - Promoted the existing MapLibre command map to the second primary destination
   and added direct map shortcuts in both the rail and command header.
+- Added an explicitly illustrative Atlas Robotics network fallback for clean
+  browsers so the restored map does not open to a dead end. Saved browser cases
+  still win and the fallback is not written as shared office truth.
+- Removed broken New Customer links that pointed at a retired redirect route.
 - Added Motion for React for navigation, panel, modal, hover, and tap feedback,
   with user reduced-motion behavior enabled.
 - Responsive behavior keeps the labeled rail on desktop, an icon rail on

@@ -1813,6 +1813,15 @@
   font-weight: 650;
 }
 
+.commandMetrics .commandFixtureBadge {
+  margin-right: 5px;
+  border: 1px solid #c7a66a;
+  color: #745421;
+  background: #fff8e8;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
 .commandActions {
   display: flex;
   align-items: center;

@@ -9,6 +9,9 @@
 - Promoted the existing MapLibre supplier, factory, customs, and delivery map
   to the second primary destination, with a dedicated sidebar status card and
   command-header shortcut.
+- A clean browser now opens a deterministic, explicitly labeled Atlas Robotics
+  network fixture instead of a dead empty state. Saved customer cases still
+  take precedence and the fixture is not persisted as canonical office data.
 - Added Motion for React for active navigation, panel transitions, overlay
   entry and exit, and bounded hover and tap feedback. Motion honors the user's
   reduced-motion setting.
@@ -92,6 +95,8 @@ supply-os-sidebar-map, targeting main
   drawers for those records remain a follow-up.
 - The existing network map still uses browser-local case compatibility data;
   this UI change does not pretend that those records are shared office truth.
+- The retired `/dashboard/supply-os/new` builder link was removed from the map
+  surface because the route now redirects into the single workspace.
 
 ## Prior Update
 

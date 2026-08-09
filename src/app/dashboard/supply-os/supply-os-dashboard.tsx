@@ -12,7 +12,6 @@ import {
   ListChecks,
   MapPin,
   Phone,
-  Plus,
   ShieldAlert,
   Truck,
   Warehouse,
@@ -26,6 +25,8 @@ import {
   Tooltip as ChartTooltip,
 } from "recharts";
 import {
+  generateSupplyCase,
+  SAMPLE_SUPPLY_CASE_PROMPT,
   upsertSupplyCase,
   type SupplyCaseDashboard,
   type SupplyEngagementScope,
@@ -231,6 +232,12 @@ function workspaceForObject(
   return model.workspaces.find((workspace) => workspace.id === object.workstreamId) ?? null;
 }
 
+const ILLUSTRATIVE_NETWORK_DATE = new Date("2026-08-08T12:00:00.000Z");
+
+function illustrativeNetworkCase() {
+  return generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, ILLUSTRATIVE_NETWORK_DATE, "full_operation");
+}
+
 export function SupplyOsDashboardWorkspace({
   storageScope,
   presentationMode = false,
@@ -246,16 +253,18 @@ export function SupplyOsDashboardWorkspace({
   useEffect(() => {
     function hydrate() {
       const stored = loadSupplyCases(storageScope);
-      setSavedCases(stored.cases);
-      setActiveCase(stored.selected);
+      const cases = stored.cases.length ? stored.cases : [illustrativeNetworkCase()];
+      setSavedCases(cases);
+      setActiveCase(stored.selected ?? cases[0]);
       setStorageReady(true);
     }
 
     function handleStorage(event: StorageEvent) {
       if (event.key !== keys.cases && event.key !== keys.selected) return;
       const stored = loadSupplyCases(storageScope);
-      setSavedCases(stored.cases);
-      setActiveCase(stored.selected);
+      const cases = stored.cases.length ? stored.cases : [illustrativeNetworkCase()];
+      setSavedCases(cases);
+      setActiveCase(stored.selected ?? cases[0]);
     }
 
     removeLegacySupplyCaseStorage();
@@ -309,13 +318,7 @@ export function SupplyOsDashboardWorkspace({
           onOpenDashboard={openDashboard}
           onScopeChange={(scope) => updateDashboardScope(currentCase, scope)}
         />
-      ) : (
-        <CommandState
-          title="No customer network"
-          detail="Build a customer case to map suppliers, movements, customs, and delivery points."
-          action={<Link className={styles.commandPrimaryButton} href="/dashboard/supply-os/new"><Plus size={15} /> New customer</Link>}
-        />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -372,6 +375,7 @@ function CaseCommandCenter({
   const supplierCount = commandMap.objects.filter((object) => object.kind === "supplier").length;
   const customsCount = commandMap.objects.filter((object) => object.kind === "customs").length;
   const logoUrl = companyLogoUrl(dashboard);
+  const isIllustrativeNetwork = dashboard.sourcePrompt === SAMPLE_SUPPLY_CASE_PROMPT && !dashboard.research;
 
   function selectScope(scope: SupplyEngagementScope) {
     if (scope === selectedScope) return;
@@ -410,6 +414,7 @@ function CaseCommandCenter({
         </div>
 
         <div className={styles.commandMetrics} aria-label="Network coverage">
+          {isIllustrativeNetwork ? <span className={styles.commandFixtureBadge}>Illustrative network</span> : null}
           <span><strong>{supplierCount}</strong> suppliers</span>
           <span><strong>{commandMap.routes.length}</strong> lanes</span>
           <span><strong>{customsCount}</strong> customs</span>
@@ -469,9 +474,6 @@ function CaseCommandCenter({
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
 
-          {!presentationMode ? (
-            <Link className={styles.commandPrimaryButton} href="/dashboard/supply-os/new"><Plus size={15} /> New customer</Link>
-          ) : null}
         </div>
       </header>
 
