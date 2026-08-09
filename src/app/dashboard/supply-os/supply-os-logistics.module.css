@@ -344,21 +344,32 @@
   height: 100%;
 }
 
-.commandMap :global(.maplibregl-ctrl-bottom-left) {
-  left: 0;
-  bottom: 52px;
-}
-
-.commandMap :global(.maplibregl-ctrl-bottom-right) {
-  right: 0;
-}
-
-.commandMap :global(.maplibregl-ctrl-attrib) {
-  margin: 0 10px 10px 0;
-  border-radius: 7px;
+.mapCredits {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   color: var(--ink-muted);
-  background: rgb(255 255 255 / 92%);
-  font-size: 10px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  line-height: 1;
+  text-shadow:
+    0 1px 0 rgb(255 255 255 / 95%),
+    0 0 5px rgb(255 255 255 / 95%);
+}
+
+.mapCredits a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.mapCredits a:hover,
+.mapCredits a:focus-visible {
+  color: var(--ink);
+  box-shadow: 0 1px 0 currentcolor;
 }
 
 .commandMap :global(.maplibregl-popup-content) {
@@ -1746,11 +1757,6 @@
   .inspectorWorkspaceLink {
     min-height: 52px;
     margin: 0 18px 18px;
-  }
-
-  .commandMap :global(.maplibregl-ctrl-bottom-right),
-  .commandMap :global(.maplibregl-ctrl-bottom-left) {
-    display: none;
   }
 
   .commandMapFooter {
