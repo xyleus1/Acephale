@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ResponsiveContainer,
   Sankey,
@@ -280,6 +280,193 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
     defaultInspector: "object",
   },
 };
+
+type OpportunityPlayId = "supply" | "logistics" | "production" | "network";
+
+type OpportunityPlay = {
+  id: OpportunityPlayId;
+  label: string;
+  scope: string;
+  icon: LucideIcon;
+  action: ReturnType<typeof buildSupplyOptimizationModel>["actions"][number];
+};
+
+const OPPORTUNITY_PLAY_CONFIG: Array<{
+  id: OpportunityPlayId;
+  label: string;
+  scope: string;
+  icon: LucideIcon;
+  matches: (action: ReturnType<typeof buildSupplyOptimizationModel>["actions"][number]) => boolean;
+}> = [
+  {
+    id: "supply",
+    label: "Supply",
+    scope: "Sources, terms, and availability",
+    icon: Boxes,
+    matches: (action) => action.workstreamId === "procurement" || action.workstreamId === "supplier_outreach",
+  },
+  {
+    id: "logistics",
+    label: "Logistics",
+    scope: "Modes, lanes, customs, and timing",
+    icon: Truck,
+    matches: (action) => action.workstreamId === "shipment_planning" || action.workstreamId === "customs",
+  },
+  {
+    id: "production",
+    label: "Production",
+    scope: "Build continuity, capacity, and release",
+    icon: Factory,
+    matches: (action) => /production|build|inventory|release|capacity|shortage|kit|line stop/i.test(
+      `${action.title} ${action.currentCondition} ${action.recommendation} ${action.measure}`,
+    ),
+  },
+  {
+    id: "network",
+    label: "Network",
+    scope: "Facilities, handoffs, and customer reach",
+    icon: MapPin,
+    matches: (action) => action.workstreamId === "fulfillment",
+  },
+];
+
+function productionCopy(value: string) {
+  return value
+    .replace(/\bsubassemblies\b/gi, "integrated modules")
+    .replace(/\bsubassembly\b/gi, "integrated module")
+    .replace(/\bassemblies\b/gi, "production units")
+    .replace(/\bassembly\b/gi, "production")
+    .replace(/\bassembled\b/gi, "prebuilt")
+    .replace(/\bassemble\b/gi, "prepare");
+}
+
+function buildOpportunityPlays(model: ReturnType<typeof buildSupplyOptimizationModel>): OpportunityPlay[] {
+  const usedActionIds = new Set<string>();
+  return OPPORTUNITY_PLAY_CONFIG.flatMap((config) => {
+    const action = model.actions.find((candidate) => !usedActionIds.has(candidate.id) && config.matches(candidate))
+      ?? model.actions.find((candidate) => !usedActionIds.has(candidate.id))
+      ?? model.actions[0];
+    if (!action) return [];
+    usedActionIds.add(action.id);
+    return [{ ...config, action }];
+  });
+}
+
+function OpportunityScenarioWorkbench({
+  model,
+  company,
+}: {
+  model: ReturnType<typeof buildSupplyOptimizationModel>;
+  company: string;
+}) {
+  const plays = useMemo(() => buildOpportunityPlays(model), [model]);
+  const [selectedPlayId, setSelectedPlayId] = useState<OpportunityPlayId>(plays[0]?.id ?? "supply");
+  const [playedPlayId, setPlayedPlayId] = useState<OpportunityPlayId>(plays[0]?.id ?? "supply");
+  const [runCount, setRunCount] = useState(0);
+  const reduceMotion = useReducedMotion();
+  const outputRef = useRef<HTMLElement>(null);
+  const selectedPlay = plays.find((play) => play.id === selectedPlayId) ?? plays[0];
+  const playedPlay = plays.find((play) => play.id === playedPlayId) ?? selectedPlay;
+
+  useEffect(() => {
+    if (runCount === 0) return;
+    outputRef.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [reduceMotion, runCount]);
+
+  if (!selectedPlay || !playedPlay) return null;
+
+  return (
+    <section className={styles.scenarioWorkbench} aria-labelledby="opportunity-workbench-title">
+      <header className={styles.scenarioWorkbenchHeader}>
+        <span>
+          <h2 id="opportunity-workbench-title">Explore opportunities</h2>
+          <p>Supply, logistics, production, and network scenarios</p>
+        </span>
+        <small>Modeled from {company}</small>
+      </header>
+
+      <div className={styles.scenarioWorkbenchBody}>
+        <nav className={styles.scenarioPlayList} aria-label="Opportunity scenarios">
+          <header><span>Scenario plays</span><small>{plays.length}</small></header>
+          {plays.map((play) => {
+            const Icon = play.icon;
+            const selected = play.id === selectedPlay.id;
+            return (
+              <button
+                key={play.id}
+                type="button"
+                aria-pressed={selected}
+                data-active={selected}
+                onClick={() => setSelectedPlayId(play.id)}
+              >
+                <span className={styles.scenarioPlayIcon}><Icon size={17} strokeWidth={1.8} /></span>
+                <span><strong>{play.label}</strong><small>{play.scope}</small></span>
+                <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            );
+          })}
+        </nav>
+
+        <section className={styles.scenarioDraft} aria-label={`${selectedPlay.label} scenario inputs`}>
+          <header><small>{selectedPlay.label} play</small><strong>{productionCopy(selectedPlay.action.title)}</strong></header>
+          <dl>
+            <div><dt>Current condition</dt><dd>{productionCopy(selectedPlay.action.currentCondition)}</dd></div>
+            <div><dt>Change to test</dt><dd>{productionCopy(selectedPlay.action.recommendation)}</dd></div>
+            <div><dt>Inputs required</dt><dd>{productionCopy(selectedPlay.action.requiredInput)}</dd></div>
+          </dl>
+          <button
+            type="button"
+            className={styles.scenarioRunButton}
+            onClick={() => {
+              setPlayedPlayId(selectedPlay.id);
+              setRunCount((count) => count + 1);
+            }}
+          >
+            Run scenario <ArrowRight size={15} />
+          </button>
+        </section>
+
+        <motion.section
+          ref={outputRef}
+          key={`${playedPlay.id}:${runCount}`}
+          className={styles.scenarioOutput}
+          aria-label="Scenario output"
+          aria-live="polite"
+          initial={reduceMotion ? false : { opacity: 0.82, x: 5 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <header><span>Scenario output</span><small>{playedPlay.label}</small></header>
+          <div className={styles.scenarioComparison}>
+            <article>
+              <small>Current</small>
+              <p>{productionCopy(playedPlay.action.currentCondition)}</p>
+            </article>
+            <ArrowRight size={18} aria-hidden="true" />
+            <article data-scenario="true">
+              <small>With change</small>
+              <p>{productionCopy(playedPlay.action.recommendation)}</p>
+            </article>
+          </div>
+          <dl className={styles.scenarioOutcomeGrid}>
+            <div><dt>Measure</dt><dd>{productionCopy(playedPlay.action.measure)}</dd></div>
+            <div><dt>Decision</dt><dd>{productionCopy(playedPlay.action.decision)}</dd></div>
+            <div><dt>Evidence state</dt><dd>Company model plus current inputs. Missing facts stay open.</dd></div>
+            <div><dt>Approval</dt><dd>Human decision required before any external action.</dd></div>
+          </dl>
+        </motion.section>
+      </div>
+
+      <footer className={styles.scenarioBoundary}>
+        <ShieldAlert size={15} />
+        <p>Planning output only. No supplier, booking, filing, or spend action is approved.</p>
+      </footer>
+    </section>
+  );
+}
 
 function illustrativeNetworkCase() {
   return generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, ILLUSTRATIVE_NETWORK_DATE, "full_operation");
@@ -549,7 +736,9 @@ function CaseCommandCenter({
 
       {scopeError ? <div className={styles.commandError} role="alert">{scopeError}</div> : null}
 
-      <div className={styles.commandMapStage}>
+      {activePanel === "scenarios" ? (
+        <OpportunityScenarioWorkbench model={model} company={dashboardName(dashboard)} />
+      ) : <div className={styles.commandMapStage}>
         <section className={styles.mapPanel} aria-label={`${domain.railTitle} map`}>
           <SupplyOsCommandMap
             commandMap={commandMap}
@@ -642,7 +831,7 @@ function CaseCommandCenter({
           />
         ) : null}
 
-      </div>
+      </div>}
     </article>
   );
 }
