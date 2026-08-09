@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ResponsiveContainer,
@@ -432,6 +433,7 @@ function CaseCommandCenter({
   const customsCount = commandMap.objects.filter((object) => object.kind === "customs").length;
   const logoUrl = companyLogoUrl(dashboard);
   const isIllustrativeNetwork = dashboard.sourcePrompt === SAMPLE_SUPPLY_CASE_PROMPT && !dashboard.research;
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     setInspectorMode(domain.defaultInspector);
@@ -565,7 +567,14 @@ function CaseCommandCenter({
           </footer>
         </section>
 
-        <aside className={styles.routeRail} aria-label="Operating network objects">
+        <motion.aside
+          key={activePanel}
+          className={styles.routeRail}
+          aria-label="Operating network objects"
+          initial={reduceMotion ? false : { opacity: 0.82, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+        >
           <header>
             <span>{domain.railTitle}</span>
             <small>{domainObjects.length} objects</small>
@@ -617,7 +626,7 @@ function CaseCommandCenter({
               );
             })}
           </div>
-        </aside>
+        </motion.aside>
 
         {selectedObject ? (
           <CommandInspector
@@ -670,13 +679,21 @@ function CommandInspector({
     ? model.workspaces.find((candidate) => candidate.id === selectedAction.workstreamId) ?? null
     : null;
   const openChecks = object.checks.filter((check) => check.status !== "ready");
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     setSelectedActionId(model.actions[0]?.id ?? "");
   }, [model]);
 
   return (
-    <aside className={styles.commandInspector} aria-live="polite">
+    <motion.aside
+      key={`${activePanel}:${object.id}:${mode}`}
+      className={styles.commandInspector}
+      aria-live="polite"
+      initial={reduceMotion ? false : { opacity: 0.84, x: 4 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+    >
       <Tabs.Root
         className={styles.inspectorTabsRoot}
         value={mode}
@@ -836,6 +853,6 @@ function CommandInspector({
           ) : null}
         </Tabs.Content>
       </Tabs.Root>
-    </aside>
+    </motion.aside>
   );
 }

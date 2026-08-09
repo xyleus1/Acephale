@@ -3257,6 +3257,14 @@
   background: var(--panel);
   cursor: pointer;
   text-align: left;
+  transition:
+    color 140ms ease-out,
+    background-color 140ms ease-out,
+    transform 140ms ease-out;
+}
+
+.routeRailList > button:active {
+  transform: scale(0.995);
 }
 
 .routeRailList > button.routeRailLeg {
@@ -3400,6 +3408,9 @@
   font-size: 8px;
   font-weight: 650;
   text-overflow: ellipsis;
+  transition:
+    color 140ms ease-out,
+    background-color 140ms ease-out;
   white-space: nowrap;
 }
 
