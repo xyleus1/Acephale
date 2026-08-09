@@ -79,7 +79,7 @@
 }
 
 .createRow input {
-  min-height: 44px;
+  min-height: 44px !important;
   padding: 0 11px;
   border: 1px solid #c7ceca;
   border-radius: 10px;
