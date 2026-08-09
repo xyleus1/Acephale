@@ -313,9 +313,9 @@
   grid-template-areas:
     "map inspector"
     "context inspector";
-  gap: 18px;
+  gap: 14px;
   overflow: hidden;
-  padding: 24px;
+  padding: 18px;
   background: #edf2ef;
 }
 
@@ -638,6 +638,13 @@
 .scenarioBoundary p {
   margin: 0;
   font-size: 11px;
+}
+
+@media (min-width: 1281px) {
+  .commandMapStage {
+    grid-template-columns: minmax(0, 2.15fr) minmax(340px, 0.78fr);
+    grid-template-rows: minmax(0, 3.1fr) minmax(168px, 0.9fr);
+  }
 }
 
 .mapPanel {
@@ -1575,6 +1582,37 @@
   background: var(--ink);
 }
 
+.mapMarker[data-supplier-focus="true"] {
+  border-color: var(--navy);
+  box-shadow:
+    0 0 0 4px rgb(41 72 92 / 10%),
+    0 8px 22px rgb(27 29 28 / 13%);
+}
+
+.mapMarker[data-supplier-focus="true"][data-active="true"] {
+  box-shadow:
+    0 0 0 5px rgb(41 72 92 / 16%),
+    0 8px 22px rgb(27 29 28 / 13%);
+}
+
+.supplierFocusBadge {
+  min-width: 24px;
+  height: 20px;
+  position: absolute;
+  top: -11px;
+  left: -11px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border: 1px solid var(--navy);
+  border-radius: 7px;
+  color: var(--panel);
+  background: var(--navy);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  font-weight: 700;
+}
+
 .markerStatusDot {
   width: 8px;
   height: 8px;
@@ -1781,8 +1819,7 @@
   pointer-events: none;
 }
 
-.routeGeometry,
-.routePathSegment {
+.routeGeometry {
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1802,10 +1839,6 @@
 .routeGeometryLine {
   stroke: var(--navy);
   stroke-width: 3;
-}
-
-.routePathSegment {
-  height: 24px;
 }
 
 .fitMapButton {
@@ -1877,7 +1910,7 @@
 
   .commandMapStage {
     grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.9fr);
-    grid-template-rows: minmax(0, 2.45fr) minmax(176px, 1fr);
+    grid-template-rows: minmax(0, 3.05fr) minmax(160px, 0.82fr);
     gap: 14px;
     padding: 18px;
   }

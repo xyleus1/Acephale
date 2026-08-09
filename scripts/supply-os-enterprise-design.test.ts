@@ -102,8 +102,7 @@ assert.match(commandMap, /carto-raster/, "the live map needs a low-dependency ra
 assert.match(commandMap, /id=\{ROUTE_HIT_LAYER_ID\}/, "route geometry must expose a dedicated hit layer");
 assert.match(commandMap, /"line-width": 24/, "route geometry needs a forgiving pointer hit target");
 assert.match(commandMap, /canvas\.style\.cursor = routeId \? "pointer" : ""/, "clickable routes must advertise pointer interaction");
-assert.match(styles, /\.routePathSegment \{[^}]*height: 24px/s, "curved route segments need a forgiving direct hit target");
-assert.match(styles, /\.routePathSegment \{[^}]*cursor: pointer/s, "curved route segments must advertise pointer interaction");
+assert.equal(commandMap.includes("routePathSegment"), false, "routes must not create redundant DOM-button hit targets");
 assert.equal(commandMap.includes("WEBGL_lose_context"), false, "capability detection must not explicitly discard a browser graphics context");
 assert.match(dashboard, /alignOffset=\{3[0-9]{2}\}/, "the coverage menu must open clear of the right-side inspector");
 assert.match(dashboard, /avoidCollisions=\{false\}/, "coverage-menu positioning must not be pulled back over the inspector");

@@ -116,7 +116,8 @@ assert.match(commandMapUi, /onMouseEnter=\{\(\) => setHoveredObject\(object\)\}/
 assert.match(commandMapUi, /Click for full operating detail/, "hover cards must lead into the selected object inspector");
 assert.match(commandMapUi, /getContext\("webgl2"/, "the real map must fail closed when WebGL 2 is unavailable");
 assert.match(commandMapUi, /Map renderer unavailable/, "map failure must preserve the rest of the customer command center");
-assert.match(commandMapUi, /routePathSegment/, "curved transport paths must expose direct map hit targets");
+assert.match(commandMapUi, /id=\{ROUTE_HIT_LAYER_ID\}/, "curved transport paths must expose direct map-layer hit targets");
+assert.equal(commandMapUi.includes("routePathSegment"), false, "transport paths must not create visible bottom-row hit buttons");
 assert.match(commandMapUi, /selectRoute\(route\.id\)/, "clicking route geometry must open the matching transport leg");
 assert.match(dashboard, /aria-pressed=\{object\.id === selectedObject\?\.id\}/, "network objects must expose selection state");
 assert.match(dashboard, /<RateEnvelopeChart estimate=\{object\.rateEstimate\}/, "selected road legs must show a planning-range chart");
