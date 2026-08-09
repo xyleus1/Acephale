@@ -30,40 +30,10 @@
 .operatingSidebar {
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   padding: 12px 10px;
   border-right: 1px solid #243641;
   color: #dce6ea;
   background: #14242d;
-}
-
-.sidebarHeading {
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 8px 12px;
-  border-bottom: 1px solid rgba(210, 227, 234, 0.14);
-}
-
-.sidebarMark {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(220, 230, 234, 0.28);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.sidebarHeading strong {
-  display: block;
-}
-
-.sidebarHeading strong {
-  font-size: 14px;
-  letter-spacing: -0.01em;
 }
 
 .shell *,
@@ -210,12 +180,12 @@
 .panelNav button {
   position: relative;
   min-width: 0;
-  min-height: 54px;
+  min-height: 44px;
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 12px;
+  grid-template-columns: minmax(0, 1fr) 12px;
   align-items: center;
   gap: 8px;
-  padding: 7px 9px;
+  padding: 7px 12px;
   border: 0;
   color: #afc0c7;
   background: transparent;
@@ -242,22 +212,6 @@
   left: -1px;
   width: 2px;
   background: #91becf;
-}
-
-.navIcon {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(204, 226, 235, 0.12);
-  color: #9fb8c3;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.panelNav button[data-active="true"] .navIcon {
-  border-color: rgba(145, 190, 207, 0.42);
-  color: #dff3fa;
-  background: rgba(145, 190, 207, 0.12);
 }
 
 .navCopy {
@@ -641,35 +595,16 @@
 
 @media (max-width: 1020px) {
   .shell {
-    grid-template-columns: 76px minmax(0, 1fr);
+    grid-template-columns: 150px minmax(0, 1fr);
   }
 
   .operatingSidebar {
     padding: 10px 7px;
   }
 
-  .sidebarHeading {
-    justify-content: center;
-    padding: 3px 0 12px;
-  }
-
-  .sidebarHeading > strong,
-  .navCopy,
-  .liveMapDot {
-    display: none;
-  }
-
   .panelNav button {
     min-height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 6px;
-  }
-
-  .navIcon {
-    width: 34px;
-    height: 34px;
+    padding: 6px 10px;
   }
 
   .panelIntro {
@@ -709,10 +644,6 @@
     border-bottom: 1px solid #243641;
   }
 
-  .sidebarHeading {
-    display: none;
-  }
-
   .commandHeader {
     padding: 9px 13px;
   }
@@ -739,13 +670,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 5px;
+    padding: 5px 7px;
     text-align: center;
-  }
-
-  .navIcon {
-    width: 32px;
-    height: 32px;
   }
 
   .activeRail {

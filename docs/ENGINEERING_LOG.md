@@ -4007,3 +4007,19 @@ Use this file for chronological implementation notes that future agents should s
   boundaries remain visible. No behavior, schema, dependency, or external
   action changed.
 - Follow-up: none.
+
+### 2026-08-08 - Remove repeated product labels and mismatched rail icons
+
+- Branch: supply-os-copy-cleanup, targeting main
+- Commit: see git log
+- Task: Remove the product suffix from the authenticated navbar, remove the
+  repeated workspace heading, and make the five primary sections text-only.
+- Files changed: dashboard layout, operating shell, scoped responsive styles,
+  sidebar and single-surface regression checks, handoff, and engineering log.
+- Verification: single-surface, sidebar-map, shell-routing, operations UI,
+  product-copy, TypeScript, production build, and diff hygiene checks pass.
+- Failed/skipped checks: the in-app browser had no attached tab, so no
+  authenticated screenshot or click-through was available.
+- Caveats: internal route names and component identifiers remain unchanged.
+  No product behavior, schema, dependency, approval rule, or external action
+  changed.

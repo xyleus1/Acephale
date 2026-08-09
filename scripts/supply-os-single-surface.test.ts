@@ -16,6 +16,7 @@ const marketPage = readFileSync(resolve(root, "src/app/dashboard/market/page.tsx
 assert.doesNotMatch(dashboardLayout, /<aside\b|className="sidebar"|<NavLink\b/);
 assert.match(dashboardLayout, /app-shell app-shell-single-surface/);
 assert.match(dashboardLayout, /href="\/dashboard\/supply-os" className="topbar-brand"/);
+assert.doesNotMatch(dashboardLayout, /Supply OS/, "the dashboard navbar must use the Derya brand without a product suffix");
 assert.doesNotMatch(dashboardLayout, />Deal Desk<|>Incoming RFQs<|>CRM<|>Outreach<|>Intel<|>Supplier Finder</);
 assert.doesNotMatch(dashboardLayout, /CommandPalette|AgentChatWidget/);
 assert.match(dashboardLayout, /href="\/dashboard\/customer-portal"/);
