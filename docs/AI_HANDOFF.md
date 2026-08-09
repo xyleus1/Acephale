@@ -2,6 +2,40 @@
 
 ## Latest Update
 
+### Derya identity and final Supply OS visual holdovers corrected
+
+- Replaced the invented Derya pictogram with the official circular Derya mark
+  from `https://www.usederya.com/derya-logo.svg` in the shared logo component
+  and generated app icon. The internal shell, sign-in page, customer portal,
+  and browser icon now use the same identity source.
+- Preserved the approved airy Supply OS treatment while retaining Derya site
+  identity on tablet and mobile. Compact layouts show the mark beside the full
+  navigation instead of hiding the brand.
+- Removed the repeated `Companies` heading and the non-operational `Operating
+  workspaces` eyebrow. The company directory now shows one page title and a
+  factual company count.
+- Raised refresh, create, cancel, and company-name controls to a verified 44px
+  minimum. The mobile creation form no longer inherits the global 42px input
+  rule.
+- Authenticated browser review covered the company directory, open company
+  form, Logistics workspace, sign-in page, and customer portal. Logistics was
+  rechecked at 1440px, 768px, and 390px with zero legacy workspace classes,
+  zero undersized interactive targets, and zero page overflow.
+- No data, schema, tenant boundary, approval rule, dependency, freight logic,
+  or external action changed.
+
+Verification:
+
+- `npm run test:supply-os-company-navigation`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-single-surface`
+- `npm run test:supply-os-enterprise-design`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- Production build with a disposable PostgreSQL URL
+- `git diff --check`
+- Changed-file U+2014 scan
+
 ### Logistics state changes now use restrained motion
 
 - Added 150ms opacity and position transitions when the active Logistics domain,

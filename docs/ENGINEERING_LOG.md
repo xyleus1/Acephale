@@ -4151,3 +4151,28 @@ Use this file for chronological implementation notes that future agents should s
   pass.
 - Caveats: motion is limited to 150ms opacity and 3 to 4px position changes.
   Reduced-motion users receive no entry animation.
+
+### 2026-08-09 - Replace Derya mark and remove final Supply OS holdovers
+
+- Branch: main
+- Commits: `de42eeb`, `603fb21`, `42545a2`, `a67f3e0`, and `a99362f`
+- Task: Replace the invented Derya pictogram with the official identity mark,
+  then iteratively inspect and correct every remaining visual regression on the
+  Supply OS company and Logistics surfaces.
+- Files changed: shared Derya logo component, app icon, Supply OS operating
+  shell responsive rules, company directory component and styles, handoff, and
+  this engineering log.
+- Verification: authenticated browser review of the company directory, open
+  company form, Logistics workspace, sign-in page, and customer portal.
+  Logistics passes at 1440px, 768px, and 390px with zero legacy workspace
+  classes, zero interactive targets below 44px, and zero horizontal overflow.
+  Product-copy, Supply OS company-navigation, sidebar-map, single-surface, and
+  enterprise-design contracts, TypeScript, production build, diff whitespace,
+  and changed-file U+2014 checks pass.
+- Failed/skipped checks: the headless browser does not expose WebGL 2, so the
+  explicit map fallback was reviewed instead of the live renderer.
+- Caveats: no data, schema, domain behavior, tenant scope, approval rule,
+  dependency, or external action changed.
+- Follow-up: recheck the public sign-in surface after the production deployment
+  completes. Authenticated production Supply OS still requires a valid
+  production session.
