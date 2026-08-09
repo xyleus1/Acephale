@@ -558,13 +558,6 @@ function CaseCommandCenter({
             activePanel={activePanel}
           />
 
-          <footer className={styles.commandMapFooter}>
-            <div className={styles.commandLegend} aria-label="Map legend">
-              <span><i data-kind="node" /> Operating point</span>
-              <span><i data-kind="route" /> Planned route</span>
-              {commandMap.insights.length ? <span><i data-kind="insight" /> Sourced signal</span> : null}
-            </div>
-          </footer>
         </section>
 
         <motion.aside
@@ -577,7 +570,15 @@ function CaseCommandCenter({
         >
           <header>
             <span>{domain.railTitle}</span>
-            <small>{domainObjects.length} objects</small>
+            <div className={styles.routeRailMeta}>
+              <small>{domainObjects.length} objects</small>
+              <small className={styles.mapDataSources} aria-label="Map data attribution">
+                Map data
+                {" "}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OSM</a>
+                {" · "}<a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
+                {" · "}<a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OFM</a>
+              </small>
+            </div>
           </header>
           <div className={styles.routeRailList}>
             <div className={styles.routeRailGroupLabel}>Operating points</div>

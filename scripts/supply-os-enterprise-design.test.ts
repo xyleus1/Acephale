@@ -25,7 +25,7 @@ for (const required of [
   ".commandInspector",
   ".inspectorContacts",
   ".inspectorChecks",
-  ".commandMapFooter",
+  ".mapDataSources",
   "Provider contacts",
   "Supplier candidates",
   "Open checks",
@@ -151,7 +151,7 @@ assert.equal(mapStage.includes("overflow: hidden"), true, "map stage must not cr
 assert.match(mapStage, /grid-template-areas:\s*"map inspector"\s*"context inspector"/, "desktop must use the fixed map grid");
 assert.match(styles, /\.routeRail \{[\s\S]*grid-area: context/, "network rail must occupy the context row");
 assert.match(styles, /\.commandInspector \{[\s\S]*grid-area: inspector/, "inspector must occupy its own grid column");
-assert.match(styles, /\.commandMapFooter[\s\S]*position: absolute/, "status strip must stay inside the map viewport");
+assert.equal(dashboard.includes("commandMapFooter"), false, "redundant legend chrome must stay out of the map viewport");
 
 const compactStyles = styles.slice(styles.indexOf("@media (max-width: 1280px)"), styles.indexOf("@media (max-width: 1040px)"));
 for (const rule of [".commandMapStage", ".routeRailList"]) {
@@ -164,7 +164,7 @@ for (const rule of [".commandMapStage", ".routeRail", ".routeRailList"]) {
 }
 
 const mobileStyles = styles.slice(styles.lastIndexOf("@media (max-width: 720px)"));
-for (const rule of [".commandHeader", ".commandMapStage", ".routeRail", ".commandInspector", ".commandMapFooter"]) {
+for (const rule of [".commandHeader", ".commandMapStage", ".routeRail", ".commandInspector"]) {
   assert.equal(mobileStyles.includes(rule), true, `mobile command layout is missing: ${rule}`);
 }
 

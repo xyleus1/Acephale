@@ -240,9 +240,6 @@ export function SupplyOsCommandMap({
   const [basemapState, setBasemapState] = useState<"loading" | "ready" | "retrying" | "failed">("loading");
   const [mapCapability, setMapCapability] = useState<"checking" | "ready" | "unavailable">("checking");
   const basemap = BASEMAPS[basemapIndex] ?? BASEMAPS[0];
-  const basemapCredit = basemap.id === "openfreemap-positron"
-    ? { label: "OpenFreeMap", url: "https://openfreemap.org/" }
-    : { label: "CARTO", url: "https://carto.com/attributions" };
   const visibleObjectKinds = useMemo<SupplyCommandObjectKind[]>(() => {
     if (activePanel === "materials") return ["supplier", "factory", "distribution"];
     if (activePanel === "suppliers") return ["supplier", "factory"];
@@ -605,12 +602,6 @@ export function SupplyOsCommandMap({
         ) : null}
 
       </Map>
-
-      <div className={styles.mapCredits} aria-label="Map attribution">
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a>
-        <span>·</span>
-        <a href={basemapCredit.url} target="_blank" rel="noreferrer">{basemapCredit.label}</a>
-      </div>
 
       <svg className={styles.routeOverlay} aria-hidden="true">
         {projectedRoutePaths.map(({ route, segment, path }) => (
