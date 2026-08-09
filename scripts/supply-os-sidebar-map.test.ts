@@ -34,9 +34,11 @@ assert.doesNotMatch(shell, /Network online|Open the live map|Suppliers to factor
 assert.doesNotMatch(shell, /Supply OS/, "the dashboard must not repeat the product name");
 assert.doesNotMatch(shell, /navIcon|panel\.icon|LucideIcon|ActivePanelIcon/, "the workspace rail must stay text-only");
 assert.doesNotMatch(shellStyles, /\.navIcon|\.sidebarHeading|\.sidebarMark/, "removed icon and product-heading styles must stay deleted");
-assert.match(shellStyles, /@media \(max-width: 1020px\)[\s\S]*grid-template-columns: 190px minmax\(0, 1fr\)/, "medium layouts must keep readable section labels");
+assert.match(shellStyles, /@media \(max-width: 900px\)[\s\S]*grid-template-rows: 64px minmax\(0, 1fr\)/, "medium layouts must move navigation above the workspace");
+assert.match(shellStyles, /@media \(max-width: 900px\)[\s\S]*grid-auto-columns: max-content/, "compact navigation must preserve full-width section labels");
 assert.doesNotMatch(shellStyles, /\.navCopy,[\s\S]*display: none/, "responsive layouts must not hide section labels");
-assert.match(shellStyles, /@media \(max-width: 720px\)[\s\S]*grid-template-columns: repeat\(5, minmax\(48px, 1fr\)\)/, "mobile must retain five text navigation targets");
+assert.match(shellStyles, /\.panelNav button \{[\s\S]*min-height: 58px/, "desktop navigation targets must stay comfortably sized");
+assert.match(shell, /String\(index \+ 1\)\.padStart\(2, "0"\)/, "desktop navigation must retain numbered section indices");
 assert.match(dashboard, /generateSupplyCase\(SAMPLE_SUPPLY_CASE_PROMPT, ILLUSTRATIVE_NETWORK_DATE/);
 assert.match(dashboard, />Demo</);
 assert.doesNotMatch(dashboard, /href="\/dashboard\/supply-os\/new"/);

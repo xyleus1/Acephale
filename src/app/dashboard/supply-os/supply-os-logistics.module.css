@@ -1,0 +1,1798 @@
+/* Dedicated Logistics surface. No legacy workspace classes are used here. */
+
+.workspace {
+  --canvas: #f7f8f7;
+  --panel: #ffffff;
+  --panel-subtle: #f1f3f2;
+  --panel-selected: #eaf0f2;
+  --line: #e0e4e2;
+  --line-strong: #c7ceca;
+  --ink: #1b1d1c;
+  --ink-soft: #4d5552;
+  --ink-muted: #747c78;
+  --navy: #29485c;
+  --navy-soft: #e5eef2;
+  --decision: #a76b45;
+  --decision-soft: #f5ede8;
+  --success: #3f6c55;
+  --success-soft: #eaf2ed;
+  --danger: #944b45;
+  --danger-soft: #f6ecea;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  color: var(--ink);
+  background: transparent;
+  font-family: "Instrument Sans", sans-serif;
+}
+
+.workspace *,
+.workspace *::before,
+.workspace *::after {
+  box-sizing: border-box;
+}
+
+.workspace button,
+.workspace input,
+.workspace select,
+.workspace textarea {
+  font: inherit;
+}
+
+.workspace button:focus-visible,
+.workspace a:focus-visible,
+.workspace [tabindex]:focus-visible,
+.commandMap :global(.maplibregl-canvas:focus-visible) {
+  outline: 2px solid var(--navy);
+  outline-offset: 3px;
+}
+
+.commandWorkspace {
+  height: 100%;
+  min-height: 0;
+  display: block;
+  overflow: hidden;
+}
+
+.presentationWorkspace {
+  height: 100dvh;
+  padding: 40px;
+  background: var(--canvas);
+}
+
+.commandCenter {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-rows: 88px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 24px 72px rgb(27 29 28 / 6%);
+}
+
+.commandHeader {
+  min-width: 0;
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 28px;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--line);
+  background: rgb(255 255 255 / 97%);
+  z-index: 12;
+}
+
+.commandCenter[data-embedded="true"] .commandIdentity {
+  display: none;
+}
+
+.commandIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.commandIdentity img {
+  width: 44px;
+  height: 44px;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.commandIdentity h1,
+.commandIdentity small {
+  display: block;
+  margin: 0;
+}
+
+.commandIdentity h1 {
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandIdentity small {
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.commandMetrics {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.commandMetrics span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.commandMetrics strong {
+  color: var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.commandMetrics .commandFixtureBadge {
+  min-height: 34px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: var(--panel-subtle);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.commandActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.commandIconLink,
+.commandMenuButton {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 580;
+  text-decoration: none;
+  transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
+}
+
+.commandIconLink {
+  width: 46px;
+  padding: 0;
+}
+
+.commandIconLink:hover,
+.commandMenuButton:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--panel-subtle);
+}
+
+.commandMenu {
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(500px, calc(100dvh - 96px));
+  overflow: auto;
+  padding: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: 0 20px 56px rgb(27 29 28 / 12%);
+  z-index: 300;
+}
+
+.commandMenu > [role="label"] {
+  display: block;
+  padding: 9px 10px 7px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.commandMenuItem {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border-radius: 9px;
+  outline: 0;
+  cursor: pointer;
+}
+
+.commandMenuItem[data-highlighted] {
+  background: var(--panel-selected);
+}
+
+.commandMenuItem strong,
+.commandMenuItem small {
+  display: block;
+}
+
+.commandMenuItem strong {
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.commandMenuItem small {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandError {
+  position: absolute;
+  top: 104px;
+  left: 50%;
+  z-index: 80;
+  padding: 10px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  color: var(--danger);
+  background: var(--panel);
+  box-shadow: 0 12px 30px rgb(27 29 28 / 10%);
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.commandState {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.commandState h1,
+.commandState p {
+  margin: 0;
+}
+
+.commandState h1 {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 640;
+}
+
+.commandState p {
+  max-width: 420px;
+  font-size: 14px;
+}
+
+.commandMapStage {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: #edf2ef;
+}
+
+.commandMap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #edf2ef;
+}
+
+.commandMap :global(.maplibregl-map),
+.commandMap :global(.maplibregl-canvas-container),
+.commandMap :global(.maplibregl-canvas) {
+  width: 100%;
+  height: 100%;
+}
+
+.commandMap :global(.maplibregl-ctrl-bottom-left) {
+  left: 356px;
+}
+
+.commandMap :global(.maplibregl-ctrl-bottom-right) {
+  right: 456px;
+}
+
+.commandMap :global(.maplibregl-ctrl-attrib) {
+  margin: 0 10px 10px 0;
+  border-radius: 7px;
+  color: var(--ink-muted);
+  background: rgb(255 255 255 / 92%);
+  font-size: 10px;
+}
+
+.commandMap :global(.maplibregl-popup-content) {
+  padding: 0;
+}
+
+.mapUnavailable {
+  position: absolute;
+  inset: 0 456px 0 380px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.mapUnavailable strong,
+.mapUnavailable span {
+  display: block;
+}
+
+.mapUnavailable strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.mapUnavailable span {
+  max-width: 360px;
+  font-size: 12px;
+}
+
+.routeRail,
+.commandInspector {
+  position: absolute;
+  top: 36px;
+  bottom: 64px;
+  z-index: 20;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 97%);
+  box-shadow: 0 20px 52px rgb(27 29 28 / 10%);
+  backdrop-filter: blur(10px);
+}
+
+.routeRail {
+  left: 36px;
+  width: 320px;
+  display: grid;
+  grid-template-rows: 76px minmax(0, 1fr);
+}
+
+.routeRail > header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.routeRail > header span,
+.routeRail > header small {
+  display: block;
+}
+
+.routeRail > header span {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+}
+
+.routeRail > header small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.routeRailList {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.routeRailGroupLabel {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.routeRailList > button {
+  width: 100%;
+  min-height: 70px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 11px;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: color 130ms ease, background-color 130ms ease;
+}
+
+.routeRailList > button:hover {
+  color: var(--ink);
+  background: var(--panel-subtle);
+}
+
+.routeRailList > button[data-active="true"] {
+  color: var(--ink);
+  background: var(--panel-selected);
+}
+
+.routeRailList > button.routeRailLeg {
+  grid-template-columns: 40px minmax(0, 1fr) 28px;
+}
+
+.routeRailIcon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--navy);
+  background: var(--panel);
+}
+
+.routeRailCopy {
+  min-width: 0;
+}
+
+.routeRailCopy small,
+.routeRailCopy strong,
+.routeRailCopy em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routeRailCopy small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.routeRailCopy strong {
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.routeRailCopy em {
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.routeRailStatus {
+  width: 8px;
+  height: 8px;
+  justify-self: center;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.routeRailList > button[data-status="unassigned"] .routeRailStatus,
+.routeRailList > button[data-status="attention"] .routeRailStatus {
+  background: var(--decision);
+}
+
+.routeRailList > button[data-status="blocked"] .routeRailStatus {
+  background: var(--danger);
+}
+
+.routeRailPriority {
+  min-width: 28px;
+  min-height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d8bda9;
+  border-radius: 8px;
+  color: var(--decision);
+  background: var(--decision-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.commandInspector {
+  right: 36px;
+  width: 420px;
+}
+
+.inspectorTabsRoot {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 72px minmax(0, 1fr);
+}
+
+.inspectorTabsList {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin: 12px 18px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-subtle);
+}
+
+.inspectorTabsList button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--ink-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.inspectorTabsList button[data-state="active"] {
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: 0 1px 3px rgb(27 29 28 / 10%);
+}
+
+.inspectorTabsList small {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+}
+
+.inspectorTabPanel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.inspectorHeader {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 18px 24px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.inspectorIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  color: var(--navy);
+  background: var(--panel);
+  grid-row: 1 / 3;
+}
+
+.inspectorIcon[data-kind="customs"] {
+  color: var(--danger);
+}
+
+.inspectorHeader small,
+.inspectorHeader h2 {
+  display: block;
+  margin: 0;
+}
+
+.inspectorHeader small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.inspectorHeader h2 {
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.inspectorHeader > i {
+  max-width: 112px;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+  grid-column: 2;
+  justify-self: start;
+}
+
+.inspectorHeader > i[data-status="verified"] {
+  border-color: #bdd2c5;
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.inspectorHeader > i[data-status="unassigned"],
+.inspectorHeader > i[data-status="attention"] {
+  border-color: #d8bda9;
+  color: var(--decision);
+  background: var(--decision-soft);
+}
+
+.inspectorBody,
+.analysisBody {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  padding: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.inspectorLocation,
+.inspectorDetail {
+  margin: 0;
+}
+
+.inspectorLocation {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+}
+
+.inspectorDetail {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.inspectorProductMedia {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-subtle);
+}
+
+.inspectorProductMedia img {
+  width: 100%;
+  max-height: 180px;
+  display: block;
+  object-fit: cover;
+}
+
+.inspectorProductMedia figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.inspectorProductMedia a {
+  color: var(--ink-soft);
+}
+
+.inspectorFacts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(112px, 0.8fr);
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.inspectorFacts > div {
+  min-width: 0;
+  padding: 14px;
+}
+
+.inspectorFacts > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.inspectorFacts dt,
+.inspectorFacts dd {
+  margin: 0;
+}
+
+.inspectorFacts dt {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspectorFacts dd {
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.inspectorRatePlan,
+.inspectorRatePending,
+.inspectorChecks,
+.inspectorContacts,
+.inspectorAction,
+.analysisThesis,
+.analysisDetail,
+.networkFlowPanel,
+.routeFlowPanel {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.inspectorRatePlan header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.inspectorRatePlan header span,
+.inspectorRatePlan header small,
+.inspectorRatePlan header strong {
+  display: block;
+}
+
+.inspectorRatePlan header small,
+.inspectorRatePlan > small {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.inspectorRatePlan header strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.inspectorRatePlan p,
+.inspectorRatePlan > small,
+.inspectorRatePending p {
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+
+.inspectorRatePlan p,
+.inspectorRatePending p {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.inspectorRatePlan a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--navy);
+  font-size: 11px;
+}
+
+.inspectorRatePending {
+  padding: 16px;
+  border: 1px solid #d8bda9;
+  border-radius: 12px;
+  background: var(--decision-soft);
+}
+
+.inspectorRatePending strong {
+  color: var(--decision);
+  font-size: 13px;
+}
+
+.inspectorChecks h3,
+.inspectorContacts h3,
+.inspectorAction h3,
+.networkFlowPanel h3 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 640;
+}
+
+.inspectorChecks > div {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.inspectorChecks > div:last-child {
+  border-bottom: 0;
+}
+
+.inspectorChecks i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--decision);
+}
+
+.inspectorChecks small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.inspectorContacts h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inspectorContacts h3 span {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.inspectorContact {
+  display: grid;
+  gap: 7px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspectorContact:last-child {
+  border-bottom: 0;
+}
+
+.inspectorContact strong,
+.inspectorContact small {
+  display: block;
+}
+
+.inspectorContact strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.inspectorContact small,
+.inspectorContact address {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.inspectorContact p,
+.inspectorContact address {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.inspectorContact p {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.inspectorContact address {
+  font-style: normal;
+}
+
+.inspectorContact > b {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 7px;
+  color: var(--ink-soft);
+  background: var(--panel-subtle);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 550;
+}
+
+.inspectorContactActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.inspectorContactActions a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink-soft);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.inspectorContactActions a:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.inspectorAction > strong,
+.inspectorAction > p,
+.inspectorAction > small {
+  display: block;
+}
+
+.inspectorAction > strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.inspectorAction > p {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.inspectorAction > small {
+  margin-top: 8px;
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.inspectorWorkspaceLink {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 24px 24px;
+  padding: 0 18px;
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  color: var(--panel);
+  background: var(--ink);
+  font-size: 13px;
+  font-weight: 620;
+  text-decoration: none;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.inspectorWorkspaceLink:hover {
+  border-color: var(--navy);
+  background: var(--navy);
+}
+
+.optimizationInspector .inspectorHeader {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
+.analysisThesis {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-subtle);
+}
+
+.analysisThesis p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.analysisPriorityList {
+  display: grid;
+  gap: 5px;
+}
+
+.analysisPriorityList button {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.analysisPriorityList button:hover,
+.analysisPriorityList button[data-active="true"] {
+  color: var(--ink);
+  background: var(--panel-selected);
+}
+
+.analysisPriorityList button > small {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+
+.analysisPriorityList strong,
+.analysisPriorityList em {
+  display: block;
+}
+
+.analysisPriorityList strong {
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.analysisPriorityList em {
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.analysisDetail header small,
+.analysisDetail header strong {
+  display: block;
+}
+
+.analysisDetail header small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.analysisDetail header strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.analysisDetail dl {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.analysisDetail dl div {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.analysisDetail dt,
+.analysisDetail dd {
+  margin: 0;
+}
+
+.analysisDetail dt {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.analysisDetail dd {
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.analysisDetail > p {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 12px;
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.networkFlowPanel h3 {
+  margin-bottom: 10px;
+}
+
+.networkFlowChart,
+.routeFlowChart {
+  height: 112px;
+}
+
+.networkFlowChart > div {
+  height: 88px;
+}
+
+.networkFlowLabels,
+.routeFlowLabels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--ink-muted);
+  font-size: 9px;
+}
+
+.routeFlowPanel {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.routeFlowLabels span,
+.routeFlowLabels small,
+.routeFlowLabels strong {
+  display: block;
+}
+
+.routeFlowLabels strong {
+  margin-top: 2px;
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+.commandMapFooter {
+  min-height: 38px;
+  position: absolute;
+  right: 36px;
+  bottom: 14px;
+  left: 380px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(8px);
+}
+
+.commandLegend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+}
+
+.commandLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.commandLegend i {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.commandLegend i[data-kind="node"] {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--navy);
+}
+
+.commandLegend i[data-kind="route"] {
+  width: 22px;
+  height: 2px;
+  background: var(--navy);
+}
+
+.commandLegend i[data-kind="insight"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--decision);
+}
+
+.mapMarker,
+.routeGatewayMarker,
+.mapInsightMarker,
+.routeDirectionMarker {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.mapMarker {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--navy);
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgb(27 29 28 / 13%);
+}
+
+.mapMarker[data-active="true"] {
+  border-color: var(--ink);
+  color: var(--panel);
+  background: var(--ink);
+}
+
+.markerStatusDot {
+  width: 8px;
+  height: 8px;
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.mapMarker[data-status="unassigned"] .markerStatusDot,
+.mapMarker[data-status="attention"] .markerStatusDot {
+  background: var(--decision);
+}
+
+.mapMarker[data-status="blocked"] .markerStatusDot {
+  background: var(--danger);
+}
+
+.mapPriorityBadge {
+  min-width: 24px;
+  height: 20px;
+  position: absolute;
+  top: -11px;
+  right: -11px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border: 1px solid #d8bda9;
+  border-radius: 7px;
+  color: var(--decision);
+  background: var(--decision-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.routeMarkerText {
+  width: max-content;
+  position: absolute;
+  top: 46px;
+  left: 50%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  transform: translateX(-50%);
+}
+
+.routeDirectionMarker {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--navy);
+  border-radius: 8px;
+  color: var(--panel);
+  background: var(--navy);
+  opacity: 0.9;
+}
+
+.routeGatewayMarker {
+  width: 34px;
+  height: 34px;
+  position: relative;
+  border: 1px solid var(--navy);
+  border-radius: 10px;
+  color: var(--navy);
+  background: var(--panel);
+  box-shadow: 0 7px 18px rgb(27 29 28 / 10%);
+}
+
+.routeGatewayMarker > span {
+  width: max-content;
+  max-width: 190px;
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.mapInsightMarker {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d8bda9;
+  border-radius: 10px;
+  color: var(--decision);
+  background: var(--decision-soft);
+}
+
+.mapHoverCard,
+.mapInsightCard {
+  width: 292px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: 0 18px 46px rgb(27 29 28 / 13%);
+}
+
+.mapHoverCard > header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hoverObjectIcon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--navy);
+}
+
+.mapHoverCard header small,
+.mapHoverCard header strong {
+  display: block;
+}
+
+.mapHoverCard header small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.mapHoverCard header strong {
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hoverPriority,
+.hoverRate,
+.hoverContacts {
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.hoverPriority strong,
+.hoverRate strong,
+.hoverContacts strong {
+  color: var(--ink);
+}
+
+.mapInsightCard {
+  padding: 14px;
+}
+
+.mapInsightCard strong,
+.mapInsightCard small {
+  display: block;
+}
+
+.mapInsightCard strong {
+  font-size: 12px;
+}
+
+.mapInsightCard small {
+  margin-top: 5px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.commandMapPopup :global(.maplibregl-popup-content) {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 18px 46px rgb(27 29 28 / 13%);
+}
+
+.commandMapPopup :global(.maplibregl-popup-tip) {
+  border-top-color: var(--line-strong);
+}
+
+.routeOverlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.routeGeometry,
+.routePathSegment {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.routeGeometryCasing,
+.routeGeometryLine {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.routeGeometryCasing {
+  stroke: rgb(255 255 255 / 90%);
+  stroke-width: 8;
+}
+
+.routeGeometryLine {
+  stroke: var(--navy);
+  stroke-width: 3;
+}
+
+.routePathSegment {
+  height: 24px;
+}
+
+.fitMapButton {
+  width: 44px;
+  height: 44px;
+  position: absolute;
+  top: 16px;
+  right: 472px;
+  z-index: 18;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  box-shadow: 0 8px 20px rgb(27 29 28 / 9%);
+  cursor: pointer;
+}
+
+.fitMapButton:hover {
+  color: var(--ink);
+  background: var(--panel-subtle);
+}
+
+.mapTooltip {
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: var(--panel);
+  background: var(--ink);
+  font-size: 10px;
+}
+
+.mapTooltipArrow {
+  fill: var(--ink);
+}
+
+.mapError {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 18;
+  padding: 8px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  font-size: 10px;
+  transform: translateX(-50%);
+}
+
+.mapError[data-state="failed"] {
+  border-color: #dfc0bc;
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+@media (max-width: 1280px) {
+  .commandHeader {
+    gap: 18px;
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .commandMetrics {
+    gap: 16px;
+    font-size: 12px;
+  }
+
+  .routeRail {
+    left: 24px;
+    width: 286px;
+  }
+
+  .commandInspector {
+    right: 24px;
+    width: 372px;
+  }
+
+  .commandMapFooter {
+    right: 24px;
+    left: 330px;
+  }
+
+  .fitMapButton {
+    right: 420px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-left) {
+    left: 318px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-right) {
+    right: 404px;
+  }
+
+  .mapUnavailable {
+    right: 404px;
+    left: 330px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .commandCenter {
+    border-radius: 16px;
+  }
+
+  .commandMetrics span:nth-last-child(-n + 2) {
+    display: none;
+  }
+
+  .commandMenuButton {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .routeRail {
+    top: 20px;
+    right: 20px;
+    bottom: auto;
+    left: 20px;
+    width: auto;
+    height: 92px;
+    display: block;
+  }
+
+  .routeRail > header,
+  .routeRailGroupLabel {
+    display: none;
+  }
+
+  .routeRailList {
+    height: 100%;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px;
+  }
+
+  .routeRailList > button,
+  .routeRailList > button.routeRailLeg {
+    min-width: 210px;
+    height: 70px;
+    margin: 0;
+  }
+
+  .commandInspector {
+    top: 128px;
+    right: 20px;
+    bottom: 20px;
+    width: 360px;
+  }
+
+  .commandMapFooter,
+  .fitMapButton {
+    display: none;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-left) {
+    left: 8px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-right) {
+    right: 380px;
+  }
+
+  .mapUnavailable {
+    inset: 112px 400px 0 20px;
+  }
+}
+
+@media (max-width: 720px) {
+  .presentationWorkspace {
+    padding: 0;
+  }
+
+  .commandCenter {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .commandCenter[data-embedded="true"] {
+    grid-template-rows: 68px minmax(0, 1fr);
+  }
+
+  .commandHeader {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px 14px;
+  }
+
+  .commandMetrics {
+    gap: 14px;
+    overflow-x: auto;
+  }
+
+  .commandMetrics span:nth-last-child(-n + 2) {
+    display: none;
+  }
+
+  .commandActions {
+    display: none;
+  }
+
+  .routeRail {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    height: 84px;
+    border-radius: 14px;
+  }
+
+  .routeRailList {
+    padding: 7px;
+  }
+
+  .routeRailList > button,
+  .routeRailList > button.routeRailLeg {
+    min-width: 188px;
+    height: 68px;
+    min-height: 68px;
+    grid-template-columns: 36px minmax(0, 1fr) 10px;
+    padding: 6px 8px;
+  }
+
+  .routeRailIcon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .commandInspector {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+    height: min(54%, 470px);
+    border-radius: 16px;
+  }
+
+  .mapUnavailable {
+    inset: 96px 12px 54% 12px;
+  }
+
+  .inspectorTabsRoot {
+    grid-template-rows: 62px minmax(0, 1fr);
+  }
+
+  .inspectorHeader {
+    padding: 14px 18px;
+  }
+
+  .inspectorBody,
+  .analysisBody {
+    padding: 18px;
+  }
+
+  .inspectorWorkspaceLink {
+    min-height: 52px;
+    margin: 0 18px 18px;
+  }
+
+  .commandMap :global(.maplibregl-ctrl-bottom-right),
+  .commandMap :global(.maplibregl-ctrl-bottom-left) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commandIconLink,
+  .commandMenuButton,
+  .routeRailList > button,
+  .inspectorWorkspaceLink {
+    transition: none;
+  }
+}
+.pageFrame {
+  min-width: 0;
+}

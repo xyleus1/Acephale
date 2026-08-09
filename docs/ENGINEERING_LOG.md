@@ -2782,7 +2782,7 @@ Use this file for chronological implementation notes that future agents should s
 ### 2026-07-27 - China Intel GPT-5.6 extraction
 
 - Branch: `find-hardware-import-data`
-- Commit: pending
+- Commit: see git log
 - Task: Route the read-only China hardware load extractor through the existing
   server-side `OPENAI_API_KEY` and GPT-5.6.
 - Files changed: `src/lib/intel/preflight/extract-china-import.ts`, the China
@@ -4089,3 +4089,24 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: complete an authenticated browser pass at desktop, tablet, and
   mobile widths when an attached user session or valid test account is
   available.
+
+### 2026-08-09 - Rewrite every visible Logistics element
+
+- Branch: main
+- Commit: pending
+- Task: Remove legacy visual inheritance from the Logistics page and rebuild
+  the complete surface with the approved airy system.
+- Files changed: Supply OS page, operating shell, command map, dashboard style
+  routing, dedicated Logistics CSS module, sidebar contract test, handoff, and
+  this engineering log.
+- Verification: authenticated browser review at 1440px, 768px, and 390px found
+  zero legacy workspace classes, zero interactive targets below 44px, and zero
+  horizontal overflow. Product-copy and nine Supply OS UI contract suites,
+  TypeScript, production build, diff whitespace, and changed-file U+2014 checks
+  pass.
+- Failed/skipped checks: the headless browser does not expose WebGL 2, so visual
+  QA exercised the explicit map fallback instead of the live renderer.
+- Caveats: no domain behavior, data model, tenant scope, approval rule,
+  dependency, or external action changed.
+- Follow-up: verify the authenticated production route after deployment when a
+  valid production test session is available.

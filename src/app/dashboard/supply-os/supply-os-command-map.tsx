@@ -34,7 +34,7 @@ import type {
   SupplyCommandRouteSegment,
 } from "@/lib/supply-os-command-map";
 import type { SupplyOsPanel } from "@/lib/supply-os/panel-routing";
-import styles from "./supply-os-workspace.module.css";
+import styles from "./supply-os-logistics.module.css";
 
 const CARTO_POSITRON_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 const OPEN_FREE_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
@@ -373,7 +373,7 @@ export function SupplyOsCommandMap({
         <div className={styles.mapUnavailable} data-state={mapCapability}>
           <MapPin size={19} strokeWidth={1.6} />
           <strong>{mapCapability === "checking" ? "Starting map" : "Map renderer unavailable"}</strong>
-          <span>{mapCapability === "checking" ? "Checking WebGL 2 support." : "Use the network list to inspect suppliers, customs handoffs, and destinations."}</span>
+          {mapCapability === "checking" ? <span>Checking WebGL 2 support.</span> : null}
         </div>
       </div>
     );

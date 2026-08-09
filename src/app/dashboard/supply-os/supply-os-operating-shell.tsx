@@ -84,7 +84,7 @@ export function SupplyOsOperatingShell({
             <strong>Derya</strong>
           </a>
           <nav className={styles.panelNav} aria-label="Workspace sections">
-            {PANELS.map((panel) => {
+            {PANELS.map((panel, index) => {
               const active = panel.id === activePanel;
               return (
                 <motion.button
@@ -97,6 +97,7 @@ export function SupplyOsOperatingShell({
                   whileTap={{ scale: 0.985 }}
                 >
                   {active ? <motion.span className={styles.activeRail} layoutId="supply-os-active-panel" /> : null}
+                  <span className={styles.navIndex}>{String(index + 1).padStart(2, "0")}</span>
                   <span className={styles.navCopy}>
                     <strong>{panel.shortLabel}</strong>
                   </span>

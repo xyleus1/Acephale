@@ -2,6 +2,52 @@
 
 ## Latest Update
 
+### Logistics page rewritten without legacy visual inheritance
+
+- Replaced the Logistics page's cascade-over-legacy approach with a dedicated
+  `supply-os-logistics.module.css` implementation. Every rendered Logistics
+  class now resolves to the new module. The authenticated DOM audit found zero
+  classes from `supply-os-workspace.module.css`.
+- Rebuilt every visible layer: app rail, company header, status ribbon, object
+  list, object rows, map canvas, map state, map legend, inspector tabs,
+  inspector sections, provider links, priority rows, and primary action.
+- Desktop now uses a 260px navigation rail, 88px header, 320px object rail,
+  420px inspector, 44px controls, 70px object rows, and a 16px workspace radius.
+  At 900px and below, navigation moves above the workspace. Mobile keeps full
+  section labels in a horizontal strip.
+- Removed instructional fallback copy. The unsupported browser state now says
+  only `Map renderer unavailable`; WebGL checking remains a factual status.
+- Updated the sidebar contract test to enforce the new responsive shell instead
+  of the obsolete 190px medium-width rail.
+- No domain behavior, data model, tenant scope, approval rule, dependency, or
+  external action changed.
+
+Verification:
+
+- Authenticated browser review at 1440px, 768px, and 390px
+- Zero legacy workspace classes in the rendered Logistics DOM
+- Zero interactive targets below 44px at all three widths
+- Zero horizontal overflow at all three widths
+- `npm run check:product-copy`
+- `npm run test:supply-os-single-surface`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-company-navigation`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-operations-ui`
+- `npm run test:supply-os-scenario-viewport`
+- `npm run test:supply-os-enterprise-design`
+- `npx tsc --noEmit --incremental false`
+- Disposable PostgreSQL-backed `npm run build`
+- `git diff --check`
+- Changed-file U+2014 scan
+
+Browser caveat:
+
+- The headless browser does not expose WebGL 2, so visual QA exercised the
+  designed map fallback. Map behavior and operational data logic were not
+  changed.
+
 ### Approved airy system implemented across the production app
 
 - Published commit `7b2ea43` to `origin/main`. Vercel completed the production

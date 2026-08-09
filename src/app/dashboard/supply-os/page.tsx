@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
-import styles from "./supply-os-workspace.module.css";
+import styles from "./supply-os-logistics.module.css";
 
 export const metadata: Metadata = {
   title: "Supply OS",

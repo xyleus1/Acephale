@@ -49,7 +49,7 @@ import {
   writeBrowserStorage,
 } from "./supply-os-storage";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
-import styles from "./supply-os-workspace.module.css";
+import styles from "./supply-os-logistics.module.css";
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
   const storedName = dashboard.companyName?.trim();
@@ -568,7 +568,7 @@ function CaseCommandCenter({
         <aside className={styles.routeRail} aria-label="Operating network objects">
           <header>
             <span>{domain.railTitle}</span>
-            <small>{domain.railSummary}</small>
+            <small>{domainObjects.length} objects</small>
           </header>
           <div className={styles.routeRailList}>
             <div className={styles.routeRailGroupLabel}>Operating points</div>
