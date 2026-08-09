@@ -2,12 +2,10 @@
 
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
-  AttributionControl,
   Layer,
   Map,
   Marker,
   Popup,
-  ScaleControl,
   Source,
   type MapRef,
 } from "@vis.gl/react-maplibre";
@@ -242,6 +240,9 @@ export function SupplyOsCommandMap({
   const [basemapState, setBasemapState] = useState<"loading" | "ready" | "retrying" | "failed">("loading");
   const [mapCapability, setMapCapability] = useState<"checking" | "ready" | "unavailable">("checking");
   const basemap = BASEMAPS[basemapIndex] ?? BASEMAPS[0];
+  const basemapCredit = basemap.id === "openfreemap-positron"
+    ? { label: "OpenFreeMap", url: "https://openfreemap.org/" }
+    : { label: "CARTO", url: "https://carto.com/attributions" };
   const visibleObjectKinds = useMemo<SupplyCommandObjectKind[]>(() => {
     if (activePanel === "materials") return ["supplier", "factory", "distribution"];
     if (activePanel === "suppliers") return ["supplier", "factory"];
@@ -603,9 +604,13 @@ export function SupplyOsCommandMap({
           </Popup>
         ) : null}
 
-        <ScaleControl position="bottom-left" unit="imperial" />
-        <AttributionControl position="bottom-right" compact />
       </Map>
+
+      <div className={styles.mapCredits} aria-label="Map attribution">
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a>
+        <span>·</span>
+        <a href={basemapCredit.url} target="_blank" rel="noreferrer">{basemapCredit.label}</a>
+      </div>
 
       <svg className={styles.routeOverlay} aria-hidden="true">
         {projectedRoutePaths.map(({ route, segment, path }) => (
