@@ -4099,9 +4099,12 @@ Use this file for chronological implementation notes that future agents should s
 - Files changed: Supply OS page, operating shell, command map, dashboard style
   routing, dedicated Logistics CSS module, sidebar contract test, handoff, and
   this engineering log.
+- Integration: rebased onto the concurrently merged fixed-map-grid work and
+  styled its bounded map panel, horizontal context rail, and persistent
+  inspector inside the same dedicated module.
 - Verification: authenticated browser review at 1440px, 768px, and 390px found
   zero legacy workspace classes, zero interactive targets below 44px, and zero
-  horizontal overflow. Product-copy and nine Supply OS UI contract suites,
+  horizontal overflow. Product-copy and ten Supply OS UI contract suites,
   TypeScript, production build, diff whitespace, and changed-file U+2014 checks
   pass.
 - Failed/skipped checks: the headless browser does not expose WebGL 2, so visual

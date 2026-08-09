@@ -6,7 +6,7 @@ const root = process.cwd();
 const dashboard = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const commandMap = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-command-map.tsx"), "utf8");
 const generator = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-generator.tsx"), "utf8");
-const styles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workspace.module.css"), "utf8");
+const styles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"), "utf8");
 const workstreamShell = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream-shell.tsx"), "utf8");
 const workstreamStyles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream.module.css"), "utf8");
 const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
@@ -124,8 +124,8 @@ for (const token of [
 ]) {
   assert.equal(designSystem.includes(token), true, `app design system is missing: ${token}`);
 }
-assert.match(styles, /\.workspace \.commandCenter \{[^}]*border-radius: 16px/s, "command workspace must use the approved 16px geometry");
-assert.match(styles, /\.workspace \.routeRail,[\s\S]*border-radius: 14px/s, "map overlays must use the approved 14px geometry");
+assert.match(styles, /\.commandCenter \{[^}]*border-radius: 18px/s, "command workspace must use the approved soft geometry");
+assert.match(styles, /\.routeRail,[\s\S]*border-radius: 16px/s, "network panels must use the approved soft geometry");
 assert.equal(styles.includes("linear-gradient"), false, "Supply OS must not use decorative gradients");
 assert.equal(dashboard.includes("supply-os-workspace"), true, "dashboard needs a stable root for global style isolation");
 assert.equal(generator.includes("supply-os-workspace"), true, "generator needs a stable root for global style isolation");
@@ -139,26 +139,28 @@ for (const control of ["button", "textarea"]) {
 assert.equal(globals.includes(":not(.supply-os-workspace"), false, "Supply OS exclusions must not raise global specificity");
 
 const fixedViewport = styles.slice(styles.indexOf(".commandWorkspace {"), styles.indexOf(".presentationWorkspace {"));
-for (const rule of ["height: calc(100dvh - 56px)", "display: grid", "overflow: hidden"]) {
+for (const rule of ["height: 100%", "display: block", "overflow: hidden"]) {
   assert.equal(fixedViewport.includes(rule), true, `fixed command viewport is missing: ${rule}`);
 }
 const mapStage = styles.slice(styles.indexOf(".commandMapStage {"), styles.indexOf(".commandMap {"));
 assert.equal(mapStage.includes("overflow: hidden"), true, "map stage must not create document scrolling");
-assert.match(styles, /\.routeRail,[\s\S]*\.commandInspector[\s\S]*position: absolute/, "network rail and inspector must overlay the map");
+assert.match(mapStage, /grid-template-areas:\s*"map inspector"\s*"context inspector"/, "desktop must use the fixed map grid");
+assert.match(styles, /\.routeRail \{[\s\S]*grid-area: context/, "network rail must occupy the context row");
+assert.match(styles, /\.commandInspector \{[\s\S]*grid-area: inspector/, "inspector must occupy its own grid column");
 assert.match(styles, /\.commandMapFooter[\s\S]*position: absolute/, "status strip must stay inside the map viewport");
 
-const compactStyles = styles.slice(styles.indexOf("@media (max-width: 1180px)"), styles.indexOf("@media (max-width: 900px)"));
-for (const rule of [".routeRail", ".commandInspector", ".commandMapFooter"]) {
+const compactStyles = styles.slice(styles.indexOf("@media (max-width: 1280px)"), styles.indexOf("@media (max-width: 1040px)"));
+for (const rule of [".commandMapStage", ".routeRailList"]) {
   assert.equal(compactStyles.includes(rule), true, `compact command layout is missing: ${rule}`);
 }
 
-const tabletStyles = styles.slice(styles.indexOf("@media (max-width: 900px)"), styles.lastIndexOf("@media (max-width: 680px)"));
-for (const rule of [".routeRail", ".commandInspector", ".routeRailList"]) {
+const tabletStyles = styles.slice(styles.indexOf("@media (max-width: 1040px)"), styles.lastIndexOf("@media (max-width: 720px)"));
+for (const rule of [".commandMapStage", ".routeRail", ".routeRailList"]) {
   assert.equal(tabletStyles.includes(rule), true, `tablet command layout is missing: ${rule}`);
 }
 
-const mobileStyles = styles.slice(styles.lastIndexOf("@media (max-width: 680px)"));
-for (const rule of [".commandWorkspace", ".commandHeader", ".routeRail", ".commandInspector", ".commandMapFooter"]) {
+const mobileStyles = styles.slice(styles.lastIndexOf("@media (max-width: 720px)"));
+for (const rule of [".commandHeader", ".commandMapStage", ".routeRail", ".commandInspector", ".commandMapFooter"]) {
   assert.equal(mobileStyles.includes(rule), true, `mobile command layout is missing: ${rule}`);
 }
 

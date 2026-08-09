@@ -11,10 +11,11 @@
 - Rebuilt every visible layer: app rail, company header, status ribbon, object
   list, object rows, map canvas, map state, map legend, inspector tabs,
   inspector sections, provider links, priority rows, and primary action.
-- Desktop now uses a 260px navigation rail, 88px header, 320px object rail,
-  420px inspector, 44px controls, 70px object rows, and a 16px workspace radius.
-  At 900px and below, navigation moves above the workspace. Mobile keeps full
-  section labels in a horizontal strip.
+- Desktop now uses a 260px navigation rail, 88px header, bounded map panel,
+  horizontal object rail, persistent inspector, 44px controls, and a 16px
+  workspace radius. At 900px and below, navigation moves above the workspace.
+  The map, object rail, and inspector become a scrollable single-column grid.
+  Mobile keeps full section labels in a horizontal strip.
 - Removed instructional fallback copy. The unsupported browser state now says
   only `Map renderer unavailable`; WebGL checking remains a factual status.
 - Updated the sidebar contract test to enforce the new responsive shell instead
@@ -37,6 +38,8 @@ Verification:
 - `npm run test:supply-os-operations-ui`
 - `npm run test:supply-os-scenario-viewport`
 - `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-command-map`
+- `npm run test:supply-os-fixed-map-grid`
 - `npx tsc --noEmit --incremental false`
 - Disposable PostgreSQL-backed `npm run build`
 - `git diff --check`

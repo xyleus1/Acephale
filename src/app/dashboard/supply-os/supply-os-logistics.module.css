@@ -307,9 +307,27 @@
 .commandMapStage {
   min-width: 0;
   min-height: 0;
-  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(360px, 0.9fr);
+  grid-template-rows: minmax(0, 2.35fr) minmax(190px, 1fr);
+  grid-template-areas:
+    "map inspector"
+    "context inspector";
+  gap: 18px;
   overflow: hidden;
+  padding: 24px;
   background: #edf2ef;
+}
+
+.mapPanel {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  grid-area: map;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--panel);
 }
 
 .commandMap {
@@ -327,11 +345,12 @@
 }
 
 .commandMap :global(.maplibregl-ctrl-bottom-left) {
-  left: 356px;
+  left: 0;
+  bottom: 52px;
 }
 
 .commandMap :global(.maplibregl-ctrl-bottom-right) {
-  right: 456px;
+  right: 0;
 }
 
 .commandMap :global(.maplibregl-ctrl-attrib) {
@@ -348,7 +367,7 @@
 
 .mapUnavailable {
   position: absolute;
-  inset: 0 456px 0 380px;
+  inset: 0;
   display: grid;
   place-content: center;
   justify-items: center;
@@ -374,23 +393,21 @@
 
 .routeRail,
 .commandInspector {
-  position: absolute;
-  top: 36px;
-  bottom: 64px;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
   z-index: 20;
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 16px;
-  background: rgb(255 255 255 / 97%);
-  box-shadow: 0 20px 52px rgb(27 29 28 / 10%);
-  backdrop-filter: blur(10px);
+  background: var(--panel);
+  box-shadow: 0 12px 34px rgb(27 29 28 / 6%);
 }
 
 .routeRail {
-  left: 36px;
-  width: 320px;
+  grid-area: context;
   display: grid;
-  grid-template-rows: 76px minmax(0, 1fr);
+  grid-template-rows: 54px minmax(0, 1fr);
 }
 
 .routeRail > header {
@@ -424,35 +441,33 @@
 
 .routeRailList {
   min-height: 0;
-  overflow-y: auto;
+  display: grid;
+  grid-auto-columns: minmax(210px, 1fr);
+  grid-auto-flow: column;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 10px;
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
 
 .routeRailGroupLabel {
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  display: none;
 }
 
 .routeRailList > button {
-  width: 100%;
-  min-height: 70px;
+  width: auto;
+  height: 100%;
+  min-height: 0;
   position: relative;
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) 12px;
   align-items: center;
   gap: 11px;
-  margin: 0 0 4px;
+  margin: 0;
   padding: 8px 10px;
   border: 0;
+  border-right: 1px solid var(--line);
   border-radius: 12px;
   color: var(--ink-soft);
   background: transparent;
@@ -555,8 +570,7 @@
 }
 
 .commandInspector {
-  right: 36px;
-  width: 420px;
+  grid-area: inspector;
 }
 
 .inspectorTabsRoot {
@@ -1200,9 +1214,9 @@
 .commandMapFooter {
   min-height: 38px;
   position: absolute;
-  right: 36px;
+  right: auto;
   bottom: 14px;
-  left: 380px;
+  left: 14px;
   z-index: 18;
   display: flex;
   align-items: center;
@@ -1521,7 +1535,7 @@
   height: 44px;
   position: absolute;
   top: 16px;
-  right: 472px;
+  right: 16px;
   z-index: 18;
   display: grid;
   place-items: center;
@@ -1583,36 +1597,15 @@
     font-size: 12px;
   }
 
-  .routeRail {
-    left: 24px;
-    width: 286px;
+  .commandMapStage {
+    grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.9fr);
+    grid-template-rows: minmax(0, 2.45fr) minmax(176px, 1fr);
+    gap: 14px;
+    padding: 18px;
   }
 
-  .commandInspector {
-    right: 24px;
-    width: 372px;
-  }
-
-  .commandMapFooter {
-    right: 24px;
-    left: 330px;
-  }
-
-  .fitMapButton {
-    right: 420px;
-  }
-
-  .commandMap :global(.maplibregl-ctrl-bottom-left) {
-    left: 318px;
-  }
-
-  .commandMap :global(.maplibregl-ctrl-bottom-right) {
-    right: 404px;
-  }
-
-  .mapUnavailable {
-    right: 404px;
-    left: 330px;
+  .routeRailList {
+    grid-auto-columns: minmax(190px, 1fr);
   }
 }
 
@@ -1632,59 +1625,27 @@
     white-space: nowrap;
   }
 
-  .routeRail {
-    top: 20px;
-    right: 20px;
-    bottom: auto;
-    left: 20px;
-    width: auto;
-    height: 92px;
-    display: block;
+  .commandMapStage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(360px, 54vh) 180px 320px;
+    grid-template-areas:
+      "map"
+      "context"
+      "inspector";
+    overflow-y: auto;
   }
 
-  .routeRail > header,
-  .routeRailGroupLabel {
-    display: none;
+  .routeRail {
+    grid-template-rows: 48px minmax(0, 1fr);
   }
 
   .routeRailList {
-    height: 100%;
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 10px;
+    grid-auto-columns: minmax(200px, 1fr);
   }
 
   .routeRailList > button,
   .routeRailList > button.routeRailLeg {
-    min-width: 210px;
-    height: 70px;
-    margin: 0;
-  }
-
-  .commandInspector {
-    top: 128px;
-    right: 20px;
-    bottom: 20px;
-    width: 360px;
-  }
-
-  .commandMapFooter,
-  .fitMapButton {
-    display: none;
-  }
-
-  .commandMap :global(.maplibregl-ctrl-bottom-left) {
-    left: 8px;
-  }
-
-  .commandMap :global(.maplibregl-ctrl-bottom-right) {
-    right: 380px;
-  }
-
-  .mapUnavailable {
-    inset: 112px 400px 0 20px;
+    min-width: 200px;
   }
 }
 
@@ -1721,12 +1682,24 @@
     display: none;
   }
 
-  .routeRail {
-    top: 12px;
-    right: 12px;
-    left: 12px;
-    height: 84px;
+  .commandMapStage {
+    grid-template-rows: minmax(320px, 48vh) 168px 280px;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .mapPanel,
+  .routeRail,
+  .commandInspector {
     border-radius: 14px;
+  }
+
+  .routeRail {
+    grid-template-rows: 44px minmax(0, 1fr);
+  }
+
+  .routeRail > header {
+    padding: 0 14px;
   }
 
   .routeRailList {
@@ -1745,20 +1718,6 @@
   .routeRailIcon {
     width: 36px;
     height: 36px;
-  }
-
-  .commandInspector {
-    top: auto;
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
-    width: auto;
-    height: min(54%, 470px);
-    border-radius: 16px;
-  }
-
-  .mapUnavailable {
-    inset: 96px 12px 54% 12px;
   }
 
   .inspectorTabsRoot {
@@ -1782,6 +1741,12 @@
   .commandMap :global(.maplibregl-ctrl-bottom-right),
   .commandMap :global(.maplibregl-ctrl-bottom-left) {
     display: none;
+  }
+
+  .commandMapFooter {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
   }
 }
 
