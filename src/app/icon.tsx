@@ -5,35 +5,12 @@ export const contentType = "image/png";
 
 export default function Icon() {
   return new ImageResponse(
-    <svg width="64" height="64" viewBox="0 0 64 64">
-      <rect x="2" y="2" width="60" height="60" rx="14" fill="#eaf2fb" />
-      <rect x="2.5" y="2.5" width="59" height="59" rx="13.5" fill="none" stroke="#7db3e3" />
-
-      <g transform="rotate(-44 32 32)">
-        <path d="M31 6.2L32 3.5L33 6.2L35 39H29L31 6.2Z" fill="#1f5d96" stroke="#0a1f3a" strokeWidth="0.8" />
-        <path d="M32 9.5V35.5" stroke="#b8d8f4" strokeWidth="1.1" strokeLinecap="round" opacity="0.92" />
-        <path d="M22.2 38.1H41.8L39 43.2H25L22.2 38.1Z" fill="#2f7fb7" stroke="#0a1f3a" strokeWidth="0.8" />
-        <rect x="29.1" y="41.8" width="5.8" height="10.6" rx="2.3" fill="#0a1f3a" />
-        <circle cx="32" cy="54.2" r="3.2" fill="#2f7fb7" stroke="#0a1f3a" strokeWidth="0.8" />
-      </g>
-
-      <g transform="rotate(44 32 32)">
-        <path d="M31 6.2L32 3.5L33 6.2L35 39H29L31 6.2Z" fill="#123f70" stroke="#0a1f3a" strokeWidth="0.8" />
-        <path d="M32 9.5V35.5" stroke="#d8ebfb" strokeWidth="1.1" strokeLinecap="round" opacity="0.92" />
-        <path d="M22.2 38.1H41.8L39 43.2H25L22.2 38.1Z" fill="#5aa0d7" stroke="#0a1f3a" strokeWidth="0.8" />
-        <rect x="29.1" y="41.8" width="5.8" height="10.6" rx="2.3" fill="#0a1f3a" />
-        <circle cx="32" cy="54.2" r="3.2" fill="#5aa0d7" stroke="#0a1f3a" strokeWidth="0.8" />
-      </g>
-
-      <g fill="none" stroke="#0a1f3a" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="32" cy="13.5" r="5.4" strokeWidth="3.8" />
-        <path d="M32 19.5V43.5" strokeWidth="5.2" />
-        <path d="M21.5 25H42.5" strokeWidth="5.2" />
-        <path d="M17.2 38.7C18.9 48.9 26.8 53.9 32 45.2C37.2 53.9 45.1 48.9 46.8 38.7" strokeWidth="5" />
-      </g>
-      <path d="M14.7 38.2L24.1 35.7L20.4 45.4Z" fill="#0a1f3a" />
-      <path d="M49.3 38.2L39.9 35.7L43.6 45.4Z" fill="#0a1f3a" />
-      <path d="M28.4 42.2H35.6L32 50.8Z" fill="#0a1f3a" />
+    <svg width="64" height="64" viewBox="0 0 385 385">
+      <path
+        d="M 168 13 L 165 15 L 162 14 L 141 19 L 139 21 L 129 23 L 112 32 L 107 33 L 102 36 L 101 38 L 97 39 L 96 41 L 85 47 L 77 55 L 74 56 L 56 74 L 55 77 L 51 80 L 32 109 L 32 111 L 29 115 L 28 121 L 26 122 L 26 126 L 24 127 L 23 134 L 21 135 L 22 137 L 20 138 L 18 145 L 19 147 L 17 149 L 16 154 L 17 156 L 15 158 L 16 161 L 14 165 L 15 168 L 13 170 L 14 178 L 12 182 L 12 201 L 14 206 L 13 212 L 15 216 L 14 219 L 16 222 L 15 225 L 18 238 L 21 243 L 20 245 L 22 251 L 24 252 L 23 254 L 37 283 L 50 302 L 53 304 L 54 307 L 61 313 L 62 316 L 65 319 L 70 322 L 80 332 L 83 333 L 84 335 L 86 335 L 88 338 L 93 340 L 97 344 L 111 352 L 121 355 L 122 357 L 144 365 L 146 364 L 148 366 L 156 368 L 158 367 L 161 369 L 164 368 L 166 370 L 174 371 L 180 370 L 191 372 L 198 372 L 207 370 L 213 371 L 216 369 L 219 370 L 223 368 L 226 369 L 229 367 L 231 368 L 233 366 L 235 367 L 243 365 L 251 361 L 253 362 L 261 359 L 264 356 L 267 356 L 278 351 L 288 345 L 292 341 L 299 338 L 301 335 L 308 331 L 313 325 L 317 323 L 328 312 L 329 309 L 338 300 L 355 273 L 358 266 L 358 263 L 361 260 L 361 256 L 363 255 L 362 253 L 364 252 L 364 247 L 367 242 L 370 231 L 369 229 L 371 226 L 370 224 L 372 222 L 371 218 L 373 213 L 372 210 L 374 204 L 374 180 L 372 173 L 373 169 L 372 161 L 363 128 L 361 127 L 361 123 L 347 96 L 342 90 L 341 87 L 338 85 L 338 83 L 336 82 L 335 79 L 331 76 L 330 73 L 312 55 L 309 54 L 306 50 L 285 36 L 283 36 L 282 34 L 264 25 L 255 23 L 253 21 L 236 16 L 234 17 L 227 14 L 212 12 Z M 265 54 L 268 57 L 267 60 L 258 68 L 257 71 L 254 73 L 244 89 L 244 91 L 242 92 L 239 98 L 238 103 L 235 106 L 235 110 L 232 114 L 232 118 L 230 119 L 229 127 L 227 128 L 228 130 L 226 131 L 225 135 L 226 137 L 224 139 L 225 141 L 223 143 L 221 152 L 222 156 L 220 158 L 221 161 L 219 164 L 216 181 L 217 185 L 215 187 L 215 192 L 209 214 L 210 216 L 208 218 L 207 221 L 208 223 L 206 224 L 202 239 L 199 242 L 192 259 L 190 260 L 186 268 L 183 271 L 180 277 L 178 278 L 177 281 L 174 283 L 167 293 L 154 306 L 151 307 L 135 320 L 119 329 L 115 326 L 125 317 L 125 315 L 131 310 L 132 307 L 140 297 L 141 293 L 143 292 L 147 282 L 152 275 L 156 261 L 158 260 L 157 258 L 158 255 L 160 254 L 161 246 L 163 245 L 165 237 L 164 235 L 166 233 L 167 229 L 166 227 L 168 225 L 170 215 L 169 213 L 171 210 L 172 205 L 171 202 L 173 199 L 172 196 L 174 194 L 177 179 L 176 176 L 180 166 L 180 160 L 182 158 L 187 142 L 189 139 L 189 136 L 192 133 L 196 123 L 199 120 L 202 113 L 205 110 L 210 101 L 214 98 L 219 90 L 228 82 L 228 80 L 233 77 L 244 66 L 249 64 L 259 56 Z"
+        fill="#153d60"
+        fillRule="evenodd"
+      />
     </svg>,
     { ...size }
   );
