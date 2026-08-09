@@ -4,6 +4,14 @@
 
 ### Approved airy system implemented across the production app
 
+- Published commit `7b2ea43` to `origin/main`. Vercel completed the production
+  deployment successfully.
+- Live verification at `https://www.derya.ai/login` confirms the deployed page
+  now uses the `#f7f8f7` canvas, Instrument Sans, a 16px sign-in workspace, the
+  direct `Derya` title, and no legacy grid background or blue header.
+- The initial report that the app still looked unchanged was correct. The prior
+  work existed only as uncommitted local files and had never reached production.
+
 - Added `src/app/design-system.css` as the production token and component layer.
   It loads after the legacy global stylesheet and defines the approved canvas,
   surfaces, typography, spacing, radii, controls, tables, dialogs, and responsive
@@ -47,6 +55,9 @@ Skipped verification:
   and the read-only pentest verification command reported database access was
   denied. The route is covered by the production build and expanded UI tests,
   but this handoff does not claim an authenticated browser pass.
+- The in-app browser was not attached, and the documented production pentest
+  password was not accepted. Authenticated production screenshots remain
+  unverified rather than inferred from the public route.
 
 ### App-wide airy design direction and zero-fluff copy rule
 

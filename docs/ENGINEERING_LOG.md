@@ -370,7 +370,7 @@ Use this file for chronological implementation notes that future agents should s
 ### 2026-06-30 - Production-facing load playbook and agent text cleanup
 
 - Branch: main
-- Commit: not committed
+- Commit: `7b2ea43`
 - Task: Make the focused load assistant look production-ready by rendering
   assistant formatting cleanly and removing fake-sounding copy from the
   focused load workflow.
@@ -4083,5 +4083,9 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: no schema, dependency, domain behavior, tenant scope, approval rule,
   or external action changed. The existing legacy stylesheet remains in place;
   the canonical design layer loads after it to provide the migration boundary.
-- Follow-up: when a local database is available, complete an authenticated
-  browser pass at desktop, tablet, and mobile widths.
+- Publication: pushed `main` to GitHub and verified the Vercel deployment
+  completed successfully. The production sign-in page changed from the legacy
+  `Derya Supply OS` grid treatment to the approved airy system.
+- Follow-up: complete an authenticated browser pass at desktop, tablet, and
+  mobile widths when an attached user session or valid test account is
+  available.
