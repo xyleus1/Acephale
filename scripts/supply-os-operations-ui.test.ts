@@ -17,8 +17,10 @@ const twinStyles = readFileSync(
 );
 
 assert.match(shell, /className=\{`\$\{styles\.shell\} supply-os-workspace`\}/);
-assert.match(shell, /<h2 id="supply-os-tracking-title">Tracking<\/h2>/);
-assert.match(shell, /Approval required/);
+assert.match(shell, /shortLabel: "Tracking"/);
+assert.match(shell, /className=\{styles\.operatingBrand\}/);
+assert.match(shell, /<strong>Derya<\/strong>/);
+assert.match(twin, /Approval required/);
 assert.doesNotMatch(shell, /Build release|Supplier award|Landed cost/);
 
 assert.match(twin, /import \{ AnimatePresence, motion \} from "motion\/react"/);

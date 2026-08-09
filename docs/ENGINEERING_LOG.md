@@ -4041,3 +4041,47 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: internal route names and component identifiers remain unchanged.
   No product behavior, schema, dependency, approval rule, or external action
   changed.
+
+### 2026-08-09 - Define the app-wide airy system and zero-fluff copy rule
+
+- Branch: main
+- Commit: not committed
+- Task: Make the Pallet-inspired direction materially more modern and airy,
+  remove non-operational narration, and make the rules durable for future
+  agents.
+- Files changed: `DESIGN.md`, `AGENTS.md`, `docs/DECISIONS.md`,
+  `docs/AI_HANDOFF.md`, and this engineering log. The revised interactive
+  Logistics review artifact remains outside the repository.
+- Verification: preview JavaScript parses, Quick Look rendered the revised page
+  at 1600px, prohibited preview phrases are absent, changed lines contain no
+  U+2014 character, and diff whitespace checks pass.
+- Failed/skipped checks: application tests and build were not run because no
+  production code, dependency, schema, or runtime behavior changed.
+- Caveats: this task defines the system and review artifact. Existing product
+  screens have not yet been migrated to the new tokens and geometry.
+- Follow-up: after visual approval, implement shared tokens and primitives, then
+  migrate Supply OS as the reference production surface.
+
+### 2026-08-09 - Apply the approved airy system across production surfaces
+
+- Branch: main
+- Commit: not committed
+- Task: Make the full app follow the approved 80 percent airy, 20 percent
+  operational design and keep interface copy strictly functional.
+- Files changed: the root layout and design layer, Supply OS shell and panel
+  styles, customer and supplier surfaces, both sign-in routes, UI contract
+  tests, product-copy enforcement, project context, handoff, and this log.
+- Verification: product-copy, Supply OS single-surface, shell-routing,
+  sidebar-map, company-navigation, continuous-layout, operations UI, scenario,
+  enterprise-design, customer-portal, TypeScript, production build, desktop and
+  mobile public-route browser inspection, console inspection, diff whitespace,
+  and changed-line U+2014 checks pass.
+- Failed/skipped checks: authenticated Supply OS browser inspection was not
+  possible because the checkout has no usable local database. Documented demo
+  logins failed and read-only pentest verification reported database access was
+  denied.
+- Caveats: no schema, dependency, domain behavior, tenant scope, approval rule,
+  or external action changed. The existing legacy stylesheet remains in place;
+  the canonical design layer loads after it to provide the migration boundary.
+- Follow-up: when a local database is available, complete an authenticated
+  browser pass at desktop, tablet, and mobile widths.

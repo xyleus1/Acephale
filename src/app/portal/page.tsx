@@ -75,29 +75,16 @@ export default async function CustomerPortalLoginPage({
           </div>
         </a>
         <nav className={styles.loginLinks} aria-label="Portal links">
-          <a href="mailto:rfq@usederya.com">Start a shipment</a>
-          <a href="/login">Derya team sign in</a>
+          <a href="mailto:rfq@usederya.com">Start shipment</a>
+          <a href="/login">Team sign in</a>
         </nav>
       </header>
 
       <div className={styles.loginLayout}>
-        <section className={styles.loginIntro}>
-          <div className={styles.loginKicker}>Managed freight, shared clearly</div>
-          <h1>See what is moving, what changed, and what needs your attention.</h1>
-          <p>
-            Your Derya team runs the operation. This workspace keeps shipment status, quote decisions, requested documents, and approved files in one place.
-          </p>
-          <div className={styles.loginContact}>
-            <span>Starting a new shipment?</span>
-            <a href="mailto:rfq@usederya.com">Email rfq@usederya.com</a>
-          </div>
-        </section>
-
         <section className={styles.loginPanel} aria-labelledby="customer-sign-in-heading">
           <div className={styles.loginPanelHeader}>
-            <div className={styles.eyebrow}>Secure access</div>
-            <h2 id="customer-sign-in-heading">Sign in to your company workspace</h2>
-            <p>We will email a six-digit code to an address approved by your Derya operator.</p>
+            <h2 id="customer-sign-in-heading">Customer sign in</h2>
+            <p>Use an email approved by your Derya operator.</p>
           </div>
 
         {query.error && (
@@ -153,7 +140,7 @@ export default async function CustomerPortalLoginPage({
         )}
 
         <div className={styles.loginFoot}>
-          Need access? Contact your Derya operator. You can still send a new request by email without portal access.
+          Need access? Contact your Derya operator.
         </div>
         </section>
       </div>

@@ -9,6 +9,7 @@
 ## Required Reading
 
 - Before implementation tasks, read `docs/NEXT_AGENT_TASK.md` if it contains a populated task.
+- Before changing visible UI or product copy, read and follow `DESIGN.md`.
 - Read `docs/AI_COLLABORATION_PROTOCOL.md` for the strategy-agent to coding-agent workflow.
 - Read `docs/COMPANY_BRAIN.md` for memory, agent, retrieval, and intelligence work.
 - Read `docs/PROJECT_CONTEXT.md` for freight workflow and product context.
@@ -28,6 +29,8 @@
 - Firecrawl/web intelligence work must keep `FIRECRAWL_API_KEY` secret, use
   source allow-lists, avoid broad crawls, avoid paywall/login scraping, and use
   mocked fixtures for tests unless the task explicitly asks for live internet.
+- Treat the app-wide 80 percent airy, 20 percent compact direction and the
+  zero-fluff product-copy rule in `DESIGN.md` as requirements, not suggestions.
 
 ## Handoff And Verification
 

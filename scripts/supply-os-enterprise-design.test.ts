@@ -10,6 +10,7 @@ const styles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-wo
 const workstreamShell = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream-shell.tsx"), "utf8");
 const workstreamStyles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream.module.css"), "utf8");
 const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
+const designSystem = readFileSync(join(root, "src/app/design-system.css"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const source = `${dashboard}\n${commandMap}\n${generator}\n${styles}\n${workstreamShell}\n${workstreamStyles}`;
 
@@ -27,11 +28,9 @@ for (const required of [
   ".commandMapFooter",
   "Provider contacts",
   "Supplier candidates",
-  "Required checks",
+  "Open checks",
   "Next action",
   "Open {workspace.shortLabel}",
-  "Routes and providers are candidates",
-  "Clickable transport legs",
   "Carrier shortlist",
   "Modeled, not a live quote",
   "Execution workspace reserved",
@@ -89,7 +88,6 @@ assert.match(dashboard, /@radix-ui\/react-dropdown-menu/, "customer and scope me
 assert.match(dashboard, /@radix-ui\/react-tabs/, "object detail and optimization analysis must use an accessible tabs primitive");
 assert.match(dashboard, /from "recharts"/, "operating flows and cost ranges must use a maintained chart library");
 assert.match(dashboard, /<Sankey/, "the inspector must visualize supplier-to-factory flow");
-assert.match(dashboard, /<BarChart/, "the selected lane must visualize its modeled planning range");
 assert.match(commandMap, /<Source id="supply-routes" type="geojson"/, "route geometry must render inside the maintained MapLibre map");
 assert.match(commandMap, /<Layer[\s\S]*id="supply-route-core"/, "the map must render a visible connected route layer");
 assert.match(commandMap, /routeDirectionMarker/, "route corridors must show repeated directional markers");
@@ -105,48 +103,30 @@ assert.match(styles, /\.routePathSegment \{[^}]*cursor: pointer/s, "curved route
 assert.equal(commandMap.includes("WEBGL_lose_context"), false, "capability detection must not explicitly discard a browser graphics context");
 assert.match(dashboard, /alignOffset=\{3[0-9]{2}\}/, "the coverage menu must open clear of the right-side inspector");
 assert.match(dashboard, /avoidCollisions=\{false\}/, "coverage-menu positioning must not be pulled back over the inspector");
-assert.match(dashboard, /Optimization priorities/, "the inspector must expose the complete optimization analysis");
+assert.match(dashboard, /<Tabs\.Trigger value="optimization">Priorities/, "the inspector must expose the optimization analysis");
+assert.match(dashboard, /analysisPriorityList/, "the inspector must keep the ranked priority list");
 assert.match(dashboard, /companyNameHint\(dashboard\.sourcePrompt\)/, "saved SEO taglines must collapse back to the researched company name");
 assert.match(dashboard, /function companyLogoUrl/, "saved dashboards must reject obvious hero and customer images as company logos");
 assert.match(dashboard, /contact\.phone/, "local carrier cards must expose official phone contacts when available");
 assert.match(dashboard, /contact\.proximity/, "carrier candidates must explain which endpoint they are near");
 
-const paletteSource = `${styles}\n${workstreamStyles}\n${commandMap}`;
-const colorTokens = new Set([
-  ...(paletteSource.match(/#[0-9a-fA-F]{6}/g) ?? []),
-  ...(paletteSource.match(/rgba?\([^)]*\)/g) ?? []),
-]);
-const approvedHexColors = new Set([
-  "#172027",
-  "#29485c",
-  "#3f4c55",
-  "#416557",
-  "#6d7880",
-  "#825f2f",
-  "#8a4545",
-  "#aeb7bd",
-  "#bac3c8",
-  "#d5dadd",
-  "#d6dcdf",
-  "#dce7ed",
-  "#dfe4e6",
-  "#edf2f5",
-  "#eef1f2",
-  "#f2f4f5",
-  "#f7f8f8",
-  "#ffffff",
-]);
-
-assert.ok(colorTokens.size <= 18, `Supply OS palette drifted to ${colorTokens.size} explicit colors`);
-for (const token of colorTokens) {
-  if (token.startsWith("#")) {
-    assert.equal(approvedHexColors.has(token.toLowerCase()), true, `Supply OS contains an unapproved color: ${token}`);
-  } else {
-    assert.fail(`Supply OS should not need an explicit RGB color: ${token}`);
-  }
+for (const token of [
+  "--ds-canvas: #f7f8f7",
+  "--ds-surface: #ffffff",
+  "--ds-surface-selected: #eaf0f2",
+  "--ds-ink: #1b1d1c",
+  "--ds-navy: #29485c",
+  "--ds-decision: #a76b45",
+  "--ds-radius-control: 10px",
+  "--ds-radius-panel: 14px",
+  "--ds-radius-workspace: 16px",
+  'font-family: "Instrument Sans"',
+]) {
+  assert.equal(designSystem.includes(token), true, `app design system is missing: ${token}`);
 }
-
-assert.equal(/box-shadow:\s*0\s+0/.test(paletteSource), false, "Supply OS must not use decorative outer glows");
+assert.match(styles, /\.workspace \.commandCenter \{[^}]*border-radius: 16px/s, "command workspace must use the approved 16px geometry");
+assert.match(styles, /\.workspace \.routeRail,[\s\S]*border-radius: 14px/s, "map overlays must use the approved 14px geometry");
+assert.equal(styles.includes("linear-gradient"), false, "Supply OS must not use decorative gradients");
 assert.equal(dashboard.includes("supply-os-workspace"), true, "dashboard needs a stable root for global style isolation");
 assert.equal(generator.includes("supply-os-workspace"), true, "generator needs a stable root for global style isolation");
 for (const control of ["button", "textarea"]) {
@@ -168,12 +148,12 @@ assert.match(styles, /\.routeRail,[\s\S]*\.commandInspector[\s\S]*position: abso
 assert.match(styles, /\.commandMapFooter[\s\S]*position: absolute/, "status strip must stay inside the map viewport");
 
 const compactStyles = styles.slice(styles.indexOf("@media (max-width: 1180px)"), styles.indexOf("@media (max-width: 900px)"));
-for (const rule of [".routeRail", ".routeRailCopy", ".commandInspector"]) {
+for (const rule of [".routeRail", ".commandInspector", ".commandMapFooter"]) {
   assert.equal(compactStyles.includes(rule), true, `compact command layout is missing: ${rule}`);
 }
 
 const tabletStyles = styles.slice(styles.indexOf("@media (max-width: 900px)"), styles.lastIndexOf("@media (max-width: 680px)"));
-for (const rule of [".commandHeader", ".commandInspector", ".inspectorBody"]) {
+for (const rule of [".routeRail", ".commandInspector", ".routeRailList"]) {
   assert.equal(tabletStyles.includes(rule), true, `tablet command layout is missing: ${rule}`);
 }
 

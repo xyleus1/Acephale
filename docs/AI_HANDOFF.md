@@ -2,6 +2,77 @@
 
 ## Latest Update
 
+### Approved airy system implemented across the production app
+
+- Added `src/app/design-system.css` as the production token and component layer.
+  It loads after the legacy global stylesheet and defines the approved canvas,
+  surfaces, typography, spacing, radii, controls, tables, dialogs, and responsive
+  behavior.
+- Rebuilt the Supply OS shell around the approved Logistics reference: a 228px
+  labeled rail, 78px factual header, 16px operational workspace, softer map
+  overlays, 10px controls, 14px panels, and restrained shadows.
+- Applied the same system to the company index, product twin, shared workspace,
+  decision intelligence, workstreams, snapshot surfaces, supplier finder,
+  customer administration, internal sign-in, and customer sign-in.
+- Removed the customer portal marketing hero and reduced both sign-in surfaces
+  to direct labels and required access guidance.
+- Expanded product-copy and design regression checks so the approved tokens,
+  geometry, navigation structure, and prohibited filler phrases are enforced.
+- No database schema, dependency, freight logic, tenant boundary, approval rule,
+  or external action changed.
+
+Verification:
+
+- `npm run check:product-copy`
+- `npm run test:supply-os-single-surface`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-company-navigation`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-operations-ui`
+- `npm run test:supply-os-scenario-viewport`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:customer-portal`
+- `npx tsc --noEmit --incremental false`
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/derya npm run build`
+- Desktop and mobile browser inspection of `/login` and `/portal`
+- Browser console inspection, with no application-owned runtime error found
+- `git diff --check`
+- Changed-line U+2014 scan
+
+Skipped verification:
+
+- Authenticated Supply OS screenshot inspection was unavailable because this
+  checkout has no usable local database. Both documented demo logins failed,
+  and the read-only pentest verification command reported database access was
+  denied. The route is covered by the production build and expanded UI tests,
+  but this handoff does not claim an authenticated browser pass.
+
+### App-wide airy design direction and zero-fluff copy rule
+
+- Replaced the partial Supply OS styling note with an app-wide `DESIGN.md`
+  contract targeting 80 percent airy and 20 percent compact operational UI.
+- Added exact color, typography, spacing, geometry, component, map, motion,
+  responsive, and copy rules. Marketing-style page intros, repeated subtitles,
+  obvious interaction instructions, and square enterprise geometry are now
+  explicit regressions.
+- Added `DESIGN.md` to the required reading in `AGENTS.md` so future UI and copy
+  changes start from the same system.
+- Recorded the direction as an accepted durable decision.
+- Revised the isolated Logistics review artifact outside the repository. It
+  starts directly with the network, uses factual labels only, and applies the
+  softer geometry and larger whitespace scale.
+- No production component, behavior, schema, dependency, approval rule, or
+  external action changed.
+
+Verification:
+
+- Inline preview JavaScript parse check
+- Quick Look render at 1600px and visual inspection
+- Prohibited preview-copy scan
+- Changed-line U+2014 scan
+- `git diff --check`
+
 ### Account menu reduced to sign-out only
 
 - Reduced the authenticated dashboard account dropdown to one action: Sign out.

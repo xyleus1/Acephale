@@ -89,7 +89,9 @@ See `PRODUCTIZATION_ROADMAP.md` for the full path to a production-ready automate
 - Shared OpenAI Responses API adapter with GPT-5.6 for parsing, drafting,
   classification, document analysis, and agent function tools
 - GPT-5.6 Structured Outputs for China Intel load extraction
-- Mercury banking-app inspired design system (white sidebar, indigo accent, thin dividers)
+- Pallet-inspired airy operating system defined in `DESIGN.md`: neutral canvas,
+  white surfaces, navy actions, soft dividers, rounded controls, and compact
+  density only inside operational workspaces
 
 ## Open Decisions
 

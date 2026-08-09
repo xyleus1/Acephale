@@ -1,19 +1,21 @@
 .intelligence {
   --intel-panel: #ffffff;
-  --intel-subtle: #f5f7f7;
-  --intel-line: #d5dcdf;
-  --intel-line-strong: #afb9be;
-  --intel-ink: #172027;
-  --intel-soft: #46545c;
-  --intel-muted: #6d7880;
+  --intel-subtle: #f1f3f2;
+  --intel-line: #e0e4e2;
+  --intel-line-strong: #c7ceca;
+  --intel-ink: #1b1d1c;
+  --intel-soft: #4d5552;
+  --intel-muted: #747c78;
   --intel-navy: #29485c;
   --intel-warning: #825f2f;
   width: min(1520px, calc(100% - 36px));
   margin: 12px auto;
+  overflow: hidden;
   border: 1px solid var(--intel-line-strong);
+  border-radius: 16px;
   color: var(--intel-ink);
   background: var(--intel-panel);
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: "Instrument Sans", sans-serif;
 }
 
 .intelligence *,
@@ -241,4 +243,14 @@
   .signalGrid {
     grid-template-columns: repeat(5, minmax(250px, 1fr));
   }
+}
+
+.intelligence :where(button, input, select, textarea) {
+  border-radius: 10px;
+}
+
+.signalGrid article,
+.emptyState,
+.decisionUse {
+  border-radius: 12px;
 }

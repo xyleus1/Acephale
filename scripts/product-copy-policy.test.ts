@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 const root = process.cwd();
 const paths = [
   "src/app/layout.tsx",
+  "src/app/login/page.tsx",
+  "src/app/portal/page.tsx",
   "src/app/dashboard/layout.tsx",
   "src/app/dashboard/supplier-finder/steel-supplier-finder.tsx",
   "src/app/dashboard/supply-os/page.tsx",
@@ -38,6 +40,13 @@ for (const phrase of [
   "Optimization priorities",
   "Company analysis",
   "Operating model",
+  "Supply OS / Logistics",
+  "See every movement in one place",
+  "Inspect suppliers, transport legs, customs handoffs, and delivery points",
+  "Three decisions need attention",
+  "Ranked by production impact and evidence readiness",
+  "Managed freight, shared clearly",
+  "See what is moving, what changed, and what needs your attention",
 ]) {
   assert.equal(surface.includes(phrase), false, `visible product copy restored a banned phrase: ${phrase}`);
 }

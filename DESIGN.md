@@ -1,135 +1,235 @@
-# Supply OS interface system
+# Derya interface system
 
-## Scope
+## Authority and scope
 
-This system governs the single internal Supply OS operator surface and its linked customer portal boundary.
+This file is the source of truth for the visual and copy system across the entire authenticated app and customer-facing product surfaces. New screens, redesigns, components, and agent-generated UI must follow it. Existing screens migrate toward it when touched.
 
-## Product thesis
+Product truth, provenance, uncertainty, legal notices, destructive-action warnings, and approval boundaries always remain visible. The design system may simplify their presentation but may not remove or weaken them.
 
-Supply OS is a working model of how a customer's physical operation may function and what should change next. The interface must answer four questions in order:
+## Direction
 
-1. What does the company make and where does it operate?
-2. What supplier-to-customer network is supported, customer stated, or inferred?
-3. What weakness is most likely to hurt cost, lead time, or continuity?
-4. What decision and input unlock the next action?
+The target is 80 percent airy and 20 percent compact operational UI.
 
-The map is the stable center of geographic domain views, not page wallpaper. The selected object and its next action are the primary output, not a collection of metrics.
+Airy means generous negative space, calm grouping, soft geometry, restrained color, strong typography, and one obvious action. It does not mean oversized marketing copy or empty decoration. Compact means tables, dense object lists, evidence details, and operational controls may use space efficiently inside a clearly bounded work area.
 
-## Reference patterns
+Pallet.com is the primary visual reference for whitespace, short labels, soft geometry, and immediate legibility. Kpler, Windward, and Pole Star Global are interaction references for geographic operations, evidence, and selected-object inspection. Do not copy any company's branding, assets, or exact layout.
 
-- Kpler: make geography and movement the primary operating surface.
-- Windward: keep evidence, confidence, and the selected-object dossier close to the map.
-- Pole Star Global: distinguish monitoring signals from confirmed operational records.
-- Pallet: use restrained, legible controls around dense operating data.
+## Product copy
 
-Do not copy their branding. Reuse the interaction principles: one operating picture, compact dossiers, explicit evidence state, and a small number of strong actions.
+Visible product copy must do at least one of these jobs:
 
-## Visual language
+1. Identify an object, state, source, or scope.
+2. Name an action the user can take.
+3. Explain a blocker, consequence, uncertainty, or approval boundary.
+4. Prevent a material operational mistake.
 
-The visual language is light industrial, quiet, and precise.
+If a phrase does none of those jobs, remove it.
+
+Do not add:
+
+- Marketing-style eyebrow labels above a page title.
+- Page slogans or generic value claims.
+- Introductory paragraphs that explain what the visible interface already shows.
+- Subtitles that repeat a heading in longer words.
+- Instructions such as "select an object" when the interaction is obvious.
+- Claims about intelligence, ease, speed, modernity, or visibility.
+- Placeholder prose added to make an empty area feel intentional.
+- Buzzwords such as command center, decision intelligence, modeled workspace, or single source of truth.
+
+The phrases "Supply OS / Logistics," "See every movement in one place," and "Inspect suppliers, transport legs, customs handoffs, and delivery points" are examples of prohibited filler. Do not paraphrase them. Remove that layer of copy entirely.
+
+Necessary copy includes evidence labels, provenance, demo status, uncertainty, missing inputs, legal or compliance context, destructive-action consequences, and human-approval requirements. Keep it factual and short.
+
+Examples:
+
+| Avoid | Use |
+| --- | --- |
+| See every movement in one place. | No heading. Start with the network. |
+| Select an object to see what is known. | No instruction. Make objects visibly selectable. |
+| Three decisions need attention. | 3 decisions |
+| Ranked by production impact and evidence readiness. | Show the ranking and evidence state. |
+| This powerful view helps you optimize logistics. | Remove it. |
+| Candidate relationship, not confirmed supply. | Keep it. This prevents a factual mistake. |
+| Human decision required. | Keep it. This preserves the approval boundary. |
+
+Use sentence case. Prefer nouns, facts, dates, counts, and verbs. Avoid exclamation marks. A heading should usually be one to four words. A button should usually be one to three words.
+
+## Color
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Canvas | `#f2f4f5` | Page background and quiet separation |
-| Panel | `#ffffff` | Primary working surfaces |
-| Subtle panel | `#f7f8f8` | Secondary controls and non-active regions |
-| Selected panel | `#edf2f5` | Selected rows and action context |
-| Line | `#d5dadd` | Default dividers |
-| Strong line | `#aeb7bd` | Inputs, focus-adjacent controls, and confirmation boxes |
-| Ink | `#172027` | Primary text and strongest actions |
-| Soft ink | `#3f4c55` | Explanatory text |
-| Muted ink | `#6d7880` | Metadata, provenance, and labels |
-| Operational navy | `#29485c` | One restrained accent for active routes and workstream links |
+| Canvas | `#f7f8f7` | App background and generous open space |
+| Surface | `#ffffff` | Primary work surfaces |
+| Surface subtle | `#f1f3f2` | Quiet grouping and inactive controls |
+| Surface selected | `#eaf0f2` | Selected rows and active context |
+| Line | `#e0e4e2` | Default dividers |
+| Line strong | `#c7ceca` | Inputs and bounded work areas |
+| Ink | `#1b1d1c` | Primary text and strongest actions |
+| Ink secondary | `#4d5552` | Supporting operational text |
+| Ink muted | `#747c78` | Metadata and labels |
+| Operational navy | `#29485c` | Active routes, focus, and workstream links |
+| Decision clay | `#a76b45` | Human decisions and unconfirmed evidence |
+| Success | `#3f6c55` | Confirmed healthy state |
 
-No gradients, glows, decorative shadows, saturated status colors, or random accent blocks. Selected states use a border, a quiet background change, and font weight. They do not use bottom underlines.
+Use neutral surfaces for most of the interface. Accent color communicates state or action, not decoration. Do not use gradients, glows, saturated status fields, random accent blocks, or colored cards without semantic meaning.
 
 ## Typography
 
-- Use IBM Plex Sans for UI, narrative, and actions.
-- Use IBM Plex Mono only for addresses, evidence labels, timestamps, counts, and stage numbers.
-- Page headings use 24 to 42 px depending on context.
-- Section headings use 16 to 22 px.
-- Primary body copy uses 13 to 14 px on desktop and never drops below 11 px for operational detail.
-- Metadata may use 9 to 10 px only when the same information is available through semantic labels or nearby body copy.
+- Use Instrument Sans for interface text, headings, navigation, and actions.
+- Use IBM Plex Mono only for timestamps, identifiers, counts, evidence labels, coordinates, and stage numbers.
+- Use a system sans fallback while web fonts load.
+- Primary page or object headings: 24 to 38px, weight 560 to 650, tight tracking.
+- Section headings: 14 to 20px, weight 600 to 650.
+- Body and controls: 13 to 15px.
+- Metadata: 10 to 12px. Do not use tiny text to hide uncertainty.
+- Use no more than three visible type sizes in one bounded panel unless a table requires otherwise.
 
-Use sentence case. Avoid slogans, model names, internal jargon, and inflated claims.
+Typography creates hierarchy before borders or background colors do.
 
-## Layout
+## Spacing and density
 
-The customer dashboard is one fixed-height operating view. The document must not scroll at supported desktop and presentation sizes.
+Use a 4px base grid.
 
-1. A persistent top ribbon identifies the company, logo or monogram fallback, facility, data freshness, and active domain.
-2. A persistent left sidebar switches Supply, Logistics, Suppliers, Opportunities, and Tracking without changing product routes.
-3. The default entry state is a clean row-based company list. Admins create company workspaces inline from this list.
-4. A back arrow returns any selected company to the company list without opening a modal.
-5. Geographic domain views keep the map inside a bordered central box. Left, right, and lower context boxes change with the selected domain.
-6. A right dossier describes the selected object, evidence, checks, and the single next action.
+| Context | Desktop | Tablet | Mobile |
+| --- | --- | --- | --- |
+| Page edge | 40 to 48px | 24 to 32px | 16 to 20px |
+| Major section gap | 32 to 48px | 24 to 32px | 20 to 24px |
+| Panel padding | 20 to 28px | 18 to 24px | 16 to 20px |
+| Related control gap | 8 to 12px | 8 to 12px | 8px |
+| Row height | 56 to 64px | 52 to 60px | 48 to 56px |
 
-The map must not become the whole-page background. Side context may sit beside the map but must not become a stack of floating popups. At narrower widths, the company list and domain panels become full-width rows or sheets while the persistent domain navigation remains available.
+Default to comfortable density. Compact density is allowed for tables, timelines, object lists, and comparison matrices. Do not make the whole app compact because one data surface is dense.
 
-## Map, components, and provenance
+Open space must separate concepts, not pad every element equally. Prefer one generous outer workspace with compact information inside it.
 
-Use maintained components instead of drawing map chrome or operational symbols in application code:
+## Geometry
 
-- MapLibre GL JS through React MapLibre for the map, route layers, markers, popups, scale, navigation, and attribution.
-- CARTO raster tiles for the first neutral basemap, with CARTO Positron and
-  OpenFreeMap Positron as fallbacks.
-- Lucide for supplier, factory, warehouse, movement, customs, and location symbols.
-- Radix primitives for menus and tooltips.
+The previous square-box style is retired.
 
-Do not add a hand-drawn SVG geography, invented pictograms, decorative map widgets, or proprietary copied assets. If WebGL is unavailable, keep the object rail and dossier usable and show a bounded renderer notice in the map canvas. A partial provider failure must not leave markers floating over an empty canvas.
+- Inline tags and segmented-control selections: 8px radius.
+- Buttons, inputs, selected rows, and menu items: 10px radius.
+- Floating panels and side dossiers: 12 to 14px radius.
+- Main workspaces, maps, dialogs, and sheets: 16px radius.
+- Pills are reserved for status, filters, and short categorical values.
+- Circular geometry is reserved for avatars, map markers, and status dots.
 
-Every node must be one of:
+Do not wrap every label, metric, or paragraph in a box. Use whitespace and dividers first. A border is justified only when it defines a real work object, input boundary, selection, or safety boundary.
+
+Shadows are soft and scarce. Use them only when a panel overlaps a map or another surface. A normal in-flow panel should usually have a border and no shadow.
+
+## App shell
+
+1. The persistent top ribbon identifies the current company and only the operational facts needed globally.
+2. The persistent left navigation switches domains without changing product identity.
+3. Do not repeat the product name, company, domain, or page purpose in a second title block.
+4. If the ribbon, navigation, and workspace already establish context, start directly with the work object.
+5. One screen should have one visually dominant work area and one dominant next action.
+6. Utility controls belong near the object they affect, not in a generic page hero.
+
+The company directory uses rows, not cards. Company creation is inline or uses a dedicated page region. Primary operations do not depend on hover-only or modal-only interactions.
+
+## Maps and operational workspaces
+
+The map is a bounded primary workspace, not full-page wallpaper and not a decorative card. Keep generous canvas around the workspace. Inside it, object rails and dossiers may be denser.
+
+- Use MapLibre GL JS through React MapLibre.
+- Use maintained basemaps, symbols, and accessible controls.
+- Use Lucide for operational icons and Radix primitives for menus, tabs, and tooltips.
+- Do not draw custom geography, pictograms, or controls when a maintained component exists.
+- Keep the object list and dossier usable if the map renderer fails.
+- Click or keyboard selection updates the persistent dossier. Hover is supplemental only.
+- Inferred routes are dashed. Confirmed routes are solid.
+- Map attribution remains visible.
+
+Every node and relationship must identify its evidence class:
 
 - Official evidence
 - Public evidence
 - Customer input
 - Inferred pattern
 
-Public evidence never becomes official evidence, and known endpoints never prove that a movement occurred. Inferred movement uses a dashed route, a hollow point, and explicit copy. Candidate suppliers and buyer profiles must say that they are qualification targets, not known relationships.
+Known endpoints do not prove that a movement occurred. Public evidence does not become official evidence. Candidate suppliers are qualification targets, not confirmed relationships.
 
-The map zooms to the current network. Routes remain dashed while they are planning hypotheses. Markers use one neutral shell, a standard symbol, and status color only. Click selects the object and updates the persistent dossier. Do not require hover popups to understand or operate the map.
+## Components
 
-## Operating action
+### Buttons
 
-The right dossier has two maintained Radix tabs. `Selected object` contains only information required to understand and advance that part of the network. `Optimization priorities` contains the ranked company operating analysis, its measurable outcome, and the linked workstream.
+- Minimum height: 42px desktop and 44px touch layouts.
+- Primary: dark ink or operational navy fill. Use once per decision region.
+- Secondary: neutral surface with a visible line.
+- Quiet: text or icon control with no permanent border.
+- Labels describe the action, not the benefit.
+- Focus uses a 2px operational navy outline with 2px offset.
 
-1. Object type, place, status, and evidence basis
-2. Cargo or operational scope
-3. Candidate contacts with role and fit
-4. Readiness checks when applicable
-5. One next action and one linked workstream
+### Panels
 
-A workstream link must carry the customer case identifier and must never imply that a supplier, booking, filing, or spend action is already live.
+- Use a panel for one coherent object or task, not for visual decoration.
+- Panel headers contain a direct label, optional factual count, and local controls.
+- Do not add descriptive subtitles beneath obvious panel headings.
+- Prefer a single divider between header, body, and action region.
 
-## Controls
+### Lists and tables
 
-- Primary actions use dark ink or operational navy, never multiple competing colors.
-- Secondary actions are white with a visible border.
-- Minimum interactive height is 42 px on desktop and 44 px on mobile.
-- Focus state is a 2 px operational navy outline with a 2 px offset.
-- Links inside evidence or candidate lists use navy text without an underline.
-- Disclosure rows use a chevron and full-row hit target.
+- Lists use full-row hit targets and quiet selected backgrounds.
+- Tables align numbers and dates with tabular figures.
+- Avoid card grids for records that users need to compare.
+- Keep status and provenance visible without making every cell a badge.
 
-## Company entry
+### Forms
 
-The company directory uses rows, not cards. Admin creation is an inline form in the directory and creates an office-shared operating workspace. Selecting a row opens that company's current domain view. Data import and research progress must remain inline or in dedicated page regions, never modal-only workflows.
+- Labels stay visible. Placeholder text is an example, not a label.
+- Group related inputs with spacing before adding containers.
+- Validation states state the problem and the correction.
+- Dangerous or external actions state the consequence and approval requirement.
 
-## Empty and future workstreams
+### Empty states
 
-Future workstream routes may be present before execution tools are connected. They must show the customer-specific starting condition, recommendation, decision, and required input. They must explicitly state that no supplier, booking, filing, or spend action is active. Do not fill unfinished pages with fake tables or sample transactions.
+- Name what is missing.
+- Offer one relevant action when an action exists.
+- Do not add illustrations, slogans, or paragraphs to occupy space.
+- Do not invent sample transactions or operational facts.
+
+## Motion
+
+- Use 120 to 180ms transitions for hover, selection, panel entry, and disclosure.
+- Prefer opacity and small position changes. Avoid bouncing, sweeping, or staged decorative motion.
+- Respect `prefers-reduced-motion`.
+- Motion must explain state change, not advertise polish.
+
+## Responsive behavior
+
+- Preserve readable labels as long as possible. Do not collapse critical navigation to unexplained icons at medium widths.
+- At narrow widths, transform side panels into full-width rows or sheets.
+- Keep the current company, current domain, evidence state, and primary action available.
+- Never shrink operational text below readable size to preserve a desktop layout.
+- Allow dense tables to scroll horizontally inside their own region.
 
 ## Prohibited patterns
 
-- Decorative corner logo tiles inside Supply OS
-- Tab selection represented by a random bottom bar
+- Marketing heroes inside the authenticated product
+- Generic page intros and explanatory filler
+- Repeated product, company, domain, or object labels
+- Square enterprise buttons and panels
 - Cards created only to fill space
-- Repeated summaries that do not change the next decision
-- Stacked report sections that force the customer dashboard to scroll
-- Full-background maps that erase the surrounding information hierarchy
-- Modal or popup workflows for company selection and creation
-- Custom-drawn maps, icons, or controls when a maintained library component exists
-- Generic provider lists without scope, evidence, or a customer-specific reason
-- Fake rates, shipment status, customers, suppliers, or system connections
-- Buzzword headings such as command center, modeled workspace, or decision intelligence
-- Tiny gray text used to hide uncertainty
+- A box around every metric or sentence
+- More than one visually dominant primary action in a decision region
+- Full-background maps that erase information hierarchy
+- Modal or hover-popup workflows for primary operation
+- Decorative gradients, glows, glass effects, or saturated accent fields
+- Fake rates, shipment states, customers, suppliers, or system connections
+- Tiny gray copy used to hide uncertainty
+- AI model names, internal slogans, and inflated product claims
+
+## Agent implementation contract
+
+Before changing visible UI, agents must:
+
+1. Read this file.
+2. Reuse existing tokens and maintained components before inventing variants.
+3. Remove redundant copy encountered in the touched surface.
+4. Check desktop and mobile behavior in proportion to the change.
+5. Preserve provenance, demo labels, uncertainty, and approval boundaries.
+6. Run product-copy checks and relevant UI contracts.
+7. Update this file and `docs/DECISIONS.md` when introducing a durable visual pattern.
+
+A screenshot or image is a review artifact, not the design system. The durable system is this document plus coded tokens, shared components, automated checks, and review requirements.

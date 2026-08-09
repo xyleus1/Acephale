@@ -1,16 +1,16 @@
 .shell {
   min-height: 100vh;
-  color: #182b3b;
-  background: #f4f1ea;
-  font-family: "IBM Plex Sans", sans-serif;
+  color: #1b1d1c;
+  background: #f7f8f7;
+  font-family: "Instrument Sans", sans-serif;
 }
 
 .topbar {
   position: sticky;
   top: 0;
   z-index: 20;
-  border-bottom: 1px solid #cbc6bc;
-  background: rgba(255, 253, 250, 0.97);
+  border-bottom: 1px solid #e0e4e2;
+  background: rgb(255 255 255 / 94%);
   backdrop-filter: blur(10px);
 }
 
@@ -106,9 +106,9 @@
   align-items: center;
   justify-content: center;
   padding: 8px 13px;
-  border-radius: 3px;
-  border: 1px solid #0f4f85;
-  background: #0f4f85;
+  border-radius: 10px;
+  border: 1px solid #1b1d1c;
+  background: #1b1d1c;
   color: #ffffff;
   font: inherit;
   font-size: 13px;
@@ -2676,4 +2676,74 @@
   .date {
     grid-column: 2;
   }
+}
+
+.shell :where(button, input, select, textarea),
+.loginShell :where(button, input, select, textarea) {
+  border-radius: 10px;
+}
+
+.card,
+.summaryCard,
+.actionCard,
+.shipmentCard,
+.documentCard,
+.loginPanel,
+.notice,
+.error {
+  border-radius: 14px;
+}
+
+.loginShell {
+  color: #1b1d1c;
+  background: #f7f8f7;
+  font-family: "Instrument Sans", sans-serif;
+}
+
+.loginTopbar {
+  min-height: 78px;
+  padding: 14px clamp(20px, 4vw, 48px);
+  border-color: #e0e4e2;
+  background: rgb(255 255 255 / 94%);
+}
+
+.loginLayout {
+  width: 100%;
+  min-height: calc(100dvh - 78px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 48px;
+}
+
+.loginPanel {
+  width: min(520px, 100%);
+  padding: 32px;
+  border: 1px solid #c7ceca;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 72px rgb(27 29 28 / 7%);
+}
+
+.loginPanelHeader {
+  margin-bottom: 24px;
+}
+
+.loginPanelHeader h2 {
+  margin: 0 0 8px;
+  color: #1b1d1c;
+  font-size: 26px;
+  font-weight: 620;
+}
+
+.loginPanelHeader p,
+.loginFoot {
+  color: #747c78;
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .loginLinks a:first-child { display: none; }
+  .loginLayout { padding: 24px 16px; }
+  .loginPanel { padding: 24px 20px; }
 }

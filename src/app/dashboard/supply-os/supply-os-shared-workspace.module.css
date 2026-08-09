@@ -1,11 +1,11 @@
 .workspaceControl {
   --shared-panel: #ffffff;
-  --shared-subtle: #f4f7f7;
-  --shared-line: #d1d9dc;
-  --shared-line-strong: #aeb9be;
-  --shared-ink: #172127;
-  --shared-soft: #43525a;
-  --shared-muted: #6b7880;
+  --shared-subtle: #f1f3f2;
+  --shared-line: #e0e4e2;
+  --shared-line-strong: #c7ceca;
+  --shared-ink: #1b1d1c;
+  --shared-soft: #4d5552;
+  --shared-muted: #747c78;
   --shared-navy: #294a5d;
   --shared-navy-soft: #e7eef1;
   --shared-success: #3f6958;
@@ -15,9 +15,10 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--shared-line-strong);
+  border-radius: 16px;
   color: var(--shared-ink);
   background: var(--shared-panel);
-  font-family: "IBM Plex Sans", "Inter", sans-serif;
+  font-family: "Instrument Sans", sans-serif;
   font-size: 13px;
 }
 
@@ -783,4 +784,17 @@
   .spin {
     animation-duration: 1.5s;
   }
+}
+
+.workspaceControl :where(button, input, select, textarea) {
+  border-radius: 10px;
+}
+
+.headerIcon,
+.snapshotPanel,
+.importPanel,
+.createDialog,
+.zeroState,
+.stagedReview {
+  border-radius: 12px;
 }

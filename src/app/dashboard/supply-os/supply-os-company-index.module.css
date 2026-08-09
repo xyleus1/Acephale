@@ -1,25 +1,28 @@
 .index {
-  width: min(1180px, calc(100% - 48px));
-  margin: 24px auto;
-  border: 1px solid #aeb8bd;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #c7ceca;
+  border-radius: 16px;
   background: #ffffff;
+  box-shadow: 0 24px 72px rgb(27 29 28 / 6%);
 }
 
 .index > header {
-  min-height: 78px;
+  min-height: 84px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 14px 18px;
-  border-bottom: 1px solid #d5dbde;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e0e4e2;
 }
 
 .index > header span,
 .companyIdentity small,
 .companyFacts small {
-  color: #6d7980;
-  font-size: 10px;
+  color: #747c78;
+  font-size: 11px;
 }
 
 .index > header h2 {
@@ -35,23 +38,24 @@
 
 .headerActions button,
 .createRow button {
-  min-height: 38px;
+  min-height: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 12px;
-  border: 1px solid #aeb8bd;
-  color: #162027;
+  padding: 0 13px;
+  border: 1px solid #c7ceca;
+  border-radius: 10px;
+  color: #1b1d1c;
   background: #ffffff;
   cursor: pointer;
 }
 
 .headerActions .newButton,
 .createRow button {
-  border-color: #162027;
+  border-color: #1b1d1c;
   color: #ffffff;
-  background: #162027;
+  background: #1b1d1c;
 }
 
 .createRow {
@@ -59,9 +63,9 @@
   grid-template-columns: 120px minmax(220px, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 1px solid #d5dbde;
-  background: #f6f8f8;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e0e4e2;
+  background: #f1f3f2;
 }
 
 .createRow label {
@@ -72,8 +76,9 @@
 .createRow input {
   min-height: 40px;
   padding: 0 11px;
-  border: 1px solid #aeb8bd;
-  color: #162027;
+  border: 1px solid #c7ceca;
+  border-radius: 10px;
+  color: #1b1d1c;
   background: #ffffff;
   font: inherit;
 }
@@ -90,15 +95,15 @@
 
 .companyRow {
   min-width: 0;
-  min-height: 72px;
+  min-height: 76px;
   display: grid;
   grid-template-columns: 38px minmax(220px, 1.4fr) minmax(130px, 0.7fr) minmax(150px, 0.8fr) 20px;
   align-items: center;
   gap: 14px;
-  padding: 12px 18px;
+  padding: 12px 24px;
   border: 0;
-  border-bottom: 1px solid #d5dbde;
-  color: #162027;
+  border-bottom: 1px solid #e0e4e2;
+  color: #1b1d1c;
   background: #ffffff;
   text-align: left;
   cursor: pointer;
@@ -110,7 +115,7 @@
 
 .companyRow:hover,
 .companyRow:focus-visible {
-  background: #edf2f5;
+  background: #eaf0f2;
 }
 
 .companyMark {
@@ -118,9 +123,10 @@
   height: 36px;
   display: grid;
   place-items: center;
-  border: 1px solid #29485c;
+  border: 1px solid #c7ceca;
+  border-radius: 10px;
   color: #29485c;
-  background: #edf2f5;
+  background: #f1f3f2;
   font-size: 11px;
   font-weight: 700;
 }

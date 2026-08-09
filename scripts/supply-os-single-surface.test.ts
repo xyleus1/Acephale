@@ -52,7 +52,7 @@ assert.match(
 );
 
 assert.match(rootLayout, /default: "Derya Supply OS"/);
-assert.match(loginPage, />Derya Supply OS<\/h1>/);
+assert.match(loginPage, /<h1 className="login-title">Derya<\/h1>/);
 assert.match(middleware, /const EMPLOYEE_HOME = "\/dashboard\/supply-os"/);
 assert.match(middleware, /pathname === "\/dashboard"/);
 assert.match(middleware, /new URL\("\/dashboard\/supply-os", req\.url\)/);

@@ -1,13 +1,13 @@
 .twin {
-  --twin-canvas: #eef1f2;
+  --twin-canvas: #f7f8f7;
   --twin-panel: #ffffff;
-  --twin-subtle: #f7f8f8;
-  --twin-selected: #edf2f5;
-  --twin-line: #d5dadd;
-  --twin-line-strong: #aeb7bd;
-  --twin-ink: #172027;
-  --twin-ink-soft: #3f4c55;
-  --twin-ink-muted: #6d7880;
+  --twin-subtle: #f1f3f2;
+  --twin-selected: #eaf0f2;
+  --twin-line: #e0e4e2;
+  --twin-line-strong: #c7ceca;
+  --twin-ink: #1b1d1c;
+  --twin-ink-soft: #4d5552;
+  --twin-ink-muted: #747c78;
   --twin-navy: #29485c;
   --twin-success: #416557;
   --twin-warning: #825f2f;
@@ -15,9 +15,10 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--twin-line-strong);
+  border-radius: 16px;
   color: var(--twin-ink);
   background: var(--twin-canvas);
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: "Instrument Sans", sans-serif;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -1478,4 +1479,28 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.twin :where(button, input, select, textarea) {
+  border-radius: 10px;
+}
+
+.productVisual,
+.productVisualFallback,
+.bomNavigator,
+.shortageQueue,
+.graphPanel,
+.inventorySection,
+.scenarioSection,
+.decisionDossier,
+.dossierRecommendation,
+.selectedScenario,
+.evidenceSection {
+  border-radius: 12px;
+}
+
+.treeIcon,
+.componentIcon,
+.dossierIcon {
+  border-radius: 8px;
 }

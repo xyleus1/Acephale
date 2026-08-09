@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LogoMark } from "@/components/logo-mark";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
@@ -47,7 +48,6 @@ export function SupplyOsOperatingShell({
     setWorkspaceSelection(selection);
     setCompanyIndexOpen(false);
   }, []);
-  const activePanelDefinition = PANELS.find((panel) => panel.id === activePanel) ?? PANELS[0];
   const companyName = workspaceSelection?.workspaceName ?? "Atlas Robotics";
   const companyInitials = useMemo(
     () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
@@ -79,6 +79,10 @@ export function SupplyOsOperatingShell({
           animate={{ x: 0, opacity: 1 }}
           aria-label="Workspace navigation"
         >
+          <a className={styles.operatingBrand} href="/dashboard/supply-os" aria-label="Derya home">
+            <LogoMark mini />
+            <strong>Derya</strong>
+          </a>
           <nav className={styles.panelNav} aria-label="Workspace sections">
             {PANELS.map((panel) => {
               const active = panel.id === activePanel;
@@ -114,13 +118,11 @@ export function SupplyOsOperatingShell({
                 ) : null}
               </span>
               <div>
-                <small>{companyIndexOpen ? "Company directory" : activePanelDefinition.shortLabel}</small>
                 <h1>{companyIndexOpen ? "Companies" : companyName}</h1>
               </div>
             </div>
             <div className={styles.workspaceControls}>
               <dl>
-                <div><dt>View</dt><dd>{companyIndexOpen ? "Company list" : activePanelDefinition.shortLabel}</dd></div>
                 <div><dt>Facility</dt><dd>{workspaceSelection ? "Published locations" : "Austin"}</dd></div>
                 <div><dt>Data</dt><dd>{workspaceSelection?.snapshotVersion ? `Snapshot v${workspaceSelection.snapshotVersion}` : "Demo"}</dd></div>
               </dl>

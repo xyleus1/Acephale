@@ -41,8 +41,8 @@ const staffPortalSource = readFileSync(resolve(process.cwd(), "src/app/dashboard
 const customerDevelopmentPreviewSource = readFileSync(resolve(process.cwd(), "src/app/customer/page.tsx"), "utf8");
 const customerWorkspaceSource = readFileSync(resolve(process.cwd(), "src/app/portal/workspace/page.tsx"), "utf8");
 
-assert.match(customerLoginSource, /href="\/login">Derya team sign in/);
-assert.match(customerLoginSource, /href="mailto:rfq@usederya\.com">Start a shipment/);
+assert.match(customerLoginSource, /href="\/login">Team sign in/);
+assert.match(customerLoginSource, /href="mailto:rfq@usederya\.com">Start shipment/);
 assert.match(staffLoginSource, /Customer\? <a href="\/portal">Sign in to your shipment workspace<\/a>/);
 assert.match(staffPortalSource, /customerPortalWorkspaceHref\(membership\.company\.id, true\)/);
 assert.match(staffPortalSource, /Customer sign-in:/);

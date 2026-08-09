@@ -16,6 +16,32 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-09 - Derya uses an app-wide airy system and zero-fluff UI copy
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The existing interface direction still felt evenly split between
+  spacious product design and square, compact enterprise software. It also
+  allowed page slogans, explanatory intros, and repeated subtitles that did
+  not help an operator make a decision.
+- Decision: Apply `DESIGN.md` to the entire app. Target 80 percent airy and 20
+  percent compact operational UI. Use generous page spacing, Instrument Sans,
+  restrained neutral color, 10px control radii, 12 to 14px panel radii, and
+  16px workspace radii. Start directly with the work when the app shell already
+  establishes context. Visible copy must identify an object, state, source, or
+  scope; name an action; explain a blocker, consequence, uncertainty, or
+  approval boundary; or prevent a material mistake. Otherwise remove it.
+- Rationale: Operators need fast comprehension, not narration. Spacious layout
+  and soft geometry make dense freight data easier to scan, while factual copy
+  preserves operational trust.
+- Consequences: Future UI work must read and follow `DESIGN.md`. Existing
+  screens migrate when touched. Generic hero copy, repeated descriptions,
+  square enterprise controls, and decorative card grids are regressions.
+  Provenance, demo state, uncertainty, compliance, destructive-action warnings,
+  and human approval remain mandatory.
+- Revisit when: observed operator sessions show measurable comprehension or
+  task-speed problems caused by the comfortable density or geometry.
+
 ### 2026-08-08 - Supply OS uses a persistent company ribbon, domain sidebar, and boxed map
 
 - Status: accepted

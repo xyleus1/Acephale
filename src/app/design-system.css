@@ -1,0 +1,468 @@
+/* App-wide implementation of DESIGN.md. Loaded after legacy global styles. */
+
+:root {
+  --ds-canvas: #f7f8f7;
+  --ds-surface: #ffffff;
+  --ds-surface-subtle: #f1f3f2;
+  --ds-surface-selected: #eaf0f2;
+  --ds-line: #e0e4e2;
+  --ds-line-strong: #c7ceca;
+  --ds-ink: #1b1d1c;
+  --ds-ink-secondary: #4d5552;
+  --ds-ink-muted: #747c78;
+  --ds-navy: #29485c;
+  --ds-navy-hover: #203a4a;
+  --ds-navy-soft: #e5eef2;
+  --ds-decision: #a76b45;
+  --ds-decision-soft: #f5ede8;
+  --ds-success: #3f6c55;
+  --ds-success-soft: #eaf2ed;
+  --ds-danger: #944b45;
+  --ds-danger-soft: #f6ecea;
+  --ds-radius-inline: 8px;
+  --ds-radius-control: 10px;
+  --ds-radius-panel: 14px;
+  --ds-radius-workspace: 16px;
+  --ds-shadow-overlap: 0 18px 48px rgb(27 29 28 / 9%);
+  --ds-page-gutter: 48px;
+  --ds-section-gap: 32px;
+  --ds-control-height: 42px;
+
+  /* Legacy aliases stay in place while surfaces migrate. */
+  --bg: var(--ds-canvas) !important;
+  --surface: var(--ds-surface) !important;
+  --surface-2: var(--ds-surface-subtle) !important;
+  --surface-3: #e9ecea !important;
+  --surface-hover: var(--ds-surface-selected) !important;
+  --border: var(--ds-line) !important;
+  --border-strong: var(--ds-line-strong) !important;
+  --text: var(--ds-ink) !important;
+  --text-2: var(--ds-ink-secondary) !important;
+  --text-3: var(--ds-ink-muted) !important;
+  --muted: var(--ds-ink-muted) !important;
+  --brand: var(--ds-navy) !important;
+  --brand-hover: var(--ds-navy-hover) !important;
+  --brand-light: var(--ds-navy-soft) !important;
+  --brand-border: #b8ccd5 !important;
+  --accent: var(--ds-decision) !important;
+  --accent-light: var(--ds-decision-soft) !important;
+  --accent-border: #d8bda9 !important;
+  --success: var(--ds-success) !important;
+  --success-bg: var(--ds-success-soft) !important;
+  --success-border: #bdd2c5 !important;
+  --warning: #956b2f !important;
+  --warning-bg: #f6f0e5 !important;
+  --warning-border: #dcc9a8 !important;
+  --danger: var(--ds-danger) !important;
+  --danger-bg: var(--ds-danger-soft) !important;
+  --danger-border: #dfc0bc !important;
+  --info: var(--ds-navy) !important;
+  --info-bg: var(--ds-navy-soft) !important;
+  --info-border: #b8ccd5 !important;
+  --neutral-bg: var(--ds-surface-subtle) !important;
+  --neutral-border: var(--ds-line) !important;
+  --radius-sm: var(--ds-radius-inline) !important;
+  --radius: var(--ds-radius-control) !important;
+  --radius-lg: var(--ds-radius-panel) !important;
+  --radius-xl: var(--ds-radius-workspace) !important;
+  --shadow-xs: none !important;
+  --shadow-sm: 0 8px 24px rgb(27 29 28 / 7%) !important;
+  --shadow-md: var(--ds-shadow-overlap) !important;
+  --shadow-lg: 0 28px 72px rgb(27 29 28 / 12%) !important;
+
+  --derya-navy: var(--ds-ink) !important;
+  --derya-navy-2: var(--ds-navy-hover) !important;
+  --derya-paper: var(--ds-canvas) !important;
+  --derya-paper-2: var(--ds-surface-subtle) !important;
+  --derya-panel: var(--ds-surface) !important;
+  --derya-line: var(--ds-line) !important;
+  --derya-line-strong: var(--ds-line-strong) !important;
+  --derya-blue: var(--ds-navy) !important;
+  --derya-blue-hover: var(--ds-navy-hover) !important;
+  --derya-blue-soft: var(--ds-navy-soft) !important;
+  --derya-blue-border: #b8ccd5 !important;
+  --derya-walnut: var(--ds-decision) !important;
+  --derya-walnut-2: #875537 !important;
+  --derya-walnut-soft: var(--ds-decision-soft) !important;
+  --derya-green: var(--ds-success) !important;
+  --derya-green-soft: var(--ds-success-soft) !important;
+  --derya-green-border: #bdd2c5 !important;
+  --derya-maroon: var(--ds-danger) !important;
+  --derya-maroon-soft: var(--ds-danger-soft) !important;
+  --derya-maroon-border: #dfc0bc !important;
+}
+
+html {
+  color-scheme: light;
+  background: var(--ds-canvas);
+  scrollbar-color: var(--ds-line-strong) transparent;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+body {
+  color: var(--ds-ink) !important;
+  background: var(--ds-canvas) !important;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--ds-ink);
+  font-weight: 620;
+  letter-spacing: -0.025em;
+}
+
+code,
+pre,
+.mono,
+.data-cell-mono,
+.record-ref,
+.copy-ref {
+  font-family: "IBM Plex Mono", monospace !important;
+}
+
+::selection {
+  color: var(--ds-ink) !important;
+  background: #d7e6ec !important;
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--ds-navy) !important;
+  outline-offset: 2px !important;
+}
+
+.app-shell,
+.content,
+.page-container {
+  background: var(--ds-canvas) !important;
+}
+
+.page-container {
+  padding: 40px var(--ds-page-gutter) 48px !important;
+}
+
+.app-shell-single-surface > .content > .page-container {
+  padding: 0 !important;
+}
+
+.app-shell-single-surface > .content:has(.supply-os-workspace) > .topbar {
+  display: none !important;
+}
+
+.topbar,
+.app-shell-single-surface > .content > .topbar {
+  min-height: 78px !important;
+  height: 78px !important;
+  padding: 0 var(--ds-page-gutter) !important;
+  border-color: var(--ds-line) !important;
+  color: var(--ds-ink) !important;
+  background: rgb(255 255 255 / 94%) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.topbar-brand,
+.topbar-brand-text,
+.topbar-brand-text strong,
+.app-shell-single-surface .topbar-brand-text,
+.app-shell-single-surface .topbar-brand-text strong {
+  color: var(--ds-ink) !important;
+}
+
+.brand-mark,
+.brand-mark-mini,
+.login-logo.brand-mark {
+  border-color: var(--ds-line-strong) !important;
+  border-radius: var(--ds-radius-control) !important;
+  background: var(--ds-surface-subtle) !important;
+  box-shadow: none !important;
+}
+
+.topbar-avatar,
+.app-shell-single-surface .topbar-avatar,
+.user-avatar {
+  border: 1px solid var(--ds-line-strong) !important;
+  border-radius: var(--ds-radius-control) !important;
+  color: var(--ds-ink) !important;
+  background: var(--ds-surface-subtle) !important;
+  box-shadow: none !important;
+}
+
+.topbar-menu-panel,
+.dropdown-menu,
+.menu-panel,
+.table-picker-menu {
+  padding: 6px !important;
+  border-color: var(--ds-line-strong) !important;
+  border-radius: var(--ds-radius-control) !important;
+  background: var(--ds-surface) !important;
+  box-shadow: var(--ds-shadow-overlap) !important;
+}
+
+.card,
+.table-shell,
+.record-hero,
+.record-panel,
+.record-notice,
+.record-primary-panel,
+.stage-panel,
+.ops-brief,
+.pricing-workspace,
+.pricing-detail,
+.pricing-sidebar,
+.pricing-carrier-card,
+.pricing-settings-card,
+.pricing-margin-card,
+.pricing-inquiry-card,
+.pricing-calculator,
+.pricing-result-panel,
+.inbox-thread-card,
+.inbox-group-card,
+.conversation-panel,
+.agent-panel,
+.product-modal,
+.portal-card,
+.portal-metric-card,
+.report-card,
+.control-card,
+.control-mini-card,
+.job-card,
+.pipeline-card,
+.sheet-snapshot,
+.sheet-playbook,
+.attention-queue,
+.target-trail {
+  border-color: var(--ds-line) !important;
+  border-radius: var(--ds-radius-panel) !important;
+  background: var(--ds-surface) !important;
+  box-shadow: none !important;
+}
+
+.card:hover,
+.inbox-thread-card:hover,
+.job-card:hover {
+  border-color: var(--ds-line-strong) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.btn,
+.button,
+.modal-action-btn,
+.boundary-btn,
+.boundary-link,
+.agent-fab,
+.agent-send-btn,
+.filter-chip,
+.view-switcher-tab,
+.appearance-toggle button,
+.load-filter-button,
+.sheet-select-trigger,
+.login-card button {
+  min-height: var(--ds-control-height);
+  border-radius: var(--ds-radius-control) !important;
+  box-shadow: none !important;
+}
+
+.btn:not(.btn-secondary):not(.btn-ghost),
+.button.primary,
+button.primary,
+.boundary-btn,
+.agent-send-btn {
+  border-color: var(--ds-ink) !important;
+  color: #ffffff !important;
+  background: var(--ds-ink) !important;
+}
+
+.btn:not(.btn-secondary):not(.btn-ghost):hover,
+.button.primary:hover,
+button.primary:hover,
+.boundary-btn:hover,
+.agent-send-btn:hover:not(:disabled) {
+  border-color: var(--ds-navy-hover) !important;
+  color: #ffffff !important;
+  background: var(--ds-navy-hover) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.btn-secondary,
+.btn.btn-secondary,
+.btn.secondary,
+button.secondary,
+.boundary-link {
+  border-color: var(--ds-line-strong) !important;
+  color: var(--ds-ink-secondary) !important;
+  background: var(--ds-surface) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  min-height: var(--ds-control-height);
+  border-color: var(--ds-line-strong) !important;
+  border-radius: var(--ds-radius-control) !important;
+  color: var(--ds-ink) !important;
+  background: var(--ds-surface) !important;
+  box-shadow: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ds-ink-muted) !important;
+}
+
+.data-table,
+.sheet-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table thead tr,
+.sheet-table thead tr {
+  background: var(--ds-surface-subtle) !important;
+}
+
+.data-table th,
+.sheet-table th {
+  color: var(--ds-ink-muted) !important;
+  font-family: "IBM Plex Mono", monospace !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+
+.data-table td,
+.sheet-table td {
+  min-height: 56px;
+  border-color: var(--ds-line) !important;
+}
+
+.login-shell {
+  min-height: 100dvh;
+  display: grid !important;
+  place-items: center !important;
+  padding: 40px 20px !important;
+  background: var(--ds-canvas) !important;
+}
+
+.login-card {
+  width: min(460px, 100%) !important;
+  overflow: hidden;
+  border: 1px solid var(--ds-line-strong) !important;
+  border-radius: var(--ds-radius-workspace) !important;
+  background: var(--ds-surface) !important;
+  box-shadow: 0 24px 72px rgb(27 29 28 / 7%) !important;
+}
+
+.login-header {
+  padding: 32px 32px 24px !important;
+  border-bottom: 1px solid var(--ds-line) !important;
+  background: var(--ds-surface) !important;
+}
+
+.login-body {
+  padding: 28px 32px 32px !important;
+}
+
+.login-title {
+  color: var(--ds-ink) !important;
+  font-size: 24px !important;
+  font-weight: 620 !important;
+  letter-spacing: -0.03em !important;
+}
+
+.login-subtitle,
+.login-audience-switch {
+  color: var(--ds-ink-muted) !important;
+}
+
+.modal,
+.dialog,
+[role="dialog"] {
+  border-radius: var(--ds-radius-workspace) !important;
+}
+
+.status-pill,
+.badge,
+.pill,
+.record-status-pill {
+  box-shadow: none !important;
+}
+
+.agent-panel {
+  border-radius: var(--ds-radius-workspace) 0 0 var(--ds-radius-workspace) !important;
+}
+
+.agent-panel-header,
+.conversation-header {
+  border-color: var(--ds-line) !important;
+  color: var(--ds-ink) !important;
+  background: var(--ds-surface) !important;
+}
+
+.agent-panel-title,
+.conversation-title,
+.agent-panel-kicker,
+.conversation-kicker {
+  color: var(--ds-ink) !important;
+}
+
+.agent-panel-subtitle,
+.conversation-subtitle {
+  color: var(--ds-ink-muted) !important;
+}
+
+@media (max-width: 1024px) {
+  :root { --ds-page-gutter: 32px; }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --ds-page-gutter: 16px;
+    --ds-section-gap: 24px;
+  }
+
+  .page-container {
+    padding: 24px var(--ds-page-gutter) 32px !important;
+  }
+
+  .topbar,
+  .app-shell-single-surface > .content > .topbar {
+    min-height: 68px !important;
+    height: 68px !important;
+    padding: 0 var(--ds-page-gutter) !important;
+  }
+
+  .login-header,
+  .login-body {
+    padding-right: 22px !important;
+    padding-left: 22px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

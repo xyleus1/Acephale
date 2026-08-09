@@ -1,6 +1,6 @@
 .page {
   display: grid;
-  gap: 20px;
+  gap: 32px;
   padding-bottom: 48px;
 }
 
@@ -38,7 +38,7 @@
 }
 
 .previewCard {
-  padding: 22px;
+  padding: 28px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, .7fr);
   gap: 32px;
@@ -84,7 +84,7 @@
 .previewEmpty {
   padding: 16px;
   border: 1px dashed var(--border);
-  border-radius: 3px;
+  border-radius: 10px;
   color: var(--text-2);
   font-size: 13px;
   text-align: center;
@@ -100,7 +100,7 @@
 .card {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 14px;
   background: var(--surface);
 }
 

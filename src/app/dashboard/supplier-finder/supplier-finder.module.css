@@ -1,8 +1,8 @@
 .page {
-  --ink: #18232b;
-  --muted: #66737c;
-  --line: #dce2e5;
-  --soft: #f5f7f8;
+  --ink: #1b1d1c;
+  --muted: #747c78;
+  --line: #e0e4e2;
+  --soft: #f1f3f2;
   --navy: #29485c;
   display: grid;
   gap: 18px;
@@ -84,6 +84,7 @@
 .emptyState,
 .gapsPanel {
   border: 1px solid var(--line);
+  border-radius: 14px;
   background: #fff;
 }
 

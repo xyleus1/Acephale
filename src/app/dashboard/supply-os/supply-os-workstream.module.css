@@ -1,18 +1,18 @@
 .workspace {
-  --canvas: #f2f4f5;
+  --canvas: #f7f8f7;
   --panel: #ffffff;
-  --panel-subtle: #f7f8f8;
-  --line: #d5dadd;
-  --line-strong: #aeb7bd;
-  --ink: #172027;
-  --ink-soft: #3f4c55;
-  --ink-muted: #6d7880;
+  --panel-subtle: #f1f3f2;
+  --line: #e0e4e2;
+  --line-strong: #c7ceca;
+  --ink: #1b1d1c;
+  --ink-soft: #4d5552;
+  --ink-muted: #747c78;
   --navy: #29485c;
   min-height: calc(100vh - 56px);
   margin: -22px -28px;
   color: var(--ink);
   background: var(--canvas);
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: "Instrument Sans", sans-serif;
 }
 
 .workspace * {
@@ -46,7 +46,7 @@
   gap: 8px;
   padding: 0 14px;
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: 10px;
   color: var(--ink-soft);
   background: var(--panel);
   font-size: 13px;
@@ -246,4 +246,14 @@
   .primaryLink {
     width: 100%;
   }
+}
+
+.main > section,
+.header,
+.context,
+.placeholder,
+.loading,
+.missing,
+.status {
+  border-radius: 14px;
 }
