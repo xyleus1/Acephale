@@ -4,7 +4,7 @@ import "./design-system.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: { default: "Derya Supply OS", template: "%s · Derya Supply OS" },
+  title: { default: "Derya", template: "%s · Derya" },
   applicationName: "Derya",
   description: "Freight operations."
 };

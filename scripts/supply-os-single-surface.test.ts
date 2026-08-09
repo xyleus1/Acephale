@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 const root = process.cwd();
 const dashboardLayout = readFileSync(resolve(root, "src/app/dashboard/layout.tsx"), "utf8");
 const rootLayout = readFileSync(resolve(root, "src/app/layout.tsx"), "utf8");
+const appIcon = readFileSync(resolve(root, "src/app/icon.tsx"), "utf8");
+const supplyOsPage = readFileSync(resolve(root, "src/app/dashboard/supply-os/page.tsx"), "utf8");
 const loginPage = readFileSync(resolve(root, "src/app/login/page.tsx"), "utf8");
 const logoutButton = readFileSync(resolve(root, "src/components/logout-button.tsx"), "utf8");
 const globalStyles = readFileSync(resolve(root, "src/app/globals.css"), "utf8");
@@ -51,7 +53,12 @@ assert.match(
   "the one-action account menu must stay compact",
 );
 
-assert.match(rootLayout, /default: "Derya Supply OS"/);
+assert.match(rootLayout, /default: "Derya"/);
+assert.match(rootLayout, /template: "%s · Derya"/);
+assert.doesNotMatch(rootLayout, /Derya Supply OS/, "browser metadata must use the Derya brand without a product suffix");
+assert.match(supplyOsPage, /title: \{ absolute: "Derya" \}/, "the primary workspace browser tab must be named Derya");
+assert.match(appIcon, /viewBox="-28 -28 441 441"/, "the Derya favicon needs enough padding to remain legible at browser-tab size");
+assert.match(appIcon, /fill="#f7f8f7"/, "the Derya favicon needs a visible neutral tile instead of a transparent cached mark");
 assert.match(loginPage, /<h1 className="login-title">Derya<\/h1>/);
 assert.match(middleware, /const EMPLOYEE_HOME = "\/dashboard\/supply-os"/);
 assert.match(middleware, /pathname === "\/dashboard"/);

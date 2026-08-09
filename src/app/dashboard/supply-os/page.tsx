@@ -4,7 +4,7 @@ import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
 import styles from "./supply-os-logistics.module.css";
 
 export const metadata: Metadata = {
-  title: "Supply OS",
+  title: { absolute: "Derya" },
   description: "Supply planning workspace.",
 };
 

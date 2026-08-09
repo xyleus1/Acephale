@@ -4135,6 +4135,26 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: inspect the authenticated company index and ribbon in an attached
   browser before the next production release.
 
+### 2026-08-09 - Set the browser identity to Derya
+
+- Branch: main
+- Commit: pending
+- Task: Change the favicon and browser tab identity to Derya.
+- Files changed: root metadata, primary Supply OS page metadata, generated app
+  icon, single-surface contract, handoff, and this log.
+- Behavior: the root title is `Derya`, child route titles use `Derya` as the
+  brand suffix, and the primary Supply OS workspace uses the exact tab title
+  `Derya`. The official mark now renders on a padded neutral tile and receives
+  a new generated icon hash.
+- Verification: single-surface, product-copy, TypeScript, production build,
+  generated production HTML, icon response headers and PNG signature, original
+  64px icon inspection, diff whitespace, and changed-diff U+2014 checks pass.
+- Failed/skipped checks: the in-app browser had no attached tab, so browser
+  chrome was not inspected directly.
+- Caveats: route-specific pages outside the primary workspace keep useful page
+  names with `Derya` as their suffix. No application behavior changed.
+- Follow-up: verify the deployed tab after the next production release.
+
 ### 2026-08-09 - Reconcile restrained motion with the Logistics rewrite
 
 - Branch: main

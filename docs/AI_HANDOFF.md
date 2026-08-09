@@ -2,6 +2,39 @@
 
 ## Latest Update
 
+### Browser identity now uses Derya
+
+- Changed the root browser metadata from `Derya Supply OS` to `Derya`.
+  Route titles now use `Derya` as the brand suffix, while the primary Supply OS
+  workspace uses the exact tab title `Derya`.
+- Updated the generated favicon canvas so the official Derya mark has a neutral
+  rounded tile and enough padding to remain legible at browser-tab size. The
+  changed icon output receives a new content hash, preventing browsers from
+  reusing the previous cached icon URL.
+- Expanded the single-surface contract to enforce the browser title, brand
+  suffix, primary workspace title, and favicon treatment.
+- No data, schema, tenant boundary, approval rule, dependency, freight logic,
+  or external action changed.
+
+Verification:
+
+- `npm run test:supply-os-single-surface`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- Production build with a disposable PostgreSQL URL
+- Production server output contained `<title>Derya</title>`
+- Production server output contained `application-name` set to `Derya`
+- Generated favicon returned HTTP 200 as a cache-busted 64px PNG
+- Generated favicon image inspected at its original 64px size
+- `git diff --check`
+- Changed-diff U+2014 scan
+
+Skipped verification:
+
+- The in-app browser had no attached tab, so direct browser-chrome inspection
+  was unavailable. Production HTML, response headers, PNG bytes, and the
+  rendered favicon image were checked directly instead.
+
 ### Derya identity and final Supply OS visual holdovers corrected
 
 - Replaced the invented Derya pictogram with the official circular Derya mark
