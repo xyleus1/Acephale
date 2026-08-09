@@ -122,4 +122,26 @@ assert.doesNotMatch(
   "retirement must fail on unexpected external dependencies",
 );
 
+const agentGuidance = fs.readFileSync(path.join(root, "AGENTS.md"), "utf8");
+assert.ok(
+  agentGuidance.includes(
+    "The retired parallel procurement prototype and its Supply OS name, routes, models, scripts, dependencies, and product positioning must not return.",
+  ),
+  "founder product-direction lock must remain in AGENTS.md",
+);
+
+const decisions = fs.readFileSync(path.join(root, "docs/DECISIONS.md"), "utf8");
+assert.ok(
+  decisions.includes(
+    "Retire the parallel procurement prototype and keep Freight OS canonical",
+  ),
+  "durable retirement decision must remain documented",
+);
+assert.ok(
+  decisions.includes(
+    "Every prior decision dated 2026-08-06 through 2026-08-08",
+  ),
+  "durable retirement decision must supersede the conflicting direction",
+);
+
 console.log("retired product boundary checks passed");

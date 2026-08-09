@@ -3143,3 +3143,27 @@ Use this file for chronological implementation notes that future agents should s
   freight workflow regressions passed. Authenticated runtime smoke checks
   returned 200 for ten restored admin routes. Employee route checks confirmed
   the loads board remains available and restricted routes redirect correctly.
+
+### 2026-08-08 - Reconcile the reverted retirement and add a merge boundary
+
+- Branch: `reconcile-requested-changes`, targeting `main`.
+- Task: Apply every requested PR #77 change after PR #81 restored the retired
+  prototype, while preserving unrelated uncommitted work in the primary
+  checkout.
+- Integration: Reverted PR #81's single revert commit. The resulting tree
+  matched merge commit `a91c9ec` exactly before adding the product-direction
+  lock and GitHub enforcement.
+- Product direction: Added an explicit founder rule to `AGENTS.md` and an
+  accepted decision superseding every older decision that promoted the retired
+  prototype as an active product.
+- Enforcement: Added `.github/workflows/product-boundary.yml`. Pull requests
+  and pushes to `main` must retain and pass the retirement boundary and product
+  copy checks.
+- Safety: No uncommitted file in the primary checkout was staged, changed, or
+  deleted. The existing forward migration remains non-cascading and the five
+  historical migrations remain unchanged.
+- Verification: Product copy, retirement boundary, Supplier Finder images,
+  employee routing, docs freshness, freight workflow tests, customer portal
+  tests, Prisma validation, TypeScript, the full 24-migration chain on a
+  disposable PostgreSQL database, zero retired database objects, production
+  build, diff hygiene, and changed-line U+2014 scan passed.

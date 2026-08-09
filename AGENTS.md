@@ -5,6 +5,7 @@
 - Derya is a freight forwarding operating system, not a generic CRM.
 - The product supports pricing, route choice, risk assessment, margin guardrails, negotiation, and operational execution with human approval where risk is high.
 - Repo docs are the source of truth. Chat history is not.
+- FOUNDER PRODUCT DIRECTION (Mert, 2026-08-08): The retired parallel procurement prototype and its Supply OS name, routes, models, scripts, dependencies, and product positioning must not return. The freight dashboard, RFQ, pricing, inbox, CRM, carrier, intelligence, reporting, and Supplier Finder workflows are the active internal product. Any reversal requires a new explicit founder instruction that names this decision and explains the migration and data-preservation plan.
 
 ## Required Reading
 

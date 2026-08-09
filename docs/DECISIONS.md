@@ -16,6 +16,40 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-08 - Retire the parallel procurement prototype and keep Freight OS canonical
+
+- Status: accepted
+- Owner: founder, product, and engineering
+- Context: The parallel procurement prototype introduced a second product
+  identity, replaced active freight workflows with redirects, and accumulated
+  fixture-heavy routes, models, scripts, and dependencies. Its removal was
+  merged in PR #77 and then reverted in PR #81 because older decision records
+  still described that prototype as the approved direction. The founder has
+  explicitly directed that the removal and all requested follow-up changes be
+  reapplied.
+- Decision: The Supply OS name, routes, APIs, domain modules, Prisma models,
+  tests, feature-only dependencies, and product positioning are retired. Keep
+  the freight dashboard, RFQ, pricing, inbox, CRM, carrier, intelligence,
+  reporting, customer portal, and Supplier Finder workflows as the active
+  product. Supplier Finder may use source-backed company, facility, logo, and
+  product images, with company-domain matching and visible source links.
+- Rationale: One canonical freight operating product is easier to understand,
+  maintain, test, and ship. Restoring the retired prototype because an older
+  document says it was approved is a change-control failure, not a product
+  requirement.
+- Consequences: `scripts/retired-product-boundary.test.ts`, the product-copy
+  policy, the production build gate, and the Product boundary GitHub workflow
+  must remain in place. Historical Prisma migrations remain unchanged, while
+  the forward retirement migration removes the 26 retired tables and 18
+  trigger functions without `CASCADE`. Product restoration cannot be hidden
+  inside a refactor, visual cleanup, or conflict-resolution PR.
+- Supersedes: Every prior decision dated 2026-08-06 through 2026-08-08 that
+  promoted Supply OS as an active, primary, sole, authenticated, map-first, or
+  customer-facing product surface.
+- Revisit when: The founder explicitly names this decision and approves a new
+  product direction, including data ownership, migration, tenant scope,
+  approval boundaries, and a plan for preserving active freight workflows.
+
 ### 2026-08-07 - Supplier discovery separates public evidence from private origin context
 
 - Status: accepted
