@@ -557,7 +557,7 @@ function executionBrief(item: DecisionQueueItem | null): DecisionQueueBrief["exe
     case "OUTCOME":
       return {
         ...base,
-        next_step: "Resolve the pending customer quote: follow up if still live, or mark won/lost so the pricing brain learns.",
+        next_step: "Resolve the pending customer quote: follow up if still live, or mark won/lost so pricing rules can use the outcome.",
         safety: "Do not mark an outcome without customer evidence.",
       };
     case "REPLY":

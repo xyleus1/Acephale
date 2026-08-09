@@ -1,4 +1,4 @@
-// Open-data market baseline for the US domestic trucking wedge.
+// Open-data market baseline for US domestic trucking.
 // Keyless public feeds: BLS (long-distance truckload PPI) and the FMCSA
 // company census on Socrata (CA carrier-supply counts). Key-gated free feeds
 // (skipped silently when the env var is absent): EIA (California diesel,

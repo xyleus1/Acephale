@@ -19,12 +19,30 @@
   border-bottom: 1px solid var(--line);
 }
 
+.eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #6d7880;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .hero h1 {
   margin: 0;
   color: #172027;
   font-size: clamp(28px, 3vw, 42px);
   font-weight: 650;
   letter-spacing: -0.04em;
+}
+
+.hero p {
+  max-width: 700px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .heroBoundary {
@@ -242,6 +260,13 @@
   background: #f8fafb;
 }
 
+.privateCard p {
+  margin: 9px 0 0;
+  color: #738089;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 .gateCard ol {
   display: grid;
   gap: 0;
@@ -328,8 +353,16 @@
 
 .emptyState h3 {
   max-width: 620px;
-  margin: 16px 0 0;
+  margin: 16px 0 6px;
   font-size: 16px;
+}
+
+.emptyState p {
+  max-width: 700px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .resultSummary {
@@ -338,6 +371,165 @@
   color: #53616a;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.productVisuals,
+.candidateVisuals {
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.productVisuals {
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+}
+
+.productVisuals > header,
+.candidateVisuals > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.productVisuals > header > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.productVisuals h3,
+.candidateVisuals strong {
+  margin: 0;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.productVisuals > header svg {
+  color: var(--navy);
+}
+
+.productVisuals > header small,
+.candidateVisuals > header small {
+  color: #758189;
+  font-size: 9px;
+}
+
+.productVisuals > p,
+.candidateVisuals > p {
+  margin: 0;
+  color: #738089;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.visualGrid,
+.compactVisualGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.visualGrid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.compactVisualGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.visualCard,
+.candidateCard .visualCard {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dce2e5;
+  background: #f7f8f9;
+  color: inherit;
+  font-weight: 400;
+  text-decoration: none;
+}
+
+.visualCard:hover,
+.candidateCard .visualCard:hover {
+  border-color: #9fb1ba;
+  text-decoration: none;
+}
+
+.visualImage {
+  position: relative;
+  height: 132px;
+  overflow: hidden;
+  border-bottom: 1px solid #dce2e5;
+  background: #edf1f3;
+}
+
+.compactVisualGrid .visualImage {
+  height: 92px;
+}
+
+.visualImage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.visualCard[data-kind="logo"] .visualImage img {
+  padding: 14px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.visualImage > span {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  padding: 3px 5px;
+  background: rgb(20 31 38 / 82%);
+  color: #fff;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.visualMeta {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+}
+
+.visualMeta strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visualMeta p {
+  display: -webkit-box;
+  min-height: 2.6em;
+  margin: 0;
+  overflow: hidden;
+  color: #65727a;
+  font-size: 8px;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.visualMeta small {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  color: var(--navy);
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .candidateGrid {
@@ -418,6 +610,14 @@
 .evidenceSummary {
   margin-top: 6px;
   color: #6b7780;
+}
+
+.candidateVisuals {
+  display: grid;
+  gap: 8px;
+  margin-top: 13px;
+  padding: 10px;
+  background: #f8fafb;
 }
 
 .evidenceList {
@@ -560,6 +760,10 @@
     grid-template-columns: 1fr;
   }
 
+  .visualGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .sideStack {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -579,6 +783,11 @@
   .sideStack,
   .gapsPanel {
     grid-template-columns: 1fr;
+  }
+
+  .visualGrid,
+  .compactVisualGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .fullField {

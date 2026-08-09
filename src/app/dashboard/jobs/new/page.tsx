@@ -116,7 +116,6 @@ export default async function NewJobPage() {
       <div className="page-header form-page-header">
         <div>
           <h1 className="page-title">New Job</h1>
-          <p className="page-subtitle">Create a manual job without an RFQ</p>
         </div>
       </div>
 

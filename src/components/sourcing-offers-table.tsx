@@ -160,7 +160,7 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
               style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               <Icon name="sparkles" size={11} />
-              {busy ? "Extracting…" : "Re-extract with AI"}
+              {busy ? "Extracting…" : "Re-extract"}
             </button>
           </div>
         </div>
@@ -254,12 +254,12 @@ export function SourcingOffersTable({ inquiryId, rows }: { inquiryId: string; ro
                             fontSize: 10.5, padding: "2px 6px", borderRadius: 3,
                             background: "transparent", color: "var(--brand)", border: "1px solid var(--brand-border)", cursor: "pointer",
                           }}
-                        >AI reply</button>
+                        >Draft reply</button>
                         <button
                           type="button"
                           onClick={() => counter(r)}
                           disabled={busy || !r.offer?.pricePerUnit}
-                          title={r.offer?.pricePerUnit ? "AI counter-offer at a target price" : "Need a parsed price first"}
+                          title={r.offer?.pricePerUnit ? "Draft a counter-offer at a target price" : "Need a parsed price first"}
                           style={{
                             fontSize: 10.5, padding: "2px 6px", borderRadius: 3,
                             background: "transparent", color: "var(--text-2)",

@@ -82,7 +82,6 @@ export function PricingCalculator({
     <section className="card pricing-calculator">
       <header className="pricing-calculator-header">
         <h2 className="pricing-calculator-title">Rate calculator</h2>
-        <p className="pricing-calculator-subtitle">Enter a route to price against lane rates and margin profiles.</p>
       </header>
 
       <div className="pricing-calculator-body">

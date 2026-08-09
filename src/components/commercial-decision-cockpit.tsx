@@ -205,7 +205,7 @@ export function CommercialDecisionCockpit({
     {
       key: "data",
       tone: docTone,
-      label: "Data room",
+      label: "Documents",
       value: `${approvedDocs}/${totalDocs} docs approved`,
       detail: `${analyzedDocs} analyzed, ${extractedFields} extracted fields, ${documentFlags} flags.`,
     },
@@ -295,7 +295,6 @@ export function CommercialDecisionCockpit({
     <section className={`commercial-cockpit ${gateTone}`}>
       <div className="commercial-cockpit-head">
         <div>
-          <div className="commercial-cockpit-kicker">Commercial brain</div>
           <h2>{strategy.operatorDecision.title}</h2>
           <p>{strategy.operatorDecision.command}</p>
         </div>
@@ -422,7 +421,7 @@ export function CommercialDecisionCockpit({
               <em>{commercialPriority.whyNow}</em>
             </div>
             <div>
-              <span>Economic unlock</span>
+              <span>Required economics</span>
               <strong>{commercialPriority.economicUnlock}</strong>
               <em>{commercialPriority.riskTradeoff}</em>
             </div>

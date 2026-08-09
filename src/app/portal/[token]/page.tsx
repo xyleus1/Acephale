@@ -116,7 +116,6 @@ export default async function PortalPage({
               <div id="portal-status-title" className="portal-section-title">
                 Current status
               </div>
-              <div className="portal-section-copy">Current shipment status published by the Derya operations desk.</div>
             </div>
             <div className="portal-status-chip">{currentStatusLabel}</div>
           </div>
@@ -160,7 +159,6 @@ export default async function PortalPage({
               <div id="portal-milestones-title" className="portal-section-title">
                 Shipment milestones
               </div>
-              <div className="portal-section-copy">Only operational milestones that matter to the customer are shown.</div>
             </div>
           </div>
           <div className="portal-row-list">
@@ -205,7 +203,6 @@ export default async function PortalPage({
                 <div id="portal-documents-title" className="portal-section-title">
                   Approved documents
                 </div>
-                <div className="portal-section-copy">Customer-visible files only.</div>
               </div>
             </div>
             <div className="portal-row-list">

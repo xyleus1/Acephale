@@ -137,12 +137,7 @@ export function IntelChatDesk({
   return (
     <main className={styles.desk} data-intel-chat>
       <header className={styles.deskHeader}>
-        <div>
-          <h1>Intelligence</h1>
-          <span className={styles.headerStatus}>
-            GPT-5.6 answers with cited freight evidence
-          </span>
-        </div>
+        <h1>Intelligence</h1>
         <a className={styles.shipmentLink} href="/dashboard/intel/load">
           <Icon name="ship" size={15} />
           Review a China load
@@ -156,16 +151,10 @@ export function IntelChatDesk({
       >
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyMark}>
-              <Icon name="sparkles" size={19} />
-            </div>
-            <span className={styles.emptyLabel}>Derya Intel</span>
             <h2>What do you need to know?</h2>
             <p>
-              Ask about import history, gateways, hardware categories,
-              customs risk, providers, lanes, or one real shipment. Derya
-              answers first and opens the full sourced report only when it
-              belongs in the answer.
+              Import history, gateways, hardware categories, customs,
+              providers, lanes, or a shipment.
             </p>
             <div
               className={styles.suggestions}
@@ -216,14 +205,11 @@ export function IntelChatDesk({
                 {message.id === reportMessageId ? (
                   <section
                     className={styles.reportAttachment}
-                    aria-label="Full cited hardware import report"
+                    aria-label="Hardware import report"
                   >
                     <div className={styles.attachmentHeader}>
-                      <div>
-                        <span>Attached evidence</span>
-                        <strong>Full cited hardware import report</strong>
-                      </div>
-                      <a href="#sources">Jump to source ledger</a>
+                      <strong>Hardware import report</strong>
+                      <a href="#sources">Sources</a>
                     </div>
                     {report}
                   </section>
@@ -259,7 +245,7 @@ export function IntelChatDesk({
             onChange={onInputChange}
             onKeyDown={onKeyDown}
             placeholder="Ask about imports, customs, routes, providers, or paste a shipment question..."
-            aria-label="Ask Derya Intelligence"
+            aria-label="Ask an intelligence question"
             rows={1}
             disabled={busy}
           />

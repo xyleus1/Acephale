@@ -82,11 +82,7 @@ export default async function CustomerPortalLoginPage({
 
       <div className={styles.loginLayout}>
         <section className={styles.loginIntro}>
-          <div className={styles.loginKicker}>Managed freight, shared clearly</div>
-          <h1>See what is moving, what changed, and what needs your attention.</h1>
-          <p>
-            Your Derya team runs the operation. This workspace keeps shipment status, quote decisions, requested documents, and approved files in one place.
-          </p>
+          <h1>Customer shipment portal</h1>
           <div className={styles.loginContact}>
             <span>Starting a new shipment?</span>
             <a href="mailto:rfq@usederya.com">Email rfq@usederya.com</a>
@@ -96,7 +92,7 @@ export default async function CustomerPortalLoginPage({
         <section className={styles.loginPanel} aria-labelledby="customer-sign-in-heading">
           <div className={styles.loginPanelHeader}>
             <div className={styles.eyebrow}>Secure access</div>
-            <h2 id="customer-sign-in-heading">Sign in to your company workspace</h2>
+            <h2 id="customer-sign-in-heading">Sign in</h2>
             <p>We will email a six-digit code to an address approved by your Derya operator.</p>
           </div>
 

@@ -26,7 +26,7 @@ async function main() {
   for (const label of ["Maersk", "Drewry", "CBP", "Port of LA"]) {
     assert(mapComponentSource.includes(label), `Expected empty-state source button for ${label}.`);
   }
-  assert(mapComponentSource.includes("Pull trusted market data to light up the map"), "Expected explicit empty-state copy for manual ingestion.");
+  assert(mapComponentSource.includes("No market data loaded"), "Expected explicit empty-state copy for manual ingestion.");
 
   const runId = `intelligence-map-${Date.now()}`;
   const office = await prisma.office.create({ data: { name: runId } });

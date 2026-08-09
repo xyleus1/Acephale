@@ -3,6 +3,7 @@ import {
   countSupportedEvidence,
   normalizeSteelSupplierSearch,
   normalizeSteelSupplierSearchInput,
+  normalizeSteelSupplierVisuals,
 } from "../src/lib/steel-supplier-search";
 
 const official = "https://mill.example/products/hrc";
@@ -56,6 +57,51 @@ assert.equal(
   "a supported claim without an attributable source must be downgraded",
 );
 assert.equal(countSupportedEvidence(result.candidates[0]!), 2);
+assert.deepEqual(result.visuals, [], "text-only normalization must remain compatible when image search returns nothing");
+
+const visuals = normalizeSteelSupplierVisuals([
+  {
+    type: "image_result",
+    image_url: "https://cdn.mill.example/factory.jpg",
+    thumbnail_url: "https://cdn.mill.example/factory-thumb.jpg",
+    source_website_url: "https://mill.example/about/factory",
+    caption: "Mill Company hot rolling factory and production line",
+  },
+  {
+    type: "image_result",
+    image_url: "https://cdn.mill.example/factory-copy.jpg",
+    thumbnail_url: "https://cdn.mill.example/factory-thumb.jpg",
+    source_website_url: "https://mill.example/about/factory",
+    caption: "Duplicate thumbnail for the same factory",
+  },
+  {
+    type: "image_result",
+    image_url: "https://images.example/iron-ore.jpg",
+    thumbnail_url: "https://images.example/iron-ore-thumb.jpg",
+    source_website_url: "https://geology.example/commodities/iron-ore",
+    caption: "Iron ore fines ready for bulk handling",
+  },
+  {
+    type: "image_result",
+    image_url: "http://localhost/private.jpg",
+    source_website_url: "https://mill.example/private",
+    caption: "Invalid private image target",
+  },
+  {
+    type: "image_result",
+    image_url: "http://127.0.0.1/private.jpg",
+    source_website_url: "https://mill.example/private",
+    caption: "Invalid loopback image target",
+  },
+], result.candidates, "Iron ore");
+
+assert.equal(visuals.length, 2, "duplicate and non-public image URLs must be removed");
+assert.equal(visuals[0]?.candidateId, result.candidates[0]?.id, "official-domain factory images must attach to the candidate");
+assert.equal(visuals[0]?.kind, "facility");
+assert.equal(visuals[0]?.sourceDomain, "mill.example");
+assert.equal(visuals[1]?.candidateId, null, "independent product images must stay separate from company ownership claims");
+assert.equal(visuals[1]?.kind, "product");
+assert.equal(visuals[1]?.subject, "Iron ore");
 
 const publicInput = normalizeSteelSupplierSearchInput({
   segment: "raw_material",

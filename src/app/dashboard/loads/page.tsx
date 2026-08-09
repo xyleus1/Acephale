@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { Icon } from "@/components/icon";
 import { LinkRow } from "@/components/link-row";
+import { OverflowMenu } from "@/components/overflow-menu";
 
 export const metadata = { title: "Loads" };
 
@@ -49,7 +50,7 @@ export default async function LoadsPage({
         <div>
           <h1 className="page-title">Loads</h1>
           <p className="page-subtitle">
-            {mine ? "Loads assigned to you" : "All loads"}, newest first - spreadsheet view. {jobs.length} row{jobs.length === 1 ? "" : "s"} shown.
+            {mine ? "Assigned to you" : "All loads"}, {jobs.length} total
           </p>
         </div>
         <div className="page-actions">
@@ -64,10 +65,12 @@ export default async function LoadsPage({
             </a>
           </div>
           {!isEmployee && (
-            <a href="/dashboard/rfq" className="btn">
-              <Icon name="inbox" size={13} />
-              Move RFQ into loads
-            </a>
+            <OverflowMenu>
+              <a href="/dashboard/rfq" className="btn btn-secondary">
+                <Icon name="inbox" size={13} />
+                Open RFQs
+              </a>
+            </OverflowMenu>
           )}
         </div>
       </div>

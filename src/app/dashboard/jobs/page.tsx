@@ -177,7 +177,7 @@ export default async function JobsPage({
             Deal Pipeline
             <span className="live-dot" aria-hidden />
           </h1>
-          <p className="page-subtitle">{activeCount} active loads · RFQ, pricing, booked cargo, en route, delivered</p>
+          <p className="page-subtitle">{activeCount} active loads</p>
         </div>
         <div className="page-actions">
           <div className="mode-tabs">

@@ -146,7 +146,7 @@ export default async function RFQDetailPage({
 
   if (!inquiry) notFound();
 
-  // Truckload desk data: buy-side bids, recorded flywheel quotes, bench names.
+  // Truckload desk data: buy-side bids, recorded quotes, and bench names.
   const [carrierBids, truckloadQuotes, benchCarriers, officeUsers] = await Promise.all([
     prisma.carrierBid.findMany({
       where: { officeId: session.officeId, inquiryId: inquiry.id },
@@ -186,7 +186,7 @@ export default async function RFQDetailPage({
 
   // Keyed by canonical status so legacy values (INGESTED/PARSED/PRICED/QUOTED) hit too.
   const FLOW_HINTS: Record<string, { msg: string; action: string }> = {
-    RECEIVED: { msg: "This RFQ is waiting on pricing.", action: "Parse with AI or fill the fields below, then move it to Pricing." },
+    RECEIVED: { msg: "This RFQ is waiting on pricing.", action: "Parse the request or fill the fields below, then move it to Pricing." },
     PRICING:  { msg: "RFQ is in pricing.", action: "Prepare the customer quote or convert to a load. Mark it Booked or Missed when the outcome is known." },
   };
   const flowHint = !inquiry.job ? FLOW_HINTS[canonicalInquiryStatus(inquiry.status)] : null;
@@ -289,7 +289,7 @@ export default async function RFQDetailPage({
           {canonicalInquiryStatus(inquiry.status) === "RECEIVED" && inquiry.rawEmailBody && (
             <form action={parseRFQWithAI.bind(null, inquiry.id)} className="record-notice-action">
               <button className="btn btn-sm" type="submit">
-                <Icon name="sparkles" size={12} strokeWidth={2} /> Parse with AI
+                <Icon name="sparkles" size={12} strokeWidth={2} /> Parse request
               </button>
             </form>
           )}

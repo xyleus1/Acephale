@@ -56,7 +56,7 @@ for (const requiredCopy of [
   "Read-only, no RFQ or shipment write",
   "This does not calculate",
   "pasted text is sent to",
-  "OpenAI GPT-5.6",
+  "configured third-party service",
   "This page does not persist",
   "Eight customs gates",
   "Official source ledger",
