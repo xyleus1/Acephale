@@ -7111,9 +7111,14 @@ Verification:
 - `npm run test:supply-os-operations-ui`
 - `npm run check:product-copy`
 - `npx tsc --noEmit`
+- Production `npm run build` passed against a disposable local PostgreSQL
+  database and generated all 60 static pages.
 - Authenticated browser QA at 1440 by 1000, 1024 by 900, and 390 by 844.
   Scenario selection and run output passed with no horizontal overflow or
   console errors.
+- Scoped `npx eslint src/app/dashboard/supply-os/supply-os-dashboard.tsx` did
+  not run because this repo has ESLint 9 but no `eslint.config.js`, `.mjs`, or
+  `.cjs` file. No lint configuration was changed for this task.
 
 Trust boundary:
 

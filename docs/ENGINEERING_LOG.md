@@ -4210,8 +4210,11 @@ Use this file for chronological implementation notes that future agents should s
   Running a play updates the output and brings it into view on narrow screens.
 - Verification: new opportunity-scenario contract, scenario-viewport,
   continuous-layout, enterprise-design, operations-UI, product-copy, and
-  TypeScript checks pass. Authenticated browser QA passed at 1440 by 1000,
-  1024 by 900, and 390 by 844 with no horizontal overflow or console errors.
+  TypeScript checks pass. The production build passed against disposable local
+  PostgreSQL. Authenticated browser QA passed at 1440 by 1000, 1024 by 900, and
+  390 by 844 with no horizontal overflow or console errors.
+- Failed/skipped checks: scoped ESLint could not start because the repo uses
+  ESLint 9 without an `eslint.config.js`, `.mjs`, or `.cjs` file.
 - Caveats: output is deterministic planning guidance from the current company
   model. It does not execute a supplier, carrier, customs, or spend action.
 - Follow-up: connect persisted canonical planning results when the server-owned
