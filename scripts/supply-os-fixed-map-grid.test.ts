@@ -13,6 +13,11 @@ assert.match(
 );
 assert.match(styles, /grid-template-areas:\s*"map inspector"\s*"context inspector"/);
 assert.match(styles, /grid-template-columns: minmax\(0, 1\.85fr\) minmax\(340px, 0\.9fr\)/);
+assert.match(
+  styles,
+  /@media \(max-width: 1180px\)[\s\S]*grid-template-columns: minmax\(0, 1\.85fr\) minmax\(260px, 0\.9fr\)/,
+  "the bounded map must retain the majority of the workspace at compact desktop widths",
+);
 assert.match(styles, /grid-template-rows: minmax\(0, 2\.35fr\) minmax\(188px, 1fr\)/);
 assert.match(styles, /\.mapPanel\s*\{[\s\S]*grid-area: map;[\s\S]*border-radius: 16px/);
 assert.match(styles, /\.commandMapStage > \.routeRail\s*\{[\s\S]*grid-area: context/);

@@ -4593,7 +4593,7 @@
 
 @media (max-width: 1180px) {
   .commandMapStage {
-    grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
+    grid-template-columns: minmax(0, 1.85fr) minmax(260px, 0.9fr);
     grid-template-rows: minmax(0, 2.45fr) minmax(170px, 1fr);
     gap: 12px;
     padding: 16px;
