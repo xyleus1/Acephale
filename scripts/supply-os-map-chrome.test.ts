@@ -7,6 +7,10 @@ const commandMap = readFileSync(
   resolve(root, "src/app/dashboard/supply-os/supply-os-command-map.tsx"),
   "utf8",
 );
+const dashboard = readFileSync(
+  resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"),
+  "utf8",
+);
 const styles = readFileSync(
   resolve(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"),
   "utf8",
@@ -14,10 +18,13 @@ const styles = readFileSync(
 
 assert.equal(commandMap.includes("ScaleControl"), false, "the map must not render a decorative distance ruler");
 assert.equal(commandMap.includes("AttributionControl"), false, "the map must not render the intrusive attribution badge");
-assert.match(commandMap, /className=\{styles\.mapCredits\}/, "quiet map credits must replace MapLibre control chrome");
-assert.match(commandMap, /openstreetmap\.org\/copyright/, "OpenStreetMap attribution must remain linked");
-assert.match(commandMap, /basemapCredit/, "the visible tile-provider credit must follow the active basemap");
-assert.match(styles, /\.mapCredits\s*\{[\s\S]*top: 12px;[\s\S]*left: 14px;/, "credits must stay clear of the map's bottom edge");
+assert.equal(commandMap.includes("mapCredits"), false, "map data credits must not float over the map");
+assert.equal(dashboard.includes("commandMapFooter"), false, "the redundant map legend must not float over the map");
+assert.equal(styles.includes(".commandLegend"), false, "the removed map legend must not leave dead styling");
+assert.match(dashboard, /className=\{styles\.mapDataSources\}/, "map data attribution must remain in the adjacent operations rail");
+assert.match(dashboard, /openstreetmap\.org\/copyright/, "OpenStreetMap attribution must remain linked");
+assert.match(dashboard, /carto\.com\/attributions/, "CARTO attribution must remain linked");
+assert.match(dashboard, /openfreemap\.org/, "OpenFreeMap attribution must remain linked");
 assert.equal(styles.includes("maplibregl-ctrl-attrib"), false, "dead attribution-control styling must be removed");
 
 console.log("Supply OS map chrome contract passed.");

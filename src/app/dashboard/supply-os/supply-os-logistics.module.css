@@ -344,34 +344,6 @@
   height: 100%;
 }
 
-.mapCredits {
-  position: absolute;
-  top: 12px;
-  left: 14px;
-  z-index: 18;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 8px;
-  line-height: 1;
-  text-shadow:
-    0 1px 0 rgb(255 255 255 / 95%),
-    0 0 5px rgb(255 255 255 / 95%);
-}
-
-.mapCredits a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.mapCredits a:hover,
-.mapCredits a:focus-visible {
-  color: var(--ink);
-  box-shadow: 0 1px 0 currentcolor;
-}
-
 .commandMap :global(.maplibregl-popup-content) {
   padding: 0;
 }
@@ -434,6 +406,29 @@
 .routeRail > header span,
 .routeRail > header small {
   display: block;
+}
+
+.routeRailMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mapDataSources {
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.mapDataSources a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.mapDataSources a:hover,
+.mapDataSources a:focus-visible {
+  color: var(--ink);
+  box-shadow: 0 1px 0 currentcolor;
 }
 
 .routeRail > header span {
@@ -1232,65 +1227,6 @@
   font-size: 9px;
 }
 
-.commandMapFooter {
-  min-height: 38px;
-  position: absolute;
-  right: auto;
-  bottom: 14px;
-  left: 14px;
-  z-index: 18;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: rgb(255 255 255 / 92%);
-  backdrop-filter: blur(8px);
-}
-
-.commandLegend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  color: var(--ink-muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
-}
-
-.commandLegend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.commandLegend i {
-  display: block;
-  flex: 0 0 auto;
-}
-
-.commandLegend i[data-kind="node"] {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--navy);
-}
-
-.commandLegend i[data-kind="route"] {
-  width: 22px;
-  height: 2px;
-  background: var(--navy);
-}
-
-.commandLegend i[data-kind="insight"] {
-  width: 8px;
-  height: 8px;
-  border-radius: 3px;
-  background: var(--decision);
-}
-
 .mapMarker,
 .routeGatewayMarker,
 .mapInsightMarker,
@@ -1759,11 +1695,6 @@
     margin: 0 18px 18px;
   }
 
-  .commandMapFooter {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

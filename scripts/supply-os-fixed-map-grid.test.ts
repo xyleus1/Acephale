@@ -8,9 +8,10 @@ const styles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os
 
 assert.match(
   dashboard,
-  /<section className=\{styles\.mapPanel\}[\s\S]*<SupplyOsCommandMap[\s\S]*<footer className=\{styles\.commandMapFooter\}/,
-  "the map and legend must share one bounded map panel",
+  /<section className=\{styles\.mapPanel\}[\s\S]*<SupplyOsCommandMap[\s\S]*<\/section>/,
+  "the map must remain inside one bounded map panel",
 );
+assert.equal(dashboard.includes("commandMapFooter"), false, "the bounded map must not contain floating legend chrome");
 assert.match(styles, /grid-template-areas:\s*"map inspector"\s*"context inspector"/);
 assert.match(styles, /grid-template-columns: minmax\(0, 1\.85fr\) minmax\(360px, 0\.9fr\)/);
 assert.match(
