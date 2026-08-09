@@ -12,10 +12,10 @@ import {
 import type { StyleSpecification } from "maplibre-gl";
 import {
   AlertTriangle,
-  Boxes,
   Factory,
   LocateFixed,
   MapPin,
+  PackageSearch,
   Plane,
   ShieldAlert,
   Ship,
@@ -136,7 +136,7 @@ function segmentIcon(segment: SupplyCommandRouteSegment): LucideIcon {
 }
 
 function objectIcon(object: SupplyCommandObject): LucideIcon {
-  if (object.kind === "supplier") return Boxes;
+  if (object.kind === "supplier") return PackageSearch;
   if (object.kind === "factory") return Factory;
   if (object.kind === "distribution") return Warehouse;
   if (object.kind === "customer") return MapPin;

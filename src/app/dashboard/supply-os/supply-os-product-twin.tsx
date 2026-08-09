@@ -3,14 +3,15 @@
 import {
   Bot,
   Box,
-  Boxes,
   Camera,
   CheckCircle2,
   CircuitBoard,
   Clock3,
+  Cog,
   Factory,
   ImageOff,
   PackageCheck,
+  PackageOpen,
   ShieldCheck,
   TriangleAlert,
   type LucideIcon,
@@ -180,12 +181,12 @@ const BOM_ITEMS: SupplyOsTwinItem[] = [
 ];
 
 const ITEM_ICONS: Record<SupplyOsTwinItem["category"], LucideIcon> = {
-  drive: Boxes,
+  drive: Cog,
   vision: Camera,
   control: CircuitBoard,
   battery: PackageCheck,
   frame: Box,
-  other: Boxes,
+  other: PackageOpen,
 };
 
 function netAvailable(item: SupplyOsTwinItem, includeInbound: boolean) {

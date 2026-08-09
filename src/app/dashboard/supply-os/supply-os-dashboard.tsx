@@ -3,11 +3,13 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import {
   ArrowRight,
-  Boxes,
   ExternalLink,
   Factory,
   ListChecks,
+  LoaderCircle,
   MapPin,
+  PackageOpen,
+  PackageSearch,
   Phone,
   ShieldAlert,
   Truck,
@@ -61,7 +63,7 @@ function dashboardName(dashboard: SupplyCaseDashboard) {
 }
 
 function objectIcon(kind: SupplyCommandObject["kind"]): LucideIcon {
-  if (kind === "supplier") return Boxes;
+  if (kind === "supplier") return PackageSearch;
   if (kind === "factory") return Factory;
   if (kind === "distribution") return Warehouse;
   if (kind === "customer") return MapPin;
@@ -274,7 +276,7 @@ const OPPORTUNITY_PLAY_CONFIG: Array<{
     id: "supply",
     label: "Supply",
     scope: "Sources, terms, and availability",
-    icon: Boxes,
+    icon: PackageOpen,
     matches: (action) => action.workstreamId === "procurement" || action.workstreamId === "supplier_outreach",
   },
   {
@@ -528,7 +530,7 @@ function CommandState({
 }) {
   return (
     <div className={styles.commandState}>
-      <Boxes size={22} strokeWidth={1.6} />
+      <LoaderCircle size={22} strokeWidth={1.6} />
       <h1>{title}</h1>
       <p>{detail}</p>
       {action}
