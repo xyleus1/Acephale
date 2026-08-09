@@ -396,7 +396,7 @@ export function SupplyOsCommandMap({
   }, [activePanel, fitCoordinates, focusObject, focusRoute, routePaths, supplierFocusObjects, visibleMapObjects]);
 
   useEffect(() => {
-    if (mapRef.current?.loaded()) focusActivePanel(true);
+    if (mapRef.current) focusActivePanel(true);
   }, [activePanel, focusActivePanel]);
 
   useEffect(() => {
@@ -408,7 +408,7 @@ export function SupplyOsCommandMap({
       !selectedObject
       || previousId === selectedObject.id
       || panelChanged
-      || !mapRef.current?.loaded()
+      || !mapRef.current
     ) return;
     focusObject(selectedObject, true);
   }, [activePanel, focusObject, selectedObject]);

@@ -7,6 +7,7 @@ const shell = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const map = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-command-map.tsx"), "utf8");
 const shellStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.module.css"), "utf8");
+const logisticsStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"), "utf8");
 
 assert.match(
   shell,
@@ -26,5 +27,8 @@ assert.match(dashboard, /data-embedded=\{!presentationMode\}/);
 assert.match(map, /data-domain=\{activePanel\}/);
 assert.match(map, /line-dasharray/);
 assert.match(shellStyles, /\.panelStage\s*\{[\s\S]*overflow: hidden/);
+assert.doesNotMatch(dashboard, /<header className=\{styles\.commandHeader\}>/, "the workspace must not duplicate the persistent company ribbon");
+assert.doesNotMatch(dashboard, /aria-label="Network coverage"/, "network counts must not consume a second header row");
+assert.match(logisticsStyles, /\.commandCenter\s*\{[\s\S]*grid-template-rows: minmax\(0, 1fr\);/, "removing the duplicate ribbon must return its height to the workspace");
 
 console.log("Supply OS continuous-layout contract passed.");

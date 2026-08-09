@@ -16,7 +16,6 @@ const source = `${dashboard}\n${commandMap}\n${generator}\n${styles}\n${workstre
 
 for (const required of [
   ".commandWorkspace",
-  ".commandHeader",
   ".commandMapStage",
   ".commandMap",
   ".mapMarker",
@@ -84,7 +83,7 @@ for (const dependency of [
 assert.match(commandMap, /@vis\.gl\/react-maplibre/, "map rendering must come from React MapLibre");
 assert.match(commandMap, /lucide-react/, "map symbols must come from Lucide");
 assert.match(commandMap, /@radix-ui\/react-tooltip/, "map controls must use an accessible tooltip primitive");
-assert.match(dashboard, /@radix-ui\/react-dropdown-menu/, "customer and scope menus must use an accessible dropdown primitive");
+assert.doesNotMatch(dashboard, /@radix-ui\/react-dropdown-menu/, "the workspace must not repeat company and scope menus inside the map surface");
 assert.match(dashboard, /@radix-ui\/react-tabs/, "object detail and optimization analysis must use an accessible tabs primitive");
 assert.match(dashboard, /motion, useReducedMotion/, "state motion must honor reduced-motion preferences");
 assert.match(dashboard, /<motion\.aside[\s\S]*className=\{styles\.routeRail\}/, "network context changes need restrained motion");
@@ -104,12 +103,11 @@ assert.match(commandMap, /"line-width": 24/, "route geometry needs a forgiving p
 assert.match(commandMap, /canvas\.style\.cursor = routeId \? "pointer" : ""/, "clickable routes must advertise pointer interaction");
 assert.equal(commandMap.includes("routePathSegment"), false, "routes must not create redundant DOM-button hit targets");
 assert.equal(commandMap.includes("WEBGL_lose_context"), false, "capability detection must not explicitly discard a browser graphics context");
-assert.match(dashboard, /alignOffset=\{3[0-9]{2}\}/, "the coverage menu must open clear of the right-side inspector");
-assert.match(dashboard, /avoidCollisions=\{false\}/, "coverage-menu positioning must not be pulled back over the inspector");
+assert.doesNotMatch(dashboard, /aria-label="Network coverage"/, "the duplicate network coverage ribbon must stay removed");
 assert.match(dashboard, /<Tabs\.Trigger value="optimization">Priorities/, "the inspector must expose the optimization analysis");
 assert.match(dashboard, /analysisPriorityList/, "the inspector must keep the ranked priority list");
 assert.match(dashboard, /companyNameHint\(dashboard\.sourcePrompt\)/, "saved SEO taglines must collapse back to the researched company name");
-assert.match(dashboard, /function companyLogoUrl/, "saved dashboards must reject obvious hero and customer images as company logos");
+assert.doesNotMatch(dashboard, /function companyLogoUrl/, "company identity belongs to the persistent application ribbon, not the map workspace");
 assert.match(dashboard, /contact\.phone/, "local carrier cards must expose official phone contacts when available");
 assert.match(dashboard, /contact\.proximity/, "carrier candidates must explain which endpoint they are near");
 
@@ -163,7 +161,7 @@ for (const rule of [".commandMapStage", ".routeRail", ".routeRailList"]) {
 }
 
 const mobileStyles = styles.slice(styles.lastIndexOf("@media (max-width: 720px)"));
-for (const rule of [".commandHeader", ".commandMapStage", ".routeRail", ".commandInspector"]) {
+for (const rule of [".commandMapStage", ".routeRail", ".commandInspector"]) {
   assert.equal(mobileStyles.includes(rule), true, `mobile command layout is missing: ${rule}`);
 }
 

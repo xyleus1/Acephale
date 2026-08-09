@@ -1,12 +1,9 @@
 "use client";
 
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
 import {
   ArrowRight,
   Boxes,
-  Check,
-  ChevronDown,
   ExternalLink,
   Factory,
   ListChecks,
@@ -28,26 +25,21 @@ import {
 import {
   generateSupplyCase,
   SAMPLE_SUPPLY_CASE_PROMPT,
-  upsertSupplyCase,
   type SupplyCaseDashboard,
-  type SupplyEngagementScope,
 } from "@/lib/supply-os-case-model";
 import {
   buildSupplyCommandMap,
   type SupplyCommandObject,
   type SupplyCommandRoute,
 } from "@/lib/supply-os-command-map";
-import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
 import { companyNameHint } from "@/lib/supply-os-company-identity";
 import { buildSupplyOptimizationModel } from "@/lib/supply-os-optimization-engine";
 import type { SupplyOsPanel } from "@/lib/supply-os/panel-routing";
 import {
   loadSupplyCases,
-  persistSupplyCases,
   removeLegacySupplyCaseStorage,
   supplyCaseStorageKeys,
   visibleSupplyCases,
-  writeBrowserStorage,
 } from "./supply-os-storage";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
 import styles from "./supply-os-logistics.module.css";
@@ -63,45 +55,6 @@ function dashboardName(dashboard: SupplyCaseDashboard) {
     return hintedName;
   }
   return storedName || "Unnamed customer";
-}
-
-function companyLogoUrl(dashboard: SupplyCaseDashboard) {
-  const logoUrl = dashboard.research?.company.logoUrl;
-  if (!logoUrl) return null;
-  try {
-    const url = new URL(logoUrl);
-    const file = url.pathname.split("/").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
-    const company = dashboardName(dashboard).toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (company && file.includes(company)) return url.toString();
-    if (/^(?:logo|brandlogo|headerlogo|sitelogo|favicon|icon|wordmark)/.test(file)) return url.toString();
-    const website = new URL(dashboard.research?.company.website ?? "");
-    return website.hostname === url.hostname ? new URL("/logo.svg", website).toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function dashboardLocation(dashboard: SupplyCaseDashboard) {
-  return dashboard.productionLocation ?? dashboard.companyLocation ?? "Operating site to confirm";
-}
-
-function formatTimestamp(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recently updated";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
-}
-
-function scopeLabel(scope: SupplyEngagementScope | undefined) {
-  return SUPPLY_ENGAGEMENT_OPTIONS.find((option) => option.id === (scope ?? "full_operation"))?.shortLabel
-    ?? "Full operation";
-}
-
-function websiteLabel(value: string) {
-  try {
-    return new URL(value).hostname.replace(/^www\./, "");
-  } catch {
-    return "Official website";
-  }
 }
 
 function objectIcon(kind: SupplyCommandObject["kind"]): LucideIcon {
@@ -541,22 +494,6 @@ export function SupplyOsDashboardWorkspace({
     ? activeCase
     : visibleCases[0] ?? null;
 
-  function openDashboard(item: SupplyCaseDashboard) {
-    writeBrowserStorage(keys.selected, item.id);
-    setActiveCase(item);
-  }
-
-  function updateDashboardScope(item: SupplyCaseDashboard, engagementScope: SupplyEngagementScope): boolean {
-    const latestCases = loadSupplyCases(storageScope).cases;
-    const latestItem = latestCases.find((candidate) => candidate.id === item.id) ?? item;
-    const updated = { ...latestItem, engagementScope, updatedAt: new Date().toISOString() };
-    const nextCases = upsertSupplyCase(latestCases, updated);
-    if (!persistSupplyCases(storageScope, nextCases, updated.id)) return false;
-    setSavedCases(nextCases);
-    setActiveCase(updated);
-    return true;
-  }
-
   return (
     <div className={`${styles.workspace} ${styles.commandWorkspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>
       {!storageReady ? (
@@ -565,11 +502,8 @@ export function SupplyOsDashboardWorkspace({
         <CaseCommandCenter
           key={currentCase.id}
           dashboard={currentCase}
-          savedCases={visibleCases}
           presentationMode={presentationMode}
           activePanel={activePanel}
-          onOpenDashboard={openDashboard}
-          onScopeChange={(scope) => updateDashboardScope(currentCase, scope)}
         />
       ) : null}
     </div>
@@ -597,21 +531,13 @@ function CommandState({
 
 function CaseCommandCenter({
   dashboard,
-  savedCases,
   presentationMode,
   activePanel,
-  onOpenDashboard,
-  onScopeChange,
 }: {
   dashboard: SupplyCaseDashboard;
-  savedCases: SupplyCaseDashboard[];
   presentationMode: boolean;
   activePanel: SupplyOsPanel;
-  onOpenDashboard: (item: SupplyCaseDashboard) => void;
-  onScopeChange: (scope: SupplyEngagementScope) => boolean;
 }) {
-  const selectedScope = dashboard.engagementScope ?? "full_operation";
-  const [scopeError, setScopeError] = useState("");
   const modelDashboard = useMemo(() => {
     const name = dashboardName(dashboard);
     return name === dashboard.companyName ? dashboard : { ...dashboard, companyName: name };
@@ -638,24 +564,11 @@ function CaseCommandCenter({
     : preferredObject ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
-  const supplierCount = commandMap.objects.filter((object) => object.kind === "supplier").length;
-  const customsCount = commandMap.objects.filter((object) => object.kind === "customs").length;
-  const logoUrl = companyLogoUrl(dashboard);
-  const isIllustrativeNetwork = dashboard.sourcePrompt === SAMPLE_SUPPLY_CASE_PROMPT && !dashboard.research;
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     setInspectorMode(domain.defaultInspector);
   }, [activePanel, domain.defaultInspector]);
-
-  function selectScope(scope: SupplyEngagementScope) {
-    if (scope === selectedScope) return;
-    if (!onScopeChange(scope)) {
-      setScopeError("Coverage could not be saved in this browser.");
-      return;
-    }
-    setScopeError("");
-  }
 
   function selectNetworkObject(object: SupplyCommandObject) {
     setSelection({ panel: activePanel, objectId: object.id });
@@ -670,91 +583,10 @@ function CaseCommandCenter({
   return (
     <article
       className={styles.commandCenter}
-      aria-labelledby="supply-command-title"
+      aria-label={`${domain.railTitle} workspace`}
       data-domain={activePanel}
       data-embedded={!presentationMode}
     >
-      <header className={styles.commandHeader}>
-        <div className={styles.commandIdentity}>
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt=""
-              onError={(event) => { event.currentTarget.hidden = true; }}
-            />
-          ) : null}
-          <span>
-            <h1 id="supply-command-title">{dashboardName(dashboard)}</h1>
-            <small>{dashboardLocation(dashboard)}</small>
-          </span>
-        </div>
-
-        <div className={styles.commandMetrics} aria-label="Network coverage">
-          {isIllustrativeNetwork ? <span className={styles.commandFixtureBadge}>Demo</span> : null}
-          <span><strong>{supplierCount}</strong> suppliers</span>
-          <span><strong>{commandMap.routes.length}</strong> lanes</span>
-          <span><strong>{customsCount}</strong> customs</span>
-          <span>Updated {formatTimestamp(dashboard.updatedAt)}</span>
-        </div>
-
-        <div className={styles.commandActions}>
-          {dashboard.research ? (
-            <a className={styles.commandIconLink} href={dashboard.research.company.website} target="_blank" rel="noreferrer" aria-label={`Open ${websiteLabel(dashboard.research.company.website)}`}>
-              <ExternalLink size={15} />
-            </a>
-          ) : null}
-
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button type="button" className={styles.commandMenuButton}>
-                {dashboardName(dashboard)} <ChevronDown size={14} />
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content className={styles.commandMenu} align="end" sideOffset={7} collisionPadding={12}>
-                <DropdownMenu.Label>Customer dashboards</DropdownMenu.Label>
-                {savedCases.map((item) => (
-                  <DropdownMenu.Item
-                    key={item.id}
-                    className={styles.commandMenuItem}
-                    onSelect={() => onOpenDashboard(item)}
-                  >
-                    <span><strong>{dashboardName(item)}</strong><small>{dashboardLocation(item)}</small></span>
-                    {item.id === dashboard.id ? <Check size={14} /> : null}
-                  </DropdownMenu.Item>
-                ))}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button type="button" className={styles.commandMenuButton}>
-                {scopeLabel(selectedScope)} <ChevronDown size={14} />
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content className={styles.commandMenu} align="end" alignOffset={388} sideOffset={7} avoidCollisions={false}>
-                <DropdownMenu.Label>Derya coverage</DropdownMenu.Label>
-                {SUPPLY_ENGAGEMENT_OPTIONS.map((option) => (
-                  <DropdownMenu.Item
-                    key={option.id}
-                    className={styles.commandMenuItem}
-                    onSelect={() => selectScope(option.id)}
-                  >
-                    <span><strong>{option.shortLabel}</strong><small>{option.label}</small></span>
-                    {option.id === selectedScope ? <Check size={14} /> : null}
-                  </DropdownMenu.Item>
-                ))}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-
-        </div>
-      </header>
-
-      {scopeError ? <div className={styles.commandError} role="alert">{scopeError}</div> : null}
-
       <div className={styles.commandMapStage}>
         <section className={styles.mapPanel} aria-label={`${domain.railTitle} map`}>
           <SupplyOsCommandMap

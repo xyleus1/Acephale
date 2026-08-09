@@ -32,5 +32,15 @@ assert.match(commandMap, /activePanel === "scenarios"[\s\S]*object\.kind === "cu
   "Opportunity camera focus must use customer coordinates");
 assert.match(commandMap, /focusRoute\(object\.edgeId/,
   "selecting a movement must frame its route instead of a meaningless midpoint");
+assert.equal(
+  commandMap.includes("mapRef.current?.loaded()) focusActivePanel(true)"),
+  false,
+  "tab camera commands must not be dropped while map sources are still loading",
+);
+assert.equal(
+  commandMap.includes("|| !mapRef.current?.loaded()"),
+  false,
+  "object camera commands must not require every tile and source to be fully loaded",
+);
 
 console.log("Supply OS panel map-focus contract passed.");
