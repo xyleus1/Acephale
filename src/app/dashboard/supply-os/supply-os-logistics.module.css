@@ -308,14 +308,14 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.85fr) minmax(360px, 0.9fr);
-  grid-template-rows: minmax(0, 2.35fr) minmax(190px, 1fr);
+  grid-template-columns: minmax(0, 2.6fr) minmax(300px, 0.75fr);
+  grid-template-rows: minmax(0, 3.8fr) minmax(140px, 0.72fr);
   grid-template-areas:
     "map inspector"
     "context inspector";
-  gap: 14px;
+  gap: 12px;
   overflow: hidden;
-  padding: 18px;
+  padding: 12px;
   background: #edf2ef;
 }
 
@@ -642,8 +642,8 @@
 
 @media (min-width: 1281px) {
   .commandMapStage {
-    grid-template-columns: minmax(0, 2.15fr) minmax(340px, 0.78fr);
-    grid-template-rows: minmax(0, 3.1fr) minmax(168px, 0.9fr);
+    grid-template-columns: minmax(0, 3.4fr) minmax(300px, 0.68fr);
+    grid-template-rows: minmax(0, 4.2fr) minmax(140px, 0.7fr);
   }
 }
 
@@ -1909,10 +1909,10 @@
   }
 
   .commandMapStage {
-    grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.9fr);
-    grid-template-rows: minmax(0, 3.05fr) minmax(160px, 0.82fr);
-    gap: 14px;
-    padding: 18px;
+    grid-template-columns: minmax(0, 2.6fr) minmax(300px, 0.75fr);
+    grid-template-rows: minmax(0, 3.8fr) minmax(140px, 0.72fr);
+    gap: 12px;
+    padding: 12px;
   }
 
   .scenarioWorkbench {

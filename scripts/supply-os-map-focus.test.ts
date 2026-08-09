@@ -12,8 +12,8 @@ const styles = readFileSync(
   "utf8",
 );
 
-assert.match(styles, /@media \(min-width: 1281px\)[\s\S]*grid-template-columns: minmax\(0, 2\.15fr\) minmax\(340px, 0\.78fr\)/, "wide layouts must give the map a larger share of the workspace");
-assert.match(styles, /grid-template-rows: minmax\(0, 3\.1fr\) minmax\(168px, 0\.9fr\)/, "wide layouts must keep the map taller than the context rail");
+assert.match(styles, /@media \(min-width: 1281px\)[\s\S]*grid-template-columns: minmax\(0, 3\.4fr\) minmax\(300px, 0\.68fr\)/, "wide layouts must give the map a larger share of the workspace");
+assert.match(styles, /grid-template-rows: minmax\(0, 4\.2fr\) minmax\(140px, 0\.7fr\)/, "wide layouts must keep the map taller than the context rail");
 assert.match(commandMap, /\.slice\(0, 4\)/, "supplier focus must stay limited to four locations");
 assert.match(commandMap, /data-supplier-focus=\{supplierFocusRank \? "true" : undefined\}/, "focused supplier markers must expose a visual state");
 assert.match(commandMap, /Supplier focus \$\{supplierFocusRank\}/, "focused supplier markers must remain identifiable to assistive technology");

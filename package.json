@@ -19,6 +19,7 @@
     "test:supply-os-company-navigation": "tsx scripts/supply-os-company-navigation.test.ts",
     "test:supply-os-continuous-layout": "tsx scripts/supply-os-continuous-layout.test.ts",
     "test:supply-os-fixed-map-grid": "tsx scripts/supply-os-fixed-map-grid.test.ts",
+    "test:supply-os-map-dominance": "tsx scripts/supply-os-map-dominance.test.ts",
     "test:supply-os-operations-ui": "tsx scripts/supply-os-operations-ui.test.ts",
     "test:supply-os-scenario-viewport": "tsx scripts/supply-os-scenario-viewport.test.ts",
     "test:supply-os-legacy-routes": "tsx scripts/supply-os-legacy-routes.test.ts",

@@ -13,13 +13,13 @@ assert.match(
 );
 assert.equal(dashboard.includes("commandMapFooter"), false, "the bounded map must not contain floating legend chrome");
 assert.match(styles, /grid-template-areas:\s*"map inspector"\s*"context inspector"/);
-assert.match(styles, /grid-template-columns: minmax\(0, 1\.85fr\) minmax\(360px, 0\.9fr\)/);
+assert.match(styles, /grid-template-columns: minmax\(0, 2\.6fr\) minmax\(300px, 0\.75fr\)/);
 assert.match(
   styles,
-  /@media \(max-width: 1280px\)[\s\S]*grid-template-columns: minmax\(0, 1\.8fr\) minmax\(320px, 0\.9fr\)/,
+  /@media \(max-width: 1280px\)[\s\S]*grid-template-columns: minmax\(0, 2\.6fr\) minmax\(300px, 0\.75fr\)/,
   "the bounded map must retain the majority of the workspace at compact desktop widths",
 );
-assert.match(styles, /grid-template-rows: minmax\(0, 2\.35fr\) minmax\(190px, 1fr\)/);
+assert.match(styles, /grid-template-rows: minmax\(0, 3\.8fr\) minmax\(140px, 0\.72fr\)/);
 assert.match(styles, /\.mapPanel\s*\{[\s\S]*grid-area: map;[\s\S]*border-radius: 16px/);
 assert.match(styles, /\.routeRail\s*\{[\s\S]*grid-area: context/);
 assert.match(styles, /\.commandInspector\s*\{[\s\S]*grid-area: inspector/);
