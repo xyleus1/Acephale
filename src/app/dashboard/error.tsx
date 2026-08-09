@@ -17,7 +17,7 @@ export default function DashboardError({
         <Icon name="alert" size={22} />
       </div>
       <h1>This page hit an error</h1>
-      <p>Try again. If it keeps failing, share the reference code below.</p>
+      <p>The rest of the desk is fine. Try again; if it keeps failing, share the reference code below.</p>
       {error.digest && <code className="boundary-digest">ref {error.digest}</code>}
       <div className="boundary-actions">
         <button type="button" className="boundary-btn" onClick={reset}>

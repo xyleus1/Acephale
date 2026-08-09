@@ -235,7 +235,7 @@ Draft the counter-offer email body to send back to this supplier.`,
   return { ok: true, draft: text.trim(), replyTo: lastInbound?.fromEmail ?? null };
 }
 
-// Drafts a reply to a specific email message (or the latest in a thread)
+// Drafts an AI reply to a specific email message (or the latest in a thread)
 // without sending. Returns the draft text the operator can copy / edit / send.
 export async function draftReplyToMessage(args: {
   messageId?: string;

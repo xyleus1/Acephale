@@ -3460,47 +3460,6 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
   opacity: 1;
 }
 
-.sidebar-more {
-  margin-top: 4px;
-}
-
-.sidebar-more > summary {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 36px;
-  padding: 8px 9px;
-  border-radius: 7px;
-  color: var(--sidebar-text);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  list-style: none;
-}
-
-.sidebar-more > summary::-webkit-details-marker {
-  display: none;
-}
-
-.sidebar-more > summary:hover,
-.sidebar-more[open] > summary {
-  background: var(--sidebar-hover);
-  color: var(--text);
-}
-
-.sidebar-more > summary svg {
-  width: 16px;
-  flex: 0 0 16px;
-  opacity: 0.75;
-}
-
-.sidebar-more-links {
-  display: grid;
-  gap: 2px;
-  margin-top: 2px;
-  padding-left: 10px;
-}
-
 .sidebar-footer {
   padding: 14px 16px;
   border-top: 1px solid var(--sidebar-border);
@@ -3589,15 +3548,6 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
 .topbar-sub {
   font-size: 12px;
   color: var(--text-3);
-}
-
-.topbar-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  padding: 0 16px;
-  max-width: 480px;
-  margin: 0 auto;
 }
 
 .topbar-right {
@@ -4203,17 +4153,17 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
    FORMS & INPUTS
    ============================================================ */
 
-input,
-select,
-textarea,
-button {
+input:not(:where(.supply-os-workspace input)),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)),
+button:not(:where(.supply-os-workspace button)) {
   font: inherit;
   font-size: 13.5px;
 }
 
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)) {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 8px 11px;
@@ -4224,15 +4174,15 @@ textarea {
   width: 100%;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
+select:not(:where(.supply-os-workspace select)):focus,
+textarea:not(:where(.supply-os-workspace textarea)):focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(47,95,168,0.12);
 }
 
-input::placeholder,
-textarea::placeholder {
+input:not(:where(.supply-os-workspace input))::placeholder,
+textarea:not(:where(.supply-os-workspace textarea))::placeholder {
   color: var(--text-3);
 }
 
@@ -4448,7 +4398,7 @@ label.field > span,
    BUTTONS
    ============================================================ */
 
-button, .btn {
+button:not(:where(.supply-os-workspace button)), .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4466,22 +4416,22 @@ button, .btn {
   color: #fff;
 }
 
-button:disabled,
+button:not(:where(.supply-os-workspace button)):disabled,
 .btn:disabled,
-button[disabled] {
+button:not(:where(.supply-os-workspace button))[disabled] {
   cursor: not-allowed;
   opacity: 0.55;
   box-shadow: none;
   transform: none;
 }
 
-button:hover:not(:disabled),
+button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
 .btn:hover {
   background: var(--brand-hover);
   box-shadow: var(--shadow-sm);
 }
 
-button:active:not(:disabled),
+button:not(:where(.supply-os-workspace button)):active:not(:disabled),
 .btn:active {
   transform: translateY(1px);
 }
@@ -5229,86 +5179,6 @@ tbody tr:hover td {
   border-radius: var(--radius);
   background: #f6ecd9;
   box-shadow: var(--shadow-xs);
-}
-
-.pricing-queue-overview > summary,
-.pricing-decision-disclosure > summary {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 42px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.pricing-queue-overview > summary::-webkit-details-marker,
-.pricing-decision-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-
-.pricing-queue-overview > summary span,
-.pricing-decision-disclosure > summary span {
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.pricing-queue-overview > summary strong,
-.pricing-decision-disclosure > summary strong {
-  color: var(--text);
-  font-size: 14px;
-}
-
-.pricing-queue-overview > summary em,
-.pricing-decision-disclosure > summary em {
-  color: var(--text-2);
-  font-size: 12px;
-  font-style: normal;
-}
-
-.pricing-queue-overview > summary::after,
-.pricing-decision-disclosure > summary::after {
-  content: "+";
-  color: var(--text-3);
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.pricing-queue-overview[open] > summary::after,
-.pricing-decision-disclosure[open] > summary::after {
-  content: "-";
-}
-
-.pricing-queue-overview > summary em,
-.pricing-decision-disclosure > summary em {
-  margin-left: auto;
-}
-
-.pricing-directory-disclosure > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 42px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.pricing-directory-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-
-.pricing-directory-disclosure > summary strong {
-  color: var(--text);
-  font-size: 13px;
-}
-
-.pricing-directory-disclosure > summary span {
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 750;
 }
 
 .pricing-command-board-head {
@@ -10406,7 +10276,7 @@ details[open] .saved-views-summary::before {
   .section-header > form {
     flex-wrap: wrap;
   }
-  .section-header > form input:not([type="checkbox"]):not([type="radio"]) {
+  .section-header > form input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]) {
     flex: 1 1 180px;
     min-width: 0;
     width: 100% !important;
@@ -10414,7 +10284,7 @@ details[open] .saved-views-summary::before {
   .filter-bar {
     align-items: stretch;
   }
-  .filter-bar input:not([type="checkbox"]):not([type="radio"]),
+  .filter-bar input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
   .filter-bar select {
     flex: 1 1 100%;
     max-width: none !important;
@@ -10436,7 +10306,6 @@ details[open] .saved-views-summary::before {
     flex-wrap: wrap;
   }
   .topbar { padding: 0 16px; }
-  .topbar-center { display: none; }
   .topbar-stat { display: none; }
   .job-focus-strip { top: 56px; }
   .job-focus-strip-inner { padding: 6px 16px; }
@@ -13254,7 +13123,7 @@ body {
   border-color: var(--derya-cobalt);
 }
 
-button:not(.sidebar-toggle-btn):not(.job-focus-clear),
+button:not(:where(.supply-os-workspace button)):not(.sidebar-toggle-btn):not(.job-focus-clear),
 .btn {
   border-radius: 6px;
 }
@@ -13589,17 +13458,17 @@ button.primary:hover:not(:disabled) {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)) {
   border-color: rgba(17, 17, 17, 0.2);
   background: #fff;
   border-radius: 6px;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
+select:not(:where(.supply-os-workspace select)):focus,
+textarea:not(:where(.supply-os-workspace textarea)):focus {
   border-color: rgba(36, 84, 214, 0.56);
   box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.12);
 }
@@ -13611,14 +13480,14 @@ label.field > span,
   font-weight: 780;
 }
 
-button,
+button:not(:where(.supply-os-workspace button)),
 .btn {
   border-radius: 6px;
   font-weight: 720;
   box-shadow: none;
 }
 
-button:hover:not(:disabled),
+button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
 .btn:hover {
   box-shadow: 0 6px 16px rgba(17, 17, 17, 0.1);
 }
@@ -14984,9 +14853,9 @@ body {
 }
 
 .topbar-search-form:focus-within,
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
+select:not(:where(.supply-os-workspace select)):focus,
+textarea:not(:where(.supply-os-workspace textarea)):focus {
   border-color: rgba(36, 84, 214, 0.56);
   box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.12);
 }
@@ -17604,9 +17473,9 @@ button.secondary,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)) {
   background: rgba(255, 255, 255, 0.86);
   border-color: rgba(190, 208, 220, 0.82);
   color: var(--text);
@@ -17627,9 +17496,9 @@ button.secondary:hover:not(:disabled),
 }
 
 .topbar-search-form:focus-within,
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
+select:not(:where(.supply-os-workspace select)):focus,
+textarea:not(:where(.supply-os-workspace textarea)):focus {
   border-color: rgba(111, 159, 202, 0.65);
   box-shadow: 0 0 0 3px rgba(111, 159, 202, 0.14);
 }
@@ -17965,9 +17834,9 @@ button.secondary,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)) {
   background: rgba(255, 253, 248, 0.9);
   border-color: rgba(205, 188, 167, 0.84);
   color: var(--text);
@@ -17988,9 +17857,9 @@ button.secondary:hover:not(:disabled),
 }
 
 .topbar-search-form:focus-within,
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus {
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
+select:not(:where(.supply-os-workspace select)):focus,
+textarea:not(:where(.supply-os-workspace textarea)):focus {
   border-color: rgba(111, 129, 113, 0.58);
   box-shadow: 0 0 0 3px rgba(111, 129, 113, 0.14);
 }
@@ -18201,9 +18070,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea,
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)),
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -18555,9 +18424,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea,
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)),
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -18571,15 +18440,15 @@ button.secondary,
   color: var(--text);
 }
 
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus,
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
+select:not(:where(.supply-os-workspace select)):focus,
+textarea:not(:where(.supply-os-workspace textarea)):focus,
 .topbar-search-form:focus-within {
   border-color: var(--derya-blue);
   box-shadow: 0 0 0 3px rgba(91, 120, 151, 0.14);
 }
 
-button,
+button:not(:where(.supply-os-workspace button)),
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -18590,7 +18459,7 @@ button.primary {
   box-shadow: none;
 }
 
-button:hover:not(:disabled),
+button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -18974,9 +18843,9 @@ body,
 .agent-panel-body,
 .conversation-body,
 .draft-modal-textarea,
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea,
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)),
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -19082,7 +18951,7 @@ button.secondary:hover:not(:disabled),
   box-shadow: inset 0 -2px 0 var(--derya-cobalt);
 }
 
-button,
+button:not(:where(.supply-os-workspace button)),
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -19093,7 +18962,7 @@ button.primary {
   box-shadow: none;
 }
 
-button:hover:not(:disabled),
+button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -19544,9 +19413,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea,
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)),
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -19580,7 +19449,7 @@ button.secondary:hover:not(:disabled),
   box-shadow: inset 0 -2px 0 var(--derya-clay) !important;
 }
 
-button,
+button:not(:where(.supply-os-workspace button)),
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -19596,7 +19465,7 @@ button.primary,
   box-shadow: none;
 }
 
-button:hover:not(:disabled),
+button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -19605,9 +19474,9 @@ button.primary:hover:not(:disabled) {
   box-shadow: 0 4px 12px rgba(43, 36, 26, 0.18) !important;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus,
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
+select:not(:where(.supply-os-workspace select)):focus,
+textarea:not(:where(.supply-os-workspace textarea)):focus,
 .topbar-search-form:focus-within {
   border-color: var(--derya-olive) !important;
   box-shadow: 0 0 0 3px rgba(111, 106, 69, 0.18) !important;
@@ -19701,8 +19570,8 @@ textarea:focus,
   opacity: 1 !important;
 }
 
-input::placeholder,
-textarea::placeholder,
+input:not(:where(.supply-os-workspace input))::placeholder,
+textarea:not(:where(.supply-os-workspace textarea))::placeholder,
 .topbar-search-input::placeholder,
 .cmdk-input-row input::placeholder {
   color: #5c4a2f !important;
@@ -21987,6 +21856,66 @@ textarea::placeholder,
 .workbench-agent .agent-suggestion:hover {
   background: #f4ead6 !important;
   border-color: #caa865 !important;
+}
+
+.appearance-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.appearance-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+
+.appearance-toggle button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent !important;
+  border-radius: 6px;
+  background: transparent !important;
+  color: var(--text-2) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.appearance-toggle button:hover {
+  background: var(--surface-hover) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.appearance-toggle button.active {
+  background: #33281b !important;
+  border-color: #33281b !important;
+  color: #eadbc2 !important;
+}
+
+.appearance-toggle-note {
+  padding: 0 8px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  .appearance-card-body {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .agent-proposal-card {
@@ -26598,9 +26527,9 @@ body,
 .job-note-textarea,
 .quote-draft-textarea,
 .portal-link-input,
-input,
-textarea,
-select {
+input:not(:where(.supply-os-workspace input)),
+textarea:not(:where(.supply-os-workspace textarea)),
+select:not(:where(.supply-os-workspace select)) {
   background-color: #fbf5e8 !important;
   background-image: none !important;
   border-color: var(--border) !important;
@@ -29259,9 +29188,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea,
+input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+select:not(:where(.supply-os-workspace select)),
+textarea:not(:where(.supply-os-workspace textarea)),
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -29279,7 +29208,7 @@ button.secondary,
   color: var(--text) !important;
 }
 
-button,
+button:not(:where(.supply-os-workspace button)),
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -29294,7 +29223,7 @@ button.primary,
   color: #ffffff !important;
 }
 
-button:hover:not(:disabled),
+button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -31188,7 +31117,7 @@ body,
   width: var(--sidebar-width) !important;
 }
 
-.content {
+.app-shell:not(.app-shell-single-surface) > .content {
   margin-left: var(--sidebar-rail-width) !important;
   transition: margin-right 160ms ease-out !important;
 }
@@ -31214,8 +31143,6 @@ body,
 .sidebar:not(:hover):not(:focus-within) .brand-sub,
 .sidebar:not(:hover):not(:focus-within) .nav-link .nav-link-text,
 .sidebar:not(:hover):not(:focus-within) .nav-section-label,
-.sidebar:not(:hover):not(:focus-within) .sidebar-more > summary span,
-.sidebar:not(:hover):not(:focus-within) .sidebar-more-links,
 .sidebar:not(:hover):not(:focus-within) .user-info,
 .sidebar:not(:hover):not(:focus-within) .sidebar-footer-actions {
   display: none !important;
@@ -31241,11 +31168,6 @@ body,
 }
 
 .sidebar:not(:hover):not(:focus-within) .nav-link {
-  justify-content: center !important;
-  padding: 10px !important;
-}
-
-.sidebar:not(:hover):not(:focus-within) .sidebar-more > summary {
   justify-content: center !important;
   padding: 10px !important;
 }
@@ -31935,6 +31857,7 @@ html.agent-dock-open .page-container {
 .view-switcher-tab.active,
 .pricing-tab.active,
 .mode-tab.active,
+.appearance-toggle button.active,
 .load-filter-button.active,
 .record-status-pill,
 .job-focus-status,
@@ -31954,6 +31877,7 @@ html.agent-dock-open .page-container {
 .view-switcher-tab.active *,
 .pricing-tab.active *,
 .mode-tab.active *,
+.appearance-toggle button.active *,
 .load-filter-button.active *,
 .record-status-pill *,
 .job-focus-status *,
@@ -36128,10 +36052,10 @@ html { scrollbar-color: var(--derya-line-strong) transparent; }
 ::selection { background: var(--derya-blue); color: #ffffff; }
 
 /* Visible ring for keyboard users only; mouse focus stays quiet */
-button:focus-visible,
+button:not(:where(.supply-os-workspace button)):focus-visible,
 a:focus-visible,
 summary:focus-visible,
-[role="button"]:focus-visible {
+[role="button"]:not(:where(.supply-os-workspace [role="button"])):focus-visible {
   outline: 2px solid var(--derya-blue);
   outline-offset: 2px;
 }
@@ -36174,92 +36098,72 @@ summary:focus-visible,
   text-underline-offset: 3px;
 }
 
-/* Secondary actions stay reachable without competing with the page's main task. */
-.overflow-menu {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.overflow-menu > summary {
-  min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  list-style: none;
-}
-
-.overflow-menu > summary::-webkit-details-marker {
+/* Supply OS presentation mode removes internal operator chrome for customer demos. */
+body.supply-os-presentation .app-shell > .sidebar,
+body.supply-os-presentation .content > .topbar,
+body.supply-os-presentation .agent-fab,
+body.supply-os-presentation .agent-panel,
+body.supply-os-presentation .live-event-toast {
   display: none;
 }
 
-.overflow-menu > summary::after {
-  content: "\22ef";
-  margin-left: 7px;
-  font-size: 16px;
-  line-height: 1;
+body.supply-os-presentation .app-shell > .content {
+  width: 100% !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+  flex-basis: 100% !important;
 }
 
-.overflow-menu[open] > summary,
-.overflow-menu > summary:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
+body.supply-os-presentation .page-container {
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
 }
 
-.overflow-menu-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  z-index: 80;
-  display: grid;
-  min-width: 210px;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 9px;
-  background: var(--surface);
-  box-shadow: var(--shadow-md);
-}
-
-.overflow-menu-right .overflow-menu-panel {
-  right: 0;
-}
-
-.overflow-menu-left .overflow-menu-panel {
-  left: 0;
-}
-
-.overflow-menu-panel > .btn,
-.overflow-menu-panel > a,
-.overflow-menu-panel > button,
-.overflow-menu-panel > form > button {
+/* Supply OS is the authenticated product shell. Utility routes share the
+   compact header, but the retired navigation rail is no longer rendered. */
+.app-shell-single-surface > .content {
   width: 100%;
-  min-height: 38px;
-  justify-content: flex-start;
+  max-width: none;
+  margin-left: 0;
+  flex-basis: 100%;
 }
 
-@media (max-width: 680px) {
-  .overflow-menu-panel {
-    position: fixed;
-    right: 12px !important;
-    bottom: 12px;
-    left: 12px !important;
-    top: auto;
-  }
+.app-shell-single-surface > .content > .page-container {
+  max-width: none;
+  padding: 0;
+}
 
-  .pricing-queue-overview > summary,
-  .pricing-decision-disclosure > summary {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
+/* The Supply OS sidebar is the visual anchor for the authenticated product.
+   Extend its graphite chrome across the global header so the operator shell
+   reads as one intentional frame instead of two stacked applications. */
+.app-shell-single-surface > .content > .topbar {
+  min-height: 58px;
+  height: 58px;
+  padding: 0 18px;
+  border-color: #263a45 !important;
+  color: #dce6ea !important;
+  background: #14242d !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
 
-  .pricing-queue-overview > summary em,
-  .pricing-decision-disclosure > summary em {
-    display: none;
-  }
+.app-shell-single-surface .topbar-brand-text,
+.app-shell-single-surface .topbar-brand-text strong {
+  color: #f2f7f9 !important;
+}
+
+.app-shell-single-surface .topbar-product-label {
+  color: #93aab5 !important;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app-shell-single-surface .topbar-avatar {
+  border-color: #9ab9c6 !important;
+  color: #14242d !important;
+  background: #dce9ee !important;
 }

@@ -223,7 +223,7 @@ export async function updateInquiryStatus(inquiryId: string, status: string) {
   revalidatePath("/dashboard/rfq");
 }
 
-// Truckload desk: carrier bids and quote history.
+// ── Truckload desk: carrier bids + quote flywheel ───────────────────────────
 
 export type CarrierBidPatch = {
   carrierName?: string;
@@ -370,7 +370,7 @@ export async function deleteCarrierBidAction(bidId: string): Promise<{ ok: true 
 }
 
 // Selecting a bid: single SELECTED per inquiry, buy side lands on the linked
-// job's cost, and pending quote records pick up the carrier and buy.
+// job's cost, and pending flywheel quotes pick up the carrier + buy.
 export async function selectCarrierBidAction(bidId: string): Promise<BidActionResult> {
   const session = await requireSession();
   const bid = await prisma.carrierBid.findFirst({
@@ -436,7 +436,7 @@ export type RecordedQuoteRow = {
   sentVia: string | null;
 };
 
-// Save the current domestic draft economics as a quote record. One row
+// Snapshot the current domestic draft economics into the flywheel. One row
 // per press - each is a quote version; outcomes settle via RFQ status.
 export async function recordTruckloadQuoteAction(
   inquiryId: string,

@@ -74,7 +74,7 @@ export function PricingScenarioSandbox({
       <div className="pricing-scenario-head">
         <div>
           <span>Scenario sandbox</span>
-          <strong>Test a price scenario</strong>
+          <strong>Can this price survive the brain?</strong>
           <em>Tests target, buy cost, floor, and quote gate without writing anything.</em>
         </div>
         <Icon name="dollar" size={18} />

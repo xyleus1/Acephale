@@ -778,7 +778,12 @@ export function ContactSheet({
       {view === "contacts" ? (
         <section className="outreach-hero" aria-labelledby="crm-contacts-title">
           <div>
-            <h1 id="crm-contacts-title">Contacts</h1>
+            <span className="outreach-eyebrow">CRM contacts</span>
+            <h1 id="crm-contacts-title">Contacts and outreach data</h1>
+            <p>
+              Maintain status, importance, category, channel, and contact details here.
+              The separate Outreach workspace uses this same data for its daily and weekly queues.
+            </p>
           </div>
           <a className="btn" href={outreachViewHref("today", q)}>
             Open Outreach <Icon name="arrow-right" size={14} />
@@ -788,11 +793,17 @@ export function ContactSheet({
         <>
           <section className="outreach-hero">
             <div>
+              <span className="outreach-eyebrow">Outreach desk</span>
               <h1>
                 {view === "today"
                   ? "Send today's outreach"
                   : "Build this week's outreach pool"}
               </h1>
+              <p>
+                {view === "today"
+                  ? "Work the queue by channel, open the contact method, then mark each person reached."
+                  : "Keep seven days of Bookface, LinkedIn, and email capacity ready for daily promotion."}
+              </p>
             </div>
             <div className="outreach-report-line">
               <strong>
@@ -886,10 +897,15 @@ export function ContactSheet({
           <section className="outreach-capacity" aria-labelledby="outreach-capacity-title">
             <div className="outreach-capacity-head">
               <div>
+                <span className="outreach-eyebrow">Empty outreach slots</span>
                 <h2 id="outreach-capacity-title">
                   {view === "today" ? "Fill today's channel gaps" : "Fill the weekly pool"}
                 </h2>
               </div>
+              <p>
+                Add or classify startup and personally important contacts, then assign
+                their preferred channel. Forwarders remain data-only.
+              </p>
             </div>
             <div className="outreach-capacity-grid">
               {report.channels.map((channel) => {
@@ -930,10 +946,13 @@ export function ContactSheet({
           {canLoadHardwareVcCampaign && (
             <section className="outreach-campaign-loader" aria-labelledby="hardware-vc-campaign-title">
               <div>
+                <span className="outreach-eyebrow">Today's researched list</span>
                 <h2 id="hardware-vc-campaign-title">Load 120 hardware outreach targets</h2>
                 <p>
-                  Queues 27 Bookface, 31 LinkedIn, and 62 email targets. Previously
-                  contacted people may be queued again.
+                  Bookface gets 27 YC hardware founders. LinkedIn gets 31 hardware
+                  company leaders. Email gets 62 specialist hardware and deep-tech
+                  investors for portfolio introductions. Previously contacted people
+                  are eligible to queue again.
                 </p>
               </div>
               <button

@@ -394,7 +394,8 @@ export function ChinaCustomsDecisionGuideSection({
       <p className={styles.guideLead}>
         The corridor data can prioritize research. It cannot determine a
         shipment&apos;s classification, duty, admissibility, or clearance
-        status. Review the shipment packet against these eight customs gates.
+        status. These eight gates turn a product packet into an evidence-backed
+        customs workflow.
       </p>
 
       <div className={styles.readinessGrid} aria-label="Customs quote readiness">

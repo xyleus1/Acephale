@@ -371,7 +371,7 @@ function ProposalDecisionDossier({
     {
       key: "brain",
       tone: proposalToneFromStop(firstStop.tone),
-      label: "Decision score",
+      label: "Decision brain",
       value: `Grade ${gradeDelta}`,
       detail: `${missingDelta}. Next stop: ${formatProposalValue(firstStop.label)}.`,
     },
@@ -600,7 +600,7 @@ export default async function JobDetailPage({
       events.push({
         at: new Date(inquiry.updatedAt),
         iconName: "sparkles", kind: "auto",
-        title: "Shipment fields parsed",
+        title: "AI parsed shipment fields",
         sub: `${inquiry.origin ?? "?"} → ${inquiry.destination ?? "?"} · ${inquiry.mode ?? "-"}${inquiry.weight ? ` · ${inquiry.weight.toLocaleString()}kg` : ""}`,
       });
     }
@@ -1656,7 +1656,7 @@ export default async function JobDetailPage({
                       <div className="record-row-title">{d.name}</div>
                       <div className="record-row-meta">
                         {DOC_TYPE_LABEL[d.docType] ?? d.docType} - {d.status.toLowerCase()}
-                        {d.aiAnalyzedAt && <span className="record-ai-inline">Analysis available</span>}
+                        {d.aiAnalyzedAt && <span className="record-ai-inline">AI commented</span>}
                         {d.customerVisible && <span className="record-ai-inline">Customer-visible</span>}
                         {d.customerRequested && <span className="record-ai-inline">Requested from customer</span>}
                       </div>
@@ -1701,7 +1701,7 @@ export default async function JobDetailPage({
                     <div className="record-ai-panel">
                       {d.aiSummary && (
                         <div className="record-ai-summary">
-                          <span className="record-ai-label">Automated analysis</span>
+                          <span className="record-ai-label">AI</span>
                           {d.aiSummary}
                         </div>
                       )}

@@ -1,14 +1,11 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
 import {
   AlertTriangle,
   Check,
   CircleDashed,
   ExternalLink,
   Factory,
-  Images,
   LockKeyhole,
   Search,
   ShieldCheck,
@@ -20,8 +17,6 @@ import type {
   SteelSupplierSearchInput,
   SteelSupplierSearchResult,
   SteelSupplierSegment,
-  SteelSupplierVisual,
-  SteelSupplierVisualKind,
 } from "@/lib/steel-supplier-search";
 import styles from "./supplier-finder.module.css";
 
@@ -68,14 +63,6 @@ const ROLE_LABELS = {
   agent_or_representative: "Agent or representative",
 } as const;
 
-const VISUAL_KIND_LABELS: Record<SteelSupplierVisualKind, string> = {
-  logo: "Logo",
-  facility: "Facility",
-  product: "Product",
-  company: "Company",
-  context: "Related image",
-};
-
 function text(value: unknown) {
   return typeof value === "string" ? value.slice(0, 1_000) : "";
 }
@@ -112,47 +99,6 @@ function sourceLabel(url: string) {
   } catch {
     return "Public source";
   }
-}
-
-function SupplierVisualCard({ visual }: { visual: SteelSupplierVisual }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return null;
-  return (
-    <a
-      className={styles.visualCard}
-      data-kind={visual.kind}
-      href={visual.sourcePageUrl}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`Open image source for ${visual.subject}`}
-    >
-      <div className={styles.visualImage}>
-        <img
-          src={visual.thumbnailUrl ?? visual.imageUrl}
-          alt={visual.caption}
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
-        />
-        <span>{VISUAL_KIND_LABELS[visual.kind]}</span>
-      </div>
-      <div className={styles.visualMeta}>
-        <strong>{visual.subject}</strong>
-        <p>{visual.caption}</p>
-        <small>{visual.sourceDomain} <ExternalLink size={9} /></small>
-      </div>
-    </a>
-  );
-}
-
-function SupplierVisualGallery({ visuals, compact = false }: { visuals: SteelSupplierVisual[]; compact?: boolean }) {
-  if (!visuals.length) return null;
-  return (
-    <div className={compact ? styles.compactVisualGrid : styles.visualGrid}>
-      {visuals.map((visual) => <SupplierVisualCard key={visual.id} visual={visual} />)}
-    </div>
-  );
 }
 
 export function SteelSupplierFinder({ storageScope }: { storageScope: string }) {
@@ -223,27 +169,26 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
     <main className={styles.page}>
       <header className={styles.hero}>
         <div>
-          <h1>Supplier Finder</h1>
+          <h1>Steel suppliers</h1>
         </div>
         <div className={styles.heroBoundary}>
           <ShieldCheck size={18} />
-          <span><strong>Candidate discovery only</strong> No supplier is approved, awarded, or called reliable by this search.</span>
+          <span><strong>Candidates only.</strong> No supplier is approved or awarded.</span>
         </div>
       </header>
 
       <section className={styles.privacyNotice}>
         <LockKeyhole size={18} />
-        <span><strong>Sensitive origin protection:</strong> private origin notes stay in this browser. Public research receives only the product brief.</span>
+        <span>Private notes stay in this browser and are never searched.</span>
       </section>
 
       <div className={styles.topGrid}>
         <form className={styles.searchCard} onSubmit={submitSearch}>
           <header className={styles.cardHeader}>
             <div>
-              <span>01</span>
-              <h2>Public search brief</h2>
+              <h2>Search</h2>
             </div>
-            <small>Sent to public-source research</small>
+            <small>Public sources</small>
           </header>
 
           <div className={styles.formGrid}>
@@ -270,7 +215,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               />
             </label>
             <label className={styles.fullField}>
-              <span>Grade, standard, and technical specification</span>
+              <span>Specification</span>
               <input
                 value={draft.specification}
                 onChange={(event) => setField("specification", event.target.value)}
@@ -278,7 +223,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               />
             </label>
             <label>
-              <span>Volume and cadence</span>
+              <span>Volume</span>
               <input value={draft.quantity} onChange={(event) => setField("quantity", event.target.value)} placeholder="Example: 40,000 mt quarterly" />
             </label>
             <label>
@@ -286,7 +231,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               <input required minLength={2} value={draft.targetMarket} onChange={(event) => setField("targetMarket", event.target.value)} />
             </label>
             <label className={styles.fullField}>
-              <span>Regions to search</span>
+              <span>Search regions</span>
               <input
                 value={draft.preferredRegions}
                 onChange={(event) => setField("preferredRegions", event.target.value)}
@@ -294,7 +239,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               />
             </label>
             <label className={styles.fullField}>
-              <span>Required evidence or certifications</span>
+              <span>Requirements</span>
               <textarea
                 value={draft.requirements}
                 onChange={(event) => setField("requirements", event.target.value)}
@@ -304,7 +249,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
           </div>
 
           <button className={styles.searchButton} type="submit" disabled={searching}>
-            <Search size={16} /> {searching ? "Searching attributable public sources..." : "Find supplier candidates"}
+            <Search size={16} /> {searching ? "Searching..." : "Find candidates"}
           </button>
         </form>
 
@@ -313,7 +258,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
             <header className={styles.cardHeader}>
               <div>
                 <span><LockKeyhole size={13} /></span>
-                <h2>Private origin context</h2>
+                <h2>Private notes</h2>
               </div>
               <small>Browser only</small>
             </header>
@@ -322,13 +267,12 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               onChange={(event) => setField("confidentialOriginNotes", event.target.value)}
               placeholder="Current origins, supplier relationships, sensitivities, or names that must never enter public research"
             />
-            <p>Browser only. Excluded from public search.</p>
           </section>
 
           <section className={styles.gateCard}>
             <header className={styles.cardHeader}>
-              <div><span>02</span><h2>Reliability gate</h2></div>
-              <small>Before contact or award</small>
+              <div><h2>Approval checks</h2></div>
+              <small>Before award</small>
             </header>
             <ol>
               <li><Check size={14} /><span><strong>Public evidence</strong> Identity, producer status, capability, quality, export activity</span></li>
@@ -345,8 +289,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
       <section className={styles.resultsSection} aria-live="polite">
         <header className={styles.resultsHeader}>
           <div>
-            <span className={styles.eyebrow}>Results</span>
-            <h2>{result ? `${result.candidates.length} attributable candidates` : "No search run yet"}</h2>
+            <h2>{result ? `${result.candidates.length} candidates` : "No results"}</h2>
           </div>
           {result ? <small>Researched {new Date(result.searchedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
         </header>
@@ -354,25 +297,14 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
         {!result ? (
           <div className={styles.emptyState}>
             <Factory size={25} />
-            <h3>Enter a product to search</h3>
+            <h3>Enter a specific product</h3>
           </div>
         ) : (
           <>
             <p className={styles.resultSummary}>{result.summary}</p>
-            {result.visuals.some((visual) => visual.candidateId === null) ? (
-              <section className={styles.productVisuals}>
-                <header>
-                  <div><Images size={16} /><h3>Product and market images</h3></div>
-                  <small>{result.visuals.filter((visual) => visual.candidateId === null).length} public images</small>
-                </header>
-                <p>Images do not prove grade, origin, availability, or product fit.</p>
-                <SupplierVisualGallery visuals={result.visuals.filter((visual) => visual.candidateId === null)} />
-              </section>
-            ) : null}
             <div className={styles.candidateGrid}>
               {result.candidates.map((candidate) => {
                 const supported = supportedEvidenceCount(candidate);
-                const candidateVisuals = result.visuals.filter((visual) => visual.candidateId === candidate.id);
                 return (
                   <article className={styles.candidateCard} key={candidate.id}>
                     <header>
@@ -388,17 +320,6 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
 
                     <p className={styles.productFit}>{candidate.productFit}</p>
                     <p className={styles.evidenceSummary}>{candidate.evidenceSummary}</p>
-
-                    {candidateVisuals.length ? (
-                      <section className={styles.candidateVisuals}>
-                        <header>
-                          <strong>Public company images</strong>
-                          <small>{candidateVisuals.length} linked sources</small>
-                        </header>
-                        <SupplierVisualGallery visuals={candidateVisuals} compact />
-                        <p>Images do not prove ownership, production, or facility control.</p>
-                      </section>
-                    ) : null}
 
                     <div className={styles.evidenceList}>
                       {candidate.evidence.map((item) => (

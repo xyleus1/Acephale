@@ -1,5 +1,4 @@
 import { Icon } from "@/components/icon";
-import { OverflowMenu } from "@/components/overflow-menu";
 import {
   JobConversationPanel,
   type FeedItem,
@@ -73,6 +72,10 @@ export function LoadWorkspace({
               ? model.primaryAction.title
               : "Review the load before the next commitment"}
           </h2>
+          <p>
+            One place for shipment truth, unresolved risks, correspondence,
+            and the next operator move.
+          </p>
         </div>
         <div className={styles.headerActions}>
           <a
@@ -80,16 +83,14 @@ export function LoadWorkspace({
             href={`/dashboard/intel/load?jobId=${encodeURIComponent(jobId)}`}
           >
             <Icon name="sparkles" size={14} />
-            Review risks
+            Review this load in Intel
           </a>
-          <OverflowMenu>
-            <a
-              className={styles.secondaryLink}
-              href={`/dashboard/intel?question=${intelQuestion}`}
-            >
-              Research lane
-            </a>
-          </OverflowMenu>
+          <a
+            className={styles.secondaryLink}
+            href={`/dashboard/intel?question=${intelQuestion}`}
+          >
+            Research lane risks
+          </a>
         </div>
       </header>
 

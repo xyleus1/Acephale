@@ -13,9 +13,9 @@ type ChatItem = ChatMsg & {
 
 const AGENT_TOOLS = [
   {
-    label: "Decision review",
+    label: "Brain read",
     icon: "shield",
-    prompt: "Review this job. Start with missing proof, the next allowed action, and the stop condition.",
+    prompt: "Inspect the commercial brain for this job. Start with the decision contract, weakest proof gap, next safe move, and stop condition.",
   },
   {
     label: "Run desk",
@@ -25,7 +25,7 @@ const AGENT_TOOLS = [
   {
     label: "Pricing queue",
     icon: "shield",
-    prompt: "List the pricing queue and the next action for each RFQ.",
+    prompt: "List the pricing brain queue. Start with the operator playbook: exact ask or first move, safety rule, stop condition, and review link for the top RFQ.",
   },
   {
     label: "Qualify RFQ",
@@ -154,7 +154,7 @@ export function AgentChatWidget() {
     if (next) window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  // The Context chat view is the chat, so the floating dock would duplicate it.
+  // The Company Brain chat view IS the chat - the floating dock would duplicate it.
   if (isCompanyBrainPage || isIntelPage) return null;
   if (isLoadWorkspace) return null;
 
@@ -232,6 +232,7 @@ export function AgentChatWidget() {
             <div>
               <div className="agent-panel-kicker">Agent</div>
               <div className="agent-panel-title">Desk Assistant</div>
+              <div className="agent-panel-subtitle">RFQs, target price, forwarder replies</div>
             </div>
           </div>
           <button onClick={() => setDockOpen(false)} className="agent-panel-close" aria-label="Close">
@@ -242,7 +243,10 @@ export function AgentChatWidget() {
         <div ref={scrollRef} className="agent-panel-body">
           {messages.length === 0 && (
             <div className="agent-empty">
-              <div className="agent-empty-title">What needs review?</div>
+              <div className="agent-empty-title">Start with the commercial gap.</div>
+              <p className="agent-empty-copy">
+                Paste an RFQ, ask what is missing, check target price, or draft the next customer/forwarder reply.
+              </p>
               <div className="agent-capability-grid compact" aria-label="Desk assistant tools">
                 {AGENT_TOOLS.map((tool) => (
                   <button
@@ -260,7 +264,7 @@ export function AgentChatWidget() {
               <div className="agent-suggestion-list">
                 {[
                   "List the decision queue.",
-                  "List the pricing queue.",
+                  "List the pricing brain queue.",
                   "What is missing before this RFQ can go out?",
                   "What if target is USD 2300 and buy cost is USD 2000?",
                   "Find stale forwarder replies.",

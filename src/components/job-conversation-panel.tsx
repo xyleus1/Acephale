@@ -36,10 +36,10 @@ type ChatItem = ChatMsg & {
 
 const AGENT_TOOLS = [
   {
-    label: "Review",
+    label: "Brain",
     detail: "Contract + proof",
     icon: "shield",
-    prompt: "Review this job. Start with missing proof, the next allowed action, and the stop condition.",
+    prompt: "Inspect the commercial brain for this job. Start with the decision contract, weakest proof gap, next safe move, and stop condition.",
   },
   {
     label: "Qualify",
@@ -182,6 +182,7 @@ export function JobConversationPanel({
           <div>
             <div className="conversation-kicker">Agent</div>
             <div className="conversation-title">Desk Assistant</div>
+            <div className="conversation-subtitle">RFQs, target price, forwarder replies</div>
           </div>
         </div>
         <button

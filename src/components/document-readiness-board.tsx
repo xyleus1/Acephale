@@ -19,6 +19,7 @@ export function DocumentReadinessBoard({
     <div className={`doc-readiness-board ${readiness.tone}`}>
       <div className="doc-readiness-head">
         <div>
+          <div className="doc-readiness-kicker">Data room</div>
           <div className="doc-readiness-title">{title}</div>
         </div>
         <div className="doc-readiness-score">
@@ -43,7 +44,7 @@ export function DocumentReadinessBoard({
           <strong>{readiness.uploaded}</strong>
         </div>
         <div>
-          <span>Extracted fields</span>
+          <span>AI fields</span>
           <strong>{readiness.extractedFields}</strong>
         </div>
         <div>

@@ -9,7 +9,8 @@ export function IntelligenceHotspotPanel({ hotspot }: { hotspot: IntelligenceHot
     return (
       <aside style={panelStyle}>
         <div style={eyebrowStyle}>Select a hotspot</div>
-        <h3 style={titleStyle}>Market context</h3>
+        <h3 style={titleStyle}>Live market context</h3>
+        <p style={mutedStyle}>Click a glowing point or lane to inspect related research, signals, reviews, evidence, and recommended operator actions.</p>
       </aside>
     );
   }

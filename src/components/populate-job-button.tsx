@@ -37,7 +37,7 @@ export function PopulateJobButton({ jobId }: { jobId: string }) {
         disabled={busy}
         className="btn btn-secondary btn-sm"
         style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-        title="Extract a reviewed field proposal from linked emails"
+        title="Use AI to extract a reviewed field proposal from linked emails"
       >
         <Icon name="sparkles" size={11} />
         {busy ? "Extracting…" : "Propose from emails"}

@@ -220,7 +220,7 @@ export function DomesticTruckingRatePanel({
 
         {!compact && (
           <div className="domestic-field-block">
-            <div className="domestic-section-title">Recorded context</div>
+            <div className="domestic-section-title">Brain context</div>
             <div className="domestic-brain-grid">
               {assessment.brainContext.sections.map((section) => (
                 <div key={section.key} className="domestic-brain-card">

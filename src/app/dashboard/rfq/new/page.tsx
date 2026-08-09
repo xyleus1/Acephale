@@ -147,7 +147,8 @@ export default async function NewRFQPage() {
 
       <div className="page-header form-page-header">
         <div>
-          <h1 className="page-title">New RFQ</h1>
+          <h1 className="page-title">Manual RFQ Entry</h1>
+          <p className="page-subtitle">Add a freight request received by phone, chat, or another off-channel source.</p>
         </div>
       </div>
 

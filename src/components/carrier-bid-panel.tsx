@@ -27,7 +27,7 @@ function money(value: number | null): string {
 }
 
 // The truckload desk on an RFQ: capture carrier bids (buy side), pick the
-// winner, and save issued quotes to quote history. Outcomes settle from
+// winner, and snapshot issued quotes into the flywheel. Outcomes settle from
 // the RFQ status (Booked => won, Missed => lost).
 export function CarrierBidPanel({
   inquiryId,
@@ -146,7 +146,7 @@ export function CarrierBidPanel({
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <Icon name="truck" size={15} />
           <div className="record-card-title">Truckload desk</div>
-          <span style={{ fontSize: 12, opacity: 0.6 }}>Carrier bids and recorded quotes</span>
+          <span style={{ fontSize: 12, opacity: 0.6 }}>carrier bids + recorded quotes</span>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             <button type="button" className="btn btn-sm btn-secondary" disabled={busy} onClick={() => setDraft(draft ? null : { carrierName: "", totalAmount: "" })}>
               <Icon name="plus" size={12} strokeWidth={2.5} /> Bid
@@ -156,7 +156,7 @@ export function CarrierBidPanel({
               className="btn btn-sm"
               disabled={busy}
               onClick={recordQuote}
-              title="Save the current domestic draft as a carrier quote"
+              title="Snapshot the current domestic draft economics into the quote flywheel"
             >
               <Icon name="dollar" size={12} strokeWidth={2.5} /> Record quote
             </button>

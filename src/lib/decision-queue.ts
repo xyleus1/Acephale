@@ -1098,7 +1098,7 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
       entityId: quote.id,
       title: age >= 72 ? `Resolve stale quote outcome: ${quote.company.name}` : `Follow up pending quote: ${quote.company.name}`,
       meta: `${routeLabel(quote)} · ${value} · pending ${age}h`,
-      reason: "A customer quote that never becomes won/lost leaves pricing rules without outcome evidence and hides follow-up leakage.",
+      reason: "A customer quote that never becomes won/lost teaches the pricing brain nothing and hides follow-up leakage.",
       actionLabel: age >= 72 ? "Mark won/lost" : "Follow up",
       href: `/dashboard/crm?q=${encodeURIComponent(quote.company.name)}`,
       score,
@@ -1147,7 +1147,7 @@ export async function listDecisionQueueItems(officeId: string, limit = 10): Prom
         phase: "RESOLVE_QUOTE_OUTCOME",
         label: age >= 72 ? "Resolve stale outcome" : "Follow up quote",
         owner: "CUSTOMER",
-        command: "Get a customer answer or mark the quote won/lost so pricing rules can use the outcome.",
+        command: "Get a customer answer or mark the quote won/lost so the pricing brain learns from the outcome.",
         toolHint: "find_follow_up_targets",
       }),
     });

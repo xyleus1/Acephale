@@ -89,7 +89,11 @@ export default async function CustomerPortalAdminPage() {
     <div className={styles.page}>
       <div className={styles.hero}>
         <div>
-          <h1 className={styles.title}>Customer access</h1>
+          <div className={styles.eyebrow}>Customer access</div>
+          <h1 className={styles.title}>Customer workspace</h1>
+          <p className={styles.copy}>
+            Manage who can sign in, open a company workspace, and review customer replies.
+          </p>
         </div>
         <a className={`btn btn-secondary ${styles.portalLink}`} href="/portal" target="_blank" rel="noreferrer">
           Customer sign-in
@@ -99,9 +103,10 @@ export default async function CustomerPortalAdminPage() {
       <div className={`${styles.card} ${styles.previewCard}`}>
         <div className={styles.previewCopy}>
           <div>
-            <h2>Preview customer view</h2>
+            <div className={styles.eyebrow}>View as customer</div>
+            <h2>Open a customer workspace</h2>
             <p>
-              Quote replies and uploads are disabled in preview.
+              Choose a company to inspect what its users can see. Quote replies and uploads are disabled in preview.
             </p>
           </div>
         </div>
@@ -201,7 +206,8 @@ export default async function CustomerPortalAdminPage() {
         </div>
       </div>
 
-      <div className={styles.card}>
+      <div className={styles.grid}>
+        <div className={styles.card}>
           <div className={styles.cardHeader}>
             <h2>Customer action queue</h2>
             <span className={styles.count}>{customerActions.length} open</span>
@@ -241,6 +247,16 @@ export default async function CustomerPortalAdminPage() {
               </div>
             )) : <div className={styles.empty}>No customer actions need review.</div>}
           </div>
+        </div>
+
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2>What customers can do</h2>
+          </div>
+          <div className={styles.inviteHint}>
+            Customers can view shipment status and approved documents, upload requested files, and reply to quotes. Derya staff still approve pricing, bookings, document publication, exceptions, and status changes.
+          </div>
+        </div>
       </div>
     </div>
   );

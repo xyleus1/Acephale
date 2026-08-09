@@ -493,7 +493,7 @@ export async function updateInquiryRowAction(
   }
 
   // Settle pending truckload quotes on terminal statuses - best-effort, the
-  // Quote-history updates must never block a sheet edit.
+  // flywheel must never block a sheet edit.
   if (typeof data.status === "string" && data.status !== inquiry.status) {
     const outcome = data.status === "BOOKED" ? "WON" : data.status === "MISSED" ? "LOST" : null;
     if (outcome) {
