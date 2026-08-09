@@ -9,9 +9,8 @@ export function LogoutButton() {
   return (
     <form action={logoutAction}>
       <button className="logout-btn" type="submit">
-        ↩ Sign out
+        Sign out
       </button>
     </form>
   );
 }
-

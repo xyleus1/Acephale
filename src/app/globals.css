@@ -2682,68 +2682,13 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 240px;
+  width: 132px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
   padding: 4px;
   z-index: 50;
-}
-
-.topbar-menu-header {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-
-.topbar-menu-user {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.topbar-menu-email {
-  margin-top: 2px;
-  color: var(--text-3);
-  font-size: 11px;
-}
-
-.topbar-menu-item {
-  display: block;
-  padding: 8px 10px;
-  border-radius: 5px;
-  font-size: 12.5px;
-  color: var(--text-2);
-  text-decoration: none;
-  cursor: pointer;
-}
-.topbar-menu-item:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.topbar-menu-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  font-size: 12px;
-}
-
-.topbar-menu-label {
-  color: var(--text-3);
-  font-size: 12px;
-}
-
-.topbar-menu-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-
-.topbar-menu-logout {
-  padding: 6px 10px;
 }
 
 /* ── Command palette ─────────────────────────────────────────────────── */
@@ -3843,27 +3788,6 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
 
 @media (max-width: 700px) {
   .pipeline-board { grid-template-columns: 1fr; }
-}
-
-.lang-toggle-btn {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-2);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.lang-toggle-btn:hover {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
-  color: var(--text);
-  box-shadow: none;
 }
 
 .page-container {
