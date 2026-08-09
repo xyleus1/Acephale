@@ -221,12 +221,12 @@
 
 .automationList > button {
   width: 100%;
-  min-height: 72px;
+  min-height: 64px;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) 16px;
   align-items: center;
   gap: 12px;
-  padding: 13px 20px;
+  padding: 10px 20px;
   border: 0;
   border-bottom: 1px solid var(--os-line, #e0e4e2);
   color: var(--os-soft, #4d5552);
