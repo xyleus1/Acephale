@@ -548,12 +548,22 @@ function CaseCommandCenter({
       {scopeError ? <div className={styles.commandError} role="alert">{scopeError}</div> : null}
 
       <div className={styles.commandMapStage}>
-        <SupplyOsCommandMap
-          commandMap={commandMap}
-          selectedObject={selectedObject}
-          onSelectObject={selectNetworkObject}
-          activePanel={activePanel}
-        />
+        <section className={styles.mapPanel} aria-label={`${domain.railTitle} map`}>
+          <SupplyOsCommandMap
+            commandMap={commandMap}
+            selectedObject={selectedObject}
+            onSelectObject={selectNetworkObject}
+            activePanel={activePanel}
+          />
+
+          <footer className={styles.commandMapFooter}>
+            <div className={styles.commandLegend} aria-label="Map legend">
+              <span><i data-kind="node" /> Operating point</span>
+              <span><i data-kind="route" /> Planned route</span>
+              {commandMap.insights.length ? <span><i data-kind="insight" /> Sourced signal</span> : null}
+            </div>
+          </footer>
+        </section>
 
         <aside className={styles.routeRail} aria-label="Operating network objects">
           <header>
@@ -622,13 +632,6 @@ function CaseCommandCenter({
           />
         ) : null}
 
-        <footer className={styles.commandMapFooter}>
-          <div className={styles.commandLegend} aria-label="Map legend">
-            <span><i data-kind="node" /> Operating point</span>
-            <span><i data-kind="route" /> Planned route</span>
-            {commandMap.insights.length ? <span><i data-kind="insight" /> Sourced signal</span> : null}
-          </div>
-        </footer>
       </div>
     </article>
   );
