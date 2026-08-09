@@ -10,6 +10,7 @@ const twin = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-p
 const twinStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.module.css"), "utf8");
 const sharedWorkspace = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-shared-workspace.tsx"), "utf8");
 const intelligence = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-decision-intelligence.tsx"), "utf8");
+const productPhoto = readFileSync(resolve(root, "public/supply-os/demo/vector3dhd-amr.jpg"));
 const surface = `${page}\n${shell}\n${shellStyles}\n${twin}\n${twinStyles}\n${sharedWorkspace}\n${intelligence}`;
 
 assert.match(page, /SupplyOsOperatingShell/, "the authenticated Supply OS route must render the operating shell");
@@ -26,8 +27,13 @@ assert.match(shell, /SupplyOsDashboardWorkspace/, "the existing logistics and cu
 assert.match(shell, /TrackingAndCostPanel/, "tracking and cost visibility must be part of the same page");
 assert.match(shell, /SupplyOsSharedWorkspace/, "shared office data controls must be part of the same page");
 assert.match(page, /SupplyOsDecisionIntelligence/, "office-scoped market intelligence must feed the scenario panel");
-assert.match(shell, /Autonomous_Mobile_Robot_AMR\.png/, "the product twin must use a real robotics image");
-assert.match(shell, /CC BY 4\.0/, "the external product image must carry attribution");
+assert.match(shell, /\/supply-os\/demo\/vector3dhd-amr\.jpg/, "the product twin must use a project-owned real robotics photo");
+assert.match(shell, /PattyK33/, "the product image must identify its creator");
+assert.match(shell, /CC BY-SA 4\.0/, "the product image must carry its exact license");
+assert.match(shell, /sourcePage/, "the product image must retain a source-page provenance link");
+assert.match(shell, /href=\{PRODUCT_MEDIA\.sourcePage\}/, "the rendered attribution must link to the recorded source page");
+assert.deepEqual([...productPhoto.subarray(0, 3)], [0xff, 0xd8, 0xff], "the bundled product photo must be a valid JPEG asset");
+assert.ok(productPhoto.byteLength > 100_000, "the bundled product photo must not be an empty placeholder");
 
 for (const copy of [
   "AMR-240 warehouse robot",

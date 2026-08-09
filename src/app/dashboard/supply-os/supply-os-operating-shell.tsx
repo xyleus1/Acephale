@@ -42,7 +42,15 @@ const PANELS: PanelDefinition[] = [
   { id: "tracking", label: "Tracking and cost", shortLabel: "Tracking", description: "Milestones and variance", icon: Radio },
 ];
 
-const PRODUCT_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/8/8e/Autonomous_Mobile_Robot_AMR.png";
+const PRODUCT_MEDIA = {
+  src: "/supply-os/demo/vector3dhd-amr.jpg",
+  sourcePage: "https://commons.wikimedia.org/wiki/File:Vector3DHD_autonomous_mobile_robot_and_EnZone_wireless_charging.jpg",
+  creator: "PattyK33",
+  license: "CC BY-SA 4.0",
+  dimensions: "900 x 900 display crop",
+  originalDimensions: "2220 x 1480",
+  retrievedAt: "2026-08-08",
+} as const;
 
 const EXECUTION_ROWS = [
   {
@@ -286,7 +294,7 @@ export function SupplyOsOperatingShell({
               exit={{ opacity: 0, y: -3 }}
             >
               {activePanel === "materials" ? (
-                <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} />
+                <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_MEDIA.src} />
               ) : null}
               {activePanel === "suppliers" ? (
                 <div className={styles.embeddedPanel}>
@@ -300,7 +308,7 @@ export function SupplyOsOperatingShell({
                     <p>Select a sourcing plan in the scenario table, then inspect its evidence and human approval boundary.</p>
                   </div>
                   {intelligencePanel}
-                  <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} view="scenarios" />
+                  <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_MEDIA.src} view="scenarios" />
                 </div>
               ) : null}
               {activePanel === "logistics" ? (
@@ -328,9 +336,9 @@ export function SupplyOsOperatingShell({
                 );
               })}
             </ul>
-            <a href="https://commons.wikimedia.org/wiki/File:Autonomous_Mobile_Robot_AMR.png" target="_blank" rel="noreferrer">
-              <span>Illustrative fixture</span>
-              <small>AMR image · CC BY 4.0</small>
+            <a href={PRODUCT_MEDIA.sourcePage} target="_blank" rel="noreferrer" title={`${PRODUCT_MEDIA.dimensions} · original ${PRODUCT_MEDIA.originalDimensions} · retrieved ${PRODUCT_MEDIA.retrievedAt}`}>
+              <span>Illustrative AMR photo</span>
+              <small>{PRODUCT_MEDIA.creator} · {PRODUCT_MEDIA.license}</small>
             </a>
           </footer>
         </section>

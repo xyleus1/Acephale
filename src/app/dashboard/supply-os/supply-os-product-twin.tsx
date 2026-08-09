@@ -364,7 +364,7 @@ export function SupplyOsProductTwin({
         <ProductVisual
           source={isPublishedSnapshot ? model.productImageUrl : productImageUrl}
           alt={`${productName} product image`}
-          label={isPublishedSnapshot ? `Published snapshot v${model.snapshotVersion}` : "Illustrative robotics fixture"}
+          label={isPublishedSnapshot ? `Published snapshot v${model.snapshotVersion}` : "Illustrative"}
         />
         <div className={styles.productIdentity}>
           <span className={styles.kicker}><Factory size={13} /> {productContext}</span>

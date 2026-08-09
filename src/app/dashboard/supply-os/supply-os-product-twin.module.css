@@ -77,8 +77,9 @@
 
 .productVisual > small {
   position: absolute;
-  right: 7px;
-  bottom: 7px;
+  top: 7px;
+  right: auto;
+  bottom: auto;
   left: 7px;
   padding: 4px 6px;
   border: 1px solid var(--twin-line-strong);
@@ -88,6 +89,7 @@
   font-size: 11px;
   text-align: center;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .productVisualFallback {
