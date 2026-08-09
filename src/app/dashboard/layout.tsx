@@ -73,7 +73,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </>
           ) : (
             <>
-              <div className="nav-section-label with-rule">Commercial Workflow</div>
+              <div className="nav-section-label with-rule">Work</div>
 
               <NavLink href="/dashboard" icon={<Icon name="grid" />}>Deal Desk</NavLink>
 
@@ -89,25 +89,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
               <NavLink href="/dashboard/supplier-finder" icon={<Icon name="search" />}>Supplier Finder</NavLink>
 
-              {/* Archived from the nav: /dashboard/pricing, /dashboard/domestic-pricing, /dashboard/intelligence
-                  and /dashboard/carriers stay reachable directly (the carrier bench is linked from the
-                  Intelligence pre-flight results). */}
-
-              {/* ─── SETUP ───────────────────────────────────────────────────── */}
-              <div className="nav-section-label with-rule">Setup</div>
-
-              <NavLink href="/dashboard/settings/email" icon={<Icon name="settings" />}>Channels</NavLink>
-
-              <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company Brain</NavLink>
-
-              {(session.role === "ADMIN" || session.role === "MANAGER") && (
-                <>
-                  <NavLink href="/dashboard/customer-portal" icon={<Icon name="external" />}>Customer Portal</NavLink>
-                  <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
-                </>
-              )}
-
               <NavLink href="/dashboard/inbox" icon={<Icon name="mail" />}>Inbox</NavLink>
+
+              <details className="sidebar-more">
+                <summary>
+                  <Icon name="settings" />
+                  <span>Manage</span>
+                </summary>
+                <div className="sidebar-more-links">
+                  <NavLink href="/dashboard/settings/email" icon={<Icon name="settings" />}>Channels</NavLink>
+                  <NavLink href="/dashboard/brain" icon={<Icon name="sparkles" />}>Company context</NavLink>
+                  {(session.role === "ADMIN" || session.role === "MANAGER") && (
+                    <>
+                      <NavLink href="/dashboard/customer-portal" icon={<Icon name="external" />}>Customer access</NavLink>
+                      <NavLink href="/dashboard/admin" icon={<Icon name="shield" />}>Admin</NavLink>
+                    </>
+                  )}
+                </div>
+              </details>
             </>
           )}
         </nav>

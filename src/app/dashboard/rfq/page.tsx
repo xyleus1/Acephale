@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { deriveInquirySource } from "@/lib/inquiry-source";
 import { Icon } from "@/components/icon";
+import { OverflowMenu } from "@/components/overflow-menu";
 import { RfqSheet, type RfqOutreachDisplay, type RfqRowData, type SheetOption } from "@/components/rfq-expandable-rows";
 import { UsLeadCards } from "@/components/us-lead-cards";
 import { RfqSendAllButton } from "@/components/rfq-send-all-button";
@@ -500,26 +501,28 @@ export default async function RFQPage({
           <h1 className="page-title">Incoming RFQs</h1>
           <p className="page-subtitle">
             {usView
-              ? `${rows.length} ${filter === "" ? "open " : ""}US lead${rows.length === 1 ? "" : "s"} shown${qualityFilter !== "all" ? ` · ${qualityFilter === "good" ? "Good" : "Maybe"} quality only` : ""}${searchQuery ? ` · matching “${searchQuery}”` : ""} · synced hourly from the California lead sheet · Good and Maybe leads are emailed automatically: first email on arrival, follow-ups every few days, dropped after the 4th goes unanswered · replies are detected from the synced inboxes and flagged on the card`
-              : `${rows.length} ${filter === "" ? "open " : ""}RFQ${rows.length === 1 ? "" : "s"} shown${searchQuery ? ` · matching “${searchQuery}”` : ""} · newest first · click a cell to edit, changes save automatically · the arrow opens load details · tick rows to change status in bulk · drag headers to rearrange columns`}
+              ? `${rows.length} US lead${rows.length === 1 ? "" : "s"}${qualityFilter !== "all" ? `, ${qualityFilter} quality` : ""}${searchQuery ? ` matching “${searchQuery}”` : ""}`
+              : `${rows.length} RFQ${rows.length === 1 ? "" : "s"}${searchQuery ? ` matching “${searchQuery}”` : ""}`}
           </p>
         </div>
         <div className="page-actions">
-          {usView && (
-            <a href={usSheetUrl} target="_blank" rel="noreferrer" className="btn btn-secondary">
-              <Icon name="external" size={13} />
-              Lead sheet
-            </a>
-          )}
-          <RfqSendAllButton pending={pendingForwards} disabled={!mailConfigured} />
           <SyncGoogleSheetButton />
-          <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
-            <Icon name="inbox" size={13} />
-            Inbox triage
-          </Link>
           <a href="/dashboard/rfq/new" className="btn">
             <Icon name="plus" size={13} strokeWidth={2.5} /> New RFQ
           </a>
+          <OverflowMenu>
+            {usView && (
+              <a href={usSheetUrl} target="_blank" rel="noreferrer" className="btn btn-secondary">
+                <Icon name="external" size={13} />
+                Lead sheet
+              </a>
+            )}
+            <RfqSendAllButton pending={pendingForwards} disabled={!mailConfigured} />
+            <Link href="/dashboard/inbox?view=rfqs" className="btn btn-secondary">
+              <Icon name="inbox" size={13} />
+              Inbox triage
+            </Link>
+          </OverflowMenu>
         </div>
       </div>
 

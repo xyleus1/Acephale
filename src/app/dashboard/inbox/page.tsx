@@ -13,6 +13,7 @@ import { LoadFilterPicker } from "@/components/load-filter-picker";
 import { RfqRowActions } from "@/components/rfq-row-actions";
 import { Icon } from "@/components/icon";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
+import { OverflowMenu } from "@/components/overflow-menu";
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefForInbox, isDeryaRfqSourceSender } from "@/lib/derya-inboxes";
 import { LOAD_RFQ_RELATED_CLASSIFICATIONS, primaryEmailWorkflowLabel } from "@/lib/email-workflow-labels";
 import { inquiryStatusBadgeCls, inquiryStatusLabel, openInquiryStatusFilter } from "@/lib/inquiry-status";
@@ -672,11 +673,13 @@ export default async function InboxPage({
         />
         <div className="page-actions">
           <SyncDeryaInboxesButton disabled={connectedDeryaInboxEmails.size === 0} />
-          <MergeDuplicatesButton />
-          <ReclassifyButton onlyUnclassified={false} />
-          <a href="/dashboard/settings/email" className="btn btn-secondary">
-            Manage inboxes
-          </a>
+          <OverflowMenu>
+            <MergeDuplicatesButton />
+            <ReclassifyButton onlyUnclassified={false} />
+            <a href="/dashboard/settings/email" className="btn btn-secondary">
+              Manage inboxes
+            </a>
+          </OverflowMenu>
         </div>
       </div>
 

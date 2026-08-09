@@ -3460,6 +3460,47 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
   opacity: 1;
 }
 
+.sidebar-more {
+  margin-top: 4px;
+}
+
+.sidebar-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  color: var(--sidebar-text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  list-style: none;
+}
+
+.sidebar-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-more > summary:hover,
+.sidebar-more[open] > summary {
+  background: var(--sidebar-hover);
+  color: var(--text);
+}
+
+.sidebar-more > summary svg {
+  width: 16px;
+  flex: 0 0 16px;
+  opacity: 0.75;
+}
+
+.sidebar-more-links {
+  display: grid;
+  gap: 2px;
+  margin-top: 2px;
+  padding-left: 10px;
+}
+
 .sidebar-footer {
   padding: 14px 16px;
   border-top: 1px solid var(--sidebar-border);
@@ -5188,6 +5229,86 @@ tbody tr:hover td {
   border-radius: var(--radius);
   background: #f6ecd9;
   box-shadow: var(--shadow-xs);
+}
+
+.pricing-queue-overview > summary,
+.pricing-decision-disclosure > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.pricing-queue-overview > summary::-webkit-details-marker,
+.pricing-decision-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pricing-queue-overview > summary span,
+.pricing-decision-disclosure > summary span {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pricing-queue-overview > summary strong,
+.pricing-decision-disclosure > summary strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.pricing-queue-overview > summary em,
+.pricing-decision-disclosure > summary em {
+  color: var(--text-2);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.pricing-queue-overview > summary::after,
+.pricing-decision-disclosure > summary::after {
+  content: "+";
+  color: var(--text-3);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.pricing-queue-overview[open] > summary::after,
+.pricing-decision-disclosure[open] > summary::after {
+  content: "-";
+}
+
+.pricing-queue-overview > summary em,
+.pricing-decision-disclosure > summary em {
+  margin-left: auto;
+}
+
+.pricing-directory-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.pricing-directory-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pricing-directory-disclosure > summary strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.pricing-directory-disclosure > summary span {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .pricing-command-board-head {
@@ -31093,6 +31214,8 @@ body,
 .sidebar:not(:hover):not(:focus-within) .brand-sub,
 .sidebar:not(:hover):not(:focus-within) .nav-link .nav-link-text,
 .sidebar:not(:hover):not(:focus-within) .nav-section-label,
+.sidebar:not(:hover):not(:focus-within) .sidebar-more > summary span,
+.sidebar:not(:hover):not(:focus-within) .sidebar-more-links,
 .sidebar:not(:hover):not(:focus-within) .user-info,
 .sidebar:not(:hover):not(:focus-within) .sidebar-footer-actions {
   display: none !important;
@@ -31118,6 +31241,11 @@ body,
 }
 
 .sidebar:not(:hover):not(:focus-within) .nav-link {
+  justify-content: center !important;
+  padding: 10px !important;
+}
+
+.sidebar:not(:hover):not(:focus-within) .sidebar-more > summary {
   justify-content: center !important;
   padding: 10px !important;
 }
@@ -36044,4 +36172,94 @@ summary:focus-visible,
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* Secondary actions stay reachable without competing with the page's main task. */
+.overflow-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.overflow-menu > summary {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.overflow-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.overflow-menu > summary::after {
+  content: "\22ef";
+  margin-left: 7px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.overflow-menu[open] > summary,
+.overflow-menu > summary:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.overflow-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 80;
+  display: grid;
+  min-width: 210px;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.overflow-menu-right .overflow-menu-panel {
+  right: 0;
+}
+
+.overflow-menu-left .overflow-menu-panel {
+  left: 0;
+}
+
+.overflow-menu-panel > .btn,
+.overflow-menu-panel > a,
+.overflow-menu-panel > button,
+.overflow-menu-panel > form > button {
+  width: 100%;
+  min-height: 38px;
+  justify-content: flex-start;
+}
+
+@media (max-width: 680px) {
+  .overflow-menu-panel {
+    position: fixed;
+    right: 12px !important;
+    bottom: 12px;
+    left: 12px !important;
+    top: auto;
+  }
+
+  .pricing-queue-overview > summary,
+  .pricing-decision-disclosure > summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .pricing-queue-overview > summary em,
+  .pricing-decision-disclosure > summary em {
+    display: none;
+  }
 }
