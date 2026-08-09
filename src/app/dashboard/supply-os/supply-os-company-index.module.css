@@ -38,7 +38,8 @@
 
 .headerActions button,
 .createRow button {
-  min-height: 42px;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -74,7 +75,7 @@
 }
 
 .createRow input {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 11px;
   border: 1px solid #c7ceca;
   border-radius: 10px;
