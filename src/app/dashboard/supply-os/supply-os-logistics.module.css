@@ -1460,8 +1460,7 @@
   pointer-events: none;
 }
 
-.routeGeometry,
-.routePathSegment {
+.routeGeometry {
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1481,10 +1480,6 @@
 .routeGeometryLine {
   stroke: var(--navy);
   stroke-width: 3;
-}
-
-.routePathSegment {
-  height: 24px;
 }
 
 .fitMapButton {

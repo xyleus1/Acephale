@@ -618,30 +618,6 @@ export function SupplyOsCommandMap({
         ))}
       </svg>
 
-      {projectedRoutePaths.flatMap(({ route, segment, points }) => points.slice(2, -3).map((point, index) => {
-        const next = points[index + 3];
-        const deltaX = next.x - point.x;
-        const deltaY = next.y - point.y;
-        return (
-          <button
-            key={`route-hit:${segment.id}:${index}`}
-            type="button"
-            className={styles.routePathSegment}
-            tabIndex={-1}
-            aria-hidden="true"
-            style={{
-              left: (point.x + next.x) / 2,
-              top: (point.y + next.y) / 2,
-              width: Math.max(18, Math.hypot(deltaX, deltaY) + 8),
-              transform: `translate(-50%, -50%) rotate(${Math.atan2(deltaY, deltaX) * 180 / Math.PI}deg)`,
-            }}
-            onMouseEnter={() => setHoveredRouteId(segment.id)}
-            onMouseLeave={() => setHoveredRouteId((current) => current === segment.id ? null : current)}
-            onClick={() => selectRoute(route.id)}
-          />
-        );
-      }))}
-
       <Tooltip.Provider delayDuration={250}>
         <Tooltip.Root>
           <Tooltip.Trigger asChild>

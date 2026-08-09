@@ -19,6 +19,7 @@ const styles = readFileSync(
 assert.equal(commandMap.includes("ScaleControl"), false, "the map must not render a decorative distance ruler");
 assert.equal(commandMap.includes("AttributionControl"), false, "the map must not render the intrusive attribution badge");
 assert.equal(commandMap.includes("mapCredits"), false, "map data credits must not float over the map");
+assert.equal(commandMap.includes("routePathSegment"), false, "route hit targets must not render as bottom-row buttons");
 assert.equal(dashboard.includes("commandMapFooter"), false, "the redundant map legend must not float over the map");
 assert.equal(styles.includes(".commandLegend"), false, "the removed map legend must not leave dead styling");
 assert.match(dashboard, /className=\{styles\.mapDataSources\}/, "map data attribution must remain in the adjacent operations rail");
