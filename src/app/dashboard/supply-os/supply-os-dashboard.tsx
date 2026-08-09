@@ -39,6 +39,7 @@ import {
 import { SUPPLY_ENGAGEMENT_OPTIONS } from "@/lib/supply-os-engagement-plan";
 import { companyNameHint } from "@/lib/supply-os-company-identity";
 import { buildSupplyOptimizationModel } from "@/lib/supply-os-optimization-engine";
+import type { SupplyOsPanel } from "@/lib/supply-os/panel-routing";
 import {
   loadSupplyCases,
   persistSupplyCases,
@@ -234,6 +235,51 @@ function workspaceForObject(
 
 const ILLUSTRATIVE_NETWORK_DATE = new Date("2026-08-08T12:00:00.000Z");
 
+const PRODUCT_MEDIA = {
+  src: "/supply-os/demo/vector3dhd-amr.jpg",
+  sourcePage: "https://commons.wikimedia.org/wiki/File:Vector3DHD_autonomous_mobile_robot_and_EnZone_wireless_charging.jpg",
+  creator: "PattyK33",
+  license: "CC BY-SA 4.0",
+} as const;
+
+const DOMAIN_CONFIG: Record<SupplyOsPanel, {
+  railTitle: string;
+  railSummary: string;
+  objectKinds: SupplyCommandObject["kind"][];
+  defaultInspector: "object" | "optimization";
+}> = {
+  materials: {
+    railTitle: "Supply network",
+    railSummary: "Sources and facilities",
+    objectKinds: ["supplier", "factory", "distribution"],
+    defaultInspector: "object",
+  },
+  logistics: {
+    railTitle: "Logistics network",
+    railSummary: "Routes and controls",
+    objectKinds: ["movement", "customs", "factory", "distribution", "customer"],
+    defaultInspector: "object",
+  },
+  suppliers: {
+    railTitle: "Supplier network",
+    railSummary: "Qualification targets",
+    objectKinds: ["supplier", "factory"],
+    defaultInspector: "object",
+  },
+  scenarios: {
+    railTitle: "Opportunity network",
+    railSummary: "Candidate paths",
+    objectKinds: ["supplier", "factory", "distribution", "customer", "customs", "movement"],
+    defaultInspector: "optimization",
+  },
+  tracking: {
+    railTitle: "Execution network",
+    railSummary: "Movement and exceptions",
+    objectKinds: ["movement", "customs", "factory", "customer"],
+    defaultInspector: "object",
+  },
+};
+
 function illustrativeNetworkCase() {
   return generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, ILLUSTRATIVE_NETWORK_DATE, "full_operation");
 }
@@ -241,9 +287,11 @@ function illustrativeNetworkCase() {
 export function SupplyOsDashboardWorkspace({
   storageScope,
   presentationMode = false,
+  activePanel = "materials",
 }: {
   storageScope: string;
   presentationMode?: boolean;
+  activePanel?: SupplyOsPanel;
 }) {
   const keys = useMemo(() => supplyCaseStorageKeys(storageScope), [storageScope]);
   const [savedCases, setSavedCases] = useState<SupplyCaseDashboard[]>([]);
@@ -315,6 +363,7 @@ export function SupplyOsDashboardWorkspace({
           dashboard={currentCase}
           savedCases={visibleCases}
           presentationMode={presentationMode}
+          activePanel={activePanel}
           onOpenDashboard={openDashboard}
           onScopeChange={(scope) => updateDashboardScope(currentCase, scope)}
         />
@@ -346,12 +395,14 @@ function CaseCommandCenter({
   dashboard,
   savedCases,
   presentationMode,
+  activePanel,
   onOpenDashboard,
   onScopeChange,
 }: {
   dashboard: SupplyCaseDashboard;
   savedCases: SupplyCaseDashboard[];
   presentationMode: boolean;
+  activePanel: SupplyOsPanel;
   onOpenDashboard: (item: SupplyCaseDashboard) => void;
   onScopeChange: (scope: SupplyEngagementScope) => boolean;
 }) {
@@ -363,6 +414,7 @@ function CaseCommandCenter({
   }, [dashboard]);
   const model = useMemo(() => buildSupplyOptimizationModel(modelDashboard), [modelDashboard]);
   const commandMap = useMemo(() => buildSupplyCommandMap(model, modelDashboard), [model, modelDashboard]);
+  const domain = DOMAIN_CONFIG[activePanel];
   const initialObject = commandMap.objects.find((object) => object.kind === "factory")
     ?? commandMap.objects.find((object) => object.kind === "supplier")
     ?? commandMap.objects[0]
@@ -370,12 +422,23 @@ function CaseCommandCenter({
   const [selectedObjectId, setSelectedObjectId] = useState(initialObject?.id ?? "");
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const selectedObject = commandMap.objects.find((object) => object.id === selectedObjectId) ?? initialObject;
-  const networkObjects = useMemo(() => orderedNetworkObjects(commandMap.objects), [commandMap.objects]);
-  const transportObjects = useMemo(() => orderedTransportObjects(commandMap.objects), [commandMap.objects]);
+  const domainObjects = useMemo(
+    () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
+    [commandMap.objects, domain.objectKinds],
+  );
+  const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
+  const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
   const supplierCount = commandMap.objects.filter((object) => object.kind === "supplier").length;
   const customsCount = commandMap.objects.filter((object) => object.kind === "customs").length;
   const logoUrl = companyLogoUrl(dashboard);
   const isIllustrativeNetwork = dashboard.sourcePrompt === SAMPLE_SUPPLY_CASE_PROMPT && !dashboard.research;
+
+  useEffect(() => {
+    setInspectorMode(domain.defaultInspector);
+    if (selectedObject && domain.objectKinds.includes(selectedObject.kind)) return;
+    const nextObject = domainObjects.find((object) => object.kind === "factory") ?? domainObjects[0];
+    if (nextObject) setSelectedObjectId(nextObject.id);
+  }, [domain.defaultInspector, domain.objectKinds, domainObjects, selectedObject]);
 
   function selectScope(scope: SupplyEngagementScope) {
     if (scope === selectedScope) return;
@@ -397,7 +460,12 @@ function CaseCommandCenter({
   }
 
   return (
-    <article className={styles.commandCenter} aria-labelledby="supply-command-title">
+    <article
+      className={styles.commandCenter}
+      aria-labelledby="supply-command-title"
+      data-domain={activePanel}
+      data-embedded={!presentationMode}
+    >
       <header className={styles.commandHeader}>
         <div className={styles.commandIdentity}>
           {logoUrl ? (
@@ -484,12 +552,13 @@ function CaseCommandCenter({
           commandMap={commandMap}
           selectedObject={selectedObject}
           onSelectObject={selectNetworkObject}
+          activePanel={activePanel}
         />
 
         <aside className={styles.routeRail} aria-label="Operating network objects">
           <header>
-            <span>Network</span>
-            <small>{networkObjects.length} points, {transportObjects.length} legs</small>
+            <span>{domain.railTitle}</span>
+            <small>{domain.railSummary}</small>
           </header>
           <div className={styles.routeRailList}>
             <div className={styles.routeRailGroupLabel}>Operating points</div>
@@ -549,6 +618,7 @@ function CaseCommandCenter({
             mode={inspectorMode}
             onModeChange={setInspectorMode}
             onFocusAction={focusOptimizationAction}
+            activePanel={activePanel}
           />
         ) : null}
 
@@ -572,6 +642,7 @@ function CommandInspector({
   mode,
   onModeChange,
   onFocusAction,
+  activePanel,
 }: {
   dashboard: SupplyCaseDashboard;
   model: ReturnType<typeof buildSupplyOptimizationModel>;
@@ -580,6 +651,7 @@ function CommandInspector({
   mode: "object" | "optimization";
   onModeChange: (mode: "object" | "optimization") => void;
   onFocusAction: (actionId: string) => void;
+  activePanel: SupplyOsPanel;
 }) {
   const Icon = objectIcon(object.kind);
   const workspace = workspaceForObject(object, model);
@@ -623,6 +695,17 @@ function CommandInspector({
           </header>
 
           <div className={styles.inspectorBody}>
+            {activePanel === "materials" ? (
+              <figure className={styles.inspectorProductMedia}>
+                <img src={PRODUCT_MEDIA.src} alt="Autonomous mobile robot in an industrial workspace" />
+                <figcaption>
+                  Product reference
+                  <a href={PRODUCT_MEDIA.sourcePage} target="_blank" rel="noreferrer">
+                    {PRODUCT_MEDIA.creator}, {PRODUCT_MEDIA.license}
+                  </a>
+                </figcaption>
+              </figure>
+            ) : null}
             <p className={styles.inspectorLocation}>{object.location}</p>
             <p className={styles.inspectorDetail}>{object.detail}</p>
 

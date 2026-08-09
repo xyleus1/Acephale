@@ -14,8 +14,8 @@ assert.match(shell, /const \[companyIndexOpen, setCompanyIndexOpen\] = useState\
 assert.match(shell, /<ArrowLeft size=\{15\} \/> Companies/, "selected workspaces need a back-to-companies control");
 assert.match(shell, /className=\{styles\.commandHeader\}/, "company identity ribbon must remain above every domain view");
 assert.match(shell, /data-company-index=\{companyIndexOpen\}/);
-assert.match(shellStyles, /data-panel="logistics"/);
-assert.match(shellStyles, /data-panel="scenarios"/);
+assert.match(shellStyles, /\.panelStage\s*\{[\s\S]*overflow: hidden/, "every domain must use the same fixed stage");
+assert.doesNotMatch(shell, /key=\{activePanel\}/, "switching domains must not remount the fixed stage");
 assert.match(index, /className=\{styles\.companyRow\}/, "company index must use simple rows");
 assert.match(index, /"New company"/, "admins need an inline company creation action");
 assert.match(index, /className=\{styles\.createRow\}/, "company creation must stay inline");
