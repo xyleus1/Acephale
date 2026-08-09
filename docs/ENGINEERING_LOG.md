@@ -3191,3 +3191,24 @@ Use this file for chronological implementation notes that future agents should s
   tests, Prisma validation, TypeScript, the full 24-migration chain on a
   disposable PostgreSQL database, zero retired database objects, production
   build, diff hygiene, and changed-line U+2014 scan passed.
+
+### 2026-08-08 - Simplify the restored operator interface
+
+- Branch: `remove-retired-product-bloat`, targeting `main`.
+- Added `OverflowMenu` as the shared disclosure for secondary page actions.
+  The control stays visible without exposing every maintenance, alternate-view,
+  and destructive action at once.
+- Moved sidebar setup and admin destinations under Manage. Kept daily work
+  destinations directly visible.
+- Collapsed pricing queue analysis, decision audit, and the forwarder directory.
+  Removed duplicated playbook, route decision, gate, and priority-factor rows
+  from RFQ list cards.
+- Removed the dashboard load playbook because it repeated the load facts,
+  pricing state, documents, and milestones already rendered on the same page.
+- Shortened top-level product copy and renamed generic labels such as Control
+  Center, Forwarding Reports, Manual RFQ Entry, and Email and WhatsApp.
+- Verification passed: product-copy policy, TypeScript, diff hygiene, changed
+  U+2014 scan, local route compilation, and the optimized production build with
+  disposable Postgres URLs. Authenticated visual QA remains pending because no
+  local test login was available, and the pass did not send a real login code
+  or weaken authentication.

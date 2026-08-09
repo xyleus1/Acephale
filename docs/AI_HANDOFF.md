@@ -7,7 +7,7 @@
 - Reverted PR #81's single revert commit on top of current `main`, restoring
   the exact PR #77 tree without overwriting concurrent uncommitted work in the
   primary checkout.
-- Restored all requested follow-up commits already present in PR #77: sourced
+- Restored all requested follow-up commits that followed PR #77: sourced
   Supplier Finder company and product images, reduced navigation and copy, and
   secondary-action menus.
 - Added an explicit founder product-direction rule to `AGENTS.md` and a durable
@@ -23,6 +23,54 @@
   customer portal tests, Prisma validation, TypeScript, the full 24-migration
   chain on a disposable PostgreSQL database, zero retired database objects,
   production build, diff hygiene, and changed-line U+2014 scan.
+
+### Reduced navigation, copy, and secondary-action noise
+
+- Removed the retired Supply OS page before this pass, so the fixture-heavy
+  product twin and its parallel navigation are no longer active on this branch.
+- Reduced the authenticated sidebar to daily work areas. Channels, company
+  context, customer access, and admin now sit under one visible Manage control.
+- Added a reusable overflow menu for secondary page actions. Inbox maintenance,
+  RFQ batch tools, load shortcuts, and destructive pricing actions no longer
+  compete with the main task.
+- Pricing now opens on the RFQ workspace. Queue analysis, the full decision
+  audit, and the forwarder directory remain available through disclosures.
+  Duplicate playbook, route, evidence, and factor blocks were removed from RFQ
+  list rows.
+- Deleted the four-step load playbook that narrated the workflow already shown
+  by the load record. Shortened page titles and subtitles across RFQs, loads,
+  jobs, reports, operations, channels, and intelligence.
+- No schema, dependency, tenant scope, sending, approval, or pricing rule
+  changed.
+- Verification passed: `npm run check:product-copy`, `npx tsc --noEmit
+  --incremental false`, `git diff --check`, changed-file U+2014 scan, route
+  compilation, and `npm run build` with disposable local database URLs. The
+  authenticated screens could not be visually inspected because this checkout
+  has no usable test login. No real sign-in email was sent and no auth bypass
+  was added.
+
+### Added source-backed visual research to Supplier Finder
+
+- Supplier research now asks the existing public web search for up to 30 image
+  results covering the requested good, candidate companies, logos, factories,
+  mills, mines, facilities, and product photos.
+- Every accepted image keeps its caption, direct URL, thumbnail, and public
+  source page. Duplicate, loopback, private-network, and unattributed image
+  records are removed.
+- Images from a candidate's official or primary domain render inside that
+  candidate card. Other images render in a separate product and market gallery
+  so a commodity photo is not presented as company property.
+- The UI links every image to its source page, hides failed images, sends no
+  referrer, and states that visual context does not prove ownership, facility
+  control, grade, origin, availability, or product fit.
+- No database schema, dependency, persistence, supplier contact, or approval
+  behavior changed.
+- Verification passed: `npm run test:steel-supplier-search`, `npm run
+  check:product-copy`, `npx tsc --noEmit`, `git diff --check`, changed-file
+  U+2014 scan, and a production build with a disposable local `DATABASE_URL`.
+  The first build attempt stopped before compilation because Prisma required
+  that variable. No database was contacted or modified, and no live image
+  search was run during tests.
 
 ### Retired the parallel procurement prototype and restored freight workflows
 
@@ -44,7 +92,7 @@
 
 ## Branch
 
-remove-retired-product-bloat, targeting main
+reconcile-requested-changes, targeting main
 
 ## Verification
 
