@@ -9,6 +9,7 @@ import { Icon } from "@/components/icon";
 import { MissingInfoDraftButton } from "@/components/missing-info-draft-button";
 import { NegotiationPlanDraftButton } from "@/components/negotiation-plan-draft-button";
 import { OpportunityScoreCard, OpportunityScorePill } from "@/components/opportunity-score-card";
+import { OverflowMenu } from "@/components/overflow-menu";
 import { requiredRfqMissing } from "@/lib/opportunity-score";
 import { createWithFileReference } from "@/lib/references";
 import { assessInquiryStrategy } from "@/lib/commercial-strategy-persistence";
@@ -1678,7 +1679,12 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
     ];
 
     return (
-      <section className={`pricing-decision-rail ${decision.priority}`} aria-label="Pricing command rail">
+      <details className={`pricing-decision-rail pricing-decision-disclosure ${decision.priority}`} aria-label="Pricing decision">
+        <summary>
+          <span>Next</span>
+          <strong>{decision.ctaLabel}</strong>
+          <em>{gate.label}</em>
+        </summary>
         <div className="pricing-decision-head">
           <div>
             <span className="pricing-section-label">Pricing command</span>
@@ -1923,7 +1929,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
           )}
           <p>{routeDecision.selectionRule}</p>
         </div>
-      </section>
+      </details>
     );
   }
 
@@ -1932,11 +1938,15 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
       <div className="page-header pricing-header">
         <div>
           <h1 className="page-title">Pricing</h1>
-          <p className="page-subtitle">Target prices, mature RFQs, and forwarder quote comparison.</p>
         </div>
       </div>
 
-      <section className="pricing-command-board" aria-label="Pricing queue">
+      <details className="pricing-command-board pricing-queue-overview" aria-label="Pricing queue">
+        <summary>
+          <span>Queue</span>
+          <strong>{rankedInquiries.length} RFQs</strong>
+          <em>{unassessedCommandCount} unassessed, {staleCommandCount} stale</em>
+        </summary>
         <div className="pricing-command-board-head">
           <div>
             <span className="pricing-section-label">Commercial work order</span>
@@ -2144,7 +2154,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
             </div>
           </div>
         </div>
-      </section>
+      </details>
 
       <div className="pricing-workspace">
         <aside className="pricing-sidebar">
@@ -2224,47 +2234,12 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                     <span>{summary?.commandLabel ?? "Review RFQ"}</span>
                     <strong>{summary?.commandReason ?? "No commercial assessment"}</strong>
                   </div>
-                  {summary?.playbookExactAsk && (
-                    <div className="pricing-inquiry-playbook">
-                      <span>Ask</span>
-                      <strong>{summary.playbookExactAsk}</strong>
-                    </div>
-                  )}
-                  {summary?.routeLabel && (
-                    <div className={`pricing-inquiry-route-decision ${summary.routeCanQuoteCustomer ? "ready" : "review"}`}>
-                      <span>Route</span>
-                      <strong>{summary.routeLabel}</strong>
-                      <em>
-                        {[summary.routeCostLabel, summary.routeFreshnessLabel]
-                          .filter(Boolean)
-                          .join(" · ") || "decision context"}
-                      </em>
-                    </div>
-                  )}
                   {(inq.origin || inq.destination) && (
                     <div className="pricing-inquiry-route">
                       {inq.origin ?? "?"} to {inq.destination ?? "?"}
                       {inq.mode && <span>{inq.mode}</span>}
                     </div>
                   )}
-                  {summary && (
-                    <div className="pricing-inquiry-brain-row">
-                      <span>{summary.quoteGateLabel}</span>
-                      <span>{summary.guardrailStatus.toLowerCase().replace("_", " ")}</span>
-                      <span>{summary.receivedQuotes} live</span>
-                      {summary.stale && <span className="stale">stale</span>}
-                    </div>
-                  )}
-                  {summary?.priorityFactors.length ? (
-                    <div className="pricing-inquiry-factor-row" aria-label="Pricing rank factors">
-                      {summary.priorityFactors.slice(0, 3).map((factor) => (
-                        <span key={`${inq.id}-${factor.label}-${factor.value}`} className={`pricing-mini-factor ${factor.tone}`}>
-                          <em>{factor.label}</em>
-                          <strong>{factor.value}</strong>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
                   <div className="pricing-inquiry-counts">
                     {inq.targetPrice != null
                       ? `${inq.targetCurrency ?? "USD"} ${inq.targetPrice.toLocaleString()} target`
@@ -2278,16 +2253,11 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
             })}
           </div>
 
-          <section className="pricing-carrier-card pricing-directory-card">
-            <header className="pricing-carrier-header">
-              <div>
-                <h2 className="pricing-carrier-title">Forwarder directory</h2>
-                <p className="pricing-carrier-description">
-                  Real recipients only. Drafts use this list; sends stay blocked.
-                </p>
-              </div>
-              <span className="pricing-status status-parsed">{forwarderRows.filter((f) => f.active).length} active</span>
-            </header>
+          <details className="pricing-carrier-card pricing-directory-card pricing-directory-disclosure">
+            <summary>
+              <strong>Forwarders</strong>
+              <span>{forwarderRows.filter((f) => f.active).length} active</span>
+            </summary>
             <details className="pricing-details">
               <summary className="pricing-summary-btn">+ Add forwarder</summary>
               <form action={addForwarderAction} className="pricing-form-stack pricing-directory-form">
@@ -2324,7 +2294,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                 ))}
               </div>
             )}
-          </section>
+          </details>
         </aside>
 
         <main className="pricing-main">
@@ -2353,10 +2323,12 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                       options={[...new Set([canonicalInquiryStatus(selectedInquiry.status), "BOOKED", "PRICING", "MISSED", "RECEIVED", "IGNORED", "TRASH"])].map((s) => ({ value: s, label: statusMeta(s).label }))}
                     />
                   </form>
-                  <form action={deleteInquiryAction}>
-                    <input type="hidden" name="id" value={selectedInquiry.id} />
-                    <button type="submit" className="pricing-delete-btn">Delete</button>
-                  </form>
+                  <OverflowMenu>
+                    <form action={deleteInquiryAction}>
+                      <input type="hidden" name="id" value={selectedInquiry.id} />
+                      <button type="submit" className="pricing-delete-btn">Delete RFQ</button>
+                    </form>
+                  </OverflowMenu>
                 </div>
               </header>
 
