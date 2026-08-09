@@ -2,16 +2,10 @@
 
 import {
   ArrowLeft,
-  Boxes,
   Factory,
-  GitCompareArrows,
-  Globe2,
   MapPinned,
-  PackageSearch,
-  Radio,
   ShieldCheck,
   Truck,
-  type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -26,15 +20,14 @@ import styles from "./supply-os-operating-shell.module.css";
 type PanelDefinition = {
   id: SupplyOsPanel;
   shortLabel: string;
-  icon: LucideIcon;
 };
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", shortLabel: "Supply", icon: Boxes },
-  { id: "logistics", shortLabel: "Logistics", icon: Globe2 },
-  { id: "suppliers", shortLabel: "Suppliers", icon: PackageSearch },
-  { id: "scenarios", shortLabel: "Opportunities", icon: GitCompareArrows },
-  { id: "tracking", shortLabel: "Tracking", icon: Radio },
+  { id: "materials", shortLabel: "Supply" },
+  { id: "logistics", shortLabel: "Logistics" },
+  { id: "suppliers", shortLabel: "Suppliers" },
+  { id: "scenarios", shortLabel: "Opportunities" },
+  { id: "tracking", shortLabel: "Tracking" },
 ];
 
 const PRODUCT_MEDIA = {
@@ -187,16 +180,10 @@ export function SupplyOsOperatingShell({
           className={styles.operatingSidebar}
           initial={{ x: -12, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          aria-label="Supply OS navigation"
+          aria-label="Workspace navigation"
         >
-          <div className={styles.sidebarHeading}>
-            <span className={styles.sidebarMark}><Boxes size={17} /></span>
-            <strong>Supply OS</strong>
-          </div>
-
-          <nav className={styles.panelNav} aria-label="Supply OS operating panels">
+          <nav className={styles.panelNav} aria-label="Workspace sections">
             {PANELS.map((panel) => {
-              const Icon = panel.icon;
               const active = panel.id === activePanel;
               return (
                 <motion.button
@@ -209,7 +196,6 @@ export function SupplyOsOperatingShell({
                   whileTap={{ scale: 0.985 }}
                 >
                   {active ? <motion.span className={styles.activeRail} layoutId="supply-os-active-panel" /> : null}
-                  <span className={styles.navIcon}><Icon size={16} /></span>
                   <span className={styles.navCopy}>
                     <strong>{panel.shortLabel}</strong>
                   </span>

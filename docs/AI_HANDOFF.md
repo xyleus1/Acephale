@@ -2,6 +2,37 @@
 
 ## Latest Update
 
+### Navbar and workspace navigation no longer repeat the product name
+
+- The authenticated navbar now shows only the Derya brand.
+- The primary workspace rail no longer shows a second product heading.
+- Supply, Logistics, Suppliers, Opportunities, and Tracking now use text-only
+  navigation. The mismatched section icons and the duplicate active-panel icon
+  were removed.
+- Medium-width layouts keep section labels instead of collapsing into an
+  icon-only rail. Narrow layouts keep the existing horizontal section strip.
+- No route, panel state, data behavior, schema, dependency, approval rule, or
+  external action changed.
+
+Verification:
+
+- `npm run test:supply-os-single-surface`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-operations-ui`
+- `npm run check:product-copy`
+- `npx tsc --noEmit`
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/derya npm run build`
+- `git diff --check`
+
+Skipped verification:
+
+- The in-app browser had no attached tab, so authenticated visual inspection
+  was unavailable. Responsive behavior is covered by source contracts,
+  TypeScript, and the production build, but no screenshot claim is made.
+
+## Prior Update
+
 ### Supply OS copy and control cleanup
 
 - Kept Supply OS as the primary operator surface and removed its repeated
