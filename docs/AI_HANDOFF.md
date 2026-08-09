@@ -7080,6 +7080,62 @@ Caveat and next step:
   when Agent 2 needs cross-snapshot queries or execution joins. Do not pretend
   the current component research result is an awarded supplier or live quote.
 
+## Supply OS automation draft workspace, August 9
+
+Status:
+
+- Implemented on `main` in `939a0ad`, `35c2ac8`, `f576b34`, `dec7520`, and
+  `c9b6faf`.
+- No database schema, dependency, secret, provider call, external message, or
+  external write was added.
+
+Operator result:
+
+- Supply OS now has a sixth `Automations` tab with URL state at
+  `?panel=automations`.
+- The desktop workspace gives chat roughly two-thirds of the width and keeps an
+  automation library plus the selected step plan in the right context pane.
+- Built-in drafts cover bill of lading preparation, supplier search, freight
+  rate requests, customs document checks, and transport exception monitoring.
+- Chat can create a new browser-session automation, append an operator step, or
+  add an approval gate. New drafts appear immediately in the library and remain
+  selected for review.
+- The responsive layout stacks chat and the automation library without page
+  overflow. The compact navigation scrolls the active sixth tab fully into
+  view.
+- Generic `Boxes` icons were removed from Supply OS. Supplier, supply,
+  loading, drive, and uncategorized states now use object-specific Lucide
+  icons.
+
+Verification:
+
+- `npm run test:supply-os-automations`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-operations-ui`
+- `npm run check:product-copy`
+- `npx tsc --noEmit`
+- Authenticated browser QA at 1440 by 1000 and 390 by 844. The new draft flow,
+  six-item navigation, zero horizontal overflow, and 44px minimum interactive
+  targets passed.
+
+Trust boundary:
+
+- Automations are client-side session drafts. They do not persist, read or
+  write canonical freight records, call an LLM, contact providers or customers,
+  file customs, book transport, or authorize spend.
+- Production execution requires a separate office-scoped workflow model,
+  versioned typed actions, approval hashes, audit history, and idempotent
+  workers.
+
+Known existing failure:
+
+- `npm run test:supply-os-product-twin` still fails because its source contract
+  expects `commandMap.insights` in the dashboard after the upstream map rewrite.
+  This task did not modify that existing test.
+
 ## Supply OS opportunity scenario workbench, August 9
 
 Status:

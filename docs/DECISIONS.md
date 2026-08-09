@@ -16,6 +16,31 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-09 - Automations starts as a chat-edited draft workspace
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Supply OS had no place to inspect reusable operating workflows,
+  edit their steps, or describe a new workflow in plain language. Reusing the
+  network map would make automation setup harder to understand and would imply
+  that a draft could execute live freight actions.
+- Decision: Add Automations as the sixth company workspace. Use a two-pane
+  layout with chat as the primary work area and an automation library plus the
+  selected step plan as secondary context. The first version supports
+  deterministic, browser-session drafts only. Chat may select, extend, add an
+  approval gate to, or create a workflow draft.
+- Rationale: Operators can shape the workflow before Derya connects it to
+  canonical records or execution workers. The interface is useful now without
+  pretending that a text response is a production automation.
+- Consequences: Built-in workflows cover bill of lading preparation, supplier
+  search, freight rate requests, customs document checks, and transport
+  exception monitoring. The UI must state that drafts are inactive and cannot
+  send messages, file customs, book freight, write records, or authorize spend.
+  Specific operational icons replace the generic Boxes icon across Supply OS.
+- Revisit when: office-scoped workflow persistence, version history, typed
+  triggers and actions, approval hashes, and idempotent execution workers are
+  ready for the Automations surface.
+
 ### 2026-08-09 - Opportunities is a scenario workbench, not a network report
 
 - Status: accepted

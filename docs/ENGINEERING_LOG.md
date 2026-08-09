@@ -4219,3 +4219,29 @@ Use this file for chronological implementation notes that future agents should s
   model. It does not execute a supplier, carrier, customs, or spend action.
 - Follow-up: connect persisted canonical planning results when the server-owned
   planning API exposes them to this workspace.
+
+### 2026-08-09 - Add the Supply OS automation draft workspace
+
+- Branch: main
+- Commits: `939a0ad`, `35c2ac8`, `f576b34`, `dec7520`, and `c9b6faf`
+- Task: Add Automations as the sixth Supply OS tab with chat-led workflow
+  drafting and replace the repeated generic Boxes icon.
+- Files changed: panel routing, operating shell, dashboard switch, new
+  automation component and styles, Supply OS icon maps, regression contract,
+  package script, decisions, handoff, and this log.
+- Behavior: operators can inspect five built-in automation drafts, select one,
+  add steps or an approval gate through chat, and create a new browser-session
+  draft. The right pane always exposes the selected step sequence and inactive
+  state.
+- Verification: automation, routing, sidebar, continuous-layout,
+  enterprise-design, operations-UI, product-copy, TypeScript, desktop browser,
+  and mobile browser checks passed. No horizontal overflow or undersized
+  interactive target was found on the new surface.
+- Existing failure: `test:supply-os-product-twin` expects the retired
+  `commandMap.insights` source pattern and fails on current `main`. It was not
+  changed because the task does not own that upstream contract.
+- Caveat: chat behavior is deterministic and session-only. No production
+  automation or external action is connected.
+- Follow-up: introduce an office-scoped workflow model and approval-bound
+  execution only when typed triggers, actions, versioning, audit history, and
+  idempotent workers are ready.
