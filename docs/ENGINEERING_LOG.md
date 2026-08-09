@@ -4196,3 +4196,23 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: recheck the public sign-in surface after the production deployment
   completes. Authenticated production Supply OS still requires a valid
   production session.
+
+### 2026-08-09 - Turn Opportunities into a scenario workbench
+
+- Branch: main
+- Commits: `4d00cd9` and `e965548`
+- Task: Replace the barren Opportunities map copy with runnable Supply,
+  Logistics, Production, and Network scenarios.
+- Files changed: Supply OS dashboard, dedicated Logistics styles, new scenario
+  contract, decisions, handoff, and this engineering log.
+- Behavior: each play exposes the current condition, change, missing inputs,
+  modeled output, measure, decision, evidence state, and approval boundary.
+  Running a play updates the output and brings it into view on narrow screens.
+- Verification: new opportunity-scenario contract, scenario-viewport,
+  continuous-layout, enterprise-design, operations-UI, product-copy, and
+  TypeScript checks pass. Authenticated browser QA passed at 1440 by 1000,
+  1024 by 900, and 390 by 844 with no horizontal overflow or console errors.
+- Caveats: output is deterministic planning guidance from the current company
+  model. It does not execute a supplier, carrier, customs, or spend action.
+- Follow-up: connect persisted canonical planning results when the server-owned
+  planning API exposes them to this workspace.

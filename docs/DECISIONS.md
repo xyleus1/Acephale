@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-09 - Opportunities is a scenario workbench, not a network report
+
+- Status: accepted
+- Owner: product and design
+- Context: The Opportunities tab reused the network map and ranked-priority
+  inspector. It exposed recommendations but did not let an operator choose a
+  change, run it as a scenario, or compare the modeled result with the current
+  condition.
+- Decision: Give Opportunities its own scenario workbench inside the shared
+  company shell. Offer Supply, Logistics, Production, and Network plays. Each
+  play must state the current condition, change to test, required inputs,
+  measure, decision, evidence state, and approval boundary. Running a play
+  updates a side-by-side current-versus-change output. Use `Production` for the
+  operating domain instead of `Assembly`.
+- Rationale: An opportunity is useful only when an operator can test a concrete
+  change and see what evidence and decision are required. Reusing the map made
+  this tab look like a thinner copy of Logistics.
+- Consequences: Scenario output remains deterministic and company-model bound.
+  It cannot invent rates, approve a supplier, book transport, file customs, or
+  authorize spend. Narrow layouts bring the output into view after a run.
+- Revisit when: persisted office-scoped planning results replace the current
+  browser interaction or the canonical planning engine exposes additional
+  scenario families to this surface.
+
 ### 2026-08-09 - Derya uses an app-wide airy system and zero-fluff UI copy
 
 - Status: accepted

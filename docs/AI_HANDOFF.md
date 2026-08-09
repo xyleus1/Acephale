@@ -7079,3 +7079,44 @@ Caveat and next step:
   immutable JSON metadata on the snapshot. Move them to dedicated typed tables
   when Agent 2 needs cross-snapshot queries or execution joins. Do not pretend
   the current component research result is an awarded supplier or live quote.
+
+## Supply OS opportunity scenario workbench, August 9
+
+Status:
+
+- Implemented on `main` in `4d00cd9` and `e965548`.
+- No database schema, dependency, secret, provider call, or external write was
+  added.
+
+Operator result:
+
+- Opportunities no longer repeats the Logistics map and priority inspector.
+  It opens a scenario workbench with Supply, Logistics, Production, and Network
+  plays.
+- Selecting a play shows its current condition, proposed change, and missing
+  inputs. `Run scenario` updates a current-versus-change output with the measure,
+  operator decision, evidence state, and human-approval boundary.
+- The UI replaces assembly terminology with production language on this
+  surface. Company-model text is normalized before display so the retired term
+  does not leak back through a generated recommendation.
+- Tablet and mobile runs bring the output into view. The layout keeps the
+  company ribbon, domain navigation, provenance state, and approval warning.
+
+Verification:
+
+- `npx tsx scripts/supply-os-opportunity-scenarios.test.ts`
+- `npm run test:supply-os-scenario-viewport`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-operations-ui`
+- `npm run check:product-copy`
+- `npx tsc --noEmit`
+- Authenticated browser QA at 1440 by 1000, 1024 by 900, and 390 by 844.
+  Scenario selection and run output passed with no horizontal overflow or
+  console errors.
+
+Trust boundary:
+
+- Results reuse the deterministic company optimization model. Missing inputs
+  stay visible. No rate, award, booking, filing, supplier commitment, or spend
+  approval is implied.
