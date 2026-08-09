@@ -97,7 +97,7 @@ export function CustomerQuoteDraftButton({
                   {draft.status === "READY" ? "Reviewed quote draft" : "Quote gate blocked"}
                 </div>
                 <div className="product-modal-subtitle">
-                  {draft.status === "READY" ? `${draft.to ?? "No recipient"} · ${draft.subject ?? "No subject"}` : "The brain is refusing to quote this load yet."}
+                  {draft.status === "READY" ? `${draft.to ?? "No recipient"} · ${draft.subject ?? "No subject"}` : "Quote requirements are not met."}
                 </div>
               </div>
               <button type="button" onClick={close} className="product-modal-close" aria-label="Close customer quote draft">

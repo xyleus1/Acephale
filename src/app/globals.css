@@ -3559,16 +3559,6 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
   margin: 0 auto;
 }
 
-.topbar-product-label {
-  overflow: hidden;
-  color: var(--text-3);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .topbar-right {
   display: flex;
   align-items: center;
@@ -4172,17 +4162,17 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
    FORMS & INPUTS
    ============================================================ */
 
-input:not(:where(.supply-os-workspace input)),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)),
-button:not(:where(.supply-os-workspace button)) {
+input,
+select,
+textarea,
+button {
   font: inherit;
   font-size: 13.5px;
 }
 
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)) {
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 8px 11px;
@@ -4193,15 +4183,15 @@ textarea:not(:where(.supply-os-workspace textarea)) {
   width: 100%;
 }
 
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
-select:not(:where(.supply-os-workspace select)):focus,
-textarea:not(:where(.supply-os-workspace textarea)):focus {
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(47,95,168,0.12);
 }
 
-input:not(:where(.supply-os-workspace input))::placeholder,
-textarea:not(:where(.supply-os-workspace textarea))::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--text-3);
 }
 
@@ -4417,7 +4407,7 @@ label.field > span,
    BUTTONS
    ============================================================ */
 
-button:not(:where(.supply-os-workspace button)), .btn {
+button, .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4435,22 +4425,22 @@ button:not(:where(.supply-os-workspace button)), .btn {
   color: #fff;
 }
 
-button:not(:where(.supply-os-workspace button)):disabled,
+button:disabled,
 .btn:disabled,
-button:not(:where(.supply-os-workspace button))[disabled] {
+button[disabled] {
   cursor: not-allowed;
   opacity: 0.55;
   box-shadow: none;
   transform: none;
 }
 
-button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
+button:hover:not(:disabled),
 .btn:hover {
   background: var(--brand-hover);
   box-shadow: var(--shadow-sm);
 }
 
-button:not(:where(.supply-os-workspace button)):active:not(:disabled),
+button:active:not(:disabled),
 .btn:active {
   transform: translateY(1px);
 }
@@ -10295,7 +10285,7 @@ details[open] .saved-views-summary::before {
   .section-header > form {
     flex-wrap: wrap;
   }
-  .section-header > form input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]) {
+  .section-header > form input:not([type="checkbox"]):not([type="radio"]) {
     flex: 1 1 180px;
     min-width: 0;
     width: 100% !important;
@@ -10303,7 +10293,7 @@ details[open] .saved-views-summary::before {
   .filter-bar {
     align-items: stretch;
   }
-  .filter-bar input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
+  .filter-bar input:not([type="checkbox"]):not([type="radio"]),
   .filter-bar select {
     flex: 1 1 100%;
     max-width: none !important;
@@ -13143,7 +13133,7 @@ body {
   border-color: var(--derya-cobalt);
 }
 
-button:not(:where(.supply-os-workspace button)):not(.sidebar-toggle-btn):not(.job-focus-clear),
+button:not(.sidebar-toggle-btn):not(.job-focus-clear),
 .btn {
   border-radius: 6px;
 }
@@ -13478,17 +13468,17 @@ button.primary:hover:not(:disabled) {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)) {
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
   border-color: rgba(17, 17, 17, 0.2);
   background: #fff;
   border-radius: 6px;
 }
 
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
-select:not(:where(.supply-os-workspace select)):focus,
-textarea:not(:where(.supply-os-workspace textarea)):focus {
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
   border-color: rgba(36, 84, 214, 0.56);
   box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.12);
 }
@@ -13500,14 +13490,14 @@ label.field > span,
   font-weight: 780;
 }
 
-button:not(:where(.supply-os-workspace button)),
+button,
 .btn {
   border-radius: 6px;
   font-weight: 720;
   box-shadow: none;
 }
 
-button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
+button:hover:not(:disabled),
 .btn:hover {
   box-shadow: 0 6px 16px rgba(17, 17, 17, 0.1);
 }
@@ -14873,9 +14863,9 @@ body {
 }
 
 .topbar-search-form:focus-within,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
-select:not(:where(.supply-os-workspace select)):focus,
-textarea:not(:where(.supply-os-workspace textarea)):focus {
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
   border-color: rgba(36, 84, 214, 0.56);
   box-shadow: 0 0 0 3px rgba(36, 84, 214, 0.12);
 }
@@ -17493,9 +17483,9 @@ button.secondary,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)) {
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
   background: rgba(255, 255, 255, 0.86);
   border-color: rgba(190, 208, 220, 0.82);
   color: var(--text);
@@ -17516,9 +17506,9 @@ button.secondary:hover:not(:disabled),
 }
 
 .topbar-search-form:focus-within,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
-select:not(:where(.supply-os-workspace select)):focus,
-textarea:not(:where(.supply-os-workspace textarea)):focus {
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
   border-color: rgba(111, 159, 202, 0.65);
   box-shadow: 0 0 0 3px rgba(111, 159, 202, 0.14);
 }
@@ -17854,9 +17844,9 @@ button.secondary,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)) {
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
   background: rgba(255, 253, 248, 0.9);
   border-color: rgba(205, 188, 167, 0.84);
   color: var(--text);
@@ -17877,9 +17867,9 @@ button.secondary:hover:not(:disabled),
 }
 
 .topbar-search-form:focus-within,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
-select:not(:where(.supply-os-workspace select)):focus,
-textarea:not(:where(.supply-os-workspace textarea)):focus {
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
   border-color: rgba(111, 129, 113, 0.58);
   box-shadow: 0 0 0 3px rgba(111, 129, 113, 0.14);
 }
@@ -18090,9 +18080,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)),
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea,
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -18444,9 +18434,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)),
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea,
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -18460,15 +18450,15 @@ button.secondary,
   color: var(--text);
 }
 
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
-select:not(:where(.supply-os-workspace select)):focus,
-textarea:not(:where(.supply-os-workspace textarea)):focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus,
 .topbar-search-form:focus-within {
   border-color: var(--derya-blue);
   box-shadow: 0 0 0 3px rgba(91, 120, 151, 0.14);
 }
 
-button:not(:where(.supply-os-workspace button)),
+button,
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -18479,7 +18469,7 @@ button.primary {
   box-shadow: none;
 }
 
-button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
+button:hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -18863,9 +18853,9 @@ body,
 .agent-panel-body,
 .conversation-body,
 .draft-modal-textarea,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)),
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea,
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -18971,7 +18961,7 @@ button.secondary:hover:not(:disabled),
   box-shadow: inset 0 -2px 0 var(--derya-cobalt);
 }
 
-button:not(:where(.supply-os-workspace button)),
+button,
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -18982,7 +18972,7 @@ button.primary {
   box-shadow: none;
 }
 
-button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
+button:hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -19433,9 +19423,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)),
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea,
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -19469,7 +19459,7 @@ button.secondary:hover:not(:disabled),
   box-shadow: inset 0 -2px 0 var(--derya-clay) !important;
 }
 
-button:not(:where(.supply-os-workspace button)),
+button,
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -19485,7 +19475,7 @@ button.primary,
   box-shadow: none;
 }
 
-button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
+button:hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -19494,9 +19484,9 @@ button.primary:hover:not(:disabled) {
   box-shadow: 0 4px 12px rgba(43, 36, 26, 0.18) !important;
 }
 
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]):focus,
-select:not(:where(.supply-os-workspace select)):focus,
-textarea:not(:where(.supply-os-workspace textarea)):focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus,
 .topbar-search-form:focus-within {
   border-color: var(--derya-olive) !important;
   box-shadow: 0 0 0 3px rgba(111, 106, 69, 0.18) !important;
@@ -19590,8 +19580,8 @@ textarea:not(:where(.supply-os-workspace textarea)):focus,
   opacity: 1 !important;
 }
 
-input:not(:where(.supply-os-workspace input))::placeholder,
-textarea:not(:where(.supply-os-workspace textarea))::placeholder,
+input::placeholder,
+textarea::placeholder,
 .topbar-search-input::placeholder,
 .cmdk-input-row input::placeholder {
   color: #5c4a2f !important;
@@ -21876,66 +21866,6 @@ textarea:not(:where(.supply-os-workspace textarea))::placeholder,
 .workbench-agent .agent-suggestion:hover {
   background: #f4ead6 !important;
   border-color: #caa865 !important;
-}
-
-.appearance-card-body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.appearance-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-2);
-  flex-shrink: 0;
-}
-
-.appearance-toggle button {
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid transparent !important;
-  border-radius: 6px;
-  background: transparent !important;
-  color: var(--text-2) !important;
-  box-shadow: none !important;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.appearance-toggle button:hover {
-  background: var(--surface-hover) !important;
-  border-color: var(--border) !important;
-  color: var(--text) !important;
-}
-
-.appearance-toggle button.active {
-  background: #33281b !important;
-  border-color: #33281b !important;
-  color: #eadbc2 !important;
-}
-
-.appearance-toggle-note {
-  padding: 0 8px;
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-@media (max-width: 680px) {
-  .appearance-card-body {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 .agent-proposal-card {
@@ -26547,9 +26477,9 @@ body,
 .job-note-textarea,
 .quote-draft-textarea,
 .portal-link-input,
-input:not(:where(.supply-os-workspace input)),
-textarea:not(:where(.supply-os-workspace textarea)),
-select:not(:where(.supply-os-workspace select)) {
+input,
+textarea,
+select {
   background-color: #fbf5e8 !important;
   background-image: none !important;
   border-color: var(--border) !important;
@@ -29208,9 +29138,9 @@ body,
 .view-bar,
 .inbox-search-form,
 .pricing-tabs,
-input:not(:where(.supply-os-workspace input)):not([type="checkbox"]):not([type="radio"]),
-select:not(:where(.supply-os-workspace select)),
-textarea:not(:where(.supply-os-workspace textarea)),
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea,
 button.btn-secondary,
 button.secondary,
 .btn.btn-secondary,
@@ -29228,7 +29158,7 @@ button.secondary,
   color: var(--text) !important;
 }
 
-button:not(:where(.supply-os-workspace button)),
+button,
 .btn,
 .agent-send-btn,
 .conv-chat-user .conv-chat-body,
@@ -29243,7 +29173,7 @@ button.primary,
   color: #ffffff !important;
 }
 
-button:not(:where(.supply-os-workspace button)):hover:not(:disabled),
+button:hover:not(:disabled),
 .btn:hover,
 .agent-send-btn:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
@@ -31137,7 +31067,7 @@ body,
   width: var(--sidebar-width) !important;
 }
 
-.app-shell:not(.app-shell-single-surface) > .content {
+.content {
   margin-left: var(--sidebar-rail-width) !important;
   transition: margin-right 160ms ease-out !important;
 }
@@ -31877,7 +31807,6 @@ html.agent-dock-open .page-container {
 .view-switcher-tab.active,
 .pricing-tab.active,
 .mode-tab.active,
-.appearance-toggle button.active,
 .load-filter-button.active,
 .record-status-pill,
 .job-focus-status,
@@ -31897,7 +31826,6 @@ html.agent-dock-open .page-container {
 .view-switcher-tab.active *,
 .pricing-tab.active *,
 .mode-tab.active *,
-.appearance-toggle button.active *,
 .load-filter-button.active *,
 .record-status-pill *,
 .job-focus-status *,
@@ -36072,10 +36000,10 @@ html { scrollbar-color: var(--derya-line-strong) transparent; }
 ::selection { background: var(--derya-blue); color: #ffffff; }
 
 /* Visible ring for keyboard users only; mouse focus stays quiet */
-button:not(:where(.supply-os-workspace button)):focus-visible,
+button:focus-visible,
 a:focus-visible,
 summary:focus-visible,
-[role="button"]:not(:where(.supply-os-workspace [role="button"])):focus-visible {
+[role="button"]:focus-visible {
   outline: 2px solid var(--derya-blue);
   outline-offset: 2px;
 }
@@ -36116,74 +36044,4 @@ summary:focus-visible,
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-/* Supply OS presentation mode removes internal operator chrome for customer demos. */
-body.supply-os-presentation .app-shell > .sidebar,
-body.supply-os-presentation .content > .topbar,
-body.supply-os-presentation .agent-fab,
-body.supply-os-presentation .agent-panel,
-body.supply-os-presentation .live-event-toast {
-  display: none;
-}
-
-body.supply-os-presentation .app-shell > .content {
-  width: 100% !important;
-  max-width: none !important;
-  margin-right: 0 !important;
-  margin-left: 0 !important;
-  flex-basis: 100% !important;
-}
-
-body.supply-os-presentation .page-container {
-  width: 100% !important;
-  max-width: none !important;
-  padding: 0 !important;
-}
-
-/* Supply OS is the authenticated product shell. Utility routes share the
-   compact header, but the retired navigation rail is no longer rendered. */
-.app-shell-single-surface > .content {
-  width: 100%;
-  max-width: none;
-  margin-left: 0;
-  flex-basis: 100%;
-}
-
-.app-shell-single-surface > .content > .page-container {
-  max-width: none;
-  padding: 0;
-}
-
-/* The Supply OS sidebar is the visual anchor for the authenticated product.
-   Extend its graphite chrome across the global header so the operator shell
-   reads as one intentional frame instead of two stacked applications. */
-.app-shell-single-surface > .content > .topbar {
-  min-height: 58px;
-  height: 58px;
-  padding: 0 18px;
-  border-color: #263a45 !important;
-  color: #dce6ea !important;
-  background: #14242d !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-}
-
-.app-shell-single-surface .topbar-brand-text,
-.app-shell-single-surface .topbar-brand-text strong {
-  color: #f2f7f9 !important;
-}
-
-.app-shell-single-surface .topbar-product-label {
-  color: #93aab5 !important;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.app-shell-single-surface .topbar-avatar {
-  border-color: #9ab9c6 !important;
-  color: #14242d !important;
-  background: #dce9ee !important;
 }

@@ -44,7 +44,7 @@ export function DocumentReadinessBoard({
           <strong>{readiness.uploaded}</strong>
         </div>
         <div>
-          <span>AI fields</span>
+          <span>Extracted fields</span>
           <strong>{readiness.extractedFields}</strong>
         </div>
         <div>

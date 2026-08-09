@@ -92,7 +92,7 @@ export function DocumentViewer({
                     Ask the doc
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                    AI answers from the PDF text.
+                    Answers use the extracted PDF text.
                   </div>
                 </div>
                 <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)" }}>

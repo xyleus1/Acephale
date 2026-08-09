@@ -442,7 +442,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const queuedJobs = backgroundCount("QUEUED");
   const runningJobs = backgroundCount("RUNNING");
   const failedJobs = backgroundCount("FAILED");
-  const pageTitle = tab === "brain" ? "Commercial Brain" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : tab === "audit" ? "Activity Log" : "Team";
+  const pageTitle = tab === "brain" ? "Commercial Assessment" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : tab === "audit" ? "Activity Log" : "Team";
   const pageSubtitle = tab === "audit"
     ? `${auditLogs.length} recent changes · who did what on which load`
     : tab === "agent"
@@ -474,7 +474,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             )}
             {canSeeAgentAudit && (
               <Link href="/dashboard/admin?tab=brain">
-                <button type="button" className={tab === "brain" ? "btn-sm" : "secondary btn-sm"}>Brain lab</button>
+                <button type="button" className={tab === "brain" ? "btn-sm" : "secondary btn-sm"}>Scenario lab</button>
               </Link>
             )}
             {canSeeAgentAudit && (
@@ -649,7 +649,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {/* ── COMMERCIAL BRAIN TAB ─────────────────────────────────── */}
+      {/* Commercial assessment tab */}
       {tab === "brain" && canSeeAgentAudit && (
         <div className="admin-brain">
           <form action="/dashboard/admin" method="get" className="admin-brain-selector">
@@ -664,7 +664,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 ))}
               </select>
             </label>
-            <button type="submit" className="btn-sm">Load brain</button>
+            <button type="submit" className="btn-sm">Load assessment</button>
             {selectedBrainJobId && (
               <Link href={`/dashboard/jobs/${selectedBrainJobId}`} className="admin-brain-open-link">
                 Open job
@@ -727,14 +727,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   {brainScenario ? (
                     <BrainScenarioResult result={brainScenario} />
                   ) : (
-                    <p>Enter a target, buy cost, or floor margin to see how the brain changes the gate, price, margin, route confidence, and operator action.</p>
+                    <p>Enter a target, buy cost, or floor margin to see how the assessment changes the gate, price, margin, route confidence, and operator action.</p>
                   )}
                 </div>
               </section>
 
               <section className="admin-brain-card admin-brain-wide">
                 <div className="admin-brain-card-head">
-                  <span>Active brain snapshots</span>
+                  <span>Active assessment snapshots</span>
                   <strong>{activeBrainAssessments.length}</strong>
                 </div>
                 <div className="admin-brain-snapshot-list">
@@ -759,7 +759,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           ) : (
             <div className="card">
               <div className="card-body" style={{ color: "var(--text-3)", fontSize: 13 }}>
-                No job is available for the brain lab yet. Create or import a lead/RFQ/job first.
+                No job is available for scenario testing. Create or import a lead, RFQ, or job first.
               </div>
             </div>
           )}
@@ -985,7 +985,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div className="card-body" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="section-title">Background job queue</div>
             <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
-              Durable queue for AI/document/email work. Failed jobs here are not harmless; they mean production work stopped somewhere.
+              Durable queue for automated document and email work. Failed jobs here mean production work stopped somewhere.
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
               <Badge tone={failedJobs > 0 ? "danger" : "neutral"}>{failedJobs} failed</Badge>

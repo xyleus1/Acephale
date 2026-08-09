@@ -1,11 +1,10 @@
-import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: { default: "Derya Supply OS", template: "%s · Derya Supply OS" },
+  title: { default: "Derya Deal Desk", template: "%s · Derya Deal Desk" },
   applicationName: "Derya",
-  description: "One operating surface for products, inventory, sourcing, logistics, customs, and execution"
+  description: "Lead-to-quote freight desk for RFQ qualification, pricing, and customer follow-up"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

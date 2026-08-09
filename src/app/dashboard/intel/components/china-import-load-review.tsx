@@ -817,7 +817,7 @@ export function ChinaImportLoadReview({
   const questionGroups = groupQuestions(assessment?.nextQuestions ?? []);
   const extractionMode = note?.includes("parsed locally")
     ? "local_fallback"
-    : note?.includes("AI drafted")
+    : note?.includes("Automated extraction drafted")
       ? "ai_draft"
       : "notice";
 
@@ -874,9 +874,9 @@ export function ChinaImportLoadReview({
             </div>
             <div className={styles.privacyNote}>
               <Icon name="shield" size={14} />
-              If AI extraction is configured, pasted text is sent to
-              OpenAI GPT-5.6 to draft fields. If it fails, only
-              explicitly labeled lines are parsed locally.
+              If automated extraction is configured, pasted text is sent to
+              the configured third-party service to draft fields. If it fails,
+              only explicitly labeled lines are parsed locally.
               This page does not persist the text or assessment.
             </div>
           </div>

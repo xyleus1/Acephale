@@ -18,15 +18,15 @@ const BRAIN_SUGGESTIONS = [
   },
   {
     label: "Pricing queue",
-    prompt: "List the pricing brain queue. Start with the operator playbook: exact ask or first move, safety rule, stop condition, and review link for the top RFQ.",
+    prompt: "List the pricing review queue. Start with the operator playbook: exact ask or first move, safety rule, stop condition, and review link for the top RFQ.",
   },
   {
     label: "Stale follow-ups",
     prompt: "Find stale customer or forwarder follow-ups that need attention.",
   },
   {
-    label: "Inspect the brain",
-    prompt: "Inspect the commercial brain: what are the weakest proof gaps and the next safe moves across open deals?",
+    label: "Inspect assessments",
+    prompt: "Inspect open commercial assessments: what proof is missing and what can the operator do next?",
   },
   {
     label: "Qualify newest RFQ",
@@ -96,10 +96,9 @@ export function CompanyBrainChat() {
         <div ref={scrollRef} className="brain-chat-scroll">
           {messages.length === 0 && !busy ? (
             <div className="brain-chat-empty">
-              <h1 className="brain-chat-empty-title">What does the company know?</h1>
+              <h1 className="brain-chat-empty-title">Search company context</h1>
               <p className="brain-chat-empty-copy">
-                Ask the company brain about deals, pricing, follow-ups, and market moves.
-                It answers from the same memory the desk and the daily crons write to.
+                Ask about deals, pricing, follow-ups, and market conditions.
               </p>
               <div className="brain-chip-row" aria-label="Suggested questions">
                 {BRAIN_SUGGESTIONS.map((suggestion) => (

@@ -112,7 +112,7 @@ export function AgentAuditRerunButton({
           : (next.blockers.length ? next.blockers.join("\n") : "Customer quote gate is not ready."),
         detail: next.status === "READY"
           ? "Customer quote draft rerun from current pricing facts."
-          : "Customer quote still blocked by the commercial brain.",
+          : "Customer quote remains blocked by the current assessment.",
       });
       router.refresh();
     });

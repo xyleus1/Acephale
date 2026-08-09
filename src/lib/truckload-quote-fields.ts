@@ -1,4 +1,4 @@
-// Shared vocabulary + row shapes for the truckload quote flywheel
+// Shared vocabulary and row shapes for truckload quote history.
 // (client + server safe, no runtime deps). Persistence helpers live in
 // src/lib/truckload-quotes.ts.
 

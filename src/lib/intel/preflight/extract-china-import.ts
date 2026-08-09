@@ -711,18 +711,18 @@ export async function extractChinaHardwareLoad(
       },
     });
     if (!result.output_parsed) {
-      throw new Error("GPT-5.6 returned no structured shipment packet");
+      throw new Error("The extraction service returned no structured shipment packet");
     }
     return {
       input: withAiProvenance(result.output_parsed),
       note:
-        "OpenAI GPT-5.6 AI drafted the shipment facts. Confirm every extracted value before using the report.",
+        "Automated extraction drafted the shipment facts. Confirm every extracted value before using the report.",
     };
   } catch {
     return {
       input: parseLabeledChinaHardwareLoadFallback(trimmed),
       note:
-        "The GPT-5.6 extraction failed. Explicitly labeled shipment facts were parsed locally instead. No shipment text or assessment was persisted. Confirm every source-text value before using the report.",
+        "Automated extraction failed. Explicitly labeled shipment facts were parsed locally instead. No shipment text or assessment was persisted. Confirm every source-text value before using the report.",
     };
   }
 }

@@ -21,7 +21,7 @@ import {
 
 const REPORT_METADATA = {
   question:
-    "Which hardware imports matter for California and West Coast startups, and where can an AI freight system reduce shipment risk and create qualified leads?",
+    "Which hardware imports matter for California and West Coast startups, and which shipment facts are required to assess freight risk or qualify a lead?",
   providerReferencesReviewedAt: "2026-07-23T00:00:00.000Z",
 } as const;
 
