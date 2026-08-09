@@ -10,6 +10,7 @@ import { MilestoneEdit } from "@/components/milestone-edit";
 import { StageEmailPanel, type ThreadView } from "@/components/stage-email-panel";
 import { templatesForStatus } from "@/lib/job-email-types";
 import { CopyPortalLink } from "@/components/copy-portal-link";
+import { OverflowMenu } from "@/components/overflow-menu";
 import { CounterOfferButton } from "@/components/counter-offer-button";
 import { DocumentViewer } from "@/components/document-viewer";
 import { DocumentReadinessBoard } from "@/components/document-readiness-board";
@@ -510,78 +511,6 @@ function DecisionFlowPanel({
   );
 }
 
-function LoadPlaybookPanel({
-  reference,
-  routeLabel,
-  modeLabel,
-  customerName,
-  inquiryFrom,
-  targetPriceLabel,
-  quoteCoverageLabel,
-  docsLabel,
-  statusLabel,
-}: {
-  reference: string;
-  routeLabel: string;
-  modeLabel: string;
-  customerName: string | null;
-  inquiryFrom: string | null;
-  targetPriceLabel: string;
-  quoteCoverageLabel: string;
-  docsLabel: string;
-  statusLabel: string;
-}) {
-  const customerLabel = customerName ?? "Unassigned customer";
-  const isWaSource = isWhatsAppAddress(inquiryFrom);
-  const sourceLabel = inquiryFrom ? displayParty(inquiryFrom) : "inbound RFQ source";
-  const steps = [
-    {
-      label: "Inbox capture",
-      title: `${reference} comes in from ${sourceLabel}${isWaSource ? " on WhatsApp" : ""}`,
-      detail: `${modeLabel} on ${routeLabel}; operator starts from the ${isWaSource ? "conversation" : "email"}, not from spreadsheet cleanup.`,
-    },
-    {
-      label: "Agent qualification",
-      title: "Ask the agent what is missing",
-      detail: `The useful gap list is customer, commodity, container details, cargo-ready date, customs/incoterms, and target posture for ${customerLabel}.`,
-    },
-    {
-      label: "Pricing fan-out",
-      title: "Create forwarder drafts once facts are clean",
-      detail: `Current forwarder coverage is ${quoteCoverageLabel}; prepare Black Sea to Adriatic rate requests and wait for comparable replies before quoting.`,
-    },
-    {
-      label: "Quote and documents",
-      title: "Customer confirms, then the RFQ becomes operating work",
-      detail: `Target is ${targetPriceLabel}; document proof is ${docsLabel}. After acceptance, show the document checklist and milestone timeline as the load control surface.`,
-    },
-  ];
-
-  return (
-    <section className="load-playbook" aria-label={`Load playbook for ${reference}`}>
-      <div className="load-playbook-head">
-        <div>
-          <span>Load playbook</span>
-          <strong>{routeLabel}</strong>
-        </div>
-        <em>{statusLabel}</em>
-      </div>
-      <div className="load-playbook-steps">
-        {steps.map((step, index) => (
-          <div key={step.label} className="load-playbook-step">
-            <span>{index + 1}</span>
-            <div>
-              <em>{step.label}</em>
-              <strong>{step.title}</strong>
-              <small>{step.detail}</small>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 type DashboardView = "focus" | "overview";
 
 export default async function DashboardPage({
@@ -674,9 +603,11 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
             Start from the decision queue, add a manual RFQ, or create a job.
           </p>
           <div className="workbench-empty-actions">
-            <a href="/dashboard?view=overview" className="btn btn-secondary">Top-down dashboard</a>
-            <a href="/dashboard/rfq/new" className="btn btn-secondary">Manual RFQ</a>
             <a href="/dashboard/jobs/new" className="btn">New Job</a>
+            <OverflowMenu align="left">
+              <a href="/dashboard/rfq/new" className="btn btn-secondary">New RFQ</a>
+              <a href="/dashboard?view=overview" className="btn btn-secondary">Queue overview</a>
+            </OverflowMenu>
           </div>
         </div>
       </div>
@@ -989,18 +920,6 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
           currentStatus={job.targetPriceStatus}
         />
 
-        <LoadPlaybookPanel
-          reference={job.reference}
-          routeLabel={routeLabel}
-          modeLabel={modeLabel}
-          customerName={job.company?.name ?? null}
-          inquiryFrom={job.inquiry?.fromEmail ?? null}
-          targetPriceLabel={targetPriceLabel}
-          quoteCoverageLabel={`${receivedQuotes.length}/${carrierQuotes.length}`}
-          docsLabel={`${approvedDocs}/${docs.length}`}
-          statusLabel={STATUS_LABEL[visibleStatus] ?? visibleStatus}
-        />
-
       <section className="job-command-panel" aria-label="Focused job">
         <div className="job-command-main">
           <div className="job-command-eyebrow">
@@ -1024,11 +943,6 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
         </div>
 
         <div className="job-command-actions">
-            <a href="/dashboard?view=overview" className="btn btn-secondary">
-              <Icon name="grid" size={13} />
-              Top-down dashboard
-            </a>
-            <CopyPortalLink jobId={job.id} />
             <JobEditPanel
               job={{
                 id: job.id, reference: job.reference, status: job.status,
@@ -1053,9 +967,13 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
               }}
               companies={companies}
             />
-            <span className="job-command-shortcut">
-              <kbd>⌘K</kbd> search
-            </span>
+            <OverflowMenu>
+              <CopyPortalLink jobId={job.id} />
+              <a href="/dashboard?view=overview" className="btn btn-secondary">
+                <Icon name="grid" size={13} />
+                Queue overview
+              </a>
+            </OverflowMenu>
         </div>
 
         <div className="job-command-metrics" aria-label="Job summary">

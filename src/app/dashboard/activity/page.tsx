@@ -178,7 +178,7 @@ export default async function ActivityPage() {
     <div className="control-page">
       <div className="page-header control-page-header">
         <div>
-          <h1 className="page-title">Control Center</h1>
+          <h1 className="page-title">Operations</h1>
           <p className="page-subtitle">
             {totalAttention === 0
               ? "Everything is on track. No items need your attention."

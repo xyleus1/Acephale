@@ -182,19 +182,13 @@ export default async function EmailSettingsPage({
 
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">Email & WhatsApp</h1>
-          <p className="page-subtitle">
-            Connected channels, permissions, and message routing.
-          </p>
+          <h1 className="page-title">Channels</h1>
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body">
-          <div className="section-title" style={{ marginBottom: 6 }}>Production setup gates</div>
-          <p style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5, marginBottom: 12 }}>
-            These are explicit blockers, not hidden failures. The local batch works without them; production messaging and sync do not.
-          </p>
+          <div className="section-title" style={{ marginBottom: 12 }}>Setup status</div>
           <div style={{ display: "grid", gap: 8 }}>
             {setupGates.map((gate) => (
               <div key={gate.label} style={{

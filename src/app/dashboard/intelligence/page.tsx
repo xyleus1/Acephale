@@ -444,9 +444,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
             <Icon name="activity" size={20} />
             <h1 className="page-title">Intelligence</h1>
           </div>
-          <p className="page-subtitle">
-            Research, market signals, and impact review. Advisory only.
-          </p>
+          <p className="page-subtitle">Advisory only.</p>
         </div>
         <div className="page-actions">
           <a className="btn btn-secondary" href="/dashboard/intelligence">Reset</a>

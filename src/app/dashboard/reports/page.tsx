@@ -227,8 +227,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
     <div className="report-page">
       <div className="page-header report-page-header">
         <div>
-          <h1 className="page-title">Forwarding Reports</h1>
-          <p className="page-subtitle">Operations metrics, RFQ funnel, margin, lane health, and supplier response quality.</p>
+          <h1 className="page-title">Reports</h1>
         </div>
         <div className="report-period-control" aria-label="Report period">
           {PERIOD_OPTIONS.map((opt) => (
