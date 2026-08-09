@@ -2,6 +2,26 @@
 
 ## Latest Update
 
+### Account menu reduced to sign-out only
+
+- Reduced the authenticated dashboard account dropdown to one action: Sign out.
+- Removed the user name and email header, Email and WhatsApp link, customer
+  portal link, admin link, and language control from that dropdown.
+- Removed the unused language-toggle component and its dead menu styles.
+- Kept authentication, admin, settings, and customer portal routes unchanged.
+- Updated the single-surface regression contract to prevent the removed account
+  menu options from returning.
+
+Verification:
+
+- `npm run test:supply-os-single-surface`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/derya npm run build`
+- `git diff --check`
+
+## Prior Update
+
 ### Navbar and workspace navigation no longer repeat the product name
 
 - The authenticated navbar now shows only the Derya brand.
@@ -30,8 +50,6 @@ Skipped verification:
 - The in-app browser had no attached tab, so authenticated visual inspection
   was unavailable. Responsive behavior is covered by source contracts,
   TypeScript, and the production build, but no screenshot claim is made.
-
-## Prior Update
 
 ### Supply OS copy and control cleanup
 

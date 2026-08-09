@@ -4008,6 +4008,24 @@ Use this file for chronological implementation notes that future agents should s
   action changed.
 - Follow-up: none.
 
+### 2026-08-08 - Reduce the account menu to sign-out only
+
+- Branch: fix/account-menu-signout-only, targeting main
+- Commit: see git log
+- Task: Remove product, admin, settings, identity, and language controls from
+  the authenticated dashboard account dropdown.
+- Files changed: dashboard layout, logout button, global menu styles,
+  single-surface regression coverage, handoff, and engineering log. The unused
+  language-toggle component was deleted.
+- Verification: single-surface regression, TypeScript, diff whitespace, and
+  changed-file U+2014 checks pass.
+- Failed/skipped checks: browser click-through was not required for this
+  source-level menu contraction.
+- Caveats: the underlying authentication, admin, settings, and customer portal
+  routes remain unchanged. Only the dashboard account menu entry points were
+  removed.
+- Follow-up: none.
+
 ### 2026-08-08 - Remove repeated product labels and mismatched rail icons
 
 - Branch: supply-os-copy-cleanup, targeting main
