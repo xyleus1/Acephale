@@ -704,6 +704,7 @@ export function SupplyOsCommandMap({
           >
             <path className={styles.routeGeometryCasing} d={path} />
             <path className={styles.routeGeometryLine} d={path} />
+            <path className={styles.routeGeometryFlow} d={path} />
           </g>
         ))}
       </svg>

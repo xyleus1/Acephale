@@ -1825,7 +1825,8 @@
 }
 
 .routeGeometryCasing,
-.routeGeometryLine {
+.routeGeometryLine,
+.routeGeometryFlow {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1839,6 +1840,27 @@
 .routeGeometryLine {
   stroke: var(--navy);
   stroke-width: 3;
+}
+
+.routeGeometryFlow {
+  stroke: rgb(255 255 255 / 88%);
+  stroke-width: 1.6;
+  stroke-dasharray: 0.1 8;
+  stroke-dashoffset: 0;
+  animation: routeFlow 1.6s linear infinite;
+}
+
+.routeGeometry[data-active="true"] .routeGeometryFlow,
+.routeGeometry[data-hovered="true"] .routeGeometryFlow {
+  stroke-width: 2;
+  stroke-dasharray: 0.1 6;
+  animation-duration: 1.2s;
+}
+
+@keyframes routeFlow {
+  to {
+    stroke-dashoffset: -16.2;
+  }
 }
 
 .fitMapButton {
@@ -2204,6 +2226,10 @@
   .scenarioPlayList > button,
   .scenarioRunButton {
     transition: none;
+  }
+
+  .routeGeometryFlow {
+    animation: none;
   }
 }
 .pageFrame {
