@@ -16,6 +16,67 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-08 - Supply OS uses PostgreSQL, relational graphs, and a typed capability DSL
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Supply OS must combine ERP state, product and BOM mapping,
+  supplier and shipper discovery, compliance, sourcing alternatives,
+  logistics, customs, tracking, and cost. These records need exact quantities,
+  office isolation, evidence provenance, versioning, and human approval. A
+  generic agent prompt, separate graph database, or vector-first store would
+  weaken those guarantees and add synchronization work before measured scale
+  requires it.
+- Decision: Keep PostgreSQL as the operational source of truth. Store BOM and
+  future route edges as relational adjacency lists, connector-specific detail
+  as JSONB beside normalized columns, published ERP data as immutable
+  snapshots, and execution history as append-only events. Use the existing
+  source-linked knowledge model for unstructured retrieval. Consider pgvector
+  only as an optional chunk-retrieval aid after measured recall failures, never
+  as operational truth. Control capabilities through the versioned
+  `supply-os/v1` DSL and a typed registry. Bind every approval to the hash of
+  the exact decision or execution input. Keep external actions behind a
+  matching human approval and an idempotent connector worker.
+- Rationale: One relational consistency boundary is simpler, safer, and
+  sufficient for product and route traversal. The DSL makes agent-assisted
+  work reviewable and testable without hiding permissions or side effects
+  inside prompts.
+- Consequences: Office and workspace scope is enforced in application queries
+  and database triggers. Browser storage is temporary compatibility state, not
+  shared office persistence. Neo4j and a standalone vector database are not
+  part of the current architecture. Supplier contact, purchase orders,
+  shipment bookings, and customs filings remain inert until an approved
+  connector implementation exists. Missing quantities, prices, lead times,
+  dates, and scrap rates remain database `NULL` or explicit unknown values;
+  import code may not replace them with zero or an epoch timestamp.
+- Revisit when: measured PostgreSQL traversal performance, unstructured recall,
+  or connector throughput fails a defined service target after normal indexing,
+  recursive SQL, materialized projections, and queue workers are exhausted.
+
+### 2026-08-08 - Supply OS is the sole primary internal product surface
+
+- Status: accepted
+- Owner: product and engineering
+- Context: CRM, Intel, Supplier Finder, freight planning, and tracking appeared
+  as separate products even though they are inputs or workstreams in one supply
+  decision. The fragmentation hid the core product and forced operators to
+  assemble the operating picture themselves.
+- Decision: Make `/dashboard/supply-os` the only primary internal navigation
+  destination. Integrate product and materials, supplier qualification,
+  sourcing scenarios, logistics and customs, and tracking and cost as panels
+  in one operating shell. Keep setup, admin, customer portal, and carefully
+  scoped operational deep links available without presenting them as peer
+  products. Redirect legacy standalone Supplier Finder and Intel entry points
+  into the matching Supply OS panel after their state is migrated.
+- Rationale: The product is the decision and execution system across the
+  supply chain, not a collection of departmental screens.
+- Consequences: Legacy modules may remain temporarily as implementation
+  components or compatibility routes, but they cannot retain independent
+  product positioning. Every panel must distinguish shared canonical records,
+  browser-local drafts, illustrative fixtures, and live external state.
+- Revisit when: a customer-facing surface or a narrowly authorized operator
+  workflow genuinely requires a separate application boundary.
+
 ### 2026-08-07 - Supplier discovery separates public evidence from private origin context
 
 - Status: accepted
@@ -1835,3 +1896,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: connected rate histories, port events, customs records,
   purchase orders, and shipment telemetry can provide deterministic joins and
   measured severity instead of public-source matching.
+
+### 2026-08-08 - Supply planning is deterministic, snapshot-bound, and append-only
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The shared Supply OS snapshot models made BOM, inventory, and demand
+  canonical, but the existing optimization module was still a presentation
+  model. Accepting browser-computed rank, feasibility, cost, or lead time would
+  make planning unauditable and easy to tamper with.
+- Decision: Run planning in a pure deterministic server-owned engine over one
+  published snapshot plus canonical supplier terms, approved equivalence rules,
+  and FCC evidence profiles. Support only current plan, alternate supplier,
+  assembled subassembly, and approved equivalence scenario families. Persist
+  append-only results with snapshot, normalized-input, engine-version, and
+  deterministic-output hashes.
+- Unknown-data rule: Missing inventory facts, price, freight, evidenced duty,
+  lead time, supplier capacity, receipt timing, or compliance evidence remain
+  null and appear in the unknown list. Absence is never converted to zero.
+- Recommendation rule: Reject blocked scenarios, maximize units available by
+  the required dates, compare landed cost only when complete, then lead time,
+  supplier concentration, and stable scenario key. Do not use an AI score.
+- FCC boundary: Report only `evidence_complete`, `review_required`, or
+  `blocked`. Module authorization evidence never proves that a host product
+  passes FCC.
+- Consequences: Client requests may select only canonical scenario inputs and
+  cannot author rank, cost, feasibility, or commercial facts. A newer published
+  snapshot marks older results stale in reads while retaining their immutable
+  audit history. Execution still requires the separate approval ledger.
+- Revisit when: Real customer connectors need additional canonical term fields,
+  unit conversion rules, separate inbound receipt dates, or constrained
+  inter-facility transfer planning.

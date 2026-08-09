@@ -2,6 +2,223 @@
 
 ## Latest Update
 
+### Deterministic Supply OS planning and scenario engine
+
+- Added a pure multi-level BOM engine with cycle rejection, exact unit checks,
+  scrap multiplication, optional-line exclusion, subassembly expansion, shared
+  component constraints, facility inventory, dated demand allocation, and
+  explicit unknown handling.
+- Added the four allowed scenario families: current purchasing plan, alternate
+  supplier, assembled subassembly purchase, and approved equivalence change.
+  Unapproved substitutions are blocked.
+- Scenario output now includes material, freight, evidenced duty, landed-cost
+  completeness, lead range, dated buildability, shortages, concentration, cash
+  exposure, evidence completeness, FCC review state, blockers, and unknowns.
+- Recommendation order is deterministic and rule-based. It rejects blocked
+  cases, maximizes required-date units, uses landed cost only when complete,
+  then compares lead time and supplier concentration.
+- Added snapshot-owned supplier terms and FCC profiles, workspace-approved
+  equivalence rules, expected inventory receipt dates, and append-only planning
+  results with snapshot, normalized-input, engine-version, and output hashes.
+- The server rejects client-authored rank, cost, feasibility, and unsupported
+  fields. Older results are returned with `isStale` after a newer snapshot is
+  published, without mutation.
+
+### Legacy operator routes now enter Supply OS panels
+
+- Legacy CRM, RFQ, Outreach, Intel, Intelligence, Brain, Pricing, Reports,
+  Jobs, Loads, Carriers, Inbox, Activity, and Domestic Pricing navigation now
+  redirects into the appropriate Supply OS panel.
+- The separate Supply OS customer builder and workstream URLs now return to the
+  single workspace instead of rendering another product surface.
+- Redirects apply only to navigation requests. Retained actions, APIs,
+  background engines, admin, settings, authentication, and customer portal
+  behavior remain available.
+- Original query state and path context are preserved for future native record
+  drawers instead of silently discarding deep-link intent.
+- Dashboard home, Activity, Brain, Carriers, CRM, Domestic Pricing, Inbox,
+  Outreach, Pricing, Reports, and Search no longer compile their old page UIs.
+  They are small redirect stubs backed by the same route contract.
+
+## Date
+
+2026-08-08
+
+## Branch
+
+supply-os-grand-vision, targeting main
+
+## Verification passed
+
+- `npm run test:supply-os-planning-engine`
+- `npm run test:supply-os-planning-persistence` against disposable PostgreSQL
+- `npm run test:supply-os-legacy-routes`
+- `npm run test:supply-os-single-surface`
+- `npm run test:supply-os-shell-routing`
+- Fresh-database `npx prisma migrate deploy`
+- `npx prisma validate`
+- `npx tsc --noEmit`
+- `npm run build`
+- `git diff --check`
+
+## Caveats
+
+- Supplier terms and FCC profiles are canonical snapshot inputs, but the CSV
+  adapter does not yet import those record types.
+- One inventory position has one optional expected receipt timestamp for its
+  in-transit and on-order quantities. Split positions when those quantities
+  have different dates.
+- Planning results are recommendations only. They do not place orders, book
+  freight, file customs entries, send messages, or authorize spend.
+- Intel, Intelligence, Jobs, Loads, RFQ, and the old Supply OS builder and
+  workstream implementations still compile until their useful components and
+  legacy source-based tests are extracted or retired.
+- Redirected record details currently preserve `legacyPath`; native Supply OS
+  drawers for those records remain a follow-up.
+
+## Prior Update
+
+### Restricted operators and approvals now respect snapshot boundaries
+
+- An `EMPLOYEE` no longer gains office-wide Supply OS access when the legacy
+  `canViewWholeOffice` flag is true. Employees require an active workspace
+  membership and remain unable to edit or import workspace data.
+- Publishing a newer snapshot expires pending approvals tied to older
+  decisions or execution tasks.
+- Decision creation, proposal, approval requests, approval decisions, task
+  creation, task approval requests, and task release now reject stale snapshot
+  inputs. Approved work cannot be released after the workspace data changes.
+- A forward migration now rejects cross-office workspace company and user
+  references, plus BOM, inventory, demand, and media references whose linked
+  records do not belong to the exact same snapshot.
+
+## Date
+
+2026-08-08
+
+## Branch
+
+supply-os-grand-vision, targeting main
+
+## Verification passed
+
+- `npm run test:supply-os-persistence` against a disposable PostgreSQL database
+- `npm run test:supply-os-execution` against a disposable PostgreSQL database
+- Fresh-database `npx prisma migrate deploy`
+- `npx prisma validate`
+- `npx tsc --noEmit`
+- `git diff --check`
+- Changed-content U+2014 scan
+
+## Caveats
+
+- Existing released tasks remain ledger records after a newer snapshot is
+  published. Any future external executor must repeat the current-snapshot
+  check immediately before its side effect.
+
+## Prior Update
+
+### Supply OS now owns the authenticated product chrome
+
+- Removed the dashboard sidebar instead of wasting permanent space on one
+  navigation link. Authenticated utility routes retain the compact account
+  header, while Supply OS uses the full page width.
+- Materials, Suppliers, Scenarios, Logistics, and Tracking now update the
+  `panel` query parameter. Direct links, refresh, and browser back or forward
+  preserve the selected operating panel.
+- Workspace, facility, freshness, and import controls now sit in the Supply OS
+  command header. Shared workspace and CSV controls open in an accessible
+  modal instead of expanding the page vertically.
+- The operating shell uses the available viewport with internal panel
+  scrolling. Browser verification found no page overflow at 1440 by 900,
+  1024 by 768, or 390 by 844.
+- This slice does not redirect CRM, RFQ, Job, or other detailed operational
+  routes. Those remain reachable until their workflows have real Supply OS
+  replacements.
+
+## Date
+
+2026-08-08
+
+## Branch
+
+supply-os-grand-vision, targeting main
+
+## Verification passed
+
+- `npm run test:supply-os-single-surface`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-product-twin`
+- `npm run test:supply-os-snapshot-twin`
+- `npx tsc --noEmit`
+- `npm run build` against a disposable PostgreSQL database
+- Authenticated browser panel, history, modal, overflow, and console checks
+- `git diff --check`
+
+## Caveats
+
+- Legacy detail pages are still live. Removing their navigation rail is not
+  the same as completing workflow parity.
+- The supplier and logistics panels still contain browser-local compatibility
+  state that must move to shared workspace records.
+
+## Prior Update
+
+### Supply OS is the primary product surface with shared operating state
+
+- `/dashboard/supply-os` is the default and only primary navigation surface.
+  Supplier discovery, market evidence, sourcing scenarios, logistics planning,
+  and tracking visibility now live inside its five-panel operating shell.
+- Office workspaces, CSV import runs, immutable snapshots, locations, items,
+  aliases, BOM lines, inventory, demand, and media persist in tenant-scoped
+  PostgreSQL records. Browser storage is limited to explicitly labeled legacy
+  compatibility data and draft UI convenience state.
+- Published snapshots now drive the product twin. The adapter calculates
+  buildability from BOM demand and shared inventory without inventing missing
+  costs, lead times, images, or sourcing scenarios. Incomplete datasets fall
+  back to a clearly labeled demonstration fixture.
+- The typed `supply-os/v1` capability DSL defines ingestion, mapping, supplier,
+  compliance, sourcing, logistics, tracking, and execution boundaries. Unknown
+  capabilities, invalid dependency graphs, untrusted execution evidence, and
+  missing approval are rejected deterministically.
+- Decisions, evidence, scenarios, approvals, and execution tasks use an
+  append-only PostgreSQL ledger. Proposal and action hashes bind approval to
+  exact inputs. Release stops at `READY`; no external order, booking, customs
+  filing, message, or spend action is performed.
+- The standalone Supplier Finder and Market pages now redirect into the
+  relevant Supply OS panels. Operational detail routes and APIs remain in place
+  until their workflows have equivalent Supply OS destinations.
+
+## Date
+
+2026-08-08
+
+## Branch
+
+supply-os-grand-vision, targeting main
+
+## Verification passed
+
+- `npm run test:supply-os-single-surface`
+- `npm run test:supply-os-product-twin`
+- `npm run test:supply-os-snapshot-twin`
+- `npm run test:supply-os-dsl`
+- `npm run test:supply-os-execution` against a disposable PostgreSQL database
+- `npx tsc --noEmit`
+- `git diff --check`
+- Changed-content U+2014 scan
+
+## Caveats
+
+- Supplier candidates and market signals are decision evidence, not approved
+  suppliers, live quotes, committed capacity, or compliance clearance.
+- The product twin can only be as complete as its published BOM, inventory,
+  demand, and media inputs. Missing commercial fields remain visible as missing.
+- `READY` means approved for a future adapter to execute. It does not mean an
+  external action occurred.
+
+## Prior Update
+
 ### Generated Supply OS cases retain a connected operating network
 
 - Generated companies no longer lose every route when public research finds
@@ -6461,3 +6678,49 @@ Verification:
   post-change authenticated screenshot could not be captured with the local
   placeholder database, so the user screenshots and source-level visual
   contract test are the visual evidence for this patch.
+
+## Supply OS ingestion and supplier intelligence hardening, August 8
+
+Status:
+
+- Implemented on `agent3/data-ingestion-supplier-intelligence` from
+  `origin/supply-os-grand-vision`.
+- One local commit is intended. Nothing is pushed, and no Supply OS visual
+  workspace file was touched.
+
+What changed:
+
+- CSV ingestion now covers locations, items, BOM, inventory, demand, purchase
+  orders, supplier terms, and compliance records. It supports explicit column
+  mappings, quoted and escaped fields, row-level malformed input, deterministic
+  normalization, templates, stale inventory, identity collisions, references,
+  units, dates, coordinates, and cycles.
+- Missing quantities, scrap, price, MOQ, lead time, and optional dates remain
+  unknown. A forward migration makes inventory quantities and BOM scrap
+  nullable instead of storing false zeroes.
+- Product identity follows the required deterministic order. Fuzzy and vector
+  matches are review proposals, never automatic merges.
+- Component supplier research keeps only provider-cited claims, attaches every
+  candidate to one component, labels freshness, degrades cleanly with no
+  sources, and rejects unsupported, stale, or cross-office approval attempts.
+- Provider candidates require a concrete logistics role and role-specific
+  evidence. Customs boilerplate cannot become a movement lane.
+- Authenticated endpoints expose all eight CSV templates and component-scoped
+  supplier research. SAP and Oracle are registered as unavailable adapters.
+
+Verification:
+
+- New CSV and ingestion/research suites pass.
+- Existing steel supplier, DSL, market-lane, signal-suppression,
+  intelligence-map, persistence, and execution suites pass.
+- Fresh PostgreSQL migration deploy applies all 22 migrations.
+- Prisma validation, TypeScript, production build, diff hygiene, and the
+  touched-path tenant audit pass. The full tenant audit still reports nine
+  unrelated pre-existing findings outside the touched Supply OS paths.
+
+Caveat and next step:
+
+- Optional purchase-order, supplier-term, and compliance rows are currently
+  immutable JSON metadata on the snapshot. Move them to dedicated typed tables
+  when Agent 2 needs cross-snapshot queries or execution joins. Do not pretend
+  the current component research result is an awarded supplier or live quote.

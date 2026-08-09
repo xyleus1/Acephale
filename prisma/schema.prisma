@@ -137,6 +137,32 @@ model Office {
   customerPortalMemberships CustomerPortalMembership[]
   customerPortalLoginCodes  CustomerPortalLoginCode[]
   customerPortalActions     CustomerPortalAction[]
+  supplyWorkspaces          SupplyWorkspace[]
+  supplyWorkspaceMembers    SupplyWorkspaceMember[]
+  supplyImportRuns          SupplyImportRun[]
+  supplySnapshots           SupplySnapshot[]
+  supplyLocations           SupplyLocation[]
+  supplyItems               SupplyItem[]
+  supplyItemAliases         SupplyItemAlias[]
+  supplyBomVersions         SupplyBomVersion[]
+  supplyBomLines            SupplyBomLine[]
+  supplyInventoryPositions  SupplyInventoryPosition[]
+  supplyDemands             SupplyDemand[]
+  supplyMediaAssets         SupplyMediaAsset[]
+  supplySupplierTerms       SupplySupplierTerm[]
+  supplyEquivalenceRules    SupplyEquivalenceRule[]
+  supplyFccProfiles         SupplyFccProfile[]
+  supplyPlanningResults     SupplyPlanningResult[]
+  supplyEvidence            SupplyEvidence[]
+  supplyCapabilityRuns      SupplyCapabilityRun[]
+  supplyDecisions           SupplyDecision[]
+  supplyScenarios           SupplyScenario[]
+  supplyScenarioComparisons SupplyScenarioComparison[]
+  supplyDecisionEvidence    SupplyDecisionEvidence[]
+  supplyScenarioEvidence    SupplyScenarioEvidence[]
+  supplyApprovals           SupplyApproval[]
+  supplyExecutionTasks      SupplyExecutionTask[]
+  supplyExecutionEvents     SupplyExecutionEvent[]
 
   @@unique([name])
 }
@@ -191,6 +217,20 @@ model User {
   assignmentChangesMade AssignmentChange[] @relation("AssignmentChangedBy")
   assignedJobs          Job[]              @relation("JobAssignee")
   assignedInquiries     Inquiry[]          @relation("InquiryAssignee")
+  supplyWorkspacesCreated SupplyWorkspace[]       @relation("SupplyWorkspaceCreatedBy")
+  supplyWorkspaceMembers  SupplyWorkspaceMember[]
+  supplyImportRunsCreated SupplyImportRun[]       @relation("SupplyImportRunCreatedBy")
+  supplySnapshotsCreated  SupplySnapshot[]        @relation("SupplySnapshotCreatedBy")
+  supplyAliasesApproved   SupplyItemAlias[]       @relation("SupplyItemAliasApprovedBy")
+  supplyEquivalenceRulesApproved SupplyEquivalenceRule[] @relation("SupplyEquivalenceRuleApprovedBy")
+  supplyPlanningResultsCreated   SupplyPlanningResult[]  @relation("SupplyPlanningResultCreatedBy")
+  supplyEvidenceCreated    SupplyEvidence[]        @relation("SupplyEvidenceCreatedBy")
+  supplyCapabilityRuns     SupplyCapabilityRun[]   @relation("SupplyCapabilityRunInvokedBy")
+  supplyDecisionsCreated   SupplyDecision[]        @relation("SupplyDecisionCreatedBy")
+  supplyApprovalsRequested SupplyApproval[]        @relation("SupplyApprovalRequestedBy")
+  supplyApprovalsDecided   SupplyApproval[]        @relation("SupplyApprovalDecidedBy")
+  supplyExecutionTasks     SupplyExecutionTask[]   @relation("SupplyExecutionTaskCreatedBy")
+  supplyExecutionEvents    SupplyExecutionEvent[]  @relation("SupplyExecutionEventActor")
 
   @@unique([officeId, email])
   @@index([officeId, role])
@@ -249,6 +289,7 @@ model Company {
   truckloadQuotes   TruckloadQuote[]
   customerPortalMemberships CustomerPortalMembership[]
   customerPortalActions     CustomerPortalAction[]
+  supplyWorkspaces           SupplyWorkspace[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -1864,4 +1905,898 @@ model CustomerPortalAction {
   @@index([officeId, companyId, createdAt])
   @@index([officeId, jobId, createdAt])
   @@index([portalUserId, createdAt])
+}
+
+// Shared, office-scoped Supply OS workspace. Browser-local presentation state
+// may point here, but this record is the durable collaboration boundary.
+model SupplyWorkspace {
+  id              String  @id @default(cuid())
+  officeId        String
+  companyId       String?
+  createdByUserId String?
+  externalKey     String?
+  name            String
+  status          String  @default("ACTIVE") // ACTIVE / ARCHIVED
+  version         Int     @default(1)
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  office    Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation("SupplyWorkspaceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  members     SupplyWorkspaceMember[]
+  importRuns  SupplyImportRun[]
+  snapshots   SupplySnapshot[]
+  locations   SupplyLocation[]
+  items       SupplyItem[]
+  itemAliases SupplyItemAlias[]
+  bomVersions SupplyBomVersion[]
+  bomLines    SupplyBomLine[]
+  inventory   SupplyInventoryPosition[]
+  demands     SupplyDemand[]
+  mediaAssets SupplyMediaAsset[]
+  supplierTerms    SupplySupplierTerm[]
+  equivalenceRules SupplyEquivalenceRule[]
+  fccProfiles      SupplyFccProfile[]
+  planningResults  SupplyPlanningResult[]
+  evidence            SupplyEvidence[]
+  capabilityRuns      SupplyCapabilityRun[]
+  decisions           SupplyDecision[]
+  scenarios           SupplyScenario[]
+  scenarioComparisons SupplyScenarioComparison[]
+  decisionEvidence    SupplyDecisionEvidence[]
+  scenarioEvidence    SupplyScenarioEvidence[]
+  approvals           SupplyApproval[]
+  executionTasks      SupplyExecutionTask[]
+  executionEvents     SupplyExecutionEvent[]
+
+  @@unique([officeId, externalKey])
+  @@index([officeId, status, updatedAt])
+  @@index([officeId, companyId, status])
+}
+
+// Explicit membership supports shared office state without granting every
+// restricted operator access to every workspace.
+model SupplyWorkspaceMember {
+  id          String  @id @default(cuid())
+  officeId    String
+  workspaceId String
+  userId      String
+  role        String  @default("MEMBER") // OWNER / EDITOR / MEMBER / VIEWER
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([officeId, userId, isActive])
+  @@index([officeId, workspaceId, isActive])
+}
+
+// One connector execution. A successful run may publish exactly one immutable
+// snapshot. Raw files remain outside this table and are referenced by hash.
+model SupplyImportRun {
+  id              String  @id @default(cuid())
+  officeId        String
+  workspaceId     String
+  createdByUserId String?
+  adapter         String  @default("CSV")
+  status          String  @default("DRAFT") // DRAFT / VALIDATING / READY / PUBLISHED / FAILED / CANCELLED
+  sourceName      String?
+  sourceHash      String?
+  idempotencyKey  String?
+  mapping         Json?
+  validation      Json?
+  lastError       String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  failedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation("SupplyImportRunCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  snapshot  SupplySnapshot?
+
+  @@unique([officeId, idempotencyKey])
+  @@index([officeId, workspaceId, status, createdAt])
+}
+
+// Snapshot rows and every snapshot-owned child are mutable only while DRAFT.
+// The forward migration installs database triggers that reject writes after
+// status becomes PUBLISHED.
+model SupplySnapshot {
+  id              String  @id @default(cuid())
+  officeId        String
+  workspaceId     String
+  importRunId     String? @unique
+  createdByUserId String?
+  version         Int
+  status          String  @default("DRAFT") // DRAFT / PUBLISHED
+  schemaVersion   Int     @default(1)
+  sourceHash      String?
+  metadata        Json?
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  office    Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  importRun SupplyImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  createdBy User?            @relation("SupplySnapshotCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  locations   SupplyLocation[]
+  items       SupplyItem[]
+  bomVersions SupplyBomVersion[]
+  bomLines    SupplyBomLine[]
+  inventory   SupplyInventoryPosition[]
+  demands     SupplyDemand[]
+  mediaAssets SupplyMediaAsset[]
+  supplierTerms   SupplySupplierTerm[]
+  fccProfiles     SupplyFccProfile[]
+  planningResults SupplyPlanningResult[]
+  evidence       SupplyEvidence[]
+  capabilityRuns SupplyCapabilityRun[]
+  decisions      SupplyDecision[]
+  executionTasks SupplyExecutionTask[]
+
+  @@unique([workspaceId, version])
+  @@index([officeId, workspaceId, status, publishedAt])
+  @@index([officeId, createdAt])
+}
+
+model SupplyLocation {
+  id          String   @id @default(cuid())
+  officeId    String
+  workspaceId String
+  snapshotId  String
+  locationKey String
+  externalId  String?
+  name        String
+  kind        String   @default("UNKNOWN") // FACTORY / WAREHOUSE / SUPPLIER / CUSTOMER / PORT / UNKNOWN
+  addressLine String?
+  city        String?
+  region      String?
+  postalCode  String?
+  countryCode String?
+  latitude    Decimal? @db.Decimal(9, 6)
+  longitude   Decimal? @db.Decimal(9, 6)
+  timezone    String?
+  sourceRefs  Json?
+
+  createdAt DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  inventory   SupplyInventoryPosition[]
+  demands     SupplyDemand[]
+  mediaAssets SupplyMediaAsset[]
+  supplierTerms SupplySupplierTerm[]
+
+  @@unique([snapshotId, locationKey])
+  @@index([officeId, workspaceId, name])
+  @@index([officeId, countryCode])
+}
+
+model SupplyItem {
+  id            String  @id @default(cuid())
+  officeId      String
+  workspaceId   String
+  snapshotId    String
+  itemKey       String
+  externalId    String?
+  sku           String?
+  manufacturer  String?
+  mpn           String?
+  gtin          String?
+  name          String
+  description   String?
+  category      String?
+  itemType      String  @default("COMPONENT") // PRODUCT / SUBASSEMBLY / COMPONENT / MATERIAL / SERVICE
+  unitOfMeasure String
+  metadata      Json?
+  sourceRefs    Json?
+
+  createdAt DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  bomVersionsAsProduct SupplyBomVersion[]        @relation("SupplyBomVersionProduct")
+  bomLinesAsParent     SupplyBomLine[]           @relation("SupplyBomLineParent")
+  bomLinesAsComponent  SupplyBomLine[]           @relation("SupplyBomLineComponent")
+  inventory            SupplyInventoryPosition[]
+  demands              SupplyDemand[]
+  mediaAssets          SupplyMediaAsset[]
+  supplierTerms        SupplySupplierTerm[]
+  fccProfile           SupplyFccProfile?
+
+  @@unique([snapshotId, itemKey])
+  @@index([officeId, workspaceId, sku])
+  @@index([officeId, manufacturer, mpn])
+  @@index([officeId, gtin])
+}
+
+// Durable identity decisions are workspace-scoped rather than snapshot-scoped
+// so accepted ERP and manufacturer aliases can be reused by later imports.
+model SupplyItemAlias {
+  id               String   @id @default(cuid())
+  officeId         String
+  workspaceId      String
+  approvedByUserId String?
+  aliasType        String
+  aliasValue       String
+  normalizedValue  String
+  canonicalItemKey String
+  source           String
+  confidence       Decimal? @db.Decimal(5, 4)
+  isActive         Boolean  @default(true)
+
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  office     Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace  SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  approvedBy User?           @relation("SupplyItemAliasApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, aliasType, normalizedValue])
+  @@index([officeId, workspaceId, canonicalItemKey, isActive])
+}
+
+model SupplyBomVersion {
+  id            String    @id @default(cuid())
+  officeId      String
+  workspaceId   String
+  snapshotId    String
+  productItemId String
+  revision      String
+  status        String    @default("ACTIVE")
+  sourceSystem  String?
+  externalId    String?
+  effectiveAt   DateTime?
+  sourceRefs    Json?
+
+  createdAt DateTime @default(now())
+
+  office      Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace   SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot    SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  productItem SupplyItem      @relation("SupplyBomVersionProduct", fields: [productItemId], references: [id], onDelete: Cascade)
+  lines       SupplyBomLine[]
+
+  @@unique([snapshotId, productItemId, revision])
+  @@index([officeId, workspaceId, productItemId])
+}
+
+// Adjacency-list BOM edges keep traversal in PostgreSQL. Recursive queries can
+// explode an assembly without introducing a second graph database.
+model SupplyBomLine {
+  id               String  @id @default(cuid())
+  officeId         String
+  workspaceId      String
+  snapshotId       String
+  bomVersionId     String
+  parentItemId     String
+  componentItemId  String
+  lineNumber       Int
+  quantity         Decimal @db.Decimal(20, 6)
+  unitOfMeasure    String
+  scrapRate        Decimal? @db.Decimal(9, 6)
+  isOptional       Boolean @default(false)
+  alternativeGroup String?
+  sourceRefs       Json?
+
+  createdAt DateTime @default(now())
+
+  office        Office           @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace     SupplyWorkspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot      SupplySnapshot   @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  bomVersion    SupplyBomVersion @relation(fields: [bomVersionId], references: [id], onDelete: Cascade)
+  parentItem    SupplyItem       @relation("SupplyBomLineParent", fields: [parentItemId], references: [id], onDelete: Cascade)
+  componentItem SupplyItem       @relation("SupplyBomLineComponent", fields: [componentItemId], references: [id], onDelete: Cascade)
+
+  @@unique([bomVersionId, lineNumber])
+  @@index([officeId, workspaceId, parentItemId])
+  @@index([officeId, workspaceId, componentItemId])
+  @@index([snapshotId, bomVersionId])
+}
+
+model SupplyInventoryPosition {
+  id                String   @id @default(cuid())
+  officeId          String
+  workspaceId       String
+  snapshotId        String
+  positionKey       String
+  itemId            String
+  locationId        String
+  lotNumber         String?
+  unitOfMeasure     String
+  quantityOnHand    Decimal? @db.Decimal(20, 6)
+  quantityAllocated Decimal? @db.Decimal(20, 6)
+  quantityInTransit Decimal? @db.Decimal(20, 6)
+  quantityOnOrder   Decimal? @db.Decimal(20, 6)
+  expectedReceiptAt DateTime?
+  asOf              DateTime
+  sourceRefs        Json?
+
+  createdAt DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  item      SupplyItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  location  SupplyLocation  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, positionKey])
+  @@index([officeId, workspaceId, itemId])
+  @@index([officeId, workspaceId, locationId])
+  @@index([snapshotId, asOf])
+}
+
+model SupplyDemand {
+  id            String   @id @default(cuid())
+  officeId      String
+  workspaceId   String
+  snapshotId    String
+  demandKey     String
+  itemId        String
+  locationId    String?
+  sourceType    String
+  externalId    String?
+  quantity      Decimal  @db.Decimal(20, 6)
+  unitOfMeasure String
+  dueAt         DateTime
+  status        String   @default("OPEN")
+  priority      Int      @default(0)
+  sourceRefs    Json?
+
+  createdAt DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  item      SupplyItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  location  SupplyLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@unique([snapshotId, demandKey])
+  @@index([officeId, workspaceId, itemId, status])
+  @@index([officeId, workspaceId, dueAt, status])
+  @@index([snapshotId, locationId])
+}
+
+// Commercial terms are published snapshot inputs. Null commercial fields are
+// deliberate unknowns and stay null through every planning result.
+model SupplySupplierTerm {
+  id                    String   @id @default(cuid())
+  officeId              String
+  workspaceId           String
+  snapshotId            String
+  termKey               String
+  itemId                String
+  facilityId            String?
+  supplierKey           String
+  supplierName          String
+  isCurrent             Boolean  @default(false)
+  unitOfMeasure         String
+  currency              String?
+  unitPrice             Decimal? @db.Decimal(20, 6)
+  modeledFreightPerUnit Decimal? @db.Decimal(20, 6)
+  evidencedDutyPerUnit  Decimal? @db.Decimal(20, 6)
+  dutyEvidenceRefs      Json?
+  leadTimeMinDays       Int?
+  leadTimeMaxDays       Int?
+  availableQuantity     Decimal? @db.Decimal(20, 6)
+  availableAt           DateTime?
+  evidenceRefs          Json?
+  sourceRefs            Json?
+  createdAt             DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  item      SupplyItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  facility  SupplyLocation? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, termKey])
+  @@index([officeId, workspaceId, itemId, isCurrent])
+  @@index([snapshotId, facilityId])
+}
+
+// Equivalence rules are explicit, approved workspace records. The engine only
+// applies APPROVED rules and hashes their exact contents into its input.
+model SupplyEquivalenceRule {
+  id               String   @id @default(cuid())
+  officeId         String
+  workspaceId      String
+  approvedByUserId String?
+  ruleKey          String
+  version          Int      @default(1)
+  fromItemKey      String
+  toItemKey        String?
+  action           String   // REPLACE / REMOVE
+  status           String   @default("DRAFT") // DRAFT / APPROVED / REVOKED
+  constraints      Json?
+  evidenceRefs     Json?
+  ruleHash         String
+  approvedAt       DateTime?
+  createdAt        DateTime @default(now())
+
+  office     Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace  SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  approvedBy User?           @relation("SupplyEquivalenceRuleApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, ruleKey, version])
+  @@index([officeId, workspaceId, fromItemKey, status])
+  @@index([officeId, workspaceId, toItemKey, status])
+}
+
+// FCC records describe evidence and review state. They never assert that a
+// finished product passes FCC.
+model SupplyFccProfile {
+  id                              String   @id @default(cuid())
+  officeId                        String
+  workspaceId                     String
+  snapshotId                      String
+  itemId                          String   @unique
+  moduleAuthorization             String
+  moduleAuthorizationEvidenceRefs Json?
+  hostIntegrationConstraints      Json?
+  labeling                        String
+  labelingEvidenceRefs            Json?
+  rfExposure                      String
+  rfExposureEvidenceRefs          Json?
+  testing                         String
+  testingEvidenceRefs             Json?
+  testingGaps                     Json?
+  reviewRequirements              Json?
+  blockedReasons                  Json?
+  sourceRefs                      Json?
+  createdAt                       DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  item      SupplyItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, workspaceId, moduleAuthorization])
+}
+
+// One immutable deterministic run contains all scenario outputs, comparisons,
+// recommendation order, unknowns, and the hashes needed to reproduce it.
+model SupplyPlanningResult {
+  id                  String   @id @default(cuid())
+  officeId            String
+  workspaceId         String
+  snapshotId          String
+  createdByUserId     String?
+  engineVersion       String
+  snapshotHash        String
+  normalizedInputHash String
+  assumptions         Json
+  unknowns            Json
+  evidenceReferences  Json
+  output              Json
+  outputHash          String
+  createdAt           DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation("SupplyPlanningResultCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, normalizedInputHash])
+  @@index([officeId, workspaceId, createdAt])
+  @@index([snapshotId, engineVersion])
+  @@index([outputHash])
+}
+
+// Media is attributable operational context, not proof by itself. Snapshot-
+// linked assets become immutable with the rest of the published snapshot.
+model SupplyMediaAsset {
+  id            String  @id @default(cuid())
+  officeId      String
+  workspaceId   String
+  snapshotId    String?
+  itemId        String?
+  locationId    String?
+  kind          String
+  url           String
+  sourceUrl     String
+  sourcePageUrl String?
+  creator       String?
+  license       String?
+  attribution   String?
+  contentHash   String?
+  width         Int?
+  height        Int?
+  isPrimary     Boolean @default(false)
+
+  capturedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot  SupplySnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  item      SupplyItem?     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  location  SupplyLocation? @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([officeId, workspaceId, kind])
+  @@index([officeId, itemId, isPrimary])
+  @@index([officeId, locationId, isPrimary])
+  @@index([snapshotId])
+}
+
+// Evidence is append-only and independently addressable. Links below explain
+// how a decision or scenario used it without rewriting the source record.
+model SupplyEvidence {
+  id              String    @id @default(cuid())
+  officeId        String
+  workspaceId     String
+  snapshotId      String?
+  capabilityRunId String?
+  executionTaskId String?
+  createdByUserId String?
+  evidenceKey     String?
+  kind            String
+  sourceType      String
+  sourceUri       String?
+  sourceRecordId  String?
+  sourceVersion   String?
+  title           String
+  excerpt         String?
+  payload         Json?
+  contentHash     String?
+  confidence      Decimal?  @db.Decimal(5, 4)
+  observedAt      DateTime?
+  capturedAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+
+  office        Office                   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace     SupplyWorkspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot      SupplySnapshot?          @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  capabilityRun SupplyCapabilityRun?     @relation(fields: [capabilityRunId], references: [id], onDelete: SetNull)
+  executionTask SupplyExecutionTask?     @relation(fields: [executionTaskId], references: [id], onDelete: SetNull)
+  createdBy     User?                    @relation("SupplyEvidenceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  decisionLinks SupplyDecisionEvidence[]
+  scenarioLinks SupplyScenarioEvidence[]
+
+  @@unique([workspaceId, evidenceKey])
+  @@index([officeId, workspaceId, kind, capturedAt])
+  @@index([snapshotId, sourceType])
+  @@index([capabilityRunId])
+  @@index([executionTaskId])
+  @@index([contentHash])
+}
+
+// A capability run is one deterministic or agent-assisted DSL invocation.
+// Input and output hashes make retries and downstream evidence reproducible.
+model SupplyCapabilityRun {
+  id                String    @id @default(cuid())
+  officeId          String
+  workspaceId       String
+  snapshotId        String?
+  executionTaskId   String?
+  invokedByUserId   String?
+  parentRunId       String?
+  capabilityKey     String
+  capabilityVersion String
+  dslName           String?
+  dslVersion        String?
+  status            String    @default("QUEUED") // QUEUED / RUNNING / SUCCEEDED / FAILED / CANCELLED
+  input             Json
+  inputHash         String
+  output            Json?
+  outputHash        String?
+  error             Json?
+  traceId           String?
+  idempotencyKey    String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  office             Office                     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace          SupplyWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot           SupplySnapshot?            @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  executionTask      SupplyExecutionTask?       @relation(fields: [executionTaskId], references: [id], onDelete: Cascade)
+  invokedBy          User?                      @relation("SupplyCapabilityRunInvokedBy", fields: [invokedByUserId], references: [id], onDelete: SetNull)
+  parentRun          SupplyCapabilityRun?       @relation("SupplyCapabilityRunParent", fields: [parentRunId], references: [id], onDelete: Restrict)
+  childRuns          SupplyCapabilityRun[]      @relation("SupplyCapabilityRunParent")
+  evidence           SupplyEvidence[]
+  decisionsCreated   SupplyDecision[]
+  scenariosCreated   SupplyScenario[]
+  comparisonsCreated SupplyScenarioComparison[]
+  executionEvents    SupplyExecutionEvent[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([officeId, workspaceId, capabilityKey, status, createdAt])
+  @@index([snapshotId, capabilityKey])
+  @@index([executionTaskId, status])
+  @@index([parentRunId])
+  @@index([traceId])
+}
+
+// A decision is the stable approval object. Once proposed, its hash is the
+// exact scope a human approves. New analysis creates a superseding decision.
+model SupplyDecision {
+  id                   String    @id @default(cuid())
+  officeId             String
+  workspaceId          String
+  snapshotId           String
+  createdByUserId      String?
+  createdByRunId       String?
+  supersedesDecisionId String?
+  decisionType         String
+  subjectType          String
+  subjectRef           String
+  title                String
+  objective            String?
+  status               String    @default("DRAFT") // DRAFT / PROPOSED / APPROVED / REJECTED / SUPERSEDED / CANCELLED
+  riskLevel            String    @default("MEDIUM")
+  proposal             Json
+  proposalHash         String?
+  rationale            String?
+  constraints          Json?
+  idempotencyKey       String?
+  finalizedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  office         Office                     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace      SupplyWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot       SupplySnapshot             @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  createdBy      User?                      @relation("SupplyDecisionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByRun   SupplyCapabilityRun?       @relation(fields: [createdByRunId], references: [id], onDelete: SetNull)
+  supersedes     SupplyDecision?            @relation("SupplyDecisionSupersession", fields: [supersedesDecisionId], references: [id], onDelete: Restrict)
+  supersededBy   SupplyDecision[]           @relation("SupplyDecisionSupersession")
+  scenarios      SupplyScenario[]
+  comparisons    SupplyScenarioComparison[]
+  evidenceLinks  SupplyDecisionEvidence[]
+  approvals      SupplyApproval[]
+  executionTasks SupplyExecutionTask[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([officeId, workspaceId, status, createdAt])
+  @@index([snapshotId, decisionType])
+  @@index([subjectType, subjectRef])
+  @@index([supersedesDecisionId])
+}
+
+model SupplyScenario {
+  id                   String   @id @default(cuid())
+  officeId             String
+  workspaceId          String
+  decisionId           String
+  createdByRunId       String?
+  scenarioKey          String
+  name                 String
+  kind                 String   @default("ALTERNATIVE") // BASELINE / PROPOSED / ALTERNATIVE
+  summary              String?
+  assumptions          Json
+  measures             Json
+  supplierPlan         Json?
+  logisticsPlan        Json?
+  compliancePlan       Json?
+  currency             String?
+  expectedCost         Decimal? @db.Decimal(20, 4)
+  expectedLeadTimeDays Int?
+  riskLevel            String   @default("MEDIUM")
+  feasible             Boolean?
+  rank                 Int?
+  createdAt            DateTime @default(now())
+
+  office               Office                     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace            SupplyWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decision             SupplyDecision             @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  createdByRun         SupplyCapabilityRun?       @relation(fields: [createdByRunId], references: [id], onDelete: SetNull)
+  baselineComparisons  SupplyScenarioComparison[] @relation("SupplyScenarioComparisonBaseline")
+  candidateComparisons SupplyScenarioComparison[] @relation("SupplyScenarioComparisonCandidate")
+  evidenceLinks        SupplyScenarioEvidence[]
+  executionTasks       SupplyExecutionTask[]
+
+  @@unique([decisionId, scenarioKey])
+  @@index([officeId, workspaceId, decisionId, rank])
+  @@index([createdByRunId])
+}
+
+model SupplyScenarioComparison {
+  id                  String   @id @default(cuid())
+  officeId            String
+  workspaceId         String
+  decisionId          String
+  baselineScenarioId  String
+  candidateScenarioId String
+  createdByRunId      String?
+  measures            Json
+  costDelta           Decimal? @db.Decimal(20, 4)
+  leadTimeDeltaDays   Int?
+  riskDelta           String?
+  verdict             String?
+  rationale           String?
+  createdAt           DateTime @default(now())
+
+  office            Office               @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace         SupplyWorkspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decision          SupplyDecision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  baselineScenario  SupplyScenario       @relation("SupplyScenarioComparisonBaseline", fields: [baselineScenarioId], references: [id], onDelete: Cascade)
+  candidateScenario SupplyScenario       @relation("SupplyScenarioComparisonCandidate", fields: [candidateScenarioId], references: [id], onDelete: Cascade)
+  createdByRun      SupplyCapabilityRun? @relation(fields: [createdByRunId], references: [id], onDelete: SetNull)
+
+  @@unique([decisionId, baselineScenarioId, candidateScenarioId])
+  @@index([officeId, workspaceId, decisionId])
+  @@index([createdByRunId])
+}
+
+model SupplyDecisionEvidence {
+  id          String   @id @default(cuid())
+  officeId    String
+  workspaceId String
+  decisionId  String
+  evidenceId  String
+  usage       String   @default("SUPPORTS") // SUPPORTS / CONTRADICTS / CONSTRAINT / ASSUMPTION
+  note        String?
+  createdAt   DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decision  SupplyDecision  @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  evidence  SupplyEvidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([decisionId, evidenceId, usage])
+  @@index([officeId, workspaceId, decisionId])
+  @@index([evidenceId])
+}
+
+model SupplyScenarioEvidence {
+  id          String   @id @default(cuid())
+  officeId    String
+  workspaceId String
+  scenarioId  String
+  evidenceId  String
+  usage       String   @default("SUPPORTS")
+  note        String?
+  createdAt   DateTime @default(now())
+
+  office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scenario  SupplyScenario  @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  evidence  SupplyEvidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, evidenceId, usage])
+  @@index([officeId, workspaceId, scenarioId])
+  @@index([evidenceId])
+}
+
+// Approvals bind a human decision to the exact proposal or task input hash.
+// Terminal approval records cannot be rewritten by normal application code.
+model SupplyApproval {
+  id                String    @id @default(cuid())
+  officeId          String
+  workspaceId       String
+  decisionId        String?
+  executionTaskId   String?
+  requestedByUserId String?
+  decidedByUserId   String?
+  status            String    @default("PENDING") // PENDING / APPROVED / REJECTED / CANCELLED / EXPIRED
+  requiredRole      String?
+  scopeHash         String
+  requestReason     String?
+  requestContext    Json?
+  decisionNote      String?
+  idempotencyKey    String?
+  requestedAt       DateTime  @default(now())
+  decidedAt         DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  office        Office               @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace     SupplyWorkspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decision      SupplyDecision?      @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  executionTask SupplyExecutionTask? @relation(fields: [executionTaskId], references: [id], onDelete: Cascade)
+  requestedBy   User?                @relation("SupplyApprovalRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  decidedBy     User?                @relation("SupplyApprovalDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([officeId, workspaceId, status, requestedAt])
+  @@index([decisionId, status])
+  @@index([executionTaskId, status])
+}
+
+// Execution task stores the intended side effect. Execution events are the
+// append-only ledger of attempts, external acknowledgements, and outcomes.
+model SupplyExecutionTask {
+  id               String    @id @default(cuid())
+  officeId         String
+  workspaceId      String
+  snapshotId       String?
+  decisionId       String?
+  scenarioId       String?
+  createdByUserId  String?
+  parentTaskId     String?
+  taskKey          String
+  taskType         String
+  capabilityKey    String?
+  status           String    @default("PLANNED") // PLANNED / BLOCKED / READY / RUNNING / SUCCEEDED / FAILED / CANCELLED
+  requiresApproval Boolean   @default(true)
+  input            Json
+  inputHash        String
+  result           Json?
+  resultHash       String?
+  error            Json?
+  externalSystem   String?
+  externalRef      String?
+  idempotencyKey   String?
+  scheduledFor     DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  failedAt         DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  office         Office                 @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace      SupplyWorkspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshot       SupplySnapshot?        @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  decision       SupplyDecision?        @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  scenario       SupplyScenario?        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  createdBy      User?                  @relation("SupplyExecutionTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  parentTask     SupplyExecutionTask?   @relation("SupplyExecutionTaskParent", fields: [parentTaskId], references: [id], onDelete: Restrict)
+  childTasks     SupplyExecutionTask[]  @relation("SupplyExecutionTaskParent")
+  approvals      SupplyApproval[]
+  capabilityRuns SupplyCapabilityRun[]
+  evidence       SupplyEvidence[]
+  events         SupplyExecutionEvent[]
+
+  @@unique([workspaceId, taskKey])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([officeId, workspaceId, status, scheduledFor])
+  @@index([snapshotId, status])
+  @@index([decisionId, scenarioId])
+  @@index([parentTaskId])
+  @@index([externalSystem, externalRef])
+}
+
+model SupplyExecutionEvent {
+  id              String   @id @default(cuid())
+  officeId        String
+  workspaceId     String
+  executionTaskId String
+  capabilityRunId String?
+  actorUserId     String?
+  sequence        Int
+  eventType       String
+  status          String?
+  message         String?
+  payload         Json?
+  payloadHash     String?
+  idempotencyKey  String?
+  occurredAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  office        Office               @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace     SupplyWorkspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executionTask SupplyExecutionTask  @relation(fields: [executionTaskId], references: [id], onDelete: Cascade)
+  capabilityRun SupplyCapabilityRun? @relation(fields: [capabilityRunId], references: [id], onDelete: SetNull)
+  actor         User?                @relation("SupplyExecutionEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([executionTaskId, sequence])
+  @@unique([executionTaskId, idempotencyKey])
+  @@index([officeId, workspaceId, occurredAt])
+  @@index([capabilityRunId])
 }

@@ -3787,3 +3787,180 @@ Use this file for chronological implementation notes that future agents should s
   route-relevance, legend copy, chart gating, and map-control regressions.
 - Verification: new evidence test, command-map test, company-research test,
   diff checks, em-dash scan, and optimized production build passed.
+
+### 2026-08-08 - Consolidate the product into Supply OS
+
+- Made Supply OS the default and sole primary navigation destination, with
+  materials, suppliers, scenarios, logistics, and tracking in one shell.
+- Added tenant-scoped PostgreSQL persistence for shared office workspaces,
+  normalized CSV imports, immutable published snapshots, product structures,
+  inventory, demand, media, evidence, decisions, approvals, and action tasks.
+- Connected published snapshot data to the product twin with deterministic BOM
+  buildability calculations and explicit missing-data states.
+- Added the typed `supply-os/v1` capability DSL and concrete capability
+  contracts for ERP ingestion, product mapping, supplier and shipper discovery,
+  compliance, sourcing, logistics, tracking, and controlled execution.
+- Added deterministic proposal and action hashes, role-gated approvals,
+  self-approval protection, immutable approved decisions, and release only to
+  `READY` without external side effects.
+- Integrated office-scoped market evidence into scenario decisions and
+  redirected the standalone Supplier Finder and Market pages into Supply OS.
+- Added `docs/SUPPLY_OS_ARCHITECTURE.md` and
+  `docs/SUPPLY_OS_LEGACY_EXTRACTION.md` for durable architecture and cutover
+  boundaries.
+- Verification: focused UI, snapshot, persistence, DSL, execution, TypeScript,
+  diff hygiene, and prohibited-character checks passed. Disposable integration
+  databases were removed after verification.
+
+### 2026-08-08 - Cut Supply OS over to full-width product chrome
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: Remove the obsolete one-link sidebar, make Supply OS panels URL-backed,
+  move shared data controls into a modal, and constrain the workspace to the
+  available viewport.
+- Files changed: dashboard layout, Supply OS operating shell and styles, panel
+  routing helper and regression, single-surface regression, package scripts,
+  engineering log, and handoff.
+- Verification: single-surface, shell-routing, product-twin, and snapshot-twin
+  tests pass. TypeScript and diff hygiene pass. Authenticated browser checks at
+  1440 by 900, 1024 by 768, and 390 by 844 found zero page overflow and no
+  console errors. Panel query state, browser history, modal open, and Escape
+  close behavior were exercised.
+- Failed/skipped checks: the in-app browser controller was unavailable, so the
+  repository headless browser was used against a disposable local database.
+- Caveats: legacy operator detail routes remain available until their workflows
+  have equivalent Supply OS panels or drawers.
+- Follow-up: harden employee scope and snapshot-bound approvals before adding
+  more decision UI.
+
+### 2026-08-08 - Harden Supply OS workspace and snapshot trust boundaries
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: prevent restricted employees from inheriting office-wide workspace
+  access and prevent approvals or action release against stale supply data.
+- Files changed: Supply OS persistence and execution services, integration
+  regressions, engineering log, and handoff.
+- Verification: persistence and execution integration tests pass against
+  disposable PostgreSQL databases. TypeScript, diff hygiene, and the
+  changed-content prohibited-character scan pass.
+- Caveats: database-level composite tenant and snapshot consistency guards
+  remain a separate migration. Future external executors must recheck the
+  current snapshot immediately before performing a side effect.
+- Follow-up: add database consistency constraints, then build the deterministic
+  multi-level planning engine without treating missing commercial data as zero.
+
+### 2026-08-08 - Enforce Supply OS reference scope in PostgreSQL
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: make tenant and snapshot reference integrity a database invariant
+  instead of relying only on application query discipline.
+- Added a forward migration that rejects cross-office company and user links on
+  workspaces, memberships, imports, snapshots, and aliases. It also rejects
+  BOM, inventory, demand, and media references outside the exact owning
+  snapshot.
+- Added integration coverage for a foreign-office member, a foreign-office
+  workspace creator, and an inventory item borrowed from another snapshot.
+- Verification: the full migration chain deploys into a fresh PostgreSQL
+  database. Persistence and execution integration suites, Prisma validation,
+  TypeScript, diff hygiene, and changed-content prohibited-character checks
+  pass.
+- Follow-up: treat the deterministic planning engine and visual product twin as
+  the next parallel product checkpoints. Database safety is no longer the
+  excuse for leaving the main page visually static.
+
+### 2026-08-08 - Harden Supply OS ingestion and component research
+
+- Branch: agent3/data-ingestion-supplier-intelligence, integrated into
+  supply-os-grand-vision
+- Expanded the normalized snapshot contract to eight CSV types with header
+  detection, explicit mappings, malformed-row locations, deterministic row
+  ordering, templates, reference and cycle checks, unit and coordinate checks,
+  inventory freshness, and optional purchase-order, supplier-term, and
+  compliance datasets.
+- Registered CSV, SAP, and Oracle behind one adapter contract. SAP and Oracle
+  remain explicitly unavailable and hold no connector credentials.
+- Added deterministic product identity resolution. Exact identifiers may
+  resolve automatically; lexical and optional vector candidates remain human
+  review proposals and cannot publish inferred BOM edges.
+- Added component-scoped supplier research with citation filtering, common
+  evidence envelopes, freshness, official-domain checks, no-source
+  degradation, role-qualified provider gates, approval scope checks, bounded
+  research fetch policy, and rate limiting.
+- Added a forward migration that keeps missing inventory quantities and BOM
+  scrap rates nullable instead of silently converting them to zero.
+- Verification: focused CSV, identity, research, supplier, DSL, lane,
+  suppression, intelligence-map, persistence, and execution suites passed.
+  All migrations deployed into fresh PostgreSQL databases. Prisma validation,
+  touched-path tenant audit, TypeScript, production build, and diff hygiene
+  passed.
+- Caveat: optional purchase-order, supplier-term, and compliance rows are
+  immutable snapshot metadata in this slice. They need dedicated relational
+  models when execution or cross-snapshot querying is implemented.
+
+### 2026-08-08 - Add deterministic Supply OS planning and scenario results
+
+- Branch: agent2/deterministic-planning-engine, integrated into
+  supply-os-grand-vision
+- Task: Build the server-owned planning brain without changing Supply OS UI or
+  dashboard routes.
+- Added a pure engine for multi-level BOM explosion, shared-component and
+  facility constraints, dated demand coverage, shortage dates, commercial and
+  evidence completeness, cash exposure, FCC review state, and deterministic
+  scenario recommendation order.
+- Added canonical snapshot supplier terms and FCC profiles, workspace-approved
+  equivalence rules, an expected inventory receipt date, and an append-only
+  planning result with reproducibility hashes.
+- Added a strict server loader that rejects client-authored rank, cost,
+  feasibility, lead time, and unsupported request fields. It computes stale
+  state by comparing immutable results with the latest published snapshot.
+- Added focused acceptance coverage for deep BOMs, scrap, optional lines,
+  shared components, shortage dates, assembled buys, alternate suppliers,
+  approved and unapproved substitutes, unknown commercial fields, row-order
+  determinism, cycle and unit rejection, FCC blocking, result immutability,
+  stale snapshots, and client trust boundaries.
+- Verification: focused tests, tenant audit, Prisma validation, TypeScript,
+  fresh migration deploy, production build, diff hygiene, and prohibited
+  character scan. See the current handoff for exact command status.
+- Follow-up: teach customer-specific ingestion adapters to populate canonical
+  supplier terms, FCC profiles, and distinct receipt-date positions.
+
+### 2026-08-08 - Cut legacy operator navigation over to Supply OS
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: stop rendering legacy module entry pages as competing products while
+  preserving engines, side-effect boundaries, and utility surfaces.
+- CRM and Search now enter Materials; RFQ and Outreach enter Suppliers; Intel,
+  Intelligence, Brain, Pricing, and Reports enter Scenarios; Jobs, Loads,
+  Carriers, and Domestic Pricing enter Logistics; Inbox and Activity enter
+  Tracking.
+- Old Supply OS builder and workstream URLs also return to panel state in the
+  single workspace. Query and prior-path context remain available for future
+  drawers.
+- Navigation-only redirects leave server actions, APIs, background workers,
+  admin, settings, authentication, and the customer portal intact.
+- Verification: legacy route, single-surface, and panel-routing regressions,
+  TypeScript, and diff hygiene pass.
+- Follow-up: replace unreachable page wrappers with redirect stubs and remove
+  UI-only dependencies after import analysis.
+
+### 2026-08-08 - Remove the first obsolete legacy page implementations
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: stop compiling unreachable legacy operator interfaces after the route
+  cutover, without deleting reusable engines or server actions.
+- Replaced Dashboard home, Activity, Brain, Carriers, CRM, Domestic Pricing,
+  Inbox, Outreach, Pricing, Reports, and Search page implementations with typed
+  Supply OS redirect stubs.
+- Removed roughly 7,700 lines of obsolete page UI while retaining action files,
+  domain logic, APIs, admin, settings, and customer portal surfaces.
+- Production build confirms the retired routes now use the shared minimal
+  redirect bundle instead of their former page-specific bundles.
+- Verification: legacy-route and single-surface regressions, TypeScript,
+  production build, and diff hygiene pass.
+- Follow-up: extract and retire the remaining Intel, Intelligence, Jobs, Loads,
+  RFQ, builder, and workstream page wrappers without breaking embedded engines.

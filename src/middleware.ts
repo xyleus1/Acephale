@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { legacySupplyOsDestination } from "@/lib/supply-os/legacy-route-map";
 
 // Auto-focus a job when the user navigates to its detail page.
 // The cookie persists across pages so the context strip travels with the user.
 const JOB_DETAIL_RE = /^\/dashboard\/jobs\/([^/?]+)/;
 const RESERVED = new Set(["new"]);
 
-// Loadboard-only accounts (UserRole.EMPLOYEE) may only open the loads
-// surfaces; everything else bounces to their home board.
-const EMPLOYEE_HOME = "/dashboard/loads";
+// Employees enter through the same Supply OS surface and retain temporary
+// access to assigned load details while execution is integrated into it.
+const EMPLOYEE_HOME = "/dashboard/supply-os";
 
 function isEmployeeAllowedPath(pathname: string) {
+  if (pathname === "/dashboard/supply-os" || pathname.startsWith("/dashboard/supply-os/")) return true;
   if (pathname === "/dashboard/loads" || pathname.startsWith("/dashboard/loads/")) return true;
   if (pathname === "/dashboard/jobs" || pathname.startsWith("/dashboard/jobs/")) {
     // Creating loads stays an admin/ops task; employees work existing ones.
@@ -52,6 +54,17 @@ async function sessionRoleFromCookie(token: string | undefined): Promise<string 
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+
+  if (pathname === "/dashboard") {
+    return NextResponse.redirect(new URL("/dashboard/supply-os", req.url));
+  }
+
+  if (req.method === "GET" || req.method === "HEAD") {
+    const legacyDestination = legacySupplyOsDestination(pathname, req.nextUrl.search);
+    if (legacyDestination) {
+      return NextResponse.redirect(new URL(legacyDestination, req.url));
+    }
+  }
 
   const role = await sessionRoleFromCookie(req.cookies.get("crm_session")?.value);
   if (role === "EMPLOYEE" && !isEmployeeAllowedPath(pathname)) {

@@ -3559,6 +3559,16 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: 0; }
   margin: 0 auto;
 }
 
+.topbar-product-label {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .topbar-right {
   display: flex;
   align-items: center;
@@ -31127,7 +31137,7 @@ body,
   width: var(--sidebar-width) !important;
 }
 
-.content {
+.app-shell:not(.app-shell-single-surface) > .content {
   margin-left: var(--sidebar-rail-width) !important;
   transition: margin-right 160ms ease-out !important;
 }
@@ -36129,4 +36139,18 @@ body.supply-os-presentation .page-container {
   width: 100% !important;
   max-width: none !important;
   padding: 0 !important;
+}
+
+/* Supply OS is the authenticated product shell. Utility routes share the
+   compact header, but the retired navigation rail is no longer rendered. */
+.app-shell-single-surface > .content {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  flex-basis: 100%;
+}
+
+.app-shell-single-surface > .content > .page-container {
+  max-width: none;
+  padding: 0;
 }
