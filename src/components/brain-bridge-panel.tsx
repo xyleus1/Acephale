@@ -3,7 +3,7 @@ import type { BrainBridgeResult, BrainBridgeSection } from "@/lib/brain-bridge";
 type Tone = "neutral" | "good" | "warn" | "danger" | "info";
 
 const MODE_META: Record<BrainBridgeResult["mode"], { label: string; tone: Tone }> = {
-  live: { label: "Live GBrain", tone: "good" },
+  live: { label: "Live", tone: "good" },
   mock: { label: "Mock mode", tone: "warn" },
   disabled: { label: "Disabled", tone: "neutral" },
   error: { label: "Unavailable", tone: "danger" },
@@ -35,7 +35,7 @@ export function BrainBridgePanel({ result }: { result: BrainBridgeResult }) {
     <section className="card brain-bridge-panel">
       <div className="card-body">
         <div className="brain-bridge-header">
-          <h2>Brain context</h2>
+          <h2>Recorded context</h2>
           {result.sections.length > 0 && <span>{result.sections.length}</span>}
         </div>
         <div className="brain-bridge-state">
@@ -85,8 +85,7 @@ export function BrainBridgePanel({ result }: { result: BrainBridgeResult }) {
         )}
         <div className="brain-bridge-block">
           <p>
-            <strong>Gate:</strong> Read-only memory context. Product truth wins on any conflict. Web-intel sections are
-            proposed context, not operational fact. No customer-facing action from this panel.
+            <strong>Limit:</strong> Read only. RFQ records override this context. Review web sources before use.
           </p>
         </div>
       </div>

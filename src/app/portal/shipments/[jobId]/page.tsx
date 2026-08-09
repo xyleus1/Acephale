@@ -321,7 +321,6 @@ export default async function CustomerPortalShipmentPage({
               <div className={styles.cardHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Shipment details</h2>
-                  <p className={styles.cardCopy}>Cargo and handling details recorded for this shipment.</p>
                 </div>
               </div>
               <div className={styles.factGrid}>
@@ -339,7 +338,6 @@ export default async function CustomerPortalShipmentPage({
                 <div className={styles.cardHeader}>
                   <div>
                     <h2 className={styles.cardTitle}>Customer quote</h2>
-                    <p className={styles.cardCopy}>Pricing currently attached to this shipment.</p>
                   </div>
                   {totals.length === 1 && <strong className={styles.quoteTotal}>{totals[0][1].toLocaleString()} {totals[0][0]}</strong>}
                 </div>
@@ -418,7 +416,6 @@ export default async function CustomerPortalShipmentPage({
               <div className={styles.cardHeader}>
                 <div>
                   <h2 className={styles.cardTitle}>Documents</h2>
-                  <p className={styles.cardCopy}>Requested uploads and approved files.</p>
                 </div>
                 <span className={styles.count}>{visibleDocumentCount}</span>
               </div>

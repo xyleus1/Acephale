@@ -492,7 +492,7 @@ function cachedPricingDecisionContractSummary(args: {
       ? `${firstBlocker ?? args.decisionQuality.detail} ${args.playbookStopCondition}`
       : state === "review"
         ? `${args.playbookObjective} is allowed as a review artifact; cached proof may still require approval or refresh.`
-        : `${args.playbookObjective} can be prepared from the cached commercial assessment.`,
+        : `${args.playbookObjective} can be prepared from the saved review.`,
     proven: proven.slice(0, 4),
     assumptions: assumptions.slice(0, 5),
     allowedAgentMoves: state === "blocked"
@@ -784,7 +784,7 @@ function commandSummaryFromCached(
     || readString(decisionBrief, "nextCommand")
     || readString(target, "stance")
     || assessment.strategyMemo
-    || "Cached commercial assessment";
+    || "Saved review";
   const priority = normalizePriority(readString(nextAction, "priority") ?? primaryAction?.priority);
   const band = normalizeBand(readString(decisionBrief, "band") ?? assessment.band);
   const confidence = normalizeConfidence(readString(decisionBrief, "confidence") ?? assessment.confidence);
@@ -2232,7 +2232,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Sear
                   <div className="pricing-inquiry-subject">{inq.subject}</div>
                   <div className={`pricing-inquiry-command ${commandTone}${summary?.stale ? " stale" : ""}`}>
                     <span>{summary?.commandLabel ?? "Review RFQ"}</span>
-                    <strong>{summary?.commandReason ?? "No commercial assessment"}</strong>
+                    <strong>{summary?.commandReason ?? "No saved review"}</strong>
                   </div>
                   {(inq.origin || inq.destination) && (
                     <div className="pricing-inquiry-route">

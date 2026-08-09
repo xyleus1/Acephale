@@ -507,7 +507,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         <div className="workbench-card-header">
           <div>
             <h2>Daily Market Automation</h2>
-            <p>Hobby-compatible daily cron at 11:00 UTC. Advisory-only; it never mutates jobs, RFQs, quotes, prices, customers, milestones, or messages.</p>
+            <p>Daily at 11:00 UTC. Advisory only.</p>
           </div>
           <span className={["pricing-status", scheduledStatus.config.cronEnabled ? "status-priced" : "status-needs-info"].join(" ")}>
             {scheduledStatus.config.cronEnabled ? "enabled" : "disabled"}
@@ -571,7 +571,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         <div className="workbench-card-header">
           <div>
             <h2>Source Health</h2>
-            <p>Registry policy, deterministic quality score, and safe manual Firecrawl controls. Disabled means not scheduled.</p>
+            <p>Disabled sources are not scheduled.</p>
           </div>
           <span className="muted">{enabledSourceCount} enabled / {disabledSourceCount} disabled</span>
         </div>
@@ -689,7 +689,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         <div className="workbench-card-header">
           <div>
             <h2>Research Feed</h2>
-            <p>Ranked raw source objects before they become operational claims.</p>
+            <p>Unreviewed source records.</p>
           </div>
         </div>
         <div className="intelligence-list">
@@ -746,7 +746,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         <div className="workbench-card-header">
           <div>
             <h2>Market Signals</h2>
-            <p>Ranked operational interpretations. Still advisory until reviewed.</p>
+            <p>Advisory until reviewed.</p>
           </div>
         </div>
         <div className="intelligence-list">
@@ -799,7 +799,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
         <div className="workbench-card-header">
           <div>
             <h2>Ingestion Runs</h2>
-            <p>Connector observability. Errors live here instead of disappearing into logs.</p>
+            <p>Connector errors.</p>
           </div>
         </div>
         <div className="intelligence-run-grid">

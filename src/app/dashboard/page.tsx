@@ -106,7 +106,7 @@ function TargetPriceTrail({
     <section className="target-trail" aria-label="Target price history">
       <div className="target-trail-head">
         <div>
-          <div className="target-trail-kicker">Target price memory</div>
+          <div className="target-trail-kicker">Target price history</div>
           <h2>{statusLabel}</h2>
         </div>
         <div className="target-trail-current">
@@ -470,7 +470,7 @@ function DecisionFlowPanel({
     },
     {
       key: "price",
-      label: "Pricing review",
+      label: "Price check",
       status: guardrail === "PASS" ? "ready" : guardrail === "BLOCKED" ? "blocked" : "review",
       title: guardrail.toLowerCase().replace("_", " "),
       meta: `${targetPriceLabel} · ${quoteCoverage}`,
@@ -488,11 +488,7 @@ function DecisionFlowPanel({
     <section className="decision-flow-panel">
       <div className="decision-flow-head">
         <div>
-          <div className="decision-flow-kicker">Commercial assessment</div>
           <h2>Lead to quote flow</h2>
-        </div>
-        <div className="decision-flow-note">
-          One path: pick lead, mature RFQ, protect price, prove with documents.
         </div>
       </div>
       <div className="decision-flow-steps">
@@ -541,10 +537,6 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
       <div className="workbench-overview-shell">
         <section className="ops-brief dashboard-overview-brief" aria-label="Top-down decision dashboard">
           <div className="ops-brief-copy">
-            <div className="ops-eyebrow">
-              <span className="ops-status-light" aria-hidden />
-              Top-down dashboard
-            </div>
             <div className="ops-brief-title">
               <strong>Control sheet and RFQ queue</strong>
             </div>
@@ -1027,7 +1019,7 @@ async function _DashboardPageImpl(stageOverride: string | null, dashboardView: D
 
       <div className="card workbench-card">
         <div className="workbench-card-header">
-          <div className="workbench-kicker">Deal Timeline</div>
+          <div className="workbench-kicker">Timeline</div>
           <div className="workbench-note small">
             {timelineMilestones.filter((m) => m.actualAt).length} of {timelineMilestones.length} confirmed
           </div>
@@ -1246,7 +1238,6 @@ function ReferenceDealSnapshot({
     <section className="sheet-snapshot">
       <div className="sheet-snapshot-header">
         <div>
-          <div className="sheet-kicker">Control sheet decision board</div>
           <h2>Next commercial work</h2>
         </div>
         <div className="sheet-total">
@@ -1352,7 +1343,7 @@ function ReferenceDealSnapshot({
         </div>
 
         <div className="sheet-contact-list">
-          <div className="sheet-section-label">Where the money is clustered</div>
+          <div className="sheet-section-label">Profit by contact</div>
           {summary.byContact.slice(0, 3).map((contact) => (
             <div key={contact.contact} className="sheet-contact-row">
               <strong>{contact.contact}</strong>
@@ -1401,11 +1392,11 @@ function StageWorkbench({
 
   // Header strip + stage-specific content
   const STAGE_TITLES: Record<string, { title: string; sub: string }> = {
-    INQUIRY:    { title: "Source RFQ & rate procurement",   sub: "What an inquiry needs: parsed fields, then carrier rate sourcing." },
-    QUOTED:     { title: "Sellside quote builder",           sub: "Build the customer-facing quote. Send when ready." },
-    BOOKED:     { title: "Booked / waiting cargo",           sub: "Confirm booking details and wait for cargo readiness." },
-    IN_TRANSIT: { title: "En route",                         sub: "Use email updates as the source of truth until delivery." },
-    DELIVERED:  { title: "Settlement",                       sub: "Final invoice, margin reconciliation." },
+    INQUIRY:    { title: "RFQ and carrier rates", sub: "" },
+    QUOTED:     { title: "Customer quote", sub: "" },
+    BOOKED:     { title: "Cargo readiness", sub: "" },
+    IN_TRANSIT: { title: "In transit", sub: "" },
+    DELIVERED:  { title: "Settlement", sub: "" },
   };
   const stage = STAGE_TITLES[status] ?? { title: "Workbench", sub: "" };
 
@@ -1415,7 +1406,7 @@ function StageWorkbench({
       <div className="stage-header">
         <div className="stage-heading">
           <div className="stage-eyebrow">
-            Stage workbench · {STATUS_LABEL[status] ?? status}
+            Stage · {STATUS_LABEL[status] ?? status}
             {isPreview && (
               <span className="stage-preview-pill">
                 Preview · job is {STATUS_LABEL[actualStatus] ?? actualStatus}
@@ -1423,7 +1414,7 @@ function StageWorkbench({
             )}
           </div>
           <div className="stage-title">{stage.title}</div>
-          <div className="stage-subtitle">{stage.sub}</div>
+          {stage.sub && <div className="stage-subtitle">{stage.sub}</div>}
         </div>
         <div className="stage-switcher" role="tablist" aria-label="Workbench stage">
           {STAGE_KEYS.map((s) => {
@@ -1624,9 +1615,7 @@ function QuotedStage({ job, quoteLines, laneRates, carrierQuotes }: {
         <div className="worktable-section-header split">
           <div>
             <div className="stage-panel-title">Carrier rates received</div>
-            <div className="stage-panel-subtitle">
-              Aggregated quotes for this load. Cheapest 40HC flagged. Click Use this rate to seed the customer-facing quote.
-            </div>
+            <div className="stage-panel-subtitle">Select a rate for the customer quote.</div>
           </div>
           <div className="workbench-count-row">
             <span className="workbench-count-pill">Pending: {pending.length}</span>

@@ -427,7 +427,7 @@ function CustomerShipment({ shipment }: { shipment: CustomerPortalShipment }) {
             </section>
 
             <section className={portalStyles.card}>
-              <div className={portalStyles.cardHeader}><div><h2 className={portalStyles.cardTitle}>Shipment details</h2><p className={portalStyles.cardCopy}>Cargo and handling details recorded for this shipment.</p></div></div>
+              <div className={portalStyles.cardHeader}><div><h2 className={portalStyles.cardTitle}>Shipment details</h2></div></div>
               <div className={portalStyles.factGrid}>
                 <div className={portalStyles.fact}><span>Mode</span><strong>{shipment.mode}</strong></div>
                 <div className={portalStyles.fact}><span>Equipment</span><strong>{equipmentLabel(shipment)}</strong></div>
@@ -441,7 +441,7 @@ function CustomerShipment({ shipment }: { shipment: CustomerPortalShipment }) {
             {shipment.quoteLines.length > 0 && (
               <section className={portalStyles.card} id="quote">
                 <div className={portalStyles.cardHeader}>
-                  <div><h2 className={portalStyles.cardTitle}>Customer quote</h2><p className={portalStyles.cardCopy}>Pricing currently attached to this shipment.</p></div>
+                  <div><h2 className={portalStyles.cardTitle}>Customer quote</h2></div>
                   {totals.length === 1 && <strong className={portalStyles.quoteTotal}>{totals[0][1].toLocaleString()} {totals[0][0]}</strong>}
                 </div>
                 <div className={portalStyles.quoteLines}>
@@ -467,7 +467,7 @@ function CustomerShipment({ shipment }: { shipment: CustomerPortalShipment }) {
             )}
 
             <section className={portalStyles.card} id="documents">
-              <div className={portalStyles.cardHeader}><div><h2 className={portalStyles.cardTitle}>Documents</h2><p className={portalStyles.cardCopy}>Requested uploads and approved files.</p></div><span className={portalStyles.count}>{visibleDocumentCount}</span></div>
+              <div className={portalStyles.cardHeader}><div><h2 className={portalStyles.cardTitle}>Documents</h2></div><span className={portalStyles.count}>{visibleDocumentCount}</span></div>
               <div className={portalStyles.documentList}>
                 {shipment.documentRequests.length > 0 && (
                   <div className={portalStyles.documentGroup}>

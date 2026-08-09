@@ -18,15 +18,15 @@ const BRAIN_SUGGESTIONS = [
   },
   {
     label: "Pricing queue",
-    prompt: "List the pricing review queue. Start with the operator playbook: exact ask or first move, safety rule, stop condition, and review link for the top RFQ.",
+    prompt: "List the pricing queue and the next action for each RFQ.",
   },
   {
     label: "Stale follow-ups",
     prompt: "Find stale customer or forwarder follow-ups that need attention.",
   },
   {
-    label: "Inspect assessments",
-    prompt: "Inspect open commercial assessments: what proof is missing and what can the operator do next?",
+    label: "Blocked RFQs",
+    prompt: "List RFQs blocked by missing proof and the next action for each.",
   },
   {
     label: "Qualify newest RFQ",
@@ -92,14 +92,11 @@ export function CompanyBrainChat() {
 
   return (
     <>
-      <div className="brain-chat" aria-label="Company brain chat">
+      <div className="brain-chat" aria-label="Context search">
         <div ref={scrollRef} className="brain-chat-scroll">
           {messages.length === 0 && !busy ? (
             <div className="brain-chat-empty">
               <h1 className="brain-chat-empty-title">Search company context</h1>
-              <p className="brain-chat-empty-copy">
-                Ask about deals, pricing, follow-ups, and market conditions.
-              </p>
               <div className="brain-chip-row" aria-label="Suggested questions">
                 {BRAIN_SUGGESTIONS.map((suggestion) => (
                   <button
@@ -145,7 +142,7 @@ export function CompanyBrainChat() {
             value={input}
             onChange={onInputChange}
             onKeyDown={onKeyDown}
-            placeholder="Ask the company brain..."
+            placeholder="Search companies, loads, and messages"
             rows={1}
             disabled={busy}
           />

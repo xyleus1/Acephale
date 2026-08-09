@@ -7,7 +7,7 @@ import { TaskListInline } from "@/components/task-list-inline";
 import { WorldIntelligenceMap } from "@/components/intelligence/world-intelligence-map";
 import { getIntelligenceMapData } from "@/lib/market-intelligence/intelligence-map";
 
-export const metadata = { title: "Company Brain" };
+export const metadata = { title: "Context" };
 
 type SearchParams = Promise<{
   section?: string;
@@ -55,9 +55,6 @@ export default async function CompanyBrainPage({ searchParams }: { searchParams:
         <div className="brain-section-head">
           <div>
             <h2 className="brain-section-title">Open to-dos</h2>
-            <p className="brain-section-note">
-              Collected from the daily ops crons and the CRM. Tick a task to mark it done.
-            </p>
           </div>
         </div>
         <div className="brain-card">
@@ -84,9 +81,7 @@ export default async function CompanyBrainPage({ searchParams }: { searchParams:
         <div className="brain-section-head">
           <div>
             <h2 className="brain-section-title">Daily news</h2>
-            <p className="brain-section-note">
-              Refreshed daily at 11:00 UTC by the market intelligence cron.
-            </p>
+            <p className="brain-section-note">Updated daily at 11:00 UTC.</p>
           </div>
           <Link href="/dashboard/intelligence" className="brain-section-link">Market intelligence</Link>
         </div>
@@ -171,9 +166,7 @@ export default async function CompanyBrainPage({ searchParams }: { searchParams:
           {mapSwitcher}
           <div className="brain-placeholder">
             <h2 className="brain-section-title">Internal company map</h2>
-            <p className="brain-placeholder-copy">
-              The map is not configured. Current memory record counts are shown below.
-            </p>
+            <p className="brain-placeholder-copy">Not configured.</p>
             <div className="brain-count-row" aria-label="Memory substrate counts">
               <div className="brain-count">
                 <div className="brain-count-value">{knowledgeObjects}</div>
@@ -198,8 +191,8 @@ export default async function CompanyBrainPage({ searchParams }: { searchParams:
     // <main> so the agent page-cue fallback (querySelector("main")) resolves here.
     <main className={`brain-page${active === "chat" ? " brain-page-chat" : ""}`}>
       <header className="brain-header">
-        <div className="brain-kicker">Company Brain</div>
-        <nav className="brain-switch" aria-label="Company brain sections">
+        <div className="brain-kicker">Context</div>
+        <nav className="brain-switch" aria-label="Context sections">
           {SECTIONS.map((item) => (
             <Link
               key={item.key}

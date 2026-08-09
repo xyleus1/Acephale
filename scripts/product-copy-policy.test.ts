@@ -40,6 +40,12 @@ const rules: CopyRule[] = [
     scope: "all-source",
   },
   {
+    name: "generic capability tagline",
+    pattern:
+      /\b(?:products?,\s*inventory,\s*sourcing,\s*and execution|RFQs,\s*target price,\s*forwarder replies|procurement intelligence|candidate bench|company brain|pricing brain|decision brain|brain context|commercial assessment|target price memory|control sheet decision board|data room|managed freight,\s*shared clearly|in one place)\b/giu,
+    scope: "ui",
+  },
+  {
     name: "banned Derya metaphor or slogan",
     pattern:
       /\b(?:cited freight evidence|economic unlock|margin unlock|data unlock|quote flywheel|US trucking wedge|where the next RFQ money is|survive the brain|the brain is refusing|the brain should|(?:pricing|decision|load|commercial decision) brain|brain (?:lab|queue|snapshot|snapshots|recommendation|recommendations|result|results|view|read|changes)|command center|pull trusted market data to light up the map)\b/giu,

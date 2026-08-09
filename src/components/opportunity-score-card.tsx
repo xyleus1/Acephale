@@ -105,7 +105,6 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
     <section className={`opp-card ${toneClass(score.score)}`}>
       <div className="opp-card-top">
         <div>
-          <div className="opp-eyebrow">Strategy</div>
           <div className="opp-title">{score.recommendationLabel}</div>
           <div className="opp-action">{score.action}</div>
         </div>
@@ -239,7 +238,6 @@ export function OpportunityScoreCard({ score }: { score: OpportunityScore }) {
                 <span className="strategy-section-label">Clear next</span>
                 <strong>No blocker queue</strong>
               </div>
-              <p>The current decision is not waiting on missing RFQ facts. Trust the quote gate and guardrail before execution.</p>
             </div>
           )}
 

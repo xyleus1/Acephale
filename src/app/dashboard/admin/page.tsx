@@ -442,7 +442,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const queuedJobs = backgroundCount("QUEUED");
   const runningJobs = backgroundCount("RUNNING");
   const failedJobs = backgroundCount("FAILED");
-  const pageTitle = tab === "brain" ? "Commercial Assessment" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : tab === "audit" ? "Activity Log" : "Team";
+  const pageTitle = tab === "brain" ? "Scenario Lab" : tab === "agent" ? "Agent Audit" : tab === "jobs" ? "System Jobs" : tab === "audit" ? "Activity Log" : "Team";
   const pageSubtitle = tab === "audit"
     ? `${auditLogs.length} recent changes · who did what on which load`
     : tab === "agent"
@@ -649,7 +649,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {/* Commercial assessment tab */}
+      {/* Scenario tab */}
       {tab === "brain" && canSeeAgentAudit && (
         <div className="admin-brain">
           <form action="/dashboard/admin" method="get" className="admin-brain-selector">
@@ -664,7 +664,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 ))}
               </select>
             </label>
-            <button type="submit" className="btn-sm">Load assessment</button>
+            <button type="submit" className="btn-sm">Load job</button>
             {selectedBrainJobId && (
               <Link href={`/dashboard/jobs/${selectedBrainJobId}`} className="admin-brain-open-link">
                 Open job
@@ -727,14 +727,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   {brainScenario ? (
                     <BrainScenarioResult result={brainScenario} />
                   ) : (
-                    <p>Enter a target, buy cost, or floor margin to see how the assessment changes the gate, price, margin, route confidence, and operator action.</p>
+                    <p>Enter a target, buy cost, or floor margin to recalculate the decision.</p>
                   )}
                 </div>
               </section>
 
               <section className="admin-brain-card admin-brain-wide">
                 <div className="admin-brain-card-head">
-                  <span>Active assessment snapshots</span>
+                  <span>Active assessments</span>
                   <strong>{activeBrainAssessments.length}</strong>
                 </div>
                 <div className="admin-brain-snapshot-list">

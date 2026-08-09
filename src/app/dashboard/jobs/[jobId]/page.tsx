@@ -371,7 +371,7 @@ function ProposalDecisionDossier({
     {
       key: "brain",
       tone: proposalToneFromStop(firstStop.tone),
-      label: "Decision review",
+      label: "Decision score",
       value: `Grade ${gradeDelta}`,
       detail: `${missingDelta}. Next stop: ${formatProposalValue(firstStop.label)}.`,
     },

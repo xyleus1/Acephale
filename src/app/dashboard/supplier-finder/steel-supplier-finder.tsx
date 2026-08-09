@@ -223,9 +223,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
     <main className={styles.page}>
       <header className={styles.hero}>
         <div>
-          <span className={styles.eyebrow}>Procurement intelligence</span>
-          <h1>Steel Supplier Finder</h1>
-          <p>Find evidence-backed candidates for raw materials, fuel, semi-finished goods, and finished steel products.</p>
+          <h1>Supplier Finder</h1>
         </div>
         <div className={styles.heroBoundary}>
           <ShieldCheck size={18} />
@@ -324,7 +322,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
               onChange={(event) => setField("confidentialOriginNotes", event.target.value)}
               placeholder="Current origins, supplier relationships, sensitivities, or names that must never enter public research"
             />
-            <p>This field is saved under your office and user browser scope. It is never included in the search request.</p>
+            <p>Browser only. Excluded from public search.</p>
           </section>
 
           <section className={styles.gateCard}>
@@ -347,7 +345,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
       <section className={styles.resultsSection} aria-live="polite">
         <header className={styles.resultsHeader}>
           <div>
-            <span className={styles.eyebrow}>Candidate bench</span>
+            <span className={styles.eyebrow}>Results</span>
             <h2>{result ? `${result.candidates.length} attributable candidates` : "No search run yet"}</h2>
           </div>
           {result ? <small>Researched {new Date(result.searchedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</small> : null}
@@ -356,8 +354,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
         {!result ? (
           <div className={styles.emptyState}>
             <Factory size={25} />
-            <h3>Start with the exact product, not a generic supplier category</h3>
-            <p>A steel mill, commodity trader, raw-material producer, and Türkiye representative are different counterparties. The brief keeps them separate.</p>
+            <h3>Enter a product to search</h3>
           </div>
         ) : (
           <>
@@ -368,7 +365,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
                   <div><Images size={16} /><h3>Product and market images</h3></div>
                   <small>{result.visuals.filter((visual) => visual.candidateId === null).length} public images</small>
                 </header>
-                <p>Use the linked source page to confirm what each image shows. An image is not proof of grade, origin, availability, or product fit.</p>
+                <p>Images do not prove grade, origin, availability, or product fit.</p>
                 <SupplierVisualGallery visuals={result.visuals.filter((visual) => visual.candidateId === null)} />
               </section>
             ) : null}
@@ -399,7 +396,7 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
                           <small>{candidateVisuals.length} linked sources</small>
                         </header>
                         <SupplierVisualGallery visuals={candidateVisuals} compact />
-                        <p>These images do not prove that the candidate owns the site, produced the goods shown, or controls the facility.</p>
+                        <p>Images do not prove ownership, production, or facility control.</p>
                       </section>
                     ) : null}
 

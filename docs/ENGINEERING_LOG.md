@@ -3212,3 +3212,20 @@ Use this file for chronological implementation notes that future agents should s
   disposable Postgres URLs. Authenticated visual QA remains pending because no
   local test login was available, and the pass did not send a real login code
   or weaken authentication.
+
+### 2026-08-08 - Remove generic capability copy from active pages
+
+- Branch: `remove-retired-product-bloat`, targeting `main`.
+- Removed redundant taglines, eyebrow labels, section explanations, and empty
+  state narration across operator, supplier, outreach, admin, context, and
+  customer portal surfaces.
+- Replaced product metaphors with direct operational labels such as Price
+  check, Documents, Recorded context, Timeline, Scenario Lab, and RFQ and
+  carrier rates.
+- Extended the product-copy check to reject the removed generic capability
+  taglines and the Company Brain and Pricing brain labels in UI source.
+- No workflow, database schema, dependency, tenant scope, approval, pricing,
+  customer access, or supplier-search behavior changed.
+- Verification passed: product-copy policy, customer portal test, supplier
+  finder test, TypeScript, diff hygiene, changed-file U+2014 scan, and the
+  optimized production build with disposable local database URLs.

@@ -24,6 +24,24 @@
   chain on a disposable PostgreSQL database, zero retired database objects,
   production build, diff hygiene, and changed-line U+2014 scan.
 
+### Removed generic capability copy from active pages
+
+- Deleted redundant taglines, eyebrow labels, section explanations, and empty
+  state narration across the dashboard, pricing, context, intelligence,
+  supplier finder, contacts, outreach, customer access, and shipment portal.
+- Replaced internal metaphors with direct labels. Examples include Price check,
+  Documents, Recorded context, Timeline, Scenario Lab, and RFQ and carrier
+  rates.
+- Kept copy that states a real status, scope, limit, action, approval boundary,
+  or source. No workflow, pricing, tenant scope, customer access, supplier
+  search, database schema, or dependency changed.
+- Added a UI copy regression rule for the removed capability taglines and the
+  Company Brain and Pricing brain labels.
+- Verification passed: `npm run check:product-copy`, `npm run
+  test:customer-portal`, `npm run test:steel-supplier-search`, `npx tsc
+  --noEmit --incremental false`, `git diff --check`, changed-file U+2014 scan,
+  and `npm run build` with disposable local database URLs.
+
 ### Reduced navigation, copy, and secondary-action noise
 
 - Removed the retired Supply OS page before this pass, so the fixture-heavy
