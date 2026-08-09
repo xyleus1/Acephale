@@ -4134,3 +4134,20 @@ Use this file for chronological implementation notes that future agents should s
   cannot leak into real workspaces that do not have stored media.
 - Follow-up: inspect the authenticated company index and ribbon in an attached
   browser before the next production release.
+
+### 2026-08-09 - Reconcile restrained motion with the Logistics rewrite
+
+- Branch: main
+- Commit: pending
+- Task: Apply the final state-motion finding after the Logistics rewrite and
+  fixed-map-grid integration landed.
+- Files changed: Supply OS dashboard, dedicated Logistics styles, retired
+  workspace styles, enterprise-design contract, handoff, and this log.
+- Integration: cherry-picked `5f281b0`, retained its `useReducedMotion` guarded
+  React transitions, and moved its CSS feedback from the retired workspace
+  module into the live dedicated Logistics module.
+- Verification: enterprise design, operations UI, fixed map-grid, product-copy,
+  TypeScript, production build, diff whitespace, and changed-diff U+2014 checks
+  pass.
+- Caveats: motion is limited to 150ms opacity and 3 to 4px position changes.
+  Reduced-motion users receive no entry animation.

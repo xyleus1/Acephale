@@ -2,6 +2,30 @@
 
 ## Latest Update
 
+### Logistics state changes now use restrained motion
+
+- Added 150ms opacity and position transitions when the active Logistics domain,
+  selected network object, or inspector mode changes.
+- Motion uses `useReducedMotion`; users who request reduced motion receive the
+  state change without the entry animation.
+- Moved row press and tab-state transitions into the dedicated Logistics module.
+  The retired workspace stylesheet does not carry live Logistics behavior.
+- Added regression checks for both animated regions, reduced-motion handling,
+  and bounded row press feedback.
+- No data, schema, tenant boundary, approval rule, dependency, or external
+  action changed.
+
+Verification:
+
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-operations-ui`
+- `npm run test:supply-os-fixed-map-grid`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- Production build with a disposable PostgreSQL URL
+- `git diff --check`
+- Changed-diff U+2014 scan
+
 ### Atlas Robotics demo now uses its official logo
 
 - Replaced the visible `AR` monogram in the built-in Atlas Robotics company

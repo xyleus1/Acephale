@@ -473,7 +473,14 @@
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: color 130ms ease, background-color 130ms ease;
+  transition:
+    color 140ms ease-out,
+    background-color 140ms ease-out,
+    transform 140ms ease-out;
+}
+
+.routeRailList > button:active {
+  transform: scale(0.995);
 }
 
 .routeRailList > button:hover {
@@ -604,6 +611,9 @@
   background: transparent;
   cursor: pointer;
   font-size: 11px;
+  transition:
+    color 140ms ease-out,
+    background-color 140ms ease-out;
 }
 
 .inspectorTabsList button[data-state="active"] {
