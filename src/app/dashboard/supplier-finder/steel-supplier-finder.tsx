@@ -1,11 +1,14 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import {
   AlertTriangle,
   Check,
   CircleDashed,
   ExternalLink,
   Factory,
+  Images,
   LockKeyhole,
   Search,
   ShieldCheck,
@@ -17,6 +20,8 @@ import type {
   SteelSupplierSearchInput,
   SteelSupplierSearchResult,
   SteelSupplierSegment,
+  SteelSupplierVisual,
+  SteelSupplierVisualKind,
 } from "@/lib/steel-supplier-search";
 import styles from "./supplier-finder.module.css";
 
@@ -63,6 +68,14 @@ const ROLE_LABELS = {
   agent_or_representative: "Agent or representative",
 } as const;
 
+const VISUAL_KIND_LABELS: Record<SteelSupplierVisualKind, string> = {
+  logo: "Logo",
+  facility: "Facility",
+  product: "Product",
+  company: "Company",
+  context: "Related image",
+};
+
 function text(value: unknown) {
   return typeof value === "string" ? value.slice(0, 1_000) : "";
 }
@@ -99,6 +112,47 @@ function sourceLabel(url: string) {
   } catch {
     return "Public source";
   }
+}
+
+function SupplierVisualCard({ visual }: { visual: SteelSupplierVisual }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <a
+      className={styles.visualCard}
+      data-kind={visual.kind}
+      href={visual.sourcePageUrl}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`Open image source for ${visual.subject}`}
+    >
+      <div className={styles.visualImage}>
+        <img
+          src={visual.thumbnailUrl ?? visual.imageUrl}
+          alt={visual.caption}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+        <span>{VISUAL_KIND_LABELS[visual.kind]}</span>
+      </div>
+      <div className={styles.visualMeta}>
+        <strong>{visual.subject}</strong>
+        <p>{visual.caption}</p>
+        <small>{visual.sourceDomain} <ExternalLink size={9} /></small>
+      </div>
+    </a>
+  );
+}
+
+function SupplierVisualGallery({ visuals, compact = false }: { visuals: SteelSupplierVisual[]; compact?: boolean }) {
+  if (!visuals.length) return null;
+  return (
+    <div className={compact ? styles.compactVisualGrid : styles.visualGrid}>
+      {visuals.map((visual) => <SupplierVisualCard key={visual.id} visual={visual} />)}
+    </div>
+  );
 }
 
 export function SteelSupplierFinder({ storageScope }: { storageScope: string }) {
@@ -308,9 +362,20 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
         ) : (
           <>
             <p className={styles.resultSummary}>{result.summary}</p>
+            {result.visuals.some((visual) => visual.candidateId === null) ? (
+              <section className={styles.productVisuals}>
+                <header>
+                  <div><Images size={16} /><h3>Product and market images</h3></div>
+                  <small>{result.visuals.filter((visual) => visual.candidateId === null).length} public images</small>
+                </header>
+                <p>Use the linked source page to confirm what each image shows. An image is not proof of grade, origin, availability, or product fit.</p>
+                <SupplierVisualGallery visuals={result.visuals.filter((visual) => visual.candidateId === null)} />
+              </section>
+            ) : null}
             <div className={styles.candidateGrid}>
               {result.candidates.map((candidate) => {
                 const supported = supportedEvidenceCount(candidate);
+                const candidateVisuals = result.visuals.filter((visual) => visual.candidateId === candidate.id);
                 return (
                   <article className={styles.candidateCard} key={candidate.id}>
                     <header>
@@ -326,6 +391,17 @@ export function SteelSupplierFinder({ storageScope }: { storageScope: string }) 
 
                     <p className={styles.productFit}>{candidate.productFit}</p>
                     <p className={styles.evidenceSummary}>{candidate.evidenceSummary}</p>
+
+                    {candidateVisuals.length ? (
+                      <section className={styles.candidateVisuals}>
+                        <header>
+                          <strong>Public company images</strong>
+                          <small>{candidateVisuals.length} linked sources</small>
+                        </header>
+                        <SupplierVisualGallery visuals={candidateVisuals} compact />
+                        <p>These images do not prove that the candidate owns the site, produced the goods shown, or controls the facility.</p>
+                      </section>
+                    ) : null}
 
                     <div className={styles.evidenceList}>
                       {candidate.evidence.map((item) => (
