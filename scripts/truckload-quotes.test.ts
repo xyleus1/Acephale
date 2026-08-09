@@ -1,4 +1,4 @@
-// Smoke test for truckload quote vocabulary and pure economics.
+// Smoke test for the truckload quote flywheel vocabulary and pure economics.
 // Run: npx tsx scripts/truckload-quotes.test.ts
 
 import {

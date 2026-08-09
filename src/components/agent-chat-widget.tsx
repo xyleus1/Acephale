@@ -13,9 +13,9 @@ type ChatItem = ChatMsg & {
 
 const AGENT_TOOLS = [
   {
-    label: "Decision review",
+    label: "Brain read",
     icon: "shield",
-    prompt: "Inspect the commercial assessment for this job. Start with the decision record, missing proof, next allowed action, and stop condition.",
+    prompt: "Inspect the commercial brain for this job. Start with the decision contract, weakest proof gap, next safe move, and stop condition.",
   },
   {
     label: "Run desk",
@@ -25,7 +25,7 @@ const AGENT_TOOLS = [
   {
     label: "Pricing queue",
     icon: "shield",
-    prompt: "List the pricing review queue. Start with the operator playbook: exact ask or first move, safety rule, stop condition, and review link for the top RFQ.",
+    prompt: "List the pricing brain queue. Start with the operator playbook: exact ask or first move, safety rule, stop condition, and review link for the top RFQ.",
   },
   {
     label: "Qualify RFQ",
@@ -243,7 +243,7 @@ export function AgentChatWidget() {
         <div ref={scrollRef} className="agent-panel-body">
           {messages.length === 0 && (
             <div className="agent-empty">
-              <div className="agent-empty-title">What needs review?</div>
+              <div className="agent-empty-title">Start with the commercial gap.</div>
               <p className="agent-empty-copy">
                 Paste an RFQ, ask what is missing, check target price, or draft the next customer/forwarder reply.
               </p>
@@ -264,7 +264,7 @@ export function AgentChatWidget() {
               <div className="agent-suggestion-list">
                 {[
                   "List the decision queue.",
-                  "List the pricing review queue.",
+                  "List the pricing brain queue.",
                   "What is missing before this RFQ can go out?",
                   "What if target is USD 2300 and buy cost is USD 2000?",
                   "Find stale forwarder replies.",

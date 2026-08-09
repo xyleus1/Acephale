@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function MarketRedirectPage() {
-  redirect("/dashboard/intel");
+  redirect("/dashboard/supply-os?panel=scenarios");
 }

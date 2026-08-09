@@ -112,7 +112,7 @@ function EmptyIntelligenceMapCta({ sources }: { sources: Array<{ id: string; nam
     <section style={emptyMapCtaStyle}>
       <div>
         <div style={emptyEyebrowStyle}>Empty intelligence map</div>
-        <h2 style={emptyTitleStyle}>No market data loaded</h2>
+        <h2 style={emptyTitleStyle}>Pull trusted market data to light up the map</h2>
         <p style={emptyBodyStyle}>
           Start with curated carrier, rate-index, customs, and port sources. Manual pulls stay narrow and advisory.
         </p>
@@ -445,7 +445,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
             <h1 className="page-title">Intelligence</h1>
           </div>
           <p className="page-subtitle">
-            Research, market signals, and impact review. Advisory only.
+            Source-backed freight research, ranked market signals, and human impact review. Advisory only.
           </p>
         </div>
         <div className="page-actions">

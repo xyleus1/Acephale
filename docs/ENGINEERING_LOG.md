@@ -17,6 +17,134 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-07 - Expand Supply OS lanes into multimodal legs
+
+- Branch: feat/supply-os-full-network-demo, targeting main
+- Commit: see git log
+- Task: Replace single compound route curves with explicit pickup, ocean or
+  air, customs, and final-mile planning legs, and add a complete one-click
+  AON3D reference dashboard. Expand ocean and air comparisons with official
+  carrier and forwarder candidates.
+- Files changed: Supply OS case geography, command-map domain model, map
+  renderer, dashboard lane flow, generator example, scoped styles, command-map
+  regression coverage, decisions, engineering log, and handoff.
+- Verification: all ten Supply OS regression suites, TypeScript, production
+  build, diff whitespace, and changed-file U+2014 checks pass.
+- Failed/skipped checks: in-app browser control was unavailable in this session,
+  so visual click-through was not rechecked there.
+- Caveats: gateway and route segments are inferred planning hypotheses. No live
+  route, schedule, booking, capacity, filing, broker acceptance, or rate is
+  claimed.
+- Follow-up: replace inferred legs one by one as shipment, schedule, provider,
+  terminal, broker, and route-engine integrations become available.
+
+### 2026-08-06 - Add movement-scoped customs and execution planning
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Extend generated Supply OS customer cases with isolated port, customs,
+  current-condition, provider, handoff, and end-to-end cost plans for every
+  source-to-destination movement.
+- Files changed: new operating-plan domain model and tests, Supply OS workspace
+  and scoped stylesheet, prototype and enterprise design regression tests,
+  package scripts, decisions, engineering log, and handoff.
+- Verification: case-model, operating-plan, prototype, enterprise-design, and
+  command-model tests pass. TypeScript, production build, diff whitespace, and
+  changed-file U+2014 checks pass. Browser QA covers movement switching, scoped
+  map emphasis, port ranking, customs records, source requirements, leg costs,
+  provider details, desktop, tablet, mobile, overflow, focus, and console state.
+- Adversarial review added regression coverage for non-overlapping service
+  handoffs, US versus non-US providers and authority sources, ground versus
+  ocean intelligence, Mexico-US land-border topology, structured US territory
+  resolution, dangerous-goods price suppression, source-specific agricultural
+  data, map keyboard interaction, and non-public connector records.
+- A release-blocking provider-scope review found reused road quote text on
+  downstream legs. Road provider candidates now receive each leg's exact
+  origin and destination and have unique leg-scoped IDs; domestic, intra-EU,
+  and Mexico-US regressions assert both endpoints in every road request.
+- The same review removed overlapping door-to-door language from DHL's
+  port-to-port linehaul request and corrected US-to-Mexico routing so both
+  cross-border directions hand off at Laredo rather than a default US ocean
+  gateway.
+- Final release review added fail-closed geography handling for North Korea,
+  retained mixed known and unsupported source and destination lists, removed
+  duplicate inland charges for port-local imports, corrected empty-plan status,
+  and introduced an explicit air-freight topology that does not inherit ocean
+  providers, ports, containers, vessels, or drayage.
+- Air mode now requires explicit routing language such as `by air` or `via
+  air`, so a company that makes air-cargo products cannot trigger it. Air
+  linehaul requests are airport-to-airport only and exclude the separately
+  priced pickup, handling, customs, storage, and final-recovery legs.
+- Authenticated design QA fixed four responsive and interaction defects in
+  separate commits: the mobile execution ledger, 44-pixel action and map
+  targets, numeric cost wrapping, and the blank strip caused by a direct-child
+  dashboard width override. Rechecks at 1440, 1024, and 390 pixels found zero
+  page overflow and no console errors after interaction.
+- Failed/skipped checks: no provider, customs, terminal, rate, broker, ERP, TMS,
+  or procurement callback was executed because this change adds no live adapter
+  or external write path.
+- Caveats: current findings and costs are deterministic modeled records. Duties
+  and taxes are excluded. A technology connector does not replace a licensed
+  broker or direct importer-to-broker authorization for customs entry work.
+- Follow-up: persist office-scoped case snapshots, then add read-only provider
+  adapters with provenance, freshness, and expiry before enabling approved
+  outbound or execution actions.
+
+### 2026-08-06 - Remove decorative color and flatten Supply OS hierarchy
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Keep the dense Supply OS operating model while replacing the improvised
+  tactical color treatment with a restrained, Pallet-informed enterprise
+  system.
+- Files changed: Supply OS workspace and scoped stylesheet, global form and
+  button theme isolation, enterprise design regression test, engineering log,
+  and handoff.
+- Pre-landing review: generic form and button exclusions were converted to
+  zero-specificity `:where()` selectors so the isolation does not strengthen
+  global rules on unrelated pages. Remaining generic button states are scoped
+  out of Supply OS, which now owns its neutral keyboard focus treatment.
+- Verification: all three Supply OS tests, TypeScript, production build, and
+  `git diff --check` pass. Browser QA covered all six views and command layouts
+  at desktop, 1024 by 900, and 390 by 844.
+- Failed/skipped checks: authenticated production behavior was not exercised
+  locally because the design prototype has no production data or provider
+  connection. Browser console history contained unrelated WebGL failures from
+  the Pallet reference tab and a style attribute injected into local inputs by
+  the browser harness.
+- Caveats: operational records remain modeled or fictional. This change does
+  not add live feeds, persistence, booking, filing, messaging, or external
+  writes.
+- Follow-up: connect office-scoped canonical records and provider evidence
+  behind the existing human-approval boundaries before enabling actions.
+
+### 2026-08-06 - Rebuild Supply OS as a customer command center
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Replace the sparse Supply OS presentation with a dense customer-facing
+  operating picture informed by Kpler and Windward patterns.
+- Files changed: the Supply OS workspace and scoped stylesheet, command model,
+  three Supply OS regression tests, package scripts, architecture decision,
+  engineering log, and handoff.
+- Verification: all three Supply OS tests and TypeScript pass. Browser QA covered
+  all six views, objective recompute, exception synchronization, review state,
+  map search and layers, quote approval, execution gates, authority controls,
+  responsive layouts, and console errors.
+- Integrity checks cover movement-scoped assessment resolution, separate
+  Yantian and Shanghai quote sets, honest no-quote states, country of origin,
+  and prevention of cross-movement quote approvals in execution.
+- Failed/skipped checks: targeted ESLint could not run because this repository
+  has no `eslint.config.*` for its installed ESLint 9. Live provider behavior
+  was not tested because no live provider or write path is part of this
+  prototype.
+- Caveats: all operational records, rates, risk areas, locations, evidence,
+  confidence, and events on the page are modeled or fictional. The interface
+  explicitly says no AIS, GPS, carrier, customs, or port feed is connected.
+- Follow-up: project office-scoped customer records into this interface, then
+  add provider adapters and human-approved actions without weakening source
+  provenance or tenant boundaries.
+
 ### 2026-07-29 - Separate liveness failures from queue degradation
 
 - Branch: find-hardware-import-data
@@ -3099,6 +3227,511 @@ Use this file for chronological implementation notes that future agents should s
 - Deployment: Pending merge to `main`. No migration, dependency, or environment
   change is required.
 
+### 2026-08-06 - Publish Supply OS through the main sidebar
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Make the standalone Supply OS v0.5 prototype discoverable from the
+  authenticated product and publish the reconciled result to main.
+- Files changed: `src/app/dashboard/layout.tsx`,
+  `scripts/supply-os-prototype.test.ts`, the existing `src/app/supply-os`
+  prototype, `package.json`, and handoff documentation.
+- Verification: `npm run test:supply-os-prototype`,
+  `npm run test:customer-portal`, `npx tsc --noEmit --incremental false`, the
+  production build with non-secret placeholders, `git diff --check`, and the
+  changed-text em dash scan passed. The production route table contains the
+  static `/supply-os` page.
+- Failed/skipped checks: The first TypeScript pass used stale generated Next
+  route types from before the main merge and rejected `/portal` redirects. The
+  build regenerated route types, and the unchanged TypeScript command then
+  passed. Authenticated browser QA of the dashboard sidebar was not run because
+  the local runtime has no disposable database session; the focused test
+  verifies the exact rendered navigation declaration.
+- Caveats: The main dashboard sidebar opens a standalone synthetic prototype
+  with its own sidebar. It does not read or write office data and does not
+  execute freight, customs, supplier, or customer actions.
+- Follow-up: After deployment, sign in with a non-employee account, click
+  `Supply OS` under Commercial Workflow, and confirm `/supply-os` loads.
+
+### 2026-08-06 - Integrate Supply OS and replace the decorative map
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commit: see git log
+- Task: Correct the standalone green Supply OS prototype by placing it inside
+  the authenticated dashboard, preserving the product palette, using real
+  geography, and reducing generic dashboard styling.
+- Files changed: the dashboard navigation and brand, the legacy Supply OS
+  redirect, a new dashboard Supply OS route and workspace, the focused test,
+  and handoff and decision documentation. The old standalone component and
+  stylesheet were removed.
+- Verification: `npm run test:supply-os-prototype`, `npm run
+  test:load-route-map`, `npm run test:customer-portal`, TypeScript, the
+  production build with non-secret placeholders, `git diff --check`, and the
+  changed-text em dash check passed. Local visual review covered desktop and
+  390 pixel widths in the dashboard shell.
+- Failed/skipped checks: Authenticated browser review used a local-only shell
+  harness because the workspace has no disposable authenticated session. The
+  harness was removed before commit. Route authentication and the compatibility
+  redirect were checked separately.
+- Caveats: Every supplier, quote, route, event, and score in this workspace is
+  synthetic. Natural Earth provides real geography, but lanes are modeled and
+  are not live vessel, container, or carrier tracking.
+- Follow-up: Replace synthetic records only after office-scoped supplier,
+  product, lane, quote, and approval contracts are accepted.
+
+### 2026-08-06 - Rebuild Supply OS as an enterprise map control tower
+
+- Branch: crm-status-structure (Conductor workspace phoenix, targets main)
+- Commits: `395cc3c`, `194639b`
+- Task: Make Supply OS resemble an enterprise maritime operations product while
+  keeping Derya's current dashboard shell and color system.
+- UI: Replaced the sparse map and decisions-card layout with a split operating
+  console. The left pane now shows exceptions, exposure, quote-source coverage,
+  active modeled movements, and the selected workflow. The right pane is a
+  full-height Natural Earth map with search, filters, analysis modes, risk areas,
+  route focus, zoom, modeled milestones, and a selected-movement inspector.
+- Interaction: Selecting one of four modeled POs updates the workflow, route
+  emphasis, status, and inspector. The Supply map tab expands the same map and
+  preserves the shared selection and filters.
+- Data boundary: Real geography and coordinates remain deterministic and
+  checked in. Every movement, route, date, cost, status, milestone, and risk
+  area is synthetic. The UI states that no live AIS or GPS feed is connected.
+- Safety: No database, tenant, provider, server action, or external write path
+  was added. Existing approval and execution boundaries are unchanged.
+- Design QA: Browser review covered 1280, 768, and 375 pixel widths. Search,
+  movement selection, map modes, layer filters, route focus, and zoom worked
+  without console errors. A local dashboard-shell harness was removed before
+  commit.
+- Verification: `npm run test:supply-os-enterprise-design`, `npm run
+  test:supply-os-prototype`, `npm run test:load-route-map`, `npm run
+  test:customer-portal`, TypeScript, the production build with non-secret
+  placeholders, `git diff --check`, and the changed-text em dash scan passed.
+- Follow-up: Connect the surface to office-scoped canonical supplier, product,
+  lane, quote, shipment, and approval records only after those contracts are
+  approved.
+
+### 2026-08-06 - Replace the Supply OS command demo with customer-case generation
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Start Supply OS from a customer description, generate one coherent
+  sourcing and logistics dashboard, and let the operator save and reopen demo
+  cases.
+- Files changed: deterministic case model, Supply OS workspace and scoped
+  stylesheet, page metadata, three Supply OS regression tests, package script,
+  decisions, engineering log, and handoff.
+- Behavior: one prompt now produces normalized customer facts, supplier and
+  gateway nodes, conditional customs checkpoints, route legs, supplier search
+  briefs, indicative forwarder comparisons, risks, customs readiness checks,
+  and missing questions. Results scroll into view and can be saved in versioned
+  browser storage.
+- Trust boundary: no CRM company is created or linked. No Prisma, server action,
+  provider request, booking, filing, message, or customer publication was
+  added. Missing and inferred facts stay marked for confirmation or review.
+- Local persistence: browser keys include `officeId` and `userId`, stale-tab
+  saves merge against current storage, storage failures remain non-fatal, and
+  legacy unscoped demo keys are removed rather than ambiguously migrated.
+- Route trust: unresolved geography stays unmodeled. Domestic and intra-EU
+  lanes omit import customs, Mexico-US lanes use a border-road model, Pacific
+  routes wrap at the date line, and destination-specific checks avoid applying
+  US rules to non-US imports.
+- Verification: Supply OS model, prototype, design, and prior command-model
+  tests pass with TypeScript and the production build. Browser QA covered the
+  example, a separate medtech company, missing inputs, save and reopen, refresh
+  persistence, route-node selection, and desktop, tablet, and mobile overflow.
+- Caveats: local browser storage is for the demo only. It is namespaced by
+  office and user but is not shared or protected by server-enforced tenancy.
+  Production persistence needs office-scoped cases, immutable snapshots,
+  server-created provenance, explicit CRM linking, and customer-safe projection.
+- Follow-up: validate the demo with customers before adding shared persistence
+  or live supplier, rate, customs, and forwarder adapters.
+
+### 2026-08-06 - Split and simplify Supply OS customer cases
+
+- Branch: crm-status-structure, targeting main
+- Commit: see git log
+- Task: Separate case generation from saved customer dashboards and remove
+  planning internals from the default customer-facing view.
+- Files changed: separate dashboard, generator, and browser-storage modules;
+  new authenticated generator route; simplified shared stylesheet; updated
+  Supply OS UI regression tests; decisions, engineering log, and handoff.
+- Behavior: `/dashboard/supply-os/new` builds and reviews a customer case, then
+  saves and opens it. `/dashboard/supply-os` browses saved customers and shows
+  only the selected route, map, expected cost and transit, end-to-end legs,
+  customs, risks to verify, and three next actions.
+- Data compatibility: the version 1 case serializer and movement-scoped
+  operating-plan engine were not changed. Existing scoped browser saves remain
+  readable. Detailed provider, connector, evidence, invoice, and supplier data
+  stays available in the engine but is no longer dumped into the customer page.
+- Verification: Supply OS prototype, design, case-model, operating-plan, and
+  command-model tests pass. TypeScript and the production build pass.
+  Authenticated browser QA covered
+  the empty state, separate generator, example extraction, save and reopen,
+  movement switching, desktop, tablet, and mobile layouts, page overflow, and
+  console errors.
+- Failed/skipped checks: no live provider, customs, carrier, terminal, rate,
+  booking, or customer-publication path was exercised because this remains a
+  deterministic browser-saved prototype.
+- Caveats: the dashboard is not a server-enforced customer projection and does
+  not persist outside the current browser. Human approval and existing
+  operational trust boundaries are unchanged.
+- Follow-up: validate the simpler hierarchy with customers before adding a
+  separate operator evidence drill-down or shared office-scoped persistence.
+
+### 2026-08-06 - Make Supply OS sell operational ownership
+
+- Branch: supply-os-operating-ownership, targeting main
+- Commit: see git log
+- Task: Make the generated customer case immediately show that Derya can run
+  the full supply chain or one selected module, especially for robotics and
+  hardware startups.
+- Files changed: optional case engagement scope, new deterministic engagement
+  plan and test, generator scope selector, customer dashboard, scoped design,
+  Supply OS regression tests, package script, decisions, log, and handoff.
+- Behavior: the Atlas demo now maps inbound components from Shenzhen to Austin
+  production and outbound finished robots from Austin to Detroit and
+  Nashville. Five workstreams cover sourcing, supplier coordination, inbound
+  movement, customs, and finished-goods delivery. Coverage choices save to the
+  browser case and survive reload. The three kickoff inputs and offer copy
+  change with the selected module instead of presenting cosmetic scope buttons.
+- Topology: new cases separate company location from the production or
+  receiving site, including the San Francisco headquarters and Austin factory
+  case. Multi-source flows state that component allocation is unconfirmed.
+- Trust boundary: the customer page no longer shows modeled prices, first-in-
+  array provider assignments, static gateway recommendations, or a broker name
+  as if selected. It asks for three kickoff inputs, states the broker approval
+  boundary, and keeps operational handoffs collapsed by default.
+- Persistence and customs: scope changes merge against current browser state,
+  including the latest same-customer record. Failed writes do not alter the
+  visible plan, cross-tab scope changes sync,
+  and domestic or unknown lanes no longer display import-specific broker copy.
+  Customs scope evaluates supplier-to-production and production-to-customer
+  legs separately, and incomplete networks stay unknown unless an import is
+  unavoidable.
+- Location integrity: headquarters-only production assumptions create an open
+  confirmation question, and specific city aliases win over generic region
+  text so San Francisco does not inherit Los Angeles coordinates. Product-use
+  language does not become a confirmed production site.
+- Scope integrity: collapsed execution details include only the selected
+  module, while full-operation cases show both inbound and finished-goods
+  handoffs. Domestic and unknown cases omit import-only broker steps.
+- Verification: engagement-plan, case-model, prototype, enterprise-design,
+  operating-plan, and command-model tests pass. TypeScript passes. Authenticated
+  browser QA covered generator scope, save, reopen, scope persistence, network
+  flow selection, workstream drill-down, execution disclosure, desktop, and
+  390-pixel mobile with zero page overflow.
+- Build: the production Next.js build passes with the local test database
+  configuration.
+- Failed/skipped checks: no supplier, provider, broker, customs, rate, booking,
+  or messaging integration was called because this remains a browser-local
+  scoping prototype.
+- Caveats: detailed provider and cost models still exist in the internal
+  planning engine. They require current attributable evidence before any
+  customer-facing reuse.
+- Follow-up: validate the operating-ownership framing with robotics founders,
+  then persist office-scoped cases before connecting live supplier, quote,
+  broker, and shipment records.
+
+### 2026-08-06 - Add evidence-backed company research to Supply OS
+
+- Branch: supply-os-company-research, targeting main
+- Commit: see git log
+- Task: Turn a company name, website, or operating description into a sourced
+  customer presentation instead of changing only the displayed company name.
+- Files changed: new authenticated company-research API and research service,
+  optional research provenance on the browser case, generator and presentation
+  flow, company identity and research surfaces, presentation-mode shell rules,
+  regression tests, package scripts, decisions, handoff, and engineering log.
+- Verification: company-research, case-model, prototype, enterprise-design,
+  engagement-plan, operating-plan, and command-model tests pass. TypeScript and
+  the production build pass. Authenticated browser QA covered the unavailable
+  research state, explicit local fallback, full-width 1440-pixel presentation,
+  official company logo, source disclosure, inferred inputs, real map, and a
+  390-pixel layout with no horizontal overflow.
+- Trust boundary: provider-attributed URLs are the citation allow-list. Public
+  research cannot confirm suppliers, lanes, rates, customs treatment, or
+  providers unless a retained source directly supports the claim. Operational
+  hypotheses remain `verify` facts and all commitments retain human approval.
+- Security: the metadata fetch occurs only after the official website matches
+  a returned web-search source. It rejects credentials, local or private
+  address resolution, unsafe redirects, non-HTML responses, over-large bodies,
+  and cross-domain logo candidates.
+- Failed/skipped checks: no live research request ran locally because the local
+  server did not have `OPENAI_API_KEY`. No supplier, provider, broker, customs,
+  booking, filing, rate, or message action was called.
+- Caveats: research is a bounded useful-company brief rather than a complete
+  mirror of every public page. Saved customer cases are still scoped browser
+  records, not shared or durable server records.
+- Follow-up: configure the deployment key, verify one live company request in
+  production, then persist the sourced research packet as an office-scoped
+  record before enabling customer publishing.
+
+### 2026-08-07 - Repair Supply OS controls and make company research resilient
+
+- Branch: supply-os-light-gray, targeting main
+- Commits: cc487dc, 2ee2011, 8114746
+- Task: Fix collapsed generator buttons, lighten the Supply OS palette, expose
+  meaningful company-research progress, and stop provider outages from killing
+  website-backed demos.
+- UI: the engagement grid now clears its floated legend and measures at full
+  card width. The palette uses a lighter neutral graphite scale with deliberate
+  borders and no decorative highlights. The generator renders a compact trace
+  for verified, active, inferred, and failed research steps.
+- Research transport: the authenticated route streams newline-delimited JSON
+  progress and result events. The browser client incrementally publishes those
+  events to the active generator and preserves the existing research-first
+  planning order.
+- Resilience: an explicit public website enables a same-domain fallback when
+  the OpenAI key is absent, the provider call fails, no attributable sources
+  return, or structured normalization fails. The fallback reads at most four
+  selected official pages and returns a partial, sourced research packet.
+- Extraction: official metadata and JSON-LD provide identity, descriptions,
+  logos, addresses, and products. Product page titles add bounded product
+  context without treating marketing headings as products. Deterministic
+  industry patterns generate likely-input hypotheses.
+- Safety: SSRF checks, public DNS validation, same-domain redirects, HTML-only
+  responses, byte caps, timeouts, source limits, and the existing human
+  approval boundary remain in force. Prompt-provided locations are inferred,
+  not relabeled as verified facilities.
+- Verification: all Supply OS tests, the new research-progress regression test,
+  TypeScript, and the production build passed. Authenticated browser QA covered
+  AON3D website-only success, actionable no-website failure, desktop and mobile
+  scope controls, official source disclosure, logo extraction, and customer
+  location confirmation.
+- Caveat: provider-backed live public search was not exercised locally because
+  the disposable server intentionally had no `OPENAI_API_KEY`. That absence was
+  used to verify the new official-site fallback end to end.
+
+### 2026-08-07 - Fix production Supply OS stream cutoff
+
+- Branch: hotfix-supply-research-terminal, targeting main
+- Symptom: the AON3D example emitted only `Searching public sources`, then the
+  browser reported that research ended without a dashboard result.
+- Root cause: a configured model key made explicit-website prompts enter the
+  slower public-search call first. The production function ended while waiting
+  on that upstream call, outside the route's normal result and error events.
+- Fix: select `official_site` before `public_search` whenever the prompt has a
+  valid public website. Retain public search as recovery if the official site is
+  unreachable, and cap name-only model calls at 20 seconds with zero SDK
+  retries.
+- Regression coverage: `selectCompanyResearchStrategy()` is tested for website,
+  name-only configured, and unavailable cases.
+- Fresh reproduction: an AON3D request with an intentionally invalid model key
+  returned the official name, website, four sources, and six progress events in
+  1.6 seconds.
+
+### 2026-08-07 - Make name-only company research terminal and correct
+
+- Branch: `fix/supply-os-research-quality`, targeting `main`
+- Commits: `de33b50`, `eb85d15`, `dc7e9e4`, `fa62a03`
+- Symptom: `do nox metals` emitted early progress, then production ended the
+  stream without a dashboard.
+- Root cause: name-only prompts still made provider-backed public search the
+  prerequisite for the first usable result. A host cutoff could therefore
+  occur outside the route's result and error handling.
+- Research fix: generate likely domains from the company name, inspect each
+  with bounded SSRF-safe official-site requests, score identity evidence,
+  reject parked or mismatched domains, and keep model search as optional
+  secondary enrichment. The browser also converts any remaining timeout or
+  malformed stream into a saved description-based dashboard.
+- Quality fix: split likely materials into `Needs` and geographic origins into
+  `Sources`. With no origin or destination, the map shows only the verified
+  facility and asks for a real endpoint.
+- Design fix: replace the dark graphite field with light-gray and white
+  surfaces, reduce the generator height, simplify explanatory copy, collapse
+  workstream details by default, and remove supplemental content on mobile.
+- Regression coverage: official-domain candidate generation and ranking,
+  parked-site rejection, Nox `.co` selection, research strategy ordering,
+  automatic fallback, metals inputs, source-region separation, and expandable
+  workstream semantics.
+- Verification: all eight Supply OS test scripts, `npx tsc --noEmit
+  --incremental false`, the optimized production build, and authenticated
+  desktop/mobile browser QA passed. Clean browser reload showed no console
+  errors.
+- Caveat: public domain discovery is a bounded heuristic, not a company master
+  data service. The user can provide the official website when a name is
+  ambiguous.
+
+### 2026-08-07 - Build the Supply OS company optimization engine
+
+- Branch: `feat/supply-os-optimization-engine`, targeting `main`
+- Product: Replaced the passive customer dashboard with a supplier-to-customer
+  network, selected-node dossier, ranked action queue, kickoff inputs, and
+  collapsed evidence section.
+- Design: Removed the corner logo tile, tab underlines, decorative effects, and
+  mixed highlight colors. Added a light neutral system with one operational
+  navy accent, flatter rows, deliberate dividers, and responsive map layouts.
+- Inference: Added deterministic profiles for metals, robotics, additive
+  manufacturing, aerospace, medical devices, chemicals, automotive, and
+  industrial hardware. Each profile supplies plausible source markets,
+  customer markets, cargo, movement modes, confirmation steps, and five
+  workstream actions.
+- NOX: Added capability-matched upstream candidates for aerospace plate mills,
+  Great Lakes buffer stock, and Southern Ontario alternates, plus regional and
+  national buyer profiles. Every candidate remains labeled as inferred and not
+  a known relationship.
+- Navigation: Added authenticated routes for procurement, supplier contact,
+  shipment planning, customs, and fulfillment or 3PL. Routes carry the
+  browser-local case identifier and contain no execution side effects.
+- Research: Added bounded visible-address extraction for relevant official
+  pages and protected the parser from treating an alloy number as the street
+  number.
+- Tests: Added `test:supply-os-optimization-engine`, rewrote the prototype and
+  enterprise-design assertions for the new product shape, and extended company
+  research coverage for visible addresses.
+- Review fixes: Preserved third-party public evidence as a separate provenance
+  class, kept all non-customer-confirmed movements inferred, and made the
+  original customer prompt authoritative for profile selection. Added profile
+  coverage for every deterministic industry branch.
+- Verification: Nine Supply OS suites, TypeScript, scoped lint, the optimized
+  production build, and authenticated desktop, tablet, and mobile browser QA
+  passed. Full-repository lint still reports the pre-existing unrelated lint
+  backlog.
+- Safety: No schema, dependency, secret, environment, supplier, booking,
+  customs filing, message, or spend mutation was introduced.
+
+### 2026-08-07 - Replace the Supply OS report with a fixed command map
+
+- Branch: `feat/supply-os-command-map`, targeting `main`
+- Product: Replaced the scroll-based saved-customer report with a compact
+  header, physical-flow object rail, full map canvas, selected-object dossier,
+  and bottom status strip. The supported desktop and presentation view has no
+  document scroll.
+- Map: Added React MapLibre and MapLibre GL JS with the OpenFreeMap Positron
+  style. Routes use GeoJSON layers, map controls come from MapLibre, operational
+  symbols come from Lucide, and menus and tooltips come from Radix.
+- Interaction: Supplier, movement, customs, factory, distribution, and customer
+  objects expose hover contact cards and persistent click selection. The
+  selected dossier shows cargo, evidence basis, candidate providers, readiness
+  checks, one next action, and a case-scoped workstream link.
+- Network detail: Added deterministic candidate coverage for DHL Global
+  Forwarding, Uber Freight, Livingston International, and Farrow. Added an
+  explicit Windsor-Detroit customs object for inferred U.S.-Canada movements.
+  Provider selection now follows the actual modeled movement: Farrow appears
+  only on U.S.-Canada work, China ocean movement omits domestic truck capacity,
+  and domestic sites do not receive an irrelevant customs broker. All contacts
+  and lanes remain unassigned planning candidates.
+- Resilience: Added a WebGL 2 capability gate so unsupported browsers retain
+  the route list and dossier instead of entering the application error
+  boundary. Basemap connection failure also leaves the operating objects
+  available.
+- Case parsing: Added exact Ferndale, Michigan coordinates and descriptor
+  extraction for prompts such as `NOX Metals is a Ferndale, Michigan metals
+  service center`, which restores factory, lane, and customs generation in the
+  description-only fallback. Negative coverage prevents `China-focused
+  supplier` from becoming a false headquarters, keeps Ferndale inside the U.S.
+  customs territory, and classifies Laredo, Texas as U.S. geography before the
+  generic Mexico border alias.
+- Tests: Added `test:supply-os-command-map` and rewrote the prototype and design
+  assertions around the fixed map-first surface. Extended case-model coverage
+  for Ferndale extraction.
+- Browser QA: Authenticated NOX Metals creation produced three suppliers,
+  Windsor-Detroit customs, the Ferndale site, two customer clusters, provider
+  contacts, and workstream navigation. The page measured 720 pixels of content
+  in a 720 pixel viewport with no document scroll and no console errors after
+  reload. The headless browser lacks WebGL 2, so it verified the fallback while
+  the live map path remained build and test verified.
+- Safety: No database schema, secret, environment, supplier, booking, customs
+  filing, message, or spend mutation was introduced.
+
+### 2026-08-07 - Restore the Supply OS basemap and deepen company analysis
+
+- Branch: `fix/supply-os-map-analysis-v2`, targeting `main`.
+- Root causes: the map depended on one nested vector-style resource graph and
+  did not recover from partial style failures; Radix collision handling pulled
+  the coverage menu back over the right inspector; logo extraction treated a
+  social image or generic `company-logo` carousel as company identity; the map
+  view discarded most fields from the optimization engine.
+- Map fix: made CARTO raster the first provider, added bounded remount fallback
+  through CARTO Positron and OpenFreeMap Positron, marked the raster ready on
+  source content, preserved the WebGL fallback, and retained the route and
+  provider planning boundary.
+- UI fix: moved the coverage menu fully left of the inspector with a stable
+  Radix alignment offset, added Radix tabs for object detail and company
+  optimization, and kept the fixed one-viewport layout at 1280 by 720 and 2048
+  by 1100.
+- Identity fix: ranked JSON-LD and visible brand assets above icons, ignored
+  social-preview images and unlabelled customer-logo carousels, corrected empty
+  HTML attribute parsing, and normalized saved SEO-tagline names before model
+  generation.
+- Analysis fix: added measured outcomes to every action and expanded the
+  advanced-aircraft profile to eight controls across BOM, demand, serial kits,
+  production lanes, supplier industrialization, customs, gateway selection,
+  and field logistics. Added UK or European propulsion supply, U.S. mission
+  systems, international customs handoffs, and conditional Oman, Fiji, and
+  European deployment nodes.
+- Regression coverage: exact Odys hero-photo versus logo fixture, customer-logo
+  carousel versus favicon, SEO-title normalization, advanced-aircraft network
+  and action set, international broker selection, Radix analysis surface,
+  basemap fallback, and menu positioning contract.
+- Browser QA: GPU-enabled Chrome rendered the real CARTO basemap, zero document
+  overflow, zero console errors, and a non-overlapping coverage menu. A live
+  Odys research run returned the official logo and the eight-priority operating
+  model. The separate headless browser correctly retained the no-WebGL fallback.
+- Safety: No schema, secret, external supplier action, booking, customs filing,
+  message, or spend mutation was introduced.
+
+### 2026-08-07 - Add selectable transport paths and lane decision support
+
+- Branch: `feat/supply-os-route-intelligence`, targeting `main`.
+- Fixed route loss when public research supplied a recognizable operating city
+  without normalized coordinates. The fallback is bounded to known cities and
+  preserves the original evidence basis and confidence.
+- Added endpoint-aware domestic and cross-border road modes so a robotics or
+  hardware profile cannot label Phoenix-to-Tulsa as air or ocean freight.
+- Promoted each movement into a first-class route object with a mapped
+  optimization priority, carrier candidates, and an optional deterministic
+  road-cost envelope.
+- Added official public candidate records for Stewart Transport, Knight
+  Transportation, Dependable Supply Chain Services, Universal Logistics, Old
+  Dominion Freight Line, and C.A.T., plus existing global forwarder, truck,
+  and customs candidates. Cards expose source links, phone numbers, addresses,
+  capabilities, and endpoint relevance.
+- Added projected route geometry over the maintained MapLibre basemap. Solid
+  route lines update on map move and resize. A narrow native button follows
+  each line, preserves map panning outside the lane, supports keyboard focus,
+  and opens the matching movement dossier.
+- Added Recharts Sankey and bar views for network flow, lane flow, and modeled
+  price range. No custom geography, map symbol set, or proprietary visual asset
+  was introduced.
+- Verification: ten Supply OS suites, TypeScript, optimized production build,
+  and GPU browser QA at 1280 and 2048 pixels passed. Browser QA confirmed lane
+  click selection, pointer affordance, local contact detail, zero viewport
+  overflow, and zero console errors.
+- Tooling note: scoped ESLint is blocked by the repository's ESLint 9 plus
+  legacy config mismatch and duplicate Next plugin resolution inside the nested
+  Conductor worktree.
+- Safety: No schema, tenant scope, secret, outbound message, live quote,
+  booking, customs filing, supplier award, or spend mutation was introduced.
+### 2026-08-07 - Supply OS directional route corridors and carrier depth
+
+- Replaced straight route presentation with 33-point quadratic corridors that
+  stay connected during map movement and resize.
+- Added a MapLibre GeoJSON route source plus visible projected casing and core
+  geometry, repeated Lucide direction markers, and 24-pixel direct hit segments.
+- Curved route clicks select the exact movement object and update the existing
+  transport-leg inspector.
+- Expanded deterministic carrier candidates for Tulsa, Phoenix, Los Angeles and
+  Long Beach, Quebec, and Ontario. Added broader Schneider, J.B. Hunt, and
+  ArcBest road alternatives.
+- Updated command-map, prototype, and enterprise-design regression tests for
+  connected curved geometry, direct hit targets, direction markers, and carrier
+  depth.
+- GPU browser QA at 1440 by 900 and 2048 by 900 confirmed a live basemap, six
+  direction markers for two lanes, direct line selection, nine Tulsa-to-Phoenix
+  carrier candidates, no viewport overflow, and no console errors.
+
+### 2026-08-07 - Supply OS gateway marker correction
+
+- Aligned customs dossier coordinates with the rendered customs handoff for
+  ocean, air, and cross-border road routes.
+- Moved lane controls onto the primary transport segment to avoid overlap with
+  border controls.
+- Added Taiwan gateway routing for Kaohsiung and Taoyuan.
+- Preserved the complete AON3D fallback when the user enters only the company
+  name or official domain.
+- Verified the command-map regression suite, TypeScript, optimized production
+  build, diff hygiene, and the repository em-dash prohibition.
 ### 2026-08-07 - Add evidence-gated steel supplier discovery
 
 - Branch: steel-supplier-finder, targeting main
@@ -3120,26 +3753,236 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: add office-scoped candidate records and a reviewed diligence
   workflow before enabling supplier outreach or award actions.
 
-### 2026-08-08 - Retire the parallel prototype and restore freight pages
+### 2026-08-07 - Keep generated Supply OS networks connected
 
-- Branch: `remove-retired-product-bloat`, targeting `main`.
-- Removed the isolated prototype UI, API routes, domain modules, browser state,
-  styles, tests, docs, and dependencies.
-- Restored the freight dashboard, activity, inbox, CRM, pricing, reports,
-  carrier, search, and domestic-pricing pages from the last version before the
-  redirect cutover.
-- Removed product slogans, model promotion, internal strategy jargon, and
-  anthropomorphic copy from active surfaces.
-- Added a utility-only copy policy and a production-build check.
-- Removed the prototype's 26 active Prisma models after explicit founder
-  approval to permanently delete the related records.
-- Added one forward migration that drops the 26 retired tables in a single
-  non-cascading statement, then drops their 18 standalone trigger functions.
-  The five historical migrations remain unchanged.
-- Verification: The complete 24-migration chain passed on a disposable
-  PostgreSQL database. Post-migration checks found zero retired relations,
-  functions, triggers, or constraints. Prisma validation, generated client,
-  TypeScript, production build, docs freshness, copy policy, and focused
-  freight workflow regressions passed. Authenticated runtime smoke checks
-  returned 200 for ten restored admin routes. Employee route checks confirmed
-  the loads board remains available and restricted routes redirect correctly.
+- Fixed the generated-company path that could show supplier and customer
+  points while silently dropping every lane because the operating site lacked
+  normalized coordinates.
+- Added low-confidence provisional map placement for unresolved facilities,
+  explicit source regions, and destinations. The placement remains labeled as
+  an assumption and never upgrades the underlying evidence basis.
+- Preserved customs objects for lanes whose modeled mode explicitly says
+  cross-border or international, even when one endpoint country is unknown.
+- Added a regression for a NOX-style research result with no location data.
+  The case now produces five connected lanes, visible route segments, and a
+  customs handoff instead of zero lanes.
+
+### 2026-08-07 - Gate map signals by evidence and relevance
+
+- Added route-linked map insights derived only from official or public
+  research findings with attributable URLs. Matching requires a shared cargo
+  or location token with a rendered route, and the map is capped at three
+  signals to preserve legibility.
+- Expanded company research to request dated, current material, freight,
+  customs, port, tariff, congestion, and capacity evidence after official-site
+  verification. Cost direction requires a cited comparison or time series,
+  and live-rate language requires a current lane-specific source.
+- Preserved the official-site result as the fallback when public research
+  times out, returns no attributable sources, or fails normalization.
+- Removed repeated non-selected lane labels, the empty MapLibre navigation
+  control, the full-width disclaimer sentence, and the redundant rate bars.
+  Flow charts and warning lists now render only when their data shape warrants
+  them.
+- Added `scripts/supply-os-evidence-insights.test.ts` for provenance,
+  route-relevance, legend copy, chart gating, and map-control regressions.
+- Verification: new evidence test, command-map test, company-research test,
+  diff checks, em-dash scan, and optimized production build passed.
+
+### 2026-08-08 - Consolidate the product into Supply OS
+
+- Made Supply OS the default and sole primary navigation destination, with
+  materials, suppliers, scenarios, logistics, and tracking in one shell.
+- Added tenant-scoped PostgreSQL persistence for shared office workspaces,
+  normalized CSV imports, immutable published snapshots, product structures,
+  inventory, demand, media, evidence, decisions, approvals, and action tasks.
+- Connected published snapshot data to the product twin with deterministic BOM
+  buildability calculations and explicit missing-data states.
+- Added the typed `supply-os/v1` capability DSL and concrete capability
+  contracts for ERP ingestion, product mapping, supplier and shipper discovery,
+  compliance, sourcing, logistics, tracking, and controlled execution.
+- Added deterministic proposal and action hashes, role-gated approvals,
+  self-approval protection, immutable approved decisions, and release only to
+  `READY` without external side effects.
+- Integrated office-scoped market evidence into scenario decisions and
+  redirected the standalone Supplier Finder and Market pages into Supply OS.
+- Added `docs/SUPPLY_OS_ARCHITECTURE.md` and
+  `docs/SUPPLY_OS_LEGACY_EXTRACTION.md` for durable architecture and cutover
+  boundaries.
+- Verification: focused UI, snapshot, persistence, DSL, execution, TypeScript,
+  diff hygiene, and prohibited-character checks passed. Disposable integration
+  databases were removed after verification.
+
+### 2026-08-08 - Cut Supply OS over to full-width product chrome
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: Remove the obsolete one-link sidebar, make Supply OS panels URL-backed,
+  move shared data controls into a modal, and constrain the workspace to the
+  available viewport.
+- Files changed: dashboard layout, Supply OS operating shell and styles, panel
+  routing helper and regression, single-surface regression, package scripts,
+  engineering log, and handoff.
+- Verification: single-surface, shell-routing, product-twin, and snapshot-twin
+  tests pass. TypeScript and diff hygiene pass. Authenticated browser checks at
+  1440 by 900, 1024 by 768, and 390 by 844 found zero page overflow and no
+  console errors. Panel query state, browser history, modal open, and Escape
+  close behavior were exercised.
+- Failed/skipped checks: the in-app browser controller was unavailable, so the
+  repository headless browser was used against a disposable local database.
+- Caveats: legacy operator detail routes remain available until their workflows
+  have equivalent Supply OS panels or drawers.
+- Follow-up: harden employee scope and snapshot-bound approvals before adding
+  more decision UI.
+
+### 2026-08-08 - Harden Supply OS workspace and snapshot trust boundaries
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: prevent restricted employees from inheriting office-wide workspace
+  access and prevent approvals or action release against stale supply data.
+- Files changed: Supply OS persistence and execution services, integration
+  regressions, engineering log, and handoff.
+- Verification: persistence and execution integration tests pass against
+  disposable PostgreSQL databases. TypeScript, diff hygiene, and the
+  changed-content prohibited-character scan pass.
+- Caveats: database-level composite tenant and snapshot consistency guards
+  remain a separate migration. Future external executors must recheck the
+  current snapshot immediately before performing a side effect.
+- Follow-up: add database consistency constraints, then build the deterministic
+  multi-level planning engine without treating missing commercial data as zero.
+
+### 2026-08-08 - Enforce Supply OS reference scope in PostgreSQL
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: make tenant and snapshot reference integrity a database invariant
+  instead of relying only on application query discipline.
+- Added a forward migration that rejects cross-office company and user links on
+  workspaces, memberships, imports, snapshots, and aliases. It also rejects
+  BOM, inventory, demand, and media references outside the exact owning
+  snapshot.
+- Added integration coverage for a foreign-office member, a foreign-office
+  workspace creator, and an inventory item borrowed from another snapshot.
+- Verification: the full migration chain deploys into a fresh PostgreSQL
+  database. Persistence and execution integration suites, Prisma validation,
+  TypeScript, diff hygiene, and changed-content prohibited-character checks
+  pass.
+- Follow-up: treat the deterministic planning engine and visual product twin as
+  the next parallel product checkpoints. Database safety is no longer the
+  excuse for leaving the main page visually static.
+
+### 2026-08-08 - Harden Supply OS ingestion and component research
+
+- Branch: agent3/data-ingestion-supplier-intelligence, integrated into
+  supply-os-grand-vision
+- Expanded the normalized snapshot contract to eight CSV types with header
+  detection, explicit mappings, malformed-row locations, deterministic row
+  ordering, templates, reference and cycle checks, unit and coordinate checks,
+  inventory freshness, and optional purchase-order, supplier-term, and
+  compliance datasets.
+- Registered CSV, SAP, and Oracle behind one adapter contract. SAP and Oracle
+  remain explicitly unavailable and hold no connector credentials.
+- Added deterministic product identity resolution. Exact identifiers may
+  resolve automatically; lexical and optional vector candidates remain human
+  review proposals and cannot publish inferred BOM edges.
+- Added component-scoped supplier research with citation filtering, common
+  evidence envelopes, freshness, official-domain checks, no-source
+  degradation, role-qualified provider gates, approval scope checks, bounded
+  research fetch policy, and rate limiting.
+- Added a forward migration that keeps missing inventory quantities and BOM
+  scrap rates nullable instead of silently converting them to zero.
+- Verification: focused CSV, identity, research, supplier, DSL, lane,
+  suppression, intelligence-map, persistence, and execution suites passed.
+  All migrations deployed into fresh PostgreSQL databases. Prisma validation,
+  touched-path tenant audit, TypeScript, production build, and diff hygiene
+  passed.
+- Caveat: optional purchase-order, supplier-term, and compliance rows are
+  immutable snapshot metadata in this slice. They need dedicated relational
+  models when execution or cross-snapshot querying is implemented.
+
+### 2026-08-08 - Add deterministic Supply OS planning and scenario results
+
+- Branch: agent2/deterministic-planning-engine, integrated into
+  supply-os-grand-vision
+- Task: Build the server-owned planning brain without changing Supply OS UI or
+  dashboard routes.
+- Added a pure engine for multi-level BOM explosion, shared-component and
+  facility constraints, dated demand coverage, shortage dates, commercial and
+  evidence completeness, cash exposure, FCC review state, and deterministic
+  scenario recommendation order.
+- Added canonical snapshot supplier terms and FCC profiles, workspace-approved
+  equivalence rules, an expected inventory receipt date, and an append-only
+  planning result with reproducibility hashes.
+- Added a strict server loader that rejects client-authored rank, cost,
+  feasibility, lead time, and unsupported request fields. It computes stale
+  state by comparing immutable results with the latest published snapshot.
+- Added focused acceptance coverage for deep BOMs, scrap, optional lines,
+  shared components, shortage dates, assembled buys, alternate suppliers,
+  approved and unapproved substitutes, unknown commercial fields, row-order
+  determinism, cycle and unit rejection, FCC blocking, result immutability,
+  stale snapshots, and client trust boundaries.
+- Verification: focused tests, tenant audit, Prisma validation, TypeScript,
+  fresh migration deploy, production build, diff hygiene, and prohibited
+  character scan. See the current handoff for exact command status.
+- Follow-up: teach customer-specific ingestion adapters to populate canonical
+  supplier terms, FCC profiles, and distinct receipt-date positions.
+
+### 2026-08-08 - Cut legacy operator navigation over to Supply OS
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: stop rendering legacy module entry pages as competing products while
+  preserving engines, side-effect boundaries, and utility surfaces.
+- CRM and Search now enter Materials; RFQ and Outreach enter Suppliers; Intel,
+  Intelligence, Brain, Pricing, and Reports enter Scenarios; Jobs, Loads,
+  Carriers, and Domestic Pricing enter Logistics; Inbox and Activity enter
+  Tracking.
+- Old Supply OS builder and workstream URLs also return to panel state in the
+  single workspace. Query and prior-path context remain available for future
+  drawers.
+- Navigation-only redirects leave server actions, APIs, background workers,
+  admin, settings, authentication, and the customer portal intact.
+- Verification: legacy route, single-surface, and panel-routing regressions,
+  TypeScript, and diff hygiene pass.
+- Follow-up: replace unreachable page wrappers with redirect stubs and remove
+  UI-only dependencies after import analysis.
+
+### 2026-08-08 - Remove the first obsolete legacy page implementations
+
+- Branch: supply-os-grand-vision, targeting main
+- Commit: see git log
+- Task: stop compiling unreachable legacy operator interfaces after the route
+  cutover, without deleting reusable engines or server actions.
+- Replaced Dashboard home, Activity, Brain, Carriers, CRM, Domestic Pricing,
+  Inbox, Outreach, Pricing, Reports, and Search page implementations with typed
+  Supply OS redirect stubs.
+- Removed roughly 7,700 lines of obsolete page UI while retaining action files,
+  domain logic, APIs, admin, settings, and customer portal surfaces.
+- Production build confirms the retired routes now use the shared minimal
+  redirect bundle instead of their former page-specific bundles.
+- Verification: legacy-route and single-surface regressions, TypeScript,
+  production build, and diff hygiene pass.
+- Follow-up: extract and retire the remaining Intel, Intelligence, Jobs, Loads,
+  RFQ, builder, and workstream page wrappers without breaking embedded engines.
+
+### 2026-08-08 - Restore the Supply OS operator sidebar and network map
+
+- Branch: supply-os-sidebar-map, targeting main
+- Added a persistent Supply OS navigation rail without restoring Deal Desk,
+  CRM, RFQ, Outreach, Intel, or other retired product navigation.
+- Promoted the existing MapLibre command map to the second primary destination
+  and added direct map shortcuts in both the rail and command header.
+- Added an explicitly illustrative Atlas Robotics network fallback for clean
+  browsers so the restored map does not open to a dead end. Saved browser cases
+  still win and the fallback is not written as shared office truth.
+- Removed broken New Customer links that pointed at a retired redirect route.
+- Added Motion for React for navigation, panel, modal, hover, and tap feedback,
+  with user reduced-motion behavior enabled.
+- Responsive behavior keeps the labeled rail on desktop, an icon rail on
+  medium viewports, and a compact horizontal navigation strip on narrow
+  viewports.
+- Verification: sidebar-map, shell-routing, single-surface, product-twin, and
+  command-map tests pass. Prisma generation, TypeScript, production build, and
+  diff hygiene pass.
+- Bundle note: Supply OS first-load JavaScript increased from 312 kB to 354 kB,
+  about 13.5 percent, which remains inside the prior 15 percent release limit.

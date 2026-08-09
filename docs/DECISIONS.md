@@ -16,6 +16,67 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-08 - Supply OS uses PostgreSQL, relational graphs, and a typed capability DSL
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Supply OS must combine ERP state, product and BOM mapping,
+  supplier and shipper discovery, compliance, sourcing alternatives,
+  logistics, customs, tracking, and cost. These records need exact quantities,
+  office isolation, evidence provenance, versioning, and human approval. A
+  generic agent prompt, separate graph database, or vector-first store would
+  weaken those guarantees and add synchronization work before measured scale
+  requires it.
+- Decision: Keep PostgreSQL as the operational source of truth. Store BOM and
+  future route edges as relational adjacency lists, connector-specific detail
+  as JSONB beside normalized columns, published ERP data as immutable
+  snapshots, and execution history as append-only events. Use the existing
+  source-linked knowledge model for unstructured retrieval. Consider pgvector
+  only as an optional chunk-retrieval aid after measured recall failures, never
+  as operational truth. Control capabilities through the versioned
+  `supply-os/v1` DSL and a typed registry. Bind every approval to the hash of
+  the exact decision or execution input. Keep external actions behind a
+  matching human approval and an idempotent connector worker.
+- Rationale: One relational consistency boundary is simpler, safer, and
+  sufficient for product and route traversal. The DSL makes agent-assisted
+  work reviewable and testable without hiding permissions or side effects
+  inside prompts.
+- Consequences: Office and workspace scope is enforced in application queries
+  and database triggers. Browser storage is temporary compatibility state, not
+  shared office persistence. Neo4j and a standalone vector database are not
+  part of the current architecture. Supplier contact, purchase orders,
+  shipment bookings, and customs filings remain inert until an approved
+  connector implementation exists. Missing quantities, prices, lead times,
+  dates, and scrap rates remain database `NULL` or explicit unknown values;
+  import code may not replace them with zero or an epoch timestamp.
+- Revisit when: measured PostgreSQL traversal performance, unstructured recall,
+  or connector throughput fails a defined service target after normal indexing,
+  recursive SQL, materialized projections, and queue workers are exhausted.
+
+### 2026-08-08 - Supply OS is the sole primary internal product surface
+
+- Status: accepted
+- Owner: product and engineering
+- Context: CRM, Intel, Supplier Finder, freight planning, and tracking appeared
+  as separate products even though they are inputs or workstreams in one supply
+  decision. The fragmentation hid the core product and forced operators to
+  assemble the operating picture themselves.
+- Decision: Make `/dashboard/supply-os` the only primary internal navigation
+  destination. Integrate product and materials, supplier qualification,
+  sourcing scenarios, logistics and customs, and tracking and cost as panels
+  in one operating shell. Keep setup, admin, customer portal, and carefully
+  scoped operational deep links available without presenting them as peer
+  products. Redirect legacy standalone Supplier Finder and Intel entry points
+  into the matching Supply OS panel after their state is migrated.
+- Rationale: The product is the decision and execution system across the
+  supply chain, not a collection of departmental screens.
+- Consequences: Legacy modules may remain temporarily as implementation
+  components or compatibility routes, but they cannot retain independent
+  product positioning. Every panel must distinguish shared canonical records,
+  browser-local drafts, illustrative fixtures, and live external state.
+- Revisit when: a customer-facing surface or a narrowly authorized operator
+  workflow genuinely requires a separate application boundary.
+
 ### 2026-08-07 - Supplier discovery separates public evidence from private origin context
 
 - Status: accepted
@@ -43,6 +104,208 @@ Use this log for durable product and engineering decisions. Do not put every imp
   notes are not encrypted shared records and should not hold formal secrets.
 - Revisit when: Derya has office-scoped supplier records, an approved diligence
   provider, role-based secret storage, and a human-reviewed outreach workflow.
+
+### 2026-08-07 - Supply OS lanes expand into multimodal operating legs
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A continuous curve between a supplier and factory still hid the
+  actual operating chain. Pickup, port or airport handoff, main carriage,
+  customs release, and final delivery were stored only as words inside one
+  compound mode label, so the map could not render or select them.
+- Decision: Keep the commercial lane as the parent record, but deterministically
+  expand it into separately rendered road, ocean, air, customs, and final-mile
+  planning legs. Show maintained Lucide transport symbols and labeled gateway
+  markers on the MapLibre surface. A click on any leg continues to open the
+  parent lane dossier. Keep every generated gateway and route explicitly
+  inferred until shipment records or live provider responses confirm it.
+- Rationale: The customer needs to see the physical handoffs immediately while
+  Derya still needs one lane record for quoting, ownership, and approval.
+- Consequences: Route geometry and gateways are planning hypotheses. They do
+  not claim an observed truck path, booked terminal, vessel movement, flight,
+  broker acceptance, capacity, or price.
+- Revisit when: A routing engine, shipment feed, terminal API, airline or ocean
+  schedule, and broker integration can replace individual inferred legs with
+  current records.
+
+### 2026-08-07 - Supply OS route corridors are continuous, directional, and directly selectable
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Straight route strokes and isolated midpoint labels did not make the
+  supplier-to-factory-to-customer flow visually obvious. Small provider lists
+  also made the lane inspector look like a generic recommendation widget.
+- Decision: Render every modeled movement as a continuous curved corridor over
+  the maintained MapLibre basemap. Use repeated Lucide direction markers,
+  persistent white casing, and selected-lane emphasis. Keep a wide native
+  pointer target along the route curve and preserve the route rail as the
+  keyboard-accessible control. Build lane shortlists from endpoint-specific
+  official candidates first, followed by national alternatives, with no claim
+  of live capacity or award.
+- Rationale: A customer should understand physical flow before reading detail,
+  and an operator should be able to open the exact lane directly from the map.
+  Local and national alternatives make the next quote action useful without
+  pretending Derya has already tendered freight.
+- Consequences: Curves are planning geometry, not turn-by-turn routes. Provider
+  expansion must keep official-source provenance and clearly separate candidate
+  fit from live price, capacity, and performance.
+- Revisit when: Live route engines, carrier APIs, quote ingestion, or a dynamic
+  endpoint provider-search service replaces deterministic planning candidates.
+
+### 2026-08-06 - Customer Supply OS leads with operational ownership and a production handoff
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The saved customer dashboard treated a robotics company's sourced
+  components and finished-goods deliveries as one direct freight lane. In the
+  Atlas example, that sent Shenzhen components to Detroit and Nashville while
+  skipping the Austin production site. The page also made unqualified
+  providers, modeled costs, and static gateway order look more certain than
+  the available cargo facts supported.
+- Decision: Add a deterministic customer-engagement layer above the detailed
+  movement engine. The default offer is full operational ownership, with
+  modular starting points for supplier sourcing, inbound logistics, customs,
+  and finished-goods delivery. Model the customer network as inbound
+  components into the stated production or receiving site and outbound
+  finished goods from that site to customers. Store that site separately from
+  company headquarters when the prompt distinguishes them. Keep named
+  providers, prices, broker candidates, and gateway rankings out of the
+  default customer view until current evidence supports a decision. Persist
+  the selected coverage with the version 1 browser case,
+  while accepting older version 1 cases that do not contain the optional field.
+- Rationale: The one-minute demo must answer what the customer can hand to
+  Derya before it explains freight mechanics. Separating the production
+  handoff prevents a false supply-chain topology, and suppressing unsupported
+  precision protects trust.
+- Consequences: The customer view now presents five concrete workstreams,
+  three scope-specific kickoff inputs, an inbound and outbound network, a
+  customs boundary that distinguishes domestic, unknown, and import movements,
+  and collapsed execution depth. Multi-source inputs do not assign every
+  component to every region without source allocation evidence. Customs scope
+  follows each side of the production handoff, and a headquarters fallback
+  remains an explicit confirmation item. The existing detailed
+  movement planner remains available as an internal deterministic engine and
+  no database schema, dependency, provider call, message, booking, or customs
+  filing path changes. The prior decision to show gateway, price, transit, and
+  eight execution legs by default is superseded.
+- Revisit when: Office-scoped cases, BOM records, supplier candidates, live
+  quotes, broker responses, or bookings can replace the browser-local scoping
+  plan with attributable operational evidence.
+
+### 2026-08-06 - Separate customer generation from saved Supply OS dashboards
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first customer-case version placed the prompt, saved customer
+  browser, map, provider research, evidence records, customs integrations,
+  execution details, and open checks in one very long page. The data model was
+  useful, but the presentation made a customer perform two jobs at once and
+  exposed planning internals that belong in operator tooling or settings.
+- Decision: Keep `/dashboard/supply-os` for saved customer dashboards and add
+  `/dashboard/supply-os/new` for case generation and input review. The saved
+  dashboard shows only the selected lane, map, recommended gateway, expected
+  range, transit assumption, door-to-door steps, compact customs and risk
+  summaries, and three next actions. Keep detailed provider requests,
+  evidence references, connector setup, invoice guidance, and generic supplier
+  profiles in the deterministic engine, but do not render them in the default
+  customer dashboard.
+- Rationale: One page should answer one question. The generator answers what
+  should be modeled. The saved dashboard answers what route is recommended,
+  what it may cost, what can block it, and what the operator needs next.
+- Consequences: Existing version 1 browser saves and movement-scoped planning
+  remain compatible. The route split changes no database schema, tenant scope,
+  provider connection, booking, customs filing, message, or approval boundary.
+  The single-scroll presentation described in the prior customer-case decision
+  is superseded, but its deterministic case model and browser-storage contract
+  remain in force.
+- Revisit when: Detailed operator evidence receives a separate authenticated
+  drill-down, or shared office-scoped case persistence replaces browser saves.
+
+### 2026-08-06 - Supply OS operating plans are movement-scoped and evidence-gated
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A generated customer case could describe several source regions and
+  delivery markets, but one shared shipping section could mix ports, customs
+  requirements, provider options, and cost assumptions across different lanes.
+  The product also needs detailed guidance without pretending a directory,
+  published schedule, index, or stale terminal page is a live quote or current
+  operating condition.
+- Decision: Derive one operating plan for each source-to-destination movement
+  from the versioned saved case. Scope all port rankings, customs workflows,
+  intelligence checks, execution legs, candidate providers, quote inputs,
+  costs, and evidence to that movement identifier. Model unknown current
+  conditions explicitly and require a named source callback with freshness
+  before changing a decision. Customs technology may prepare and validate
+  source facts, but broker-controlled entry review and filing remain human
+  gated.
+- Rationale: Movement isolation prevents one lane's evidence or price from
+  leaking into another. Evidence gates let the UI be useful at planning time
+  without manufacturing live rates, capacity, terminal status, classification,
+  admissibility, or customs release.
+- Consequences: Existing browser-saved cases stay compatible because the plan
+  is derived at render time. All costs remain labeled demo estimates and omit
+  duties and taxes. Dangerous-goods prompts withhold totals until source facts
+  and carrier acceptance are confirmed. Domestic, intra-EU, land-border, US
+  ocean-import, and non-US ocean-import templates cannot borrow jurisdiction or
+  mode-specific providers from each other. Provider and customs connector
+  records are integration candidates until a real adapter returns attributable,
+  timestamped evidence.
+  A production implementation needs office-scoped persisted cases, immutable
+  plan snapshots, expiry rules, authorized provider callbacks, and explicit
+  human approval before messages, bookings, filings, or spend commitments.
+- Revisit when: Derya adds an approved live rate, terminal, carrier, drayage,
+  broker, customs, ERP, TMS, or procurement adapter.
+
+### 2026-08-06 - Supply OS demos start from a generated customer case
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The command-center prototype displayed dense fictional operations
+  before the user identified a customer. Several controls changed only local
+  labels, and six separate views made the demo look broader than its working
+  behavior.
+- Decision: Make one natural-language customer prompt the start of the Supply
+  OS demo. Generate a single scrollable dashboard containing normalized company
+  facts, a supply route, supplier search briefs, indicative forwarder options,
+  customs checks, risks, and open questions. Save and browse demo dashboards in
+  versioned browser storage only. Keep one discreet demo disclosure and mark
+  every unsourced or missing claim for verification.
+- Rationale: A customer can understand the product by watching their own supply
+  case appear. One complete flow is more credible than multiple disconnected
+  tabs, fake telemetry, or disabled controls.
+- Consequences: Browser saves do not create or link CRM companies, persist to
+  Prisma, publish to a customer portal, or authorize any supplier, forwarder,
+  broker, customs, booking, or spend action. Local keys are namespaced by the
+  authenticated office and user, but this is not a substitute for
+  server-enforced tenancy. The future server implementation should use
+  office-scoped cases and immutable snapshots with explicit company linking and
+  allowlisted customer projection.
+- Revisit when: shared case persistence, live provider evidence, or explicit
+  customer access is approved.
+
+### 2026-08-06 - Supply OS is an authenticated dashboard workspace
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first Supply OS prototype was linked from the product sidebar
+  but opened a standalone page with its own green shell. That made it look like
+  a separate product and bypassed the established Derya visual system.
+- Decision: Keep Supply OS at `/dashboard/supply-os` inside the authenticated
+  application layout. Keep `/supply-os` only as a compatibility redirect. Use
+  the existing Derya palette and checked-in Natural Earth geography. Prototype
+  decisions may update local browser state but cannot call server actions,
+  external providers, or operational write paths.
+- Rationale: Supply intelligence and logistics control are part of Derya, not
+  a detached microsite. A real geographic base and restrained record-oriented
+  layout make the prototype more credible without pretending synthetic lanes
+  are live tracking.
+- Consequences: New Supply OS views should extend the authenticated workspace
+  and reuse office-scoped canonical records when backend work begins. They must
+  preserve provenance and human approval before supplier, broker, forwarder,
+  customs, booking, or spend actions.
+- Revisit when: A separately authorized public demo or customer-facing supply
+  network product is approved.
 
 ### 2026-08-04 - Public customer design sandbox is fixture-only
 
@@ -1308,6 +1571,67 @@ Use this log for durable product and engineering decisions. Do not put every imp
   measurable accuracy, latency, or cost enough to justify a documented
   exception.
 
+### 2026-08-06 - Supply OS uses a scoped customer command-center language
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first Supply OS prototype proved the workflow but looked like a
+  generic dashboard. A customer-facing resilience product needs a clear
+  operating picture, faster exception recognition, dense evidence, and an
+  explicit boundary between modeled intelligence and connected live data.
+- Decision: Keep the authenticated Supply OS inside the existing Derya shell,
+  but give the workspace its own dark command-center design language. Make the
+  real Natural Earth map, ranked exceptions, selected entity dossier, evidence,
+  and recommended action the command surface. Reuse that state across network,
+  supplier, procurement, execution, and authority views. Every surface must
+  distinguish fictional or modeled records from connected feeds and external
+  actions. Movement-scoped intelligence must fail closed: when an assessment,
+  quote set, or approval does not belong to the selected movement, show its own
+  fallback or an honest empty state instead of borrowing another record.
+- Rationale: Kpler-style geospatial density and Windward-style anomaly dossiers
+  support fast operational decisions, while Derya differentiates through the
+  full supplier-to-execution workflow and explicit delegation policy. Scoping
+  the visual language avoids destabilizing the internal application shell.
+- Consequences: Supply OS may be visually denser and darker than the rest of
+  the product. It still uses canonical geography, deterministic local state,
+  no provider calls, no server actions, and no external writes in the current
+  prototype. Tablet and mobile layouts must stack the operating surfaces rather
+  than crop the desktop canvas.
+- Revisit when: real office-scoped customer records and provider events are
+  connected, or when customer testing shows that a specific data layer needs a
+  different default hierarchy.
+
+### 2026-08-06 - Public company research is evidence, not operating truth
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A useful one-minute customer demo cannot rely on the operator to
+  manually restate every company fact, but a public website also does not prove
+  actual suppliers, active lanes, customs treatment, freight rates, or current
+  operational relationships.
+- Decision: Start Supply OS case generation with one authenticated web-search
+  research packet. Verify the official website against provider-attributed
+  sources, retain source URLs on every supported claim, and extract bounded
+  same-domain homepage metadata for the logo. Store the packet with the
+  browser case. Treat likely inputs, source regions, and destinations as
+  hypotheses with explicit uncertainty. Keep deterministic case logic and
+  human approval responsible for route, customs, supplier, spend, and booking
+  decisions. If research is unavailable, offer an explicit description-only
+  fallback that does not claim public verification.
+- Rationale: The customer should recognize their company immediately and see a
+  credible supply-chain starting point, while Derya remains honest about the
+  difference between public context and the records needed to run logistics.
+  Provider-source filtering makes provenance auditable and limits fabricated
+  citations. The bounded metadata fetch adds identity without creating a broad
+  crawler or weakening the research trust boundary.
+- Consequences: `OPENAI_API_KEY` powers company discovery. Research latency is
+  part of new-case generation, research failures stay visible, and unsupported
+  facts cannot silently graduate to confirmed workflow data. Cases remain
+  browser-local until a later office-scoped persistence design is approved.
+- Revisit when: production evaluation shows the public brief misses material
+  company facts, or when office-scoped persistence and customer publishing need
+  a versioned research refresh policy.
+
 ### 2026-08-07 - Company research degrades to verified official-site evidence
 
 - Status: accepted
@@ -1334,6 +1658,23 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: connected company systems provide authoritative facility,
   supplier, shipment, and customs records, or when measured fallback quality
   justifies a broader allow-listed source strategy.
+
+### 2026-08-07 - Supply OS uses a lighter graphite customer surface
+
+- Status: accepted
+- Owner: product and design
+- Context: Customer feedback found the command-center palette too close to
+  black and the visual hierarchy too flat.
+- Decision: Keep the scoped enterprise language but derive page and panel
+  surfaces from a lighter neutral graphite scale. Use borders, spacing, and
+  typography for hierarchy instead of highlights, gradients, or random colors.
+- Rationale: The product should retain operational density without feeling
+  oppressive or hiding controls in low-contrast surfaces.
+- Consequences: The Supply OS remains visually distinct from the internal app,
+  but its controls and evidence panels are easier to scan. Existing mobile,
+  palette, and global-style isolation tests continue to guard the boundary.
+- Revisit when: customer testing supports a full light theme or a shared
+  application-wide token system.
 
 ### 2026-08-07 - Explicit company websites use official-site research first
 
@@ -1386,6 +1727,151 @@ Use this log for durable product and engineering decisions. Do not put every imp
   across requests, or a connected company-data provider can resolve ambiguous
   legal entities without weakening provenance.
 
+### 2026-08-07 - Supply OS leads with an inferred network and ranked changes
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: The previous customer page exposed broad planning categories and a
+  route map, but it did not make a useful best-effort model of the customer's
+  supplier network, processing site, buyer profile, or first operational
+  improvement. Generic cards also made the product look assembled rather than
+  designed around a supply-chain decision.
+- Decision: Build a deterministic company-profile model that maps supplier
+  clusters, the operating site, customer clusters, likely cargo, movement
+  modes, confidence, and the next fact to confirm. Keep official evidence,
+  third-party public evidence, customer input, and inference as separate basis
+  values. Endpoint evidence does not prove a shipment; a movement is
+  customer-stated only when its endpoints came directly from customer input.
+  Lead the page with an interactive network and a ranked action queue. Each
+  action must state the current condition, recommended change, required
+  customer decision, required input, and the linked procurement,
+  supplier-contact, shipment, customs, or fulfillment workstream. Candidate
+  organizations may appear only as qualification targets with a direct
+  capability source and an explicit note that they are not known
+  relationships.
+- Rationale: An early customer demo needs to be immediately useful before ERP,
+  procurement, shipment, and broker systems are connected. A structured
+  hypothesis plus a concrete validation path creates value without pretending
+  to possess operational truth.
+- Consequences: The NOX Metals profile includes domestic aerospace plate mills,
+  Great Lakes buffer stock, a Southern Ontario alternate, a known operating
+  site, and regional plus national buyer profiles. The interface can link into
+  five reserved workstream routes, but those routes do not send messages, award
+  suppliers, book freight, file customs, or commit spend. Visible official-site
+  addresses are considered alongside structured metadata so stale or missing
+  JSON-LD does not silently suppress the current address.
+- Revisit when: connected office-scoped purchase orders, suppliers, customer
+  orders, shipments, and broker records can replace inferred nodes with
+  observed relationships and measured lane performance.
+
+### 2026-08-07 - Supply OS uses a fixed map-first command view
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: The report-style dashboard and checked-in Natural Earth SVG made the
+  network secondary, created document scrolling, and required application code
+  to imitate map controls and symbols. It did not meet the interaction quality
+  of established maritime operating products.
+- Decision: Make the saved-customer dashboard one fixed-height view with a
+  compact header, object rail, full map canvas, selected-object dossier, and
+  bottom status strip. Use MapLibre GL JS through React MapLibre, the
+  OpenFreeMap Positron vector style, Lucide operational symbols, and Radix
+  controls. Hover or focus exposes the contact card, click selects an object,
+  and every selected supplier, movement, customs handoff, factory,
+  distribution point, or customer exposes one next action. If WebGL 2 is not
+  available, preserve the object rail and dossier and show a bounded renderer
+  notice instead of crashing the page.
+- Supersedes: The checked-in Natural Earth map and scroll-based saved-customer
+  layout described in `Supply OS leads with an inferred network and ranked
+  changes`. The provenance and human-approval requirements from that decision
+  remain active.
+- Rationale: A logistics operating surface should lead with geography,
+  movement, selection, and local operating detail. Maintained map, icon, and
+  control libraries provide consistent behavior without proprietary copying or
+  custom-drawn visual language.
+- Consequences: The dashboard requires WebGL 2 and a network connection to the
+  OpenFreeMap style for the live basemap. Provider and broker entries remain
+  candidates with direct public links, not connected capacity or awarded work.
+  Routes remain inferred until supported by customer or connected operating
+  records. Browser-local customer storage and office/user scoping are
+  unchanged.
+- Revisit when: Derya has live shipment, AIS, rate, broker, and provider data,
+  or when an approved self-hosted basemap is required for offline operation.
+
+### 2026-08-07 - Supply OS basemaps fail over and analysis stays actionable
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: One vector-style provider could leave working markers over an empty
+  canvas when any nested style resource was slow or unavailable. The right
+  dossier also collapsed a complete company analysis into one truncated
+  recommendation, and saved social-preview images could appear as logos.
+- Decision: Load the low-dependency CARTO raster basemap first and treat the
+  first raster source content as ready. Fall back to CARTO Positron and then
+  OpenFreeMap Positron only when no usable source arrives within the bounded
+  load window. Keep the object rail usable when WebGL is unavailable. Separate
+  selected-object detail from ranked optimization priorities with maintained
+  Radix tabs. Every priority must state the condition, Derya intervention,
+  customer decision, starting input, measurable operating result, and linked
+  workstream. Rank structured or visible official brand assets above icons,
+  and never treat a social-preview photograph or customer-logo carousel as the
+  company logo.
+- Rationale: The map is the product's primary working surface, so a visible
+  real basemap is more valuable than a fragile richer style. Company analysis
+  must remain inspectable and operational inside the same viewport instead of
+  being hidden behind a summary sentence.
+- Consequences: Advanced-aircraft profiles expose eight measurable controls
+  covering multi-tier BOM visibility, demand gates, serial-number kits,
+  prototype and production lanes, supplier industrialization, customs and
+  export passports, gateway variability, and deployment spares. Existing
+  browser-local cases collapse SEO taglines back to the customer name and
+  reject obvious hero images as identity assets. Candidate suppliers, routes,
+  brokers, and recommendations remain hypotheses until connected records and
+  human approval exist.
+- Revisit when: Derya adopts an approved self-hosted basemap, durable
+  office-scoped company master data, or connected procurement and shipment
+  evidence that can replace the current outside-in operating model.
+
+### 2026-08-07 - Supply OS lanes are selectable planning objects
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: The command map displayed movement markers but did not reliably
+  preserve a route when research omitted coordinates, did not make the path
+  itself selectable, and did not turn a movement into a usable carrier and cost
+  decision. Generic global providers also failed the local pickup and delivery
+  question.
+- Decision: Treat each modeled edge as a first-class route with endpoints,
+  cargo, mode, confidence, mapped optimization priority, local candidate
+  contacts, and an optional deterministic rate envelope. Normalize only a
+  bounded list of known place names when coordinates are absent, without
+  changing provenance. Project solid route geometry over the maintained
+  MapLibre basemap and align a 24 pixel native button to the path for pointer
+  and keyboard selection. Use Recharts for network flow and rate comparisons.
+- Pricing boundary: A road-rate envelope may be shown only when both endpoints
+  and a road-compatible mode exist. It must state its mileage method, source
+  benchmark, exclusions, and that a live quote is required. It may not imply
+  capacity, equipment availability, accessorial acceptance, or an awarded
+  carrier.
+- Provider boundary: A local carrier card requires an official public source,
+  location, phone number where available, relevant capability, and endpoint
+  relevance. It remains a qualification candidate until Derya receives and a
+  human approves current capacity, insurance, operating authority, service,
+  and price.
+- Rationale: The customer should be able to click the exact supply-chain leg
+  that needs work and immediately see what Derya would compare, who could serve
+  it, what it might cost, what remains unknown, and which optimization action
+  belongs there.
+- Consequences: The map can now support a one-minute customer demo without
+  pretending that public evidence is an operating record. Added chart and map
+  interaction code increases the Supply OS client bundle, currently 311 kB
+  first load in the production build. This is acceptable for the authenticated
+  planning surface and should be revisited when connected data makes the page
+  substantially denser.
+- Revisit when: connected office-scoped TMS, ERP, procurement, broker, rate,
+  telematics, and shipment events can replace planning envelopes and candidate
+  providers with measured lane performance and executable options.
+
 ### 2026-08-07 - Map intelligence requires cited route relevance
 
 - Status: accepted
@@ -1411,27 +1897,58 @@ Use this log for durable product and engineering decisions. Do not put every imp
   purchase orders, and shipment telemetry can provide deterministic joins and
   measured severity instead of public-source matching.
 
-### 2026-08-08 - Keep one freight operator product and enforce utility-only copy
+### 2026-08-08 - Supply planning is deterministic, snapshot-bound, and append-only
 
 - Status: accepted
 - Owner: product and engineering
-- Context: A parallel procurement prototype became the authenticated home,
-  replaced working freight pages with redirects, and added a large isolated UI,
-  API, domain, persistence, style, and test stack. Product labels also drifted
-  into model promotion, slogans, metaphors, and internal strategy language.
-- Decision: Retire the parallel prototype and restore the freight dashboard as
-  the operator product. Keep useful freight, CRM, customer workspace, supplier
-  research, market intelligence, and approval-gated domain services. Product
-  copy must state operational state, scope, limits, action, recovery, or
-  provenance, and the production build must reject known fluff patterns.
-- Rationale: A second product surface hid working freight workflows and added
-  maintenance cost without replacing their operational depth. Utility-only copy
-  makes the interface easier to trust and harder to mistake for a pitch deck.
-- Consequences: The isolated prototype code, styles, APIs, tests, docs, and
-  feature-only dependencies are removed. Existing freight routes render their
-  prior functional pages. The founder explicitly approved permanent deletion
-  of the prototype's persisted records, so its 26 active models are removed by
-  a forward migration that also removes its standalone database functions,
-  while its historical migrations remain unchanged.
-- Revisit when: a measured freight workflow requires a new operator surface
-  that cannot fit the current route structure without hiding existing work.
+- Context: The shared Supply OS snapshot models made BOM, inventory, and demand
+  canonical, but the existing optimization module was still a presentation
+  model. Accepting browser-computed rank, feasibility, cost, or lead time would
+  make planning unauditable and easy to tamper with.
+- Decision: Run planning in a pure deterministic server-owned engine over one
+  published snapshot plus canonical supplier terms, approved equivalence rules,
+  and FCC evidence profiles. Support only current plan, alternate supplier,
+  assembled subassembly, and approved equivalence scenario families. Persist
+  append-only results with snapshot, normalized-input, engine-version, and
+  deterministic-output hashes.
+- Unknown-data rule: Missing inventory facts, price, freight, evidenced duty,
+  lead time, supplier capacity, receipt timing, or compliance evidence remain
+  null and appear in the unknown list. Absence is never converted to zero.
+- Recommendation rule: Reject blocked scenarios, maximize units available by
+  the required dates, compare landed cost only when complete, then lead time,
+  supplier concentration, and stable scenario key. Do not use an AI score.
+- FCC boundary: Report only `evidence_complete`, `review_required`, or
+  `blocked`. Module authorization evidence never proves that a host product
+  passes FCC.
+- Consequences: Client requests may select only canonical scenario inputs and
+  cannot author rank, cost, feasibility, or commercial facts. A newer published
+  snapshot marks older results stale in reads while retaining their immutable
+  audit history. Execution still requires the separate approval ledger.
+- Revisit when: Real customer connectors need additional canonical term fields,
+  unit conversion rules, separate inbound receipt dates, or constrained
+  inter-facility transfer planning.
+
+### 2026-08-08 - Supply OS uses an internal operator rail and restores map access
+
+- Status: accepted
+- Owner: product and design
+- Context: Removing the one-link dashboard sidebar was correct, but replacing
+  all in-product navigation with a horizontal tab strip made the operating
+  surface harder to scan and buried the network map inside Logistics.
+- Decision: Keep Supply OS as the only internal product while restoring a
+  persistent sidebar inside that product. The rail may navigate only Materials,
+  Network Map, Suppliers, Scenarios, and Tracking. It must not resurrect the
+  retired Deal Desk, CRM, RFQ, Outreach, Intel, or report navigation.
+- Map decision: Promote the existing evidence-bounded MapLibre command map to a
+  primary Network Map destination and expose it from both the rail and command
+  header. The map remains supporting operational context, not a replacement for
+  product, inventory, demand, and sourcing decisions.
+- UI library decision: Use Motion for React for interruptible interface motion,
+  layout indicators, presence transitions, and gestures. Keep simple color
+  transitions in CSS and keep all supply, evidence, authorization, and approval
+  logic outside animation libraries.
+- Accessibility: Motion must honor the user's reduced-motion preference. The
+  sidebar collapses rather than consuming the analytical canvas on smaller
+  screens.
+- Supersedes: The no-sidebar interface choice in the 2026-08-08 full-width
+  product-chrome slice. It does not supersede the single-product route cutover.

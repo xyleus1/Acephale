@@ -35,7 +35,7 @@ export function BrainBridgePanel({ result }: { result: BrainBridgeResult }) {
     <section className="card brain-bridge-panel">
       <div className="card-body">
         <div className="brain-bridge-header">
-          <h2>Brain context</h2>
+          <h2>Live Brain Context</h2>
           {result.sections.length > 0 && <span>{result.sections.length}</span>}
         </div>
         <div className="brain-bridge-state">
@@ -46,7 +46,7 @@ export function BrainBridgePanel({ result }: { result: BrainBridgeResult }) {
           <div className="brain-bridge-empty">
             {result.mode === "error"
               ? "Context retrieval failed - this panel is read-only context; the RFQ data above is unaffected."
-              : "No context sections available."}
+              : "No brain context sections to show."}
           </div>
         ) : (
           result.sections.map((section) => {

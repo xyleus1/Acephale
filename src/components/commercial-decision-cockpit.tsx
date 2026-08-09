@@ -295,7 +295,7 @@ export function CommercialDecisionCockpit({
     <section className={`commercial-cockpit ${gateTone}`}>
       <div className="commercial-cockpit-head">
         <div>
-          <div className="commercial-cockpit-kicker">Commercial assessment</div>
+          <div className="commercial-cockpit-kicker">Commercial brain</div>
           <h2>{strategy.operatorDecision.title}</h2>
           <p>{strategy.operatorDecision.command}</p>
         </div>
@@ -422,7 +422,7 @@ export function CommercialDecisionCockpit({
               <em>{commercialPriority.whyNow}</em>
             </div>
             <div>
-              <span>Required economics</span>
+              <span>Economic unlock</span>
               <strong>{commercialPriority.economicUnlock}</strong>
               <em>{commercialPriority.riskTradeoff}</em>
             </div>

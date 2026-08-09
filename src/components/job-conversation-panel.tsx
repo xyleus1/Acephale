@@ -39,7 +39,7 @@ const AGENT_TOOLS = [
     label: "Brain",
     detail: "Contract + proof",
     icon: "shield",
-    prompt: "Inspect the commercial assessment for this job. Start with the decision record, missing proof, next allowed action, and stop condition.",
+    prompt: "Inspect the commercial brain for this job. Start with the decision contract, weakest proof gap, next safe move, and stop condition.",
   },
   {
     label: "Qualify",
