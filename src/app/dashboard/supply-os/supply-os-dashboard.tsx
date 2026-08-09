@@ -252,7 +252,7 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
     railTitle: "Supply network",
     railSummary: "Sources and facilities",
     objectKinds: ["supplier", "factory", "distribution"],
-    defaultInspector: "optimization",
+    defaultInspector: "object",
   },
   logistics: {
     railTitle: "Logistics network",
