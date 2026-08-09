@@ -6,7 +6,13 @@ const root = process.cwd();
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"), "utf8");
 
-assert.match(dashboard, /activePanel === "scenarios"[\s\S]*<OpportunityScenarioWorkbench/);
+assert.equal(
+  /activePanel === "scenarios"[\s\S]*<OpportunityScenarioWorkbench/.test(dashboard),
+  false,
+  "Opportunities must not replace the stable map workspace",
+);
+assert.match(dashboard, /<div className=\{styles\.commandMapStage\}>[\s\S]*<SupplyOsCommandMap/);
+assert.match(dashboard, /scenarios: \["customer", "distribution", "supplier"\]/);
 assert.match(dashboard, /Supply, logistics, production, and network scenarios/);
 
 for (const scenario of ["Supply", "Logistics", "Production", "Network"]) {

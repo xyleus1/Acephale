@@ -233,6 +233,7 @@ export function SupplyOsCommandMap({
   const fallbackPendingRef = useRef(false);
   const basemapReadyRef = useRef(false);
   const previousSelectedObjectIdRef = useRef(selectedObject?.id);
+  const previousActivePanelRef = useRef(activePanel);
   const [hoveredObject, setHoveredObject] = useState<SupplyCommandObject | null>(null);
   const [hoveredInsight, setHoveredInsight] = useState<SupplyCommandInsight | null>(null);
   const [hoveredRouteId, setHoveredRouteId] = useState<string | null>(null);
@@ -314,25 +315,12 @@ export function SupplyOsCommandMap({
     if (object) onSelectObject(object);
   }, [commandMap.objects, commandMap.routes, onSelectObject]);
 
-  const fitNetwork = useCallback((animate = true) => {
-    const focusedObjects = activePanel === "suppliers"
-      ? [
-          ...supplierFocusObjects,
-          ...visibleMapObjects.filter((object) => object.kind === "factory").slice(0, 1),
-        ]
-      : activePanel === "materials"
-        ? [
-            ...supplierFocusObjects,
-            ...visibleMapObjects.filter((object) => object.kind !== "supplier"),
-          ]
-        : visibleMapObjects;
-    const visibleInsights = activePanel === "logistics" || activePanel === "scenarios" || activePanel === "tracking"
-      ? commandMap.insights
-      : [];
-    const coordinates = [
-      ...focusedObjects.map((object) => object.coordinates),
-      ...visibleInsights.map((insight) => insight.coordinates),
-    ];
+  const fitCoordinates = useCallback((
+    coordinates: Array<{ longitude: number; latitude: number }>,
+    animate = true,
+    singleZoom = 7.6,
+    maxZoom = 7.2,
+  ) => {
     if (!coordinates.length || !mapRef.current) return;
     const west = Math.min(...coordinates.map((point) => point.longitude));
     const east = Math.max(...coordinates.map((point) => point.longitude));
@@ -340,38 +328,90 @@ export function SupplyOsCommandMap({
     const north = Math.max(...coordinates.map((point) => point.latitude));
     const compact = window.innerWidth < 1180;
     if (west === east && south === north) {
-      mapRef.current.easeTo({ center: [west, south], zoom: 5.6, duration: animate ? 450 : 0 });
+      mapRef.current.easeTo({ center: [west, south], zoom: singleZoom, duration: animate ? 440 : 0 });
       return;
     }
     mapRef.current.fitBounds([[west, south], [east, north]], {
       padding: compact
         ? { top: 60, right: 52, bottom: 60, left: 52 }
         : { top: 68, right: 68, bottom: 68, left: 68 },
-      maxZoom: activePanel === "suppliers" ? 5.8 : 6.4,
-      duration: animate ? 450 : 0,
+      maxZoom,
+      duration: animate ? 480 : 0,
     });
-  }, [activePanel, commandMap.insights, supplierFocusObjects, visibleMapObjects]);
+  }, []);
+
+  const focusRoute = useCallback((edgeId: string, animate = true) => {
+    const coordinates = routePaths
+      .filter(({ route }) => route.edgeId === edgeId)
+      .flatMap(({ coordinates: path }) => path.map(([longitude, latitude]) => ({ longitude, latitude })));
+    fitCoordinates(coordinates, animate, 6.8, 6.8);
+  }, [fitCoordinates, routePaths]);
+
+  const focusObject = useCallback((object: SupplyCommandObject, animate = true) => {
+    if (object.kind === "movement" && object.edgeId) {
+      focusRoute(object.edgeId, animate);
+      return;
+    }
+    const zoom = object.kind === "supplier"
+      ? 6.2
+      : object.kind === "factory"
+        ? 8.8
+        : object.kind === "customer"
+          ? 8.2
+          : 7.8;
+    fitCoordinates([object.coordinates], animate, zoom, zoom);
+  }, [fitCoordinates, focusRoute]);
+
+  const focusActivePanel = useCallback((animate = true) => {
+    if (activePanel === "materials") {
+      const object = visibleMapObjects.find((object) => object.kind === "factory")
+        ?? visibleMapObjects.find((object) => object.kind === "distribution")
+        ?? visibleMapObjects[0];
+      if (object) focusObject(object, animate);
+      return;
+    }
+    if (activePanel === "suppliers") {
+      const suppliers = supplierFocusObjects.filter((object) => object.kind === "supplier");
+      fitCoordinates(suppliers.map((object) => object.coordinates), animate, 6.2, 5.8);
+      return;
+    }
+    if (activePanel === "scenarios") {
+      const customers = visibleMapObjects.filter((object) => object.kind === "customer");
+      if (customers.length) {
+        fitCoordinates(customers.map((object) => object.coordinates), animate, 8.2, 7.4);
+        return;
+      }
+    }
+    if (activePanel === "tracking") {
+      const movement = visibleMapObjects.find((object) => object.kind === "movement" && object.edgeId);
+      if (movement?.edgeId) {
+        focusRoute(movement.edgeId, animate);
+        return;
+      }
+    }
+    const routeCoordinates = routePaths.flatMap(({ coordinates: path }) => (
+      path.map(([longitude, latitude]) => ({ longitude, latitude }))
+    ));
+    fitCoordinates(routeCoordinates, animate, 5.8, 5.8);
+  }, [activePanel, fitCoordinates, focusObject, focusRoute, routePaths, supplierFocusObjects, visibleMapObjects]);
 
   useEffect(() => {
-    if (mapRef.current?.loaded()) fitNetwork(false);
-  }, [fitNetwork]);
+    if (mapRef.current?.loaded()) focusActivePanel(true);
+  }, [activePanel, focusActivePanel]);
 
   useEffect(() => {
     const previousId = previousSelectedObjectIdRef.current;
+    const panelChanged = previousActivePanelRef.current !== activePanel;
     previousSelectedObjectIdRef.current = selectedObject?.id;
+    previousActivePanelRef.current = activePanel;
     if (
       !selectedObject
       || previousId === selectedObject.id
-      || (activePanel !== "materials" && activePanel !== "suppliers")
-      || (selectedObject.kind !== "supplier" && selectedObject.kind !== "factory")
+      || panelChanged
       || !mapRef.current?.loaded()
     ) return;
-    mapRef.current.easeTo({
-      center: [selectedObject.coordinates.longitude, selectedObject.coordinates.latitude],
-      zoom: selectedObject.kind === "supplier" ? 5.2 : 4.8,
-      duration: 420,
-    });
-  }, [activePanel, selectedObject]);
+    focusObject(selectedObject, true);
+  }, [activePanel, focusObject, selectedObject]);
 
   useEffect(() => {
     const canvas = document.createElement("canvas");
@@ -403,8 +443,8 @@ export function SupplyOsCommandMap({
     basemapReadyRef.current = true;
     fallbackPendingRef.current = false;
     setBasemapState("ready");
-    fitNetwork(false);
-  }, [fitNetwork]);
+    focusActivePanel(false);
+  }, [focusActivePanel]);
 
   useEffect(() => {
     if (mapCapability !== "ready" || basemapReadyRef.current || basemapState === "failed") return;
@@ -674,15 +714,15 @@ export function SupplyOsCommandMap({
             <button
               type="button"
               className={styles.fitMapButton}
-              aria-label={activePanel === "suppliers" ? "Fit supplier network on map" : "Fit network on map"}
-              onClick={() => fitNetwork()}
+              aria-label={`Refocus ${activePanel} on map`}
+              onClick={() => focusActivePanel()}
             >
               <LocateFixed size={16} strokeWidth={1.8} />
             </button>
           </Tooltip.Trigger>
           <Tooltip.Portal>
             <Tooltip.Content className={styles.mapTooltip} side="left" sideOffset={8}>
-              {activePanel === "suppliers" ? "Fit supplier network" : "Fit network"}
+              Refocus {activePanel}
               <Tooltip.Arrow className={styles.mapTooltipArrow} />
             </Tooltip.Content>
           </Tooltip.Portal>

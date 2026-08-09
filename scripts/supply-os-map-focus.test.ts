@@ -17,9 +17,9 @@ assert.match(styles, /grid-template-rows: minmax\(0, 4\.2fr\) minmax\(140px, 0\.
 assert.match(commandMap, /\.slice\(0, 4\)/, "supplier focus must stay limited to four locations");
 assert.match(commandMap, /data-supplier-focus=\{supplierFocusRank \? "true" : undefined\}/, "focused supplier markers must expose a visual state");
 assert.match(commandMap, /Supplier focus \$\{supplierFocusRank\}/, "focused supplier markers must remain identifiable to assistive technology");
-assert.match(commandMap, /visibleMapObjects\.filter\(\(object\) => object\.kind === "factory"\)\.slice\(0, 1\)/, "supplier framing must retain the receiving factory as context");
+assert.match(commandMap, /activePanel === "suppliers"[\s\S]*supplierFocusObjects\.filter\(\(object\) => object\.kind === "supplier"\)/, "supplier framing must focus the ranked supplier shortlist");
 assert.equal(commandMap.includes("right: 410"), false, "map fitting must not reserve space for retired floating panels");
 assert.equal(commandMap.includes("left: 300"), false, "map fitting must use the full bounded viewport");
-assert.match(commandMap, /selectedObject\.kind === "supplier" \? 5\.2 : 4\.8/, "selecting a supplier must zoom into its operating region");
+assert.match(commandMap, /object\.kind === "supplier"[\s\S]*?\? 6\.2/, "selecting a supplier must zoom into its operating region");
 
 console.log("Supply OS map focus contract passed.");

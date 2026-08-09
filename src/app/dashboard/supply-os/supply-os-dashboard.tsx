@@ -281,6 +281,22 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
   },
 };
 
+const PANEL_FOCUS_KINDS: Record<SupplyOsPanel, SupplyCommandObject["kind"][]> = {
+  materials: ["factory", "distribution", "supplier"],
+  logistics: ["movement", "customs", "factory"],
+  suppliers: ["supplier", "factory"],
+  scenarios: ["customer", "distribution", "supplier"],
+  tracking: ["movement", "customs", "customer"],
+};
+
+function preferredPanelObject(panel: SupplyOsPanel, objects: SupplyCommandObject[]) {
+  for (const kind of PANEL_FOCUS_KINDS[panel]) {
+    const match = objects.find((object) => object.kind === kind);
+    if (match) return match;
+  }
+  return objects[0] ?? null;
+}
+
 type OpportunityPlayId = "supply" | "logistics" | "production" | "network";
 
 type OpportunityPlay = {
@@ -607,13 +623,19 @@ function CaseCommandCenter({
     ?? commandMap.objects.find((object) => object.kind === "supplier")
     ?? commandMap.objects[0]
     ?? null;
-  const [selectedObjectId, setSelectedObjectId] = useState(initialObject?.id ?? "");
+  const [selection, setSelection] = useState({ panel: activePanel, objectId: initialObject?.id ?? "" });
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
-  const selectedObject = commandMap.objects.find((object) => object.id === selectedObjectId) ?? initialObject;
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
   );
+  const preferredObject = useMemo(
+    () => preferredPanelObject(activePanel, domainObjects),
+    [activePanel, domainObjects],
+  );
+  const selectedObject = selection.panel === activePanel
+    ? commandMap.objects.find((object) => object.id === selection.objectId) ?? preferredObject ?? initialObject
+    : preferredObject ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
   const supplierCount = commandMap.objects.filter((object) => object.kind === "supplier").length;
@@ -624,15 +646,7 @@ function CaseCommandCenter({
 
   useEffect(() => {
     setInspectorMode(domain.defaultInspector);
-    if (activePanel === "suppliers") {
-      const supplier = domainObjects.find((object) => object.kind === "supplier");
-      if (supplier && selectedObject?.kind !== "supplier") setSelectedObjectId(supplier.id);
-      return;
-    }
-    if (selectedObject && domain.objectKinds.includes(selectedObject.kind)) return;
-    const nextObject = domainObjects.find((object) => object.kind === "factory") ?? domainObjects[0];
-    if (nextObject) setSelectedObjectId(nextObject.id);
-  }, [activePanel, domain.defaultInspector, domain.objectKinds, domainObjects, selectedObject]);
+  }, [activePanel, domain.defaultInspector]);
 
   function selectScope(scope: SupplyEngagementScope) {
     if (scope === selectedScope) return;
@@ -644,13 +658,13 @@ function CaseCommandCenter({
   }
 
   function selectNetworkObject(object: SupplyCommandObject) {
-    setSelectedObjectId(object.id);
+    setSelection({ panel: activePanel, objectId: object.id });
     setInspectorMode("object");
   }
 
   function focusOptimizationAction(actionId: string) {
     const related = commandMap.objects.find((object) => object.optimizationIds.includes(actionId));
-    if (related) setSelectedObjectId(related.id);
+    if (related) setSelection({ panel: activePanel, objectId: related.id });
   }
 
   return (
@@ -741,9 +755,7 @@ function CaseCommandCenter({
 
       {scopeError ? <div className={styles.commandError} role="alert">{scopeError}</div> : null}
 
-      {activePanel === "scenarios" ? (
-        <OpportunityScenarioWorkbench model={model} company={dashboardName(dashboard)} />
-      ) : <div className={styles.commandMapStage}>
+      <div className={styles.commandMapStage}>
         <section className={styles.mapPanel} aria-label={`${domain.railTitle} map`}>
           <SupplyOsCommandMap
             commandMap={commandMap}
@@ -836,7 +848,7 @@ function CaseCommandCenter({
           />
         ) : null}
 
-      </div>}
+      </div>
     </article>
   );
 }
