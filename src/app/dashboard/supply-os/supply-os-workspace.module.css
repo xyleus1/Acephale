@@ -3627,6 +3627,15 @@
     padding: 0;
   }
 
+  .routeRail > header::after {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--navy);
+    content: "";
+  }
+
+  .routeRail > header span,
   .routeRail > header small,
   .routeRailCopy,
   .routeRailStatus {
