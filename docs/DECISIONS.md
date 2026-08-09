@@ -1927,3 +1927,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: Real customer connectors need additional canonical term fields,
   unit conversion rules, separate inbound receipt dates, or constrained
   inter-facility transfer planning.
+
+### 2026-08-08 - Supply OS uses an internal operator rail and restores map access
+
+- Status: accepted
+- Owner: product and design
+- Context: Removing the one-link dashboard sidebar was correct, but replacing
+  all in-product navigation with a horizontal tab strip made the operating
+  surface harder to scan and buried the network map inside Logistics.
+- Decision: Keep Supply OS as the only internal product while restoring a
+  persistent sidebar inside that product. The rail may navigate only Materials,
+  Network Map, Suppliers, Scenarios, and Tracking. It must not resurrect the
+  retired Deal Desk, CRM, RFQ, Outreach, Intel, or report navigation.
+- Map decision: Promote the existing evidence-bounded MapLibre command map to a
+  primary Network Map destination and expose it from both the rail and command
+  header. The map remains supporting operational context, not a replacement for
+  product, inventory, demand, and sourcing decisions.
+- UI library decision: Use Motion for React for interruptible interface motion,
+  layout indicators, presence transitions, and gestures. Keep simple color
+  transitions in CSS and keep all supply, evidence, authorization, and approval
+  logic outside animation libraries.
+- Accessibility: Motion must honor the user's reduced-motion preference. The
+  sidebar collapses rather than consuming the analytical canvas on smaller
+  screens.
+- Supersedes: The no-sidebar interface choice in the 2026-08-08 full-width
+  product-chrome slice. It does not supersede the single-product route cutover.

@@ -2,9 +2,11 @@
 
 import {
   Boxes,
+  CircleDot,
   Database,
   Factory,
   GitCompareArrows,
+  Globe2,
   MapPinned,
   PackageSearch,
   Radio,
@@ -14,6 +16,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SteelSupplierFinder } from "../supplier-finder/steel-supplier-finder";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
@@ -26,15 +29,16 @@ type PanelDefinition = {
   id: SupplyOsPanel;
   label: string;
   shortLabel: string;
+  description: string;
   icon: LucideIcon;
 };
 
 const PANELS: PanelDefinition[] = [
-  { id: "materials", label: "Product and materials", shortLabel: "Materials", icon: Boxes },
-  { id: "suppliers", label: "Supplier qualification", shortLabel: "Suppliers", icon: PackageSearch },
-  { id: "scenarios", label: "Sourcing scenarios", shortLabel: "Scenarios", icon: GitCompareArrows },
-  { id: "logistics", label: "Logistics and customs", shortLabel: "Logistics", icon: Route },
-  { id: "tracking", label: "Tracking and cost", shortLabel: "Tracking", icon: Radio },
+  { id: "materials", label: "Product and materials", shortLabel: "Materials", description: "BOM, stock, demand", icon: Boxes },
+  { id: "logistics", label: "Network map", shortLabel: "Network map", description: "Suppliers, factories, lanes", icon: Globe2 },
+  { id: "suppliers", label: "Supplier qualification", shortLabel: "Suppliers", description: "Evidence and terms", icon: PackageSearch },
+  { id: "scenarios", label: "Sourcing scenarios", shortLabel: "Scenarios", description: "Cost, lead time, risk", icon: GitCompareArrows },
+  { id: "tracking", label: "Tracking and cost", shortLabel: "Tracking", description: "Milestones and variance", icon: Radio },
 ];
 
 const PRODUCT_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/8/8e/Autonomous_Mobile_Robot_AMR.png";
@@ -149,6 +153,8 @@ export function SupplyOsOperatingShell({
     setWorkspaceSelection(selection);
   }, []);
   const publishedWorkspaceId = workspaceSelection?.snapshotId ? workspaceSelection.workspaceId : null;
+  const activePanelDefinition = PANELS.find((panel) => panel.id === activePanel) ?? PANELS[0];
+  const ActivePanelIcon = activePanelDefinition.icon;
 
   useEffect(() => {
     const syncPanelFromUrl = () => setActivePanel(panelFromCurrentUrl());
@@ -175,98 +181,167 @@ export function SupplyOsOperatingShell({
   }
 
   return (
-    <main className={styles.shell} data-panel={activePanel}>
-      <header className={styles.commandHeader}>
-        <div className={styles.identity}>
-          <span className={styles.mark}><Boxes size={18} /></span>
-          <div>
-            <small>Derya Supply OS</small>
-            <h1>{workspaceSelection?.workspaceName ?? "Atlas Robotics operating workspace"}</h1>
-          </div>
-        </div>
-        <div className={styles.workspaceControls}>
-          <dl>
-            <div><dt>Facility</dt><dd>{workspaceSelection ? "Published locations" : "Austin assembly"}</dd></div>
-            <div><dt>Freshness</dt><dd>{workspaceSelection?.snapshotVersion ? `Snapshot v${workspaceSelection.snapshotVersion}` : "Illustrative demo"}</dd></div>
-          </dl>
-          <button type="button" onClick={() => setDataControlsOpen(true)}>
-            <Database size={15} /> Import and data
-          </button>
-        </div>
-      </header>
-
-      <nav className={styles.panelNav} aria-label="Supply OS operating panels">
-        {PANELS.map((panel) => {
-          const Icon = panel.icon;
-          const active = panel.id === activePanel;
-          return (
-            <button
-              key={panel.id}
-              type="button"
-              aria-pressed={active}
-              data-active={active}
-              onClick={() => selectPanel(panel.id)}
-            >
-              <Icon size={15} />
-              <span>{panel.shortLabel}</span>
-              <small>{panel.label}</small>
-            </button>
-          );
-        })}
-      </nav>
-
-      {dataControlsOpen ? (
-        <div className={styles.dataOverlay} role="presentation" onMouseDown={() => setDataControlsOpen(false)}>
-          <section
-            className={styles.dataDialog}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="supply-os-data-dialog-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <span>Shared office data</span>
-                <h2 id="supply-os-data-dialog-title">Workspaces, snapshots, and CSV import</h2>
-              </div>
-              <button type="button" aria-label="Close data controls" autoFocus onClick={() => setDataControlsOpen(false)}><X size={17} /></button>
-            </header>
-            <div className={styles.dataDialogBody}><SupplyOsSharedWorkspace onSelectionChange={handleWorkspaceSelection} /></div>
-          </section>
-        </div>
-      ) : null}
-
-      <div className={styles.panelStage} key={activePanel}>
-        {activePanel === "materials" ? (
-          <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} />
-        ) : null}
-        {activePanel === "suppliers" ? (
-          <div className={styles.embeddedPanel}>
-            <SteelSupplierFinder storageScope={storageScope} />
-          </div>
-        ) : null}
-        {activePanel === "scenarios" ? (
-          <div className={styles.scenarioFrame}>
-            <div className={styles.focusBanner}>
-              <span><GitCompareArrows size={15} /> Decision mode</span>
-              <p>Select a sourcing plan in the scenario table, then inspect its evidence and human approval boundary.</p>
+    <MotionConfig reducedMotion="user" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
+      <main className={styles.shell} data-panel={activePanel}>
+        <motion.aside
+          className={styles.operatingSidebar}
+          initial={{ x: -12, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          aria-label="Supply OS navigation"
+        >
+          <div className={styles.sidebarHeading}>
+            <span className={styles.sidebarMark}><Boxes size={17} /></span>
+            <div>
+              <small>Operator surface</small>
+              <strong>Supply OS</strong>
             </div>
-            {intelligencePanel}
-            <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} />
           </div>
-        ) : null}
-        {activePanel === "logistics" ? (
-          <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode={false} />
-        ) : null}
-        {activePanel === "tracking" ? <TrackingAndCostPanel /> : null}
-      </div>
 
-      <footer className={styles.sourceFooter}>
-        <span>Visual evidence</span>
-        <a href="https://commons.wikimedia.org/wiki/File:Autonomous_Mobile_Robot_AMR.png" target="_blank" rel="noreferrer">
-          AMR image by Rlistmedia, CC BY 4.0
-        </a>
-      </footer>
-    </main>
+          <nav className={styles.panelNav} aria-label="Supply OS operating panels">
+            <span className={styles.navSectionLabel}>Workspace</span>
+            {PANELS.map((panel) => {
+              const Icon = panel.icon;
+              const active = panel.id === activePanel;
+              return (
+                <motion.button
+                  key={panel.id}
+                  type="button"
+                  aria-pressed={active}
+                  data-active={active}
+                  onClick={() => selectPanel(panel.id)}
+                  whileHover={{ x: 2 }}
+                  whileTap={{ scale: 0.985 }}
+                >
+                  {active ? <motion.span className={styles.activeRail} layoutId="supply-os-active-panel" /> : null}
+                  <span className={styles.navIcon}><Icon size={16} /></span>
+                  <span className={styles.navCopy}>
+                    <strong>{panel.shortLabel}</strong>
+                    <small>{panel.description}</small>
+                  </span>
+                  {panel.id === "logistics" ? <span className={styles.liveMapDot} aria-label="Network map available" /> : null}
+                </motion.button>
+              );
+            })}
+          </nav>
+
+          <motion.button
+            type="button"
+            className={styles.mapShortcut}
+            onClick={() => selectPanel("logistics")}
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.985 }}
+          >
+            <span className={styles.mapShortcutVisual} aria-hidden="true">
+              <i /><i /><i />
+              <Route size={17} />
+            </span>
+            <span>
+              <small><CircleDot size={10} /> Network online</small>
+              <strong>Open the live map</strong>
+              <em>Suppliers to factory to delivery</em>
+            </span>
+          </motion.button>
+        </motion.aside>
+
+        <section className={styles.workspace}>
+          <header className={styles.commandHeader}>
+            <div className={styles.identity}>
+              <span className={styles.mark}><ActivePanelIcon size={18} /></span>
+              <div>
+                <small>{activePanelDefinition.label}</small>
+                <h1>{workspaceSelection?.workspaceName ?? "Atlas Robotics operating workspace"}</h1>
+              </div>
+            </div>
+            <div className={styles.workspaceControls}>
+              <dl>
+                <div><dt>Facility</dt><dd>{workspaceSelection ? "Published locations" : "Austin assembly"}</dd></div>
+                <div><dt>Freshness</dt><dd>{workspaceSelection?.snapshotVersion ? `Snapshot v${workspaceSelection.snapshotVersion}` : "Illustrative demo"}</dd></div>
+              </dl>
+              {activePanel !== "logistics" ? (
+                <motion.button type="button" className={styles.mapButton} onClick={() => selectPanel("logistics")} whileTap={{ scale: 0.98 }}>
+                  <Globe2 size={15} /> Network map
+                </motion.button>
+              ) : null}
+              <motion.button type="button" onClick={() => setDataControlsOpen(true)} whileTap={{ scale: 0.98 }}>
+                <Database size={15} /> Import and data
+              </motion.button>
+            </div>
+          </header>
+
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              className={styles.panelStage}
+              key={activePanel}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -3 }}
+            >
+              {activePanel === "materials" ? (
+                <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} />
+              ) : null}
+              {activePanel === "suppliers" ? (
+                <div className={styles.embeddedPanel}>
+                  <SteelSupplierFinder storageScope={storageScope} />
+                </div>
+              ) : null}
+              {activePanel === "scenarios" ? (
+                <div className={styles.scenarioFrame}>
+                  <div className={styles.focusBanner}>
+                    <span><GitCompareArrows size={15} /> Decision mode</span>
+                    <p>Select a sourcing plan in the scenario table, then inspect its evidence and human approval boundary.</p>
+                  </div>
+                  {intelligencePanel}
+                  <SupplyOsSnapshotTwin workspaceId={publishedWorkspaceId} fallbackImageUrl={PRODUCT_IMAGE_URL} />
+                </div>
+              ) : null}
+              {activePanel === "logistics" ? (
+                <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode={false} />
+              ) : null}
+              {activePanel === "tracking" ? <TrackingAndCostPanel /> : null}
+            </motion.div>
+          </AnimatePresence>
+
+          <footer className={styles.sourceFooter}>
+            <span>Visual evidence</span>
+            <a href="https://commons.wikimedia.org/wiki/File:Autonomous_Mobile_Robot_AMR.png" target="_blank" rel="noreferrer">
+              AMR image by Rlistmedia, CC BY 4.0
+            </a>
+          </footer>
+        </section>
+
+        <AnimatePresence>
+          {dataControlsOpen ? (
+            <motion.div
+              className={styles.dataOverlay}
+              role="presentation"
+              onMouseDown={() => setDataControlsOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.section
+                className={styles.dataDialog}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="supply-os-data-dialog-title"
+                onMouseDown={(event) => event.stopPropagation()}
+                initial={{ opacity: 0, y: 14, scale: 0.99 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.995 }}
+              >
+                <header>
+                  <div>
+                    <span>Shared office data</span>
+                    <h2 id="supply-os-data-dialog-title">Workspaces, snapshots, and CSV import</h2>
+                  </div>
+                  <button type="button" aria-label="Close data controls" autoFocus onClick={() => setDataControlsOpen(false)}><X size={17} /></button>
+                </header>
+                <div className={styles.dataDialogBody}><SupplyOsSharedWorkspace onSelectionChange={handleWorkspaceSelection} /></div>
+              </motion.section>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </main>
+    </MotionConfig>
   );
 }

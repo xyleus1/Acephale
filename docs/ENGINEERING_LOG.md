@@ -3964,3 +3964,21 @@ Use this file for chronological implementation notes that future agents should s
   production build, and diff hygiene pass.
 - Follow-up: extract and retire the remaining Intel, Intelligence, Jobs, Loads,
   RFQ, builder, and workstream page wrappers without breaking embedded engines.
+
+### 2026-08-08 - Restore the Supply OS operator sidebar and network map
+
+- Branch: supply-os-sidebar-map, targeting main
+- Added a persistent Supply OS navigation rail without restoring Deal Desk,
+  CRM, RFQ, Outreach, Intel, or other retired product navigation.
+- Promoted the existing MapLibre command map to the second primary destination
+  and added direct map shortcuts in both the rail and command header.
+- Added Motion for React for navigation, panel, modal, hover, and tap feedback,
+  with user reduced-motion behavior enabled.
+- Responsive behavior keeps the labeled rail on desktop, an icon rail on
+  medium viewports, and a compact horizontal navigation strip on narrow
+  viewports.
+- Verification: sidebar-map, shell-routing, single-surface, product-twin, and
+  command-map tests pass. Prisma generation, TypeScript, production build, and
+  diff hygiene pass.
+- Bundle note: Supply OS first-load JavaScript increased from 312 kB to 354 kB,
+  about 13.5 percent, which remains inside the prior 15 percent release limit.

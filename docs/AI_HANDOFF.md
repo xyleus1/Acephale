@@ -2,6 +2,19 @@
 
 ## Latest Update
 
+### Supply OS restored its operator sidebar and network map
+
+- Added a persistent Supply OS sidebar for Materials, Network Map, Suppliers,
+  Scenarios, and Tracking without bringing back the retired CRM product maze.
+- Promoted the existing MapLibre supplier, factory, customs, and delivery map
+  to the second primary destination, with a dedicated sidebar status card and
+  command-header shortcut.
+- Added Motion for React for active navigation, panel transitions, overlay
+  entry and exit, and bounded hover and tap feedback. Motion honors the user's
+  reduced-motion setting.
+- The rail collapses to icons at medium widths and becomes a compact horizontal
+  navigation strip on narrow screens.
+
 ### Deterministic Supply OS planning and scenario engine
 
 - Added a pure multi-level BOM engine with cycle rejection, exact unit checks,
@@ -46,10 +59,12 @@
 
 ## Branch
 
-supply-os-grand-vision, targeting main
+supply-os-sidebar-map, targeting main
 
 ## Verification passed
 
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-command-map`
 - `npm run test:supply-os-planning-engine`
 - `npm run test:supply-os-planning-persistence` against disposable PostgreSQL
 - `npm run test:supply-os-legacy-routes`
@@ -75,6 +90,8 @@ supply-os-grand-vision, targeting main
   legacy source-based tests are extracted or retired.
 - Redirected record details currently preserve `legacyPath`; native Supply OS
   drawers for those records remain a follow-up.
+- The existing network map still uses browser-local case compatibility data;
+  this UI change does not pretend that those records are shared office truth.
 
 ## Prior Update
 
