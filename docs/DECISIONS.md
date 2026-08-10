@@ -2325,3 +2325,25 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Boundary: Approval authorizes purchase preparation only. It does not contact
   a supplier, issue a PO, commit spend, book freight, file customs, or create a
   Logistics handoff.
+
+### 2026-08-10 - Connected supplier replies remain evidence until reviewed
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Sending an RFQ from Supply OS but forcing the buyer to hunt through
+  Gmail and paste a public URL breaks the resumable procurement workflow.
+  Automatically treating an email body as confirmed price or delivery terms is
+  worse because ordinary language and attachments are not safe execution input.
+- Decision: A buyer may sync the connected sender account from the active quote
+  cycle. Supply OS captures only replies in the delivered Gmail thread from the
+  exact approved supplier address. Provider message identity, body excerpt,
+  attachment metadata, sender, and observation time become immutable connected
+  evidence and remain visible after leaving the workspace.
+- Commercial boundary: Captured messages are `REVIEW_REQUIRED`. An operator
+  must transcribe and confirm the structured quote terms. The resulting quote
+  response keeps the connected evidence lineage and may then enter the existing
+  commercial review and approval scopes. No extraction automatically satisfies
+  a gate or authorizes purchase.
+- Concurrency: Repeated and simultaneous inbox checks deduplicate by provider
+  message identity and retry serialization conflicts without duplicating
+  evidence or events.

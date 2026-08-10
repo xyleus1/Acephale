@@ -7613,6 +7613,36 @@ Known existing failure:
   expects `commandMap.insights` in the dashboard after the upstream map rewrite.
   This task did not modify that existing test.
 
+## Supply OS connected supplier replies, August 10
+
+Status:
+
+- Implemented on `supply-os-supplier-replies`, targeting `main`.
+- No Prisma migration or new dependency is required. Reply state uses the
+  existing email, execution-task, event, and evidence records.
+
+Operator result:
+
+- A delivered connected-Gmail quote cycle exposes `Check connected inbox`.
+- Supply OS runs the office-scoped Gmail sync, finds inbound messages in the
+  exact delivered thread from the approved supplier address, and saves each as
+  durable connected evidence.
+- Reply cards survive queue navigation and show sender, subject, received date,
+  excerpt, attachments, and the evidence link.
+- `Use as quote evidence` pins the response date to the Gmail observation. The
+  buyer still enters and reviews price, currency, MOQ, unit, delivery, quote
+  reference, and validity before the commercial gate can advance.
+
+Trust boundary:
+
+- Email content and attachments remain review input. They never automatically
+  become approved commercial terms, supplier qualification, purchase authority,
+  spend, or a Logistics handoff.
+- Only the current office, workspace, quote cycle, connected sender account,
+  provider thread, and exact approved supplier address are accepted.
+- Repeated and concurrent checks deduplicate provider messages and do not append
+  duplicate evidence or events.
+
 ## Supply OS opportunity scenario workbench, August 9
 
 Status:

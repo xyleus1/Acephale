@@ -280,6 +280,18 @@ clear boundaries.
   malformed receipt becomes unknown delivery and blocks resend. Reconciliation
   searches Gmail by the stable message ID. A manager must document verified
   non-delivery before one new attempt receives a new message ID.
+- After a connected send, `Check connected inbox` runs the office-scoped Gmail
+  synchronizer and inspects the exact provider thread. Only inbound messages
+  from the approved supplier address and after the send receipt are eligible.
+  Each new reply becomes immutable `SUPPLIER_QUOTE_REPLY_EMAIL` evidence with
+  its provider message identity, message excerpt, attachments, and observation
+  time. Repeated and concurrent checks are idempotent.
+- A captured reply is review input, not a commercial fact. The operator must
+  enter price, currency, MOQ, unit, delivery, quote reference, and validity.
+  Recording those terms against the reply creates a derived
+  `SUPPLIER_QUOTE_RESPONSE` evidence row with `CONNECTED_PROVIDER` provenance.
+  The reply date is pinned to the provider message date. No parser or model can
+  silently advance the commercial gate.
 - A released quote cycle stays `RUNNING` while supplier responses are appended and
   closes only when the selected quote reaches full supplier order acknowledgment.
   Every response stores exact decimal price and MOQ, unit, delivery, validity,
@@ -291,9 +303,9 @@ clear boundaries.
   `SupplyEvidence` rows bound to their exact task and content hash. The selected
   response evidence ID travels with its response hash through both approval
   scopes. Manual release and response evidence stays
-  `OPERATOR_RECORDED_EXTERNAL`; a successful connected Gmail release is
-  `CONNECTED_PROVIDER`. Supplier changes cancel pending unsent communication
-  scopes and the active quote cycle.
+  `OPERATOR_RECORDED_EXTERNAL`; successful connected Gmail release and reviewed
+  reply evidence are `CONNECTED_PROVIDER`. Supplier changes cancel pending
+  unsent communication scopes and the active quote cycle.
 - After those gates complete, Supply OS creates a separate immutable
   `PROCUREMENT_APPROVAL` task. Its input contains the exact selected supplier,
   confirmed quote terms, evidence review, and quality plan. `SupplyApproval`

@@ -74,6 +74,21 @@ type SupplierEmailMessage = {
   body: string;
 };
 
+export type ConnectedSupplierReply = {
+  evidenceId: string;
+  evidenceClass: "CONNECTED_PROVIDER";
+  sourceRecordId: string;
+  localMessageId: string;
+  fromEmail: string;
+  fromName: string | null;
+  subject: string | null;
+  excerpt: string;
+  attachments: Array<{ name: string; mimeType: string | null; size: number | null }>;
+  receivedAt: string;
+  sourceUrl: string;
+  reviewState: "REVIEW_REQUIRED";
+};
+
 export type SavedProcurementCase = {
   id: string;
   status: string;
@@ -116,7 +131,7 @@ export type SavedProcurementCase = {
       validUntil: string;
       quoteCycleTaskId: string;
       responseHash: string;
-      evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
+      evidenceClass: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
     };
     qualityPlan?: {
       method: "SAMPLE" | "PRE_SHIPMENT_INSPECTION" | "DOCUMENT_REVIEW";
@@ -174,6 +189,7 @@ export type SavedProcurementCase = {
       releasedOn?: string;
       lastQuoteReference?: string;
       selectedResponseHash?: string;
+      connectedReplyCount?: number;
       updatedAt: string;
     };
     selectionHash: string;
@@ -228,10 +244,13 @@ export type SavedProcurementCase = {
         evidenceId?: string;
         note: string | null;
         responseHash: string;
-        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
+        connectedReplyEvidenceId?: string | null;
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
         recordedByUserId: string;
         recordedAt: string;
       }>;
+      connectedReplies?: ConnectedSupplierReply[];
+      lastReplySyncAt?: string;
       selectedResponseHash: string | null;
       externalSideEffect: false | "RECORDED_ONLY" | "CONNECTED_PROVIDER";
       updatedAt: string;
@@ -316,7 +335,7 @@ export type SavedProcurementCase = {
         quoteResponseHash: string;
         quoteEvidenceUrl: string;
         quoteEvidenceId?: string | null;
-        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
       };
       totals: { materialSubtotal: string; currency: string };
       approvedProcurementScope: { approvalId: string; scopeHash: string };
@@ -359,7 +378,7 @@ export type SavedProcurementCase = {
         quoteResponseHash: string;
         quoteEvidenceUrl: string;
         quoteEvidenceId?: string | null;
-        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
       };
       totals: { materialSubtotal: string; currency: string };
       procurementApproval: { id: string; scopeHash: string };

@@ -26,6 +26,7 @@ import {
 import styles from "./supply-os-logistics.module.css";
 import type {
   PublicResearchResult,
+  ConnectedSupplierReply,
   SavedProcurementCase,
   SavedSourcingResearchRun,
   SupplierSenderAccount,
@@ -300,6 +301,7 @@ export function AtlasProcurementWorkspace({
   const [supplierEmailApprovalReason, setSupplierEmailApprovalReason] = useState("Supplier quote request is ready for review and release.");
   const [supplierEmailDecisionNote, setSupplierEmailDecisionNote] = useState("");
   const [supplierEmailRecoveryNote, setSupplierEmailRecoveryNote] = useState("");
+  const [selectedReplyEvidenceId, setSelectedReplyEvidenceId] = useState<string | null>(null);
   const [qualityForm, setQualityForm] = useState(() => ({
     method: initialCase?.result?.qualityPlan?.method ?? "SAMPLE",
     acceptanceCriteria: initialCase?.result?.qualityPlan?.acceptanceCriteria ?? "",
@@ -364,6 +366,7 @@ export function AtlasProcurementWorkspace({
     const result = currentCase?.result;
     if (!result) return;
     setSourceReviewNote("");
+    setSelectedReplyEvidenceId(null);
     setCommercialForm({
       receivedOn: "",
       price: "",
@@ -408,7 +411,17 @@ export function AtlasProcurementWorkspace({
       evidenceUrl: cycle.release?.evidenceUrl ?? "",
       note: cycle.release?.note ?? "",
     });
+  }, [
+    currentCase?.quoteCycle?.id,
+    currentCase?.quoteCycle?.result?.requestHash,
+    currentCase?.quoteCycle?.result?.release?.evidenceId,
+  ]);
+
+  useEffect(() => {
+    const cycle = currentCase?.quoteCycle?.result;
+    if (!cycle) return;
     const latest = cycle.responses.at(-1);
+    setSelectedReplyEvidenceId(latest?.connectedReplyEvidenceId ?? null);
     if (latest) {
       setCommercialForm({
         receivedOn: latest.receivedOn,
@@ -436,7 +449,7 @@ export function AtlasProcurementWorkspace({
         note: "",
       });
     }
-  }, [currentCase?.quoteCycle?.id, currentCase?.quoteCycle?.resultHash]);
+  }, [currentCase?.quoteCycle?.id, currentCase?.quoteCycle?.result?.responses.at(-1)?.responseHash]);
 
   useEffect(() => {
     const draftMessage = currentCase?.supplierEmailDraft?.result?.message;
@@ -691,6 +704,21 @@ export function AtlasProcurementWorkspace({
     });
   }
 
+  function checkConnectedSupplierReplies() {
+    const cycle = currentCase?.quoteCycle;
+    if (!cycle?.result) return;
+    void runCaseAction(`/api/supply-os/quote-cycles/${cycle.id}/connected-replies`, {});
+  }
+
+  function useConnectedSupplierReply(reply: ConnectedSupplierReply) {
+    setSelectedReplyEvidenceId(reply.evidenceId);
+    setCommercialForm((current) => ({
+      ...current,
+      receivedOn: reply.receivedAt.slice(0, 10),
+      evidenceUrl: "",
+    }));
+  }
+
   function recordQuoteResponse() {
     const cycle = currentCase?.quoteCycle;
     if (!cycle?.result) return;
@@ -702,7 +730,8 @@ export function AtlasProcurementWorkspace({
       minimumOrderQuantity: Number(commercialForm.minimumOrderQuantity),
       unitOfMeasure: commercialForm.unitOfMeasure,
       deliveryDate: commercialForm.deliveryDate,
-      evidenceUrl: commercialForm.evidenceUrl,
+      evidenceUrl: selectedReplyEvidenceId ? null : commercialForm.evidenceUrl,
+      connectedReplyEvidenceId: selectedReplyEvidenceId,
       quoteReference: commercialForm.quoteReference,
       validUntil: commercialForm.validUntil,
       note: commercialForm.note || null,
@@ -824,7 +853,7 @@ export function AtlasProcurementWorkspace({
     && Boolean(commercialForm.deliveryDate)
     && Boolean(commercialForm.quoteReference.trim())
     && Boolean(commercialForm.validUntil)
-    && Boolean(commercialForm.evidenceUrl.trim());
+    && Boolean(selectedReplyEvidenceId || commercialForm.evidenceUrl.trim());
 
   return (
     <motion.section
@@ -1052,6 +1081,26 @@ export function AtlasProcurementWorkspace({
                           <CheckCircle2 size={20} />
                           <div><strong>{currentCase.quoteCycle.result.responses.length ? "Supplier responses received" : "Awaiting supplier response"}</strong><p>External request release recorded for {currentCase.quoteCycle.result.release?.releasedOn}. {currentCase.quoteCycle.result.release ? <a href={evidenceHref(currentCase.quoteCycle.result.release.evidenceId, currentCase.quoteCycle.result.release.evidenceUrl)} target="_blank" rel="noreferrer">Open release evidence</a> : null}</p></div>
                         </section>
+                        {currentCase.supplierEmailAction?.status === "SUCCEEDED" && currentCase.supplierEmailAction.result?.state === "SENT" ? (
+                          <section className={styles.purchaseApprovalRequest}>
+                            <p><strong>Connected supplier inbox</strong></p>
+                            <p>Sync the approved sender account and capture replies from the exact supplier address. Captured messages remain review evidence, not confirmed commercial terms.</p>
+                            <button type="button" disabled={gateActionState === "saving"} onClick={checkConnectedSupplierReplies}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />} Check connected inbox</button>
+                            {currentCase.quoteCycle.result.lastReplySyncAt ? <small>Last checked <time dateTime={currentCase.quoteCycle.result.lastReplySyncAt}>{displayStoredDate(currentCase.quoteCycle.result.lastReplySyncAt.slice(0, 10))}</time>.</small> : null}
+                          </section>
+                        ) : null}
+                        {(currentCase.quoteCycle.result.connectedReplies ?? []).map((reply) => (
+                          <section className={styles.purchaseApprovalRequest} key={reply.evidenceId}>
+                            <p><strong>Reply from {reply.fromName || reply.fromEmail}</strong></p>
+                            <p>{reply.subject || "No subject"} · <time dateTime={reply.receivedAt}>{displayStoredDate(reply.receivedAt.slice(0, 10))}</time></p>
+                            <p>{reply.excerpt || "This reply contains no plain-text body."}</p>
+                            {reply.attachments.length ? <p>Attachments: {reply.attachments.map((attachment) => attachment.name).join(", ")}</p> : null}
+                            <div className={styles.purchaseDecisionActions}>
+                              <a href={evidenceHref(reply.evidenceId, reply.sourceUrl)} target="_blank" rel="noreferrer">Open connected evidence <ArrowRight size={14} /></a>
+                              <button type="button" disabled={gateActionState === "saving"} onClick={() => useConnectedSupplierReply(reply)}><PackageCheck size={14} /> {selectedReplyEvidenceId === reply.evidenceId ? "Using this reply" : "Use as quote evidence"}</button>
+                            </div>
+                          </section>
+                        ))}
                         {currentCase.quoteCycle.result.responses.map((response) => (
                           <section className={styles.purchaseApprovalRequest} key={response.responseHash}>
                             <dl className={styles.purchaseDraftSummary}>
@@ -1075,7 +1124,13 @@ export function AtlasProcurementWorkspace({
                             <label>Delivery date<input type="date" value={commercialForm.deliveryDate} onChange={(event) => setCommercialForm((current) => ({ ...current, deliveryDate: event.target.value }))} /></label>
                             <label>Quote reference<input value={commercialForm.quoteReference} onChange={(event) => setCommercialForm((current) => ({ ...current, quoteReference: event.target.value }))} placeholder="Supplier quote number" /></label>
                             <label>Valid until<input type="date" value={commercialForm.validUntil} onChange={(event) => setCommercialForm((current) => ({ ...current, validUntil: event.target.value }))} /></label>
-                            <label className={styles.procurementWideField}>Quote evidence URL<input type="url" value={commercialForm.evidenceUrl} onChange={(event) => setCommercialForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>
+                            {selectedReplyEvidenceId ? (
+                              <div className={styles.procurementWideField}>
+                                <p><strong>Connected Gmail reply selected</strong></p>
+                                <p>The response date is pinned to the message timestamp. Review and enter the commercial values exactly as written by the supplier.</p>
+                                <button type="button" onClick={() => setSelectedReplyEvidenceId(null)}>Use external evidence URL instead</button>
+                              </div>
+                            ) : <label className={styles.procurementWideField}>Quote evidence URL<input type="url" value={commercialForm.evidenceUrl} onChange={(event) => setCommercialForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>}
                             <label className={styles.procurementWideField}>Response note<textarea value={commercialForm.note} onChange={(event) => setCommercialForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional exclusions or supplier conditions" /></label>
                           </div>
                           <button type="button" disabled={gateActionState === "saving" || !quoteResponseComplete} onClick={recordQuoteResponse}><PackageCheck size={14} /> Record quote response</button>

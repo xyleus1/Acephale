@@ -61,6 +61,17 @@ function publicUrl(value: unknown, label: string) {
   }
 }
 
+function connectedProviderUrl(value: unknown, label: string) {
+  const text = requiredText(value, label, 2_000);
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "https:" || url.hostname !== "mail.google.com" || !url.pathname.startsWith("/mail/u/") || url.username || url.password) throw new Error();
+    return url.toString();
+  } catch {
+    throw new SupplyPersistenceError(`${label} must be a connected Gmail URL.`, "invalid_input");
+  }
+}
+
 function isoDate(value: unknown, label: string) {
   const text = requiredText(value, label, 10);
   const parsed = new Date(`${text}T12:00:00Z`);
@@ -188,7 +199,7 @@ async function appendExternalEvidence(args: {
   actorUserId: string;
   kind: string;
   title: string;
-  sourceType?: "OFFICIAL" | "OPERATOR_RECORDED_EXTERNAL";
+  sourceType?: "OFFICIAL" | "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
   sourceUri: string;
   sourceRecordId?: string | null;
   observedOn: string;
@@ -559,15 +570,21 @@ export async function procurementEvidenceSource(context: SupplyAccessContext, ev
         in: [
           "SUPPLIER_SOURCE_REVIEW",
           "SUPPLIER_QUOTE_RELEASE",
+          "SUPPLIER_QUOTE_REPLY_EMAIL",
           "SUPPLIER_QUOTE_RESPONSE",
           "SUPPLIER_ORDER_ACKNOWLEDGMENT",
         ],
       },
     },
-    select: { title: true, sourceUri: true },
+    select: { title: true, sourceUri: true, sourceType: true },
   });
   if (!evidence?.sourceUri) throw new SupplyPersistenceError("Supplier evidence was not found.", "not_found");
-  return { title: evidence.title, url: publicUrl(evidence.sourceUri, "Stored supplier evidence URL") };
+  return {
+    title: evidence.title,
+    url: evidence.sourceType === "CONNECTED_PROVIDER"
+      ? connectedProviderUrl(evidence.sourceUri, "Stored connected supplier evidence URL")
+      : publicUrl(evidence.sourceUri, "Stored supplier evidence URL"),
+  };
 }
 
 async function cancelPendingApproval(tx: Prisma.TransactionClient, value: Prisma.JsonValue | null) {
@@ -1225,6 +1242,11 @@ function normalizeQuoteResponse(input: unknown) {
   if (deliveryDate < receivedOn || validUntil < receivedOn) {
     throw new SupplyPersistenceError("Delivery and quote validity cannot precede the supplier response.", "invalid_input");
   }
+  const connectedReplyEvidenceId = optionalText(body.connectedReplyEvidenceId, "Connected reply evidence ID", 220);
+  const evidenceUrlInput = optionalText(body.evidenceUrl, "Supplier quote evidence URL", 2_000);
+  if (Boolean(connectedReplyEvidenceId) === Boolean(evidenceUrlInput)) {
+    throw new SupplyPersistenceError("Choose exactly one connected supplier reply or external evidence URL.", "invalid_input");
+  }
   return {
     expectedRequestHash: requiredText(body.expectedRequestHash, "Quote request hash", 128),
     receivedOn,
@@ -1235,7 +1257,8 @@ function normalizeQuoteResponse(input: unknown) {
     deliveryDate,
     quoteReference: requiredText(body.quoteReference, "Quote reference", 300),
     validUntil,
-    evidenceUrl: publicUrl(body.evidenceUrl, "Supplier quote evidence URL"),
+    evidenceUrl: evidenceUrlInput ? publicUrl(evidenceUrlInput, "Supplier quote evidence URL") : null,
+    connectedReplyEvidenceId: connectedReplyEvidenceId ?? null,
     note: optionalText(body.note, "Supplier quote note", 2_000),
   };
 }
@@ -1287,6 +1310,29 @@ export async function recordSupplierQuoteResponse(args: {
         if (responseInput.unitOfMeasure !== requestedUnit) {
           throw new SupplyPersistenceError(`Supplier quote unit must match the requested unit ${requestedUnit}.`, "invalid_input");
         }
+        const connectedReplyEvidence = responseInput.connectedReplyEvidenceId
+          ? await tx.supplyEvidence.findFirst({
+              where: {
+                id: responseInput.connectedReplyEvidenceId,
+                officeId: args.context.officeId,
+                workspaceId: workspace.id,
+                executionTaskId: quoteCycle.id,
+                kind: "SUPPLIER_QUOTE_REPLY_EMAIL",
+                sourceType: "CONNECTED_PROVIDER",
+              },
+              select: { id: true, sourceUri: true, sourceRecordId: true, observedAt: true },
+            })
+          : null;
+        if (responseInput.connectedReplyEvidenceId && (!connectedReplyEvidence?.sourceUri || !connectedReplyEvidence.observedAt)) {
+          throw new SupplyPersistenceError("Connected supplier reply evidence is outside the current quote cycle.", "conflict");
+        }
+        if (connectedReplyEvidence && connectedReplyEvidence.observedAt?.toISOString().slice(0, 10) !== responseInput.receivedOn) {
+          throw new SupplyPersistenceError("Response date must match the connected supplier reply date.", "invalid_input");
+        }
+        const evidenceUrl = connectedReplyEvidence?.sourceUri
+          ? connectedProviderUrl(connectedReplyEvidence.sourceUri, "Connected supplier reply URL")
+          : responseInput.evidenceUrl!;
+        const evidenceClass = connectedReplyEvidence ? "CONNECTED_PROVIDER" : "OPERATOR_RECORDED_EXTERNAL";
         const normalizedResponse = {
           receivedOn: responseInput.receivedOn,
           price: new Prisma.Decimal(responseInput.price).toString(),
@@ -1296,7 +1342,8 @@ export async function recordSupplierQuoteResponse(args: {
           deliveryDate: responseInput.deliveryDate,
           quoteReference: responseInput.quoteReference,
           validUntil: responseInput.validUntil,
-          evidenceUrl: responseInput.evidenceUrl,
+          evidenceUrl,
+          connectedReplyEvidenceId: connectedReplyEvidence?.id ?? null,
           note: responseInput.note,
         };
         const responseHash = digest(normalizedResponse);
@@ -1306,7 +1353,7 @@ export async function recordSupplierQuoteResponse(args: {
         const now = new Date();
         const response = {
           ...normalizedResponse,
-          evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
+          evidenceClass,
           responseHash,
           recordedByUserId: args.context.userId,
           recordedAt: now.toISOString(),
@@ -1319,11 +1366,12 @@ export async function recordSupplierQuoteResponse(args: {
           actorUserId: args.context.userId,
           kind: "SUPPLIER_QUOTE_RESPONSE",
           title: `Supplier quote ${responseInput.quoteReference}`,
-          sourceUri: responseInput.evidenceUrl,
-          sourceRecordId: responseInput.quoteReference,
+          sourceType: evidenceClass,
+          sourceUri: evidenceUrl,
+          sourceRecordId: connectedReplyEvidence?.sourceRecordId ?? responseInput.quoteReference,
           observedOn: responseInput.receivedOn,
           contentHash: responseHash,
-          payload: inputJson(normalizedResponse),
+          payload: inputJson({ ...normalizedResponse, sourceEvidenceId: connectedReplyEvidence?.id ?? null }),
         });
         const evidencedResponse = { ...response, evidenceId: evidence.id };
         const result = {
@@ -1519,8 +1567,14 @@ export async function reviewProcurementGate(args: {
           if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(minimumOrderQuantity) || minimumOrderQuantity <= 0) {
             throw new SupplyPersistenceError("Stored supplier quote quantities are invalid.", "conflict");
           }
-          const quoteEvidenceUrl = publicUrl(response.evidenceUrl, "Stored quote evidence URL");
           const quoteEvidenceHash = requiredText(response.responseHash, "Stored quote response hash", 128);
+          const quoteEvidenceClass = requiredText(response.evidenceClass, "Stored quote evidence class", 80);
+          if (!["OPERATOR_RECORDED_EXTERNAL", "CONNECTED_PROVIDER"].includes(quoteEvidenceClass)) {
+            throw new SupplyPersistenceError("Stored quote evidence class is invalid.", "conflict");
+          }
+          const quoteEvidenceUrl = quoteEvidenceClass === "CONNECTED_PROVIDER"
+            ? connectedProviderUrl(response.evidenceUrl, "Stored connected quote evidence URL")
+            : publicUrl(response.evidenceUrl, "Stored quote evidence URL");
           const quoteEvidence = typeof response.evidenceId === "string"
             ? await tx.supplyEvidence.findFirst({
                 where: {
@@ -1530,6 +1584,7 @@ export async function reviewProcurementGate(args: {
                   executionTaskId: quoteCycle.id,
                   kind: "SUPPLIER_QUOTE_RESPONSE",
                   contentHash: quoteEvidenceHash,
+                  sourceType: quoteEvidenceClass,
                 },
                 select: { id: true },
               })
@@ -1562,7 +1617,7 @@ export async function reviewProcurementGate(args: {
             validUntil: requireCurrentOrFutureDate(isoDate(response.validUntil, "Stored quote validity date"), "Stored quote validity date"),
             quoteCycleTaskId: quoteCycle.id,
             responseHash: quoteResponseHash!,
-            evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
+            evidenceClass: quoteEvidenceClass,
           };
           review = {
             ...confirmedTerms,
@@ -2255,13 +2310,15 @@ export async function savePurchaseOrderDraft(args: {
         }
         const quoteCycleTaskId = requiredText(approvedTerms.quoteCycleTaskId, "Approved quote cycle task ID", 220);
         const quoteResponseHash = requiredText(approvedTerms.responseHash, "Approved quote response hash", 128);
-        const quoteEvidenceUrl = publicUrl(approvedTerms.evidenceUrl, "Approved quote evidence URL");
         const quoteEvidenceId = typeof approvedTerms.evidenceId === "string"
           ? requiredText(approvedTerms.evidenceId, "Approved quote evidence ID", 220)
           : null;
-        if (approvedTerms.evidenceClass !== "OPERATOR_RECORDED_EXTERNAL") {
+        if (!["OPERATOR_RECORDED_EXTERNAL", "CONNECTED_PROVIDER"].includes(String(approvedTerms.evidenceClass))) {
           throw new SupplyPersistenceError("Approved quote evidence class is invalid.", "conflict");
         }
+        const quoteEvidenceUrl = approvedTerms.evidenceClass === "CONNECTED_PROVIDER"
+          ? connectedProviderUrl(approvedTerms.evidenceUrl, "Approved connected quote evidence URL")
+          : publicUrl(approvedTerms.evidenceUrl, "Approved quote evidence URL");
         if (quoteEvidenceId) {
           const quoteEvidence = await tx.supplyEvidence.findFirst({
             where: {
@@ -2272,6 +2329,7 @@ export async function savePurchaseOrderDraft(args: {
               kind: "SUPPLIER_QUOTE_RESPONSE",
               sourceUri: quoteEvidenceUrl,
               contentHash: quoteResponseHash,
+              sourceType: String(approvedTerms.evidenceClass),
             },
             select: { id: true },
           });
@@ -2345,7 +2403,7 @@ export async function savePurchaseOrderDraft(args: {
             quoteResponseHash,
             quoteEvidenceUrl,
             quoteEvidenceId,
-            evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
+            evidenceClass: approvedTerms.evidenceClass,
           },
           totals: {
             materialSubtotal: quantity.mul(unitPrice).toDecimalPlaces(2).toString(),

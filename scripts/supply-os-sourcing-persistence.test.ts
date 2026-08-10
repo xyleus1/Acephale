@@ -31,6 +31,7 @@ import {
   sendSupplierEmailAction,
 } from "../src/lib/supply-os/supplier-communication-persistence";
 import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
+import { captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -961,23 +962,149 @@ async function main() {
     const connectedEvidence = await prisma.supplyEvidence.findFirstOrThrow({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, sourceType: "CONNECTED_PROVIDER" } });
     assert.equal(connectedEvidence.sourceRecordId, "gmail-test-message");
     assert.equal(await prisma.emailMessage.count({ where: { gmailMessageId: "gmail-test-message", thread: { officeId: context.officeId } } }), 1);
+    const sentResult = sentEmail.result as { localThreadId: string; sentAt: string };
+    const supplierReply = await prisma.emailMessage.create({
+      data: {
+        threadId: sentResult.localThreadId,
+        accountId: senderAccount.id,
+        externalId: `<supplier-reply-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-reply-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "quotes@example.com",
+        fromName: "Example supplier quotes",
+        toEmails: JSON.stringify([senderAccount.email]),
+        subject: "Re: Quote request: calibrated stereo depth cameras",
+        bodyText: "Quote Q-RETRY: USD 126 per EA, MOQ 4. Delivery and validity are stated in the attached quotation.",
+        attachments: JSON.stringify([{ filename: "Q-RETRY.pdf", mimeType: "application/pdf", size: 2048 }]),
+        sentAt: new Date(),
+      },
+    });
+    const otherSenderAccount = await prisma.emailAccount.create({
+      data: {
+        officeId: context.officeId,
+        email: `other-buyer-${suffix}@example.test`,
+        provider: "GMAIL",
+        accessToken: "test-only-token",
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: sentResult.localThreadId,
+        accountId: otherSenderAccount.id,
+        externalId: `<wrong-account-reply-${suffix}@example.com>`,
+        gmailMessageId: `gmail-wrong-account-reply-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "quotes@example.com",
+        toEmails: JSON.stringify([otherSenderAccount.email]),
+        subject: "Same supplier on the wrong connected account",
+        bodyText: "This message must not become evidence for the approved sender account.",
+        sentAt: new Date(),
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: sentResult.localThreadId,
+        accountId: senderAccount.id,
+        externalId: `<pre-send-reply-${suffix}@example.com>`,
+        gmailMessageId: `gmail-pre-send-reply-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "quotes@example.com",
+        toEmails: JSON.stringify([senderAccount.email]),
+        subject: "Message predating the approved request",
+        bodyText: "This older message must not become quote reply evidence.",
+        sentAt: new Date(new Date(sentResult.sentAt).getTime() - 60_000),
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: sentResult.localThreadId,
+        accountId: senderAccount.id,
+        externalId: `<unrelated-reply-${suffix}@example.com>`,
+        gmailMessageId: `gmail-unrelated-reply-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "unrelated@example.com",
+        toEmails: JSON.stringify([senderAccount.email]),
+        subject: "Unrelated participant",
+        bodyText: "This message must not become supplier evidence.",
+        sentAt: new Date(),
+      },
+    });
+    const replySync = async (input: { accountId: string; officeId: string; query: string }) => {
+      assert.equal(input.accountId, senderAccount.id);
+      assert.equal(input.officeId, context.officeId);
+      assert.equal(input.query, `rfc822msgid:${retriedMessageId}`, "connected reply sync must target only the stable quote-request message ID");
+      return { ok: true as const, processed: 2, created: 2, threadsTouched: 1 };
+    };
+    await assert.rejects(() => captureConnectedSupplierReplies({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sync: async () => ({ ok: true, processed: 0, created: 0, threadsTouched: 0 }),
+    }), /did not return the delivered quote-request thread/i, "a silent Gmail miss must not be presented as a successful inbox check");
+    await assert.rejects(() => captureConnectedSupplierReplies({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sync: async () => ({ error: "Temporary provider failure" }),
+    }), /Temporary provider failure/i, "an explicit Gmail failure must remain visible and retryable");
+    const capturedReplies = await captureConnectedSupplierReplies({ context, quoteCycleId: retryQuoteDraft.quoteCycle.id, sync: replySync });
+    assert.equal(capturedReplies.captured, 1, "only the exact approved supplier address may become connected reply evidence");
+    assert.equal(capturedReplies.total, 1);
+    const replyEvidence = await prisma.supplyEvidence.findFirstOrThrow({
+      where: { executionTaskId: retryQuoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_REPLY_EMAIL", sourceRecordId: supplierReply.gmailMessageId },
+    });
+    assert.equal(replyEvidence.sourceType, "CONNECTED_PROVIDER");
+    assert.match(String(replyEvidence.excerpt), /Quote Q-RETRY/);
+    assert.match((await procurementEvidenceSource(context, replyEvidence.id)).url, /#sent\/gmail-test-thread$/, "connected evidence links must retain the Gmail thread target");
+    const replyEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REPLIES_CAPTURED" } });
+    const repeatedReplySync = await captureConnectedSupplierReplies({ context, quoteCycleId: retryQuoteDraft.quoteCycle.id, sync: replySync });
+    assert.equal(repeatedReplySync.captured, 0, "repeated inbox checks must not duplicate connected replies");
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REPLIES_CAPTURED" } }), replyEventCount);
+    await prisma.emailMessage.create({
+      data: {
+        threadId: sentResult.localThreadId,
+        accountId: senderAccount.id,
+        externalId: `<supplier-follow-up-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-follow-up-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "quotes@example.com",
+        toEmails: JSON.stringify([senderAccount.email]),
+        subject: "Re: Quote request follow-up",
+        bodyText: "Follow-up confirming that the attached quote remains the governing offer.",
+        sentAt: new Date(),
+      },
+    });
+    const concurrentReplySyncs = await Promise.all([
+      captureConnectedSupplierReplies({ context, quoteCycleId: retryQuoteDraft.quoteCycle.id, sync: replySync }),
+      captureConnectedSupplierReplies({ context, quoteCycleId: retryQuoteDraft.quoteCycle.id, sync: replySync }),
+    ]);
+    assert.equal(concurrentReplySyncs.reduce((sum, result) => sum + result.captured, 0), 1, "concurrent inbox checks must capture one new reply exactly once");
+    assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_REPLY_EMAIL" } }), 2);
+    const restoredReplyCase = (await listProcurementCases(context))[0];
+    assert.equal(restoredReplyCase?.quoteCycle?.result && (restoredReplyCase.quoteCycle.result as { connectedReplies?: unknown[] }).connectedReplies?.length, 2, "captured replies must survive queue reloads");
+    const connectedResponseInput = {
+      expectedRequestHash: retryRequestHash,
+      receivedOn: supplierReply.sentAt.toISOString().slice(0, 10),
+      price: 126,
+      currency: "USD",
+      minimumOrderQuantity: 4,
+      unitOfMeasure: "EA",
+      deliveryDate: quoteDeliveryDate,
+      connectedReplyEvidenceId: replyEvidence.id,
+      quoteReference: "Q-RETRY",
+      validUntil: quoteValidUntil,
+      note: null,
+    };
+    await assert.rejects(() => recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      input: { ...connectedResponseInput, connectedReplyEvidenceId: connectedEvidence.id },
+    }), /outside the current quote cycle/i, "connected releases or unrelated evidence cannot masquerade as supplier replies");
     const retryQuoteResponse = await recordSupplierQuoteResponse({
       context,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
-      input: {
-        expectedRequestHash: retryRequestHash,
-        receivedOn: futureDate(0),
-        price: 126,
-        currency: "USD",
-        minimumOrderQuantity: 4,
-        unitOfMeasure: "EA",
-        deliveryDate: quoteDeliveryDate,
-        evidenceUrl: "https://example.com/quote/retry",
-        quoteReference: "Q-RETRY",
-        validUntil: quoteValidUntil,
-        note: null,
-      },
+      input: connectedResponseInput,
     });
+    assert.equal((retryQuoteResponse.response as { evidenceClass: string }).evidenceClass, "CONNECTED_PROVIDER");
+    assert.equal((retryQuoteResponse.response as { connectedReplyEvidenceId: string }).connectedReplyEvidenceId, replyEvidence.id);
     await reviewProcurementGate({
       context,
       caseId: returnedCase.id,
@@ -1291,6 +1418,11 @@ async function main() {
     const restrictedContext = { ...context, userId: restrictedUser.id, role: restrictedUser.role, canViewWholeOffice: false };
     const stalePrivilegedContext = { ...restrictedContext, role: "ADMIN", canViewWholeOffice: true };
     await assert.rejects(() => listProcurementCases(restrictedContext), /not found|cannot edit/i, "unassigned employees must not read office procurement cases");
+    await assert.rejects(() => captureConnectedSupplierReplies({
+      context: stalePrivilegedContext,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sync: replySync,
+    }), /not found|cannot edit/i, "a stale privileged session must not capture connected supplier replies");
     await assert.rejects(() => saveProcurementSelection({
       context: restrictedContext,
       researchRunId: started.id,
@@ -1382,6 +1514,11 @@ async function main() {
     foreignOfficeId = foreign.officeId;
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
+    await assert.rejects(() => captureConnectedSupplierReplies({
+      context: foreign,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sync: replySync,
+    }), /not found|cannot edit|delivered connected Gmail quote request/i, "another office must not capture connected supplier replies");
     await assert.rejects(() => procurementEvidenceSource(foreign, storedQuoteResponse.evidenceId), /not found/i, "another office must not resolve supplier evidence");
     assert.equal((await procurementEvidenceSource(context, storedQuoteResponse.evidenceId)).url, quoteResponseInput.evidenceUrl);
     await assert.rejects(() => decideProcurementApproval({

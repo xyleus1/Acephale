@@ -4585,3 +4585,19 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Add a controlled supplier communication task only after exact
   recipient, message body, sender account, approval hash, provider message ID,
   and unknown-send recovery are persisted.
+
+### 2026-08-10 - Capture connected supplier replies in the quote cycle
+
+- Branch: supply-os-supplier-replies, targeting main
+- Task: Close the gap between a connected Gmail quote request and commercial
+  review without allowing email text to become approved terms automatically.
+- Behavior: The active quote cycle can sync the approved Gmail account, capture
+  exact-sender inbound replies from the delivered provider thread, persist
+  immutable connected evidence, and restore the reply cards from the sourcing
+  queue. A buyer selects a reply as evidence and manually confirms the complete
+  commercial structure before the normal review and approval gates continue.
+- Safety: Other thread participants, pre-send messages, duplicate provider IDs,
+  and cross-scope evidence are rejected. Repeat and concurrent syncs are
+  idempotent. Connected response dates are pinned to the provider observation.
+- Boundary: No email parser or model confirms price, MOQ, delivery, validity, or
+  quote identity. Logistics remains unchanged.

@@ -33,6 +33,8 @@ const supplierEmailDraftRoute = readFileSync(resolve(root, "src/app/api/supply-o
 const supplierEmailApprovalRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier-email-drafts/[draftId]/approval/route.ts"), "utf8");
 const supplierEmailDecisionRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier-email-approvals/[approvalId]/decision/route.ts"), "utf8");
 const supplierEmailDeliveryRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier-email-actions/[actionId]/delivery/route.ts"), "utf8");
+const supplierReplyPersistence = readFileSync(resolve(root, "src/lib/supply-os/supplier-reply-persistence.ts"), "utf8");
+const connectedRepliesRoute = readFileSync(resolve(root, "src/app/api/supply-os/quote-cycles/[quoteCycleId]/connected-replies/route.ts"), "utf8");
 
 assert.ok(ATLAS_ROBOTICS_INVENTORY.length >= 10, "the Atlas fixture should resemble a useful robotics component inventory");
 assert.equal(new Set(ATLAS_ROBOTICS_INVENTORY.map((item) => item.sku)).size, ATLAS_ROBOTICS_INVENTORY.length, "inventory SKUs must be unique");
@@ -91,6 +93,8 @@ assert.match(procurement, /Quality plan/);
 assert.match(procurement, /Purchase approval/);
 assert.match(procurement, /Confirm supplier evidence/);
 assert.match(procurement, /Run the supplier quote cycle/);
+assert.match(procurement, /responses\.at\(-1\)\?\.responseHash/);
+assert.doesNotMatch(procurement, /quoteCycle\?\.resultHash/);
 assert.match(procurement, /Save quote request/);
 assert.match(procurement, /Record another channel/);
 assert.match(procurement, /Send through connected Gmail/);
@@ -165,6 +169,7 @@ assert.match(supplierEmailDraftRoute, /getSession[\s\S]*saveSupplierEmailDraft/)
 assert.match(supplierEmailApprovalRoute, /getSession[\s\S]*requestSupplierEmailApproval/);
 assert.match(supplierEmailDecisionRoute, /getSession[\s\S]*decideSupplierEmailApproval/);
 assert.match(supplierEmailDeliveryRoute, /SEND[\s\S]*RECONCILE[\s\S]*RESET/);
+assert.match(connectedRepliesRoute, /getSession[\s\S]*captureConnectedSupplierReplies/);
 assert.match(supplierCommunicationPersistence, /draftMessageHash[\s\S]*scopeHash/);
 assert.match(supplierCommunicationPersistence, /CONNECTED_PROVIDER/);
 assert.match(supplierCommunicationPersistence, /DELIVERY_UNKNOWN/);
@@ -172,6 +177,11 @@ assert.match(supplierCommunicationPersistence, /NOT_FOUND_REVIEW_REQUIRED/);
 assert.match(supplierCommunicationPersistence, /confirmedNotSent/);
 assert.match(supplierEmailProvider, /Message-ID/);
 assert.match(supplierEmailProvider, /rfc822msgid/);
+assert.match(supplierReplyPersistence, /SUPPLIER_QUOTE_REPLY_EMAIL/);
+assert.match(supplierReplyPersistence, /CONNECTED_PROVIDER/);
+assert.match(supplierReplyPersistence, /fromEmail\.trim\(\)\.toLowerCase\(\) === supplierEmail/);
+assert.match(procurement, /Check connected inbox/);
+assert.match(procurement, /Use as quote evidence/);
 assert.match(procurementPersistence, /SupplyExecutionTask|supplyExecutionTask/);
 assert.match(procurementPersistence, /SupplyExecutionEvent|supplyExecutionEvent/);
 assert.match(procurementPersistence, /officeId: args\.context\.officeId/);
