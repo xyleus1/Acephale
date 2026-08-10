@@ -22,8 +22,12 @@ import {
   type AtlasSourcingCandidate,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import styles from "./supply-os-logistics.module.css";
+import type {
+  PublicResearchResult,
+  SavedSourcingResearchRun,
+} from "./supply-os-sourcing-research-types";
 
-type ProcurementPhase = "researching" | "compare" | "handoff";
+type ProcurementPhase = "researching" | "compare" | "procure";
 type SourceClass = "Official" | "Trusted" | "New";
 type QualityState = "Strong" | "Conditional" | "Unverified";
 
@@ -46,29 +50,6 @@ type ProcurementOption = {
   priceType: "Modeled" | "Sourced" | "Unknown";
   deliveryType: "Modeled" | "Sourced" | "Unknown";
   sourceUrl: string | null;
-};
-
-type PublicResearchCandidate = {
-  id: string;
-  companyName: string;
-  website: string | null;
-  roles: string[];
-  country: { value: string | null };
-  facility: { value: string | null };
-  productCapability: { value: string | null; state: string };
-  price: { value: number | null; state: string };
-  currency: { value: string | null };
-  minimumOrderQuantity: { value: number | null };
-  leadTimeDays: { value: number | null; state: string };
-  sourceUrls: string[];
-  status: string;
-  cautions: string[];
-};
-
-type PublicResearchResult = {
-  candidates: PublicResearchCandidate[];
-  degraded: boolean;
-  warnings: string[];
 };
 
 const DISCOVERED_OPTIONS: Record<string, AtlasSourcingCandidate> = {
@@ -221,23 +202,30 @@ function publicResearchOptions(result: PublicResearchResult | null): Procurement
 export function AtlasProcurementWorkspace({
   item,
   requestText,
+  initialRun,
+  onResearchSaved,
   onBack,
 }: {
   item: AtlasInventoryItem | null;
   requestText: string;
+  initialRun?: SavedSourcingResearchRun | null;
+  onResearchSaved: (run: SavedSourcingResearchRun) => void;
   onBack: () => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(null);
-  const [researchState, setResearchState] = useState<"running" | "complete" | "degraded">("running");
+  const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
+  const [researchState, setResearchState] = useState<"running" | "complete" | "degraded">(
+    initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : "running",
+  );
   const options = useMemo(() => [...buildProcurementOptions(item), ...publicResearchOptions(publicResearch)], [item, publicResearch]);
   const recommended = options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
-  const [phase, setPhase] = useState<ProcurementPhase>("researching");
-  const [completedSources, setCompletedSources] = useState(0);
+  const [phase, setPhase] = useState<ProcurementPhase>(initialRun ? "compare" : "researching");
+  const [completedSources, setCompletedSources] = useState(initialRun ? RESEARCH_STEPS.length : 0);
   const [selectedOptionId, setSelectedOptionId] = useState(recommended?.id ?? "");
   const selectedOption = options.find((option) => option.id === selectedOptionId) ?? recommended;
 
   useEffect(() => {
+    if (initialRun) return;
     const controller = new AbortController();
     setResearchState("running");
     setPublicResearch(null);
@@ -251,20 +239,22 @@ export function AtlasProcurementWorkspace({
         componentName: item?.name ?? requestText,
         specification: item?.specification ?? requestText,
         targetCountry: "United States",
+        requestText,
       }),
     }).then(async (response) => {
       if (!response.ok) throw new Error("Supplier research did not finish.");
-      const payload = await response.json() as { result?: PublicResearchResult };
+      const payload = await response.json() as { result?: PublicResearchResult; run?: SavedSourcingResearchRun };
       const result = payload.result ?? { candidates: [], degraded: true, warnings: ["Supplier research returned no result."] };
       setPublicResearch(result);
       setResearchState(result.degraded ? "degraded" : "complete");
+      if (payload.run) onResearchSaved(payload.run);
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       setPublicResearch({ candidates: [], degraded: true, warnings: [error instanceof Error ? error.message : "Supplier research did not finish."] });
       setResearchState("degraded");
     });
     return () => controller.abort();
-  }, [item, requestText]);
+  }, [initialRun, item, onResearchSaved, requestText]);
 
   useEffect(() => {
     if (phase !== "researching") return;
@@ -299,13 +289,13 @@ export function AtlasProcurementWorkspace({
           <small>{item?.sku ?? "New request"}</small>
           <h2>{item?.name ?? requestText}</h2>
         </span>
-        <i>Public research</i>
+        <i>{initialRun ? "Saved research" : "Public research"}</i>
       </header>
 
       <nav className={styles.procurementProgress} aria-label="Procurement progress">
         <span data-active={phase === "researching"} data-complete={phase !== "researching"}><b>01</b> Research</span>
-        <span data-active={phase === "compare"} data-complete={phase === "handoff"}><b>02</b> Compare</span>
-        <span data-active={phase === "handoff"}><b>03</b> Handoff</span>
+        <span data-active={phase === "compare"} data-complete={phase === "procure"}><b>02</b> Compare</span>
+        <span data-active={phase === "procure"}><b>03</b> Procure</span>
       </nav>
 
       <AnimatePresence mode="wait" initial={false}>
@@ -377,7 +367,7 @@ export function AtlasProcurementWorkspace({
                 </div>
                 <footer className={styles.procurementDecisionFooter}>
                   <span><TriangleAlert size={14} /> Terms state whether evidence is modeled, sourced, or unknown. No supplier has been contacted.</span>
-                  <button type="button" disabled={!selectedOption} onClick={() => setPhase("handoff")}>Send to logistics <ArrowRight size={15} /></button>
+                  <button type="button" disabled={!selectedOption} onClick={() => setPhase("procure")}>Continue procurement <ArrowRight size={15} /></button>
                 </footer>
               </>
             ) : (
@@ -391,24 +381,24 @@ export function AtlasProcurementWorkspace({
           </motion.div>
         ) : (
           <motion.div
-            key="handoff"
+            key="procure"
             className={styles.procurementHandoff}
             initial={reduceMotion ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
           >
             <PackageCheck size={28} />
-            <small>Handoff prepared</small>
+            <small>Procurement brief</small>
             <h3>{selectedOption?.name}</h3>
             <dl>
               <div><dt>Part</dt><dd>{item?.name ?? requestText}</dd></div>
               <div><dt>Quantity</dt><dd>{item ? Math.max(shortageQuantity(item), selectedOption?.minimumOrderQuantity ?? 0) : "Unknown"}</dd></div>
-              <div><dt>Pickup</dt><dd>{selectedOption?.location ?? "Unknown"}</dd></div>
+              <div><dt>Source location</dt><dd>{selectedOption?.location ?? "Unknown"}</dd></div>
               <div><dt>Destination</dt><dd>Austin, TX</dd></div>
               <div><dt>Modeled delivery</dt><dd>{selectedOption?.deliveryDate ?? "Unknown"}</dd></div>
               <div><dt>Need by</dt><dd>{formatNeedBy(item)}</dd></div>
             </dl>
-            <p><ShieldCheck size={15} /> Draft only. No purchase order, supplier contact, booking, or spend was created.</p>
+            <p><ShieldCheck size={15} /> Qualification, commercial terms, quality plan, and approval remain required. No purchase order, supplier contact, booking, or spend was created.</p>
             <button type="button" onClick={onBack}><ArrowLeft size={15} /> Back to sourcing</button>
           </motion.div>
         )}

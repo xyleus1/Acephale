@@ -81,7 +81,13 @@ export async function requireSupplyWorkspace(
 export async function listSupplyWorkspaces(context: SupplyAccessContext) {
   // tenant-scope:ignore workspaceAccessWhere always includes context.officeId.
   return prisma.supplyWorkspace.findMany({
-    where: workspaceAccessWhere(context),
+    where: {
+      ...workspaceAccessWhere(context),
+      OR: [
+        { externalKey: null },
+        { externalKey: { not: { startsWith: "system:" } } },
+      ],
+    },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,

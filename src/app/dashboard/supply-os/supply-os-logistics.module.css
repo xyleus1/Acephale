@@ -1287,6 +1287,36 @@
   background: var(--navy-soft);
 }
 
+.sourcingQueueAction {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--navy);
+  background: var(--panel);
+  cursor: pointer;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 10px;
+  font-weight: 620;
+  white-space: nowrap;
+  transition: border-color 140ms ease-out, background-color 140ms ease-out;
+}
+
+.sourcingQueueAction:hover:not(:disabled) {
+  border-color: var(--navy);
+  background: var(--navy-soft);
+}
+
+.sourcingQueueAction:disabled {
+  color: var(--ink-muted);
+  background: var(--panel-subtle);
+  cursor: default;
+}
+
 .sourcingInspector {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;

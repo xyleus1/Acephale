@@ -245,12 +245,18 @@ clear boundaries.
 ### Procurement-to-logistics handoff
 
 - Supplier research stays inside Inventory & sourcing through request, visible
-  source research, option comparison, selection, and a draft handoff.
+  source research, option comparison, selection, and a procurement brief.
+- Each interactive research request is persisted before provider execution as
+  an office-scoped `SupplyCapabilityRun`. Its hashed input and completed output
+  let the sourcing queue restore results after navigation, refresh, or another
+  authorized office browser opens the workspace.
+- The queue displays the latest run per component plus saved custom requests.
+  Older runs remain canonical for a later history surface.
 - Interactive research uses the authenticated, office-rate-limited public web
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.
-- The current UI handoff is illustrative and browser-local. It does not create
-  a purchase order, supplier contact, booking, spend, or logistics record.
+- The current procurement brief is browser-local. It does not create a
+  purchase order, supplier contact, booking, spend, or logistics record.
 - A later Logistics integration will create a canonical approval-gated
   `SupplyAction`, prefill cargo, quantity, pickup, destination, need-by date,
   selected source, and evidence references, then open the Logistics panel by

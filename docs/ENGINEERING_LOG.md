@@ -17,6 +17,27 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-09 - Persist and resume supplier research from the sourcing queue
+
+- Branch: supply-os-persistent-procurement, targeting main
+- Commit: see git log
+- Task: Persist every interactive supplier research result, restore custom and
+  component research in the sourcing queue, and replace passive next-step text
+  with state-aware actions.
+- Files changed: research persistence, supplier-research API, procurement and
+  sourcing workspaces, dashboard state, scoped styles, sourcing contract,
+  architecture decision, handoff, and engineering log.
+- Verification: sourcing and enterprise design contracts, product copy,
+  TypeScript, production build, whitespace, and changed-line U+2014 checks.
+- Failed/skipped checks: no supplier contact, negotiation, order, payment,
+  inspection, booking, spend, or Logistics record is created.
+- Caveats: the latest run per component is the queue default. Older runs remain
+  canonical but do not yet have a visible history drawer. The system workspace
+  is office-shared and deliberately excluded from the company directory.
+- Follow-up: add run history and quote normalization, then introduce explicit
+  supplier qualification, sample or inspection, commercial approval, and
+  purchase-order stages before Logistics handoff.
+
 ### 2026-08-09 - Connect procurement comparison to public supplier research
 
 - Branch: supply-os-live-supplier-research, targeting main

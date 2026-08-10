@@ -18,6 +18,7 @@ import {
   type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import styles from "./supply-os-logistics.module.css";
+import type { SavedSourcingResearchRun } from "./supply-os-sourcing-research-types";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -37,6 +38,9 @@ export function AtlasInventoryWorkspace({
   selectedSku,
   onSelect,
   onCreateRequest,
+  researchRuns,
+  onStartItemResearch,
+  onOpenSavedResearch,
   sourceMap,
   sourceName,
   sourceLocation,
@@ -45,6 +49,9 @@ export function AtlasInventoryWorkspace({
   selectedSku: string;
   onSelect: (sku: string) => void;
   onCreateRequest: (query: string) => void;
+  researchRuns: SavedSourcingResearchRun[];
+  onStartItemResearch: (item: AtlasInventoryItem) => void;
+  onOpenSavedResearch: (run: SavedSourcingResearchRun) => void;
   sourceMap?: ReactNode;
   sourceName?: string;
   sourceLocation?: string;
@@ -53,6 +60,20 @@ export function AtlasInventoryWorkspace({
   const [query, setQuery] = useState("");
   const reduceMotion = useReducedMotion();
   const sourcingItems = ATLAS_ROBOTICS_INVENTORY.filter((item) => shortageQuantity(item) > 0);
+  const latestRuns = new Map<string, SavedSourcingResearchRun>();
+  for (const run of researchRuns) {
+    if (!latestRuns.has(run.input.componentItemKey)) latestRuns.set(run.input.componentItemKey, run);
+  }
+  const knownSkus = new Set(ATLAS_ROBOTICS_INVENTORY.map((item) => item.sku));
+  const customRuns = [...latestRuns.values()].filter((run) => !knownSkus.has(run.input.componentItemKey));
+
+  function resultState(run: SavedSourcingResearchRun | undefined) {
+    if (!run) return "Not researched";
+    if (run.status === "RUNNING") return "Researching";
+    if (run.status === "FAILED") return "Research failed";
+    const count = run.output?.candidates.length ?? 0;
+    return count ? `${count} sourced options` : "No sourced options";
+  }
 
   function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -114,11 +135,13 @@ export function AtlasInventoryWorkspace({
               <th>Requirement</th>
               <th>Need by</th>
               <th>Source state</th>
-              <th>Next step</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {sourcingItems.map((item) => (
+            {sourcingItems.map((item) => {
+              const run = latestRuns.get(item.sku);
+              return (
               <tr key={item.sku} data-active={item.sku === selectedSku} data-status="shortage">
                 <td>
                   <button type="button" aria-pressed={item.sku === selectedSku} onClick={() => onSelect(item.sku)}>
@@ -128,8 +151,42 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>{shortageQuantity(item)} units</td>
                 <td>{formatNeedBy(item.sku)}</td>
-                <td>Unqualified</td>
-                <td><span className={styles.inventoryStatusLabel}>Research</span></td>
+                <td>{resultState(run)}</td>
+                <td>
+                  <button
+                    className={styles.sourcingQueueAction}
+                    type="button"
+                    disabled={run?.status === "RUNNING"}
+                    onClick={() => run?.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onStartItemResearch(item)}
+                  >
+                    {run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
+                    <ArrowRight size={13} />
+                  </button>
+                </td>
+              </tr>
+              );
+            })}
+            {customRuns.map((run) => (
+              <tr key={run.id} data-status="request">
+                <td>
+                  <button type="button" onClick={() => onOpenSavedResearch(run)}>
+                    <span className={styles.inventoryStatusDot} />
+                    <span><small>Custom request</small><strong>{run.input.componentName}</strong><em>{run.input.specification || run.input.requestText}</em></span>
+                  </button>
+                </td>
+                <td>Custom request</td>
+                <td>Not set</td>
+                <td>{resultState(run)}</td>
+                <td>
+                  <button
+                    className={styles.sourcingQueueAction}
+                    type="button"
+                    disabled={run.status === "RUNNING"}
+                    onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
+                  >
+                    {run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

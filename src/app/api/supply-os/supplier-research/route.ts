@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { searchComponentSuppliers } from "@/lib/supply-os/component-supplier-research";
+import { supplyAccessContext } from "@/lib/supply-os/http";
 import { ResearchRateLimiter } from "@/lib/supply-os/research";
+import {
+  completeSourcingResearchRun,
+  failSourcingResearchRun,
+  listSourcingResearchRuns,
+  startSourcingResearchRun,
+} from "@/lib/supply-os/sourcing-research-persistence";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -19,6 +26,15 @@ function optionalText(value: unknown, max: number) {
   return requiredText(value, max) ?? null;
 }
 
+export async function GET() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const runs = await listSourcingResearchRuns(supplyAccessContext(session));
+  return NextResponse.json({ runs }, {
+    headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+  });
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,24 +46,52 @@ export async function POST(request: NextRequest) {
   const mpn = optionalText(body?.mpn, 180);
   const specification = optionalText(body?.specification, 1_000);
   const targetCountry = optionalText(body?.targetCountry, 120);
-  if (!componentItemKey || !componentName || manufacturer === null || mpn === null || specification === null || targetCountry === null) {
+  const requestText = optionalText(body?.requestText, 500);
+  if (!componentItemKey || !componentName || manufacturer === null || mpn === null || specification === null || targetCountry === null || requestText === null) {
     return NextResponse.json({ error: "A valid component request is required." }, { status: 400 });
   }
   if (!limiter.consume(`${session.officeId}:${session.userId}`)) {
     return NextResponse.json({ error: "Supplier research rate limit reached." }, { status: 429 });
   }
 
-  const result = await searchComponentSuppliers({
-    officeId: session.officeId,
-    workspaceId: "interactive-sourcing",
+  const context = supplyAccessContext(session);
+  const input = {
     componentItemKey,
     componentName,
-    manufacturer,
-    mpn,
-    specification,
-    targetCountry,
-  });
-  return NextResponse.json({ result }, {
-    headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
-  });
+    manufacturer: manufacturer ?? null,
+    mpn: mpn ?? null,
+    specification: specification ?? null,
+    targetCountry: targetCountry ?? null,
+    requestText: requestText ?? componentName,
+  };
+  const run = await startSourcingResearchRun(context, input);
+  try {
+    const result = await searchComponentSuppliers({
+      officeId: session.officeId,
+      workspaceId: run.workspaceId,
+      componentItemKey,
+      componentName,
+      manufacturer,
+      mpn,
+      specification,
+      targetCountry,
+    });
+    const completedRun = await completeSourcingResearchRun({
+      context,
+      runId: run.id,
+      workspaceId: run.workspaceId,
+      output: JSON.parse(JSON.stringify(result)),
+    });
+    return NextResponse.json({ result, run: completedRun }, {
+      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+    });
+  } catch {
+    await failSourcingResearchRun({
+      context,
+      runId: run.id,
+      workspaceId: run.workspaceId,
+      message: "Supplier research did not finish.",
+    });
+    return NextResponse.json({ error: "Supplier research did not finish." }, { status: 502 });
+  }
 }

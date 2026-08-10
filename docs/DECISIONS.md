@@ -2117,6 +2117,26 @@ Use this log for durable product and engineering decisions. Do not put every imp
   every returned candidate requires attributable sources and stays
   unqualified. Modeled, sourced, and unknown commercial values remain visibly
   distinct. No supplier system is presented as connected.
-- Deferred integration: `Send to logistics` prepares a local draft only in this
-  slice. A later change will create an approval-gated canonical `SupplyAction`
-  and open Logistics with the handoff context. The Logistics panel is unchanged.
+- Deferred integration: `Continue procurement` prepares a local procurement
+  brief only in this slice. A later change will create an approval-gated
+  canonical `SupplyAction` and open Logistics with accepted order context. The
+  Logistics panel is unchanged.
+
+### 2026-08-09 - Research runs are durable procurement records
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A sourcing workflow is useless if leaving the comparison destroys
+  the supplier evidence. Marketplace procurement products keep a request and
+  its responses as a durable object that can progress toward an order.
+- Decision: Interactive supplier research is stored as office-scoped
+  `SupplyCapabilityRun` records with immutable input and output hashes. The
+  sourcing queue uses the latest run per component and also lists saved custom
+  requests. Saved results reopen directly into comparison.
+- UI state: Queue actions are state-aware: start, researching, view results, or
+  retry. Passive `Next step` labels are not procurement controls.
+- Demo storage: Atlas demo research uses an office-scoped system workspace that
+  is excluded from the company directory. This avoids duplicate company rows
+  while preserving cross-refresh and cross-browser office state.
+- Boundary: Research persistence does not approve a supplier or authorize
+  contact, negotiation, purchase, payment, inspection, booking, or spend.

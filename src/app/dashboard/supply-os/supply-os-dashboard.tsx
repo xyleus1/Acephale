@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ResponsiveContainer,
   Sankey,
@@ -54,6 +54,7 @@ import {
   AtlasSourcingInspector,
 } from "./supply-os-inventory-sourcing";
 import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
+import type { SavedSourcingResearchRun } from "./supply-os-sourcing-research-types";
 import styles from "./supply-os-logistics.module.css";
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
@@ -582,7 +583,12 @@ function CaseCommandCenter({
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
   const [sourceMapCandidateId, setSourceMapCandidateId] = useState<string | null>(null);
   const [sourceMapObjectId, setSourceMapObjectId] = useState("");
-  const [procurementRequest, setProcurementRequest] = useState<{ requestText: string; itemSku: string | null } | null>(null);
+  const [procurementRequest, setProcurementRequest] = useState<{
+    requestText: string;
+    itemSku: string | null;
+    savedRun?: SavedSourcingResearchRun | null;
+  } | null>(null);
+  const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
@@ -672,6 +678,24 @@ function CaseCommandCenter({
     window.scrollTo({ top: 0, left: 0 });
   }, [procurementRequest]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/supply-os/supplier-research", {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { accept: "application/json" },
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const payload = await response.json() as { runs?: SavedSourcingResearchRun[] };
+      setResearchRuns(payload.runs ?? []);
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  const saveResearchRun = useCallback((run: SavedSourcingResearchRun) => {
+    setResearchRuns((current) => [run, ...current.filter((candidate) => candidate.id !== run.id)]);
+  }, []);
+
   function selectNetworkObject(object: SupplyCommandObject) {
     setSelection({ panel: activePanel, objectId: object.id });
     setInspectorMode("object");
@@ -716,6 +740,18 @@ function CaseCommandCenter({
     setProcurementRequest({ requestText, itemSku: matchedItem?.sku ?? null });
   }
 
+  function openSavedResearch(run: SavedSourcingResearchRun) {
+    const matchedItem = ATLAS_ROBOTICS_INVENTORY.find((item) => item.sku === run.input.componentItemKey) ?? null;
+    if (matchedItem) setSelectedInventorySku(matchedItem.sku);
+    setSourceMapCandidateId(null);
+    setSourceMapObjectId("");
+    setProcurementRequest({
+      requestText: run.input.requestText || run.input.componentName,
+      itemSku: matchedItem?.sku ?? null,
+      savedRun: run,
+    });
+  }
+
   return (
     <article
       className={styles.commandCenter}
@@ -731,6 +767,8 @@ function CaseCommandCenter({
             key={`procurement:${procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
             requestText={procurementRequest.requestText}
+            initialRun={procurementRequest.savedRun}
+            onResearchSaved={saveResearchRun}
             onBack={() => setProcurementRequest(null)}
           />
         ) : activePanel === "materials" ? (
@@ -739,6 +777,9 @@ function CaseCommandCenter({
             selectedSku={selectedInventoryItem?.sku ?? ""}
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}
+            researchRuns={researchRuns}
+            onStartItemResearch={(item) => startProcurement(item)}
+            onOpenSavedResearch={openSavedResearch}
             sourceName={selectedSourceCandidate?.name}
             sourceLocation={selectedSourceCandidate?.location}
             onHideSourceMap={() => {

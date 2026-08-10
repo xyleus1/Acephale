@@ -2,6 +2,36 @@
 
 ## Latest Update
 
+### Supplier research is persistent and resumable from the sourcing queue
+
+- Every interactive supplier research request now creates an office-scoped
+  `SupplyCapabilityRun` before public research starts and completes that run
+  with the attributable result. Refreshing or leaving the page no longer
+  discards completed research.
+- The sourcing queue loads saved runs and attaches the latest run to its
+  component. Custom free-text requests also return as queue rows.
+- Replaced the passive `Next step` column with an `Action` column. Rows expose
+  `Start research`, `Researching`, `View results`, or `Retry research`
+  according to durable run state.
+- Opening saved results skips the research animation and restores the supplier
+  comparison directly. Modeled Atlas candidates remain distinct from sourced
+  public candidates and unknown terms.
+- A hidden office-scoped system workspace owns demo procurement runs without
+  appearing as a duplicate company in the company directory. No Prisma schema
+  migration was required.
+- Supplier contact, negotiation, order, payment, inspection, and logistics
+  remain approval-gated follow-ups.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- `npm run test:supply-os-enterprise-design`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- Production build with a disposable PostgreSQL URL
+- `git diff --check`
+- Changed-line U+2014 scan
+
 ### Optimization inspector header is removed
 
 - Removed the decorative checklist icon from the optimization inspector.
@@ -29,7 +59,7 @@ Verification:
   `resize` value is `none`, the optimization title block is absent, and the
   page has no horizontal overflow.
 
-### Inventory and sourcing now runs request, research, comparison, and handoff
+### Inventory and sourcing now runs request, research, comparison, and procurement
 
 - Replaced inventory-control counters with a sourcing request composer and a
   compact queue of component needs. Operators can start from a known Atlas
@@ -41,9 +71,9 @@ Verification:
 - Added an operator comparison across modeled price, delivery, quality, and
   source class. The suggested option remains selectable rather than silently
   becoming an award.
-- Added a draft logistics handoff confirmation. It prepares part, quantity,
-  pickup, destination, delivery, and need-by context without changing the
-  Logistics panel or creating a purchase order, contact, booking, or spend.
+- Added a procurement brief after supplier comparison. It prepares part,
+  quantity, source, destination, delivery, and need-by context without changing
+  the Logistics panel or creating a purchase order, contact, booking, or spend.
 - Unknown free-text requests fail honestly. If no SKU, product name, or
   manufacturer part number can be resolved, commercial terms remain unknown.
 - The research sequence now calls the existing authenticated, rate-limited
@@ -69,7 +99,8 @@ Verification:
 
 Deferred:
 
-- Research results are not persisted as a canonical office-scoped run yet.
+- Research results are now persisted as canonical office-scoped capability
+  runs. A visible older-run history remains deferred.
 - The Logistics panel remains unchanged. A later slice should create an
   approval-gated `SupplyAction` and open Logistics with the handoff context.
 
