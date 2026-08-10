@@ -2,6 +2,45 @@
 
 ## Latest Update
 
+### Supplier selection now becomes a durable procurement planning case
+
+- Continuing from a supplier comparison now creates or updates an office-scoped
+  `SupplyExecutionTask` with task type `PROCUREMENT_CASE`. The research run is
+  immutable input, while the selected option and deterministic readiness gates
+  are stored as the current result.
+- Every supplier selection creates an append-only `SupplyExecutionEvent` with
+  a payload hash. Changing the selected supplier updates the current case and
+  preserves the prior selection in the event ledger.
+- Public supplier identity, source, price, currency, lead time state, and
+  quality state are re-derived from the persisted research output on the
+  server. Client-authored sourced terms cannot become procurement evidence.
+- Commercial values become sourced only when their field-level envelope is
+  supported, attributable, and fresh. Price, currency, MOQ, and lead time must
+  all clear that boundary before commercial terms can be evidence-complete.
+- Modeled Atlas options remain allowed only as modeled proposals with no source
+  URL. They are downgraded to new and unverified when saved, and their
+  source-evidence gate stays blocked.
+- The procurement brief now shows supplier evidence, commercial terms, quality
+  plan, and purchase approval gates. The queue restores existing cases as
+  `Continue procurement`; operators can review alternatives and persist a new
+  selection.
+- The mutable planning case is not an approval target. A future immutable
+  execution action must include the selected supplier and terms in its input so
+  approval is invalidated by any change. Purchase approval remains blocked.
+  No supplier contact, negotiation, sample,
+  inspection, purchase order, payment, booking, or spend is created.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- `DATABASE_URL=... npm run test:supply-os-sourcing-persistence`
+- `npm run test:supply-os-enterprise-design`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- Production build with a disposable PostgreSQL URL
+- `git diff --check`
+- Changed-line U+2014 scan
+
 ### Supplier research is persistent and resumable from the sourcing queue
 
 - Every interactive supplier research request now creates an office-scoped

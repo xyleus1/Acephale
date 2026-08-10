@@ -1043,6 +1043,21 @@
   text-transform: uppercase;
 }
 
+.sourcingQueueHeader button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--ink);
+  background: var(--panel);
+  font: 600 10px/1 "IBM Plex Sans", sans-serif;
+  cursor: pointer;
+}
+
+.sourcingQueueHeader button:hover {
+  background: var(--panel-subtle);
+}
+
 .candidateProvenance {
   width: fit-content;
   margin: -2px 0 8px;
@@ -2157,6 +2172,61 @@
   margin: 0;
 }
 
+.procurementGateGrid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 0 18px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.procurementGateGrid > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 13px 14px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.procurementGateGrid > div > span {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--decision);
+}
+
+.procurementGateGrid > div > span[data-status="EVIDENCE_COMPLETE"] {
+  background: var(--success);
+}
+
+.procurementGateGrid > div > span[data-status="BLOCKED"] {
+  background: var(--danger);
+}
+
+.procurementGateGrid p,
+.procurementGateGrid strong,
+.procurementGateGrid small {
+  display: block;
+  margin: 0;
+}
+
+.procurementGateGrid strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.procurementGateGrid small {
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
 .procurementHandoff dt {
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
@@ -2181,6 +2251,35 @@
   margin: 0 0 20px;
   color: var(--decision);
   font-size: 10px;
+}
+
+.procurementCaseActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.procurementCaseActions button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.procurementCaseActions button:hover {
+  color: var(--navy);
+  border-color: #bdccd3;
+  background: var(--navy-soft);
 }
 
 .procurementUnknownState p {
@@ -3490,6 +3589,10 @@
   .procurementHandoff dl {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 20px;
+  }
+
+  .procurementGateGrid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .scenarioWorkbench {

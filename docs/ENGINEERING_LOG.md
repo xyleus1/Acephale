@@ -17,6 +17,30 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-09 - Persist supplier selection and procurement readiness gates
+
+- Branch: supply-os-procurement-progression, targeting main
+- Commit: see git log
+- Task: Turn a saved supplier comparison into a durable procurement planning case with
+  server-derived evidence state, append-only selection history, and resumable
+  readiness gates.
+- Files changed: procurement-case persistence and API, sourcing client types,
+  dashboard and queue restoration, procurement comparison and gate UI, scoped
+  styles, database and UI contracts, architecture decision, handoff, and log.
+- Verification: sourcing persistence and UI contracts, enterprise design,
+  product copy, TypeScript, production build, whitespace, and changed-line
+  U+2014 checks.
+- Failed/skipped checks: no live supplier was contacted and no negotiation,
+  sample, inspection, order, payment, booking, spend, or Logistics record was
+  created.
+- Caveats: readiness gates are deterministic and fail closed. This mutable case
+  is not an approval target; the future execution action must bind the exact
+  supplier and terms in immutable input. Evidence upload,
+  qualification review, commercial confirmation, and inspection planning do
+  not have operator input forms yet, so purchase approval cannot become ready.
+- Follow-up: add evidence-backed gate actions and a supplier quote schema before
+  adding approval requests or purchase-order drafting.
+
 ### 2026-08-09 - Persist and resume supplier research from the sourcing queue
 
 - Branch: supply-os-persistent-procurement, targeting main

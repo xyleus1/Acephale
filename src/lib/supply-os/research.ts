@@ -177,7 +177,7 @@ export function normalizeSupplierResearch(args: {
     const leadTimeDays = envelope({ raw: candidate.leadTimeDays, parse: numberValue, ...common, maxAgeDays: 60 });
     const supported = Boolean(website && roles.length && productCapability.state === "SUPPORTED" && productCapability.sources.length);
     return [{
-      id: text(candidate.id, 180) || slug(companyName, index),
+      id: slug(companyName, index),
       officeId: args.officeId,
       workspaceId: args.workspaceId,
       componentItemKey: args.componentItemKey,

@@ -18,7 +18,10 @@ import {
   type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import styles from "./supply-os-logistics.module.css";
-import type { SavedSourcingResearchRun } from "./supply-os-sourcing-research-types";
+import type {
+  SavedProcurementCase,
+  SavedSourcingResearchRun,
+} from "./supply-os-sourcing-research-types";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -39,6 +42,9 @@ export function AtlasInventoryWorkspace({
   onSelect,
   onCreateRequest,
   researchRuns,
+  procurementCases,
+  dataState,
+  onRetryData,
   onStartItemResearch,
   onOpenSavedResearch,
   sourceMap,
@@ -50,6 +56,9 @@ export function AtlasInventoryWorkspace({
   onSelect: (sku: string) => void;
   onCreateRequest: (query: string) => void;
   researchRuns: SavedSourcingResearchRun[];
+  procurementCases: SavedProcurementCase[];
+  dataState: "loading" | "ready" | "error";
+  onRetryData: () => void;
   onStartItemResearch: (item: AtlasInventoryItem) => void;
   onOpenSavedResearch: (run: SavedSourcingResearchRun) => void;
   sourceMap?: ReactNode;
@@ -60,7 +69,13 @@ export function AtlasInventoryWorkspace({
   const [query, setQuery] = useState("");
   const reduceMotion = useReducedMotion();
   const sourcingItems = ATLAS_ROBOTICS_INVENTORY.filter((item) => shortageQuantity(item) > 0);
+  const runsById = new Map(researchRuns.map((run) => [run.id, run]));
+  const casesByRunId = new Map(procurementCases.map((procurementCase) => [procurementCase.input.researchRunId, procurementCase]));
   const latestRuns = new Map<string, SavedSourcingResearchRun>();
+  for (const procurementCase of procurementCases) {
+    const run = runsById.get(procurementCase.input.researchRunId);
+    if (run && !latestRuns.has(run.input.componentItemKey)) latestRuns.set(run.input.componentItemKey, run);
+  }
   for (const run of researchRuns) {
     if (!latestRuns.has(run.input.componentItemKey)) latestRuns.set(run.input.componentItemKey, run);
   }
@@ -77,6 +92,7 @@ export function AtlasInventoryWorkspace({
 
   function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (dataState !== "ready") return;
     const normalized = query.trim();
     if (!normalized) return;
     onCreateRequest(normalized);
@@ -103,12 +119,14 @@ export function AtlasInventoryWorkspace({
             placeholder="Describe the part, quantity, specification, and need-by date"
           />
         </label>
-        <button type="submit" aria-label="Research sourcing request" disabled={!query.trim()}><span>Research</span><ArrowRight size={15} /></button>
+        <button type="submit" aria-label="Research sourcing request" disabled={!query.trim() || dataState !== "ready"}><span>{dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : "Research"}</span><ArrowRight size={15} /></button>
       </form>
 
       <header className={styles.sourcingQueueHeader}>
         <h2>Sourcing queue</h2>
-        <span>Illustrative requests</span>
+        {dataState === "error"
+          ? <button type="button" onClick={onRetryData}>Retry saved work</button>
+          : <span>{dataState === "loading" ? "Loading saved work" : "Illustrative requests"}</span>}
       </header>
 
       {sourceMap ? (
@@ -141,6 +159,7 @@ export function AtlasInventoryWorkspace({
           <tbody>
             {sourcingItems.map((item) => {
               const run = latestRuns.get(item.sku);
+              const procurementCase = run ? casesByRunId.get(run.id) : undefined;
               return (
               <tr key={item.sku} data-active={item.sku === selectedSku} data-status="shortage">
                 <td>
@@ -151,22 +170,24 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>{shortageQuantity(item)} units</td>
                 <td>{formatNeedBy(item.sku)}</td>
-                <td>{resultState(run)}</td>
+                <td>{procurementCase?.result?.stage === "SOURCE_EVIDENCE" ? "Source evidence required" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" ? "Confirm commercial terms" : procurementCase?.result?.stage === "QUALITY_REVIEW" ? "Quality review required" : resultState(run)}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}
                     type="button"
-                    disabled={run?.status === "RUNNING"}
+                    disabled={dataState !== "ready" || run?.status === "RUNNING"}
                     onClick={() => run?.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onStartItemResearch(item)}
                   >
-                    {run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
                     <ArrowRight size={13} />
                   </button>
                 </td>
               </tr>
               );
             })}
-            {customRuns.map((run) => (
+            {customRuns.map((run) => {
+              const procurementCase = casesByRunId.get(run.id);
+              return (
               <tr key={run.id} data-status="request">
                 <td>
                   <button type="button" onClick={() => onOpenSavedResearch(run)}>
@@ -176,19 +197,20 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>Custom request</td>
                 <td>Not set</td>
-                <td>{resultState(run)}</td>
+                <td>{procurementCase?.result?.stage === "SOURCE_EVIDENCE" ? "Source evidence required" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" ? "Confirm commercial terms" : procurementCase?.result?.stage === "QUALITY_REVIEW" ? "Quality review required" : resultState(run)}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}
                     type="button"
-                    disabled={run.status === "RUNNING"}
+                    disabled={dataState !== "ready" || run.status === "RUNNING"}
                     onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
                   >
-                    {run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

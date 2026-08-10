@@ -54,7 +54,10 @@ import {
   AtlasSourcingInspector,
 } from "./supply-os-inventory-sourcing";
 import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
-import type { SavedSourcingResearchRun } from "./supply-os-sourcing-research-types";
+import type {
+  SavedProcurementCase,
+  SavedSourcingResearchRun,
+} from "./supply-os-sourcing-research-types";
 import styles from "./supply-os-logistics.module.css";
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
@@ -587,8 +590,12 @@ function CaseCommandCenter({
     requestText: string;
     itemSku: string | null;
     savedRun?: SavedSourcingResearchRun | null;
+    savedCase?: SavedProcurementCase | null;
   } | null>(null);
   const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
+  const [procurementCases, setProcurementCases] = useState<SavedProcurementCase[]>([]);
+  const [sourcingDataState, setSourcingDataState] = useState<"loading" | "ready" | "error">("loading");
+  const [sourcingLoadRevision, setSourcingLoadRevision] = useState(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
@@ -680,20 +687,32 @@ function CaseCommandCenter({
 
   useEffect(() => {
     const controller = new AbortController();
+    setSourcingDataState("loading");
     void fetch("/api/supply-os/supplier-research", {
       cache: "no-store",
       signal: controller.signal,
       headers: { accept: "application/json" },
     }).then(async (response) => {
-      if (!response.ok) return;
-      const payload = await response.json() as { runs?: SavedSourcingResearchRun[] };
+      if (!response.ok) throw new Error("Saved sourcing work is unavailable.");
+      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[] };
       setResearchRuns(payload.runs ?? []);
-    }).catch(() => undefined);
+      setProcurementCases(payload.cases ?? []);
+      setSourcingDataState("ready");
+    }).catch(() => {
+      if (!controller.signal.aborted) setSourcingDataState("error");
+    });
     return () => controller.abort();
-  }, []);
+  }, [sourcingLoadRevision]);
 
   const saveResearchRun = useCallback((run: SavedSourcingResearchRun) => {
     setResearchRuns((current) => [run, ...current.filter((candidate) => candidate.id !== run.id)]);
+  }, []);
+
+  const saveProcurementCase = useCallback((procurementCase: SavedProcurementCase) => {
+    setProcurementCases((current) => [
+      procurementCase,
+      ...current.filter((candidate) => candidate.id !== procurementCase.id),
+    ]);
   }, []);
 
   function selectNetworkObject(object: SupplyCommandObject) {
@@ -749,6 +768,7 @@ function CaseCommandCenter({
       requestText: run.input.requestText || run.input.componentName,
       itemSku: matchedItem?.sku ?? null,
       savedRun: run,
+      savedCase: procurementCases.find((candidate) => candidate.input.researchRunId === run.id) ?? null,
     });
   }
 
@@ -768,7 +788,9 @@ function CaseCommandCenter({
             item={procurementItem}
             requestText={procurementRequest.requestText}
             initialRun={procurementRequest.savedRun}
+            initialCase={procurementRequest.savedCase}
             onResearchSaved={saveResearchRun}
+            onProcurementCaseSaved={saveProcurementCase}
             onBack={() => setProcurementRequest(null)}
           />
         ) : activePanel === "materials" ? (
@@ -778,6 +800,9 @@ function CaseCommandCenter({
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}
             researchRuns={researchRuns}
+            procurementCases={procurementCases}
+            dataState={sourcingDataState}
+            onRetryData={() => setSourcingLoadRevision((revision) => revision + 1)}
             onStartItemResearch={(item) => startProcurement(item)}
             onOpenSavedResearch={openSavedResearch}
             sourceName={selectedSourceCandidate?.name}

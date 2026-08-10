@@ -24,6 +24,7 @@ import {
 import styles from "./supply-os-logistics.module.css";
 import type {
   PublicResearchResult,
+  SavedProcurementCase,
   SavedSourcingResearchRun,
 } from "./supply-os-sourcing-research-types";
 
@@ -136,6 +137,16 @@ function researchDeliveryDate(leadTimeDays: number | null) {
   return leadTimeDays === null ? "Unknown" : deliveryDate(leadTimeDays);
 }
 
+function isSourcedEvidence(value: { state: string; sources: unknown[]; freshness: string }) {
+  return value.state === "SUPPORTED" && value.sources.length > 0 && value.freshness === "FRESH";
+}
+
+function displayStoredDate(value: string | null | undefined) {
+  if (!value) return "Unknown";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`));
+}
+
 function formatNeedBy(item: AtlasInventoryItem | null) {
   if (!item) return "Not set";
   const value = ATLAS_SOURCING_NEED_BY[item.sku];
@@ -177,52 +188,80 @@ function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOp
 
 function publicResearchOptions(result: PublicResearchResult | null): ProcurementOption[] {
   if (!result) return [];
-  return result.candidates.map((candidate) => ({
+  return result.candidates.map((candidate) => {
+    const priceSourced = isSourcedEvidence(candidate.price) && isSourcedEvidence(candidate.currency);
+    const deliverySourced = isSourcedEvidence(candidate.leadTimeDays);
+    const moqSourced = isSourcedEvidence(candidate.minimumOrderQuantity);
+    return ({
     id: `public:${candidate.id}`,
     name: candidate.companyName,
     location: candidate.facility.value ?? candidate.country.value ?? "Location unknown",
     coordinates: { longitude: 0, latitude: 0 },
     role: candidate.roles.map((role) => role.toLowerCase()).join(" / ") || "Supplier candidate",
-    leadTimeDays: candidate.leadTimeDays.value ?? 0,
-    minimumOrderQuantity: candidate.minimumOrderQuantity.value ?? 0,
-    modeledUnitCostUsd: candidate.price.value ?? 0,
-    currency: candidate.currency.value?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null,
+    leadTimeDays: deliverySourced ? candidate.leadTimeDays.value ?? 0 : 0,
+    minimumOrderQuantity: moqSourced ? candidate.minimumOrderQuantity.value ?? 0 : 0,
+    modeledUnitCostUsd: priceSourced ? candidate.price.value ?? 0 : 0,
+    currency: priceSourced ? candidate.currency.value?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null : null,
     fit: candidate.productCapability.value ?? "Product capability requires review.",
     sourceClass: candidate.website ? "Official" : "New",
     sourceLabel: candidate.website ? "Official supplier page" : "Public web source",
     quality: candidate.status === "REVIEW_REQUIRED" ? "Conditional" : "Unverified",
     qualityEvidence: candidate.cautions[0] ?? `${candidate.productCapability.state.toLowerCase()} product-capability evidence`,
-    deliveryDate: researchDeliveryDate(candidate.leadTimeDays.value),
-    priceType: candidate.price.value !== null ? "Sourced" : "Unknown",
-    deliveryType: candidate.leadTimeDays.value !== null ? "Sourced" : "Unknown",
+    deliveryDate: researchDeliveryDate(deliverySourced ? candidate.leadTimeDays.value : null),
+    priceType: priceSourced ? "Sourced" : "Unknown",
+    deliveryType: deliverySourced ? "Sourced" : "Unknown",
     sourceUrl: candidate.website ?? candidate.sourceUrls[0] ?? null,
-  }));
+    });
+  });
 }
 
 export function AtlasProcurementWorkspace({
   item,
   requestText,
   initialRun,
+  initialCase,
   onResearchSaved,
+  onProcurementCaseSaved,
   onBack,
 }: {
   item: AtlasInventoryItem | null;
   requestText: string;
   initialRun?: SavedSourcingResearchRun | null;
+  initialCase?: SavedProcurementCase | null;
   onResearchSaved: (run: SavedSourcingResearchRun) => void;
+  onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
   onBack: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const [currentRun, setCurrentRun] = useState<SavedSourcingResearchRun | null>(initialRun ?? null);
+  const [currentCase, setCurrentCase] = useState<SavedProcurementCase | null>(initialCase ?? null);
+  const [caseSaveState, setCaseSaveState] = useState<"idle" | "saving" | "error">("idle");
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
   const [researchState, setResearchState] = useState<"running" | "complete" | "degraded">(
     initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : "running",
   );
   const options = useMemo(() => [...buildProcurementOptions(item), ...publicResearchOptions(publicResearch)], [item, publicResearch]);
   const recommended = options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
-  const [phase, setPhase] = useState<ProcurementPhase>(initialRun ? "compare" : "researching");
+  const [phase, setPhase] = useState<ProcurementPhase>(initialCase ? "procure" : initialRun ? "compare" : "researching");
   const [completedSources, setCompletedSources] = useState(initialRun ? RESEARCH_STEPS.length : 0);
-  const [selectedOptionId, setSelectedOptionId] = useState(recommended?.id ?? "");
-  const selectedOption = options.find((option) => option.id === selectedOptionId) ?? recommended;
+  const [selectedOptionId, setSelectedOptionId] = useState(initialCase?.result?.selectedOption.id ?? recommended?.id ?? "");
+  const comparisonOption = options.find((option) => option.id === selectedOptionId) ?? recommended;
+  const savedSelection = currentCase?.result?.selectedOption;
+  const selectedOption = savedSelection && comparisonOption?.id === savedSelection.id
+    ? {
+        ...comparisonOption,
+        name: savedSelection.name,
+        sourceClass: savedSelection.sourceClass,
+        sourceUrl: savedSelection.sourceUrl,
+        modeledUnitCostUsd: savedSelection.price ?? 0,
+        currency: savedSelection.currency,
+        minimumOrderQuantity: savedSelection.minimumOrderQuantity ?? 0,
+        priceType: savedSelection.priceType,
+        deliveryDate: displayStoredDate(savedSelection.deliveryDate),
+        deliveryType: savedSelection.deliveryType,
+        quality: savedSelection.quality,
+      }
+    : comparisonOption;
 
   useEffect(() => {
     if (initialRun) return;
@@ -247,7 +286,10 @@ export function AtlasProcurementWorkspace({
       const result = payload.result ?? { candidates: [], degraded: true, warnings: ["Supplier research returned no result."] };
       setPublicResearch(result);
       setResearchState(result.degraded ? "degraded" : "complete");
-      if (payload.run) onResearchSaved(payload.run);
+      if (payload.run) {
+        setCurrentRun(payload.run);
+        onResearchSaved(payload.run);
+      }
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       setPublicResearch({ candidates: [], degraded: true, warnings: [error instanceof Error ? error.message : "Supplier research did not finish."] });
@@ -273,6 +315,42 @@ export function AtlasProcurementWorkspace({
     const finish = window.setTimeout(() => setPhase("compare"), reduceMotion ? 120 : 240);
     return () => window.clearTimeout(finish);
   }, [completedSources, phase, reduceMotion, researchState]);
+
+  async function continueProcurement() {
+    if (!currentRun || !selectedOption || caseSaveState === "saving") return;
+    setCaseSaveState("saving");
+    try {
+      const response = await fetch("/api/supply-os/procurement-cases", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({
+          researchRunId: currentRun.id,
+          selection: {
+            id: selectedOption.id,
+            name: selectedOption.name,
+            sourceClass: selectedOption.sourceClass,
+            sourceUrl: selectedOption.sourceUrl,
+            price: selectedOption.priceType === "Unknown" ? null : selectedOption.modeledUnitCostUsd,
+            currency: selectedOption.currency,
+            minimumOrderQuantity: selectedOption.minimumOrderQuantity || null,
+            priceType: selectedOption.priceType,
+            deliveryDate: selectedOption.deliveryDate === "Unknown" ? null : selectedOption.deliveryDate,
+            deliveryType: selectedOption.deliveryType,
+            quality: selectedOption.quality,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { procurementCase?: SavedProcurementCase };
+      if (!response.ok || !payload.procurementCase) throw new Error("Procurement case could not be saved.");
+      setCurrentCase(payload.procurementCase);
+      onProcurementCaseSaved(payload.procurementCase);
+      setCaseSaveState("idle");
+      setPhase("procure");
+    } catch {
+      setCaseSaveState("error");
+    }
+  }
 
   return (
     <motion.section
@@ -366,8 +444,8 @@ export function AtlasProcurementWorkspace({
                   </table>
                 </div>
                 <footer className={styles.procurementDecisionFooter}>
-                  <span><TriangleAlert size={14} /> Terms state whether evidence is modeled, sourced, or unknown. No supplier has been contacted.</span>
-                  <button type="button" disabled={!selectedOption} onClick={() => setPhase("procure")}>Continue procurement <ArrowRight size={15} /></button>
+                  <span role={caseSaveState === "error" ? "alert" : undefined}><TriangleAlert size={14} /> {caseSaveState === "error" ? "Procurement progress could not be saved. Try again." : "Terms state whether evidence is modeled, sourced, or unknown. No supplier has been contacted."}</span>
+                  <button type="button" disabled={!selectedOption || !currentRun || caseSaveState === "saving"} onClick={() => void continueProcurement()}>{caseSaveState === "saving" ? "Saving" : currentCase ? "Update procurement" : "Continue procurement"} <ArrowRight size={15} /></button>
                 </footer>
               </>
             ) : (
@@ -398,8 +476,19 @@ export function AtlasProcurementWorkspace({
               <div><dt>Modeled delivery</dt><dd>{selectedOption?.deliveryDate ?? "Unknown"}</dd></div>
               <div><dt>Need by</dt><dd>{formatNeedBy(item)}</dd></div>
             </dl>
+            {currentCase?.result ? (
+              <section className={styles.procurementGateGrid} aria-label="Procurement readiness">
+                <div><span data-status={currentCase.result.gates.sourceEvidence} /><p><strong>Supplier evidence</strong><small>{currentCase.result.gates.sourceEvidence === "BLOCKED" ? "Attributable source required" : "Human qualification required"}</small></p></div>
+                <div><span data-status={currentCase.result.gates.commercialTerms} /><p><strong>Commercial terms</strong><small>{currentCase.result.gates.commercialTerms === "EVIDENCE_COMPLETE" ? "Sourced price and delivery found" : "Confirm price, currency, MOQ, and delivery"}</small></p></div>
+                <div><span data-status={currentCase.result.gates.qualityPlan} /><p><strong>Quality plan</strong><small>Sample or inspection plan required</small></p></div>
+                <div><span data-status={currentCase.result.gates.purchaseApproval} /><p><strong>Purchase approval</strong><small>Blocked until review gates are complete</small></p></div>
+              </section>
+            ) : null}
             <p><ShieldCheck size={15} /> Qualification, commercial terms, quality plan, and approval remain required. No purchase order, supplier contact, booking, or spend was created.</p>
-            <button type="button" onClick={onBack}><ArrowLeft size={15} /> Back to sourcing</button>
+            <div className={styles.procurementCaseActions}>
+              <button type="button" onClick={() => setPhase("compare")}><ArrowLeft size={15} /> Review alternatives</button>
+              <button type="button" onClick={onBack}>Back to sourcing</button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

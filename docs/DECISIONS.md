@@ -2140,3 +2140,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
   while preserving cross-refresh and cross-browser office state.
 - Boundary: Research persistence does not approve a supplier or authorize
   contact, negotiation, purchase, payment, inspection, booking, or spend.
+
+### 2026-08-09 - Supplier selection creates a durable procurement planning case
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A saved supplier search is not a procurement workflow until the
+  chosen option, its evidence state, and its remaining gates survive navigation
+  and can be audited.
+- Decision: Continue procurement creates one `PROCUREMENT_CASE`
+  `SupplyExecutionTask` per research run. The immutable task input binds the
+  case to that run. The mutable pre-execution result holds the current selected
+  option and deterministic readiness gates. Every selection change appends a
+  hashed `SupplyExecutionEvent`.
+- Trust boundary: For public candidates, the server re-derives supplier
+  identity, official or public source, commercial values, and qualification
+  state from the persisted research output. Client-authored sourced facts are
+  ignored. Commercial fields count as sourced only when their evidence envelope
+  is supported, attributable, and fresh. Modeled candidates may be saved only
+  as modeled, source-less proposals and are stored as new and unverified.
+- Gates: Supplier evidence, commercial terms, quality plan, and purchase
+  approval fail closed. Purchase approval remains blocked until later
+  evidence-backed review actions complete the preceding gates.
+- Boundary: A procurement case is planning state, not permission to contact,
+  negotiate, inspect, order, pay, book, or spend.
+- Approval scope: The mutable planning case itself is not approved. A later
+  purchase or outreach action must copy the exact selected supplier and terms
+  into an immutable execution-task input and bind approval to that input hash.

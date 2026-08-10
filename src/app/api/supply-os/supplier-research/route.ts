@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { searchComponentSuppliers } from "@/lib/supply-os/component-supplier-research";
-import { supplyAccessContext } from "@/lib/supply-os/http";
+import { listProcurementCases } from "@/lib/supply-os/procurement-case-persistence";
+import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { ResearchRateLimiter } from "@/lib/supply-os/research";
 import {
   completeSourcingResearchRun,
@@ -29,10 +30,21 @@ function optionalText(value: unknown, max: number) {
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const runs = await listSourcingResearchRuns(supplyAccessContext(session));
-  return NextResponse.json({ runs }, {
-    headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
-  });
+  try {
+    const context = supplyAccessContext(session);
+    const cases = await listProcurementCases(context);
+    const caseRunIds = cases.flatMap((procurementCase) => {
+      const input = procurementCase.input;
+      if (!input || typeof input !== "object" || Array.isArray(input)) return [];
+      return typeof input.researchRunId === "string" ? [input.researchRunId] : [];
+    });
+    const runs = await listSourcingResearchRuns(context, caseRunIds);
+    return NextResponse.json({ runs, cases }, {
+      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+    });
+  } catch (error) {
+    return supplyErrorResponse(error);
+  }
 }
 
 export async function POST(request: NextRequest) {

@@ -252,6 +252,17 @@ clear boundaries.
   authorized office browser opens the workspace.
 - The queue displays the latest run per component plus saved custom requests.
   Older runs remain canonical for a later history surface.
+- Continuing from comparison creates one non-executable planning
+  `SupplyExecutionTask(taskType=PROCUREMENT_CASE)` per research run. Its input
+  hash binds the task to immutable research; its result stores the current
+  supplier selection, selection hash, and deterministic readiness gates.
+- Each supplier-selection change appends a hashed `SupplyExecutionEvent`.
+  Public candidate facts are re-derived from the persisted research output on
+  the server. The client cannot promote modeled or unknown terms into sourced
+  evidence.
+- The mutable procurement case is not an approval target. Any future purchase,
+  outreach, or logistics action must create a separate immutable execution task
+  whose input includes the exact supplier and commercial terms being approved.
 - Interactive research uses the authenticated, office-rate-limited public web
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.

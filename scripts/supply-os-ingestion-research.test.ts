@@ -89,6 +89,21 @@ assert.equal(candidate.price.state, "PARTIAL");
 assert.equal(candidate.leadTimeDays.freshness, "STALE");
 assert.equal(candidate.status, "REVIEW_REQUIRED");
 
+const duplicateModelIds = normalizeSupplierResearch({
+  officeId: "office-a",
+  workspaceId: "workspace-a",
+  componentItemKey: "RADIO-1",
+  raw: {
+    candidates: [
+      rawCandidate.candidates[0],
+      { ...rawCandidate.candidates[0], companyName: "Radio Two", id: "radio-inc" },
+    ],
+  },
+  providerSources: [official, publicSource],
+  now,
+});
+assert.equal(new Set(duplicateModelIds.candidates.map((value) => value.id)).size, 2, "model-supplied duplicate IDs must be normalized before the UI");
+
 const approved = approveSupplierCandidate({
   candidate,
   officeId: "office-a",
