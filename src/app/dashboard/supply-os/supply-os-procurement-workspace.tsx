@@ -27,12 +27,48 @@ type ProcurementPhase = "researching" | "compare" | "handoff";
 type SourceClass = "Official" | "Trusted" | "New";
 type QualityState = "Strong" | "Conditional" | "Unverified";
 
-type ProcurementOption = AtlasSourcingCandidate & {
+type ProcurementOption = {
+  id: string;
+  name: string;
+  location: string;
+  coordinates: { longitude: number; latitude: number };
+  role: string;
+  leadTimeDays: number;
+  minimumOrderQuantity: number;
+  modeledUnitCostUsd: number;
+  currency: string | null;
+  fit: string;
   sourceClass: SourceClass;
   sourceLabel: string;
   quality: QualityState;
   qualityEvidence: string;
   deliveryDate: string;
+  priceType: "Modeled" | "Sourced" | "Unknown";
+  deliveryType: "Modeled" | "Sourced" | "Unknown";
+  sourceUrl: string | null;
+};
+
+type PublicResearchCandidate = {
+  id: string;
+  companyName: string;
+  website: string | null;
+  roles: string[];
+  country: { value: string | null };
+  facility: { value: string | null };
+  productCapability: { value: string | null; state: string };
+  price: { value: number | null; state: string };
+  currency: { value: string | null };
+  minimumOrderQuantity: { value: number | null };
+  leadTimeDays: { value: number | null; state: string };
+  sourceUrls: string[];
+  status: string;
+  cautions: string[];
+};
+
+type PublicResearchResult = {
+  candidates: PublicResearchCandidate[];
+  degraded: boolean;
+  warnings: string[];
 };
 
 const DISCOVERED_OPTIONS: Record<string, AtlasSourcingCandidate> = {
@@ -100,10 +136,11 @@ const RESEARCH_STEPS = [
   { label: "Open web discovery", detail: "New candidates held for human qualification", sourceClass: "New" },
 ] as const;
 
-function formatCurrency(value: number) {
+function formatCurrency(value: number, currency: string | null = "USD") {
+  if (!currency || !/^[A-Z]{3}$/.test(currency)) return `${value.toLocaleString("en-US")} currency unknown`;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits: 0,
   }).format(value);
 }
@@ -112,6 +149,10 @@ function deliveryDate(leadTimeDays: number) {
   const date = new Date("2026-08-09T12:00:00Z");
   date.setUTCDate(date.getUTCDate() + leadTimeDays);
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+function researchDeliveryDate(leadTimeDays: number | null) {
+  return leadTimeDays === null ? "Unknown" : deliveryDate(leadTimeDays);
 }
 
 function formatNeedBy(item: AtlasInventoryItem | null) {
@@ -132,6 +173,10 @@ function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOp
       ? "Technical match found in manufacturer documentation; sample validation remains open."
       : "Prior source record found; current authorization and allocation require review.",
     deliveryDate: deliveryDate(candidate.leadTimeDays),
+    currency: "USD",
+    priceType: "Modeled",
+    deliveryType: "Modeled",
+    sourceUrl: null,
   }));
   const discovered = DISCOVERED_OPTIONS[item.sku];
   if (!discovered) return known;
@@ -142,7 +187,35 @@ function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOp
     quality: "Unverified",
     qualityEvidence: "Public listing only; supplier identity, authorization, and technical fit require qualification.",
     deliveryDate: deliveryDate(discovered.leadTimeDays),
+    currency: "USD",
+    priceType: "Modeled",
+    deliveryType: "Modeled",
+    sourceUrl: null,
   }];
+}
+
+function publicResearchOptions(result: PublicResearchResult | null): ProcurementOption[] {
+  if (!result) return [];
+  return result.candidates.map((candidate) => ({
+    id: `public:${candidate.id}`,
+    name: candidate.companyName,
+    location: candidate.facility.value ?? candidate.country.value ?? "Location unknown",
+    coordinates: { longitude: 0, latitude: 0 },
+    role: candidate.roles.map((role) => role.toLowerCase()).join(" / ") || "Supplier candidate",
+    leadTimeDays: candidate.leadTimeDays.value ?? 0,
+    minimumOrderQuantity: candidate.minimumOrderQuantity.value ?? 0,
+    modeledUnitCostUsd: candidate.price.value ?? 0,
+    currency: candidate.currency.value?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null,
+    fit: candidate.productCapability.value ?? "Product capability requires review.",
+    sourceClass: candidate.website ? "Official" : "New",
+    sourceLabel: candidate.website ? "Official supplier page" : "Public web source",
+    quality: candidate.status === "REVIEW_REQUIRED" ? "Conditional" : "Unverified",
+    qualityEvidence: candidate.cautions[0] ?? `${candidate.productCapability.state.toLowerCase()} product-capability evidence`,
+    deliveryDate: researchDeliveryDate(candidate.leadTimeDays.value),
+    priceType: candidate.price.value !== null ? "Sourced" : "Unknown",
+    deliveryType: candidate.leadTimeDays.value !== null ? "Sourced" : "Unknown",
+    sourceUrl: candidate.website ?? candidate.sourceUrls[0] ?? null,
+  }));
 }
 
 export function AtlasProcurementWorkspace({
@@ -155,26 +228,61 @@ export function AtlasProcurementWorkspace({
   onBack: () => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const options = useMemo(() => buildProcurementOptions(item), [item]);
-  const recommended = options[1] ?? options[0] ?? null;
+  const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(null);
+  const [researchState, setResearchState] = useState<"running" | "complete" | "degraded">("running");
+  const options = useMemo(() => [...buildProcurementOptions(item), ...publicResearchOptions(publicResearch)], [item, publicResearch]);
+  const recommended = options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
   const [phase, setPhase] = useState<ProcurementPhase>("researching");
   const [completedSources, setCompletedSources] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState(recommended?.id ?? "");
   const selectedOption = options.find((option) => option.id === selectedOptionId) ?? recommended;
 
   useEffect(() => {
+    const controller = new AbortController();
+    setResearchState("running");
+    setPublicResearch(null);
+    void fetch("/api/supply-os/supplier-research", {
+      method: "POST",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        componentItemKey: item?.sku ?? `request:${requestText.slice(0, 120)}`,
+        componentName: item?.name ?? requestText,
+        specification: item?.specification ?? requestText,
+        targetCountry: "United States",
+      }),
+    }).then(async (response) => {
+      if (!response.ok) throw new Error("Supplier research did not finish.");
+      const payload = await response.json() as { result?: PublicResearchResult };
+      const result = payload.result ?? { candidates: [], degraded: true, warnings: ["Supplier research returned no result."] };
+      setPublicResearch(result);
+      setResearchState(result.degraded ? "degraded" : "complete");
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setPublicResearch({ candidates: [], degraded: true, warnings: [error instanceof Error ? error.message : "Supplier research did not finish."] });
+      setResearchState("degraded");
+    });
+    return () => controller.abort();
+  }, [item, requestText]);
+
+  useEffect(() => {
     if (phase !== "researching") return;
     if (reduceMotion) {
       setCompletedSources(RESEARCH_STEPS.length);
-      const finish = window.setTimeout(() => setPhase("compare"), 120);
-      return () => window.clearTimeout(finish);
+      return;
     }
     const timers = RESEARCH_STEPS.map((_, index) => (
       window.setTimeout(() => setCompletedSources(index + 1), 520 + index * 480)
     ));
-    timers.push(window.setTimeout(() => setPhase("compare"), 2600));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [phase, reduceMotion]);
+
+  useEffect(() => {
+    if (phase !== "researching" || completedSources < RESEARCH_STEPS.length || researchState === "running") return;
+    const finish = window.setTimeout(() => setPhase("compare"), reduceMotion ? 120 : 240);
+    return () => window.clearTimeout(finish);
+  }, [completedSources, phase, reduceMotion, researchState]);
 
   return (
     <motion.section
@@ -191,7 +299,7 @@ export function AtlasProcurementWorkspace({
           <small>{item?.sku ?? "New request"}</small>
           <h2>{item?.name ?? requestText}</h2>
         </span>
-        <i>Illustrative research</i>
+        <i>Public research</i>
       </header>
 
       <nav className={styles.procurementProgress} aria-label="Procurement progress">
@@ -218,8 +326,11 @@ export function AtlasProcurementWorkspace({
             </section>
             <ol className={styles.procurementSourceLog}>
               {RESEARCH_STEPS.map((step, index) => {
-                const complete = completedSources > index;
-                const active = completedSources === index;
+                const waitingForWeb = index === RESEARCH_STEPS.length - 1
+                  && completedSources >= RESEARCH_STEPS.length
+                  && researchState === "running";
+                const complete = completedSources > index && !waitingForWeb;
+                const active = completedSources === index || waitingForWeb;
                 return (
                   <li key={step.label} data-complete={complete} data-active={active}>
                     <span>{complete ? <Check size={15} /> : active ? <LoaderCircle size={15} /> : <Search size={15} />}</span>
@@ -229,7 +340,7 @@ export function AtlasProcurementWorkspace({
                 );
               })}
             </ol>
-            <footer><TriangleAlert size={14} /> Demo sequence. No live supplier system or website is connected.</footer>
+            <footer><TriangleAlert size={14} /> {researchState === "running" ? "Live public web research is running. No supplier system is connected." : researchState === "complete" ? "Public results are attributable and unqualified. No supplier was contacted." : publicResearch?.warnings[0] ?? "Public research is unavailable; modeled demo options remain."}</footer>
           </motion.div>
         ) : phase === "compare" ? (
           <motion.div
@@ -245,7 +356,7 @@ export function AtlasProcurementWorkspace({
                 <section className={styles.procurementRecommendation}>
                   <CheckCircle2 size={19} />
                   <span><small>Suggested option</small><h3>{recommended.name}</h3><p>Meets the modeled need-by date with a reviewed source record. Technical and commercial approval remain required.</p></span>
-                  <strong>{formatCurrency(recommended.modeledUnitCostUsd)} / unit</strong>
+                  <strong>{formatCurrency(recommended.modeledUnitCostUsd, recommended.currency)} / unit</strong>
                 </section>
                 <div className={styles.procurementOptionTableRegion}>
                   <table className={styles.procurementOptionTable}>
@@ -254,9 +365,9 @@ export function AtlasProcurementWorkspace({
                       {options.map((option) => (
                         <tr key={option.id} data-selected={option.id === selectedOption?.id} data-recommended={option.id === recommended.id}>
                           <td><strong>{option.name}</strong><small>{option.role} · {option.location}</small>{option.id === recommended.id ? <i>Suggested</i> : null}</td>
-                          <td><strong>{option.sourceClass}</strong><small>{option.sourceLabel}</small></td>
-                          <td><strong>{formatCurrency(option.modeledUnitCostUsd)}</strong><small>Modeled · MOQ {option.minimumOrderQuantity}</small></td>
-                          <td><strong>{option.deliveryDate}</strong><small>{option.leadTimeDays} days modeled</small></td>
+                          <td><strong>{option.sourceClass}</strong><small>{option.sourceLabel}</small>{option.sourceUrl ? <a href={option.sourceUrl} target="_blank" rel="noreferrer">View source</a> : null}</td>
+                          <td><strong>{option.priceType === "Unknown" ? "Unknown" : formatCurrency(option.modeledUnitCostUsd, option.currency)}</strong><small>{option.priceType} · MOQ {option.minimumOrderQuantity || "unknown"}</small></td>
+                          <td><strong>{option.deliveryDate}</strong><small>{option.leadTimeDays ? `${option.leadTimeDays} days ${option.deliveryType.toLowerCase()}` : "Lead time unknown"}</small></td>
                           <td><strong>{option.quality}</strong><small>{option.qualityEvidence}</small></td>
                           <td><button type="button" onClick={() => setSelectedOptionId(option.id)}>{option.id === selectedOption?.id ? <Check size={14} /> : null}{option.id === selectedOption?.id ? "Selected" : "Choose"}</button></td>
                         </tr>
@@ -265,7 +376,7 @@ export function AtlasProcurementWorkspace({
                   </table>
                 </div>
                 <footer className={styles.procurementDecisionFooter}>
-                  <span><TriangleAlert size={14} /> Prices and delivery dates are modeled. No supplier has been contacted.</span>
+                  <span><TriangleAlert size={14} /> Terms state whether evidence is modeled, sourced, or unknown. No supplier has been contacted.</span>
                   <button type="button" disabled={!selectedOption} onClick={() => setPhase("handoff")}>Send to logistics <ArrowRight size={15} /></button>
                 </footer>
               </>

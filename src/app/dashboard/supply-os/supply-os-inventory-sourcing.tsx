@@ -78,6 +78,7 @@ export function AtlasInventoryWorkspace({
             id="new-sourcing-request"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            maxLength={240}
             placeholder="Describe the part, quantity, specification, and need-by date"
           />
         </label>

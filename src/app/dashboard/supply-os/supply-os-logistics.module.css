@@ -1986,6 +1986,15 @@
   display: block;
 }
 
+.procurementOptionTable td a {
+  display: inline-block;
+  margin-top: 5px;
+  border-bottom: 1px solid currentColor;
+  color: var(--navy);
+  font-size: 9px;
+  text-decoration: none;
+}
+
 .procurementOptionTable td strong {
   color: var(--ink);
   font-size: 11px;

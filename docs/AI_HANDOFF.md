@@ -19,8 +19,10 @@
   Logistics panel or creating a purchase order, contact, booking, or spend.
 - Unknown free-text requests fail honestly. If no SKU, product name, or
   manufacturer part number can be resolved, commercial terms remain unknown.
-- The research sequence and Atlas candidates are explicitly illustrative. No
-  website, catalog, or supplier system is presented as live or connected.
+- The research sequence now calls the existing authenticated, rate-limited
+  public supplier research engine. Returned candidates require attributable
+  web sources and remain unqualified. Atlas starting candidates and their
+  commercial terms remain explicitly modeled.
 
 Verification:
 
@@ -40,8 +42,7 @@ Verification:
 
 Deferred:
 
-- Live source adapters and canonical office-scoped run persistence are not part
-  of this slice.
+- Research results are not persisted as a canonical office-scoped run yet.
 - The Logistics panel remains unchanged. A later slice should create an
   approval-gated `SupplyAction` and open Logistics with the handoff context.
 

@@ -2112,9 +2112,11 @@ Use this log for durable product and engineering decisions. Do not put every imp
   dashboard through visible trusted-source research, public discovery, a
   price/delivery/quality comparison, operator selection, and a draft logistics
   handoff. Missing commercial inputs remain unknown.
-- Evidence boundary: The robotics flow is explicitly illustrative. Research
-  motion does not claim that a website or supplier system is connected, and
-  modeled prices or dates are labeled modeled.
+- Evidence boundary: The robotics starting candidates remain illustrative.
+  Interactive research may call the authenticated public web research engine;
+  every returned candidate requires attributable sources and stays
+  unqualified. Modeled, sourced, and unknown commercial values remain visibly
+  distinct. No supplier system is presented as connected.
 - Deferred integration: `Send to logistics` prepares a local draft only in this
   slice. A later change will create an approval-gated canonical `SupplyAction`
   and open Logistics with the handoff context. The Logistics panel is unchanged.

@@ -246,6 +246,9 @@ clear boundaries.
 
 - Supplier research stays inside Inventory & sourcing through request, visible
   source research, option comparison, selection, and a draft handoff.
+- Interactive research uses the authenticated, office-rate-limited public web
+  research engine. Official and public evidence URLs are returned with
+  unqualified candidates; missing commercial values remain unknown.
 - The current UI handoff is illustrative and browser-local. It does not create
   a purchase order, supplier contact, booking, spend, or logistics record.
 - A later Logistics integration will create a canonical approval-gated

@@ -17,6 +17,26 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-09 - Connect procurement comparison to public supplier research
+
+- Branch: supply-os-live-supplier-research, targeting main
+- Commit: see git log
+- Task: Replace the purely illustrative source scan with an authenticated,
+  rate-limited call to the existing evidence-gated public supplier research
+  engine while retaining modeled Atlas starting candidates.
+- Files changed: interactive supplier-research API, procurement workspace,
+  sourcing composer, scoped styles, sourcing regression contract, decisions,
+  engineering log, and handoff.
+- Verification: sourcing and supplier-research contracts, TypeScript, product
+  copy, production build, whitespace, and changed-line U+2014 checks pass.
+- Failed/skipped checks: no supplier was contacted and no purchase order,
+  booking, spend, or Logistics record was created.
+- Caveats: public results depend on the configured research provider. Missing
+  price, currency, MOQ, or lead time remains unknown. Results are unqualified
+  and are not persisted in this slice.
+- Follow-up: persist the read-only research run and selected evidence, then
+  create the approval-gated Logistics handoff action.
+
 ### 2026-08-09 - Replace inventory counters with procurement research flow
 
 - Branch: supply-os-procurement-flow, targeting main
