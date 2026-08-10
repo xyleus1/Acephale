@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { createSupplyWorkspace, listSupplyWorkspaces, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import {
@@ -14,6 +14,7 @@ import {
   requestProcurementApproval,
   reviewProcurementGate,
   savePurchaseOrderDraft,
+  saveProcurementShortlist,
   saveProcurementSelection,
   saveSupplierQuoteRequest,
 } from "../src/lib/supply-os/procurement-case-persistence";
@@ -36,6 +37,10 @@ import { captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-r
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
 let foreignOfficeId = "";
+
+function jsonDigest(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
 
 async function cleanup() {
   const ids = [officeId, foreignOfficeId].filter(Boolean);
@@ -1401,6 +1406,135 @@ async function main() {
       },
     }), /ambiguous candidate identifier/, "duplicate research IDs must never select the wrong supplier");
 
+    const shortlistRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "MULTI-RFQ" });
+    await completeSourcingResearchRun({
+      context,
+      runId: shortlistRun.id,
+      workspaceId: shortlistRun.workspaceId,
+      output: {
+        candidates: [
+          { id: "shortlist-a", companyName: "Alpha Motion", website: "https://example.com/alpha", price: supported(122), currency: supported("USD"), minimumOrderQuantity: supported(4), leadTimeDays: supported(12), status: "REVIEW_REQUIRED" },
+          { id: "shortlist-b", companyName: "Bravo Controls", website: "https://example.com/bravo", price: supported(119), currency: supported("USD"), minimumOrderQuantity: supported(6), leadTimeDays: supported(15), status: "REVIEW_REQUIRED" },
+          { id: "shortlist-c", companyName: "Cobalt Systems", website: "https://example.com/cobalt", price: supported(116), currency: supported("CAD"), minimumOrderQuantity: supported(3), leadTimeDays: supported(10), status: "REVIEW_REQUIRED" },
+          { id: "shortlist-d", companyName: "Delta Robotics", website: "https://example.com/delta", price: supported(121), currency: supported("USD"), minimumOrderQuantity: supported(5), leadTimeDays: supported(11), status: "REVIEW_REQUIRED" },
+        ],
+        degraded: false,
+        warnings: [],
+      },
+    });
+    const shortlistSelection = (id: string, name: string) => ({
+      id: `public:${id}`,
+      name,
+      sourceClass: "Official" as const,
+      sourceUrl: `https://example.com/${id}`,
+      price: 1,
+      currency: "USD",
+      minimumOrderQuantity: 1,
+      priceType: "Sourced" as const,
+      deliveryDate: quoteDeliveryDate,
+      deliveryType: "Sourced" as const,
+      quality: "Conditional" as const,
+    });
+    const firstShortlist = await saveProcurementShortlist({
+      context,
+      researchRunId: shortlistRun.id,
+      selections: [shortlistSelection("shortlist-a", "Alpha Motion"), shortlistSelection("shortlist-b", "Bravo Controls")],
+    });
+    assert.equal(firstShortlist.length, 2);
+    assert.equal(new Set(firstShortlist.map((procurementCase) => procurementCase.id)).size, 2, "each supplier needs an isolated workstream");
+    const replayedShortlist = await saveProcurementShortlist({
+      context,
+      researchRunId: shortlistRun.id,
+      selections: [shortlistSelection("shortlist-a", "Alpha Motion"), shortlistSelection("shortlist-b", "Bravo Controls")],
+    });
+    assert.deepEqual(replayedShortlist.map((procurementCase) => procurementCase.id), firstShortlist.map((procurementCase) => procurementCase.id), "shortlist retries must be idempotent");
+    const expandedShortlist = await saveProcurementShortlist({
+      context,
+      researchRunId: shortlistRun.id,
+      selections: [shortlistSelection("shortlist-a", "Alpha Motion"), shortlistSelection("shortlist-b", "Bravo Controls"), shortlistSelection("shortlist-c", "Cobalt Systems")],
+    });
+    assert.equal(expandedShortlist.length, 3);
+    assert.deepEqual(expandedShortlist.slice(0, 2).map((procurementCase) => procurementCase.id), firstShortlist.map((procurementCase) => procurementCase.id), "adding a supplier must not replace existing workstreams");
+    const concurrent = await Promise.all([
+      saveProcurementShortlist({ context, researchRunId: shortlistRun.id, selections: [shortlistSelection("shortlist-d", "Delta Robotics")] }),
+      saveProcurementShortlist({ context, researchRunId: shortlistRun.id, selections: [shortlistSelection("shortlist-d", "Delta Robotics")] }),
+    ]);
+    assert.equal(concurrent[0][0]?.id, concurrent[1][0]?.id, "concurrent retries must converge on one supplier workstream");
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: concurrent[0][0]!.id, eventType: "PROCUREMENT_CASE_CREATED" },
+    }), 1, "concurrent first-time creation must append exactly one creation event");
+    const restoredShortlist = (await listProcurementCases(context))
+      .filter((procurementCase) => (procurementCase.input as { researchRunId: string }).researchRunId === shortlistRun.id);
+    assert.equal(restoredShortlist.length, 4, "all supplier workstreams must restore from the sourcing queue");
+    assert.deepEqual(new Set(restoredShortlist.map((procurementCase) => (procurementCase.result as { selectedOption: { id: string } }).selectedOption.id)), new Set([
+      "public:shortlist-a",
+      "public:shortlist-b",
+      "public:shortlist-c",
+      "public:shortlist-d",
+    ]), "restored workstreams must preserve each supplier identity");
+    const awardCandidates = restoredShortlist.slice(0, 2);
+    for (const awardCandidate of awardCandidates) {
+      const result = awardCandidate.result as Record<string, unknown>;
+      const awardReadyResult = {
+        ...result,
+        stage: "APPROVAL",
+        gates: {
+          sourceEvidence: "EVIDENCE_COMPLETE",
+          commercialTerms: "EVIDENCE_COMPLETE",
+          qualityPlan: "EVIDENCE_COMPLETE",
+          purchaseApproval: "BLOCKED",
+        },
+        confirmedTerms: {
+          price: 120,
+          currency: "USD",
+          minimumOrderQuantity: 1,
+          unitOfMeasure: "EA",
+          deliveryDate: quoteDeliveryDate,
+          validUntil: quoteValidUntil,
+        },
+        qualityPlan: {
+          method: "DOCUMENT_REVIEW",
+          owner: "Quality lead",
+          targetDate: qualityTargetDate,
+          acceptanceCriteria: "Confirm specification and traceability documents.",
+        },
+      };
+      await prisma.supplyExecutionTask.update({
+        where: { id: awardCandidate.id },
+        data: { result: awardReadyResult, resultHash: jsonDigest(awardReadyResult) },
+      });
+    }
+    const concurrentAwards = await Promise.allSettled(awardCandidates.map((awardCandidate) => requestProcurementApproval({
+      context,
+      caseId: awardCandidate.id,
+      input: {
+        expectedSelectionHash: (awardCandidate.result as { selectionHash: string }).selectionHash,
+        reason: "Best complete supplier option for this sourcing request.",
+      },
+    })));
+    assert.equal(concurrentAwards.filter((result) => result.status === "fulfilled").length, 1, "only one supplier can enter award approval");
+    assert.equal(concurrentAwards.filter((result) => result.status === "rejected").length, 1, "a concurrent sibling award must be rejected");
+    assert.match(String(concurrentAwards.find((result) => result.status === "rejected")?.reason), /another supplier is already pending or approved/i);
+    const awardStates = (await listProcurementCases(context))
+      .filter((procurementCase) => (procurementCase.input as { researchRunId: string }).researchRunId === shortlistRun.id)
+      .map((procurementCase) => (procurementCase.result as { gates: { purchaseApproval: string } }).gates.purchaseApproval);
+    assert.equal(awardStates.filter((state) => state === "PENDING").length, 1, "the sourcing request must expose exactly one pending award");
+    await assert.rejects(() => saveProcurementShortlist({
+      context,
+      researchRunId: shortlistRun.id,
+      selections: [shortlistSelection("shortlist-a", "Alpha Motion"), shortlistSelection("shortlist-a", "Alpha Motion")],
+    }), /same supplier more than once/i);
+    await assert.rejects(() => saveProcurementShortlist({
+      context,
+      researchRunId: shortlistRun.id,
+      selections: [],
+    }), /1 to 8 supplier options/i);
+    await assert.rejects(() => saveProcurementShortlist({
+      context,
+      researchRunId: shortlistRun.id,
+      selections: Array.from({ length: 9 }, () => shortlistSelection("shortlist-a", "Alpha Motion")),
+    }), /1 to 8 supplier options/i);
+
     const listed = await listSupplyWorkspaces(context);
     assert.ok(listed.some((workspace) => workspace.id === visibleWorkspace.id), "ordinary null-key workspaces must remain visible");
     assert.ok(listed.every((workspace) => !workspace.externalKey?.startsWith("system:")), "the system procurement workspace must stay out of the company directory");
@@ -1440,6 +1574,11 @@ async function main() {
         quality: "Unverified",
       },
     }), /not found|cannot edit/i, "unassigned employees must not change office procurement cases");
+    await assert.rejects(() => saveProcurementShortlist({
+      context: stalePrivilegedContext,
+      researchRunId: shortlistRun.id,
+      selections: [shortlistSelection("shortlist-a", "Alpha Motion")],
+    }), /not found|cannot edit/i, "stale privileged sessions must not create supplier workstreams");
     await assert.rejects(() => saveSupplierQuoteRequest({
       context: restrictedContext,
       caseId: returnedCase.id,
@@ -1514,6 +1653,11 @@ async function main() {
     foreignOfficeId = foreign.officeId;
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
+    await assert.rejects(() => saveProcurementShortlist({
+      context: foreign,
+      researchRunId: shortlistRun.id,
+      selections: [shortlistSelection("shortlist-a", "Alpha Motion")],
+    }), /not found/i, "another office must not create workstreams from this office's research run");
     await assert.rejects(() => captureConnectedSupplierReplies({
       context: foreign,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,

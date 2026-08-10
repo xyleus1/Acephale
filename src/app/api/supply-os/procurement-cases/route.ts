@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import {
   listProcurementCases,
-  saveProcurementSelection,
+  saveProcurementShortlist,
   type ProcurementSelectionInput,
 } from "@/lib/supply-os/procurement-case-persistence";
 
@@ -84,15 +84,28 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const researchRunId = text(body?.researchRunId, 220);
+  const selections = Array.isArray(body?.selections)
+    ? body.selections.map(selection)
+    : null;
   const selected = selection(body?.selection);
-  if (!researchRunId || !selected) {
-    return NextResponse.json({ error: "A valid research run and supplier option are required." }, { status: 400 });
+  if (!researchRunId || (selections ? !selections.length || selections.some((candidate) => !candidate) : !selected)) {
+    return NextResponse.json({ error: "A valid research run and 1 to 8 supplier options are required." }, { status: 400 });
   }
   try {
-    const procurementCase = await saveProcurementSelection({
+    if (selections) {
+      const procurementCases = await saveProcurementShortlist({
+        context: supplyAccessContext(session),
+        researchRunId,
+        selections: selections as ProcurementSelectionInput[],
+      });
+      return NextResponse.json({ procurementCases }, {
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+      });
+    }
+    const [procurementCase] = await saveProcurementShortlist({
       context: supplyAccessContext(session),
       researchRunId,
-      selection: selected,
+      selections: [selected!],
     });
     return NextResponse.json({ procurementCase }, {
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },

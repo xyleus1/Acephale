@@ -602,6 +602,7 @@ function CaseCommandCenter({
     itemSku: string | null;
     savedRun?: SavedSourcingResearchRun | null;
     savedCase?: SavedProcurementCase | null;
+    savedCases?: SavedProcurementCase[];
   } | null>(null);
   const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
   const [procurementCases, setProcurementCases] = useState<SavedProcurementCase[]>([]);
@@ -726,6 +727,18 @@ function CaseCommandCenter({
       procurementCase,
       ...current.filter((candidate) => candidate.id !== procurementCase.id),
     ]);
+    setProcurementRequest((current) => {
+      if (!current || current.savedRun?.id !== procurementCase.input.researchRunId) return current;
+      const savedCases = [
+        procurementCase,
+        ...(current.savedCases ?? []).filter((candidate) => candidate.id !== procurementCase.id),
+      ];
+      return {
+        ...current,
+        savedCases,
+        savedCase: current.savedCase?.id === procurementCase.id ? procurementCase : current.savedCase ?? procurementCase,
+      };
+    });
   }, []);
 
   function selectNetworkObject(object: SupplyCommandObject) {
@@ -777,11 +790,17 @@ function CaseCommandCenter({
     if (matchedItem) setSelectedInventorySku(matchedItem.sku);
     setSourceMapCandidateId(null);
     setSourceMapObjectId("");
+    const savedCases = procurementCases.filter((candidate) => candidate.input.researchRunId === run.id);
+    const savedCase = savedCases.find((candidate) => candidate.quoteCycle?.result?.responses.length)
+      ?? savedCases.find((candidate) => candidate.quoteCycle?.result?.state === "AWAITING_RESPONSE")
+      ?? savedCases[0]
+      ?? null;
     setProcurementRequest({
       requestText: run.input.requestText || run.input.componentName,
       itemSku: matchedItem?.sku ?? null,
       savedRun: run,
-      savedCase: procurementCases.find((candidate) => candidate.input.researchRunId === run.id) ?? null,
+      savedCase,
+      savedCases,
     });
   }
 
@@ -802,6 +821,7 @@ function CaseCommandCenter({
             requestText={procurementRequest.requestText}
             initialRun={procurementRequest.savedRun}
             initialCase={procurementRequest.savedCase}
+            initialCases={procurementRequest.savedCases}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
             senderAccounts={supplierSenderAccounts}

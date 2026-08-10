@@ -70,7 +70,12 @@ export function AtlasInventoryWorkspace({
   const reduceMotion = useReducedMotion();
   const sourcingItems = ATLAS_ROBOTICS_INVENTORY.filter((item) => shortageQuantity(item) > 0);
   const runsById = new Map(researchRuns.map((run) => [run.id, run]));
-  const casesByRunId = new Map(procurementCases.map((procurementCase) => [procurementCase.input.researchRunId, procurementCase]));
+  const casesByRunId = new Map<string, SavedProcurementCase[]>();
+  for (const procurementCase of procurementCases) {
+    const runCases = casesByRunId.get(procurementCase.input.researchRunId) ?? [];
+    runCases.push(procurementCase);
+    casesByRunId.set(procurementCase.input.researchRunId, runCases);
+  }
   const latestRuns = new Map<string, SavedSourcingResearchRun>();
   for (const procurementCase of procurementCases) {
     const run = runsById.get(procurementCase.input.researchRunId);
@@ -117,6 +122,16 @@ export function AtlasInventoryWorkspace({
       case "PURCHASE_READY": return "Approved for purchase preparation";
       default: return null;
     }
+  }
+
+  function workstreamSummary(cases: SavedProcurementCase[]) {
+    if (!cases.length) return null;
+    const quoted = cases.filter((procurementCase) => procurementCase.quoteCycle?.result?.responses.length).length;
+    const active = cases.find((procurementCase) => procurementCase.quoteCycle?.result?.responses.length)
+      ?? cases.find((procurementCase) => procurementCase.quoteCycle?.result?.state === "AWAITING_RESPONSE")
+      ?? cases[0];
+    const prefix = `${cases.length} supplier workstream${cases.length === 1 ? "" : "s"}`;
+    return quoted ? `${prefix} · ${quoted} quoted` : `${prefix} · ${caseStage(active)}`;
   }
 
   function submitRequest(event: FormEvent<HTMLFormElement>) {
@@ -188,7 +203,8 @@ export function AtlasInventoryWorkspace({
           <tbody>
             {sourcingItems.map((item) => {
               const run = latestRuns.get(item.sku);
-              const procurementCase = run ? casesByRunId.get(run.id) : undefined;
+              const runCases = run ? casesByRunId.get(run.id) ?? [] : [];
+              const procurementCase = runCases[0];
               return (
               <tr key={item.sku} data-active={item.sku === selectedSku} data-status="shortage">
                 <td>
@@ -199,7 +215,7 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>{shortageQuantity(item)} units</td>
                 <td>{formatNeedBy(item.sku)}</td>
-                <td>{caseStage(procurementCase) ?? resultState(run)}</td>
+                <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}
@@ -207,7 +223,7 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run?.status === "RUNNING"}
                     onClick={() => run?.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onStartItemResearch(item)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle ? "Review quote cycle" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : runCases.length > 1 ? "Open quote inbox" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle ? "Review quote cycle" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
                     <ArrowRight size={13} />
                   </button>
                 </td>
@@ -215,7 +231,8 @@ export function AtlasInventoryWorkspace({
               );
             })}
             {customRuns.map((run) => {
-              const procurementCase = casesByRunId.get(run.id);
+              const runCases = casesByRunId.get(run.id) ?? [];
+              const procurementCase = runCases[0];
               return (
               <tr key={run.id} data-status="request">
                 <td>
@@ -226,7 +243,7 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>Custom request</td>
                 <td>Not set</td>
-                <td>{caseStage(procurementCase) ?? resultState(run)}</td>
+                <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}
@@ -234,7 +251,7 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run.status === "RUNNING"}
                     onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle ? "Review quote cycle" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : runCases.length > 1 ? "Open quote inbox" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle ? "Review quote cycle" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
                   </button>
                 </td>
               </tr>

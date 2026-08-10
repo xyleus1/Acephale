@@ -151,7 +151,11 @@ function nextStage(gates: Record<string, unknown>) {
 
 function retryableTransactionError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError
-    && (error.code === "P2002" || error.code === "P2034");
+    && (
+      error.code === "P2002"
+      || error.code === "P2034"
+      || (error.code === "P2010" && record(error.meta).code === "40001")
+    );
 }
 
 function inputJson(value: unknown) {
@@ -460,7 +464,7 @@ export async function listProcurementCases(context: SupplyAccessContext) {
       taskType: TASK_TYPE,
     },
     orderBy: { updatedAt: "desc" },
-    take: 60,
+    take: 120,
     select: caseSelect,
   });
   if (!cases.length) return [];
@@ -731,6 +735,131 @@ async function cancelActivePurchaseActions(
   });
 }
 
+export async function saveProcurementShortlist(args: {
+  context: SupplyAccessContext;
+  researchRunId: string;
+  selections: ProcurementSelectionInput[];
+}) {
+  if (!args.selections.length || args.selections.length > 8) {
+    throw new SupplyPersistenceError("A shortlist must contain 1 to 8 supplier options.", "invalid_input");
+  }
+  const accessContext = await currentAccessContext(args.context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const researchRun = await prisma.supplyCapabilityRun.findFirst({
+    where: {
+      id: args.researchRunId,
+      officeId: args.context.officeId,
+      workspaceId: workspace.id,
+      capabilityKey: RESEARCH_CAPABILITY,
+      status: "SUCCEEDED",
+    },
+    select: { id: true, input: true, output: true, completedAt: true, createdAt: true },
+  });
+  if (!researchRun) throw new SupplyPersistenceError("Completed supplier research was not found in this office.", "not_found");
+
+  const canonicalSelections = args.selections.map((selection) => canonicalSelection(
+    selection,
+    researchRun.output,
+    researchRun.completedAt ?? researchRun.createdAt,
+  ));
+  const uniqueSupplierIds = new Set(canonicalSelections.map((selection) => selection.id));
+  if (uniqueSupplierIds.size !== canonicalSelections.length) {
+    throw new SupplyPersistenceError("A shortlist cannot contain the same supplier more than once.", "invalid_input");
+  }
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} AND "taskType" = ${TASK_TYPE} AND "input"->>'researchRunId' = ${researchRun.id} ORDER BY "id" FOR UPDATE`);
+        const existingCases = await tx.supplyExecutionTask.findMany({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            taskType: TASK_TYPE,
+            input: { path: ["researchRunId"], equals: researchRun.id },
+          },
+          select: caseSelect,
+        });
+        const savedCases = [];
+        for (const selection of canonicalSelections) {
+          const taskKey = `procurement:${researchRun.id}:${digest(selection.id).slice(0, 20)}`;
+          const input = {
+            researchRunId: researchRun.id,
+            researchInput: researchRun.input,
+            supplierId: selection.id,
+          } satisfies Prisma.InputJsonObject;
+          const result = progressionFor(selection) satisfies Prisma.InputJsonObject;
+          const existing = existingCases.find((candidate) => record(record(candidate.result).selectedOption).id === selection.id)
+            ?? existingCases.find((candidate) => candidate.taskKey === taskKey);
+          if (existing && existing.status !== "PLANNED") {
+            throw new SupplyPersistenceError(`The procurement workstream for ${selection.name} is no longer editable.`, "conflict");
+          }
+          if (record(existing?.result).selectionHash === result.selectionHash) {
+            savedCases.push(existing!);
+            continue;
+          }
+          if (existing) {
+            await cancelPendingApproval(tx, existing.result);
+            await cancelActivePurchaseDrafts(tx, existing.id, args.context.officeId, workspace.id);
+            await cancelActiveQuoteCycles(tx, existing.id, args.context.officeId, workspace.id);
+          }
+          const task = existing
+            ? await tx.supplyExecutionTask.update({
+                where: { id: existing.id },
+                data: { input, inputHash: digest(input), result, resultHash: digest(result) },
+                select: caseSelect,
+              })
+            : await tx.supplyExecutionTask.create({
+                data: {
+                  officeId: args.context.officeId,
+                  workspaceId: workspace.id,
+                  createdByUserId: args.context.userId,
+                  taskKey,
+                  taskType: TASK_TYPE,
+                  capabilityKey: "draft.procurement_case",
+                  requiresApproval: false,
+                  input,
+                  inputHash: digest(input),
+                  result,
+                  resultHash: digest(result),
+                },
+                select: caseSelect,
+              });
+          const aggregate = await tx.supplyExecutionEvent.aggregate({
+            where: { executionTaskId: task.id },
+            _max: { sequence: true },
+          });
+          const sequence = (aggregate._max.sequence ?? 0) + 1;
+          await tx.supplyExecutionEvent.create({
+            data: {
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              executionTaskId: task.id,
+              actorUserId: args.context.userId,
+              sequence,
+              eventType: existing ? "SUPPLIER_SELECTION_UPDATED" : "PROCUREMENT_CASE_CREATED",
+              status: "PLANNED",
+              message: existing ? "Supplier workstream evidence changed." : "Supplier workstream created from research shortlist.",
+              payload: result,
+              payloadHash: digest(result),
+              idempotencyKey: `selection:${sequence}:${result.selectionHash}`,
+            },
+          });
+          savedCases.push(task);
+        }
+        return savedCases;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      const retryable = retryableTransactionError(error);
+      if (!retryable || attempt === 2) {
+        if (retryable) throw new SupplyPersistenceError("Procurement shortlist changed concurrently. Retry the selection.", "conflict");
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Procurement shortlist could not be saved.", "conflict");
+}
+
 export async function saveProcurementSelection(args: {
   context: SupplyAccessContext;
   researchRunId: string;
@@ -749,29 +878,19 @@ export async function saveProcurementSelection(args: {
     select: { id: true, input: true, output: true, completedAt: true, createdAt: true },
   });
   if (!researchRun) throw new SupplyPersistenceError("Completed supplier research was not found in this office.", "not_found");
-
   const taskKey = `procurement:${researchRun.id}`;
-  const input = {
-    researchRunId: researchRun.id,
-    researchInput: researchRun.input,
-  } satisfies Prisma.InputJsonObject;
+  const input = { researchRunId: researchRun.id, researchInput: researchRun.input } satisfies Prisma.InputJsonObject;
   const result = progressionFor(canonicalSelection(
     args.selection,
     researchRun.output,
     researchRun.completedAt ?? researchRun.createdAt,
   )) satisfies Prisma.InputJsonObject;
-
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} AND "taskKey" = ${taskKey} AND "taskType" = ${TASK_TYPE} FOR UPDATE`);
         const existing = await tx.supplyExecutionTask.findFirst({
-          where: {
-            officeId: args.context.officeId,
-            workspaceId: workspace.id,
-            taskKey,
-            taskType: TASK_TYPE,
-          },
+          where: { officeId: args.context.officeId, workspaceId: workspace.id, taskKey, taskType: TASK_TYPE },
           select: caseSelect,
         });
         if (existing && existing.status !== "PLANNED") {
@@ -797,8 +916,6 @@ export async function saveProcurementSelection(args: {
                 taskKey,
                 taskType: TASK_TYPE,
                 capabilityKey: "draft.procurement_case",
-                // This mutable planning case is never an approval target. A later
-                // immutable action task must bind supplier and terms in its input.
                 requiresApproval: false,
                 input,
                 inputHash: digest(input),
@@ -1743,7 +1860,23 @@ export async function requestProcurementApproval(args: {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "id"
+          FROM "SupplyExecutionTask"
+          WHERE "officeId" = ${args.context.officeId}
+            AND "workspaceId" = ${workspace.id}
+            AND "taskType" = ${TASK_TYPE}
+            AND "input"->>'researchRunId' = (
+              SELECT "input"->>'researchRunId'
+              FROM "SupplyExecutionTask"
+              WHERE "id" = ${args.caseId}
+                AND "officeId" = ${args.context.officeId}
+                AND "workspaceId" = ${workspace.id}
+                AND "taskType" = ${TASK_TYPE}
+            )
+          ORDER BY "id"
+          FOR UPDATE
+        `);
         const procurementCase = await tx.supplyExecutionTask.findFirst({
           where: {
             id: args.caseId,
@@ -1756,6 +1889,28 @@ export async function requestProcurementApproval(args: {
         });
         if (!procurementCase) throw new SupplyPersistenceError("Planned procurement case was not found.", "not_found");
         const current = caseResult(procurementCase.result);
+        const researchRunId = record(procurementCase.input).researchRunId;
+        if (typeof researchRunId !== "string") {
+          throw new SupplyPersistenceError("Procurement case is not linked to supplier research.", "conflict");
+        }
+        const siblingCases = await tx.supplyExecutionTask.findMany({
+          where: {
+            id: { not: procurementCase.id },
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            taskType: TASK_TYPE,
+            status: "PLANNED",
+            input: { path: ["researchRunId"], equals: researchRunId },
+          },
+          select: { result: true },
+        });
+        const siblingAward = siblingCases.find((candidate) => {
+          const purchaseApproval = record(record(candidate.result).gates).purchaseApproval;
+          return purchaseApproval === "PENDING" || purchaseApproval === "APPROVED";
+        });
+        if (siblingAward) {
+          throw new SupplyPersistenceError("Another supplier is already pending or approved for this sourcing request. Resolve that award before selecting a different supplier.", "conflict");
+        }
         if (current.result.selectionHash !== expectedSelectionHash) {
           throw new SupplyPersistenceError("Supplier selection changed. Reload before requesting approval.", "conflict");
         }

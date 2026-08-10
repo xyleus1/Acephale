@@ -7,6 +7,8 @@ import {
   projectedAvailable,
   shortageQuantity,
 } from "../src/lib/supply-os/atlas-robotics-inventory";
+import { displayedSupplierQuote, supplierQuoteSignals } from "../src/lib/supply-os/quote-comparison";
+import { hasDirtyWorkstream, markWorkstreamDraft, resolveWorkstreamDraft } from "../src/lib/supply-os/workstream-drafts";
 
 const root = process.cwd();
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
@@ -43,6 +45,46 @@ assert.ok(ATLAS_ROBOTICS_INVENTORY.every((item) => projectedAvailable(item) >= 0
 
 const shortages = ATLAS_ROBOTICS_INVENTORY.filter((item) => shortageQuantity(item) > 0);
 assert.ok(shortages.length >= 4, "the demo needs multiple actionable shortages");
+
+const quoteA = { responseHash: "older", price: "12", currency: "USD", unitOfMeasure: "EA", deliveryDate: "2026-09-20" };
+const quoteB = { responseHash: "selected", price: "14", currency: "USD", unitOfMeasure: "EA", deliveryDate: "2026-09-18" };
+assert.equal(displayedSupplierQuote([quoteA, quoteB], "older")?.responseHash, "older", "the quote inbox must display the selected response rather than the latest response");
+assert.equal(displayedSupplierQuote([quoteA, quoteB], null)?.responseHash, "selected", "before a quote is selected, the inbox may display the latest response");
+assert.equal(displayedSupplierQuote([quoteA, quoteB], "missing"), null, "a broken selected-response reference must fail closed");
+assert.deepEqual(supplierQuoteSignals([
+  { id: "a", requestHash: "same-request", response: quoteA },
+  { id: "b", requestHash: "same-request", response: quoteB },
+]), { bestPriceId: "a", earliestId: "b" });
+assert.deepEqual(supplierQuoteSignals([
+  { id: "a", requestHash: "same-request", response: quoteA },
+  { id: "box", requestHash: "same-request", response: { ...quoteB, price: "5", unitOfMeasure: "BOX" } },
+]), { bestPriceId: null, earliestId: null }, "different units must never receive comparison badges");
+assert.deepEqual(supplierQuoteSignals([
+  { id: "a", requestHash: "same-request", response: quoteA },
+  { id: "eur", requestHash: "same-request", response: { ...quoteB, price: "5", currency: "EUR" } },
+]), { bestPriceId: null, earliestId: "eur" }, "mixed currencies may compare delivery but not price");
+assert.deepEqual(supplierQuoteSignals([
+  { id: "a", requestHash: "request-a", response: quoteA },
+  { id: "b", requestHash: "request-b", response: quoteB },
+]), { bestPriceId: null, earliestId: null }, "different RFQ scopes must never receive comparison badges");
+
+const dirtyQuoteRequest = markWorkstreamDraft(null, "case-a", "quote-request");
+const dirtyQuoteAndEmail = markWorkstreamDraft(dirtyQuoteRequest, "case-a", "supplier-email-draft");
+assert.equal(hasDirtyWorkstream(dirtyQuoteAndEmail, "case-a"), true);
+const savedEmailOnly = resolveWorkstreamDraft(dirtyQuoteAndEmail, "case-a", "supplier-email-draft");
+assert.deepEqual(savedEmailOnly, { caseId: "case-a", sections: ["quote-request"] }, "saving an email must not clear unsaved RFQ edits");
+assert.equal(hasDirtyWorkstream(savedEmailOnly, "case-a"), true, "unrelated unsaved fields must keep supplier switching blocked");
+assert.equal(resolveWorkstreamDraft(savedEmailOnly, "case-a", "quote-request"), null, "saving the final dirty section clears the workstream guard");
+const dirtyEmailAndApproval = markWorkstreamDraft(
+  markWorkstreamDraft(null, "case-a", "supplier-email-draft"),
+  "case-a",
+  "supplier-email-approval",
+);
+assert.deepEqual(
+  resolveWorkstreamDraft(dirtyEmailAndApproval, "case-a", "supplier-email-draft"),
+  { caseId: "case-a", sections: ["supplier-email-approval"] },
+  "saving one email form must preserve another unsaved form in the same supplier workstream",
+);
 assert.ok(shortages.every((item) => item.candidates.length >= 2), "each shortage needs a basic candidate comparison");
 assert.ok(shortages.every((item) => item.candidates.every((candidate) => (
   candidate.leadTimeDays > 0
@@ -71,6 +113,8 @@ assert.match(workbench, /Start research/);
 assert.match(workbench, /View results/);
 assert.match(workbench, /Retry research/);
 assert.match(workbench, /Continue procurement/);
+assert.match(workbench, /Open quote inbox/);
+assert.match(workbench, /supplier workstream/);
 assert.match(workbench, /Review order draft/);
 assert.match(workbench, /Review purchase action/);
 assert.match(workbench, /Review supplier acknowledgment/);
@@ -85,7 +129,15 @@ assert.match(procurement, /Approved source library/);
 assert.match(procurement, /Manufacturer catalogs/);
 assert.match(procurement, /Open web discovery/);
 assert.match(procurement, /Price<\/th><th>Delivery<\/th><th>Quality/);
-assert.match(procurement, /Continue procurement/);
+assert.match(procurement, /Create .*workstream/);
+assert.match(procurement, /Competitive quote inbox/);
+assert.match(procurement, /Only one can enter award approval/);
+assert.match(procurement, /Request award approval/);
+assert.match(procurement, /Price and delivery badges require the same currency, unit, and RFQ scope/);
+assert.match(procurement, /Lowest quoted price/);
+assert.match(procurement, /Earliest delivery/);
+assert.match(procurement, /quoteCycleProjection/);
+assert.match(procurement, /selectedResponseHash: quoteCycleProjection\.selectedResponseHash/);
 assert.match(procurement, /Procurement brief/);
 assert.match(procurement, /Supplier evidence/);
 assert.match(procurement, /Commercial terms/);
@@ -112,7 +164,7 @@ assert.doesNotMatch(procurement, /evidenceUrl: initialCase\?\.result\?\.selected
 assert.match(procurement, /It does not contact the supplier/);
 assert.match(procurement, /Use this only when the request was sent through a supplier portal/);
 assert.match(procurement, /Save quality plan/);
-assert.match(procurement, /Request manager approval/);
+assert.match(procurement, /Request award approval/);
 assert.match(procurement, /Approve scope/);
 assert.match(procurement, /Save order draft/);
 assert.match(procurement, /Update order draft/);
@@ -145,7 +197,9 @@ assert.match(researchPersistence, /officeId: context\.officeId/);
 assert.match(researchPersistence, /capabilityKey: CAPABILITY_KEY/);
 assert.match(researchPersistence, /orderBy: \{ createdAt: "desc" \}/);
 assert.match(procurementCasesRoute, /getSession/);
-assert.match(procurementCasesRoute, /saveProcurementSelection/);
+assert.match(procurementCasesRoute, /saveProcurementShortlist/);
+assert.match(procurementCasesRoute, /procurementCases/);
+assert.doesNotMatch(procurementCasesRoute, /saveProcurementSelection/);
 assert.match(procurementReviewRoute, /getSession/);
 assert.match(procurementReviewRoute, /reviewProcurementGate/);
 assert.match(procurementApprovalRoute, /requestProcurementApproval/);

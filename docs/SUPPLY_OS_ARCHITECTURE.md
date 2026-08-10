@@ -253,10 +253,14 @@ clear boundaries.
 - The queue displays the latest run per component plus saved custom requests.
   Older runs remain canonical for a later history surface.
 - Continuing from comparison creates one non-executable planning
-  `SupplyExecutionTask(taskType=PROCUREMENT_CASE)` per research run. Its input
-  hash binds the task to immutable research; its result stores the current
-  supplier selection, selection hash, and deterministic readiness gates.
-- Each supplier-selection change appends a hashed `SupplyExecutionEvent`.
+  `SupplyExecutionTask(taskType=PROCUREMENT_CASE)` per shortlisted supplier.
+  Supplier workstreams share the immutable research run but keep evidence,
+  quote communication, commercial review, and qualification state isolated.
+  The task input binds both the research run and supplier identity; its result
+  stores the selection hash and deterministic readiness gates.
+- Creating or revising a supplier workstream appends a hashed
+  `SupplyExecutionEvent`. Repeated and concurrent shortlist requests converge
+  on the same supplier-specific task key.
   Public candidate facts are re-derived from the persisted research output on
   the server. The client cannot promote modeled or unknown terms into sourced
   evidence.
@@ -268,6 +272,10 @@ clear boundaries.
   unit, need-by, destination, response deadline, requirements, and notes. The
   request remains internal until an operator either records external release
   evidence or completes the connected Gmail action.
+- Quote workstreams return to one competitive inbox. Price and delivery badges
+  appear only for selected responses with the same request scope, unit, and,
+  for price, currency. Only one sibling supplier may enter award approval at a
+  time, preventing parallel purchase preparation for the same sourcing need.
 - Connected Gmail communication uses a revisioned
   `SUPPLIER_QUOTE_EMAIL_DRAFT` and an immutable
   `SUPPLIER_QUOTE_EMAIL_ACTION`. The action input pins the Gmail account,

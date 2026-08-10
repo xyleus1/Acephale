@@ -23,6 +23,13 @@ import {
   type AtlasInventoryItem,
   type AtlasSourcingCandidate,
 } from "@/lib/supply-os/atlas-robotics-inventory";
+import { displayedSupplierQuote, supplierQuoteSignals } from "@/lib/supply-os/quote-comparison";
+import {
+  hasDirtyWorkstream,
+  markWorkstreamDraft,
+  resolveWorkstreamDraft,
+  type WorkstreamDraftState,
+} from "@/lib/supply-os/workstream-drafts";
 import styles from "./supply-os-logistics.module.css";
 import type {
   PublicResearchResult,
@@ -234,11 +241,46 @@ function publicResearchOptions(result: PublicResearchResult | null): Procurement
   });
 }
 
+function selectionPayload(option: ProcurementOption) {
+  return {
+    id: option.id,
+    name: option.name,
+    sourceClass: option.sourceClass,
+    sourceUrl: option.sourceUrl,
+    price: option.priceType === "Unknown" ? null : option.modeledUnitCostUsd,
+    currency: option.currency,
+    minimumOrderQuantity: option.minimumOrderQuantity || null,
+    priceType: option.priceType,
+    deliveryDate: option.deliveryDate === "Unknown" ? null : option.deliveryDate,
+    deliveryType: option.deliveryType,
+    quality: option.quality,
+  };
+}
+
+function workstreamState(procurementCase: SavedProcurementCase) {
+  if (procurementCase.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
+  if (procurementCase.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") return "Partially acknowledged";
+  if (procurementCase.purchaseAction?.result?.state === "AUTHORIZED" || procurementCase.purchaseAction?.approval?.status === "APPROVED") return "Purchase authorized";
+  if (procurementCase.purchaseAction?.approval?.status === "PENDING") return "Purchase approval pending";
+  if (procurementCase.purchaseDraft) return "Order draft ready";
+  const cycle = procurementCase.quoteCycle?.result;
+  if (cycle?.state === "RESPONSES_RECEIVED") return `${cycle.responses.length} quote ${cycle.responses.length === 1 ? "response" : "responses"}`;
+  if (cycle?.state === "AWAITING_RESPONSE") return "Awaiting quote";
+  if (cycle?.state === "DRAFT") return "RFQ draft";
+  if (procurementCase.result?.stage === "SOURCE_EVIDENCE") return "Qualify supplier";
+  if (procurementCase.result?.stage === "COMMERCIAL_CONFIRMATION") return "Prepare RFQ";
+  if (procurementCase.result?.stage === "QUALITY_REVIEW") return "Quality review";
+  if (procurementCase.result?.stage === "APPROVAL_PENDING") return "Approval pending";
+  if (procurementCase.result?.stage === "PURCHASE_READY") return "Purchase ready";
+  return "In review";
+}
+
 export function AtlasProcurementWorkspace({
   item,
   requestText,
   initialRun,
   initialCase,
+  initialCases,
   canApproveProcurement,
   canAuthorizePurchase,
   senderAccounts,
@@ -250,6 +292,7 @@ export function AtlasProcurementWorkspace({
   requestText: string;
   initialRun?: SavedSourcingResearchRun | null;
   initialCase?: SavedProcurementCase | null;
+  initialCases?: SavedProcurementCase[];
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
   senderAccounts: SupplierSenderAccount[];
@@ -260,6 +303,11 @@ export function AtlasProcurementWorkspace({
   const reduceMotion = useReducedMotion();
   const [currentRun, setCurrentRun] = useState<SavedSourcingResearchRun | null>(initialRun ?? null);
   const [currentCase, setCurrentCase] = useState<SavedProcurementCase | null>(initialCase ?? null);
+  const [workstreamCases, setWorkstreamCases] = useState<SavedProcurementCase[]>(
+    initialCases?.length ? initialCases : initialCase ? [initialCase] : [],
+  );
+  const [dirtyDrafts, setDirtyDrafts] = useState<WorkstreamDraftState>(null);
+  const [workstreamSwitchError, setWorkstreamSwitchError] = useState("");
   const [caseSaveState, setCaseSaveState] = useState<"idle" | "saving" | "error">("idle");
   const [gateActionState, setGateActionState] = useState<"idle" | "saving" | "error">("idle");
   const [gateActionError, setGateActionError] = useState("");
@@ -344,6 +392,12 @@ export function AtlasProcurementWorkspace({
   const [phase, setPhase] = useState<ProcurementPhase>(initialCase ? "procure" : initialRun ? "compare" : "researching");
   const [completedSources, setCompletedSources] = useState(initialRun ? RESEARCH_STEPS.length : 0);
   const [selectedOptionId, setSelectedOptionId] = useState(initialCase?.result?.selectedOption.id ?? recommended?.id ?? "");
+  const [shortlistedOptionIds, setShortlistedOptionIds] = useState<string[]>(() => {
+    const savedIds = (initialCases?.length ? initialCases : initialCase ? [initialCase] : [])
+      .map((candidate) => candidate.result?.selectedOption.id)
+      .filter((candidate): candidate is string => Boolean(candidate));
+    return savedIds.length ? savedIds : recommended ? [recommended.id] : [];
+  });
   const comparisonOption = options.find((option) => option.id === selectedOptionId) ?? recommended;
   const savedSelection = currentCase?.result?.selectedOption;
   const selectedOption = savedSelection && comparisonOption?.id === savedSelection.id
@@ -361,6 +415,24 @@ export function AtlasProcurementWorkspace({
         quality: savedSelection.quality,
     }
     : comparisonOption;
+
+  const quoteComparisons = useMemo(() => workstreamCases.map((procurementCase) => {
+    const selected = procurementCase.result?.selectedOption;
+    const cycle = procurementCase.quoteCycle?.result;
+    const response = cycle ? displayedSupplierQuote(cycle.responses, cycle.selectedResponseHash) : null;
+    return {
+      procurementCase,
+      supplier: selected?.name ?? "Unknown supplier",
+      response,
+      requestHash: cycle?.requestHash ?? null,
+      state: workstreamState(procurementCase),
+    };
+  }), [workstreamCases]);
+  const quoteSignals = useMemo(() => supplierQuoteSignals(quoteComparisons.map((candidate) => ({
+    id: candidate.procurementCase.id,
+    requestHash: candidate.requestHash,
+    response: candidate.response,
+  }))), [quoteComparisons]);
 
   useEffect(() => {
     const result = currentCase?.result;
@@ -560,8 +632,28 @@ export function AtlasProcurementWorkspace({
     return () => window.clearTimeout(finish);
   }, [completedSources, phase, reduceMotion, researchState]);
 
+  function toggleShortlist(optionId: string) {
+    setSelectedOptionId(optionId);
+    setShortlistedOptionIds((current) => current.includes(optionId)
+      ? current.length === 1 ? current : current.filter((candidate) => candidate !== optionId)
+      : current.length >= 8 ? current : [...current, optionId]);
+  }
+
+  function openWorkstream(procurementCase: SavedProcurementCase) {
+    if (gateActionState === "saving") return;
+    if (hasDirtyWorkstream(dirtyDrafts, currentCase?.id) && procurementCase.id !== currentCase?.id) {
+      setWorkstreamSwitchError("Save or submit the current supplier edits before switching workstreams.");
+      return;
+    }
+    setWorkstreamSwitchError("");
+    setCurrentCase(procurementCase);
+    setSelectedOptionId(procurementCase.result?.selectedOption.id ?? "");
+    setPhase("procure");
+  }
+
   async function continueProcurement() {
-    if (!currentRun || !selectedOption || caseSaveState === "saving") return;
+    const selectedOptions = options.filter((option) => shortlistedOptionIds.includes(option.id));
+    if (!currentRun || !selectedOptions.length || caseSaveState === "saving") return;
     setCaseSaveState("saving");
     try {
       const response = await fetch("/api/supply-os/procurement-cases", {
@@ -570,25 +662,19 @@ export function AtlasProcurementWorkspace({
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
           researchRunId: currentRun.id,
-          selection: {
-            id: selectedOption.id,
-            name: selectedOption.name,
-            sourceClass: selectedOption.sourceClass,
-            sourceUrl: selectedOption.sourceUrl,
-            price: selectedOption.priceType === "Unknown" ? null : selectedOption.modeledUnitCostUsd,
-            currency: selectedOption.currency,
-            minimumOrderQuantity: selectedOption.minimumOrderQuantity || null,
-            priceType: selectedOption.priceType,
-            deliveryDate: selectedOption.deliveryDate === "Unknown" ? null : selectedOption.deliveryDate,
-            deliveryType: selectedOption.deliveryType,
-            quality: selectedOption.quality,
-          },
+          selections: selectedOptions.map(selectionPayload),
         }),
       });
-      const payload = await response.json().catch(() => ({})) as { procurementCase?: SavedProcurementCase };
-      if (!response.ok || !payload.procurementCase) throw new Error("Procurement case could not be saved.");
-      setCurrentCase(payload.procurementCase);
-      onProcurementCaseSaved(payload.procurementCase);
+      const payload = await response.json().catch(() => ({})) as { procurementCases?: SavedProcurementCase[] };
+      if (!response.ok || !payload.procurementCases?.length) throw new Error("Supplier workstreams could not be saved.");
+      const saved = payload.procurementCases;
+      setWorkstreamCases((current) => [
+        ...saved,
+        ...current.filter((candidate) => !saved.some((next) => next.id === candidate.id)),
+      ]);
+      const active = saved.find((candidate) => candidate.result?.selectedOption.id === selectedOptionId) ?? saved[0];
+      setCurrentCase(active);
+      for (const procurementCase of saved) onProcurementCaseSaved(procurementCase);
       setCaseSaveState("idle");
       setPhase("procure");
     } catch {
@@ -596,8 +682,9 @@ export function AtlasProcurementWorkspace({
     }
   }
 
-  async function runCaseAction(path: string, body: Record<string, unknown>) {
+  async function runCaseAction(path: string, body: Record<string, unknown>, resolvedDraftSection?: string) {
     if (!currentCase?.result || gateActionState === "saving") return;
+    const actionCaseId = currentCase.id;
     setGateActionState("saving");
     setGateActionError("");
     try {
@@ -609,10 +696,22 @@ export function AtlasProcurementWorkspace({
       });
       const payload = await response.json().catch(() => ({})) as { procurementCase?: SavedProcurementCase; error?: string };
       if (!response.ok || !payload.procurementCase) throw new Error(payload.error ?? "Procurement review could not be saved.");
+      const quoteCycleProjection = payload.procurementCase.result?.quoteCycle;
+      const projectedQuoteCycle = quoteCycleProjection && currentCase.quoteCycle?.result
+        ? {
+            ...currentCase.quoteCycle,
+            result: {
+              ...currentCase.quoteCycle.result,
+              state: quoteCycleProjection.state,
+              selectedResponseHash: quoteCycleProjection.selectedResponseHash ?? currentCase.quoteCycle.result.selectedResponseHash,
+              updatedAt: quoteCycleProjection.updatedAt,
+            },
+          }
+        : currentCase.quoteCycle ?? null;
       const nextCase: SavedProcurementCase = {
         ...payload.procurementCase,
         quoteCycle: payload.procurementCase.quoteCycle
-          ?? (payload.procurementCase.result?.quoteCycle ? currentCase.quoteCycle : null),
+          ?? (quoteCycleProjection ? projectedQuoteCycle : null),
         purchaseDraft: payload.procurementCase.purchaseDraft
           ?? (payload.procurementCase.result?.purchasePreparation ? currentCase.purchaseDraft : null),
         purchaseAction: payload.procurementCase.purchaseAction
@@ -625,6 +724,11 @@ export function AtlasProcurementWorkspace({
           : currentCase.supplierEmailAction ?? null,
       };
       setCurrentCase(nextCase);
+      setDirtyDrafts((current) => resolveWorkstreamDraft(current, actionCaseId, resolvedDraftSection));
+      setWorkstreamCases((current) => [
+        nextCase,
+        ...current.filter((candidate) => candidate.id !== nextCase.id),
+      ]);
       onProcurementCaseSaved(nextCase);
       setGateActionState("idle");
     } catch (error) {
@@ -639,7 +743,7 @@ export function AtlasProcurementWorkspace({
       gate: "SOURCE_EVIDENCE",
       expectedSelectionHash: currentCase.result.selectionHash,
       note: sourceReviewNote,
-    });
+    }, "SOURCE_EVIDENCE");
   }
 
   function saveQuoteRequest() {
@@ -654,7 +758,7 @@ export function AtlasProcurementWorkspace({
       responseDue: quoteRequestForm.responseDue,
       requirements: quoteRequestForm.requirements,
       note: quoteRequestForm.note || null,
-    });
+    }, "quote-request");
   }
 
   function recordQuoteRelease() {
@@ -664,7 +768,7 @@ export function AtlasProcurementWorkspace({
       expectedRequestHash: cycle.result.requestHash,
       ...quoteReleaseForm,
       note: quoteReleaseForm.note || null,
-    });
+    }, "quote-release");
   }
 
   function saveSupplierEmail() {
@@ -674,7 +778,7 @@ export function AtlasProcurementWorkspace({
       expectedRequestHash: cycle.result.requestHash,
       expectedRevision: currentCase?.supplierEmailDraft?.result?.revision ?? 0,
       ...supplierEmailForm,
-    });
+    }, "supplier-email-draft");
   }
 
   function requestSupplierEmailReview() {
@@ -683,7 +787,7 @@ export function AtlasProcurementWorkspace({
     void runCaseAction(`/api/supply-os/supplier-email-drafts/${draft.id}/approval`, {
       expectedResultHash: draft.resultHash,
       reason: supplierEmailApprovalReason,
-    });
+    }, "supplier-email-approval");
   }
 
   function decideSupplierEmail(decision: "APPROVE" | "REJECT") {
@@ -692,7 +796,7 @@ export function AtlasProcurementWorkspace({
     void runCaseAction(`/api/supply-os/supplier-email-approvals/${approvalId}/decision`, {
       decision,
       note: supplierEmailDecisionNote || null,
-    });
+    }, "supplier-email-decision");
   }
 
   function runSupplierEmailDelivery(operation: "SEND" | "RECONCILE" | "RESET") {
@@ -701,7 +805,7 @@ export function AtlasProcurementWorkspace({
     void runCaseAction(`/api/supply-os/supplier-email-actions/${actionId}/delivery`, {
       operation,
       ...(operation === "RESET" ? { confirmedNotSent: true, note: supplierEmailRecoveryNote } : {}),
-    });
+    }, operation === "RESET" ? "supplier-email-recovery" : undefined);
   }
 
   function checkConnectedSupplierReplies() {
@@ -711,6 +815,7 @@ export function AtlasProcurementWorkspace({
   }
 
   function useConnectedSupplierReply(reply: ConnectedSupplierReply) {
+    if (currentCase) setDirtyDrafts((current) => markWorkstreamDraft(current, currentCase.id, "commercial-response"));
     setSelectedReplyEvidenceId(reply.evidenceId);
     setCommercialForm((current) => ({
       ...current,
@@ -735,7 +840,7 @@ export function AtlasProcurementWorkspace({
       quoteReference: commercialForm.quoteReference,
       validUntil: commercialForm.validUntil,
       note: commercialForm.note || null,
-    });
+    }, "commercial-response");
   }
 
   function confirmCommercialTerms(responseHash: string) {
@@ -745,7 +850,7 @@ export function AtlasProcurementWorkspace({
       expectedSelectionHash: currentCase.result.selectionHash,
       quoteCycleTaskId: currentCase.quoteCycle.id,
       responseHash,
-    });
+    }, "commercial-response");
   }
 
   function saveQualityPlan() {
@@ -754,7 +859,7 @@ export function AtlasProcurementWorkspace({
       gate: "QUALITY_PLAN",
       expectedSelectionHash: currentCase.result.selectionHash,
       ...qualityForm,
-    });
+    }, "QUALITY_REVIEW");
   }
 
   function requestApproval() {
@@ -762,7 +867,7 @@ export function AtlasProcurementWorkspace({
     void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/approval`, {
       expectedSelectionHash: currentCase.result.selectionHash,
       reason: approvalReason,
-    });
+    }, "APPROVAL");
   }
 
   function decideApproval(decision: "APPROVE" | "REJECT") {
@@ -771,7 +876,7 @@ export function AtlasProcurementWorkspace({
     void runCaseAction(`/api/supply-os/procurement-approvals/${approvalId}/decision`, {
       decision,
       note: approvalNote || null,
-    });
+    }, "APPROVAL_PENDING");
   }
 
   function savePurchaseDraft() {
@@ -788,7 +893,7 @@ export function AtlasProcurementWorkspace({
       paymentTerms: purchaseForm.paymentTerms,
       buyerReference: purchaseForm.buyerReference || null,
       notes: purchaseForm.notes || null,
-    });
+    }, "purchase-order");
   }
 
   function requestPurchaseApproval() {
@@ -799,7 +904,7 @@ export function AtlasProcurementWorkspace({
       expectedDraftResultHash: draft.resultHash,
       expectedDraftRevision: draft.result.revision,
       reason: purchaseApprovalReason,
-    });
+    }, "purchase-approval");
   }
 
   function decidePurchaseAction(decision: "APPROVE" | "REJECT") {
@@ -808,7 +913,7 @@ export function AtlasProcurementWorkspace({
     void runCaseAction(`/api/supply-os/purchase-action-approvals/${approvalId}/decision`, {
       decision,
       note: purchaseDecisionNote || null,
-    });
+    }, "purchase-decision");
   }
 
   function recordSupplierAcknowledgment() {
@@ -818,7 +923,7 @@ export function AtlasProcurementWorkspace({
       ...acknowledgmentForm,
       acceptedQuantity: Number(acknowledgmentForm.acceptedQuantity),
       note: acknowledgmentForm.note || null,
-    });
+    }, "supplier-acknowledgment");
   }
 
   const purchaseFormComplete = Number(purchaseForm.quantity) > 0
@@ -934,21 +1039,21 @@ export function AtlasProcurementWorkspace({
                     <thead><tr><th>Supplier</th><th>Source</th><th>Price</th><th>Delivery</th><th>Quality</th><th /></tr></thead>
                     <tbody>
                       {options.map((option) => (
-                        <tr key={option.id} data-selected={option.id === selectedOption?.id} data-recommended={option.id === recommended.id}>
+                        <tr key={option.id} data-selected={shortlistedOptionIds.includes(option.id)} data-recommended={option.id === recommended.id}>
                           <td><strong>{option.name}</strong><small>{option.role} · {option.location}</small>{option.id === recommended.id ? <i>Suggested</i> : null}</td>
                           <td><strong>{option.sourceClass}</strong><small>{option.sourceLabel}</small>{option.sourceUrl ? <a href={option.sourceUrl} target="_blank" rel="noreferrer">View source</a> : null}</td>
                           <td><strong>{option.priceType === "Unknown" ? "Unknown" : formatCurrency(option.modeledUnitCostUsd, option.currency)}</strong><small>{option.priceType} · MOQ {option.minimumOrderQuantity || "unknown"}</small></td>
                           <td><strong>{option.deliveryDate}</strong><small>{option.leadTimeDays ? `${option.leadTimeDays} days ${option.deliveryType.toLowerCase()}` : "Lead time unknown"}</small></td>
                           <td><strong>{option.quality}</strong><small>{option.qualityEvidence}</small></td>
-                          <td><button type="button" onClick={() => setSelectedOptionId(option.id)}>{option.id === selectedOption?.id ? <Check size={14} /> : null}{option.id === selectedOption?.id ? "Selected" : "Choose"}</button></td>
+                          <td><button type="button" aria-pressed={shortlistedOptionIds.includes(option.id)} onClick={() => toggleShortlist(option.id)}>{shortlistedOptionIds.includes(option.id) ? <Check size={14} /> : null}{shortlistedOptionIds.includes(option.id) ? "Shortlisted" : "Add"}</button></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <footer className={styles.procurementDecisionFooter}>
-                  <span role={caseSaveState === "error" ? "alert" : undefined}><TriangleAlert size={14} /> {caseSaveState === "error" ? "Procurement progress could not be saved. Try again." : "Terms state whether evidence is modeled, sourced, or unknown. No supplier has been contacted."}</span>
-                  <button type="button" disabled={!selectedOption || !currentRun || caseSaveState === "saving"} onClick={() => void continueProcurement()}>{caseSaveState === "saving" ? "Saving" : currentCase ? "Update procurement" : "Continue procurement"} <ArrowRight size={15} /></button>
+                  <span role={caseSaveState === "error" ? "alert" : undefined}><TriangleAlert size={14} /> {caseSaveState === "error" ? "Supplier workstreams could not be saved. Try again." : "Shortlist suppliers for separate RFQs. No supplier is contacted until its message is approved."}</span>
+                  <button type="button" disabled={!shortlistedOptionIds.length || !currentRun || caseSaveState === "saving"} onClick={() => void continueProcurement()}>{caseSaveState === "saving" ? "Saving" : `Create ${shortlistedOptionIds.length} workstream${shortlistedOptionIds.length === 1 ? "" : "s"}`} <ArrowRight size={15} /></button>
                 </footer>
               </>
             ) : (
@@ -964,10 +1069,36 @@ export function AtlasProcurementWorkspace({
           <motion.div
             key="procure"
             className={styles.procurementHandoff}
+            onChangeCapture={(event) => {
+              if (!currentCase) return;
+              const section = (event.target as HTMLElement).closest<HTMLElement>("[data-draft-section]")?.dataset.draftSection;
+              if (section) setDirtyDrafts((current) => markWorkstreamDraft(current, currentCase.id, section));
+            }}
             initial={reduceMotion ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
           >
+            {quoteComparisons.length > 1 ? (
+              <section className={styles.procurementQuoteInbox} aria-label="Supplier quote inbox">
+                <header><span><small>Competitive quote inbox</small><h3>{item?.name ?? requestText}</h3></span><p>Each supplier stays in a separate evidence workstream. Only one can enter award approval.</p></header>
+                <div>
+                  {quoteComparisons.map(({ procurementCase, supplier, response, state }) => (
+                    <button
+                      key={procurementCase.id}
+                      type="button"
+                      data-active={procurementCase.id === currentCase?.id}
+                      disabled={gateActionState === "saving"}
+                      onClick={() => openWorkstream(procurementCase)}
+                    >
+                      <span><strong>{supplier}</strong><small>{state}</small>{quoteSignals.bestPriceId === procurementCase.id ? <em>Lowest quoted price</em> : quoteSignals.earliestId === procurementCase.id ? <em>Earliest delivery</em> : null}</span>
+                      <span><strong>{response ? formatMoney(response.price, response.currency) : "No quote yet"}</strong><small>{response ? `${response.minimumOrderQuantity} ${response.unitOfMeasure} MOQ · ${displayStoredDate(response.deliveryDate)}` : "Open workstream"}</small></span>
+                      <ArrowRight size={14} />
+                    </button>
+                  ))}
+                </div>
+                <footer role={workstreamSwitchError ? "alert" : undefined}>{workstreamSwitchError || "Price and delivery badges require the same currency, unit, and RFQ scope. Missing freight, duty, and quality inputs remain unknown. Award approval is exclusive."}</footer>
+              </section>
+            ) : null}
             <PackageCheck size={28} />
             <small>Procurement brief</small>
             <h3>{selectedOption?.name}</h3>
@@ -988,7 +1119,7 @@ export function AtlasProcurementWorkspace({
               </section>
             ) : null}
             {currentCase?.result ? (
-              <section className={styles.procurementGateAction} aria-live="polite">
+              <section className={styles.procurementGateAction} aria-live="polite" data-draft-section={currentCase.result.stage}>
                 {currentCase.result.stage === "SOURCE_EVIDENCE" ? (
                   <>
                     <header><small>Gate 1 of 4</small><h4>Qualify the supplier source</h4><p>Open the attributed source, verify that the company and component match, then record what you checked.</p></header>
@@ -1000,7 +1131,7 @@ export function AtlasProcurementWorkspace({
                   <>
                     <header><small>Gate 2 of 4</small><h4>Run the supplier quote cycle</h4><p>Prepare the request, record how it was sent outside Derya, then select a sourced supplier response.</p></header>
                     {!currentCase.quoteCycle || currentCase.quoteCycle.status === "PLANNED" ? (
-                      <section className={styles.purchaseApprovalRequest}>
+                      <section className={styles.purchaseApprovalRequest} data-draft-section="quote-request">
                         <p><strong>{currentCase.quoteCycle ? `Quote request revision ${currentCase.quoteCycle.result?.revision}` : "Quote request"}</strong></p>
                         <div className={styles.procurementFormGrid}>
                           <label>Quantity<input type="number" min="0.01" step="0.01" value={quoteRequestForm.quantity} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
@@ -1020,7 +1151,7 @@ export function AtlasProcurementWorkspace({
                         <p><strong>Send through connected Gmail</strong></p>
                         <p>The exact sender, recipient, subject, and body are locked into the approval. Delivery is recorded only after Gmail returns a receipt.</p>
                         {senderAccounts.length ? (
-                          <div className={styles.procurementFormGrid}>
+                          <div className={styles.procurementFormGrid} data-draft-section="supplier-email-draft">
                             <label>From<select value={supplierEmailForm.senderAccountId} onChange={(event) => setSupplierEmailForm((current) => ({ ...current, senderAccountId: event.target.value }))}>{senderAccounts.map((account) => <option key={account.id} value={account.id}>{account.email}</option>)}</select></label>
                             <label>Supplier email<input type="email" value={supplierEmailForm.recipient} onChange={(event) => setSupplierEmailForm((current) => ({ ...current, recipient: event.target.value }))} placeholder="sales@supplier.com" /></label>
                             <label className={styles.procurementWideField}>Subject<input value={supplierEmailForm.subject} onChange={(event) => setSupplierEmailForm((current) => ({ ...current, subject: event.target.value }))} /></label>
@@ -1030,14 +1161,14 @@ export function AtlasProcurementWorkspace({
                         {senderAccounts.length ? <button type="button" disabled={gateActionState === "saving" || !supplierEmailForm.recipient || !supplierEmailForm.subject || !supplierEmailForm.body} onClick={saveSupplierEmail}><Mail size={14} /> {currentCase.supplierEmailDraft ? "Save message revision" : "Save email draft"}</button> : null}
                         {currentCase.supplierEmailDraft?.result && !currentCase.supplierEmailAction ? (
                           <>
-                            <label>Approval reason<textarea value={supplierEmailApprovalReason} onChange={(event) => setSupplierEmailApprovalReason(event.target.value)} /></label>
+                            <label data-draft-section="supplier-email-approval">Approval reason<textarea value={supplierEmailApprovalReason} onChange={(event) => setSupplierEmailApprovalReason(event.target.value)} /></label>
                             <button type="button" disabled={gateActionState === "saving" || !supplierEmailApprovalReason.trim()} onClick={requestSupplierEmailReview}><ShieldCheck size={14} /> Request send approval</button>
                           </>
                         ) : null}
                         {currentCase.supplierEmailAction?.approval?.status === "PENDING" ? (
                           canApproveProcurement ? (
                             <>
-                              <label>Decision note<textarea value={supplierEmailDecisionNote} onChange={(event) => setSupplierEmailDecisionNote(event.target.value)} placeholder="Optional approval or rejection context" /></label>
+                              <label data-draft-section="supplier-email-decision">Decision note<textarea value={supplierEmailDecisionNote} onChange={(event) => setSupplierEmailDecisionNote(event.target.value)} placeholder="Optional approval or rejection context" /></label>
                               <div className={styles.purchaseDecisionActions}>
                                 <button type="button" disabled={gateActionState === "saving"} onClick={() => decideSupplierEmail("APPROVE")}><Check size={14} /> Approve exact email</button>
                                 <button type="button" disabled={gateActionState === "saving"} onClick={() => decideSupplierEmail("REJECT")}><TriangleAlert size={14} /> Reject</button>
@@ -1057,13 +1188,13 @@ export function AtlasProcurementWorkspace({
                         {currentCase.supplierEmailAction?.result?.state === "NOT_FOUND_REVIEW_REQUIRED" ? (
                           <>
                             <p>Gmail did not find the message. A manager must verify non-delivery before one new attempt is allowed.</p>
-                            {canApproveProcurement ? <><label>Recovery note<textarea value={supplierEmailRecoveryNote} onChange={(event) => setSupplierEmailRecoveryNote(event.target.value)} placeholder="Explain how non-delivery was verified." /></label><button type="button" disabled={gateActionState === "saving" || supplierEmailRecoveryNote.trim().length < 10} onClick={() => runSupplierEmailDelivery("RESET")}><RefreshCw size={14} /> Confirm non-delivery and enable retry</button></> : null}
+                            {canApproveProcurement ? <><label data-draft-section="supplier-email-recovery">Recovery note<textarea value={supplierEmailRecoveryNote} onChange={(event) => setSupplierEmailRecoveryNote(event.target.value)} placeholder="Explain how non-delivery was verified." /></label><button type="button" disabled={gateActionState === "saving" || supplierEmailRecoveryNote.trim().length < 10} onClick={() => runSupplierEmailDelivery("RESET")}><RefreshCw size={14} /> Confirm non-delivery and enable retry</button></> : null}
                           </>
                         ) : null}
                       </section>
                     ) : null}
                     {currentCase.quoteCycle?.status === "PLANNED" && currentCase.quoteCycle.result ? (
-                      <section className={styles.purchaseApprovalRequest}>
+                      <section className={styles.purchaseApprovalRequest} data-draft-section="quote-release">
                         <p><strong>Record another channel</strong></p>
                         <div className={styles.procurementFormGrid}>
                           <label>Channel<select value={quoteReleaseForm.channel} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, channel: event.target.value as typeof current.channel }))}><option value="EMAIL">Email</option><option value="SUPPLIER_PORTAL">Supplier portal</option><option value="EDI">EDI</option><option value="PHONE_CONFIRMED">Phone confirmed</option><option value="OTHER">Other</option></select></label>
@@ -1113,7 +1244,7 @@ export function AtlasProcurementWorkspace({
                             <button type="button" disabled={gateActionState === "saving"} onClick={() => confirmCommercialTerms(response.responseHash)}><Check size={14} /> Use quote</button>
                           </section>
                         ))}
-                        <section className={styles.purchaseApprovalRequest}>
+                        <section className={styles.purchaseApprovalRequest} data-draft-section="commercial-response">
                           <p><strong>Record supplier response</strong></p>
                           <div className={styles.procurementFormGrid}>
                             <label>Received on<input type="date" value={commercialForm.receivedOn} onChange={(event) => setCommercialForm((current) => ({ ...current, receivedOn: event.target.value }))} /></label>
@@ -1128,7 +1259,10 @@ export function AtlasProcurementWorkspace({
                               <div className={styles.procurementWideField}>
                                 <p><strong>Connected Gmail reply selected</strong></p>
                                 <p>The response date is pinned to the message timestamp. Review and enter the commercial values exactly as written by the supplier.</p>
-                                <button type="button" onClick={() => setSelectedReplyEvidenceId(null)}>Use external evidence URL instead</button>
+                            <button type="button" onClick={() => {
+                              setDirtyDrafts((current) => currentCase ? markWorkstreamDraft(current, currentCase.id, "commercial-response") : current);
+                              setSelectedReplyEvidenceId(null);
+                            }}>Use external evidence URL instead</button>
                               </div>
                             ) : <label className={styles.procurementWideField}>Quote evidence URL<input type="url" value={commercialForm.evidenceUrl} onChange={(event) => setCommercialForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>}
                             <label className={styles.procurementWideField}>Response note<textarea value={commercialForm.note} onChange={(event) => setCommercialForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional exclusions or supplier conditions" /></label>
@@ -1151,9 +1285,9 @@ export function AtlasProcurementWorkspace({
                   </>
                 ) : currentCase.result.stage === "APPROVAL" ? (
                   <>
-                    <header><small>Gate 4 of 4</small><h4>Request approval of this exact scope</h4><p>The selected supplier, confirmed quote terms, evidence review, and quality plan are sealed into one immutable approval object.</p></header>
-                    <label>Approval reason<textarea value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} placeholder="Explain why this option should move to purchase preparation." /></label>
-                    <button type="button" disabled={gateActionState === "saving"} onClick={requestApproval}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <ShieldCheck size={14} />} Request manager approval</button>
+                    <header><small>Gate 4 of 4</small><h4>Request award approval for this supplier</h4><p>The selected supplier, confirmed quote terms, evidence review, and quality plan are sealed into one immutable approval object. A sibling supplier cannot be awarded at the same time.</p></header>
+                    <label>Approval reason<textarea value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} placeholder="Explain why this supplier should win the sourcing request." /></label>
+                    <button type="button" disabled={gateActionState === "saving"} onClick={requestApproval}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <ShieldCheck size={14} />} Request award approval</button>
                   </>
                 ) : currentCase.result.stage === "APPROVAL_PENDING" ? (
                   <>
@@ -1196,7 +1330,7 @@ export function AtlasProcurementWorkspace({
                             <p>The supplier evidence covers the full authorized quantity. The Logistics handoff is the next controlled step, but it has not been created.</p>
                           </section>
                         ) : canApproveProcurement ? (
-                          <section className={styles.purchaseApprovalRequest}>
+                          <section className={styles.purchaseApprovalRequest} data-draft-section="supplier-acknowledgment">
                             <p>Record supplier acceptance received outside Derya. Partial acceptances remain open until the full authorized quantity is covered.</p>
                             <div className={styles.procurementFormGrid}>
                               <label>Release channel<select value={acknowledgmentForm.channel} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, channel: event.target.value as typeof current.channel }))}><option value="EMAIL">Email</option><option value="SUPPLIER_PORTAL">Supplier portal</option><option value="EDI">EDI</option><option value="PHONE_CONFIRMED">Phone confirmed</option><option value="OTHER">Other</option></select></label>
@@ -1215,7 +1349,7 @@ export function AtlasProcurementWorkspace({
                       </>
                     ) : (
                       <>
-                        <div className={styles.procurementFormGrid}>
+                        <div className={styles.procurementFormGrid} data-draft-section="purchase-order">
                           <label>Quantity<input type="number" min="0.01" step="0.01" value={purchaseForm.quantity} onChange={(event) => setPurchaseForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
                           <label>Approved unit<input readOnly value={currentCase.purchaseDraft?.result?.order.unitOfMeasure ?? currentCase.result.confirmedTerms?.unitOfMeasure ?? "Unknown"} /></label>
                           <label>Need by<input type="date" value={purchaseForm.needBy} onChange={(event) => setPurchaseForm((current) => ({ ...current, needBy: event.target.value }))} /></label>
@@ -1228,13 +1362,13 @@ export function AtlasProcurementWorkspace({
                         <button type="button" disabled={gateActionState === "saving" || !purchaseFormComplete} onClick={savePurchaseDraft}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {purchaseActionStatus === "PENDING" ? "Update draft and cancel pending approval" : currentCase.purchaseDraft?.result ? "Update order draft" : "Save order draft"}</button>
                         {purchaseActionStatus === "REJECTED" ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> This exact order scope was rejected. Revise and save the draft before requesting approval again.</p> : null}
                         {currentCase.purchaseDraft?.result && !purchaseActionStatus ? (
-                          <section className={styles.purchaseApprovalRequest}>
+                          <section className={styles.purchaseApprovalRequest} data-draft-section="purchase-approval">
                             <label>Final approval reason<textarea value={purchaseApprovalReason} onChange={(event) => setPurchaseApprovalReason(event.target.value)} placeholder="Explain why this exact order should be authorized for supplier execution." /></label>
                             <button type="button" disabled={gateActionState === "saving" || purchaseApprovalReason.trim().length === 0} onClick={requestPurchaseApproval}><ShieldCheck size={14} /> Request final admin approval</button>
                           </section>
                         ) : null}
                         {purchaseActionStatus === "PENDING" ? (
-                          <section className={styles.purchaseApprovalRequest}>
+                          <section className={styles.purchaseApprovalRequest} data-draft-section="purchase-decision">
                             <p>The immutable purchase action is waiting for an admin. Editing and saving the draft cancels this request.</p>
                             {canAuthorizePurchase ? <><label>Authorization note<textarea value={purchaseDecisionNote} onChange={(event) => setPurchaseDecisionNote(event.target.value)} placeholder="Record why this exact order may or may not be issued." /></label><div className={styles.procurementDecisionActions}><button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseAction("APPROVE")}><Check size={14} /> Authorize exact order</button><button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseAction("REJECT")}><TriangleAlert size={14} /> Reject order</button></div></> : <p className={styles.procurementPermissionNote}>Only an admin can decide this final purchase action.</p>}
                           </section>

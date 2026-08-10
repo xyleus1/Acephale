@@ -2301,6 +2301,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
   purchase or outreach action must copy the exact selected supplier and terms
   into an immutable execution-task input and bind approval to that input hash.
 
+### 2026-08-10 - Supplier shortlists create isolated quote workstreams
+
+- Status: accepted; supersedes the one-case-per-research-run cardinality in the
+  August 9 supplier-selection decision.
+- Owner: product and engineering
+- Context: Buyers need competing quotes without overwriting supplier evidence,
+  communication, terms, or quality review each time they inspect another option.
+- Decision: A research run may own one `PROCUREMENT_CASE` per shortlisted
+  supplier. Supplier-specific task keys make repeated and concurrent requests
+  idempotent. The sourcing queue restores the group into one competitive quote
+  inbox while each child workstream retains its own evidence and approvals.
+- Comparison boundary: A displayed quote uses the operator-selected response.
+  Price and delivery badges require matching RFQ scope and unit; price also
+  requires one currency. Missing or incompatible inputs are not ranked.
+- Award boundary: Supplier qualification may progress independently, but only
+  one sibling supplier may have a pending or approved award at a time. Purchase
+  preparation remains impossible without the exact supplier approval scope.
+- Compatibility: The singular procurement API request shape remains accepted,
+  but it resolves through the same supplier-specific identity as the shortlist
+  request shape.
+
 ### 2026-08-10 - Procurement qualification is sequential and approval scope is immutable
 
 - Status: accepted

@@ -2151,6 +2151,117 @@
   scrollbar-gutter: stable;
 }
 
+.procurementQuoteInbox {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-bottom: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.procurementQuoteInbox > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfc;
+}
+
+.procurementQuoteInbox > header small,
+.procurementQuoteInbox > header h3,
+.procurementQuoteInbox > header p {
+  display: block;
+  margin: 0;
+}
+
+.procurementQuoteInbox > header small {
+  color: var(--navy);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.procurementQuoteInbox > header h3 {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.procurementQuoteInbox > header p,
+.procurementQuoteInbox > footer {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.procurementQuoteInbox > div {
+  display: grid;
+}
+
+.procurementQuoteInbox > div > button {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .8fr) 18px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--panel);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.procurementQuoteInbox > div > button:hover,
+.procurementQuoteInbox > div > button[data-active="true"] {
+  background: var(--panel-selected);
+}
+
+.procurementQuoteInbox > div > button[data-active="true"] {
+  box-shadow: inset 3px 0 0 var(--navy);
+}
+
+.procurementQuoteInbox button span,
+.procurementQuoteInbox button strong,
+.procurementQuoteInbox button small {
+  display: block;
+}
+
+.procurementQuoteInbox button strong {
+  font-size: 13px;
+}
+
+.procurementQuoteInbox button small {
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.procurementQuoteInbox button em {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--success);
+  background: var(--success-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.procurementQuoteInbox > footer {
+  padding: 9px 14px;
+  background: #fbfcfc;
+}
+
 .procurementHandoff h3,
 .procurementUnknownState h3 {
   margin: 8px 0 0;

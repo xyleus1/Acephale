@@ -7643,6 +7643,33 @@ Trust boundary:
 - Repeated and concurrent checks deduplicate provider messages and do not append
   duplicate evidence or events.
 
+## Supply OS competitive quote inbox, August 10
+
+Status:
+
+- Implemented on `supply-os-multi-supplier-quotes`, targeting `main`.
+- No Prisma migration or new dependency is required.
+
+Operator result:
+
+- Supplier comparison supports a shortlist of up to eight candidates.
+- Each candidate becomes a durable supplier-specific quote workstream grouped
+  under the original research run and restored through the sourcing queue.
+- The competitive quote inbox switches between workstreams without leaving
+  Supply OS and shows the operator-selected quote, not merely the latest reply.
+- Price and delivery badges appear only when request scope and units match;
+  price ranking also requires one currency.
+
+Safety and execution boundary:
+
+- Singular and plural API request shapes resolve through the same durable
+  supplier identity, so retries do not create duplicate cases.
+- Only one supplier in a sourcing group may enter pending or approved award
+  state. Supplier contact, quote release, purchase preparation, and final order
+  authorization keep their existing approval requirements.
+- Attempting to switch supplier workstreams while a form is dirty is blocked
+  inline instead of silently discarding operator input.
+
 ## Supply OS opportunity scenario workbench, August 9
 
 Status:

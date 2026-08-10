@@ -4601,3 +4601,20 @@ Use this file for chronological implementation notes that future agents should s
   idempotent. Connected response dates are pinned to the provider observation.
 - Boundary: No email parser or model confirms price, MOQ, delivery, validity, or
   quote identity. Logistics remains unchanged.
+
+### 2026-08-10 - Add competitive supplier quote workstreams
+
+- Branch: supply-os-multi-supplier-quotes, targeting main
+- Task: Preserve multiple supplier RFQ paths for one sourcing request and make
+  them resumable from one competitive quote inbox.
+- Behavior: Shortlisting creates one supplier-specific procurement case per
+  candidate. Repeated, mixed-contract, and concurrent requests converge on the
+  same task identity. Queue restoration groups siblings by research run.
+- Comparison: The inbox uses the selected response and suppresses price or
+  delivery badges when RFQ scope, unit, or currency is not comparable.
+- Safety: Dirty forms block supplier switching, each workstream retains isolated
+  evidence, and only one sibling can enter award approval at a time.
+- Verification: Atlas sourcing contract, disposable-database sourcing lifecycle,
+  concurrent first-create, cross-office write denial, TypeScript, production
+  build, diff check, and responsive authenticated browser QA.
+- Boundary: Logistics handoff remains unchanged in this slice.

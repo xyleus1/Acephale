@@ -96,6 +96,7 @@ export type SavedProcurementCase = {
   input: {
     researchRunId: string;
     researchInput: SavedSourcingResearchRun["input"];
+    supplierId?: string;
   };
   result: {
     stage: "SOURCE_EVIDENCE" | "COMMERCIAL_CONFIRMATION" | "QUALITY_REVIEW" | "APPROVAL" | "APPROVAL_PENDING" | "PURCHASE_READY";
