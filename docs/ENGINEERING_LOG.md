@@ -4313,3 +4313,44 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: if lower-rail utilities are added, prefer one global search or
   switcher and one workspace-settings entry. Do not add duplicate domain links
   merely to occupy blank rail space.
+
+### 2026-08-09 - Move the Supply OS collapse control into the rail header
+
+- Branch: main
+- Task: Replace the oversized lower-rail collapse action with a compact control
+  beside the Derya logo.
+- Files changed: Supply OS operating shell and styles, collapsible-navigation
+  regression contract, handoff, and this log.
+- Design: the toggle is now a 44px icon-only button in the 88px desktop brand
+  row. It keeps its accessible label, title, expanded state, and controlled
+  navigation ID. The control remains hidden when navigation becomes horizontal
+  below 900px.
+- Verification: collapsible-navigation, company-navigation, sidebar-map,
+  operations-UI, product-copy, TypeScript, diff-check, and changed-diff U+2014
+  checks pass. TypeScript contracts used the sandbox-compatible Node TS loader.
+- Failed/skipped checks: the in-app browser had no attached tab, so rendered
+  desktop and mobile inspection was unavailable. Commit and push were blocked
+  because the sandbox could not create `.git/index.lock`.
+- Caveat: collapse preference remains session-local and is not persisted across
+  a full page reload.
+
+### 2026-08-09 - Replace scripted Automations chat with GPT workflow drafting
+
+- Task: Remove redundant Automations narration and connect the chat to the
+  existing GPT-5.6 runtime.
+- Files changed: Automations component and styles, new authenticated chat route,
+  new structured-output workflow drafting library, automation contracts,
+  package scripts, decision record, and handoff docs.
+- Behavior: The chat now sends company context, the selected workflow, recent
+  conversation, and the operator instruction to GPT. Structured responses can
+  create or update browser-session workflow drafts. Deterministic server logic
+  restores an explicit approval gate when a risky draft omits one.
+- UI: Removed both local headers and all static assistant narration. The initial
+  left pane is an empty canvas with one compact composer, and the right pane
+  starts directly with the workflow list.
+- Verification: Automation chat, Automations workspace, company navigation,
+  shell routing, sidebar map, continuous layout, enterprise design, operations
+  UI, product twin, Atlas sourcing, collapsible navigation, product copy, and
+  TypeScript checks passed. Authenticated desktop and mobile browser checks
+  passed with no horizontal overflow. Local live GPT completion was unavailable
+  because the local environment has no `OPENAI_API_KEY`.

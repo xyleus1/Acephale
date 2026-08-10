@@ -45,6 +45,76 @@ Deferred:
 - The Logistics panel remains unchanged. A later slice should create an
   approval-gated `SupplyAction` and open Logistics with the handoff context.
 
+### Automations chat now drafts workflows with GPT
+
+- Replaced the keyword-based browser response with an authenticated GPT-5.6
+  Responses API route. Chat can create a new workflow draft, revise the
+  selected draft, or answer a workflow-design question with structured output.
+- Added office and user rate limiting, request-size limits, no-store responses,
+  strict output validation, and a deterministic approval-gate safeguard for
+  messaging, filing, booking, record, customs, and spend-related steps.
+- Removed both pane headers, the initial assistant lecture, speaker labels,
+  the visible message label, the long placeholder, the text send label, the
+  repeated browser-draft warning, the automation count, and the redundant new
+  draft button. The selected workflow keeps the compact `Draft` state.
+- The initial workspace is now an empty chat canvas with one compact composer.
+  Enter sends, Shift+Enter adds a line, and failed requests restore the input.
+- No schema, dependency, persistence, canonical record, external message,
+  filing, booking, or spend action changed.
+
+Verification:
+
+- `npm run test:supply-os-automation-chat`
+- `npm run test:supply-os-automations`
+- `npm run test:supply-os-company-navigation`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-operations-ui`
+- `npm run test:supply-os-product-twin`
+- `npm run test:supply-os-atlas-sourcing`
+- `npm run check:product-copy`
+- `npx tsx scripts/supply-os-collapsible-navigation.test.ts`
+- `npx tsc --noEmit`
+- Authenticated browser QA at 1440 by 1000 and 390 by 844. The stripped
+  desktop and mobile compositions have no horizontal overflow. The local
+  endpoint correctly returns its configured error because local development
+  has no `OPENAI_API_KEY`; production success still requires post-deploy
+  verification against the configured environment.
+
+### Supply OS collapse control moved into the rail header
+
+- Moved the desktop navigation collapse control from the bottom of the rail to
+  the Derya logo row.
+- Reduced the control to a 44px icon-only button. Its accessible label, title,
+  expanded state, and navigation relationship remain available to assistive
+  technology.
+- Preserved the 84px collapsed rail and the labeled horizontal navigation used
+  below 900px.
+- Extended the collapsible-navigation contract to reject the old footer
+  control and visible `Expand` or `Collapse` button text.
+- No schema, dependency, tenant boundary, approval rule, freight logic,
+  persistence, or external action changed.
+
+Verification:
+
+- `node --import tsx scripts/supply-os-collapsible-navigation.test.ts`
+- `node --import tsx scripts/supply-os-company-navigation.test.ts`
+- `node --import tsx scripts/supply-os-sidebar-map.test.ts`
+- `node --import tsx scripts/supply-os-operations-ui.test.ts`
+- `node --import tsx scripts/product-copy-policy.test.ts`
+- `npx tsc --noEmit --incremental false`
+- `git diff --check`
+- Changed-diff U+2014 scan
+
+Skipped verification:
+
+- The in-app browser had no attached tab, so a rendered desktop and mobile
+  inspection could not be completed in this checkout.
+- Commit and push were blocked because the workspace sandbox did not permit
+  creating `.git/index.lock`. The five task files remain unstaged.
+
 ### Supply OS navigation now collapses and Automations has structural whitespace
 
 - Added a desktop collapse control to the persistent Supply OS domain rail.
