@@ -17,6 +17,28 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-10 - Persist the supplier quote request and response cycle
+
+- The selected quote cycle now reaches `SUCCEEDED` only after the linked
+  authorized order is fully acknowledged. Legacy purchase actions without
+  quote-cycle provenance remain acknowledgeable.
+
+- Branch: supply-os-supplier-quote-cycle, targeting main
+- Commit: see git log
+- Task: Replace browser-authored commercial confirmation with a resumable RFQ
+  draft, recorded external release, append-only supplier responses, and exact
+  response selection.
+- Files changed: procurement persistence and quote routes, sourcing types,
+  in-page quote controls, queue state, database and UI contracts, architecture,
+  decision record, and handoff.
+- Verification: Atlas sourcing contract, disposable-database lifecycle and
+  tenant contract, TypeScript, layout contracts, product copy, production
+  build, whitespace, and changed-file U+2014 checks.
+- Caveats: External release is recorded evidence. Derya still does not send the
+  RFQ or supplier order, create a canonical PO, or open Logistics.
+- Follow-up: Add controlled supplier communication only when an approved,
+  idempotent connector can persist the actual provider message and response.
+
 ### 2026-08-10 - Record partial and full supplier acknowledgment
 
 - Branch: supply-os-supplier-acknowledgment, targeting main

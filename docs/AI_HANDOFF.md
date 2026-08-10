@@ -2,6 +2,35 @@
 
 ## Latest Update
 
+### Supplier quote requests and responses are persistent
+
+- Commercial confirmation no longer accepts browser-authored price and delivery
+  fields directly. It requires a server-owned supplier quote response hash.
+- After source review, an operator can save and revise an RFQ draft with
+  quantity, unit, need-by, destination, response deadline, requirements, and
+  notes. The sourcing queue restores `Quote request draft` after navigation or
+  reload.
+- The operator can record how the request was sent outside Derya, including
+  channel, date, evidence URL, and note. That moves the queue to `Awaiting
+  supplier quote` without claiming that Derya sent a message.
+- Supplier responses append price, currency, MOQ, unit, delivery, validity,
+  reference, evidence, note, actor, timestamp, and deterministic hash. Multiple
+  revisions remain visible and resumable.
+- Selecting `Use quote` copies only the chosen stored response into the
+  commercial gate. The response task and hash continue through procurement
+  approval, order drafting, and final purchase authorization.
+- Supplier changes cancel the active quote cycle. Identical request, release,
+  and response retries do not append fake history.
+- Full supplier order acknowledgment closes the exact quote cycle used by the
+  authorized purchase action, so completed sourcing work does not remain active.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL migration plus
+  `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false`
+
 ### Supplier acceptance is persistent, cumulative, and resumable
 
 - An admin or manager can record an externally received supplier acknowledgment

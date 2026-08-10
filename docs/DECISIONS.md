@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Commercial approval requires a persistent supplier quote cycle
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A browser form containing price, MOQ, delivery, and an evidence URL
+  is structured note-taking, not a defensible supplier quote workflow. It also
+  lets client-authored terms reach the approval boundary without a durable
+  request and response history.
+- Decision: After supplier-source review, create an office-scoped
+  `SUPPLIER_QUOTE_CYCLE` child task. The operator prepares a revisioned quote
+  request, records evidence that it was released outside Derya, appends one or
+  more supplier responses, and selects a response by its server-owned hash.
+  Only the selected stored response may complete the commercial gate.
+- Evidence: Request revisions, external release, responses, and response
+  selection append hashed events. Operator-recorded release and response data
+  remain labeled `OPERATOR_RECORDED_EXTERNAL`; they are not upgraded to a
+  connected-provider fact.
+- Boundary: Derya does not send the quote request in this workflow. A future
+  supplier connector requires its own approval-gated execution task. Supplier
+  changes cancel the active quote cycle, while quote revisions remain available
+  for audit and resume.
+
 ### 2026-08-10 - Supplier acknowledgment is recorded evidence, not a claimed connector send
 
 - Status: accepted

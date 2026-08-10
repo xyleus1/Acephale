@@ -6,12 +6,15 @@ import {
   decidePurchaseActionApproval,
   decideProcurementApproval,
   listProcurementCases,
+  recordSupplierQuoteRelease,
+  recordSupplierQuoteResponse,
   recordPurchaseOrderAcknowledgment,
   requestPurchaseActionApproval,
   requestProcurementApproval,
   reviewProcurementGate,
   savePurchaseOrderDraft,
   saveProcurementSelection,
+  saveSupplierQuoteRequest,
 } from "../src/lib/supply-os/procurement-case-persistence";
 import {
   completeSourcingResearchRun,
@@ -175,69 +178,137 @@ async function main() {
       },
     });
     assert.equal((sourceReviewed.result as { stage: string }).stage, "COMMERCIAL_CONFIRMATION");
+    const selectionHash = (procurementCase.result as { selectionHash: string }).selectionHash;
+    const quoteRequestInput = {
+      expectedSelectionHash: selectionHash,
+      expectedRevision: 0,
+      quantity: 8,
+      unitOfMeasure: "EA",
+      needBy: quoteDeliveryDate,
+      shipTo: "Atlas Austin assembly plant",
+      responseDue: futureDate(3),
+      requirements: "Quote calibrated stereo depth cameras with serial traceability and delivery to Austin.",
+      note: "Return calibration and warranty terms with the quote.",
+    } as const;
+    await assert.rejects(() => saveSupplierQuoteRequest({
+      context,
+      caseId: procurementCase.id,
+      input: { ...quoteRequestInput, expectedSelectionHash: "stale-selection-hash" },
+    }), /selection changed/i, "quote requests must fail closed against stale supplier state");
+    await assert.rejects(() => saveSupplierQuoteRequest({
+      context,
+      caseId: procurementCase.id,
+      input: { ...quoteRequestInput, responseDue: futureDate(25) },
+    }), /cannot be after the need-by date/i, "quote response deadlines must fit the operating requirement");
     await assert.rejects(() => reviewProcurementGate({
       context,
       caseId: procurementCase.id,
       input: {
         gate: "COMMERCIAL_TERMS",
-        expectedSelectionHash: "stale-selection-hash",
+        expectedSelectionHash: selectionHash,
         price: 125,
         currency: "USD",
-        minimumOrderQuantity: 4,
-        unitOfMeasure: "EA",
-        deliveryDate: quoteDeliveryDate,
-        evidenceUrl: "https://example.com/quote/atlas-410",
-        quoteReference: "Q-ATLAS-410",
-        validUntil: quoteValidUntil,
+        evidenceUrl: "https://untrusted.example/browser-terms",
       },
-    }), /selection changed/i, "gate reviews must fail closed against stale supplier state");
+    }), /quote cycle task id is required/i, "browser-authored terms cannot bypass the persistent quote cycle");
+    const quoteDraft = await saveSupplierQuoteRequest({ context, caseId: procurementCase.id, input: quoteRequestInput });
+    assert.equal(quoteDraft.quoteCycle.status, "PLANNED");
+    assert.equal((quoteDraft.quoteCycle.result as { revision: number; state: string; externalSideEffect: boolean }).revision, 1);
+    assert.equal((quoteDraft.quoteCycle.result as { state: string }).state, "DRAFT");
+    assert.equal((quoteDraft.quoteCycle.result as { externalSideEffect: boolean }).externalSideEffect, false);
+    assert.equal((await listProcurementCases(context))[0]?.quoteCycle?.id, quoteDraft.quoteCycle.id, "the sourcing queue must restore the quote-request draft");
+    const quoteDraftEvents = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id } });
+    const repeatedQuoteDraft = await saveSupplierQuoteRequest({ context, caseId: procurementCase.id, input: quoteRequestInput });
+    assert.equal((repeatedQuoteDraft.quoteCycle.result as { revision: number }).revision, 1);
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id } }), quoteDraftEvents, "identical quote-request retries must not append history");
+    await assert.rejects(() => saveSupplierQuoteRequest({
+      context,
+      caseId: procurementCase.id,
+      input: { ...quoteRequestInput, expectedRevision: 0, requirements: "Stale overwrite attempt." },
+    }), /changed in another session/i, "stale quote-request edits must not overwrite a newer revision");
+    const quoteReleaseInput = {
+      expectedRequestHash: (quoteDraft.quoteCycle.result as { requestHash: string }).requestHash,
+      channel: "EMAIL",
+      releasedOn: futureDate(0),
+      evidenceUrl: "https://example.com/quote-requests/atlas-410",
+      note: "Buyer sent the quote request from the supplier thread.",
+    } as const;
+    const quoteReleased = await recordSupplierQuoteRelease({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteReleaseInput });
+    assert.equal(quoteReleased.quoteCycle.status, "RUNNING");
+    assert.equal((quoteReleased.quoteCycle.result as { state: string; externalSideEffect: string }).state, "AWAITING_RESPONSE");
+    assert.equal((quoteReleased.quoteCycle.result as { externalSideEffect: string }).externalSideEffect, "RECORDED_ONLY");
+    const releaseEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED" } });
+    await recordSupplierQuoteRelease({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteReleaseInput });
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED" } }), releaseEventCount, "identical release retries must be idempotent");
+    await assert.rejects(() => saveSupplierQuoteRequest({
+      context,
+      caseId: procurementCase.id,
+      input: { ...quoteRequestInput, expectedRevision: 1, requirements: "Released request mutation." },
+    }), /already released/i, "released quote requests must be immutable");
+    const quoteResponseInput = {
+      expectedRequestHash: quoteReleaseInput.expectedRequestHash,
+      receivedOn: futureDate(0),
+      price: 125,
+      currency: "USD",
+      minimumOrderQuantity: 4,
+      unitOfMeasure: "EA",
+      deliveryDate: quoteDeliveryDate,
+      quoteReference: "Q-ATLAS-410",
+      validUntil: quoteValidUntil,
+      evidenceUrl: "https://example.com/quote/atlas-410",
+      note: "Supplier quote includes calibration records.",
+    } as const;
+    await assert.rejects(() => recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: quoteDraft.quoteCycle.id,
+      input: { ...quoteResponseInput, validUntil: futureDate(-1) },
+    }), /cannot be in the past/i, "expired quotes must never enter the response ledger");
+    await assert.rejects(() => recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: quoteDraft.quoteCycle.id,
+      input: { ...quoteResponseInput, deliveryDate: futureDate(-1) },
+    }), /delivery date cannot be in the past/i, "missed delivery dates must never enter the response ledger");
+    await assert.rejects(() => recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: quoteDraft.quoteCycle.id,
+      input: { ...quoteResponseInput, receivedOn: futureDate(-1) },
+    }), /cannot precede the recorded quote-request release/i, "supplier responses cannot be backdated before the request release");
+    await assert.rejects(() => recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: quoteDraft.quoteCycle.id,
+      input: { ...quoteResponseInput, unitOfMeasure: "KG" },
+    }), /must match the requested unit EA/i, "supplier quote units cannot silently change the commercial basis");
+    const firstQuoteResponse = await recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: quoteDraft.quoteCycle.id,
+      input: {
+        ...quoteResponseInput,
+        price: 130,
+        quoteReference: "Q-ATLAS-410-DRAFT",
+        evidenceUrl: "https://example.com/quote/atlas-410-draft",
+      },
+    });
+    assert.equal((firstQuoteResponse.quoteCycle.result as { responses: unknown[] }).responses.length, 1);
+    const quoteResponse = await recordSupplierQuoteResponse({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteResponseInput });
+    const storedQuoteResponse = quoteResponse.response as { responseHash: string };
+    assert.equal((quoteResponse.quoteCycle.result as { responses: unknown[] }).responses.length, 2, "quote revisions must remain available for comparison");
+    assert.equal(((await listProcurementCases(context))[0]?.result as { quoteCycle: { responseCount: number } }).quoteCycle.responseCount, 2);
+    const responseEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED" } });
+    await recordSupplierQuoteResponse({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteResponseInput });
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED" } }), responseEventCount, "identical supplier responses must be idempotent");
     await assert.rejects(() => reviewProcurementGate({
       context,
       caseId: procurementCase.id,
-      input: {
-        gate: "COMMERCIAL_TERMS",
-        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
-        price: 125,
-        currency: "USD",
-        minimumOrderQuantity: 4,
-        unitOfMeasure: "EA",
-        deliveryDate: quoteDeliveryDate,
-        evidenceUrl: "https://example.com/quote/expired",
-        quoteReference: "Q-EXPIRED",
-        validUntil: futureDate(-1),
-      },
-    }), /cannot be in the past/i, "expired quotes must never become approval-ready terms");
-    await assert.rejects(() => reviewProcurementGate({
-      context,
-      caseId: procurementCase.id,
-      input: {
-        gate: "COMMERCIAL_TERMS",
-        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
-        price: 125,
-        currency: "USD",
-        minimumOrderQuantity: 4,
-        unitOfMeasure: "EA",
-        deliveryDate: futureDate(-1),
-        evidenceUrl: "https://example.com/quote/missed-delivery",
-        quoteReference: "Q-MISSED-DELIVERY",
-        validUntil: quoteValidUntil,
-      },
-    }), /delivery date cannot be in the past/i, "a missed delivery date must never become approval-ready");
-
+      input: { gate: "COMMERCIAL_TERMS", expectedSelectionHash: selectionHash, quoteCycleTaskId: quoteDraft.quoteCycle.id, responseHash: "missing-response" },
+    }), /response was not found/i, "commercial review must select a canonical stored response");
     const termsReviewed = await reviewProcurementGate({
       context,
       caseId: procurementCase.id,
       input: {
         gate: "COMMERCIAL_TERMS",
-        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
-        price: 125,
-        currency: "USD",
-        minimumOrderQuantity: 4,
-        unitOfMeasure: "EA",
-        deliveryDate: quoteDeliveryDate,
-        evidenceUrl: "https://example.com/quote/atlas-410",
-        quoteReference: "Q-ATLAS-410",
-        validUntil: quoteValidUntil,
+        expectedSelectionHash: selectionHash,
+        quoteCycleTaskId: quoteDraft.quoteCycle.id,
+        responseHash: storedQuoteResponse.responseHash,
       },
     });
     assert.equal((termsReviewed.result as { stage: string }).stage, "QUALITY_REVIEW");
@@ -307,6 +378,9 @@ async function main() {
       evidenceUrl: "https://example.com/quote/atlas-410",
       quoteReference: "Q-ATLAS-410",
       validUntil: quoteValidUntil,
+      quoteCycleTaskId: quoteDraft.quoteCycle.id,
+      responseHash: storedQuoteResponse.responseHash,
+      evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
     });
     assert.equal(approvalInput.qualityPlan.method, "SAMPLE");
     await assert.rejects(() => decideProcurementApproval({
@@ -363,7 +437,7 @@ async function main() {
     const preparedResult = purchasePrepared.purchaseDraft!.result as {
       revision: number;
       supplier: { name: string; sourceUrl: string };
-      commercial: { unitPrice: string; currency: string; quoteReference: string };
+      commercial: { unitPrice: string; currency: string; quoteReference: string; quoteCycleTaskId: string; quoteResponseHash: string; evidenceClass: string };
       totals: { materialSubtotal: string; currency: string };
     };
     assert.equal(purchasePrepared.purchaseDraft!.status, "PLANNED");
@@ -379,6 +453,9 @@ async function main() {
     assert.equal(preparedResult.commercial.unitPrice, "125");
     assert.equal(preparedResult.commercial.currency, "USD");
     assert.equal(preparedResult.commercial.quoteReference, "Q-ATLAS-410");
+    assert.equal(preparedResult.commercial.quoteCycleTaskId, quoteDraft.quoteCycle.id);
+    assert.equal(preparedResult.commercial.quoteResponseHash, storedQuoteResponse.responseHash);
+    assert.equal(preparedResult.commercial.evidenceClass, "OPERATOR_RECORDED_EXTERNAL");
     assert.equal(preparedResult.totals.materialSubtotal, "1000");
     assert.notEqual(purchasePrepared.purchaseDraft!.inputHash, requested.approval.scopeHash, "purchase draft has its own provenance input hash");
     const storedPurchaseDraft = await prisma.supplyExecutionTask.findUniqueOrThrow({
@@ -446,7 +523,7 @@ async function main() {
       purchaseDraftRevision: number;
       order: { quantity: string; shipTo: string };
       supplier: { name: string };
-      commercial: { unitPrice: string; quoteReference: string };
+      commercial: { unitPrice: string; quoteReference: string; quoteCycleTaskId: string; quoteResponseHash: string };
       totals: { materialSubtotal: string };
       qualityPlan: { method: string };
     };
@@ -457,6 +534,8 @@ async function main() {
     assert.equal(immutablePurchaseInput.supplier.name, "Example supplier");
     assert.equal(immutablePurchaseInput.commercial.unitPrice, "125");
     assert.equal(immutablePurchaseInput.commercial.quoteReference, "Q-ATLAS-410");
+    assert.equal(immutablePurchaseInput.commercial.quoteCycleTaskId, quoteDraft.quoteCycle.id);
+    assert.equal(immutablePurchaseInput.commercial.quoteResponseHash, storedQuoteResponse.responseHash);
     assert.equal(immutablePurchaseInput.totals.materialSubtotal, "1250");
     assert.equal(immutablePurchaseInput.qualityPlan.method, "SAMPLE");
     assert.equal(firstPurchaseAction.purchaseAction.externalSystem, null);
@@ -619,6 +698,8 @@ async function main() {
     assert.equal(weakEvidenceResult.selectedOption.deliveryType, "Unknown");
     assert.equal(weakEvidenceResult.gates.commercialTerms, "REVIEW_REQUIRED");
     assert.equal(weakEvidenceResult.gates.purchaseApproval, "BLOCKED");
+    assert.equal((weakEvidenceCase.result as { quoteCycle?: unknown }).quoteCycle, undefined, "supplier changes must remove the stale quote-cycle projection");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: quoteDraft.quoteCycle.id } })).status, "CANCELLED", "supplier changes must cancel the active quote cycle");
     assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: requested.approval.id } })).status, "APPROVED", "historical approval remains immutable after the case changes");
     assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
       where: { id: updatedPurchaseDraft.purchaseDraft!.id },
@@ -714,12 +795,33 @@ async function main() {
       caseId: returnedCase.id,
       input: { gate: "SOURCE_EVIDENCE", expectedSelectionHash: returnedHash, note: "Verified supplier source for approval retry." },
     });
-    await reviewProcurementGate({
+    const retryQuoteDraft = await saveSupplierQuoteRequest({
       context,
       caseId: returnedCase.id,
       input: {
-        gate: "COMMERCIAL_TERMS",
         expectedSelectionHash: returnedHash,
+        expectedRevision: 0,
+        quantity: 14,
+        unitOfMeasure: "EA",
+        needBy: quoteDeliveryDate,
+        shipTo: "Atlas Austin assembly plant",
+        responseDue: futureDate(3),
+        requirements: "Return a revised quote for calibrated cameras with serial traceability.",
+        note: "Approval retry quote cycle.",
+      },
+    });
+    const retryRequestHash = (retryQuoteDraft.quoteCycle.result as { requestHash: string }).requestHash;
+    await recordSupplierQuoteRelease({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      input: { expectedRequestHash: retryRequestHash, channel: "SUPPLIER_PORTAL", releasedOn: futureDate(0), evidenceUrl: "https://example.com/quote-requests/retry", note: null },
+    });
+    const retryQuoteResponse = await recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      input: {
+        expectedRequestHash: retryRequestHash,
+        receivedOn: futureDate(0),
         price: 126,
         currency: "USD",
         minimumOrderQuantity: 4,
@@ -728,6 +830,17 @@ async function main() {
         evidenceUrl: "https://example.com/quote/retry",
         quoteReference: "Q-RETRY",
         validUntil: quoteValidUntil,
+        note: null,
+      },
+    });
+    await reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: {
+        gate: "COMMERCIAL_TERMS",
+        expectedSelectionHash: returnedHash,
+        quoteCycleTaskId: retryQuoteDraft.quoteCycle.id,
+        responseHash: (retryQuoteResponse.response as { responseHash: string }).responseHash,
       },
     });
     const retryQualityPlan = {
@@ -929,8 +1042,13 @@ async function main() {
     assert.equal(fullResult.totals.acknowledgedMaterialValue, "1764");
     assert.equal(fullResult.acknowledgments.length, 2);
     assert.equal(fullResult.externalSideEffect, "RECORDED_ONLY");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: retryQuoteDraft.quoteCycle.id },
+      select: { status: true },
+    })).status, "SUCCEEDED", "full supplier acknowledgment must close the selected quote cycle");
     const restoredReleaseCase = (await listProcurementCases(context))[0];
     assert.equal(restoredReleaseCase?.purchaseAction?.status, "SUCCEEDED");
+    assert.equal(restoredReleaseCase?.quoteCycle, null, "completed quote cycles must leave the active sourcing queue");
     assert.equal((restoredReleaseCase?.result as { purchaseRelease: { state: string } }).purchaseRelease.state, "ACKNOWLEDGED");
     await assert.rejects(() => recordPurchaseOrderAcknowledgment({
       context,
@@ -1041,6 +1159,16 @@ async function main() {
         quality: "Unverified",
       },
     }), /not found|cannot edit/i, "unassigned employees must not change office procurement cases");
+    await assert.rejects(() => saveSupplierQuoteRequest({
+      context: restrictedContext,
+      caseId: returnedCase.id,
+      input: quoteRequestInput,
+    }), /not found|cannot edit/i, "unassigned employees must not prepare supplier quote requests");
+    await assert.rejects(() => recordSupplierQuoteResponse({
+      context: stalePrivilegedContext,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      input: { ...quoteResponseInput, expectedRequestHash: retryRequestHash },
+    }), /not found|cannot edit/i, "stale privileged sessions must not record supplier quote responses");
     await assert.rejects(() => reviewProcurementGate({
       context: restrictedContext,
       caseId: returnedCase.id,
@@ -1120,6 +1248,11 @@ async function main() {
       approvalId: authorizedAction.approval.id,
       input: { decision: "APPROVE" },
     }), /not found/i, "another office must not decide a purchase action approval");
+    await assert.rejects(() => recordSupplierQuoteRelease({
+      context: foreign,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      input: quoteReleaseInput,
+    }), /not found/i, "another office must not record supplier quote release");
     await assert.rejects(() => recordPurchaseOrderAcknowledgment({
       context: foreign,
       actionId: releaseAction.purchaseAction.id,

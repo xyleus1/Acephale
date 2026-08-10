@@ -255,14 +255,32 @@ export function AtlasProcurementWorkspace({
   const [gateActionError, setGateActionError] = useState("");
   const [sourceReviewNote, setSourceReviewNote] = useState("");
   const [commercialForm, setCommercialForm] = useState(() => ({
-    price: String(initialCase?.result?.confirmedTerms?.price ?? initialCase?.result?.selectedOption.price ?? ""),
-    currency: initialCase?.result?.confirmedTerms?.currency ?? initialCase?.result?.selectedOption.currency ?? "USD",
-    minimumOrderQuantity: String(initialCase?.result?.confirmedTerms?.minimumOrderQuantity ?? initialCase?.result?.selectedOption.minimumOrderQuantity ?? ""),
-    unitOfMeasure: initialCase?.result?.confirmedTerms?.unitOfMeasure ?? (item ? "EA" : ""),
-    deliveryDate: initialCase?.result?.confirmedTerms?.deliveryDate ?? initialCase?.result?.selectedOption.deliveryDate ?? "",
-    evidenceUrl: initialCase?.result?.confirmedTerms?.evidenceUrl ?? initialCase?.result?.selectedOption.sourceUrl ?? "",
-    quoteReference: initialCase?.result?.confirmedTerms?.quoteReference ?? "",
-    validUntil: initialCase?.result?.confirmedTerms?.validUntil ?? "",
+    receivedOn: "",
+    price: "",
+    currency: "",
+    minimumOrderQuantity: "",
+    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? "EA" : ""),
+    deliveryDate: "",
+    evidenceUrl: "",
+    quoteReference: "",
+    validUntil: "",
+    note: "",
+  }));
+  const [quoteRequestForm, setQuoteRequestForm] = useState(() => ({
+    quantity: initialCase?.quoteCycle?.result?.request.quantity
+      ?? String(item ? Math.max(shortageQuantity(item), initialCase?.result?.selectedOption.minimumOrderQuantity ?? 0) : ""),
+    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? "EA" : ""),
+    needBy: initialCase?.quoteCycle?.result?.request.needBy ?? (item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? "" : ""),
+    shipTo: initialCase?.quoteCycle?.result?.request.shipTo ?? (item ? "Austin assembly plant" : ""),
+    responseDue: initialCase?.quoteCycle?.result?.request.responseDue ?? "",
+    requirements: initialCase?.quoteCycle?.result?.request.requirements ?? item?.specification ?? requestText,
+    note: initialCase?.quoteCycle?.result?.request.note ?? "",
+  }));
+  const [quoteReleaseForm, setQuoteReleaseForm] = useState(() => ({
+    channel: initialCase?.quoteCycle?.result?.release?.channel ?? "EMAIL" as "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER",
+    releasedOn: initialCase?.quoteCycle?.result?.release?.releasedOn ?? "",
+    evidenceUrl: initialCase?.quoteCycle?.result?.release?.evidenceUrl ?? "",
+    note: initialCase?.quoteCycle?.result?.release?.note ?? "",
   }));
   const [qualityForm, setQualityForm] = useState(() => ({
     method: initialCase?.result?.qualityPlan?.method ?? "SAMPLE",
@@ -327,17 +345,18 @@ export function AtlasProcurementWorkspace({
   useEffect(() => {
     const result = currentCase?.result;
     if (!result) return;
-    const terms = result.confirmedTerms;
     setSourceReviewNote("");
     setCommercialForm({
-      price: String(terms?.price ?? result.selectedOption.price ?? ""),
-      currency: terms?.currency ?? result.selectedOption.currency ?? "USD",
-      minimumOrderQuantity: String(terms?.minimumOrderQuantity ?? result.selectedOption.minimumOrderQuantity ?? ""),
-      unitOfMeasure: terms?.unitOfMeasure ?? (item ? "EA" : ""),
-      deliveryDate: terms?.deliveryDate ?? result.selectedOption.deliveryDate ?? "",
-      evidenceUrl: terms?.evidenceUrl ?? result.selectedOption.sourceUrl ?? "",
-      quoteReference: terms?.quoteReference ?? "",
-      validUntil: terms?.validUntil ?? "",
+      receivedOn: "",
+      price: "",
+      currency: "",
+      minimumOrderQuantity: "",
+      unitOfMeasure: item ? "EA" : "",
+      deliveryDate: "",
+      evidenceUrl: "",
+      quoteReference: "",
+      validUntil: "",
+      note: "",
     });
     setQualityForm({
       method: result.qualityPlan?.method ?? "SAMPLE",
@@ -352,6 +371,54 @@ export function AtlasProcurementWorkspace({
     setGateActionError("");
     setGateActionState("idle");
   }, [currentCase?.result?.selectionHash]);
+
+  useEffect(() => {
+    const cycle = currentCase?.quoteCycle?.result;
+    if (!cycle) return;
+    setQuoteRequestForm({
+      quantity: cycle.request.quantity,
+      unitOfMeasure: cycle.request.unitOfMeasure,
+      needBy: cycle.request.needBy,
+      shipTo: cycle.request.shipTo,
+      responseDue: cycle.request.responseDue,
+      requirements: cycle.request.requirements,
+      note: cycle.request.note ?? "",
+    });
+    setQuoteReleaseForm({
+      channel: cycle.release?.channel ?? "EMAIL",
+      releasedOn: cycle.release?.releasedOn ?? "",
+      evidenceUrl: cycle.release?.evidenceUrl ?? "",
+      note: cycle.release?.note ?? "",
+    });
+    const latest = cycle.responses.at(-1);
+    if (latest) {
+      setCommercialForm({
+        receivedOn: latest.receivedOn,
+        price: latest.price,
+        currency: latest.currency,
+        minimumOrderQuantity: latest.minimumOrderQuantity,
+        unitOfMeasure: latest.unitOfMeasure,
+        deliveryDate: latest.deliveryDate,
+        evidenceUrl: latest.evidenceUrl,
+        quoteReference: latest.quoteReference,
+        validUntil: latest.validUntil,
+        note: "",
+      });
+    } else {
+      setCommercialForm({
+        receivedOn: "",
+        price: "",
+        currency: "",
+        minimumOrderQuantity: "",
+        unitOfMeasure: cycle.request.unitOfMeasure,
+        deliveryDate: "",
+        evidenceUrl: "",
+        quoteReference: "",
+        validUntil: "",
+        note: "",
+      });
+    }
+  }, [currentCase?.quoteCycle?.id, currentCase?.quoteCycle?.resultHash]);
 
   useEffect(() => {
     const draft = currentCase?.purchaseDraft?.result;
@@ -483,8 +550,17 @@ export function AtlasProcurementWorkspace({
       });
       const payload = await response.json().catch(() => ({})) as { procurementCase?: SavedProcurementCase; error?: string };
       if (!response.ok || !payload.procurementCase) throw new Error(payload.error ?? "Procurement review could not be saved.");
-      setCurrentCase(payload.procurementCase);
-      onProcurementCaseSaved(payload.procurementCase);
+      const nextCase: SavedProcurementCase = {
+        ...payload.procurementCase,
+        quoteCycle: payload.procurementCase.quoteCycle
+          ?? (payload.procurementCase.result?.quoteCycle ? currentCase.quoteCycle : null),
+        purchaseDraft: payload.procurementCase.purchaseDraft
+          ?? (payload.procurementCase.result?.purchasePreparation ? currentCase.purchaseDraft : null),
+        purchaseAction: payload.procurementCase.purchaseAction
+          ?? (payload.procurementCase.result?.purchaseAuthorization ? currentCase.purchaseAction : null),
+      };
+      setCurrentCase(nextCase);
+      onProcurementCaseSaved(nextCase);
       setGateActionState("idle");
     } catch (error) {
       setGateActionState("error");
@@ -501,11 +577,37 @@ export function AtlasProcurementWorkspace({
     });
   }
 
-  function confirmCommercialTerms() {
+  function saveQuoteRequest() {
     if (!currentCase?.result) return;
-    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/review`, {
-      gate: "COMMERCIAL_TERMS",
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/quote-cycle`, {
       expectedSelectionHash: currentCase.result.selectionHash,
+      expectedRevision: currentCase.quoteCycle?.result?.revision ?? 0,
+      quantity: Number(quoteRequestForm.quantity),
+      unitOfMeasure: quoteRequestForm.unitOfMeasure,
+      needBy: quoteRequestForm.needBy,
+      shipTo: quoteRequestForm.shipTo,
+      responseDue: quoteRequestForm.responseDue,
+      requirements: quoteRequestForm.requirements,
+      note: quoteRequestForm.note || null,
+    });
+  }
+
+  function recordQuoteRelease() {
+    const cycle = currentCase?.quoteCycle;
+    if (!cycle?.result) return;
+    void runCaseAction(`/api/supply-os/quote-cycles/${cycle.id}/release`, {
+      expectedRequestHash: cycle.result.requestHash,
+      ...quoteReleaseForm,
+      note: quoteReleaseForm.note || null,
+    });
+  }
+
+  function recordQuoteResponse() {
+    const cycle = currentCase?.quoteCycle;
+    if (!cycle?.result) return;
+    void runCaseAction(`/api/supply-os/quote-cycles/${cycle.id}/responses`, {
+      expectedRequestHash: cycle.result.requestHash,
+      receivedOn: commercialForm.receivedOn,
       price: Number(commercialForm.price),
       currency: commercialForm.currency,
       minimumOrderQuantity: Number(commercialForm.minimumOrderQuantity),
@@ -513,7 +615,18 @@ export function AtlasProcurementWorkspace({
       deliveryDate: commercialForm.deliveryDate,
       evidenceUrl: commercialForm.evidenceUrl,
       quoteReference: commercialForm.quoteReference,
-      validUntil: commercialForm.validUntil || null,
+      validUntil: commercialForm.validUntil,
+      note: commercialForm.note || null,
+    });
+  }
+
+  function confirmCommercialTerms(responseHash: string) {
+    if (!currentCase?.result || !currentCase.quoteCycle) return;
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/review`, {
+      gate: "COMMERCIAL_TERMS",
+      expectedSelectionHash: currentCase.result.selectionHash,
+      quoteCycleTaskId: currentCase.quoteCycle.id,
+      responseHash,
     });
   }
 
@@ -606,6 +719,23 @@ export function AtlasProcurementWorkspace({
     && Number(acknowledgmentForm.acceptedQuantity) > 0
     && Boolean(acknowledgmentForm.confirmedDeliveryDate)
     && Boolean(acknowledgmentForm.evidenceUrl.trim());
+  const quoteRequestComplete = Number(quoteRequestForm.quantity) > 0
+    && Boolean(quoteRequestForm.unitOfMeasure.trim())
+    && Boolean(quoteRequestForm.needBy)
+    && Boolean(quoteRequestForm.shipTo.trim())
+    && Boolean(quoteRequestForm.responseDue)
+    && Boolean(quoteRequestForm.requirements.trim());
+  const quoteReleaseComplete = Boolean(quoteReleaseForm.releasedOn)
+    && Boolean(quoteReleaseForm.evidenceUrl.trim());
+  const quoteResponseComplete = Boolean(commercialForm.receivedOn)
+    && Number(commercialForm.price) > 0
+    && Boolean(commercialForm.currency.trim())
+    && Number(commercialForm.minimumOrderQuantity) > 0
+    && Boolean(commercialForm.unitOfMeasure.trim())
+    && Boolean(commercialForm.deliveryDate)
+    && Boolean(commercialForm.quoteReference.trim())
+    && Boolean(commercialForm.validUntil)
+    && Boolean(commercialForm.evidenceUrl.trim());
 
   return (
     <motion.section
@@ -750,18 +880,72 @@ export function AtlasProcurementWorkspace({
                   </>
                 ) : currentCase.result.stage === "COMMERCIAL_CONFIRMATION" ? (
                   <>
-                    <header><small>Gate 2 of 4</small><h4>Confirm quote and delivery terms</h4><p>Web research is a lead, not a quote. Record the commercial source that a buyer can defend.</p></header>
-                    <div className={styles.procurementFormGrid}>
-                      <label>Unit price<input type="number" min="0.01" step="0.01" value={commercialForm.price} onChange={(event) => setCommercialForm((current) => ({ ...current, price: event.target.value }))} /></label>
-                      <label>Currency<input maxLength={3} value={commercialForm.currency} onChange={(event) => setCommercialForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></label>
-                      <label>MOQ<input type="number" min="0.01" step="0.01" value={commercialForm.minimumOrderQuantity} onChange={(event) => setCommercialForm((current) => ({ ...current, minimumOrderQuantity: event.target.value }))} /></label>
-                      <label>Unit<input maxLength={20} value={commercialForm.unitOfMeasure} onChange={(event) => setCommercialForm((current) => ({ ...current, unitOfMeasure: event.target.value.toUpperCase() }))} placeholder="EA" /></label>
-                      <label>Delivery date<input type="date" value={commercialForm.deliveryDate} onChange={(event) => setCommercialForm((current) => ({ ...current, deliveryDate: event.target.value }))} /></label>
-                      <label>Quote reference<input value={commercialForm.quoteReference} onChange={(event) => setCommercialForm((current) => ({ ...current, quoteReference: event.target.value }))} placeholder="Quote number or dated offer" /></label>
-                      <label>Valid until<input type="date" value={commercialForm.validUntil} onChange={(event) => setCommercialForm((current) => ({ ...current, validUntil: event.target.value }))} /></label>
-                      <label className={styles.procurementWideField}>Evidence URL<input type="url" value={commercialForm.evidenceUrl} onChange={(event) => setCommercialForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>
-                    </div>
-                    <button type="button" disabled={gateActionState === "saving"} onClick={confirmCommercialTerms}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} Confirm commercial terms</button>
+                    <header><small>Gate 2 of 4</small><h4>Run the supplier quote cycle</h4><p>Prepare the request, record how it was sent outside Derya, then select a sourced supplier response.</p></header>
+                    {!currentCase.quoteCycle || currentCase.quoteCycle.status === "PLANNED" ? (
+                      <section className={styles.purchaseApprovalRequest}>
+                        <p><strong>{currentCase.quoteCycle ? `Quote request revision ${currentCase.quoteCycle.result?.revision}` : "Quote request"}</strong></p>
+                        <div className={styles.procurementFormGrid}>
+                          <label>Quantity<input type="number" min="0.01" step="0.01" value={quoteRequestForm.quantity} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
+                          <label>Unit<input maxLength={20} value={quoteRequestForm.unitOfMeasure} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, unitOfMeasure: event.target.value.toUpperCase() }))} placeholder="EA" /></label>
+                          <label>Need by<input type="date" value={quoteRequestForm.needBy} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, needBy: event.target.value }))} /></label>
+                          <label>Response due<input type="date" value={quoteRequestForm.responseDue} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, responseDue: event.target.value }))} /></label>
+                          <label className={styles.procurementWideField}>Ship to<input value={quoteRequestForm.shipTo} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, shipTo: event.target.value }))} /></label>
+                          <label className={styles.procurementWideField}>Requirements<textarea value={quoteRequestForm.requirements} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, requirements: event.target.value }))} placeholder="Specification, certification, packaging, and delivery requirements" /></label>
+                          <label className={styles.procurementWideField}>Internal note<textarea value={quoteRequestForm.note} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional buyer context" /></label>
+                        </div>
+                        <button type="button" disabled={gateActionState === "saving" || !quoteRequestComplete} onClick={saveQuoteRequest}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {currentCase.quoteCycle ? "Update quote request" : "Save quote request"}</button>
+                        <p>This is an internal draft. It does not contact the supplier.</p>
+                      </section>
+                    ) : null}
+                    {currentCase.quoteCycle?.status === "PLANNED" && currentCase.quoteCycle.result ? (
+                      <section className={styles.purchaseApprovalRequest}>
+                        <p><strong>Record external release</strong></p>
+                        <div className={styles.procurementFormGrid}>
+                          <label>Channel<select value={quoteReleaseForm.channel} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, channel: event.target.value as typeof current.channel }))}><option value="EMAIL">Email</option><option value="SUPPLIER_PORTAL">Supplier portal</option><option value="EDI">EDI</option><option value="PHONE_CONFIRMED">Phone confirmed</option><option value="OTHER">Other</option></select></label>
+                          <label>Released on<input type="date" value={quoteReleaseForm.releasedOn} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, releasedOn: event.target.value }))} /></label>
+                          <label className={styles.procurementWideField}>Release evidence URL<input type="url" value={quoteReleaseForm.evidenceUrl} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>
+                          <label className={styles.procurementWideField}>Release note<textarea value={quoteReleaseForm.note} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional external-send context" /></label>
+                        </div>
+                        <button type="button" disabled={gateActionState === "saving" || !quoteReleaseComplete} onClick={recordQuoteRelease}><ArrowRight size={14} /> Record external release</button>
+                        <p>Derya records the evidence. It does not send this request.</p>
+                      </section>
+                    ) : null}
+                    {currentCase.quoteCycle?.status === "RUNNING" && currentCase.quoteCycle.result ? (
+                      <>
+                        <section className={styles.purchaseAuthorizationState}>
+                          <CheckCircle2 size={20} />
+                          <div><strong>{currentCase.quoteCycle.result.responses.length ? "Supplier responses received" : "Awaiting supplier response"}</strong><p>External request release recorded for {currentCase.quoteCycle.result.release?.releasedOn}. No message was sent by Derya.</p></div>
+                        </section>
+                        {currentCase.quoteCycle.result.responses.map((response) => (
+                          <section className={styles.purchaseApprovalRequest} key={response.responseHash}>
+                            <dl className={styles.purchaseDraftSummary}>
+                              <div><dt>Quote</dt><dd>{response.quoteReference}</dd></div>
+                              <div><dt>Unit price</dt><dd>{formatMoney(response.price, response.currency)}</dd></div>
+                              <div><dt>MOQ</dt><dd>{response.minimumOrderQuantity} {response.unitOfMeasure}</dd></div>
+                              <div><dt>Delivery</dt><dd>{response.deliveryDate}</dd></div>
+                            </dl>
+                            <p>Received {response.receivedOn}, valid through {response.validUntil}. <a href={response.evidenceUrl} target="_blank" rel="noreferrer">Open evidence</a></p>
+                            <button type="button" disabled={gateActionState === "saving"} onClick={() => confirmCommercialTerms(response.responseHash)}><Check size={14} /> Use quote</button>
+                          </section>
+                        ))}
+                        <section className={styles.purchaseApprovalRequest}>
+                          <p><strong>Record supplier response</strong></p>
+                          <div className={styles.procurementFormGrid}>
+                            <label>Received on<input type="date" value={commercialForm.receivedOn} onChange={(event) => setCommercialForm((current) => ({ ...current, receivedOn: event.target.value }))} /></label>
+                            <label>Unit price<input type="number" min="0.01" step="0.01" value={commercialForm.price} onChange={(event) => setCommercialForm((current) => ({ ...current, price: event.target.value }))} /></label>
+                            <label>Currency<input maxLength={3} value={commercialForm.currency} onChange={(event) => setCommercialForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></label>
+                            <label>MOQ<input type="number" min="0.01" step="0.01" value={commercialForm.minimumOrderQuantity} onChange={(event) => setCommercialForm((current) => ({ ...current, minimumOrderQuantity: event.target.value }))} /></label>
+                            <label>Unit<input maxLength={20} value={commercialForm.unitOfMeasure} onChange={(event) => setCommercialForm((current) => ({ ...current, unitOfMeasure: event.target.value.toUpperCase() }))} placeholder="EA" /></label>
+                            <label>Delivery date<input type="date" value={commercialForm.deliveryDate} onChange={(event) => setCommercialForm((current) => ({ ...current, deliveryDate: event.target.value }))} /></label>
+                            <label>Quote reference<input value={commercialForm.quoteReference} onChange={(event) => setCommercialForm((current) => ({ ...current, quoteReference: event.target.value }))} placeholder="Supplier quote number" /></label>
+                            <label>Valid until<input type="date" value={commercialForm.validUntil} onChange={(event) => setCommercialForm((current) => ({ ...current, validUntil: event.target.value }))} /></label>
+                            <label className={styles.procurementWideField}>Quote evidence URL<input type="url" value={commercialForm.evidenceUrl} onChange={(event) => setCommercialForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>
+                            <label className={styles.procurementWideField}>Response note<textarea value={commercialForm.note} onChange={(event) => setCommercialForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional exclusions or supplier conditions" /></label>
+                          </div>
+                          <button type="button" disabled={gateActionState === "saving" || !quoteResponseComplete} onClick={recordQuoteResponse}><PackageCheck size={14} /> Record quote response</button>
+                        </section>
+                      </>
+                    ) : null}
                   </>
                 ) : currentCase.result.stage === "QUALITY_REVIEW" ? (
                   <>

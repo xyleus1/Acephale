@@ -11,6 +11,9 @@ const TASK_TYPE = "PROCUREMENT_CASE";
 const APPROVAL_TASK_TYPE = "PROCUREMENT_APPROVAL";
 const APPROVAL_CAPABILITY = "review.procurement_selection";
 const APPROVAL_REQUIRED_ROLE = "MANAGER";
+const QUOTE_CYCLE_TASK_TYPE = "SUPPLIER_QUOTE_CYCLE";
+const QUOTE_CYCLE_CAPABILITY = "record.supplier_quote_cycle";
+const QUOTE_CHANNELS = ["EMAIL", "SUPPLIER_PORTAL", "EDI", "PHONE_CONFIRMED", "OTHER"] as const;
 const PURCHASE_DRAFT_TASK_TYPE = "PURCHASE_ORDER_DRAFT";
 const PURCHASE_DRAFT_CAPABILITY = "draft.purchase_order";
 const PURCHASE_ACTION_TASK_TYPE = "PURCHASE_ORDER_ACTION";
@@ -326,8 +329,11 @@ const caseSelect = {
 
 const purchaseDraftSelect = {
   id: true,
+  parentTaskId: true,
   status: true,
   taskKey: true,
+  taskType: true,
+  capabilityKey: true,
   input: true,
   inputHash: true,
   result: true,
@@ -387,41 +393,64 @@ export async function listProcurementCases(context: SupplyAccessContext) {
     },
     orderBy: { updatedAt: "desc" },
     take: 60,
-    select: {
-      ...caseSelect,
-      childTasks: {
-        where: {
-          officeId: context.officeId,
-          workspaceId: workspace.id,
-          taskType: PURCHASE_DRAFT_TASK_TYPE,
-          status: { in: ["PLANNED", "BLOCKED", "READY", "RUNNING", "SUCCEEDED"] },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 1,
-        select: {
-          ...purchaseDraftSelect,
-          childTasks: {
-            where: {
-              officeId: context.officeId,
-              workspaceId: workspace.id,
-              taskType: PURCHASE_ACTION_TASK_TYPE,
-              status: { in: ["PLANNED", "BLOCKED", "READY", "RUNNING", "SUCCEEDED"] },
-            },
-            orderBy: { updatedAt: "desc" },
-            take: 1,
-            select: purchaseActionSelect,
+    select: caseSelect,
+  });
+  if (!cases.length) return [];
+  const caseIds = cases.map((procurementCase) => procurementCase.id);
+  const [quoteCycles, purchaseDrafts] = await Promise.all([
+    prisma.supplyExecutionTask.findMany({
+      where: {
+        officeId: context.officeId,
+        workspaceId: workspace.id,
+        parentTaskId: { in: caseIds },
+        taskType: QUOTE_CYCLE_TASK_TYPE,
+        status: { in: ["PLANNED", "RUNNING"] },
+      },
+      orderBy: { updatedAt: "desc" },
+      select: purchaseDraftSelect,
+    }),
+    prisma.supplyExecutionTask.findMany({
+      where: {
+        officeId: context.officeId,
+        workspaceId: workspace.id,
+        parentTaskId: { in: caseIds },
+        taskType: PURCHASE_DRAFT_TASK_TYPE,
+        status: { in: ["PLANNED", "BLOCKED", "READY", "RUNNING", "SUCCEEDED"] },
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        ...purchaseDraftSelect,
+        childTasks: {
+          where: {
+            officeId: context.officeId,
+            workspaceId: workspace.id,
+            taskType: PURCHASE_ACTION_TASK_TYPE,
+            status: { in: ["PLANNED", "BLOCKED", "READY", "RUNNING", "SUCCEEDED"] },
           },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+          select: purchaseActionSelect,
         },
       },
-    },
-  });
-  return cases.map(({ childTasks, ...procurementCase }) => {
-    const activeDraft = childTasks[0] ?? null;
-    if (!activeDraft) return { ...procurementCase, purchaseDraft: null, purchaseAction: null };
+    }),
+  ]);
+  const quoteCycleByCase = new Map<string, (typeof quoteCycles)[number]>();
+  for (const quoteCycle of quoteCycles) {
+    if (quoteCycle.parentTaskId && !quoteCycleByCase.has(quoteCycle.parentTaskId)) quoteCycleByCase.set(quoteCycle.parentTaskId, quoteCycle);
+  }
+  const purchaseDraftByCase = new Map<string, (typeof purchaseDrafts)[number]>();
+  for (const purchaseDraft of purchaseDrafts) {
+    if (purchaseDraft.parentTaskId && !purchaseDraftByCase.has(purchaseDraft.parentTaskId)) purchaseDraftByCase.set(purchaseDraft.parentTaskId, purchaseDraft);
+  }
+  return cases.map((procurementCase) => {
+    const quoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
+    const activeDraft = purchaseDraftByCase.get(procurementCase.id) ?? null;
+    if (!activeDraft) return { ...procurementCase, quoteCycle, purchaseDraft: null, purchaseAction: null };
     const { childTasks: purchaseActions, ...purchaseDraft } = activeDraft;
     const activeAction = purchaseActions[0] ?? null;
     return {
       ...procurementCase,
+      quoteCycle,
       purchaseDraft,
       purchaseAction: activeAction
         ? purchaseActionView(activeAction)
@@ -446,6 +475,24 @@ async function cancelPendingApproval(tx: Prisma.TransactionClient, value: Prisma
       data: { status: "CANCELLED", cancelledAt: new Date() },
     });
   }
+}
+
+async function cancelActiveQuoteCycles(
+  tx: Prisma.TransactionClient,
+  procurementCaseId: string,
+  officeId: string,
+  workspaceId: string,
+) {
+  await tx.supplyExecutionTask.updateMany({
+    where: {
+      officeId,
+      workspaceId,
+      parentTaskId: procurementCaseId,
+      taskType: QUOTE_CYCLE_TASK_TYPE,
+      status: { in: ["PLANNED", "RUNNING"] },
+    },
+    data: { status: "CANCELLED", cancelledAt: new Date() },
+  });
 }
 
 async function cancelActivePurchaseDrafts(
@@ -606,6 +653,7 @@ export async function saveProcurementSelection(args: {
         if (existing) {
           await cancelPendingApproval(tx, existing.result);
           await cancelActivePurchaseDrafts(tx, existing.id, args.context.officeId, workspace.id);
+          await cancelActiveQuoteCycles(tx, existing.id, args.context.officeId, workspace.id);
         }
         const task = existing
           ? await tx.supplyExecutionTask.update({
@@ -674,6 +722,465 @@ function resetApproval(result: Record<string, unknown>, gates: Record<string, un
   };
 }
 
+function normalizeQuoteRequest(input: unknown) {
+  const body = record(input);
+  const quantity = positiveNumber(body.quantity, "Requested quantity");
+  if (quantity > 1_000_000_000) {
+    throw new SupplyPersistenceError("Requested quantity must not exceed 1,000,000,000.", "invalid_input");
+  }
+  const responseDue = requireCurrentOrFutureDate(isoDate(body.responseDue, "Response due date"), "Response due date");
+  const needBy = requireCurrentOrFutureDate(isoDate(body.needBy, "Need-by date"), "Need-by date");
+  if (responseDue > needBy) {
+    throw new SupplyPersistenceError("Response due date cannot be after the need-by date.", "invalid_input");
+  }
+  return {
+    expectedSelectionHash: requiredText(body.expectedSelectionHash, "Selection hash", 128),
+    expectedRevision: nonNegativeInteger(body.expectedRevision, "Expected quote-request revision"),
+    quantity,
+    unitOfMeasure: normalizedUnitOfMeasure(body.unitOfMeasure),
+    needBy,
+    shipTo: requiredText(body.shipTo, "Ship-to location", 500),
+    responseDue,
+    requirements: requiredText(body.requirements, "Quote requirements", 2_000),
+    note: optionalText(body.note, "Quote-request note", 2_000),
+  };
+}
+
+function quoteCycleCaseView(
+  procurementCase: Prisma.SupplyExecutionTaskGetPayload<{ select: typeof caseSelect }>,
+  quoteCycle: Prisma.SupplyExecutionTaskGetPayload<{ select: typeof purchaseDraftSelect }>,
+) {
+  return { ...procurementCase, quoteCycle, purchaseDraft: null, purchaseAction: null };
+}
+
+export async function saveSupplierQuoteRequest(args: {
+  context: SupplyAccessContext;
+  caseId: string;
+  input: unknown;
+}) {
+  const requestInput = normalizeQuoteRequest(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} AND "taskType" = ${QUOTE_CYCLE_TASK_TYPE} ORDER BY "id" FOR UPDATE`);
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: { id: args.caseId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: TASK_TYPE, status: "PLANNED" },
+          select: caseSelect,
+        });
+        if (!procurementCase) throw new SupplyPersistenceError("Planned procurement case was not found.", "not_found");
+        const current = caseResult(procurementCase.result);
+        if (current.result.selectionHash !== requestInput.expectedSelectionHash) {
+          throw new SupplyPersistenceError("Supplier selection changed. Reload before preparing the quote request.", "conflict");
+        }
+        if (current.gates.sourceEvidence !== "EVIDENCE_COMPLETE" || current.gates.commercialTerms === "EVIDENCE_COMPLETE") {
+          throw new SupplyPersistenceError("The quote request is available only after supplier review and before commercial confirmation.", "conflict");
+        }
+        const existing = await tx.supplyExecutionTask.findFirst({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: procurementCase.id,
+            taskType: QUOTE_CYCLE_TASK_TYPE,
+            status: { in: ["PLANNED", "RUNNING"] },
+          },
+          orderBy: { updatedAt: "desc" },
+          select: purchaseDraftSelect,
+        });
+        if (existing?.status === "RUNNING") {
+          throw new SupplyPersistenceError("The supplier quote request is already released and cannot be edited.", "conflict");
+        }
+        const existingResult = record(existing?.result);
+        const request = {
+          quantity: new Prisma.Decimal(requestInput.quantity).toString(),
+          unitOfMeasure: requestInput.unitOfMeasure,
+          needBy: requestInput.needBy,
+          shipTo: requestInput.shipTo,
+          responseDue: requestInput.responseDue,
+          requirements: requestInput.requirements,
+          note: requestInput.note,
+        };
+        const requestHash = digest(request);
+        if (existing && existingResult.requestHash === requestHash) {
+          return { procurementCase: quoteCycleCaseView(procurementCase, existing), quoteCycle: existing };
+        }
+        const currentRevision = typeof existingResult.revision === "number" ? existingResult.revision : 0;
+        if (requestInput.expectedRevision !== currentRevision) {
+          throw new SupplyPersistenceError("The quote request changed in another session. Reload before saving.", "conflict");
+        }
+        const now = new Date();
+        const revision = currentRevision + 1;
+        const taskInput = {
+          procurementCaseId: procurementCase.id,
+          selectionHash: requestInput.expectedSelectionHash,
+          supplier: {
+            id: requiredText(current.selectedOption.id, "Supplier ID", 300),
+            name: requiredText(current.selectedOption.name, "Supplier name", 300),
+            sourceUrl: typeof current.selectedOption.sourceUrl === "string" ? current.selectedOption.sourceUrl : null,
+          },
+        };
+        const result = {
+          state: "DRAFT",
+          revision,
+          request,
+          requestHash,
+          release: null,
+          responses: [],
+          selectedResponseHash: null,
+          externalSideEffect: false,
+          updatedAt: now.toISOString(),
+        };
+        const priorCycles = existing ? 0 : await tx.supplyExecutionTask.count({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: procurementCase.id,
+            taskType: QUOTE_CYCLE_TASK_TYPE,
+          },
+        });
+        const quoteCycle = existing
+          ? await tx.supplyExecutionTask.update({
+              where: { id: existing.id },
+              data: { result: inputJson(result), resultHash: digest(result) },
+              select: purchaseDraftSelect,
+            })
+          : await tx.supplyExecutionTask.create({
+              data: {
+                officeId: args.context.officeId,
+                workspaceId: workspace.id,
+                createdByUserId: args.context.userId,
+                parentTaskId: procurementCase.id,
+                taskKey: `supplier-quote:${procurementCase.id}:${requestInput.expectedSelectionHash}:${priorCycles + 1}`,
+                taskType: QUOTE_CYCLE_TASK_TYPE,
+                capabilityKey: QUOTE_CYCLE_CAPABILITY,
+                requiresApproval: false,
+                input: inputJson(taskInput),
+                inputHash: digest(taskInput),
+                result: inputJson(result),
+                resultHash: digest(result),
+              },
+              select: purchaseDraftSelect,
+            });
+        const projected = {
+          ...current.result,
+          quoteCycle: {
+            taskId: quoteCycle.id,
+            state: "DRAFT",
+            revision,
+            requestHash,
+            responseCount: 0,
+            updatedAt: now.toISOString(),
+          },
+          updatedAt: now.toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projected), resultHash: digest(projected) },
+          select: caseSelect,
+        });
+        const eventPayload = inputJson({ quoteCycleId: quoteCycle.id, revision, request, requestHash });
+        await appendCaseEvent({
+          tx,
+          caseId: quoteCycle.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType: existing ? "SUPPLIER_QUOTE_REQUEST_UPDATED" : "SUPPLIER_QUOTE_REQUEST_DRAFTED",
+          message: existing ? "Supplier quote request draft was updated." : "Supplier quote request draft was created.",
+          payload: eventPayload,
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: procurementCase.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType: existing ? "SUPPLIER_QUOTE_REQUEST_UPDATED" : "SUPPLIER_QUOTE_REQUEST_DRAFTED",
+          message: "Supplier quote request is saved as an internal draft.",
+          payload: eventPayload,
+        });
+        return { procurementCase: quoteCycleCaseView(updatedCase, quoteCycle), quoteCycle };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || attempt === 2) {
+        if (retryableTransactionError(error)) throw new SupplyPersistenceError("Quote request changed concurrently. Reload and retry.", "conflict");
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Supplier quote request could not be saved.", "conflict");
+}
+
+function normalizeQuoteRelease(input: unknown) {
+  const body = record(input);
+  const channel = requiredText(body.channel, "Release channel", 40).toUpperCase();
+  if (!QUOTE_CHANNELS.includes(channel as (typeof QUOTE_CHANNELS)[number])) {
+    throw new SupplyPersistenceError(`Release channel must be one of: ${QUOTE_CHANNELS.join(", ")}.`, "invalid_input");
+  }
+  return {
+    expectedRequestHash: requiredText(body.expectedRequestHash, "Quote request hash", 128),
+    channel: channel as (typeof QUOTE_CHANNELS)[number],
+    releasedOn: requireCurrentOrPastDate(isoDate(body.releasedOn, "Release date"), "Release date"),
+    evidenceUrl: publicUrl(body.evidenceUrl, "Release evidence URL"),
+    note: optionalText(body.note, "Release note", 2_000),
+  };
+}
+
+export async function recordSupplierQuoteRelease(args: {
+  context: SupplyAccessContext;
+  quoteCycleId: string;
+  input: unknown;
+}) {
+  const releaseInput = normalizeQuoteRelease(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const found = await prisma.supplyExecutionTask.findFirst({
+    where: { id: args.quoteCycleId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: QUOTE_CYCLE_TASK_TYPE },
+    select: { parentTaskId: true },
+  });
+  if (!found?.parentTaskId) throw new SupplyPersistenceError("Supplier quote request was not found.", "not_found");
+  const procurementCaseId = found.parentTaskId;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.quoteCycleId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: { id: procurementCaseId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: TASK_TYPE, status: "PLANNED" },
+          select: caseSelect,
+        });
+        const quoteCycle = await tx.supplyExecutionTask.findFirst({
+          where: { id: args.quoteCycleId, officeId: args.context.officeId, workspaceId: workspace.id, parentTaskId: procurementCaseId, taskType: QUOTE_CYCLE_TASK_TYPE, status: { in: ["PLANNED", "RUNNING"] } },
+          select: purchaseDraftSelect,
+        });
+        if (!procurementCase || !quoteCycle) throw new SupplyPersistenceError("Active supplier quote request was not found.", "not_found");
+        const current = caseResult(procurementCase.result);
+        const cycleInput = record(quoteCycle.input);
+        const cycleResult = record(quoteCycle.result);
+        if (cycleInput.selectionHash !== current.result.selectionHash || cycleResult.requestHash !== releaseInput.expectedRequestHash) {
+          throw new SupplyPersistenceError("Supplier or quote request changed. Reload before recording release.", "conflict");
+        }
+        const normalizedRelease = {
+          channel: releaseInput.channel,
+          releasedOn: releaseInput.releasedOn,
+          evidenceUrl: releaseInput.evidenceUrl,
+          note: releaseInput.note,
+        };
+        const releaseHash = digest(normalizedRelease);
+        const existingRelease = record(cycleResult.release);
+        if (existingRelease.releaseHash === releaseHash) {
+          return { procurementCase: quoteCycleCaseView(procurementCase, quoteCycle), quoteCycle, release: existingRelease };
+        }
+        if (typeof existingRelease.releaseHash === "string" || quoteCycle.status !== "PLANNED") {
+          throw new SupplyPersistenceError("A different external release is already recorded for this quote request.", "conflict");
+        }
+        const now = new Date();
+        const release = {
+          ...normalizedRelease,
+          evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
+          releaseHash,
+          recordedByUserId: args.context.userId,
+          recordedAt: now.toISOString(),
+        };
+        const result = {
+          ...cycleResult,
+          state: "AWAITING_RESPONSE",
+          release,
+          externalSideEffect: "RECORDED_ONLY",
+          updatedAt: now.toISOString(),
+        };
+        await tx.supplyExecutionTask.update({
+          where: { id: quoteCycle.id },
+          data: { status: "READY" },
+        });
+        const updatedCycle = await tx.supplyExecutionTask.update({
+          where: { id: quoteCycle.id },
+          data: { status: "RUNNING", startedAt: now, result: inputJson(result), resultHash: digest(result) },
+          select: purchaseDraftSelect,
+        });
+        const projected = {
+          ...current.result,
+          quoteCycle: {
+            taskId: quoteCycle.id,
+            state: "AWAITING_RESPONSE",
+            revision: cycleResult.revision,
+            requestHash: cycleResult.requestHash,
+            responseCount: 0,
+            releasedOn: release.releasedOn,
+            updatedAt: now.toISOString(),
+          },
+          updatedAt: now.toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projected), resultHash: digest(projected) },
+          select: caseSelect,
+        });
+        const eventPayload = inputJson({ quoteCycleId: quoteCycle.id, release });
+        await appendCaseEvent({ tx, caseId: quoteCycle.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED", status: "RUNNING", message: "External supplier quote-request release was recorded.", payload: eventPayload });
+        await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED", message: "The quote request is awaiting a supplier response.", payload: eventPayload });
+        return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, release };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || attempt === 2) {
+        if (retryableTransactionError(error)) throw new SupplyPersistenceError("Quote-request release changed concurrently. Reload and retry.", "conflict");
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Supplier quote-request release could not be recorded.", "conflict");
+}
+
+function normalizeQuoteResponse(input: unknown) {
+  const body = record(input);
+  const price = positiveNumber(body.price, "Price");
+  const minimumOrderQuantity = positiveNumber(body.minimumOrderQuantity, "Minimum order quantity");
+  if (price > 1_000_000_000_000 || minimumOrderQuantity > 1_000_000_000) {
+    throw new SupplyPersistenceError("Quote price or minimum order quantity exceeds the supported limit.", "invalid_input");
+  }
+  const currency = requiredText(body.currency, "Currency", 3).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) throw new SupplyPersistenceError("Currency must be a three-letter ISO code.", "invalid_input");
+  const receivedOn = requireCurrentOrPastDate(isoDate(body.receivedOn, "Response date"), "Response date");
+  const deliveryDate = requireCurrentOrFutureDate(isoDate(body.deliveryDate, "Delivery date"), "Delivery date");
+  const validUntil = requireCurrentOrFutureDate(isoDate(body.validUntil, "Quote validity date"), "Quote validity date");
+  if (deliveryDate < receivedOn || validUntil < receivedOn) {
+    throw new SupplyPersistenceError("Delivery and quote validity cannot precede the supplier response.", "invalid_input");
+  }
+  return {
+    expectedRequestHash: requiredText(body.expectedRequestHash, "Quote request hash", 128),
+    receivedOn,
+    price,
+    currency,
+    minimumOrderQuantity,
+    unitOfMeasure: normalizedUnitOfMeasure(body.unitOfMeasure),
+    deliveryDate,
+    quoteReference: requiredText(body.quoteReference, "Quote reference", 300),
+    validUntil,
+    evidenceUrl: publicUrl(body.evidenceUrl, "Supplier quote evidence URL"),
+    note: optionalText(body.note, "Supplier quote note", 2_000),
+  };
+}
+
+export async function recordSupplierQuoteResponse(args: {
+  context: SupplyAccessContext;
+  quoteCycleId: string;
+  input: unknown;
+}) {
+  const responseInput = normalizeQuoteResponse(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const found = await prisma.supplyExecutionTask.findFirst({
+    where: { id: args.quoteCycleId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: QUOTE_CYCLE_TASK_TYPE },
+    select: { parentTaskId: true },
+  });
+  if (!found?.parentTaskId) throw new SupplyPersistenceError("Supplier quote request was not found.", "not_found");
+  const procurementCaseId = found.parentTaskId;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.quoteCycleId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: { id: procurementCaseId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: TASK_TYPE, status: "PLANNED" },
+          select: caseSelect,
+        });
+        const quoteCycle = await tx.supplyExecutionTask.findFirst({
+          where: { id: args.quoteCycleId, officeId: args.context.officeId, workspaceId: workspace.id, parentTaskId: procurementCaseId, taskType: QUOTE_CYCLE_TASK_TYPE, status: "RUNNING" },
+          select: purchaseDraftSelect,
+        });
+        if (!procurementCase || !quoteCycle) throw new SupplyPersistenceError("Released supplier quote request was not found.", "not_found");
+        const current = caseResult(procurementCase.result);
+        const cycleInput = record(quoteCycle.input);
+        const cycleResult = record(quoteCycle.result);
+        const release = record(cycleResult.release);
+        const request = record(cycleResult.request);
+        if (cycleInput.selectionHash !== current.result.selectionHash || cycleResult.requestHash !== responseInput.expectedRequestHash) {
+          throw new SupplyPersistenceError("Supplier or quote request changed. Reload before recording the response.", "conflict");
+        }
+        if (typeof release.releaseHash !== "string" || typeof release.releasedOn !== "string") {
+          throw new SupplyPersistenceError("Record the external quote-request release before its supplier response.", "conflict");
+        }
+        if (responseInput.receivedOn < release.releasedOn) {
+          throw new SupplyPersistenceError("Supplier response cannot precede the recorded quote-request release.", "invalid_input");
+        }
+        const requestedUnit = normalizedUnitOfMeasure(request.unitOfMeasure, "Requested unit");
+        if (responseInput.unitOfMeasure !== requestedUnit) {
+          throw new SupplyPersistenceError(`Supplier quote unit must match the requested unit ${requestedUnit}.`, "invalid_input");
+        }
+        const normalizedResponse = {
+          receivedOn: responseInput.receivedOn,
+          price: new Prisma.Decimal(responseInput.price).toString(),
+          currency: responseInput.currency,
+          minimumOrderQuantity: new Prisma.Decimal(responseInput.minimumOrderQuantity).toString(),
+          unitOfMeasure: responseInput.unitOfMeasure,
+          deliveryDate: responseInput.deliveryDate,
+          quoteReference: responseInput.quoteReference,
+          validUntil: responseInput.validUntil,
+          evidenceUrl: responseInput.evidenceUrl,
+          note: responseInput.note,
+        };
+        const responseHash = digest(normalizedResponse);
+        const responses = Array.isArray(cycleResult.responses) ? cycleResult.responses.map((value) => record(value)) : [];
+        const repeated = responses.find((response) => response.responseHash === responseHash);
+        if (repeated) return { procurementCase: quoteCycleCaseView(procurementCase, quoteCycle), quoteCycle, response: repeated };
+        const now = new Date();
+        const response = {
+          ...normalizedResponse,
+          evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
+          responseHash,
+          recordedByUserId: args.context.userId,
+          recordedAt: now.toISOString(),
+        };
+        const result = {
+          ...cycleResult,
+          state: typeof cycleResult.selectedResponseHash === "string" ? "RESPONSE_SELECTED" : "RESPONSES_RECEIVED",
+          responses: [...responses, response],
+          updatedAt: now.toISOString(),
+        };
+        const updatedCycle = await tx.supplyExecutionTask.update({
+          where: { id: quoteCycle.id },
+          data: { result: inputJson(result), resultHash: digest(result) },
+          select: purchaseDraftSelect,
+        });
+        const projected = {
+          ...current.result,
+          quoteCycle: {
+            taskId: quoteCycle.id,
+            state: result.state,
+            revision: cycleResult.revision,
+            requestHash: cycleResult.requestHash,
+            responseCount: responses.length + 1,
+            releasedOn: release.releasedOn,
+            lastQuoteReference: response.quoteReference,
+            updatedAt: now.toISOString(),
+          },
+          updatedAt: now.toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projected), resultHash: digest(projected) },
+          select: caseSelect,
+        });
+        const eventPayload = inputJson({ quoteCycleId: quoteCycle.id, response });
+        await appendCaseEvent({ tx, caseId: quoteCycle.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED", status: "RUNNING", message: "Supplier quote response was recorded.", payload: eventPayload });
+        await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED", message: "A supplier quote response is ready for commercial review.", payload: eventPayload });
+        return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, response };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || attempt === 2) {
+        if (retryableTransactionError(error)) throw new SupplyPersistenceError("Supplier quote response changed concurrently. Reload and retry.", "conflict");
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Supplier quote response could not be recorded.", "conflict");
+}
+
 export async function reviewProcurementGate(args: {
   context: SupplyAccessContext;
   caseId: string;
@@ -688,23 +1195,12 @@ export async function reviewProcurementGate(args: {
   const sourceReviewNote = gate === "SOURCE_EVIDENCE"
     ? requiredText(body.note, "Evidence review note", 2_000)
     : null;
-  let confirmedTermsInput: Record<string, unknown> | null = null;
-  if (gate === "COMMERCIAL_TERMS") {
-    const currency = requiredText(body.currency, "Currency", 3).toUpperCase();
-    if (!/^[A-Z]{3}$/.test(currency)) {
-      throw new SupplyPersistenceError("Currency must be a three-letter ISO code.", "invalid_input");
-    }
-    confirmedTermsInput = {
-      price: positiveNumber(body.price, "Price"),
-      currency,
-      minimumOrderQuantity: positiveNumber(body.minimumOrderQuantity, "Minimum order quantity"),
-      unitOfMeasure: normalizedUnitOfMeasure(body.unitOfMeasure),
-      deliveryDate: requireCurrentOrFutureDate(isoDate(body.deliveryDate, "Delivery date"), "Delivery date"),
-      evidenceUrl: publicUrl(body.evidenceUrl, "Commercial evidence URL"),
-      quoteReference: requiredText(body.quoteReference, "Quote reference", 300),
-      validUntil: requireCurrentOrFutureDate(isoDate(body.validUntil, "Quote validity date"), "Quote validity date"),
-    };
-  }
+  const quoteCycleTaskId = gate === "COMMERCIAL_TERMS"
+    ? requiredText(body.quoteCycleTaskId, "Quote cycle task ID", 220)
+    : null;
+  const quoteResponseHash = gate === "COMMERCIAL_TERMS"
+    ? requiredText(body.responseHash, "Quote response hash", 128)
+    : null;
   let qualityPlanInput: Record<string, unknown> | null = null;
   if (gate === "QUALITY_PLAN") {
     const method = requiredText(body.method, "Quality method", 80);
@@ -764,6 +1260,7 @@ export async function reviewProcurementGate(args: {
           if (record(reviews.sourceEvidence).reviewHash === review.reviewHash) return procurementCase;
           await cancelPendingApproval(tx, procurementCase.result);
           await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
+          await cancelActiveQuoteCycles(tx, procurementCase.id, args.context.officeId, workspace.id);
           reviews = { sourceEvidence: review };
           gates = {
             ...gates,
@@ -774,6 +1271,7 @@ export async function reviewProcurementGate(args: {
           };
           delete result.confirmedTerms;
           delete result.qualityPlan;
+          delete result.quoteCycle;
           result = resetApproval(result, gates);
           eventType = "SOURCE_EVIDENCE_REVIEWED";
           message = "Supplier source evidence was reviewed.";
@@ -781,7 +1279,53 @@ export async function reviewProcurementGate(args: {
           if (gates.sourceEvidence !== "EVIDENCE_COMPLETE") {
             throw new SupplyPersistenceError("Review supplier evidence before confirming commercial terms.", "conflict");
           }
-          const confirmedTerms = confirmedTermsInput!;
+          await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${quoteCycleTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+          const quoteCycle = await tx.supplyExecutionTask.findFirst({
+            where: {
+              id: quoteCycleTaskId!,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              parentTaskId: procurementCase.id,
+              taskType: QUOTE_CYCLE_TASK_TYPE,
+              status: "RUNNING",
+            },
+            select: purchaseDraftSelect,
+          });
+          if (!quoteCycle) throw new SupplyPersistenceError("Released supplier quote cycle was not found.", "not_found");
+          const cycleInput = record(quoteCycle.input);
+          const cycleResult = record(quoteCycle.result);
+          if (cycleInput.selectionHash !== expectedSelectionHash) {
+            throw new SupplyPersistenceError("The supplier quote belongs to a different selection.", "conflict");
+          }
+          const responses = Array.isArray(cycleResult.responses) ? cycleResult.responses.map((value) => record(value)) : [];
+          const response = responses.find((value) => value.responseHash === quoteResponseHash);
+          if (!response) throw new SupplyPersistenceError("The selected supplier quote response was not found.", "not_found");
+          const currency = requiredText(response.currency, "Stored quote currency", 3).toUpperCase();
+          if (!/^[A-Z]{3}$/.test(currency)) throw new SupplyPersistenceError("Stored quote currency is invalid.", "conflict");
+          let price: number;
+          let minimumOrderQuantity: number;
+          try {
+            price = new Prisma.Decimal(requiredText(response.price, "Stored quote price", 80)).toNumber();
+            minimumOrderQuantity = new Prisma.Decimal(requiredText(response.minimumOrderQuantity, "Stored quote MOQ", 80)).toNumber();
+          } catch {
+            throw new SupplyPersistenceError("Stored supplier quote quantities are invalid.", "conflict");
+          }
+          if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(minimumOrderQuantity) || minimumOrderQuantity <= 0) {
+            throw new SupplyPersistenceError("Stored supplier quote quantities are invalid.", "conflict");
+          }
+          const confirmedTerms = {
+            price,
+            currency,
+            minimumOrderQuantity,
+            unitOfMeasure: normalizedUnitOfMeasure(response.unitOfMeasure, "Stored quote unit"),
+            deliveryDate: requireCurrentOrFutureDate(isoDate(response.deliveryDate, "Stored delivery date"), "Stored delivery date"),
+            evidenceUrl: publicUrl(response.evidenceUrl, "Stored quote evidence URL"),
+            quoteReference: requiredText(response.quoteReference, "Stored quote reference", 300),
+            validUntil: requireCurrentOrFutureDate(isoDate(response.validUntil, "Stored quote validity date"), "Stored quote validity date"),
+            quoteCycleTaskId: quoteCycle.id,
+            responseHash: quoteResponseHash!,
+            evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
+          };
           review = {
             ...confirmedTerms,
             reviewedByUserId: args.context.userId,
@@ -800,7 +1344,38 @@ export async function reviewProcurementGate(args: {
             purchaseApproval: "BLOCKED",
           };
           delete result.qualityPlan;
-          result = resetApproval({ ...result, confirmedTerms }, gates);
+          const quoteProjection = record(result.quoteCycle);
+          result = resetApproval({
+            ...result,
+            confirmedTerms,
+            quoteCycle: {
+              ...quoteProjection,
+              state: "RESPONSE_SELECTED",
+              selectedResponseHash: quoteResponseHash,
+              updatedAt: now,
+            },
+          }, gates);
+          const selectedCycleResult = {
+            ...cycleResult,
+            state: "RESPONSE_SELECTED",
+            selectedResponseHash: quoteResponseHash,
+            updatedAt: now,
+          };
+          await tx.supplyExecutionTask.update({
+            where: { id: quoteCycle.id },
+            data: { result: inputJson(selectedCycleResult), resultHash: digest(selectedCycleResult) },
+          });
+          await appendCaseEvent({
+            tx,
+            caseId: quoteCycle.id,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            actorUserId: args.context.userId,
+            eventType: "SUPPLIER_QUOTE_RESPONSE_SELECTED",
+            status: "RUNNING",
+            message: "Supplier quote response was selected for commercial review.",
+            payload: inputJson({ responseHash: quoteResponseHash, selectionHash: expectedSelectionHash }),
+          });
           eventType = "COMMERCIAL_TERMS_CONFIRMED";
           message = "Supplier commercial terms were confirmed.";
         } else {
@@ -1440,6 +2015,12 @@ export async function savePurchaseOrderDraft(args: {
         if (!/^[A-Z]{3}$/.test(currency)) {
           throw new SupplyPersistenceError("Approved currency is invalid.", "conflict");
         }
+        const quoteCycleTaskId = requiredText(approvedTerms.quoteCycleTaskId, "Approved quote cycle task ID", 220);
+        const quoteResponseHash = requiredText(approvedTerms.responseHash, "Approved quote response hash", 128);
+        const quoteEvidenceUrl = publicUrl(approvedTerms.evidenceUrl, "Approved quote evidence URL");
+        if (approvedTerms.evidenceClass !== "OPERATOR_RECORDED_EXTERNAL") {
+          throw new SupplyPersistenceError("Approved quote evidence class is invalid.", "conflict");
+        }
         const order = {
           quantity: quantity.toString(),
           unitOfMeasure,
@@ -1502,6 +2083,10 @@ export async function savePurchaseOrderDraft(args: {
             quoteReference: requiredText(approvedTerms.quoteReference, "Approved quote reference", 300),
             quoteValidUntil: approvedTerms.validUntil,
             deliveryDate: approvedTerms.deliveryDate,
+            quoteCycleTaskId,
+            quoteResponseHash,
+            quoteEvidenceUrl,
+            evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
           },
           totals: {
             materialSubtotal: quantity.mul(unitPrice).toDecimalPlaces(2).toString(),
@@ -2235,6 +2820,35 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         const actionInput = record(purchaseAction.input);
         const order = record(actionInput.order);
         const commercial = record(actionInput.commercial);
+        const rawQuoteCycleTaskId = commercial.quoteCycleTaskId;
+        const rawQuoteResponseHash = commercial.quoteResponseHash;
+        const hasQuoteCycleTaskId = rawQuoteCycleTaskId !== undefined && rawQuoteCycleTaskId !== null;
+        const hasQuoteResponseHash = rawQuoteResponseHash !== undefined && rawQuoteResponseHash !== null;
+        if (hasQuoteCycleTaskId !== hasQuoteResponseHash) {
+          throw new SupplyPersistenceError("Authorized quote provenance is incomplete.", "conflict");
+        }
+        let quoteCycle: { id: string; status: string; result: Prisma.JsonValue | null } | null = null;
+        let quoteResponseHash: string | null = null;
+        if (hasQuoteCycleTaskId && hasQuoteResponseHash) {
+          const quoteCycleTaskId = requiredText(rawQuoteCycleTaskId, "Authorized quote cycle task ID", 220);
+          quoteResponseHash = requiredText(rawQuoteResponseHash, "Authorized quote response hash", 128);
+          await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${quoteCycleTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+          quoteCycle = await tx.supplyExecutionTask.findFirst({
+            where: {
+              id: quoteCycleTaskId,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              parentTaskId: procurementCase.id,
+              taskType: QUOTE_CYCLE_TASK_TYPE,
+              capabilityKey: QUOTE_CYCLE_CAPABILITY,
+              status: { in: ["RUNNING", "SUCCEEDED"] },
+            },
+            select: { id: true, status: true, result: true },
+          });
+          if (!quoteCycle || record(quoteCycle.result).selectedResponseHash !== quoteResponseHash) {
+            throw new SupplyPersistenceError("Authorized quote provenance no longer matches the selected supplier response.", "conflict");
+          }
+        }
         let orderedQuantity: Prisma.Decimal;
         let unitPrice: Prisma.Decimal;
         try {
@@ -2358,6 +2972,23 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             where: { id: purchaseDraft.id },
             data: { status: "SUCCEEDED", completedAt: now },
           });
+          if (quoteCycle?.status === "RUNNING") {
+            await tx.supplyExecutionTask.update({
+              where: { id: quoteCycle.id },
+              data: { status: "SUCCEEDED", completedAt: now },
+            });
+            await appendCaseEvent({
+              tx,
+              caseId: quoteCycle.id,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              actorUserId: args.context.userId,
+              eventType: "SUPPLIER_QUOTE_CYCLE_COMPLETED",
+              status: "SUCCEEDED",
+              message: "The selected supplier quote completed with full order acknowledgment.",
+              payload: inputJson({ purchaseActionId: purchaseAction.id, responseHash: quoteResponseHash }),
+            });
+          }
         }
 
         const releaseState = complete ? "ACKNOWLEDGED" : "PARTIALLY_ACKNOWLEDGED";

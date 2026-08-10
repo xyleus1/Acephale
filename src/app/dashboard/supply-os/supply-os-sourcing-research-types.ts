@@ -85,6 +85,9 @@ export type SavedProcurementCase = {
       evidenceUrl: string;
       quoteReference: string;
       validUntil: string;
+      quoteCycleTaskId: string;
+      responseHash: string;
+      evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
     };
     qualityPlan?: {
       method: "SAMPLE" | "PRE_SHIPMENT_INSPECTION" | "DOCUMENT_REVIEW";
@@ -133,7 +136,76 @@ export type SavedProcurementCase = {
       lastConfirmedDeliveryDate: string;
       updatedAt: string;
     };
+    quoteCycle?: {
+      taskId: string;
+      state: "DRAFT" | "AWAITING_RESPONSE" | "RESPONSES_RECEIVED" | "RESPONSE_SELECTED";
+      revision: number;
+      requestHash: string;
+      responseCount: number;
+      releasedOn?: string;
+      lastQuoteReference?: string;
+      selectedResponseHash?: string;
+      updatedAt: string;
+    };
     selectionHash: string;
+    updatedAt: string;
+  } | null;
+  quoteCycle?: {
+    id: string;
+    status: "PLANNED" | "RUNNING" | "CANCELLED";
+    taskKey: string;
+    taskType: "SUPPLIER_QUOTE_CYCLE";
+    capabilityKey: "record.supplier_quote_cycle";
+    input: {
+      procurementCaseId: string;
+      selectionHash: string;
+      supplier: { id: string; name: string; sourceUrl: string | null };
+    };
+    resultHash: string | null;
+    result: {
+      state: "DRAFT" | "AWAITING_RESPONSE" | "RESPONSES_RECEIVED" | "RESPONSE_SELECTED";
+      revision: number;
+      request: {
+        quantity: string;
+        unitOfMeasure: string;
+        needBy: string;
+        shipTo: string;
+        responseDue: string;
+        requirements: string;
+        note: string | null;
+      };
+      requestHash: string;
+      release: {
+        channel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
+        releasedOn: string;
+        evidenceUrl: string;
+        note: string | null;
+        releaseHash: string;
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
+        recordedByUserId: string;
+        recordedAt: string;
+      } | null;
+      responses: Array<{
+        receivedOn: string;
+        price: string;
+        currency: string;
+        minimumOrderQuantity: string;
+        unitOfMeasure: string;
+        deliveryDate: string;
+        quoteReference: string;
+        validUntil: string;
+        evidenceUrl: string;
+        note: string | null;
+        responseHash: string;
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
+        recordedByUserId: string;
+        recordedAt: string;
+      }>;
+      selectedResponseHash: string | null;
+      externalSideEffect: false | "RECORDED_ONLY";
+      updatedAt: string;
+    } | null;
+    createdAt: string;
     updatedAt: string;
   } | null;
   purchaseDraft?: {
@@ -168,6 +240,10 @@ export type SavedProcurementCase = {
         quoteReference: string;
         quoteValidUntil: string;
         deliveryDate: string;
+        quoteCycleTaskId: string;
+        quoteResponseHash: string;
+        quoteEvidenceUrl: string;
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
       };
       totals: { materialSubtotal: string; currency: string };
       approvedProcurementScope: { approvalId: string; scopeHash: string };
@@ -206,6 +282,10 @@ export type SavedProcurementCase = {
         quoteReference: string;
         quoteValidUntil: string;
         deliveryDate: string;
+        quoteCycleTaskId: string;
+        quoteResponseHash: string;
+        quoteEvidenceUrl: string;
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
       };
       totals: { materialSubtotal: string; currency: string };
       procurementApproval: { id: string; scopeHash: string };

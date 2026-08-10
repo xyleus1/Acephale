@@ -263,6 +263,21 @@ clear boundaries.
 - The mutable procurement case is not an approval target. Operators complete
   three server-validated gates in order: attributable supplier-source review,
   quote and delivery confirmation, and a named quality acceptance plan.
+- Quote and delivery confirmation requires a persistent
+  `SUPPLIER_QUOTE_CYCLE` child task. A revisioned request records quantity,
+  unit, need-by, destination, response deadline, requirements, and notes. The
+  request remains an internal draft until an operator records external release
+  evidence with channel, date, URL, and note.
+- A released quote cycle stays `RUNNING` while supplier responses are appended and
+  closes only when the selected quote reaches full supplier order acknowledgment.
+  Every response stores exact decimal price and MOQ, unit, delivery, validity,
+  reference, evidence URL, operator, timestamp, and hash. The commercial gate
+  accepts only a response loaded from that office-scoped task by its hash. It
+  never accepts browser-authored commercial terms directly.
+- Request revisions, release, response, and selection append hashed events.
+  Release and response evidence stays `OPERATOR_RECORDED_EXTERNAL`. Recording
+  this evidence does not claim that Derya sent the request or that a supplier
+  connector exists. Supplier changes cancel the active quote cycle.
 - After those gates complete, Supply OS creates a separate immutable
   `PROCUREMENT_APPROVAL` task. Its input contains the exact selected supplier,
   confirmed quote terms, evidence review, and quality plan. `SupplyApproval`
@@ -307,8 +322,9 @@ clear boundaries.
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.
 - Procurement case, gate reviews, sourcing approval, purchase draft, final
-  purchase action, action approval, and hashed event history are office-scoped
-  PostgreSQL records. Unsaved field edits remain browser state.
+  purchase action, supplier quote cycle, action approval, and hashed event
+  history are office-scoped PostgreSQL records. Unsaved field edits remain
+  browser state.
 - After full supplier acknowledgment, a later Logistics integration will create
   a canonical approval-gated
   `SupplyAction`, prefill cargo, quantity, pickup, destination, need-by date,
