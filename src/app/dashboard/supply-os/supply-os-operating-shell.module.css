@@ -40,7 +40,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 88px minmax(0, 1fr);
+  grid-template-rows: 88px minmax(0, 1fr) auto;
   padding: 0 20px 28px;
   border-right: 1px solid var(--os-line);
   color: var(--os-soft);
@@ -148,6 +148,75 @@
   border-radius: 50%;
   background: var(--os-success);
   box-shadow: 0 0 0 4px rgb(63 108 85 / 10%);
+}
+
+.sidebarFooter {
+  padding-top: 16px;
+  border-top: 1px solid var(--os-line);
+}
+
+.sidebarFooter button {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--os-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.sidebarFooter button:hover {
+  color: var(--os-ink);
+  background: var(--os-subtle);
+}
+
+@media (min-width: 901px) {
+  .shell[data-sidebar-collapsed="true"] {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .shell[data-sidebar-collapsed="true"] .operatingSidebar {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .operatingBrand {
+    justify-content: center;
+    margin-right: -12px;
+    margin-left: -12px;
+    padding: 0;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .operatingBrand strong,
+  .shell[data-sidebar-collapsed="true"] .navCopy,
+  .shell[data-sidebar-collapsed="true"] .liveMapDot,
+  .shell[data-sidebar-collapsed="true"] .sidebarFooter span {
+    display: none;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .panelNav button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 0;
+    text-align: center;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .activeRail {
+    left: -5px;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .sidebarFooter button {
+    justify-content: center;
+    padding: 0;
+  }
 }
 
 .workspace {
@@ -299,6 +368,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .panelNav button,
+  .sidebarFooter button,
   .workspaceControls > button {
     transition: none;
   }
@@ -362,6 +432,10 @@
     overflow: hidden;
     border-right: 0;
     border-bottom: 1px solid var(--os-line);
+  }
+
+  .sidebarFooter {
+    display: none;
   }
 
   .operatingBrand {

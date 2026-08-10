@@ -2,6 +2,8 @@
 
 import {
   ArrowLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,6 +47,7 @@ export function SupplyOsOperatingShell({
 }) {
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
   const panelNavRef = useRef<HTMLElement>(null);
   const openWorkspace = useCallback((selection: SupplyOsWorkspaceSelection) => {
@@ -88,7 +91,12 @@ export function SupplyOsOperatingShell({
 
   return (
     <MotionConfig reducedMotion="user" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
-      <main className={`${styles.shell} supply-os-workspace`} data-panel={activePanel} data-company-index={companyIndexOpen}>
+      <main
+        className={`${styles.shell} supply-os-workspace`}
+        data-panel={activePanel}
+        data-company-index={companyIndexOpen}
+        data-sidebar-collapsed={sidebarCollapsed}
+      >
         <motion.aside
           className={styles.operatingSidebar}
           initial={{ x: -12, opacity: 0 }}
@@ -99,18 +107,19 @@ export function SupplyOsOperatingShell({
             <LogoMark mini />
             <strong>Derya</strong>
           </a>
-          <nav ref={panelNavRef} className={styles.panelNav} aria-label="Workspace sections">
+          <nav id="supply-os-panel-navigation" ref={panelNavRef} className={styles.panelNav} aria-label="Workspace sections">
             {PANELS.map((panel, index) => {
               const active = panel.id === activePanel;
               return (
                 <motion.button
                   key={panel.id}
                   type="button"
+                  aria-label={`${String(index + 1).padStart(2, "0")} ${panel.shortLabel}`}
                   aria-pressed={active}
                   data-active={active}
                   data-panel-id={panel.id}
                   onClick={() => selectPanel(panel.id)}
-                  whileHover={{ x: 2 }}
+                  whileHover={sidebarCollapsed ? undefined : { x: 2 }}
                   whileTap={{ scale: 0.985 }}
                 >
                   {active ? <motion.span className={styles.activeRail} layoutId="supply-os-active-panel" /> : null}
@@ -123,6 +132,19 @@ export function SupplyOsOperatingShell({
               );
             })}
           </nav>
+
+          <div className={styles.sidebarFooter}>
+            <button
+              type="button"
+              aria-controls="supply-os-panel-navigation"
+              aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+              <span>{sidebarCollapsed ? "Expand" : "Collapse"}</span>
+            </button>
+          </div>
 
         </motion.aside>
 
