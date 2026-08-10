@@ -105,7 +105,7 @@ const STARTING_MESSAGES: ChatMessage[] = [
   {
     id: "intro",
     role: "derya",
-    body: "Choose an automation or describe a new workflow. I will draft the steps here.",
+    body: "What should this workflow do? Choose a template or describe it here, and I will draft the steps for review.",
   },
 ];
 
@@ -232,13 +232,12 @@ export function SupplyOsAutomations({ company }: { company: string }) {
 
   return (
     <section className={`${styles.workspace} supply-os-workspace`} aria-label="Automations workspace">
-      <section className={styles.chatPane} aria-labelledby="automation-chat-title">
+      <section className={styles.chatPane} aria-label={`Automation chat for ${company}`}>
         <header className={styles.paneHeader}>
           <span>
             <MessageSquareText size={18} aria-hidden="true" />
             <strong id="automation-chat-title">Automation chat</strong>
           </span>
-          <small>{company}</small>
         </header>
 
         <div className={styles.conversation} aria-live="polite">
@@ -251,7 +250,7 @@ export function SupplyOsAutomations({ company }: { company: string }) {
         </div>
 
         <form className={styles.composer} onSubmit={submitMessage}>
-          <label htmlFor="automation-message">Message</label>
+          <label className={styles.visuallyHidden} htmlFor="automation-message">Message</label>
           <div>
             <textarea
               id="automation-message"
@@ -281,7 +280,7 @@ export function SupplyOsAutomations({ company }: { company: string }) {
             aria-label="Start a new automation in chat"
           >
             <Plus size={16} aria-hidden="true" />
-            New
+            New draft
           </button>
         </header>
 
@@ -316,6 +315,7 @@ export function SupplyOsAutomations({ company }: { company: string }) {
             </span>
             <i>Draft</i>
           </header>
+          <p className={styles.stepPurpose}>{selectedAutomation.purpose}</p>
           <ol>
             {selectedAutomation.steps.map((step, index) => (
               <li key={`${index}-${step}`}>
