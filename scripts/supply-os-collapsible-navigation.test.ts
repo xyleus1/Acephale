@@ -19,6 +19,8 @@ assert.match(shell, /aria-label=\{`\$\{String\(index \+ 1\)\.padStart\(2, "0"\)\
 
 assert.match(styles, /@media \(min-width: 901px\)[\s\S]*data-sidebar-collapsed="true"[\s\S]*grid-template-columns: 84px minmax\(0, 1fr\)/);
 assert.match(styles, /data-sidebar-collapsed="true"[\s\S]*\.navCopy[\s\S]*display: none/);
+assert.match(styles, /data-sidebar-collapsed="true"[\s\S]*\.sidebarHeader \{[\s\S]*justify-content: center;[\s\S]*padding: 0;/);
+assert.match(styles, /data-sidebar-collapsed="true"[\s\S]*\.sidebarToggle \{[\s\S]*position: absolute;[\s\S]*z-index: 2;[\s\S]*right: -16px;[\s\S]*width: 32px;[\s\S]*height: 32px;/);
 assert.match(styles, /\.sidebarToggle \{[\s\S]*width: 44px;[\s\S]*height: 44px;/);
 assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.sidebarToggle \{[\s\S]*display: none/);
 assert.equal(`${shell}\n${styles}`.includes("\u2014"), false);

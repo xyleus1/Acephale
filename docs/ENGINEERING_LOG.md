@@ -4413,3 +4413,15 @@ Use this file for chronological implementation notes that future agents should s
   has no horizontal overflow.
 - Failed/skipped checks: None.
 - Caveats: None. Optimization data and behavior are unchanged.
+
+### 2026-08-09 - Center the collapsed Supply OS header
+
+- Branch: main
+- Task: Center the Derya mark when the domain rail is collapsed.
+- Files changed: Supply OS shell styles, collapsible-navigation contract,
+  handoff, and this log.
+- Design: The mark is centered in the 84px rail. The expand control sits on the
+  rail boundary so it does not shift the mark off-axis.
+- Verification: Collapsible navigation, company navigation, sidebar map,
+  product copy, TypeScript, diff-check, and authenticated browser QA pass.
+- Failed/skipped checks: None.

@@ -32,6 +32,24 @@ Verification:
 - `git diff --check`
 - Changed-line U+2014 scan
 
+### Collapsed navigation brand is centered
+
+- Centered the Derya mark inside the 84px collapsed rail header.
+- Moved the compact expand control onto the rail boundary so it no longer
+  pushes the mark toward the left edge.
+- Kept the expanded header, navigation behavior, accessible names, and mobile
+  layout unchanged.
+- Added a regression contract for the collapsed header alignment.
+
+Verification:
+
+- `npx tsx scripts/supply-os-collapsible-navigation.test.ts`
+- `npm run test:supply-os-company-navigation`
+- `npm run test:supply-os-sidebar-map`
+- `npm run check:product-copy`
+- `npx tsc --noEmit`
+- `git diff --check`
+
 ### Optimization inspector header is removed
 
 - Removed the decorative checklist icon from the optimization inspector.

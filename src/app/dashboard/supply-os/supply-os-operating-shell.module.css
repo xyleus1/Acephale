@@ -185,18 +185,33 @@
   }
 
   .shell[data-sidebar-collapsed="true"] .operatingSidebar {
+    position: relative;
+    z-index: 2;
     padding-right: 12px;
     padding-left: 12px;
   }
 
   .shell[data-sidebar-collapsed="true"] .sidebarHeader {
+    position: relative;
+    justify-content: center;
     margin-right: -12px;
     margin-left: -12px;
-    padding: 0 4px;
+    padding: 0;
   }
 
   .shell[data-sidebar-collapsed="true"] .operatingBrand {
-    flex: 0 0 24px;
+    flex: 0 0 auto;
+    justify-content: center;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .sidebarToggle {
+    position: absolute;
+    z-index: 2;
+    right: -16px;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--os-line);
+    background: var(--os-panel);
   }
 
   .shell[data-sidebar-collapsed="true"] .operatingBrand strong,
