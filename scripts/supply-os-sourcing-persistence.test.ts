@@ -22,6 +22,15 @@ import {
   listSourcingResearchRuns,
   startSourcingResearchRun,
 } from "../src/lib/supply-os/sourcing-research-persistence";
+import {
+  decideSupplierEmailApproval,
+  reconcileSupplierEmailAction,
+  requestSupplierEmailApproval,
+  resetSupplierEmailForRetry,
+  saveSupplierEmailDraft,
+  sendSupplierEmailAction,
+} from "../src/lib/supply-os/supplier-communication-persistence";
+import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -831,11 +840,127 @@ async function main() {
       },
     });
     const retryRequestHash = (retryQuoteDraft.quoteCycle.result as { requestHash: string }).requestHash;
-    await recordSupplierQuoteRelease({
+    const senderAccount = await prisma.emailAccount.create({
+      data: {
+        officeId: context.officeId,
+        email: `buyer-${suffix}@example.test`,
+        provider: "GMAIL",
+        accessToken: "test-only-token",
+      },
+    });
+    const supplierEmailDraft = await saveSupplierEmailDraft({
       context,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
-      input: { expectedRequestHash: retryRequestHash, channel: "SUPPLIER_PORTAL", releasedOn: futureDate(0), evidenceUrl: "https://example.com/quote-requests/retry", note: null },
+      input: {
+        expectedRequestHash: retryRequestHash,
+        expectedRevision: 0,
+        senderAccountId: senderAccount.id,
+        recipient: "quotes@example.com",
+        subject: "Quote request: calibrated stereo depth cameras",
+        body: "Please quote 14 EA calibrated stereo depth cameras for delivery to Austin.",
+      },
     });
+    assert.equal((await listProcurementCases(context))[0]?.supplierEmailDraft?.id, supplierEmailDraft.id, "the sourcing queue must restore the connected email draft");
+    const emailApprovalRequest = await requestSupplierEmailApproval({
+      context,
+      draftId: supplierEmailDraft.id,
+      input: { expectedResultHash: supplierEmailDraft.resultHash, reason: "Release the exact supplier quote request through the connected buyer inbox." },
+    });
+    const emailScope = emailApprovalRequest.action.input as { message: { recipient: string; subject: string; body: string }; draftMessageHash: string };
+    assert.equal(emailScope.message.recipient, "quotes@example.com");
+    assert.equal(emailScope.message.subject, "Quote request: calibrated stereo depth cameras");
+    assert.ok(emailScope.draftMessageHash, "approval must bind the exact draft message hash");
+    await assert.rejects(() => decideSupplierEmailApproval({
+      context,
+      approvalId: emailApprovalRequest.approval.id,
+      input: { decision: "APPROVE" },
+    }), /different eligible approver/i, "supplier email self-approval must be blocked when another approver is available");
+    const approvedEmail = await decideSupplierEmailApproval({
+      context: managerContext,
+      approvalId: emailApprovalRequest.approval.id,
+      input: { decision: "APPROVE", note: "Exact recipient and message approved." },
+    });
+    await prisma.emailAccount.update({ where: { id: senderAccount.id }, data: { email: `changed-${suffix}@example.test` } });
+    const changedSenderResult = await gmailSupplierEmailProvider.send({
+      officeId: context.officeId,
+      accountId: senderAccount.id,
+      senderEmail: senderAccount.email,
+      recipient: "quotes@example.com",
+      subject: "Quote request: calibrated stereo depth cameras",
+      body: "Please quote 14 EA calibrated stereo depth cameras for delivery to Austin.",
+      rfcMessageId: "<sender-change-test@derya.ai>",
+    });
+    assert.equal(changedSenderResult.state, "REJECTED", "a sender identity change must invalidate the approved message before Gmail is called");
+    await prisma.emailAccount.update({ where: { id: senderAccount.id }, data: { email: senderAccount.email } });
+    let uncertainSendCount = 0;
+    let releaseProviderSend: (() => void) | null = null;
+    let markProviderStarted: (() => void) | null = null;
+    const providerStarted = new Promise<void>((resolve) => { markProviderStarted = resolve; });
+    const providerRelease = new Promise<void>((resolve) => { releaseProviderSend = resolve; });
+    const uncertainProvider: SupplierEmailProvider = {
+      async send() {
+        uncertainSendCount += 1;
+        markProviderStarted?.();
+        await providerRelease;
+        return { state: "UNKNOWN", error: "Provider timed out after accepting the request." };
+      },
+      async reconcile() {
+        return { state: "NOT_FOUND" };
+      },
+    };
+    const firstSend = sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider });
+    await providerStarted;
+    await assert.rejects(
+      () => sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider }),
+      /reconcile/i,
+      "a concurrent send must observe the durable SENDING claim before Gmail can be called again",
+    );
+    assert.equal(uncertainSendCount, 1, "concurrent delivery attempts must call the provider exactly once");
+    releaseProviderSend?.();
+    const uncertainEmail = await firstSend;
+    assert.equal((uncertainEmail.result as { state: string }).state, "DELIVERY_UNKNOWN");
+    assert.equal(uncertainEmail.status, "RUNNING", "unknown delivery must hold the action in an unresolved state");
+    await assert.rejects(() => sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider }), /reconcile/i, "unknown delivery must block automatic resend");
+    assert.equal(uncertainSendCount, 1);
+    const notFoundEmail = await reconcileSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider });
+    assert.equal((notFoundEmail.result as { state: string }).state, "NOT_FOUND_REVIEW_REQUIRED");
+    await assert.rejects(() => resetSupplierEmailForRetry({
+      context: managerContext,
+      actionId: approvedEmail.action.id,
+      input: { confirmedNotSent: true, note: "short" },
+    }), /must explain/i, "non-delivery recovery requires a meaningful operator note");
+    const retryReadyEmail = await resetSupplierEmailForRetry({
+      context: managerContext,
+      actionId: approvedEmail.action.id,
+      input: { confirmedNotSent: true, note: "Verified the stable message ID was absent from the connected Gmail sent folder." },
+    });
+    assert.equal((retryReadyEmail.result as { state: string }).state, "RETRY_READY");
+    let providerSendCount = 0;
+    let retriedMessageId = "";
+    const sentProvider: SupplierEmailProvider = {
+      async send(input) {
+        providerSendCount += 1;
+        assert.match(input.rfcMessageId, /^<supply-/);
+        assert.equal(input.senderEmail, senderAccount.email);
+        retriedMessageId = input.rfcMessageId;
+        return { state: "SENT", provider: "GMAIL", providerMessageId: "gmail-test-message", providerThreadId: "gmail-test-thread", sourceUrl: "https://mail.google.com/mail/u/test/#sent/gmail-test-thread" };
+      },
+      async reconcile() {
+        throw new Error("Reconciliation should not run for a confirmed send.");
+      },
+    };
+    const sentEmail = await sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: sentProvider });
+    assert.equal(sentEmail.status, "SUCCEEDED");
+    assert.match(retriedMessageId, /-2@derya\.ai>$/, "a reviewed retry must use a new stable message ID");
+    assert.equal(providerSendCount, 1);
+    await sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: sentProvider });
+    assert.equal(providerSendCount, 1, "an identical send retry must not call Gmail twice");
+    const connectedQuoteCycle = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: retryQuoteDraft.quoteCycle.id } });
+    assert.equal(connectedQuoteCycle.status, "RUNNING");
+    assert.equal((connectedQuoteCycle.result as { externalSideEffect: string }).externalSideEffect, "CONNECTED_PROVIDER");
+    const connectedEvidence = await prisma.supplyEvidence.findFirstOrThrow({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, sourceType: "CONNECTED_PROVIDER" } });
+    assert.equal(connectedEvidence.sourceRecordId, "gmail-test-message");
+    assert.equal(await prisma.emailMessage.count({ where: { gmailMessageId: "gmail-test-message", thread: { officeId: context.officeId } } }), 1);
     const retryQuoteResponse = await recordSupplierQuoteResponse({
       context,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,

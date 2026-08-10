@@ -7,7 +7,9 @@ import {
   CheckCircle2,
   Globe2,
   LoaderCircle,
+  Mail,
   PackageCheck,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
@@ -26,6 +28,7 @@ import type {
   PublicResearchResult,
   SavedProcurementCase,
   SavedSourcingResearchRun,
+  SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 
 type ProcurementPhase = "researching" | "compare" | "procure";
@@ -237,6 +240,7 @@ export function AtlasProcurementWorkspace({
   initialCase,
   canApproveProcurement,
   canAuthorizePurchase,
+  senderAccounts,
   onResearchSaved,
   onProcurementCaseSaved,
   onBack,
@@ -247,6 +251,7 @@ export function AtlasProcurementWorkspace({
   initialCase?: SavedProcurementCase | null;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
+  senderAccounts: SupplierSenderAccount[];
   onResearchSaved: (run: SavedSourcingResearchRun) => void;
   onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
   onBack: () => void;
@@ -286,6 +291,15 @@ export function AtlasProcurementWorkspace({
     evidenceUrl: initialCase?.quoteCycle?.result?.release?.evidenceUrl ?? "",
     note: initialCase?.quoteCycle?.result?.release?.note ?? "",
   }));
+  const [supplierEmailForm, setSupplierEmailForm] = useState(() => ({
+    senderAccountId: initialCase?.supplierEmailDraft?.result?.message.senderAccountId ?? senderAccounts[0]?.id ?? "",
+    recipient: initialCase?.supplierEmailDraft?.result?.message.recipient ?? "",
+    subject: initialCase?.supplierEmailDraft?.result?.message.subject ?? `Quote request: ${item?.name ?? requestText}`,
+    body: initialCase?.supplierEmailDraft?.result?.message.body ?? "",
+  }));
+  const [supplierEmailApprovalReason, setSupplierEmailApprovalReason] = useState("Supplier quote request is ready for review and release.");
+  const [supplierEmailDecisionNote, setSupplierEmailDecisionNote] = useState("");
+  const [supplierEmailRecoveryNote, setSupplierEmailRecoveryNote] = useState("");
   const [qualityForm, setQualityForm] = useState(() => ({
     method: initialCase?.result?.qualityPlan?.method ?? "SAMPLE",
     acceptanceCriteria: initialCase?.result?.qualityPlan?.acceptanceCriteria ?? "",
@@ -425,6 +439,34 @@ export function AtlasProcurementWorkspace({
   }, [currentCase?.quoteCycle?.id, currentCase?.quoteCycle?.resultHash]);
 
   useEffect(() => {
+    const draftMessage = currentCase?.supplierEmailDraft?.result?.message;
+    if (draftMessage) {
+      setSupplierEmailForm(draftMessage);
+      return;
+    }
+    const cycle = currentCase?.quoteCycle?.result;
+    setSupplierEmailForm((current) => ({
+      ...current,
+      senderAccountId: current.senderAccountId || senderAccounts[0]?.id || "",
+      subject: `Quote request: ${item?.name ?? requestText}`,
+      body: cycle
+        ? [
+            `Hello,`,
+            "",
+            `Please quote ${cycle.request.quantity} ${cycle.request.unitOfMeasure} of ${item?.name ?? requestText}.`,
+            `Need by: ${cycle.request.needBy}`,
+            `Ship to: ${cycle.request.shipTo}`,
+            `Requirements: ${cycle.request.requirements}`,
+            `Please respond by ${cycle.request.responseDue} with unit price, currency, MOQ, availability, and delivery date.`,
+            "",
+            "Thank you,",
+            "Derya Supply Operations",
+          ].join("\n")
+        : current.body,
+    }));
+  }, [currentCase?.quoteCycle?.id, currentCase?.quoteCycle?.result?.requestHash, currentCase?.supplierEmailDraft?.id, item?.name, requestText, senderAccounts]);
+
+  useEffect(() => {
     const draft = currentCase?.purchaseDraft?.result;
     setPurchaseForm({
       quantity: draft?.order.quantity
@@ -562,6 +604,12 @@ export function AtlasProcurementWorkspace({
           ?? (payload.procurementCase.result?.purchasePreparation ? currentCase.purchaseDraft : null),
         purchaseAction: payload.procurementCase.purchaseAction
           ?? (payload.procurementCase.result?.purchaseAuthorization ? currentCase.purchaseAction : null),
+        supplierEmailDraft: payload.procurementCase.supplierEmailDraft !== undefined
+          ? payload.procurementCase.supplierEmailDraft
+          : currentCase.supplierEmailDraft ?? null,
+        supplierEmailAction: payload.procurementCase.supplierEmailAction !== undefined
+          ? payload.procurementCase.supplierEmailAction
+          : currentCase.supplierEmailAction ?? null,
       };
       setCurrentCase(nextCase);
       onProcurementCaseSaved(nextCase);
@@ -603,6 +651,43 @@ export function AtlasProcurementWorkspace({
       expectedRequestHash: cycle.result.requestHash,
       ...quoteReleaseForm,
       note: quoteReleaseForm.note || null,
+    });
+  }
+
+  function saveSupplierEmail() {
+    const cycle = currentCase?.quoteCycle;
+    if (!cycle?.result) return;
+    void runCaseAction(`/api/supply-os/quote-cycles/${cycle.id}/email-draft`, {
+      expectedRequestHash: cycle.result.requestHash,
+      expectedRevision: currentCase?.supplierEmailDraft?.result?.revision ?? 0,
+      ...supplierEmailForm,
+    });
+  }
+
+  function requestSupplierEmailReview() {
+    const draft = currentCase?.supplierEmailDraft;
+    if (!draft?.resultHash) return;
+    void runCaseAction(`/api/supply-os/supplier-email-drafts/${draft.id}/approval`, {
+      expectedResultHash: draft.resultHash,
+      reason: supplierEmailApprovalReason,
+    });
+  }
+
+  function decideSupplierEmail(decision: "APPROVE" | "REJECT") {
+    const approvalId = currentCase?.supplierEmailAction?.approval?.id;
+    if (!approvalId) return;
+    void runCaseAction(`/api/supply-os/supplier-email-approvals/${approvalId}/decision`, {
+      decision,
+      note: supplierEmailDecisionNote || null,
+    });
+  }
+
+  function runSupplierEmailDelivery(operation: "SEND" | "RECONCILE" | "RESET") {
+    const actionId = currentCase?.supplierEmailAction?.id;
+    if (!actionId) return;
+    void runCaseAction(`/api/supply-os/supplier-email-actions/${actionId}/delivery`, {
+      operation,
+      ...(operation === "RESET" ? { confirmedNotSent: true, note: supplierEmailRecoveryNote } : {}),
     });
   }
 
@@ -903,7 +988,54 @@ export function AtlasProcurementWorkspace({
                     ) : null}
                     {currentCase.quoteCycle?.status === "PLANNED" && currentCase.quoteCycle.result ? (
                       <section className={styles.purchaseApprovalRequest}>
-                        <p><strong>Record external release</strong></p>
+                        <p><strong>Send through connected Gmail</strong></p>
+                        <p>The exact sender, recipient, subject, and body are locked into the approval. Delivery is recorded only after Gmail returns a receipt.</p>
+                        {senderAccounts.length ? (
+                          <div className={styles.procurementFormGrid}>
+                            <label>From<select value={supplierEmailForm.senderAccountId} onChange={(event) => setSupplierEmailForm((current) => ({ ...current, senderAccountId: event.target.value }))}>{senderAccounts.map((account) => <option key={account.id} value={account.id}>{account.email}</option>)}</select></label>
+                            <label>Supplier email<input type="email" value={supplierEmailForm.recipient} onChange={(event) => setSupplierEmailForm((current) => ({ ...current, recipient: event.target.value }))} placeholder="sales@supplier.com" /></label>
+                            <label className={styles.procurementWideField}>Subject<input value={supplierEmailForm.subject} onChange={(event) => setSupplierEmailForm((current) => ({ ...current, subject: event.target.value }))} /></label>
+                            <label className={styles.procurementWideField}>Message<textarea value={supplierEmailForm.body} onChange={(event) => setSupplierEmailForm((current) => ({ ...current, body: event.target.value }))} /></label>
+                          </div>
+                        ) : <p>No connected Gmail sender is available for this office. Connect one or use another channel below.</p>}
+                        {senderAccounts.length ? <button type="button" disabled={gateActionState === "saving" || !supplierEmailForm.recipient || !supplierEmailForm.subject || !supplierEmailForm.body} onClick={saveSupplierEmail}><Mail size={14} /> {currentCase.supplierEmailDraft ? "Save message revision" : "Save email draft"}</button> : null}
+                        {currentCase.supplierEmailDraft?.result && !currentCase.supplierEmailAction ? (
+                          <>
+                            <label>Approval reason<textarea value={supplierEmailApprovalReason} onChange={(event) => setSupplierEmailApprovalReason(event.target.value)} /></label>
+                            <button type="button" disabled={gateActionState === "saving" || !supplierEmailApprovalReason.trim()} onClick={requestSupplierEmailReview}><ShieldCheck size={14} /> Request send approval</button>
+                          </>
+                        ) : null}
+                        {currentCase.supplierEmailAction?.approval?.status === "PENDING" ? (
+                          canApproveProcurement ? (
+                            <>
+                              <label>Decision note<textarea value={supplierEmailDecisionNote} onChange={(event) => setSupplierEmailDecisionNote(event.target.value)} placeholder="Optional approval or rejection context" /></label>
+                              <div className={styles.purchaseDecisionActions}>
+                                <button type="button" disabled={gateActionState === "saving"} onClick={() => decideSupplierEmail("APPROVE")}><Check size={14} /> Approve exact email</button>
+                                <button type="button" disabled={gateActionState === "saving"} onClick={() => decideSupplierEmail("REJECT")}><TriangleAlert size={14} /> Reject</button>
+                              </div>
+                            </>
+                          ) : <p>Manager approval is pending for this exact email.</p>
+                        ) : null}
+                        {currentCase.supplierEmailAction?.approval?.status === "APPROVED" && (currentCase.supplierEmailAction.status === "READY" || ["RETRY_READY", "SEND_FAILED"].includes(currentCase.supplierEmailAction.result?.state ?? "")) ? (
+                          <button type="button" disabled={gateActionState === "saving"} onClick={() => runSupplierEmailDelivery("SEND")}><ArrowRight size={14} /> {currentCase.supplierEmailAction.result?.state === "SEND_FAILED" ? "Retry rejected send" : "Send approved email"}</button>
+                        ) : null}
+                        {currentCase.supplierEmailAction?.result?.state === "SENDING" || currentCase.supplierEmailAction?.result?.state === "DELIVERY_UNKNOWN" ? (
+                          <>
+                            <p>Gmail delivery is unresolved. Sending again is blocked until Derya checks the stable message ID.</p>
+                            <button type="button" disabled={gateActionState === "saving"} onClick={() => runSupplierEmailDelivery("RECONCILE")}><RefreshCw size={14} /> Check Gmail delivery</button>
+                          </>
+                        ) : null}
+                        {currentCase.supplierEmailAction?.result?.state === "NOT_FOUND_REVIEW_REQUIRED" ? (
+                          <>
+                            <p>Gmail did not find the message. A manager must verify non-delivery before one new attempt is allowed.</p>
+                            {canApproveProcurement ? <><label>Recovery note<textarea value={supplierEmailRecoveryNote} onChange={(event) => setSupplierEmailRecoveryNote(event.target.value)} placeholder="Explain how non-delivery was verified." /></label><button type="button" disabled={gateActionState === "saving" || supplierEmailRecoveryNote.trim().length < 10} onClick={() => runSupplierEmailDelivery("RESET")}><RefreshCw size={14} /> Confirm non-delivery and enable retry</button></> : null}
+                          </>
+                        ) : null}
+                      </section>
+                    ) : null}
+                    {currentCase.quoteCycle?.status === "PLANNED" && currentCase.quoteCycle.result ? (
+                      <section className={styles.purchaseApprovalRequest}>
+                        <p><strong>Record another channel</strong></p>
                         <div className={styles.procurementFormGrid}>
                           <label>Channel<select value={quoteReleaseForm.channel} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, channel: event.target.value as typeof current.channel }))}><option value="EMAIL">Email</option><option value="SUPPLIER_PORTAL">Supplier portal</option><option value="EDI">EDI</option><option value="PHONE_CONFIRMED">Phone confirmed</option><option value="OTHER">Other</option></select></label>
                           <label>Released on<input type="date" value={quoteReleaseForm.releasedOn} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, releasedOn: event.target.value }))} /></label>
@@ -911,7 +1043,7 @@ export function AtlasProcurementWorkspace({
                           <label className={styles.procurementWideField}>Release note<textarea value={quoteReleaseForm.note} onChange={(event) => setQuoteReleaseForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional external-send context" /></label>
                         </div>
                         <button type="button" disabled={gateActionState === "saving" || !quoteReleaseComplete} onClick={recordQuoteRelease}><ArrowRight size={14} /> Record external release</button>
-                        <p>Derya records the evidence. It does not send this request.</p>
+                        <p>Use this only when the request was sent through a supplier portal, EDI, phone, or email outside the connected workflow.</p>
                       </section>
                     ) : null}
                     {currentCase.quoteCycle?.status === "RUNNING" && currentCase.quoteCycle.result ? (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { searchComponentSuppliers } from "@/lib/supply-os/component-supplier-research";
 import { listProcurementCases } from "@/lib/supply-os/procurement-case-persistence";
+import { listSupplierSenderAccounts } from "@/lib/supply-os/supplier-communication-persistence";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { ResearchRateLimiter } from "@/lib/supply-os/research";
 import {
@@ -33,13 +34,14 @@ export async function GET() {
   try {
     const context = supplyAccessContext(session);
     const cases = await listProcurementCases(context);
+    const senderAccounts = await listSupplierSenderAccounts(context);
     const caseRunIds = cases.flatMap((procurementCase) => {
       const input = procurementCase.input;
       if (!input || typeof input !== "object" || Array.isArray(input)) return [];
       return typeof input.researchRunId === "string" ? [input.researchRunId] : [];
     });
     const runs = await listSourcingResearchRuns(context, caseRunIds);
-    return NextResponse.json({ runs, cases }, {
+    return NextResponse.json({ runs, cases, senderAccounts }, {
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
     });
   } catch (error) {

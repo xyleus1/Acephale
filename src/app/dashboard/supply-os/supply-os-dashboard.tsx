@@ -57,6 +57,7 @@ import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
+  SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 import styles from "./supply-os-logistics.module.css";
 
@@ -604,6 +605,7 @@ function CaseCommandCenter({
   } | null>(null);
   const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
   const [procurementCases, setProcurementCases] = useState<SavedProcurementCase[]>([]);
+  const [supplierSenderAccounts, setSupplierSenderAccounts] = useState<SupplierSenderAccount[]>([]);
   const [sourcingDataState, setSourcingDataState] = useState<"loading" | "ready" | "error">("loading");
   const [sourcingLoadRevision, setSourcingLoadRevision] = useState(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
@@ -704,9 +706,10 @@ function CaseCommandCenter({
       headers: { accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) throw new Error("Saved sourcing work is unavailable.");
-      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[] };
+      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[] };
       setResearchRuns(payload.runs ?? []);
       setProcurementCases(payload.cases ?? []);
+      setSupplierSenderAccounts(payload.senderAccounts ?? []);
       setSourcingDataState("ready");
     }).catch(() => {
       if (!controller.signal.aborted) setSourcingDataState("error");
@@ -801,6 +804,7 @@ function CaseCommandCenter({
             initialCase={procurementRequest.savedCase}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
+            senderAccounts={supplierSenderAccounts}
             onResearchSaved={saveResearchRun}
             onProcurementCaseSaved={saveProcurementCase}
             onBack={() => setProcurementRequest(null)}

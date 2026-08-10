@@ -2,6 +2,32 @@
 
 ## Latest Update
 
+### Supplier quote email is approval-gated and provider-backed
+
+- A saved supplier quote request can now become a revisioned Gmail draft inside
+  the same procurement workspace. The exact sender account, sender address,
+  recipient, subject, body, supplier, and quote-request hash are copied into an
+  immutable `SUPPLIER_QUOTE_EMAIL_ACTION` input.
+- A manager approval binds directly to the action input hash. Message edits or
+  quote-request edits cancel any pending or approved unsent action and require a
+  new approval scope.
+- Sending claims a stable RFC message ID before contacting Gmail. A successful
+  Gmail receipt stores the provider message and thread IDs, a local outbound
+  email record, and `CONNECTED_PROVIDER` quote-release evidence. The quote cycle
+  then advances to `AWAITING_RESPONSE`.
+- Network, rate-limit, or incomplete-receipt outcomes become
+  `DELIVERY_UNKNOWN`. Automatic resend is blocked. Derya searches Gmail by the
+  stable message ID, and a manager must document verified non-delivery before a
+  new attempt receives a different message ID.
+- Manual supplier portal, EDI, phone, or external-email release recording remains
+  available as a separate evidence-only fallback. Logistics is unchanged.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- local PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --incremental false`
+
 ### Supplier progression now uses canonical evidence records
 
 - Supplier source review, quote-request release, each supplier quote response,
@@ -16,8 +42,9 @@
 - Evidence links in the quote and acknowledgment views resolve through an
   authenticated, tenant-scoped Supply OS route. Legacy records without an
   evidence ID still use their existing source URL.
-- This is an evidence ledger, not a supplier connector. Derya still does not
-  send the quote request or purchase order in this slice.
+- Operator-recorded channels remain an evidence ledger. Connected Gmail quote
+  release now has its own separately approved execution path. Purchase-order
+  release remains unconnected.
 
 Verification:
 

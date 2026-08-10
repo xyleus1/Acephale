@@ -266,8 +266,20 @@ clear boundaries.
 - Quote and delivery confirmation requires a persistent
   `SUPPLIER_QUOTE_CYCLE` child task. A revisioned request records quantity,
   unit, need-by, destination, response deadline, requirements, and notes. The
-  request remains an internal draft until an operator records external release
-  evidence with channel, date, URL, and note.
+  request remains internal until an operator either records external release
+  evidence or completes the connected Gmail action.
+- Connected Gmail communication uses a revisioned
+  `SUPPLIER_QUOTE_EMAIL_DRAFT` and an immutable
+  `SUPPLIER_QUOTE_EMAIL_ACTION`. The action input pins the Gmail account,
+  sender address, one recipient, subject, body, supplier, quote-request hash,
+  message hash, and draft revision. Manager approval binds directly to that
+  input hash.
+- The Gmail provider uses a stable RFC message ID for each attempt. A definitive
+  receipt stores provider message and thread IDs, a local outbound email row,
+  and `SupplyEvidence(sourceType=CONNECTED_PROVIDER)`. A timeout, rate limit, or
+  malformed receipt becomes unknown delivery and blocks resend. Reconciliation
+  searches Gmail by the stable message ID. A manager must document verified
+  non-delivery before one new attempt receives a new message ID.
 - A released quote cycle stays `RUNNING` while supplier responses are appended and
   closes only when the selected quote reaches full supplier order acknowledgment.
   Every response stores exact decimal price and MOQ, unit, delivery, validity,
@@ -278,10 +290,10 @@ clear boundaries.
   Supplier review, release, response, and acknowledgment also create immutable
   `SupplyEvidence` rows bound to their exact task and content hash. The selected
   response evidence ID travels with its response hash through both approval
-  scopes. Release and response evidence stays
-  `OPERATOR_RECORDED_EXTERNAL`. Recording this evidence does not claim that
-  Derya sent the request or that a supplier connector exists. Supplier changes
-  cancel the active quote cycle.
+  scopes. Manual release and response evidence stays
+  `OPERATOR_RECORDED_EXTERNAL`; a successful connected Gmail release is
+  `CONNECTED_PROVIDER`. Supplier changes cancel pending unsent communication
+  scopes and the active quote cycle.
 - After those gates complete, Supply OS creates a separate immutable
   `PROCUREMENT_APPROVAL` task. Its input contains the exact selected supplier,
   confirmed quote terms, evidence review, and quality plan. `SupplyApproval`

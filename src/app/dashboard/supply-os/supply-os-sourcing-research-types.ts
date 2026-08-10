@@ -46,6 +46,34 @@ export type SavedSourcingResearchRun = {
   completedAt: string | null;
 };
 
+export type SupplierSenderAccount = {
+  id: string;
+  email: string;
+  provider: "GMAIL";
+};
+
+type SupplierEmailApproval = {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+  requiredRole: "MANAGER";
+  scopeHash: string;
+  requestReason: string | null;
+  requestedByUserId: string | null;
+  decidedByUserId: string | null;
+  decisionNote: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  expiresAt: string | null;
+};
+
+type SupplierEmailMessage = {
+  senderAccountId: string;
+  senderEmail: string;
+  recipient: string;
+  subject: string;
+  body: string;
+};
+
 export type SavedProcurementCase = {
   id: string;
   status: string;
@@ -183,7 +211,7 @@ export type SavedProcurementCase = {
         evidenceId?: string;
         note: string | null;
         releaseHash: string;
-        evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
+        evidenceClass: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
         recordedByUserId: string;
         recordedAt: string;
       } | null;
@@ -205,9 +233,50 @@ export type SavedProcurementCase = {
         recordedAt: string;
       }>;
       selectedResponseHash: string | null;
-      externalSideEffect: false | "RECORDED_ONLY";
+      externalSideEffect: false | "RECORDED_ONLY" | "CONNECTED_PROVIDER";
       updatedAt: string;
     } | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  supplierEmailDraft?: {
+    id: string;
+    status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
+    resultHash: string | null;
+    result: {
+      revision: number;
+      message: SupplierEmailMessage;
+      messageHash: string;
+      approval: { id: string; actionId: string; status: SupplierEmailApproval["status"] } | null;
+      updatedAt: string;
+    } | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  supplierEmailAction?: {
+    id: string;
+    status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
+    input: {
+      procurementCaseId: string;
+      quoteCycleId: string;
+      draftId: string;
+      draftRevision: number;
+      draftMessageHash: string;
+      message: SupplierEmailMessage;
+    };
+    inputHash: string;
+    result: {
+      state: "APPROVED" | "REJECTED" | "SENDING" | "SEND_FAILED" | "DELIVERY_UNKNOWN" | "NOT_FOUND_REVIEW_REQUIRED" | "RETRY_READY" | "SENT";
+      attempt?: number;
+      rfcMessageId?: string;
+      error?: string;
+      sourceUrl?: string;
+      evidenceId?: string;
+      sentAt?: string;
+    } | null;
+    approval: SupplierEmailApproval | null;
+    externalSystem: string | null;
+    externalRef: string | null;
     createdAt: string;
     updatedAt: string;
   } | null;

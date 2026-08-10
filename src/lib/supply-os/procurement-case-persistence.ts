@@ -5,6 +5,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import {
+  listSupplierCommunicationTasks,
+  SUPPLIER_EMAIL_ACTION_TASK_TYPE,
+  SUPPLIER_EMAIL_DRAFT_TASK_TYPE,
+} from "./supplier-communication-persistence";
 
 const RESEARCH_CAPABILITY = "research.supplier_candidates";
 const TASK_TYPE = "PROCUREMENT_CASE";
@@ -494,15 +499,45 @@ export async function listProcurementCases(context: SupplyAccessContext) {
   for (const purchaseDraft of purchaseDrafts) {
     if (purchaseDraft.parentTaskId && !purchaseDraftByCase.has(purchaseDraft.parentTaskId)) purchaseDraftByCase.set(purchaseDraft.parentTaskId, purchaseDraft);
   }
+  const communicationTasks = await listSupplierCommunicationTasks({
+    context: accessContext,
+    workspaceId: workspace.id,
+    quoteCycleIds: quoteCycles.map((quoteCycle) => quoteCycle.id),
+  });
+  const emailDraftByQuoteCycle = new Map<string, (typeof communicationTasks)[number]>();
+  const emailActionByQuoteCycle = new Map<string, (typeof communicationTasks)[number]>();
+  for (const task of communicationTasks) {
+    if (!task.parentTaskId) continue;
+    const target = task.taskType === SUPPLIER_EMAIL_DRAFT_TASK_TYPE
+      ? emailDraftByQuoteCycle
+      : task.taskType === SUPPLIER_EMAIL_ACTION_TASK_TYPE
+        ? emailActionByQuoteCycle
+        : null;
+    if (target && !target.has(task.parentTaskId)) target.set(task.parentTaskId, task);
+  }
   return cases.map((procurementCase) => {
     const quoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
+    const supplierEmailDraft = quoteCycle ? emailDraftByQuoteCycle.get(quoteCycle.id) ?? null : null;
+    const candidateSupplierEmailAction = quoteCycle ? emailActionByQuoteCycle.get(quoteCycle.id) ?? null : null;
+    const rawSupplierEmailAction = candidateSupplierEmailAction
+      && record(candidateSupplierEmailAction.input).draftMessageHash === record(supplierEmailDraft?.result).messageHash
+      ? candidateSupplierEmailAction
+      : null;
+    const supplierEmailAction = rawSupplierEmailAction
+      ? (() => {
+          const { approvals, ...task } = rawSupplierEmailAction;
+          return { ...task, approval: approvals[0] ?? null };
+        })()
+      : null;
     const activeDraft = purchaseDraftByCase.get(procurementCase.id) ?? null;
-    if (!activeDraft) return { ...procurementCase, quoteCycle, purchaseDraft: null, purchaseAction: null };
+    if (!activeDraft) return { ...procurementCase, quoteCycle, supplierEmailDraft, supplierEmailAction, purchaseDraft: null, purchaseAction: null };
     const { childTasks: purchaseActions, ...purchaseDraft } = activeDraft;
     const activeAction = purchaseActions[0] ?? null;
     return {
       ...procurementCase,
       quoteCycle,
+      supplierEmailDraft,
+      supplierEmailAction,
       purchaseDraft,
       purchaseAction: activeAction
         ? purchaseActionView(activeAction)
@@ -888,6 +923,37 @@ export async function saveSupplierQuoteRequest(args: {
           throw new SupplyPersistenceError("The quote request changed in another session. Reload before saving.", "conflict");
         }
         const now = new Date();
+        if (existing) {
+          await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${existing.id} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
+          const emailActions = await tx.supplyExecutionTask.findMany({
+            where: {
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              parentTaskId: existing.id,
+              taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE,
+              status: { in: ["PLANNED", "BLOCKED", "READY", "RUNNING"] },
+            },
+            select: { id: true, status: true, result: true },
+          });
+          if (emailActions.some((action) => action.status === "RUNNING" || ["SENDING", "NOT_FOUND_REVIEW_REQUIRED"].includes(String(record(action.result).state)))) {
+            throw new SupplyPersistenceError("Supplier email delivery is unresolved. Reconcile it before changing the quote request.", "conflict");
+          }
+          const cancellableActionIds = emailActions.filter((action) => ["PLANNED", "READY"].includes(action.status)).map((action) => action.id);
+          if (cancellableActionIds.length) {
+            await tx.supplyApproval.updateMany({ where: { executionTaskId: { in: cancellableActionIds }, status: "PENDING" }, data: { status: "CANCELLED", decidedAt: now, decisionNote: "Supplier quote request changed." } });
+            await tx.supplyExecutionTask.updateMany({ where: { id: { in: cancellableActionIds } }, data: { status: "CANCELLED", cancelledAt: now } });
+          }
+          await tx.supplyExecutionTask.updateMany({
+            where: {
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              parentTaskId: existing.id,
+              taskType: SUPPLIER_EMAIL_DRAFT_TASK_TYPE,
+              status: { in: ["PLANNED", "BLOCKED", "READY"] },
+            },
+            data: { status: "CANCELLED", cancelledAt: now },
+          });
+        }
         const revision = currentRevision + 1;
         const taskInput = {
           procurementCaseId: procurementCase.id,
@@ -1025,6 +1091,7 @@ export async function recordSupplierQuoteRelease(args: {
       return await prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.quoteCycleId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${args.quoteCycleId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
         const procurementCase = await tx.supplyExecutionTask.findFirst({
           where: { id: procurementCaseId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: TASK_TYPE, status: "PLANNED" },
           select: caseSelect,
@@ -1053,6 +1120,22 @@ export async function recordSupplierQuoteRelease(args: {
         }
         if (typeof existingRelease.releaseHash === "string" || quoteCycle.status !== "PLANNED") {
           throw new SupplyPersistenceError("A different external release is already recorded for this quote request.", "conflict");
+        }
+        const activeSupplierEmail = await tx.supplyExecutionTask.findFirst({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: quoteCycle.id,
+            taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE,
+            OR: [
+              { status: { in: ["PLANNED", "READY", "RUNNING"] } },
+              { status: "BLOCKED", result: { path: ["state"], equals: "NOT_FOUND_REVIEW_REQUIRED" } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (activeSupplierEmail) {
+          throw new SupplyPersistenceError("A connected supplier email is pending, approved, or unresolved. Finish or revise that workflow before recording another channel.", "conflict");
         }
         const now = new Date();
         const release = {

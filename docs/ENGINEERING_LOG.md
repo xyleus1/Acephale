@@ -17,6 +17,26 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-10 - Add controlled connected-Gmail supplier quote release
+
+- Branch: supply-os-supplier-communication, targeting main
+- Commit: see git log
+- Task: Turn the saved supplier quote request into a revisioned email draft,
+  exact-message manager approval, connected Gmail delivery, durable provider
+  receipt, and uncertain-delivery recovery without touching Logistics.
+- Files changed: supplier communication persistence and Gmail adapter, scoped
+  API routes, procurement case projection, sourcing client types, in-page quote
+  controls, dashboard sender-account loading, persistence and UI contracts,
+  architecture, decisions, and handoff.
+- Verification: Atlas sourcing contract, local PostgreSQL sourcing lifecycle,
+  TypeScript, production build, product copy, whitespace, tenant audit, and
+  changed-file U+2014 checks.
+- Caveats: Gmail is the only connected supplier-contact provider. Manual portal,
+  EDI, phone, and external email remain evidence-only. Purchase-order release,
+  payment, booking, customs, and Logistics remain unchanged.
+- Follow-up: ingest connected supplier replies into the same quote cycle and
+  match quote attachments to canonical response evidence.
+
 ### 2026-08-10 - Persist the supplier quote request and response cycle
 
 - The selected quote cycle now reaches `SUCCEEDED` only after the linked

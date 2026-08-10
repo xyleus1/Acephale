@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Connected supplier email uses stable identity and uncertain-delivery recovery
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Recording that an operator sent a quote request outside Derya is not
+  enough for a controlled communication workflow. A generic email helper that
+  sends before durable state exists can also duplicate supplier contact after a
+  timeout or lost response.
+- Decision: Store a revisioned Gmail draft under the supplier quote cycle, then
+  copy the exact sender, recipient, subject, body, supplier, and quote-request
+  hash into an immutable execution action. Require manager approval against the
+  action input hash before delivery.
+- Delivery: Claim one stable RFC message ID before calling Gmail. Persist the
+  Gmail message and thread IDs, local outbound message, and connected-provider
+  evidence only after a definitive receipt. Treat timeouts, rate limits, and
+  incomplete receipts as unknown delivery and block resend until reconciliation
+  searches Gmail by that stable ID.
+- Recovery: A not-found search is not automatic permission to resend. An admin
+  or manager must record how non-delivery was verified. The next attempt uses a
+  new stable message ID while preserving the original attempt ledger.
+- Boundary: Manual portal, EDI, phone, and external-email recording remains
+  evidence-only. This decision does not connect purchase-order release, payment,
+  booking, customs, or Logistics.
+
 ### 2026-08-10 - Procurement evidence is independently addressable
 
 - Status: accepted
@@ -53,10 +77,10 @@ Use this log for durable product and engineering decisions. Do not put every imp
   selection append hashed events. Operator-recorded release and response data
   remain labeled `OPERATOR_RECORDED_EXTERNAL`; they are not upgraded to a
   connected-provider fact.
-- Boundary: Derya does not send the quote request in this workflow. A future
-  supplier connector requires its own approval-gated execution task. Supplier
-  changes cancel the active quote cycle, while quote revisions remain available
-  for audit and resume.
+- Boundary: Operator-recorded release does not send anything. Connected Gmail
+  release uses the separate exact-message approval and delivery-recovery path.
+  Supplier changes cancel the active quote cycle, while quote revisions remain
+  available for audit and resume.
 
 ### 2026-08-10 - Supplier acknowledgment is recorded evidence, not a claimed connector send
 
