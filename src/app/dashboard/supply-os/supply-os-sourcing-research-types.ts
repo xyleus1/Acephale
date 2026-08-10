@@ -83,6 +83,7 @@ export type SavedProcurementCase = {
       unitOfMeasure: string;
       deliveryDate: string;
       evidenceUrl: string;
+      evidenceId?: string;
       quoteReference: string;
       validUntil: string;
       quoteCycleTaskId: string;
@@ -96,7 +97,7 @@ export type SavedProcurementCase = {
       targetDate: string;
     };
     reviews?: {
-      sourceEvidence?: { sourceUrl: string; note: string; reviewedAt: string; reviewHash: string };
+      sourceEvidence?: { sourceUrl: string; evidenceId?: string; note: string; reviewedAt: string; reviewHash: string };
       commercialTerms?: { reviewedAt: string; reviewHash: string };
       qualityPlan?: { reviewedAt: string; reviewHash: string };
     };
@@ -179,6 +180,7 @@ export type SavedProcurementCase = {
         channel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
         releasedOn: string;
         evidenceUrl: string;
+        evidenceId?: string;
         note: string | null;
         releaseHash: string;
         evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
@@ -195,6 +197,7 @@ export type SavedProcurementCase = {
         quoteReference: string;
         validUntil: string;
         evidenceUrl: string;
+        evidenceId?: string;
         note: string | null;
         responseHash: string;
         evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
@@ -243,6 +246,7 @@ export type SavedProcurementCase = {
         quoteCycleTaskId: string;
         quoteResponseHash: string;
         quoteEvidenceUrl: string;
+        quoteEvidenceId?: string | null;
         evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
       };
       totals: { materialSubtotal: string; currency: string };
@@ -285,6 +289,7 @@ export type SavedProcurementCase = {
         quoteCycleTaskId: string;
         quoteResponseHash: string;
         quoteEvidenceUrl: string;
+        quoteEvidenceId?: string | null;
         evidenceClass: "OPERATOR_RECORDED_EXTERNAL";
       };
       totals: { materialSubtotal: string; currency: string };
@@ -327,6 +332,7 @@ export type SavedProcurementCase = {
         unitOfMeasure: string;
         confirmedDeliveryDate: string;
         evidenceUrl: string;
+        evidenceId?: string;
         note: string | null;
         acknowledgmentHash: string;
         recordedByUserId: string;
@@ -338,6 +344,7 @@ export type SavedProcurementCase = {
         acceptedQuantity: string;
         confirmedDeliveryDate: string;
         evidenceUrl: string;
+        evidenceId?: string;
       };
       externalSideEffect: "RECORDED_ONLY";
       updatedAt: string;

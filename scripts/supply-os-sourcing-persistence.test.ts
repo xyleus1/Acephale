@@ -6,6 +6,7 @@ import {
   decidePurchaseActionApproval,
   decideProcurementApproval,
   listProcurementCases,
+  procurementEvidenceSource,
   recordSupplierQuoteRelease,
   recordSupplierQuoteResponse,
   recordPurchaseOrderAcknowledgment,
@@ -178,6 +179,12 @@ async function main() {
       },
     });
     assert.equal((sourceReviewed.result as { stage: string }).stage, "COMMERCIAL_CONFIRMATION");
+    const sourceReview = (sourceReviewed.result as { reviews: { sourceEvidence: { evidenceId: string } } }).reviews.sourceEvidence;
+    assert.ok(sourceReview.evidenceId, "supplier review must create independently addressable evidence");
+    const sourceReviewEvidence = await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: sourceReview.evidenceId } });
+    assert.equal(sourceReviewEvidence.confidence, null, "captured operator evidence must not claim verification confidence");
+    assert.equal(sourceReviewEvidence.kind, "SUPPLIER_SOURCE_REVIEW");
+    assert.equal(sourceReviewEvidence.sourceType, "OFFICIAL");
     const selectionHash = (procurementCase.result as { selectionHash: string }).selectionHash;
     const quoteRequestInput = {
       expectedSelectionHash: selectionHash,
@@ -237,9 +244,16 @@ async function main() {
     assert.equal(quoteReleased.quoteCycle.status, "RUNNING");
     assert.equal((quoteReleased.quoteCycle.result as { state: string; externalSideEffect: string }).state, "AWAITING_RESPONSE");
     assert.equal((quoteReleased.quoteCycle.result as { externalSideEffect: string }).externalSideEffect, "RECORDED_ONLY");
+    const quoteReleaseEvidenceId = (quoteReleased.release as { evidenceId: string }).evidenceId;
+    const quoteReleaseEvidence = await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: quoteReleaseEvidenceId } });
+    assert.equal(quoteReleaseEvidence.executionTaskId, quoteDraft.quoteCycle.id);
+    assert.equal(quoteReleaseEvidence.kind, "SUPPLIER_QUOTE_RELEASE");
+    assert.equal(quoteReleaseEvidence.sourceUri, quoteReleaseInput.evidenceUrl);
+    const releaseEvidenceCount = await prisma.supplyEvidence.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_RELEASE" } });
     const releaseEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED" } });
     await recordSupplierQuoteRelease({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteReleaseInput });
     assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED" } }), releaseEventCount, "identical release retries must be idempotent");
+    assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_RELEASE" } }), releaseEvidenceCount, "identical release retries must not duplicate evidence");
     await assert.rejects(() => saveSupplierQuoteRequest({
       context,
       caseId: procurementCase.id,
@@ -290,12 +304,16 @@ async function main() {
     });
     assert.equal((firstQuoteResponse.quoteCycle.result as { responses: unknown[] }).responses.length, 1);
     const quoteResponse = await recordSupplierQuoteResponse({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteResponseInput });
-    const storedQuoteResponse = quoteResponse.response as { responseHash: string };
+    const storedQuoteResponse = quoteResponse.response as { responseHash: string; evidenceId: string };
+    assert.ok(storedQuoteResponse.evidenceId, "every supplier quote response must create canonical evidence");
+    assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: storedQuoteResponse.evidenceId } })).contentHash, storedQuoteResponse.responseHash);
     assert.equal((quoteResponse.quoteCycle.result as { responses: unknown[] }).responses.length, 2, "quote revisions must remain available for comparison");
     assert.equal(((await listProcurementCases(context))[0]?.result as { quoteCycle: { responseCount: number } }).quoteCycle.responseCount, 2);
     const responseEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED" } });
+    const responseEvidenceCount = await prisma.supplyEvidence.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_RESPONSE" } });
     await recordSupplierQuoteResponse({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteResponseInput });
     assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED" } }), responseEventCount, "identical supplier responses must be idempotent");
+    assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_RESPONSE" } }), responseEvidenceCount, "identical supplier responses must not duplicate evidence");
     await assert.rejects(() => reviewProcurementGate({
       context,
       caseId: procurementCase.id,
@@ -376,6 +394,7 @@ async function main() {
       unitOfMeasure: "EA",
       deliveryDate: quoteDeliveryDate,
       evidenceUrl: "https://example.com/quote/atlas-410",
+      evidenceId: storedQuoteResponse.evidenceId,
       quoteReference: "Q-ATLAS-410",
       validUntil: quoteValidUntil,
       quoteCycleTaskId: quoteDraft.quoteCycle.id,
@@ -455,6 +474,7 @@ async function main() {
     assert.equal(preparedResult.commercial.quoteReference, "Q-ATLAS-410");
     assert.equal(preparedResult.commercial.quoteCycleTaskId, quoteDraft.quoteCycle.id);
     assert.equal(preparedResult.commercial.quoteResponseHash, storedQuoteResponse.responseHash);
+    assert.equal((preparedResult.commercial as { quoteEvidenceId?: string }).quoteEvidenceId, storedQuoteResponse.evidenceId);
     assert.equal(preparedResult.commercial.evidenceClass, "OPERATOR_RECORDED_EXTERNAL");
     assert.equal(preparedResult.totals.materialSubtotal, "1000");
     assert.notEqual(purchasePrepared.purchaseDraft!.inputHash, requested.approval.scopeHash, "purchase draft has its own provenance input hash");
@@ -1002,6 +1022,9 @@ async function main() {
     assert.equal(partialResult.totals.currency, "USD");
     assert.equal(partialResult.acknowledgments.length, 1);
     assert.equal(partialResult.externalSideEffect, "RECORDED_ONLY");
+    const partialEvidenceId = (partialAcknowledgment.acknowledgment as { evidenceId: string }).evidenceId;
+    assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: partialEvidenceId } })).kind, "SUPPLIER_ORDER_ACKNOWLEDGMENT");
+    const acknowledgmentEvidenceCount = await prisma.supplyEvidence.count({ where: { executionTaskId: releaseAction.purchaseAction.id, kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT" } });
     const partialEventCount = await prisma.supplyExecutionEvent.count({
       where: { executionTaskId: releaseAction.purchaseAction.id, eventType: "SUPPLIER_ORDER_PARTIALLY_ACKNOWLEDGED" },
     });
@@ -1014,6 +1037,7 @@ async function main() {
     assert.equal(await prisma.supplyExecutionEvent.count({
       where: { executionTaskId: releaseAction.purchaseAction.id, eventType: "SUPPLIER_ORDER_PARTIALLY_ACKNOWLEDGED" },
     }), partialEventCount, "identical acknowledgment retries must not append fake history");
+    assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: releaseAction.purchaseAction.id, kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT" } }), acknowledgmentEvidenceCount, "identical acknowledgments must not duplicate evidence");
     const fullAcknowledgment = await recordPurchaseOrderAcknowledgment({
       context,
       actionId: releaseAction.purchaseAction.id,
@@ -1233,6 +1257,8 @@ async function main() {
     foreignOfficeId = foreign.officeId;
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
+    await assert.rejects(() => procurementEvidenceSource(foreign, storedQuoteResponse.evidenceId), /not found/i, "another office must not resolve supplier evidence");
+    assert.equal((await procurementEvidenceSource(context, storedQuoteResponse.evidenceId)).url, quoteResponseInput.evidenceUrl);
     await assert.rejects(() => decideProcurementApproval({
       context: foreign,
       approvalId: requested.approval.id,

@@ -175,6 +175,58 @@ async function appendCaseEvent(args: {
   });
 }
 
+async function appendExternalEvidence(args: {
+  tx: Prisma.TransactionClient;
+  officeId: string;
+  workspaceId: string;
+  executionTaskId: string;
+  actorUserId: string;
+  kind: string;
+  title: string;
+  sourceType?: "OFFICIAL" | "OPERATOR_RECORDED_EXTERNAL";
+  sourceUri: string;
+  sourceRecordId?: string | null;
+  observedOn: string;
+  contentHash: string;
+  payload: Prisma.InputJsonObject;
+}) {
+  const evidenceKey = `${args.kind.toLowerCase()}:${args.executionTaskId}:${args.contentHash}`;
+  const existing = await args.tx.supplyEvidence.findUnique({
+    where: { workspaceId_evidenceKey: { workspaceId: args.workspaceId, evidenceKey } },
+    select: { id: true, executionTaskId: true, sourceUri: true, contentHash: true },
+  });
+  if (existing) {
+    if (
+      existing.executionTaskId !== args.executionTaskId
+      || existing.sourceUri !== args.sourceUri
+      || existing.contentHash !== args.contentHash
+    ) {
+      throw new SupplyPersistenceError("Stored supplier evidence does not match the current procurement scope.", "conflict");
+    }
+    return existing;
+  }
+  return args.tx.supplyEvidence.create({
+    data: {
+      officeId: args.officeId,
+      workspaceId: args.workspaceId,
+      executionTaskId: args.executionTaskId,
+      createdByUserId: args.actorUserId,
+      evidenceKey,
+      kind: args.kind,
+      sourceType: args.sourceType ?? "OPERATOR_RECORDED_EXTERNAL",
+      sourceUri: args.sourceUri,
+      sourceRecordId: args.sourceRecordId ?? null,
+      sourceVersion: args.contentHash,
+      title: args.title,
+      payload: args.payload,
+      contentHash: args.contentHash,
+      confidence: null,
+      observedAt: new Date(`${args.observedOn}T12:00:00Z`),
+    },
+    select: { id: true, executionTaskId: true, sourceUri: true, contentHash: true },
+  });
+}
+
 function sourcedNumber(value: unknown) {
   const envelope = record(value);
   const amount = envelope.value;
@@ -457,6 +509,30 @@ export async function listProcurementCases(context: SupplyAccessContext) {
         : null,
     };
   });
+}
+
+export async function procurementEvidenceSource(context: SupplyAccessContext, evidenceId: string) {
+  const id = requiredText(evidenceId, "Evidence ID", 220);
+  const accessContext = await currentAccessContext(context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "view");
+  const evidence = await prisma.supplyEvidence.findFirst({
+    where: {
+      id,
+      officeId: context.officeId,
+      workspaceId: workspace.id,
+      kind: {
+        in: [
+          "SUPPLIER_SOURCE_REVIEW",
+          "SUPPLIER_QUOTE_RELEASE",
+          "SUPPLIER_QUOTE_RESPONSE",
+          "SUPPLIER_ORDER_ACKNOWLEDGMENT",
+        ],
+      },
+    },
+    select: { title: true, sourceUri: true },
+  });
+  if (!evidence?.sourceUri) throw new SupplyPersistenceError("Supplier evidence was not found.", "not_found");
+  return { title: evidence.title, url: publicUrl(evidence.sourceUri, "Stored supplier evidence URL") };
 }
 
 async function cancelPendingApproval(tx: Prisma.TransactionClient, value: Prisma.JsonValue | null) {
@@ -986,10 +1062,26 @@ export async function recordSupplierQuoteRelease(args: {
           recordedByUserId: args.context.userId,
           recordedAt: now.toISOString(),
         };
+        const supplier = record(cycleInput.supplier);
+        const evidence = await appendExternalEvidence({
+          tx,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          executionTaskId: quoteCycle.id,
+          actorUserId: args.context.userId,
+          kind: "SUPPLIER_QUOTE_RELEASE",
+          title: `Quote request release for ${requiredText(supplier.name, "Supplier name", 300)}`,
+          sourceUri: releaseInput.evidenceUrl,
+          sourceRecordId: releaseInput.expectedRequestHash,
+          observedOn: releaseInput.releasedOn,
+          contentHash: releaseHash,
+          payload: inputJson(normalizedRelease),
+        });
+        const evidencedRelease = { ...release, evidenceId: evidence.id };
         const result = {
           ...cycleResult,
           state: "AWAITING_RESPONSE",
-          release,
+          release: evidencedRelease,
           externalSideEffect: "RECORDED_ONLY",
           updatedAt: now.toISOString(),
         };
@@ -1010,7 +1102,7 @@ export async function recordSupplierQuoteRelease(args: {
             revision: cycleResult.revision,
             requestHash: cycleResult.requestHash,
             responseCount: 0,
-            releasedOn: release.releasedOn,
+            releasedOn: evidencedRelease.releasedOn,
             updatedAt: now.toISOString(),
           },
           updatedAt: now.toISOString(),
@@ -1020,10 +1112,10 @@ export async function recordSupplierQuoteRelease(args: {
           data: { result: inputJson(projected), resultHash: digest(projected) },
           select: caseSelect,
         });
-        const eventPayload = inputJson({ quoteCycleId: quoteCycle.id, release });
+        const eventPayload = inputJson({ quoteCycleId: quoteCycle.id, release: evidencedRelease });
         await appendCaseEvent({ tx, caseId: quoteCycle.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED", status: "RUNNING", message: "External supplier quote-request release was recorded.", payload: eventPayload });
         await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED", message: "The quote request is awaiting a supplier response.", payload: eventPayload });
-        return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, release };
+        return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, release: evidencedRelease };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
@@ -1136,10 +1228,25 @@ export async function recordSupplierQuoteResponse(args: {
           recordedByUserId: args.context.userId,
           recordedAt: now.toISOString(),
         };
+        const evidence = await appendExternalEvidence({
+          tx,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          executionTaskId: quoteCycle.id,
+          actorUserId: args.context.userId,
+          kind: "SUPPLIER_QUOTE_RESPONSE",
+          title: `Supplier quote ${responseInput.quoteReference}`,
+          sourceUri: responseInput.evidenceUrl,
+          sourceRecordId: responseInput.quoteReference,
+          observedOn: responseInput.receivedOn,
+          contentHash: responseHash,
+          payload: inputJson(normalizedResponse),
+        });
+        const evidencedResponse = { ...response, evidenceId: evidence.id };
         const result = {
           ...cycleResult,
           state: typeof cycleResult.selectedResponseHash === "string" ? "RESPONSE_SELECTED" : "RESPONSES_RECEIVED",
-          responses: [...responses, response],
+          responses: [...responses, evidencedResponse],
           updatedAt: now.toISOString(),
         };
         const updatedCycle = await tx.supplyExecutionTask.update({
@@ -1156,7 +1263,7 @@ export async function recordSupplierQuoteResponse(args: {
             requestHash: cycleResult.requestHash,
             responseCount: responses.length + 1,
             releasedOn: release.releasedOn,
-            lastQuoteReference: response.quoteReference,
+            lastQuoteReference: evidencedResponse.quoteReference,
             updatedAt: now.toISOString(),
           },
           updatedAt: now.toISOString(),
@@ -1166,10 +1273,10 @@ export async function recordSupplierQuoteResponse(args: {
           data: { result: inputJson(projected), resultHash: digest(projected) },
           select: caseSelect,
         });
-        const eventPayload = inputJson({ quoteCycleId: quoteCycle.id, response });
+        const eventPayload = inputJson({ quoteCycleId: quoteCycle.id, response: evidencedResponse });
         await appendCaseEvent({ tx, caseId: quoteCycle.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED", status: "RUNNING", message: "Supplier quote response was recorded.", payload: eventPayload });
         await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED", message: "A supplier quote response is ready for commercial review.", payload: eventPayload });
-        return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, response };
+        return { procurementCase: quoteCycleCaseView(updatedCase, updatedCycle), quoteCycle: updatedCycle, response: evidencedResponse };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
@@ -1258,6 +1365,22 @@ export async function reviewProcurementGate(args: {
           };
           review.reviewHash = digest({ sourceUrl: review.sourceUrl, note: review.note });
           if (record(reviews.sourceEvidence).reviewHash === review.reviewHash) return procurementCase;
+          const sourceEvidence = await appendExternalEvidence({
+            tx,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            executionTaskId: procurementCase.id,
+            actorUserId: args.context.userId,
+            kind: "SUPPLIER_SOURCE_REVIEW",
+            title: `Supplier source review for ${requiredText(current.selectedOption.name, "Supplier name", 300)}`,
+            sourceType: "OFFICIAL",
+            sourceUri: review.sourceUrl as string,
+            sourceRecordId: requiredText(current.selectedOption.id, "Supplier ID", 300),
+            observedOn: now.slice(0, 10),
+            contentHash: review.reviewHash as string,
+            payload: inputJson({ sourceUrl: review.sourceUrl, note: review.note }),
+          });
+          review.evidenceId = sourceEvidence.id;
           await cancelPendingApproval(tx, procurementCase.result);
           await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
           await cancelActiveQuoteCycles(tx, procurementCase.id, args.context.officeId, workspace.id);
@@ -1313,13 +1436,45 @@ export async function reviewProcurementGate(args: {
           if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(minimumOrderQuantity) || minimumOrderQuantity <= 0) {
             throw new SupplyPersistenceError("Stored supplier quote quantities are invalid.", "conflict");
           }
+          const quoteEvidenceUrl = publicUrl(response.evidenceUrl, "Stored quote evidence URL");
+          const quoteEvidenceHash = requiredText(response.responseHash, "Stored quote response hash", 128);
+          const quoteEvidence = typeof response.evidenceId === "string"
+            ? await tx.supplyEvidence.findFirst({
+                where: {
+                  id: response.evidenceId,
+                  officeId: args.context.officeId,
+                  workspaceId: workspace.id,
+                  executionTaskId: quoteCycle.id,
+                  kind: "SUPPLIER_QUOTE_RESPONSE",
+                  contentHash: quoteEvidenceHash,
+                },
+                select: { id: true },
+              })
+            : await appendExternalEvidence({
+                tx,
+                officeId: args.context.officeId,
+                workspaceId: workspace.id,
+                executionTaskId: quoteCycle.id,
+                actorUserId: args.context.userId,
+                kind: "SUPPLIER_QUOTE_RESPONSE",
+                title: `Supplier quote ${requiredText(response.quoteReference, "Stored quote reference", 300)}`,
+                sourceUri: quoteEvidenceUrl,
+                sourceRecordId: requiredText(response.quoteReference, "Stored quote reference", 300),
+                observedOn: isoDate(response.receivedOn, "Stored quote response date"),
+                contentHash: quoteEvidenceHash,
+                payload: inputJson(response),
+              });
+          if (!quoteEvidence) {
+            throw new SupplyPersistenceError("Stored supplier quote evidence is outside the current procurement scope.", "conflict");
+          }
           const confirmedTerms = {
             price,
             currency,
             minimumOrderQuantity,
             unitOfMeasure: normalizedUnitOfMeasure(response.unitOfMeasure, "Stored quote unit"),
             deliveryDate: requireCurrentOrFutureDate(isoDate(response.deliveryDate, "Stored delivery date"), "Stored delivery date"),
-            evidenceUrl: publicUrl(response.evidenceUrl, "Stored quote evidence URL"),
+            evidenceUrl: quoteEvidenceUrl,
+            evidenceId: quoteEvidence.id,
             quoteReference: requiredText(response.quoteReference, "Stored quote reference", 300),
             validUntil: requireCurrentOrFutureDate(isoDate(response.validUntil, "Stored quote validity date"), "Stored quote validity date"),
             quoteCycleTaskId: quoteCycle.id,
@@ -2018,8 +2173,28 @@ export async function savePurchaseOrderDraft(args: {
         const quoteCycleTaskId = requiredText(approvedTerms.quoteCycleTaskId, "Approved quote cycle task ID", 220);
         const quoteResponseHash = requiredText(approvedTerms.responseHash, "Approved quote response hash", 128);
         const quoteEvidenceUrl = publicUrl(approvedTerms.evidenceUrl, "Approved quote evidence URL");
+        const quoteEvidenceId = typeof approvedTerms.evidenceId === "string"
+          ? requiredText(approvedTerms.evidenceId, "Approved quote evidence ID", 220)
+          : null;
         if (approvedTerms.evidenceClass !== "OPERATOR_RECORDED_EXTERNAL") {
           throw new SupplyPersistenceError("Approved quote evidence class is invalid.", "conflict");
+        }
+        if (quoteEvidenceId) {
+          const quoteEvidence = await tx.supplyEvidence.findFirst({
+            where: {
+              id: quoteEvidenceId,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              executionTaskId: quoteCycleTaskId,
+              kind: "SUPPLIER_QUOTE_RESPONSE",
+              sourceUri: quoteEvidenceUrl,
+              contentHash: quoteResponseHash,
+            },
+            select: { id: true },
+          });
+          if (!quoteEvidence) {
+            throw new SupplyPersistenceError("Approved quote evidence no longer matches the procurement scope.", "conflict");
+          }
         }
         const order = {
           quantity: quantity.toString(),
@@ -2086,6 +2261,7 @@ export async function savePurchaseOrderDraft(args: {
             quoteCycleTaskId,
             quoteResponseHash,
             quoteEvidenceUrl,
+            quoteEvidenceId,
             evidenceClass: "OPERATOR_RECORDED_EXTERNAL",
           },
           totals: {
@@ -2917,8 +3093,23 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           throw new SupplyPersistenceError(`Accepted quantity cannot exceed the remaining ${remainingBefore.toString()} ${unitOfMeasure}.`, "invalid_input");
         }
         const now = new Date();
+        const evidence = await appendExternalEvidence({
+          tx,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          executionTaskId: purchaseAction.id,
+          actorUserId: args.context.userId,
+          kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT",
+          title: `Supplier acknowledgment ${acknowledgmentInput.supplierOrderReference}`,
+          sourceUri: acknowledgmentInput.evidenceUrl,
+          sourceRecordId: acknowledgmentInput.supplierOrderReference,
+          observedOn: acknowledgmentInput.acknowledgedOn,
+          contentHash: acknowledgmentHash,
+          payload: inputJson(normalizedAcknowledgment),
+        });
         const acknowledgment = {
           ...normalizedAcknowledgment,
+          evidenceId: evidence.id,
           acknowledgmentHash,
           recordedByUserId: args.context.userId,
           recordedAt: now.toISOString(),

@@ -2,6 +2,30 @@
 
 ## Latest Update
 
+### Supplier progression now uses canonical evidence records
+
+- Supplier source review, quote-request release, each supplier quote response,
+  and each order acknowledgment now append an office-scoped `SupplyEvidence`
+  record in the same transaction as the procurement event.
+- Evidence records preserve the exact task, source URL, source reference,
+  observed date, payload hash, actor, and capture time. Repeated identical
+  actions reuse the same evidence record instead of producing fake proof.
+- Commercial approval now carries the exact quote evidence ID with the quote
+  response hash. Purchase drafting validates both against the same quote-cycle
+  task before copying them into the immutable order scope.
+- Evidence links in the quote and acknowledgment views resolve through an
+  authenticated, tenant-scoped Supply OS route. Legacy records without an
+  evidence ID still use their existing source URL.
+- This is an evidence ledger, not a supplier connector. Derya still does not
+  send the quote request or purchase order in this slice.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL migration plus
+  `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false`
+
 ### Supplier quote requests and responses are persistent
 
 - Commercial confirmation no longer accepts browser-authored price and delivery

@@ -275,9 +275,13 @@ clear boundaries.
   accepts only a response loaded from that office-scoped task by its hash. It
   never accepts browser-authored commercial terms directly.
 - Request revisions, release, response, and selection append hashed events.
-  Release and response evidence stays `OPERATOR_RECORDED_EXTERNAL`. Recording
-  this evidence does not claim that Derya sent the request or that a supplier
-  connector exists. Supplier changes cancel the active quote cycle.
+  Supplier review, release, response, and acknowledgment also create immutable
+  `SupplyEvidence` rows bound to their exact task and content hash. The selected
+  response evidence ID travels with its response hash through both approval
+  scopes. Release and response evidence stays
+  `OPERATOR_RECORDED_EXTERNAL`. Recording this evidence does not claim that
+  Derya sent the request or that a supplier connector exists. Supplier changes
+  cancel the active quote cycle.
 - After those gates complete, Supply OS creates a separate immutable
   `PROCUREMENT_APPROVAL` task. Its input contains the exact selected supplier,
   confirmed quote terms, evidence review, and quality plan. `SupplyApproval`

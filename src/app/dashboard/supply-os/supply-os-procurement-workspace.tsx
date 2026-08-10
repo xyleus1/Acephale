@@ -138,6 +138,10 @@ function formatMoney(value: string, currency: string) {
   }).format(amount);
 }
 
+function evidenceHref(evidenceId: string | undefined, sourceUrl: string) {
+  return evidenceId ? `/api/supply-os/evidence/${encodeURIComponent(evidenceId)}` : sourceUrl;
+}
+
 function deliveryDate(leadTimeDays: number) {
   const date = new Date("2026-08-09T12:00:00Z");
   date.setUTCDate(date.getUTCDate() + leadTimeDays);
@@ -914,7 +918,7 @@ export function AtlasProcurementWorkspace({
                       <>
                         <section className={styles.purchaseAuthorizationState}>
                           <CheckCircle2 size={20} />
-                          <div><strong>{currentCase.quoteCycle.result.responses.length ? "Supplier responses received" : "Awaiting supplier response"}</strong><p>External request release recorded for {currentCase.quoteCycle.result.release?.releasedOn}. No message was sent by Derya.</p></div>
+                          <div><strong>{currentCase.quoteCycle.result.responses.length ? "Supplier responses received" : "Awaiting supplier response"}</strong><p>External request release recorded for {currentCase.quoteCycle.result.release?.releasedOn}. {currentCase.quoteCycle.result.release ? <a href={evidenceHref(currentCase.quoteCycle.result.release.evidenceId, currentCase.quoteCycle.result.release.evidenceUrl)} target="_blank" rel="noreferrer">Open release evidence</a> : null}</p></div>
                         </section>
                         {currentCase.quoteCycle.result.responses.map((response) => (
                           <section className={styles.purchaseApprovalRequest} key={response.responseHash}>
@@ -924,7 +928,7 @@ export function AtlasProcurementWorkspace({
                               <div><dt>MOQ</dt><dd>{response.minimumOrderQuantity} {response.unitOfMeasure}</dd></div>
                               <div><dt>Delivery</dt><dd>{response.deliveryDate}</dd></div>
                             </dl>
-                            <p>Received {response.receivedOn}, valid through {response.validUntil}. <a href={response.evidenceUrl} target="_blank" rel="noreferrer">Open evidence</a></p>
+                            <p>Received {response.receivedOn}, valid through {response.validUntil}. <a href={evidenceHref(response.evidenceId, response.evidenceUrl)} target="_blank" rel="noreferrer">Open captured evidence</a></p>
                             <button type="button" disabled={gateActionState === "saving"} onClick={() => confirmCommercialTerms(response.responseHash)}><Check size={14} /> Use quote</button>
                           </section>
                         ))}
@@ -996,6 +1000,7 @@ export function AtlasProcurementWorkspace({
                             <div><dt>Accepted</dt><dd>{purchaseReleaseResult.acknowledgedQuantity} {purchaseReleaseResult.unitOfMeasure}</dd></div>
                             <div><dt>Remaining</dt><dd>{purchaseReleaseResult.remainingQuantity} {purchaseReleaseResult.unitOfMeasure}</dd></div>
                             <div><dt>Supplier reference</dt><dd>{purchaseReleaseResult.lastAcknowledgment.supplierOrderReference}</dd></div>
+                            <div><dt>Evidence</dt><dd><a href={evidenceHref(purchaseReleaseResult.lastAcknowledgment.evidenceId, purchaseReleaseResult.lastAcknowledgment.evidenceUrl)} target="_blank" rel="noreferrer">Open acknowledgment</a></dd></div>
                           </dl>
                         ) : null}
                         {purchaseReleaseState === "ACKNOWLEDGED" ? (

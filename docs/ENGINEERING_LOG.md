@@ -4547,3 +4547,21 @@ Use this file for chronological implementation notes that future agents should s
 - Verification: Collapsible navigation, company navigation, sidebar map,
   product copy, TypeScript, diff-check, and authenticated browser QA pass.
 - Failed/skipped checks: None.
+
+### 2026-08-10 - Bind supplier progression to the evidence ledger
+
+- Branch: supply-os-procurement-evidence, targeting main
+- Commit: see git log
+- Task: Replace procurement URLs trapped in task JSON with independently
+  addressable evidence records that survive navigation and flow into approval.
+- Files changed: procurement persistence, authenticated evidence redirect,
+  sourcing types and evidence links, database and UI contracts, architecture,
+  decision record, and handoff.
+- Verification: Atlas sourcing contract, disposable-database sourcing
+  lifecycle and tenant contract, TypeScript, product copy, Supply OS layout
+  regressions, production build, whitespace, and changed-file U+2014 checks.
+- Caveats: Evidence URLs are captured records, not uploaded files or connected
+  supplier messages. Derya still does not send the RFQ or purchase order.
+- Follow-up: Add a controlled supplier communication task only after exact
+  recipient, message body, sender account, approval hash, provider message ID,
+  and unknown-send recovery are persisted.

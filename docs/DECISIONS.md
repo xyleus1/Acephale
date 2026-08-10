@@ -16,6 +16,26 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Procurement evidence is independently addressable
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A URL stored only inside mutable task JSON is useful context but not
+  a durable evidence system. Supplier qualification, quote selection, and
+  order acknowledgment need a stable record that survives task projection
+  changes and can be carried into an approval scope.
+- Decision: Append one immutable, office-scoped `SupplyEvidence` row for every
+  supplier source review, quote-request release, quote response, and order
+  acknowledgment. Bind each row to the exact execution task and content hash.
+  Carry the selected quote evidence ID with its response hash through sourcing
+  approval, purchase drafting, and final purchase authorization.
+- Access: Evidence links resolve through an authenticated Supply OS endpoint
+  that rechecks the current user and workspace before redirecting to the
+  captured source. Cross-office lookup fails closed.
+- Boundary: Operator-recorded external events remain labeled as such. A
+  canonical evidence record does not prove Derya sent a message, contacted a
+  supplier, issued a purchase order, or received a connected-provider event.
+
 ### 2026-08-10 - Commercial approval requires a persistent supplier quote cycle
 
 - Status: accepted
