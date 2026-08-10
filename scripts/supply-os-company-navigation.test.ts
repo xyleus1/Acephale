@@ -25,7 +25,9 @@ assert.match(demoCompany, /https:\/\/www\.atlas-robotics\.com\/icon\.svg/, "the 
 assert.match(index, /"New company"/, "admins need an inline company creation action");
 assert.match(index, /className=\{styles\.createRow\}/, "company creation must stay inline");
 assert.doesNotMatch(index, /<dialog|role="dialog"|aria-modal/, "company selection and creation must not use popups");
-assert.match(page, /canCreateCompany=\{session\.role === "ADMIN"\}/, "company creation must be limited to admins in the UI");
+assert.match(page, /where: \{ id: session\.userId, officeId: session\.officeId, isActive: true \}/, "page permissions must use the current database user, not a stale cookie role");
+assert.match(page, /canCreateCompany=\{currentUser\.role === "ADMIN"\}/, "company creation must be limited to current admins in the UI");
+assert.match(page, /canApproveProcurement=\{currentUser\.role === "ADMIN" \|\| currentUser\.role === "MANAGER"\}/, "procurement decisions must be limited to current managers and admins in the UI");
 assert.match(workspaceRoute, /session\.role !== "ADMIN"/, "company creation must be limited to admins on the server");
 
 console.log("Supply OS company navigation contract passed.");

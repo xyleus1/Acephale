@@ -17,6 +17,28 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-10 - Add persistent procurement qualification and exact-scope approval
+
+- Branch: supply-os-procurement-qualification, targeting main
+- Commit: see git log
+- Task: Replace passive procurement gates with durable supplier evidence,
+  commercial confirmation, quality planning, and exact-scope manager approval.
+- Files changed: procurement persistence and routes, sourcing client types,
+  in-page procurement workflow, queue status, scoped styles, database and UI
+  contracts, architecture decision, handoff, and engineering log.
+- Verification: sourcing UI and disposable-database persistence contracts,
+  TypeScript, production build, whitespace, and changed-file U+2014 checks
+  pass.
+- Failed/skipped checks: the strict tenant audit still reports nine pre-existing
+  findings outside the changed Supply OS files. The repository-wide U+2014 scan
+  still reports legacy documentation; the changed-file scan is clean. No
+  external supplier, PO, payment, booking, shipment, customs, or Logistics
+  action was attempted.
+- Caveats: approval authorizes only purchase preparation. It is deliberately
+  separate from the mutable case and does not release an external action.
+- Follow-up: add approved-scope purchase-order drafting, then create a separate
+  approval-gated Logistics handoff that references the immutable sourcing scope.
+
 ### 2026-08-09 - Persist supplier selection and procurement readiness gates
 
 - Branch: supply-os-procurement-progression, targeting main

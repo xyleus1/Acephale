@@ -55,7 +55,7 @@ export type SavedProcurementCase = {
     researchInput: SavedSourcingResearchRun["input"];
   };
   result: {
-    stage: "SOURCE_EVIDENCE" | "COMMERCIAL_CONFIRMATION" | "QUALITY_REVIEW";
+    stage: "SOURCE_EVIDENCE" | "COMMERCIAL_CONFIRMATION" | "QUALITY_REVIEW" | "APPROVAL" | "APPROVAL_PENDING" | "PURCHASE_READY";
     selectedOption: {
       id: string;
       name: string;
@@ -70,11 +70,41 @@ export type SavedProcurementCase = {
       quality: "Strong" | "Conditional" | "Unverified";
     };
     gates: {
-      sourceEvidence: "REVIEW_REQUIRED" | "BLOCKED";
+      sourceEvidence: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED" | "BLOCKED";
       commercialTerms: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED";
-      qualityPlan: "REVIEW_REQUIRED";
-      purchaseApproval: "BLOCKED";
+      qualityPlan: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED";
+      purchaseApproval: "BLOCKED" | "PENDING" | "APPROVED" | "REJECTED";
     };
+    evidenceState?: { commercialTerms?: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED" };
+    confirmedTerms?: {
+      price: number;
+      currency: string;
+      minimumOrderQuantity: number;
+      deliveryDate: string;
+      evidenceUrl: string;
+      quoteReference: string;
+      validUntil: string;
+    };
+    qualityPlan?: {
+      method: "SAMPLE" | "PRE_SHIPMENT_INSPECTION" | "DOCUMENT_REVIEW";
+      acceptanceCriteria: string;
+      owner: string;
+      targetDate: string;
+    };
+    reviews?: {
+      sourceEvidence?: { sourceUrl: string; note: string; reviewedAt: string; reviewHash: string };
+      commercialTerms?: { reviewedAt: string; reviewHash: string };
+      qualityPlan?: { reviewedAt: string; reviewHash: string };
+    };
+    approval?: {
+      id: string;
+      taskId: string;
+      scopeHash: string;
+      status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+      requestedAt: string;
+      decidedAt?: string;
+      decisionNote?: string | null;
+    } | null;
     selectionHash: string;
     updatedAt: string;
   } | null;

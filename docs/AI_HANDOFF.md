@@ -2,6 +2,36 @@
 
 ## Latest Update
 
+### Procurement qualification and exact-scope approval are now persistent
+
+- The procurement brief now runs four sequential gates in place: supplier
+  source review, commercial quote confirmation, quality acceptance planning,
+  and manager approval.
+- Gate submissions are server-validated against the active selection hash and
+  stored in the office-scoped procurement case with append-only hashed events.
+- Approval uses a separate immutable `PROCUREMENT_APPROVAL` task containing the
+  exact supplier, confirmed quote, evidence review, and quality plan. The
+  `SupplyApproval.scopeHash` must match that task input hash.
+- Pending approvals become stale when supplier or gate scope changes. Historical
+  approved records are preserved. A requester cannot self-approve when another
+  eligible manager or admin exists.
+- Expired approval requests, quotes, delivery dates, and quality-plan dates fail
+  closed and return the case to the relevant review gate instead of stranding it.
+- An approved case is only ready for purchase preparation. No supplier message,
+  purchase order, payment, booking, shipment, customs filing, or spend is
+  created.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- `DATABASE_URL=... npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false`
+- Production build with a harmless local PostgreSQL URL
+- `git diff --check`
+- Changed-file U+2014 scan
+- `npm run audit:tenant-scope:strict` still reports the same nine pre-existing
+  findings outside this Supply OS slice; no new procurement finding was added.
+
 ### Supplier selection now becomes a durable procurement planning case
 
 - Continuing from a supplier comparison now creates or updates an office-scoped

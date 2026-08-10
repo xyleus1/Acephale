@@ -90,6 +90,18 @@ export function AtlasInventoryWorkspace({
     return count ? `${count} sourced options` : "No sourced options";
   }
 
+  function caseStage(procurementCase: SavedProcurementCase | undefined) {
+    switch (procurementCase?.result?.stage) {
+      case "SOURCE_EVIDENCE": return "Source evidence required";
+      case "COMMERCIAL_CONFIRMATION": return "Confirm commercial terms";
+      case "QUALITY_REVIEW": return "Quality plan required";
+      case "APPROVAL": return "Ready for approval request";
+      case "APPROVAL_PENDING": return "Manager approval pending";
+      case "PURCHASE_READY": return "Approved for purchase preparation";
+      default: return null;
+    }
+  }
+
   function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (dataState !== "ready") return;
@@ -170,7 +182,7 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>{shortageQuantity(item)} units</td>
                 <td>{formatNeedBy(item.sku)}</td>
-                <td>{procurementCase?.result?.stage === "SOURCE_EVIDENCE" ? "Source evidence required" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" ? "Confirm commercial terms" : procurementCase?.result?.stage === "QUALITY_REVIEW" ? "Quality review required" : resultState(run)}</td>
+                <td>{caseStage(procurementCase) ?? resultState(run)}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}
@@ -197,7 +209,7 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>Custom request</td>
                 <td>Not set</td>
-                <td>{procurementCase?.result?.stage === "SOURCE_EVIDENCE" ? "Source evidence required" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" ? "Confirm commercial terms" : procurementCase?.result?.stage === "QUALITY_REVIEW" ? "Quality review required" : resultState(run)}</td>
+                <td>{caseStage(procurementCase) ?? resultState(run)}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}

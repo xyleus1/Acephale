@@ -2167,3 +2167,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Approval scope: The mutable planning case itself is not approved. A later
   purchase or outreach action must copy the exact selected supplier and terms
   into an immutable execution-task input and bind approval to that input hash.
+
+### 2026-08-10 - Procurement qualification is sequential and approval scope is immutable
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A row of readiness labels is not a procurement workflow. Operators
+  need durable actions for qualification, quote confirmation, quality planning,
+  and approval without turning mutable planning state into permission to spend.
+- Decision: The procurement case exposes sequential source-evidence,
+  commercial-term, and quality-plan actions. Each action is validated on the
+  server against the current supplier-selection hash and appended to the case
+  event ledger.
+- Approval: Once all three gates are complete, create a separate
+  `PROCUREMENT_APPROVAL` task whose immutable input includes the selected
+  supplier, confirmed terms, source review, and quality plan. Bind the manager
+  approval to that task input hash. Separation of duties blocks self-approval
+  when another eligible approver exists.
+- Staleness: A supplier or gate change cancels a pending approval. An approved
+  record remains historical, while the mutable case returns to an unapproved
+  state for the new scope. Expired quote, delivery, quality-plan, or approval
+  dates expire the pending request and return the case to the relevant review
+  gate so the operator can recover in place.
+- Boundary: Approval authorizes purchase preparation only. It does not contact
+  a supplier, issue a PO, commit spend, book freight, file customs, or create a
+  Logistics handoff.

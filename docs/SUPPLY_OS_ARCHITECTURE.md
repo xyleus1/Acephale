@@ -260,14 +260,25 @@ clear boundaries.
   Public candidate facts are re-derived from the persisted research output on
   the server. The client cannot promote modeled or unknown terms into sourced
   evidence.
-- The mutable procurement case is not an approval target. Any future purchase,
-  outreach, or logistics action must create a separate immutable execution task
-  whose input includes the exact supplier and commercial terms being approved.
+- The mutable procurement case is not an approval target. Operators complete
+  three server-validated gates in order: attributable supplier-source review,
+  quote and delivery confirmation, and a named quality acceptance plan.
+- After those gates complete, Supply OS creates a separate immutable
+  `PROCUREMENT_APPROVAL` task. Its input contains the exact selected supplier,
+  confirmed quote terms, evidence review, and quality plan. `SupplyApproval`
+  binds the manager decision to that input hash. Changing any upstream scope
+  cancels a pending approval and requires a new attempt. Expired commercial,
+  delivery, quality-plan, or approval dates return the case to the relevant
+  review gate instead of leaving an un-actionable pending request.
+- Approval only marks the sourcing scope ready for purchase preparation. It
+  does not contact the supplier, create a purchase order, commit spend, book
+  freight, or open a logistics record.
 - Interactive research uses the authenticated, office-rate-limited public web
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.
-- The current procurement brief is browser-local. It does not create a
-  purchase order, supplier contact, booking, spend, or logistics record.
+- Procurement case, gate reviews, approval request, decision, and hashed event
+  history are office-scoped PostgreSQL records. Unsaved field drafts remain
+  browser state.
 - A later Logistics integration will create a canonical approval-gated
   `SupplyAction`, prefill cargo, quantity, pickup, destination, need-by date,
   selected source, and evidence references, then open the Logistics panel by

@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { createSupplyWorkspace, listSupplyWorkspaces, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import {
+  decideProcurementApproval,
   listProcurementCases,
+  requestProcurementApproval,
+  reviewProcurementGate,
   saveProcurementSelection,
 } from "../src/lib/supply-os/procurement-case-persistence";
 import {
@@ -60,6 +63,14 @@ async function main() {
     };
     const started = await startSourcingResearchRun(context, input);
     const observedAt = new Date().toISOString();
+    const futureDate = (days: number) => {
+      const date = new Date();
+      date.setUTCDate(date.getUTCDate() + days);
+      return date.toISOString().slice(0, 10);
+    };
+    const quoteDeliveryDate = futureDate(20);
+    const quoteValidUntil = futureDate(15);
+    const qualityTargetDate = futureDate(10);
     const source = { url: "https://example.com/product", sourceType: "OFFICIAL" };
     const supported = <T>(value: T) => ({
       value,
@@ -147,8 +158,175 @@ async function main() {
     assert.notEqual(procurementResult.selectedOption.deliveryDate, "Aug 23", "sourced delivery must not trust a browser-authored date");
     assert.match(procurementResult.selectedOption.deliveryDate, /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(procurementResult.selectedOption.quality, "Conditional");
-    assert.equal(procurementResult.gates.commercialTerms, "EVIDENCE_COMPLETE");
+    assert.equal(procurementResult.gates.commercialTerms, "REVIEW_REQUIRED", "web evidence is not a confirmed quote");
     assert.equal(procurementResult.gates.purchaseApproval, "BLOCKED");
+
+    const sourceReviewed = await reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "SOURCE_EVIDENCE",
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        note: "Verified the official supplier domain and matching product page.",
+      },
+    });
+    assert.equal((sourceReviewed.result as { stage: string }).stage, "COMMERCIAL_CONFIRMATION");
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "COMMERCIAL_TERMS",
+        expectedSelectionHash: "stale-selection-hash",
+        price: 125,
+        currency: "USD",
+        minimumOrderQuantity: 4,
+        deliveryDate: quoteDeliveryDate,
+        evidenceUrl: "https://example.com/quote/atlas-410",
+        quoteReference: "Q-ATLAS-410",
+        validUntil: quoteValidUntil,
+      },
+    }), /selection changed/i, "gate reviews must fail closed against stale supplier state");
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "COMMERCIAL_TERMS",
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        price: 125,
+        currency: "USD",
+        minimumOrderQuantity: 4,
+        deliveryDate: quoteDeliveryDate,
+        evidenceUrl: "https://example.com/quote/expired",
+        quoteReference: "Q-EXPIRED",
+        validUntil: futureDate(-1),
+      },
+    }), /cannot be in the past/i, "expired quotes must never become approval-ready terms");
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "COMMERCIAL_TERMS",
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        price: 125,
+        currency: "USD",
+        minimumOrderQuantity: 4,
+        deliveryDate: futureDate(-1),
+        evidenceUrl: "https://example.com/quote/missed-delivery",
+        quoteReference: "Q-MISSED-DELIVERY",
+        validUntil: quoteValidUntil,
+      },
+    }), /delivery date cannot be in the past/i, "a missed delivery date must never become approval-ready");
+
+    const termsReviewed = await reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "COMMERCIAL_TERMS",
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        price: 125,
+        currency: "USD",
+        minimumOrderQuantity: 4,
+        deliveryDate: quoteDeliveryDate,
+        evidenceUrl: "https://example.com/quote/atlas-410",
+        quoteReference: "Q-ATLAS-410",
+        validUntil: quoteValidUntil,
+      },
+    });
+    assert.equal((termsReviewed.result as { stage: string }).stage, "QUALITY_REVIEW");
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "QUALITY_PLAN",
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        method: "SAMPLE",
+        acceptanceCriteria: "This plan is already late.",
+        owner: "Atlas vision engineering",
+        targetDate: futureDate(-1),
+      },
+    }), /quality target date cannot be in the past/i, "an expired quality plan must never become approval-ready");
+    const qualityReviewed = await reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "QUALITY_PLAN",
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        method: "SAMPLE",
+        acceptanceCriteria: "Verify calibration, connector fit, image depth accuracy, and serial traceability.",
+        owner: "Atlas vision engineering",
+        targetDate: qualityTargetDate,
+      },
+    });
+    assert.equal((qualityReviewed.result as { stage: string }).stage, "APPROVAL");
+
+    const manager = await prisma.user.create({
+      data: {
+        officeId: context.officeId,
+        email: `sourcing-manager-${suffix}@example.test`,
+        passwordHash: "verification-only",
+        fullName: "Procurement manager",
+        role: "MANAGER",
+        canViewWholeOffice: true,
+      },
+    });
+    const managerContext = { ...context, userId: manager.id, role: manager.role };
+    const requested = await requestProcurementApproval({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        reason: "Best supported option for the September production requirement.",
+      },
+    });
+    assert.equal((requested.procurementCase.result as { stage: string }).stage, "APPROVAL_PENDING");
+    const approvalTask = await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: requested.approval.executionTaskId! },
+    });
+    const approvalInput = approvalTask.input as {
+      selectedOption: { name: string };
+      confirmedTerms: { price: number; currency: string; minimumOrderQuantity: number };
+      qualityPlan: { method: string };
+    };
+    assert.equal(approvalTask.taskType, "PROCUREMENT_APPROVAL");
+    assert.equal(approvalTask.inputHash, requested.approval.scopeHash, "approval must bind the exact immutable task input");
+    assert.equal(approvalInput.selectedOption.name, "Example supplier");
+    assert.deepEqual(approvalInput.confirmedTerms, {
+      price: 125,
+      currency: "USD",
+      minimumOrderQuantity: 4,
+      deliveryDate: quoteDeliveryDate,
+      evidenceUrl: "https://example.com/quote/atlas-410",
+      quoteReference: "Q-ATLAS-410",
+      validUntil: quoteValidUntil,
+    });
+    assert.equal(approvalInput.qualityPlan.method, "SAMPLE");
+    await assert.rejects(() => decideProcurementApproval({
+      context,
+      approvalId: requested.approval.id,
+      input: { decision: "APPROVE", note: "Self approval attempt" },
+    }), /different eligible approver/i, "requesters cannot approve their own request when another approver exists");
+    const approved = await decideProcurementApproval({
+      context: managerContext,
+      approvalId: requested.approval.id,
+      input: { decision: "APPROVE", note: "Scope and quality plan approved." },
+    });
+    const approvedResult = approved.procurementCase.result as { stage: string; gates: { purchaseApproval: string } };
+    assert.equal(approvedResult.stage, "PURCHASE_READY");
+    assert.equal(approvedResult.gates.purchaseApproval, "APPROVED");
+    assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: requested.approval.id } })).status, "APPROVED");
+    assert.equal(approvalTask.externalRef, null, "approval must not create a PO, booking, or external action");
+    const approvalEventCount = await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: procurementCase.id, eventType: "PROCUREMENT_APPROVED" },
+    });
+    const approvedRetry = await decideProcurementApproval({
+      context: managerContext,
+      approvalId: requested.approval.id,
+      input: { decision: "APPROVE", note: "Scope and quality plan approved." },
+    });
+    assert.equal(approvedRetry.approval.status, "APPROVED", "an identical decision retry must return the committed result");
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: procurementCase.id, eventType: "PROCUREMENT_APPROVED" },
+    }), approvalEventCount, "an identical decision retry must not append duplicate history");
 
     const weakEvidenceCase = await saveProcurementSelection({
       context,
@@ -177,6 +355,7 @@ async function main() {
     assert.equal(weakEvidenceResult.selectedOption.deliveryType, "Unknown");
     assert.equal(weakEvidenceResult.gates.commercialTerms, "REVIEW_REQUIRED");
     assert.equal(weakEvidenceResult.gates.purchaseApproval, "BLOCKED");
+    assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: requested.approval.id } })).status, "APPROVED", "historical approval remains immutable after the case changes");
     await assert.rejects(() => saveProcurementSelection({
       context,
       researchRunId: started.id,
@@ -258,16 +437,108 @@ async function main() {
       },
     });
     assert.equal((returnedCase.result as { selectedOption: { name: string } }).selectedOption.name, "Example supplier", "operators must be able to return to a prior supplier safely");
+    const returnedHash = (returnedCase.result as { selectionHash: string }).selectionHash;
+    await reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: { gate: "SOURCE_EVIDENCE", expectedSelectionHash: returnedHash, note: "Verified supplier source for approval retry." },
+    });
+    await reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: {
+        gate: "COMMERCIAL_TERMS",
+        expectedSelectionHash: returnedHash,
+        price: 126,
+        currency: "USD",
+        minimumOrderQuantity: 4,
+        deliveryDate: quoteDeliveryDate,
+        evidenceUrl: "https://example.com/quote/retry",
+        quoteReference: "Q-RETRY",
+        validUntil: quoteValidUntil,
+      },
+    });
+    const retryQualityPlan = {
+      method: "SAMPLE",
+      acceptanceCriteria: "Approve calibration, traceability, and connector-fit sample results.",
+      owner: "Atlas quality engineering",
+      targetDate: qualityTargetDate,
+    } as const;
+    await reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: { gate: "QUALITY_PLAN", expectedSelectionHash: returnedHash, ...retryQualityPlan },
+    });
+    const firstPendingAttempt = await requestProcurementApproval({
+      context,
+      caseId: returnedCase.id,
+      input: { expectedSelectionHash: returnedHash, reason: "Approval retry lifecycle test." },
+    });
+    await reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: {
+        gate: "QUALITY_PLAN",
+        expectedSelectionHash: returnedHash,
+        ...retryQualityPlan,
+        acceptanceCriteria: "Changed plan that invalidates the pending approval.",
+      },
+    });
+    assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: firstPendingAttempt.approval.id } })).status, "CANCELLED");
+    await assert.rejects(() => decideProcurementApproval({
+      context: managerContext,
+      approvalId: firstPendingAttempt.approval.id,
+      input: { decision: "APPROVE" },
+    }), /already been decided/i, "a cancelled approval cannot approve changed scope");
+    await reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: { gate: "QUALITY_PLAN", expectedSelectionHash: returnedHash, ...retryQualityPlan },
+    });
+    const secondPendingAttempt = await requestProcurementApproval({
+      context,
+      caseId: returnedCase.id,
+      input: { expectedSelectionHash: returnedHash, reason: "Restored exact scope requires a new attempt." },
+    });
+    assert.notEqual(secondPendingAttempt.approval.id, firstPendingAttempt.approval.id);
+    assert.equal(secondPendingAttempt.approval.scopeHash, firstPendingAttempt.approval.scopeHash, "restored scope keeps the same immutable hash");
+    assert.equal(secondPendingAttempt.approval.status, "PENDING");
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyApproval.update({
+        where: { id: secondPendingAttempt.approval.id },
+        data: { expiresAt: new Date(secondPendingAttempt.approval.requestedAt.getTime() + 1) },
+      });
+    });
+    const expiredDecision = await decideProcurementApproval({
+      context: managerContext,
+      approvalId: secondPendingAttempt.approval.id,
+      input: { decision: "APPROVE", note: "Too late" },
+    });
+    const expiredResult = expiredDecision.procurementCase.result as {
+      stage: string;
+      gates: { purchaseApproval: string };
+      approval: { status: string };
+    };
+    assert.equal(expiredDecision.approval.status, "EXPIRED");
+    assert.equal(expiredResult.stage, "APPROVAL", "an expired request must return the case to an actionable review stage");
+    assert.equal(expiredResult.gates.purchaseApproval, "BLOCKED");
+    assert.equal(expiredResult.approval.status, "EXPIRED");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: secondPendingAttempt.approval.executionTaskId! },
+    })).status, "CANCELLED");
     assert.equal((await listProcurementCases(context)).length, 1);
     const events = await prisma.supplyExecutionEvent.findMany({
       where: { executionTaskId: procurementCase.id },
       orderBy: { sequence: "asc" },
     });
-    assert.equal(events.length, 4, "identical retries must not append fake history while A-B-A remains valid");
-    assert.equal(events[0]?.eventType, "PROCUREMENT_CASE_CREATED");
-    assert.equal(events[1]?.eventType, "SUPPLIER_SELECTION_UPDATED");
-    assert.equal(events[2]?.eventType, "SUPPLIER_SELECTION_UPDATED");
-    assert.equal(events[3]?.eventType, "SUPPLIER_SELECTION_UPDATED");
+    const selectionEvents = events.filter((event) => event.eventType === "PROCUREMENT_CASE_CREATED" || event.eventType === "SUPPLIER_SELECTION_UPDATED");
+    assert.equal(selectionEvents.length, 4, "identical retries must not append fake history while A-B-A remains valid");
+    assert.equal(selectionEvents[0]?.eventType, "PROCUREMENT_CASE_CREATED");
+    assert.equal(selectionEvents[1]?.eventType, "SUPPLIER_SELECTION_UPDATED");
+    assert.equal(selectionEvents[2]?.eventType, "SUPPLIER_SELECTION_UPDATED");
+    assert.equal(selectionEvents[3]?.eventType, "SUPPLIER_SELECTION_UPDATED");
+    assert.ok(events.some((event) => event.eventType === "PROCUREMENT_APPROVED"));
     assert.ok(events.every((event) => Boolean(event.payloadHash)));
 
     const duplicateRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "DUPLICATE-ID" });
@@ -324,6 +595,7 @@ async function main() {
       },
     });
     const restrictedContext = { ...context, userId: restrictedUser.id, role: restrictedUser.role, canViewWholeOffice: false };
+    const stalePrivilegedContext = { ...restrictedContext, role: "ADMIN", canViewWholeOffice: true };
     await assert.rejects(() => listProcurementCases(restrictedContext), /not found|cannot edit/i, "unassigned employees must not read office procurement cases");
     await assert.rejects(() => saveProcurementSelection({
       context: restrictedContext,
@@ -342,11 +614,60 @@ async function main() {
         quality: "Unverified",
       },
     }), /not found|cannot edit/i, "unassigned employees must not change office procurement cases");
+    await assert.rejects(() => reviewProcurementGate({
+      context: restrictedContext,
+      caseId: returnedCase.id,
+      input: {
+        gate: "SOURCE_EVIDENCE",
+        expectedSelectionHash: (returnedCase.result as { selectionHash: string }).selectionHash,
+        note: "Unauthorized review attempt.",
+      },
+    }), /not found|cannot edit/i, "unassigned employees must not review procurement gates");
+    await assert.rejects(() => requestProcurementApproval({
+      context: restrictedContext,
+      caseId: returnedCase.id,
+      input: {
+        expectedSelectionHash: (returnedCase.result as { selectionHash: string }).selectionHash,
+        reason: "Unauthorized approval request.",
+      },
+    }), /not found|cannot edit/i, "unassigned employees must not request procurement approval");
+    await assert.rejects(() => decideProcurementApproval({
+      context: restrictedContext,
+      approvalId: requested.approval.id,
+      input: { decision: "APPROVE" },
+    }), /admin or manager/i, "employees must not decide procurement approvals");
+    await assert.rejects(() => decideProcurementApproval({
+      context: stalePrivilegedContext,
+      approvalId: secondPendingAttempt.approval.id,
+      input: { decision: "APPROVE" },
+    }), /admin or manager/i, "a stale privileged cookie must not preserve approval authority after demotion");
+    await assert.rejects(() => saveProcurementSelection({
+      context: stalePrivilegedContext,
+      researchRunId: started.id,
+      selection: {
+        id: "public:candidate-1",
+        name: "Stale-session write",
+        sourceClass: "Official",
+        sourceUrl: "https://example.com/",
+        price: 125,
+        currency: "USD",
+        minimumOrderQuantity: 4,
+        priceType: "Sourced",
+        deliveryDate: quoteDeliveryDate,
+        deliveryType: "Sourced",
+        quality: "Conditional",
+      },
+    }), /not found|cannot edit/i, "a stale privileged cookie must not change supplier selection after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
+    await assert.rejects(() => decideProcurementApproval({
+      context: foreign,
+      approvalId: requested.approval.id,
+      input: { decision: "APPROVE" },
+    }), /not found/i, "another office must not decide a procurement approval");
 
     console.log("Supply OS sourcing persistence checks passed.");
   } finally {

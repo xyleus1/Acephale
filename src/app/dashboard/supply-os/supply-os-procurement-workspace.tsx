@@ -220,6 +220,7 @@ export function AtlasProcurementWorkspace({
   requestText,
   initialRun,
   initialCase,
+  canApproveProcurement,
   onResearchSaved,
   onProcurementCaseSaved,
   onBack,
@@ -228,6 +229,7 @@ export function AtlasProcurementWorkspace({
   requestText: string;
   initialRun?: SavedSourcingResearchRun | null;
   initialCase?: SavedProcurementCase | null;
+  canApproveProcurement: boolean;
   onResearchSaved: (run: SavedSourcingResearchRun) => void;
   onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
   onBack: () => void;
@@ -236,6 +238,26 @@ export function AtlasProcurementWorkspace({
   const [currentRun, setCurrentRun] = useState<SavedSourcingResearchRun | null>(initialRun ?? null);
   const [currentCase, setCurrentCase] = useState<SavedProcurementCase | null>(initialCase ?? null);
   const [caseSaveState, setCaseSaveState] = useState<"idle" | "saving" | "error">("idle");
+  const [gateActionState, setGateActionState] = useState<"idle" | "saving" | "error">("idle");
+  const [gateActionError, setGateActionError] = useState("");
+  const [sourceReviewNote, setSourceReviewNote] = useState("");
+  const [commercialForm, setCommercialForm] = useState(() => ({
+    price: String(initialCase?.result?.confirmedTerms?.price ?? initialCase?.result?.selectedOption.price ?? ""),
+    currency: initialCase?.result?.confirmedTerms?.currency ?? initialCase?.result?.selectedOption.currency ?? "USD",
+    minimumOrderQuantity: String(initialCase?.result?.confirmedTerms?.minimumOrderQuantity ?? initialCase?.result?.selectedOption.minimumOrderQuantity ?? ""),
+    deliveryDate: initialCase?.result?.confirmedTerms?.deliveryDate ?? initialCase?.result?.selectedOption.deliveryDate ?? "",
+    evidenceUrl: initialCase?.result?.confirmedTerms?.evidenceUrl ?? initialCase?.result?.selectedOption.sourceUrl ?? "",
+    quoteReference: initialCase?.result?.confirmedTerms?.quoteReference ?? "",
+    validUntil: initialCase?.result?.confirmedTerms?.validUntil ?? "",
+  }));
+  const [qualityForm, setQualityForm] = useState(() => ({
+    method: initialCase?.result?.qualityPlan?.method ?? "SAMPLE",
+    acceptanceCriteria: initialCase?.result?.qualityPlan?.acceptanceCriteria ?? "",
+    owner: initialCase?.result?.qualityPlan?.owner ?? "",
+    targetDate: initialCase?.result?.qualityPlan?.targetDate ?? "",
+  }));
+  const [approvalReason, setApprovalReason] = useState("");
+  const [approvalNote, setApprovalNote] = useState("");
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
   const [researchState, setResearchState] = useState<"running" | "complete" | "degraded">(
     initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : "running",
@@ -253,15 +275,41 @@ export function AtlasProcurementWorkspace({
         name: savedSelection.name,
         sourceClass: savedSelection.sourceClass,
         sourceUrl: savedSelection.sourceUrl,
-        modeledUnitCostUsd: savedSelection.price ?? 0,
-        currency: savedSelection.currency,
-        minimumOrderQuantity: savedSelection.minimumOrderQuantity ?? 0,
+        modeledUnitCostUsd: currentCase?.result?.confirmedTerms?.price ?? savedSelection.price ?? 0,
+        currency: currentCase?.result?.confirmedTerms?.currency ?? savedSelection.currency,
+        minimumOrderQuantity: currentCase?.result?.confirmedTerms?.minimumOrderQuantity ?? savedSelection.minimumOrderQuantity ?? 0,
         priceType: savedSelection.priceType,
-        deliveryDate: displayStoredDate(savedSelection.deliveryDate),
+        deliveryDate: displayStoredDate(currentCase?.result?.confirmedTerms?.deliveryDate ?? savedSelection.deliveryDate),
         deliveryType: savedSelection.deliveryType,
         quality: savedSelection.quality,
-      }
+    }
     : comparisonOption;
+
+  useEffect(() => {
+    const result = currentCase?.result;
+    if (!result) return;
+    const terms = result.confirmedTerms;
+    setSourceReviewNote("");
+    setCommercialForm({
+      price: String(terms?.price ?? result.selectedOption.price ?? ""),
+      currency: terms?.currency ?? result.selectedOption.currency ?? "USD",
+      minimumOrderQuantity: String(terms?.minimumOrderQuantity ?? result.selectedOption.minimumOrderQuantity ?? ""),
+      deliveryDate: terms?.deliveryDate ?? result.selectedOption.deliveryDate ?? "",
+      evidenceUrl: terms?.evidenceUrl ?? result.selectedOption.sourceUrl ?? "",
+      quoteReference: terms?.quoteReference ?? "",
+      validUntil: terms?.validUntil ?? "",
+    });
+    setQualityForm({
+      method: result.qualityPlan?.method ?? "SAMPLE",
+      acceptanceCriteria: result.qualityPlan?.acceptanceCriteria ?? "",
+      owner: result.qualityPlan?.owner ?? "",
+      targetDate: result.qualityPlan?.targetDate ?? "",
+    });
+    setApprovalReason("");
+    setApprovalNote("");
+    setGateActionError("");
+    setGateActionState("idle");
+  }, [currentCase?.result?.selectionHash]);
 
   useEffect(() => {
     if (initialRun) return;
@@ -350,6 +398,78 @@ export function AtlasProcurementWorkspace({
     } catch {
       setCaseSaveState("error");
     }
+  }
+
+  async function runCaseAction(path: string, body: Record<string, unknown>) {
+    if (!currentCase?.result || gateActionState === "saving") return;
+    setGateActionState("saving");
+    setGateActionError("");
+    try {
+      const response = await fetch(path, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({})) as { procurementCase?: SavedProcurementCase; error?: string };
+      if (!response.ok || !payload.procurementCase) throw new Error(payload.error ?? "Procurement review could not be saved.");
+      setCurrentCase(payload.procurementCase);
+      onProcurementCaseSaved(payload.procurementCase);
+      setGateActionState("idle");
+    } catch (error) {
+      setGateActionState("error");
+      setGateActionError(error instanceof Error ? error.message : "Procurement review could not be saved.");
+    }
+  }
+
+  function reviewSourceEvidence() {
+    if (!currentCase?.result) return;
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/review`, {
+      gate: "SOURCE_EVIDENCE",
+      expectedSelectionHash: currentCase.result.selectionHash,
+      note: sourceReviewNote,
+    });
+  }
+
+  function confirmCommercialTerms() {
+    if (!currentCase?.result) return;
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/review`, {
+      gate: "COMMERCIAL_TERMS",
+      expectedSelectionHash: currentCase.result.selectionHash,
+      price: Number(commercialForm.price),
+      currency: commercialForm.currency,
+      minimumOrderQuantity: Number(commercialForm.minimumOrderQuantity),
+      deliveryDate: commercialForm.deliveryDate,
+      evidenceUrl: commercialForm.evidenceUrl,
+      quoteReference: commercialForm.quoteReference,
+      validUntil: commercialForm.validUntil || null,
+    });
+  }
+
+  function saveQualityPlan() {
+    if (!currentCase?.result) return;
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/review`, {
+      gate: "QUALITY_PLAN",
+      expectedSelectionHash: currentCase.result.selectionHash,
+      ...qualityForm,
+    });
+  }
+
+  function requestApproval() {
+    if (!currentCase?.result) return;
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/approval`, {
+      expectedSelectionHash: currentCase.result.selectionHash,
+      reason: approvalReason,
+    });
+  }
+
+  function decideApproval(decision: "APPROVE" | "REJECT") {
+    const approvalId = currentCase?.result?.approval?.id;
+    if (!approvalId) return;
+    void runCaseAction(`/api/supply-os/procurement-approvals/${approvalId}/decision`, {
+      decision,
+      note: approvalNote || null,
+    });
   }
 
   return (
@@ -478,13 +598,67 @@ export function AtlasProcurementWorkspace({
             </dl>
             {currentCase?.result ? (
               <section className={styles.procurementGateGrid} aria-label="Procurement readiness">
-                <div><span data-status={currentCase.result.gates.sourceEvidence} /><p><strong>Supplier evidence</strong><small>{currentCase.result.gates.sourceEvidence === "BLOCKED" ? "Attributable source required" : "Human qualification required"}</small></p></div>
-                <div><span data-status={currentCase.result.gates.commercialTerms} /><p><strong>Commercial terms</strong><small>{currentCase.result.gates.commercialTerms === "EVIDENCE_COMPLETE" ? "Sourced price and delivery found" : "Confirm price, currency, MOQ, and delivery"}</small></p></div>
-                <div><span data-status={currentCase.result.gates.qualityPlan} /><p><strong>Quality plan</strong><small>Sample or inspection plan required</small></p></div>
-                <div><span data-status={currentCase.result.gates.purchaseApproval} /><p><strong>Purchase approval</strong><small>Blocked until review gates are complete</small></p></div>
+                <div><span data-status={currentCase.result.gates.sourceEvidence} /><p><strong>Supplier evidence</strong><small>{currentCase.result.gates.sourceEvidence === "EVIDENCE_COMPLETE" ? "Supplier source reviewed" : currentCase.result.gates.sourceEvidence === "BLOCKED" ? "Attributable source required" : "Human qualification required"}</small></p></div>
+                <div><span data-status={currentCase.result.gates.commercialTerms} /><p><strong>Commercial terms</strong><small>{currentCase.result.gates.commercialTerms === "EVIDENCE_COMPLETE" ? "Quote terms confirmed" : "Confirm price, currency, MOQ, and delivery"}</small></p></div>
+                <div><span data-status={currentCase.result.gates.qualityPlan} /><p><strong>Quality plan</strong><small>{currentCase.result.gates.qualityPlan === "EVIDENCE_COMPLETE" ? "Acceptance plan recorded" : "Sample or inspection plan required"}</small></p></div>
+                <div><span data-status={currentCase.result.gates.purchaseApproval} /><p><strong>Purchase approval</strong><small>{currentCase.result.gates.purchaseApproval === "APPROVED" ? "Approved for purchase preparation" : currentCase.result.gates.purchaseApproval === "PENDING" ? "Manager decision pending" : currentCase.result.gates.purchaseApproval === "REJECTED" ? "Revision required" : "Blocked until review gates are complete"}</small></p></div>
               </section>
             ) : null}
-            <p><ShieldCheck size={15} /> Qualification, commercial terms, quality plan, and approval remain required. No purchase order, supplier contact, booking, or spend was created.</p>
+            {currentCase?.result ? (
+              <section className={styles.procurementGateAction} aria-live="polite">
+                {currentCase.result.stage === "SOURCE_EVIDENCE" ? (
+                  <>
+                    <header><small>Gate 1 of 4</small><h4>Qualify the supplier source</h4><p>Open the attributed source, verify that the company and component match, then record what you checked.</p></header>
+                    {currentCase.result.selectedOption.sourceUrl ? <a href={currentCase.result.selectedOption.sourceUrl} target="_blank" rel="noreferrer">Open attributed supplier source <ArrowRight size={14} /></a> : null}
+                    <label>Review note<textarea value={sourceReviewNote} onChange={(event) => setSourceReviewNote(event.target.value)} placeholder="Verified company identity, product match, and source ownership." /></label>
+                    <button type="button" disabled={gateActionState === "saving" || !currentCase.result.selectedOption.sourceUrl} onClick={reviewSourceEvidence}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} Confirm supplier evidence</button>
+                  </>
+                ) : currentCase.result.stage === "COMMERCIAL_CONFIRMATION" ? (
+                  <>
+                    <header><small>Gate 2 of 4</small><h4>Confirm quote and delivery terms</h4><p>Web research is a lead, not a quote. Record the commercial source that a buyer can defend.</p></header>
+                    <div className={styles.procurementFormGrid}>
+                      <label>Unit price<input type="number" min="0.01" step="0.01" value={commercialForm.price} onChange={(event) => setCommercialForm((current) => ({ ...current, price: event.target.value }))} /></label>
+                      <label>Currency<input maxLength={3} value={commercialForm.currency} onChange={(event) => setCommercialForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></label>
+                      <label>MOQ<input type="number" min="0.01" step="0.01" value={commercialForm.minimumOrderQuantity} onChange={(event) => setCommercialForm((current) => ({ ...current, minimumOrderQuantity: event.target.value }))} /></label>
+                      <label>Delivery date<input type="date" value={commercialForm.deliveryDate} onChange={(event) => setCommercialForm((current) => ({ ...current, deliveryDate: event.target.value }))} /></label>
+                      <label>Quote reference<input value={commercialForm.quoteReference} onChange={(event) => setCommercialForm((current) => ({ ...current, quoteReference: event.target.value }))} placeholder="Quote number or dated offer" /></label>
+                      <label>Valid until<input type="date" value={commercialForm.validUntil} onChange={(event) => setCommercialForm((current) => ({ ...current, validUntil: event.target.value }))} /></label>
+                      <label className={styles.procurementWideField}>Evidence URL<input type="url" value={commercialForm.evidenceUrl} onChange={(event) => setCommercialForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>
+                    </div>
+                    <button type="button" disabled={gateActionState === "saving"} onClick={confirmCommercialTerms}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} Confirm commercial terms</button>
+                  </>
+                ) : currentCase.result.stage === "QUALITY_REVIEW" ? (
+                  <>
+                    <header><small>Gate 3 of 4</small><h4>Define acceptance before buying</h4><p>A vague quality promise is useless. Choose the verification method and write the pass criteria.</p></header>
+                    <div className={styles.procurementFormGrid}>
+                      <label>Verification method<select value={qualityForm.method} onChange={(event) => setQualityForm((current) => ({ ...current, method: event.target.value as typeof current.method }))}><option value="SAMPLE">Sample approval</option><option value="PRE_SHIPMENT_INSPECTION">Pre-shipment inspection</option><option value="DOCUMENT_REVIEW">Document review</option></select></label>
+                      <label>Owner<input value={qualityForm.owner} onChange={(event) => setQualityForm((current) => ({ ...current, owner: event.target.value }))} placeholder="Operations or engineering owner" /></label>
+                      <label>Target date<input type="date" value={qualityForm.targetDate} onChange={(event) => setQualityForm((current) => ({ ...current, targetDate: event.target.value }))} /></label>
+                      <label className={styles.procurementWideField}>Acceptance criteria<textarea value={qualityForm.acceptanceCriteria} onChange={(event) => setQualityForm((current) => ({ ...current, acceptanceCriteria: event.target.value }))} placeholder="Specify measurable checks, documents, tolerances, or sample result." /></label>
+                    </div>
+                    <button type="button" disabled={gateActionState === "saving"} onClick={saveQualityPlan}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} Save quality plan</button>
+                  </>
+                ) : currentCase.result.stage === "APPROVAL" ? (
+                  <>
+                    <header><small>Gate 4 of 4</small><h4>Request approval of this exact scope</h4><p>The selected supplier, confirmed quote terms, evidence review, and quality plan are sealed into one immutable approval object.</p></header>
+                    <label>Approval reason<textarea value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} placeholder="Explain why this option should move to purchase preparation." /></label>
+                    <button type="button" disabled={gateActionState === "saving"} onClick={requestApproval}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <ShieldCheck size={14} />} Request manager approval</button>
+                  </>
+                ) : currentCase.result.stage === "APPROVAL_PENDING" ? (
+                  <>
+                    <header><small>Approval pending</small><h4>Exact supplier and terms are locked</h4><p>A manager or admin must decide this scope. Editing the supplier or any gate cancels the pending approval.</p></header>
+                    {canApproveProcurement ? <><label>Decision note<textarea value={approvalNote} onChange={(event) => setApprovalNote(event.target.value)} placeholder="Record the decision rationale." /></label><div className={styles.procurementDecisionActions}><button type="button" disabled={gateActionState === "saving"} onClick={() => decideApproval("APPROVE")}><Check size={14} /> Approve scope</button><button type="button" disabled={gateActionState === "saving"} onClick={() => decideApproval("REJECT")}><TriangleAlert size={14} /> Reject</button></div></> : <p className={styles.procurementPermissionNote}>Your role can view this request but cannot decide it.</p>}
+                  </>
+                ) : (
+                  <>
+                    <header><small>Approved scope</small><h4>Ready for purchase preparation</h4><p>The sourcing decision is approved. No purchase order, supplier message, booking, shipment, or spend has been created.</p></header>
+                    <button type="button" disabled><PackageCheck size={14} /> Purchase preparation is the next slice</button>
+                  </>
+                )}
+                {gateActionState === "error" ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> {gateActionError}</p> : null}
+              </section>
+            ) : null}
+            <p><ShieldCheck size={15} /> {currentCase?.result?.stage === "PURCHASE_READY" ? "This scope is approved for purchase preparation. No purchase order, supplier contact, booking, or spend was created." : "Qualification, commercial terms, quality plan, and approval remain required. No purchase order, supplier contact, booking, or spend was created."}</p>
             <div className={styles.procurementCaseActions}>
               <button type="button" onClick={() => setPhase("compare")}><ArrowLeft size={15} /> Review alternatives</button>
               <button type="button" onClick={onBack}>Back to sourcing</button>

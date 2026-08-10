@@ -468,10 +468,12 @@ export function SupplyOsDashboardWorkspace({
   storageScope,
   presentationMode = false,
   activePanel = "materials",
+  canApproveProcurement = false,
 }: {
   storageScope: string;
   presentationMode?: boolean;
   activePanel?: SupplyOsPanel;
+  canApproveProcurement?: boolean;
 }) {
   const keys = useMemo(() => supplyCaseStorageKeys(storageScope), [storageScope]);
   const [savedCases, setSavedCases] = useState<SupplyCaseDashboard[]>([]);
@@ -530,6 +532,7 @@ export function SupplyOsDashboardWorkspace({
             dashboard={currentCase}
             presentationMode={presentationMode}
             activePanel={activePanel}
+            canApproveProcurement={canApproveProcurement}
           />
         )
       ) : null}
@@ -560,10 +563,12 @@ function CaseCommandCenter({
   dashboard,
   presentationMode,
   activePanel,
+  canApproveProcurement,
 }: {
   dashboard: SupplyCaseDashboard;
   presentationMode: boolean;
   activePanel: SupplyOsPanel;
+  canApproveProcurement: boolean;
 }) {
   const modelDashboard = useMemo(() => {
     const name = dashboardName(dashboard);
@@ -789,6 +794,7 @@ function CaseCommandCenter({
             requestText={procurementRequest.requestText}
             initialRun={procurementRequest.savedRun}
             initialCase={procurementRequest.savedCase}
+            canApproveProcurement={canApproveProcurement}
             onResearchSaved={saveResearchRun}
             onProcurementCaseSaved={saveProcurementCase}
             onBack={() => setProcurementRequest(null)}

@@ -2208,6 +2208,19 @@
   background: var(--danger);
 }
 
+.procurementGateGrid > div > span[data-status="PENDING"] {
+  box-shadow: 0 0 0 3px rgb(170 112 20 / 12%);
+  background: var(--decision);
+}
+
+.procurementGateGrid > div > span[data-status="APPROVED"] {
+  background: var(--success);
+}
+
+.procurementGateGrid > div > span[data-status="REJECTED"] {
+  background: var(--danger);
+}
+
 .procurementGateGrid p,
 .procurementGateGrid strong,
 .procurementGateGrid small {
@@ -2251,6 +2264,163 @@
   margin: 0 0 20px;
   color: var(--decision);
   font-size: 10px;
+}
+
+.procurementGateAction {
+  width: 100%;
+  display: grid;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #fbfcfc;
+}
+
+.procurementGateAction header small,
+.procurementGateAction header h4,
+.procurementGateAction header p {
+  display: block;
+  margin: 0;
+}
+
+.procurementGateAction header small {
+  color: var(--navy);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.procurementGateAction header h4 {
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.procurementGateAction header p,
+.procurementPermissionNote {
+  max-width: 720px;
+  margin-top: 5px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.procurementGateAction > a {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.procurementGateAction label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 620;
+  text-transform: uppercase;
+}
+
+.procurementGateAction input,
+.procurementGateAction select,
+.procurementGateAction textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--panel);
+  font: 13px/1.4 "IBM Plex Sans", sans-serif;
+  text-transform: none;
+}
+
+.procurementGateAction textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.procurementGateAction input:focus,
+.procurementGateAction select:focus,
+.procurementGateAction textarea:focus {
+  border-color: #8ca6b3;
+  outline: 3px solid rgb(42 82 102 / 10%);
+}
+
+.procurementGateAction > button,
+.procurementDecisionActions button {
+  width: fit-content;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--navy);
+  border-radius: 9px;
+  color: #fff;
+  background: var(--navy);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.procurementGateAction > a:focus-visible,
+.procurementGateAction button:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.procurementGateAction > button:hover:not(:disabled),
+.procurementDecisionActions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #173d50;
+}
+
+.procurementGateAction button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.procurementFormGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.procurementWideField {
+  grid-column: 1 / -1;
+}
+
+.procurementDecisionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.procurementDecisionActions button:last-child {
+  border-color: var(--line-strong);
+  color: var(--danger);
+  background: var(--panel);
+}
+
+.procurementActionError {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
 }
 
 .procurementCaseActions {
@@ -3593,6 +3763,18 @@
 
   .procurementGateGrid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .procurementGateAction {
+    padding: 14px;
+  }
+
+  .procurementFormGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .procurementWideField {
+    grid-column: auto;
   }
 
   .scenarioWorkbench {
