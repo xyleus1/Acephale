@@ -2,6 +2,38 @@
 
 ## Latest Update
 
+### Supplier qualification is structured, expiring, and reversible
+
+- Gate 1 no longer accepts one URL plus a free-text confirmation. A supplier
+  must now have operator-reviewed identity evidence, component-capability
+  evidence, a declared manufacturer or distributor relationship, a validity
+  date, and a review note before an RFQ can be prepared.
+- Authorized distributors require attributable manufacturer-authorization
+  evidence. Supplier identity evidence must match the attributed supplier
+  domain. Independent distributors remain explicitly identified instead of
+  being presented as authorized.
+- Operators can reject a supplier with a structured reason. The rejected
+  workstream remains visible in the sourcing queue, reopens with its evidence
+  and note, and can be requalified later without losing history.
+- Every outcome appends immutable `SUPPLIER_QUALIFICATION` evidence and a hashed
+  qualification or rejection event. The evidence record is correctly labeled
+  as operator-recorded external review, not as an automatically verified fact.
+- Expired and legacy free-text reviews reopen Gate 1 in the queue. Server-side
+  RFQ, sourcing approval, order preparation, and final purchase-authorization
+  boundaries reject missing or expired qualification evidence.
+- No schema, dependency, supplier contact, purchase execution, spend, booking,
+  customs, or Logistics behavior changed.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false --incremental false`
+- authenticated browser QA at 1440x900 and 390x844, including rejection,
+  refresh, queue resume, conditional authorization evidence, internal scrolling,
+  no horizontal overflow, and no Supply OS console errors
+- `git diff --check`
+
 ### Free-text sourcing requests clarify before supplier research
 
 - New free-text requests enter the sourcing queue immediately and remain in

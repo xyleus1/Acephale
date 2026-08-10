@@ -108,7 +108,7 @@ export type SavedProcurementCase = {
     supplierId?: string;
   };
   result: {
-    stage: "SOURCE_EVIDENCE" | "COMMERCIAL_CONFIRMATION" | "QUALITY_REVIEW" | "APPROVAL" | "APPROVAL_PENDING" | "PURCHASE_READY";
+    stage: "SOURCE_EVIDENCE" | "SUPPLIER_REJECTED" | "COMMERCIAL_CONFIRMATION" | "QUALITY_REVIEW" | "APPROVAL" | "APPROVAL_PENDING" | "PURCHASE_READY";
     selectedOption: {
       id: string;
       name: string;
@@ -150,7 +150,20 @@ export type SavedProcurementCase = {
       targetDate: string;
     };
     reviews?: {
-      sourceEvidence?: { sourceUrl: string; evidenceId?: string; note: string; reviewedAt: string; reviewHash: string };
+      sourceEvidence?: {
+        sourceUrl: string | null;
+        evidenceId?: string;
+        outcome: "QUALIFIED" | "REJECTED";
+        relationship?: "MANUFACTURER" | "AUTHORIZED_DISTRIBUTOR" | "INDEPENDENT_DISTRIBUTOR";
+        identityEvidenceUrl?: string;
+        capabilityEvidenceUrl?: string;
+        authorizationEvidenceUrl?: string | null;
+        validUntil?: string;
+        rejectionReason?: "IDENTITY_UNRESOLVED" | "CAPABILITY_UNRESOLVED" | "AUTHORIZATION_UNRESOLVED" | "SOURCE_UNVERIFIABLE" | "OTHER";
+        note: string;
+        reviewedAt: string;
+        reviewHash: string;
+      };
       commercialTerms?: { reviewedAt: string; reviewHash: string };
       qualityPlan?: { reviewedAt: string; reviewHash: string };
     };

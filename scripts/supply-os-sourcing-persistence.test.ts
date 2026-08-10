@@ -106,6 +106,18 @@ async function main() {
     const quoteDeliveryDate = futureDate(20);
     const quoteValidUntil = futureDate(15);
     const qualityTargetDate = futureDate(10);
+    const supplierQualificationInput = (expectedSelectionHash: string, note: string) => ({
+      gate: "SOURCE_EVIDENCE",
+      expectedSelectionHash,
+      outcome: "QUALIFIED",
+      relationship: "MANUFACTURER",
+      identityEvidenceUrl: "https://example.com/",
+      capabilityEvidenceUrl: "https://example.com/product",
+      authorizationEvidenceUrl: null,
+      validUntil: futureDate(90),
+      rejectionReason: "SOURCE_UNVERIFIABLE",
+      note,
+    });
     const source = { url: "https://example.com/product", sourceType: "OFFICIAL" };
     const supported = <T>(value: T) => ({
       value,
@@ -225,24 +237,59 @@ async function main() {
     assert.equal(procurementResult.selectedOption.quality, "Conditional");
     assert.equal(procurementResult.gates.commercialTerms, "REVIEW_REQUIRED", "web evidence is not a confirmed quote");
     assert.equal(procurementResult.gates.purchaseApproval, "BLOCKED");
+    const selectionHash = (procurementCase.result as { selectionHash: string }).selectionHash;
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        ...supplierQualificationInput(selectionHash, "Authorization evidence is intentionally missing for this negative test."),
+        relationship: "AUTHORIZED_DISTRIBUTOR",
+        authorizationEvidenceUrl: null,
+      },
+    }), /authorization evidence/i, "authorized distributors require manufacturer relationship evidence");
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        ...supplierQualificationInput(selectionHash, "Identity evidence points at the wrong company for this negative test."),
+        identityEvidenceUrl: "https://unrelated.example/company",
+      },
+    }), /match the attributed supplier domain/i, "supplier identity evidence cannot point at an unrelated domain");
 
-    const sourceReviewed = await reviewProcurementGate({
+    const rejectedSupplier = await reviewProcurementGate({
       context,
       caseId: procurementCase.id,
       input: {
         gate: "SOURCE_EVIDENCE",
-        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
-        note: "Verified the official supplier domain and matching product page.",
+        expectedSelectionHash: selectionHash,
+        outcome: "REJECTED",
+        rejectionReason: "AUTHORIZATION_UNRESOLVED",
+        note: "Manufacturer authorization could not be verified for this supplier relationship.",
       },
+    });
+    const rejectedResult = rejectedSupplier.result as { stage: string; gates: { sourceEvidence: string }; reviews: { sourceEvidence: { outcome: string; rejectionReason: string; evidenceId: string } } };
+    assert.equal(rejectedResult.stage, "SUPPLIER_REJECTED");
+    assert.equal(rejectedResult.gates.sourceEvidence, "BLOCKED");
+    assert.equal(rejectedResult.reviews.sourceEvidence.outcome, "REJECTED");
+    assert.equal(rejectedResult.reviews.sourceEvidence.rejectionReason, "AUTHORIZATION_UNRESOLVED");
+    const listedRejected = (await listProcurementCases(context)).find((candidate) => candidate.id === procurementCase.id);
+    assert.equal((listedRejected?.result as { stage?: string } | null)?.stage, "SUPPLIER_REJECTED", "rejected suppliers must remain visible and resumable");
+
+    const sourceReviewed = await reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: supplierQualificationInput(
+        selectionHash,
+        "Verified the official supplier identity and matching product capability page.",
+      ),
     });
     assert.equal((sourceReviewed.result as { stage: string }).stage, "COMMERCIAL_CONFIRMATION");
     const sourceReview = (sourceReviewed.result as { reviews: { sourceEvidence: { evidenceId: string } } }).reviews.sourceEvidence;
     assert.ok(sourceReview.evidenceId, "supplier review must create independently addressable evidence");
     const sourceReviewEvidence = await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: sourceReview.evidenceId } });
     assert.equal(sourceReviewEvidence.confidence, null, "captured operator evidence must not claim verification confidence");
-    assert.equal(sourceReviewEvidence.kind, "SUPPLIER_SOURCE_REVIEW");
-    assert.equal(sourceReviewEvidence.sourceType, "OFFICIAL");
-    const selectionHash = (procurementCase.result as { selectionHash: string }).selectionHash;
+    assert.equal(sourceReviewEvidence.kind, "SUPPLIER_QUALIFICATION");
+    assert.equal(sourceReviewEvidence.sourceType, "OPERATOR_RECORDED_EXTERNAL");
     const quoteRequestInput = {
       expectedSelectionHash: selectionHash,
       expectedRevision: 0,
@@ -254,6 +301,24 @@ async function main() {
       requirements: "Quote calibrated stereo depth cameras with serial traceability and delivery to Austin.",
       note: "Return calibration and warranty terms with the quote.",
     } as const;
+    const expiredQualificationResult = structuredClone(sourceReviewed.result) as Record<string, unknown>;
+    const expiredQualificationReviews = expiredQualificationResult.reviews as { sourceEvidence: { validUntil: string; reviewHash: string } };
+    expiredQualificationReviews.sourceEvidence.validUntil = futureDate(-1);
+    expiredQualificationReviews.sourceEvidence.reviewHash = "expired-qualification-projection-test";
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: expiredQualificationResult, resultHash: jsonDigest(expiredQualificationResult) },
+    });
+    const projectedExpiredQualification = (await listProcurementCasesForResearchRuns(context, [started.id]))
+      .find((candidate) => candidate.id === procurementCase.id);
+    assert.equal((projectedExpiredQualification?.result as { stage?: string } | null)?.stage, "SOURCE_EVIDENCE", "expired qualifications must reopen Gate 1 in the sourcing queue");
+    assert.equal(projectedExpiredQualification?.quoteCycle, null, "stale downstream work must not be exposed while qualification is expired");
+    await assert.rejects(() => saveSupplierQuoteRequest({ context, caseId: procurementCase.id, input: quoteRequestInput }), /qualification is missing or expired/i, "expired qualification must block RFQ preparation on the server");
+    await reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: supplierQualificationInput(selectionHash, "Requalified supplier identity and component capability after expiry."),
+    });
     await assert.rejects(() => saveSupplierQuoteRequest({
       context,
       caseId: procurementCase.id,
@@ -870,7 +935,7 @@ async function main() {
     await reviewProcurementGate({
       context,
       caseId: returnedCase.id,
-      input: { gate: "SOURCE_EVIDENCE", expectedSelectionHash: returnedHash, note: "Verified supplier source for approval retry." },
+      input: supplierQualificationInput(returnedHash, "Verified supplier identity and capability for approval retry."),
     });
     const retryQuoteDraft = await saveSupplierQuoteRequest({
       context,
@@ -1545,6 +1610,20 @@ async function main() {
           targetDate: qualityTargetDate,
           acceptanceCriteria: "Confirm specification and traceability documents.",
         },
+        reviews: {
+          sourceEvidence: {
+            outcome: "QUALIFIED",
+            relationship: "MANUFACTURER",
+            identityEvidenceUrl: "https://example.com/",
+            capabilityEvidenceUrl: "https://example.com/product",
+            authorizationEvidenceUrl: null,
+            validUntil: futureDate(90),
+            note: "Supplier identity and component capability were reviewed for the concurrent award test.",
+            reviewHash: "award-test-source-review",
+          },
+          commercialTerms: { reviewHash: "award-test-commercial-review" },
+          qualityPlan: { reviewHash: "award-test-quality-review" },
+        },
       };
       await prisma.supplyExecutionTask.update({
         where: { id: awardCandidate.id },
@@ -1640,11 +1719,10 @@ async function main() {
     await assert.rejects(() => reviewProcurementGate({
       context: restrictedContext,
       caseId: returnedCase.id,
-      input: {
-        gate: "SOURCE_EVIDENCE",
-        expectedSelectionHash: (returnedCase.result as { selectionHash: string }).selectionHash,
-        note: "Unauthorized review attempt.",
-      },
+      input: supplierQualificationInput(
+        (returnedCase.result as { selectionHash: string }).selectionHash,
+        "Unauthorized supplier qualification review attempt.",
+      ),
     }), /not found|cannot edit/i, "unassigned employees must not review procurement gates");
     await assert.rejects(() => requestProcurementApproval({
       context: restrictedContext,

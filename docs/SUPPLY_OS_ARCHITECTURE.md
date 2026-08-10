@@ -270,8 +270,18 @@ clear boundaries.
   the server. The client cannot promote modeled or unknown terms into sourced
   evidence.
 - The mutable procurement case is not an approval target. Operators complete
-  three server-validated gates in order: attributable supplier-source review,
+  three server-validated gates in order: structured supplier qualification,
   quote and delivery confirmation, and a named quality acceptance plan.
+- Supplier qualification records an explicit qualified or rejected outcome.
+  Qualification requires identity and component-capability evidence, a declared
+  manufacturer or distributor relationship, a review-validity date, and an
+  operator note. Authorized distributors also require manufacturer-authorization
+  evidence, and identity evidence must match the attributed supplier domain.
+  Rejected workstreams remain visible and may later be requalified without
+  deleting their prior evidence or events.
+- Missing, legacy free-text, and expired qualification reviews reopen Gate 1.
+  RFQ preparation, sourcing approval, order preparation, and final purchase
+  authorization fail closed until qualification is current.
 - Quote and delivery confirmation requires a persistent
   `SUPPLIER_QUOTE_CYCLE` child task. A revisioned request records quantity,
   unit, need-by, destination, response deadline, requirements, and notes. The

@@ -4656,3 +4656,23 @@ Use this file for chronological implementation notes that future agents should s
   checks.
 - Boundary: Pending drafts are browser-local. Research runs and downstream
   procurement work remain office-scoped canonical records with human approval.
+
+### 2026-08-10 - Replace free-text source review with supplier qualification
+
+- Branch: supply-os-supplier-progression-v3, targeting main
+- Commit: see git log
+- Task: Make supplier progression evidence-backed before RFQ preparation and
+  keep rejected or stale workstreams visible and resumable.
+- Behavior: Gate 1 now captures identity, component capability, relationship,
+  optional manufacturer authorization, validity, review note, and an explicit
+  qualified or rejected outcome. Rejections persist in the queue and can be
+  requalified later without erasing evidence history.
+- Safety: Identity evidence must match the attributed supplier domain.
+  Authorized distributors require manufacturer evidence. Legacy and expired
+  reviews reopen Gate 1, and downstream RFQ and approval boundaries fail closed.
+- Verification: Atlas sourcing contract, disposable PostgreSQL qualification
+  lifecycle, rejection and requalification, expiry projection, tenant checks,
+  TypeScript, responsive authenticated browser QA, product copy, production
+  build, whitespace, and changed-file U+2014 checks.
+- Boundary: No schema, dependency, supplier contact, purchase execution, spend,
+  booking, customs, or Logistics behavior changed.

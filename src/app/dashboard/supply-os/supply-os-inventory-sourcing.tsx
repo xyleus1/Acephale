@@ -145,6 +145,7 @@ export function AtlasInventoryWorkspace({
     }
     switch (procurementCase?.result?.stage) {
       case "SOURCE_EVIDENCE": return "Source evidence required";
+      case "SUPPLIER_REJECTED": return "Supplier rejected";
       case "COMMERCIAL_CONFIRMATION": return "Confirm commercial terms";
       case "QUALITY_REVIEW": return "Quality plan required";
       case "APPROVAL": return "Ready for approval request";
@@ -171,6 +172,7 @@ export function AtlasInventoryWorkspace({
     if (procurementCase?.purchaseAction) return "Review purchase action";
     if (procurementCase?.purchaseDraft) return "Review order draft";
     if (procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle) return "Review quote cycle";
+    if (procurementCase?.result?.stage === "SUPPLIER_REJECTED") return "Review rejection";
     if (procurementCase) return "Continue procurement";
     if (run?.status === "SUCCEEDED") return "View results";
     if (run?.status === "RUNNING") return "Researching";

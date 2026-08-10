@@ -16,6 +16,33 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Supplier qualification is a structured, expiring decision
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first procurement gate previously promoted one attributed URL
+  plus a free-text note to evidence-complete. That was durable, but it was not a
+  defensible supplier qualification and offered no explicit rejection path.
+- Decision: Require a structured qualification outcome before RFQ preparation.
+  A qualified supplier records identity evidence, component-capability
+  evidence, manufacturer or distributor relationship, review validity, note,
+  reviewer, timestamp, and deterministic hash. Authorized distributors also
+  require manufacturer-authorization evidence. Identity evidence must match the
+  attributed supplier domain.
+- Rejection: An operator may reject a candidate with a structured reason. The
+  workstream and immutable evidence remain visible and resumable. A later
+  qualification creates a new evidence record and event without deleting the
+  rejection history.
+- Freshness: Missing, legacy free-text, and expired qualification reviews reopen
+  Gate 1 in the read model. RFQ preparation and downstream approval boundaries
+  fail closed against missing or expired qualification.
+- Evidence class: Qualification is an operator review of external sources and is
+  stored as `OPERATOR_RECORDED_EXTERNAL`. It is not silently promoted to an
+  official fact, supplier award, compliance clearance, or purchase authority.
+- Consequences: The active sourcing queue can explain why a supplier is blocked
+  or rejected and can resume the exact review. No schema, connector, purchase,
+  or Logistics change is required.
+
 ### 2026-08-10 - Sourcing history uses cursor pages and exact workstream hydration
 
 - Status: accepted

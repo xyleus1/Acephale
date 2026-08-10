@@ -26,6 +26,8 @@ const PURCHASE_ACTION_CAPABILITY = "authorize.purchase_order";
 const PURCHASE_ACTION_REQUIRED_ROLE = "ADMIN";
 const PURCHASE_INCOTERMS = ["EXW", "FCA", "FOB", "CPT", "CIP", "DAP", "DDP"] as const;
 const PURCHASE_RELEASE_CHANNELS = ["EMAIL", "SUPPLIER_PORTAL", "EDI", "PHONE_CONFIRMED", "OTHER"] as const;
+const SUPPLIER_RELATIONSHIPS = ["MANUFACTURER", "AUTHORIZED_DISTRIBUTOR", "INDEPENDENT_DISTRIBUTOR"] as const;
+const SUPPLIER_REJECTION_REASONS = ["IDENTITY_UNRESOLVED", "CAPABILITY_UNRESOLVED", "AUTHORIZATION_UNRESOLVED", "SOURCE_UNVERIFIABLE", "OTHER"] as const;
 
 function digest(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -59,6 +61,12 @@ function publicUrl(value: unknown, label: string) {
   } catch {
     throw new SupplyPersistenceError(`${label} must be an HTTP or HTTPS URL without credentials.`, "invalid_input");
   }
+}
+
+function sameWebDomain(left: string, right: string) {
+  const leftHost = new URL(left).hostname.toLowerCase().replace(/^www\./, "");
+  const rightHost = new URL(right).hostname.toLowerCase().replace(/^www\./, "");
+  return leftHost === rightHost || leftHost.endsWith(`.${rightHost}`) || rightHost.endsWith(`.${leftHost}`);
 }
 
 function connectedProviderUrl(value: unknown, label: string) {
@@ -149,6 +157,20 @@ function nextStage(gates: Record<string, unknown>) {
   return "APPROVAL";
 }
 
+function currentSupplierQualification(value: unknown) {
+  const review = record(value);
+  return review.outcome === "QUALIFIED"
+    && typeof review.validUntil === "string"
+    && review.validUntil >= todayUtc();
+}
+
+function requireCurrentSupplierQualification(value: unknown, message: string) {
+  if (!currentSupplierQualification(value)) {
+    throw new SupplyPersistenceError(message, "conflict");
+  }
+  return record(value);
+}
+
 function retryableTransactionError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError
     && (
@@ -204,7 +226,7 @@ async function appendExternalEvidence(args: {
   kind: string;
   title: string;
   sourceType?: "OFFICIAL" | "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
-  sourceUri: string;
+  sourceUri: string | null;
   sourceRecordId?: string | null;
   observedOn: string;
   contentHash: string;
@@ -399,6 +421,40 @@ const caseSelect = {
   updatedAt: true,
 } satisfies Prisma.SupplyExecutionTaskSelect;
 
+type ProcurementCaseRecord = Prisma.SupplyExecutionTaskGetPayload<{ select: typeof caseSelect }>;
+
+function projectQualificationState(procurementCase: ProcurementCaseRecord) {
+  const result = record(procurementCase.result);
+  const gates = record(result.gates);
+  const reviews = record(result.reviews);
+  if (record(result.purchaseRelease).state === "ACKNOWLEDGED"
+    || result.stage === "SUPPLIER_REJECTED"
+    || gates.sourceEvidence !== "EVIDENCE_COMPLETE"
+    || currentSupplierQualification(reviews.sourceEvidence)) {
+    return { procurementCase, requiresRequalification: false };
+  }
+  const projectedResult: Record<string, unknown> = {
+    ...result,
+    gates: {
+      ...gates,
+      sourceEvidence: "REVIEW_REQUIRED",
+      commercialTerms: "REVIEW_REQUIRED",
+      qualityPlan: "REVIEW_REQUIRED",
+      purchaseApproval: "BLOCKED",
+    },
+    stage: "SOURCE_EVIDENCE",
+  };
+  delete projectedResult.confirmedTerms;
+  delete projectedResult.qualityPlan;
+  delete projectedResult.quoteCycle;
+  delete projectedResult.purchasePreparation;
+  delete projectedResult.purchaseAuthorization;
+  return {
+    procurementCase: { ...procurementCase, result: inputJson(projectedResult) },
+    requiresRequalification: true,
+  };
+}
+
 const purchaseDraftSelect = {
   id: true,
   parentTaskId: true,
@@ -550,7 +606,18 @@ async function listProcurementCasesMatching(
         : null;
     if (target && !target.has(task.parentTaskId)) target.set(task.parentTaskId, task);
   }
-  return cases.map((procurementCase) => {
+  return cases.map((rawProcurementCase) => {
+    const { procurementCase, requiresRequalification } = projectQualificationState(rawProcurementCase);
+    if (requiresRequalification) {
+      return {
+        ...procurementCase,
+        quoteCycle: null,
+        supplierEmailDraft: null,
+        supplierEmailAction: null,
+        purchaseDraft: null,
+        purchaseAction: null,
+      };
+    }
     const quoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
     const supplierEmailDraft = quoteCycle ? emailDraftByQuoteCycle.get(quoteCycle.id) ?? null : null;
     const candidateSupplierEmailAction = quoteCycle ? emailActionByQuoteCycle.get(quoteCycle.id) ?? null : null;
@@ -1088,6 +1155,10 @@ export async function saveSupplierQuoteRequest(args: {
         if (current.gates.sourceEvidence !== "EVIDENCE_COMPLETE" || current.gates.commercialTerms === "EVIDENCE_COMPLETE") {
           throw new SupplyPersistenceError("The quote request is available only after supplier review and before commercial confirmation.", "conflict");
         }
+        requireCurrentSupplierQualification(
+          current.reviews.sourceEvidence,
+          "Supplier qualification is missing or expired. Requalify the supplier before preparing an RFQ.",
+        );
         const existing = await tx.supplyExecutionTask.findFirst({
           where: {
             officeId: args.context.officeId,
@@ -1611,9 +1682,38 @@ export async function reviewProcurementGate(args: {
     throw new SupplyPersistenceError("A valid procurement review gate is required.", "invalid_input");
   }
   const expectedSelectionHash = requiredText(body.expectedSelectionHash, "Selection hash", 128);
-  const sourceReviewNote = gate === "SOURCE_EVIDENCE"
-    ? requiredText(body.note, "Evidence review note", 2_000)
-    : null;
+  let sourceQualificationInput: Record<string, unknown> | null = null;
+  if (gate === "SOURCE_EVIDENCE") {
+    const outcome = requiredText(body.outcome, "Supplier qualification outcome", 20).toUpperCase();
+    const note = requiredText(body.note, "Qualification review note", 2_000);
+    if (outcome === "QUALIFIED") {
+      const relationship = requiredText(body.relationship, "Supplier relationship", 40).toUpperCase();
+      if (!SUPPLIER_RELATIONSHIPS.includes(relationship as (typeof SUPPLIER_RELATIONSHIPS)[number])) {
+        throw new SupplyPersistenceError("Supplier relationship must be manufacturer, authorized distributor, or independent distributor.", "invalid_input");
+      }
+      const authorizationEvidenceUrl = optionalText(body.authorizationEvidenceUrl, "Authorization evidence URL", 2_000);
+      if (relationship === "AUTHORIZED_DISTRIBUTOR" && !authorizationEvidenceUrl) {
+        throw new SupplyPersistenceError("Authorized distributor qualification requires manufacturer authorization evidence.", "invalid_input");
+      }
+      sourceQualificationInput = {
+        outcome,
+        relationship,
+        identityEvidenceUrl: publicUrl(body.identityEvidenceUrl, "Identity evidence URL"),
+        capabilityEvidenceUrl: publicUrl(body.capabilityEvidenceUrl, "Component capability evidence URL"),
+        authorizationEvidenceUrl: authorizationEvidenceUrl ? publicUrl(authorizationEvidenceUrl, "Authorization evidence URL") : null,
+        validUntil: requireCurrentOrFutureDate(isoDate(body.validUntil, "Qualification validity date"), "Qualification validity date"),
+        note,
+      };
+    } else if (outcome === "REJECTED") {
+      const rejectionReason = requiredText(body.rejectionReason, "Supplier rejection reason", 40).toUpperCase();
+      if (!SUPPLIER_REJECTION_REASONS.includes(rejectionReason as (typeof SUPPLIER_REJECTION_REASONS)[number])) {
+        throw new SupplyPersistenceError("Supplier rejection reason is invalid.", "invalid_input");
+      }
+      sourceQualificationInput = { outcome, rejectionReason, note };
+    } else {
+      throw new SupplyPersistenceError("Supplier qualification outcome must be QUALIFIED or REJECTED.", "invalid_input");
+    }
+  }
   const quoteCycleTaskId = gate === "COMMERCIAL_TERMS"
     ? requiredText(body.quoteCycleTaskId, "Quote cycle task ID", 220)
     : null;
@@ -1666,16 +1766,21 @@ export async function reviewProcurementGate(args: {
 
         if (gate === "SOURCE_EVIDENCE") {
           const sourceUrl = current.selectedOption.sourceUrl;
-          if (typeof sourceUrl !== "string") {
+          if (sourceQualificationInput?.outcome === "QUALIFIED" && typeof sourceUrl !== "string") {
             throw new SupplyPersistenceError("An attributable supplier source is required before evidence review.", "conflict");
           }
+          const qualification = sourceQualificationInput!;
           review = {
-            sourceUrl: publicUrl(sourceUrl, "Supplier source"),
-            note: sourceReviewNote,
+            sourceUrl: typeof sourceUrl === "string" ? publicUrl(sourceUrl, "Supplier source") : null,
+            ...qualification,
             reviewedByUserId: args.context.userId,
             reviewedAt: now,
           };
-          review.reviewHash = digest({ sourceUrl: review.sourceUrl, note: review.note });
+          if (qualification.outcome === "QUALIFIED"
+            && !sameWebDomain(review.sourceUrl as string, qualification.identityEvidenceUrl as string)) {
+            throw new SupplyPersistenceError("Identity evidence must match the attributed supplier domain.", "invalid_input");
+          }
+          review.reviewHash = digest({ sourceUrl: review.sourceUrl, ...qualification });
           if (record(reviews.sourceEvidence).reviewHash === review.reviewHash) return procurementCase;
           const sourceEvidence = await appendExternalEvidence({
             tx,
@@ -1683,23 +1788,24 @@ export async function reviewProcurementGate(args: {
             workspaceId: workspace.id,
             executionTaskId: procurementCase.id,
             actorUserId: args.context.userId,
-            kind: "SUPPLIER_SOURCE_REVIEW",
-            title: `Supplier source review for ${requiredText(current.selectedOption.name, "Supplier name", 300)}`,
-            sourceType: "OFFICIAL",
-            sourceUri: review.sourceUrl as string,
+            kind: "SUPPLIER_QUALIFICATION",
+            title: `Supplier qualification for ${requiredText(current.selectedOption.name, "Supplier name", 300)}`,
+            sourceType: "OPERATOR_RECORDED_EXTERNAL",
+            sourceUri: review.sourceUrl as string | null,
             sourceRecordId: requiredText(current.selectedOption.id, "Supplier ID", 300),
             observedOn: now.slice(0, 10),
             contentHash: review.reviewHash as string,
-            payload: inputJson({ sourceUrl: review.sourceUrl, note: review.note }),
+            payload: inputJson({ sourceUrl: review.sourceUrl, ...qualification }),
           });
           review.evidenceId = sourceEvidence.id;
           await cancelPendingApproval(tx, procurementCase.result);
           await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
           await cancelActiveQuoteCycles(tx, procurementCase.id, args.context.officeId, workspace.id);
           reviews = { sourceEvidence: review };
+          const qualified = qualification.outcome === "QUALIFIED";
           gates = {
             ...gates,
-            sourceEvidence: "EVIDENCE_COMPLETE",
+            sourceEvidence: qualified ? "EVIDENCE_COMPLETE" : "BLOCKED",
             commercialTerms: "REVIEW_REQUIRED",
             qualityPlan: "REVIEW_REQUIRED",
             purchaseApproval: "BLOCKED",
@@ -1708,8 +1814,8 @@ export async function reviewProcurementGate(args: {
           delete result.qualityPlan;
           delete result.quoteCycle;
           result = resetApproval(result, gates);
-          eventType = "SOURCE_EVIDENCE_REVIEWED";
-          message = "Supplier source evidence was reviewed.";
+          eventType = qualified ? "SUPPLIER_QUALIFIED" : "SUPPLIER_REJECTED";
+          message = qualified ? "Supplier qualification evidence was accepted." : "Supplier was rejected during qualification.";
         } else if (gate === "COMMERCIAL_TERMS") {
           if (gates.sourceEvidence !== "EVIDENCE_COMPLETE") {
             throw new SupplyPersistenceError("Review supplier evidence before confirming commercial terms.", "conflict");
@@ -1877,7 +1983,9 @@ export async function reviewProcurementGate(args: {
           ...result,
           gates,
           reviews,
-          stage: nextStage(gates),
+          stage: gate === "SOURCE_EVIDENCE" && sourceQualificationInput?.outcome === "REJECTED"
+            ? "SUPPLIER_REJECTED"
+            : nextStage(gates),
           updatedAt: now,
         };
         delete result.purchasePreparation;
@@ -1981,6 +2089,10 @@ export async function requestProcurementApproval(args: {
         if (["sourceEvidence", "commercialTerms", "qualityPlan"].some((key) => current.gates[key] !== "EVIDENCE_COMPLETE")) {
           throw new SupplyPersistenceError("All supplier, commercial, and quality gates must be complete before approval.", "conflict");
         }
+        requireCurrentSupplierQualification(
+          current.reviews.sourceEvidence,
+          "Supplier qualification expired before award approval. Requalify the supplier.",
+        );
         const confirmedTerms = record(current.result.confirmedTerms);
         if (typeof confirmedTerms.validUntil !== "string" || confirmedTerms.validUntil < todayUtc()) {
           throw new SupplyPersistenceError("The supplier quote has expired. Confirm current commercial terms before approval.", "conflict");
@@ -2195,11 +2307,15 @@ export async function decideProcurementApproval(args: {
         }
 
         const immutableInput = record(approval.executionTask.input);
+        const approvedSourceReview = record(immutableInput.sourceEvidenceReview);
         const approvedTerms = record(immutableInput.confirmedTerms);
         const approvedQualityPlan = record(immutableInput.qualityPlan);
-        let staleGate: "COMMERCIAL_TERMS" | "QUALITY_PLAN" | "APPROVAL" | null = null;
+        let staleGate: "SOURCE_EVIDENCE" | "COMMERCIAL_TERMS" | "QUALITY_PLAN" | "APPROVAL" | null = null;
         let staleMessage = "";
-        if (typeof approvedTerms.validUntil !== "string" || approvedTerms.validUntil < todayUtc()) {
+        if (!currentSupplierQualification(approvedSourceReview)) {
+          staleGate = "SOURCE_EVIDENCE";
+          staleMessage = "The supplier qualification expired before approval.";
+        } else if (typeof approvedTerms.validUntil !== "string" || approvedTerms.validUntil < todayUtc()) {
           staleGate = "COMMERCIAL_TERMS";
           staleMessage = "The supplier quote expired before approval.";
         } else if (typeof approvedTerms.deliveryDate !== "string" || approvedTerms.deliveryDate < todayUtc()) {
@@ -2214,6 +2330,9 @@ export async function decideProcurementApproval(args: {
         }
         if (staleGate) {
           const expiredAt = new Date();
+          if (staleGate === "SOURCE_EVIDENCE") {
+            await cancelActiveQuoteCycles(tx, procurementCase.id, args.context.officeId, found.workspaceId);
+          }
           const expiredApproval = await tx.supplyApproval.update({
             where: { id: approval.id },
             data: { status: "EXPIRED", decidedAt: expiredAt, decisionNote: staleMessage },
@@ -2222,17 +2341,21 @@ export async function decideProcurementApproval(args: {
             where: { id: approval.executionTask.id },
             data: { status: "CANCELLED", cancelledAt: expiredAt },
           });
-          const gates = staleGate === "COMMERCIAL_TERMS"
-            ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
-            : staleGate === "QUALITY_PLAN"
-              ? { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
-              : { ...current.gates, purchaseApproval: "BLOCKED" };
+          const gates = staleGate === "SOURCE_EVIDENCE"
+            ? { ...current.gates, sourceEvidence: "REVIEW_REQUIRED", commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+            : staleGate === "COMMERCIAL_TERMS"
+              ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+              : staleGate === "QUALITY_PLAN"
+                ? { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+                : { ...current.gates, purchaseApproval: "BLOCKED" };
           const result: Record<string, unknown> = {
             ...current.result,
             gates,
-            stage: staleGate === "COMMERCIAL_TERMS"
-              ? "COMMERCIAL_CONFIRMATION"
-              : staleGate === "QUALITY_PLAN" ? "QUALITY_REVIEW" : "APPROVAL",
+            stage: staleGate === "SOURCE_EVIDENCE"
+              ? "SOURCE_EVIDENCE"
+              : staleGate === "COMMERCIAL_TERMS"
+                ? "COMMERCIAL_CONFIRMATION"
+                : staleGate === "QUALITY_PLAN" ? "QUALITY_REVIEW" : "APPROVAL",
             approval: {
               ...current.approval,
               status: "EXPIRED",
@@ -2241,7 +2364,12 @@ export async function decideProcurementApproval(args: {
             },
             updatedAt: expiredAt.toISOString(),
           };
-          if (staleGate === "COMMERCIAL_TERMS") {
+          if (staleGate === "SOURCE_EVIDENCE") {
+            delete result.confirmedTerms;
+            delete result.qualityPlan;
+            delete result.quoteCycle;
+            result.reviews = { sourceEvidence: current.reviews.sourceEvidence };
+          } else if (staleGate === "COMMERCIAL_TERMS") {
             delete result.confirmedTerms;
             delete result.qualityPlan;
             result.reviews = { sourceEvidence: current.reviews.sourceEvidence };
@@ -2452,15 +2580,19 @@ export async function savePurchaseOrderDraft(args: {
           throw new SupplyPersistenceError("The approved procurement scope is invalid.", "conflict");
         }
         const approvedInput = record(approval.executionTask.input);
+        const approvedSourceReview = record(approvedInput.sourceEvidenceReview);
         const approvedTerms = record(approvedInput.confirmedTerms);
         const approvedQualityPlan = record(approvedInput.qualityPlan);
         const approvedSelection = record(approvedInput.selectedOption);
         if (approvedInput.procurementCaseId !== procurementCase.id) {
           throw new SupplyPersistenceError("The approved procurement scope points to a different case.", "conflict");
         }
-        let staleGate: "COMMERCIAL_TERMS" | "QUALITY_PLAN" | null = null;
+        let staleGate: "SOURCE_EVIDENCE" | "COMMERCIAL_TERMS" | "QUALITY_PLAN" | null = null;
         let staleMessage = "";
-        if (typeof approvedTerms.validUntil !== "string" || approvedTerms.validUntil < todayUtc()) {
+        if (!currentSupplierQualification(approvedSourceReview)) {
+          staleGate = "SOURCE_EVIDENCE";
+          staleMessage = "The supplier qualification expired before order preparation.";
+        } else if (typeof approvedTerms.validUntil !== "string" || approvedTerms.validUntil < todayUtc()) {
           staleGate = "COMMERCIAL_TERMS";
           staleMessage = "The approved quote expired before order preparation.";
         } else if (typeof approvedTerms.unitOfMeasure !== "string"
@@ -2476,18 +2608,28 @@ export async function savePurchaseOrderDraft(args: {
         }
         if (staleGate) {
           await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
-          const gates = staleGate === "COMMERCIAL_TERMS"
-            ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
-            : { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" };
+          if (staleGate === "SOURCE_EVIDENCE") {
+            await cancelActiveQuoteCycles(tx, procurementCase.id, args.context.officeId, workspace.id);
+          }
+          const gates = staleGate === "SOURCE_EVIDENCE"
+            ? { ...current.gates, sourceEvidence: "REVIEW_REQUIRED", commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+            : staleGate === "COMMERCIAL_TERMS"
+              ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+              : { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" };
           const result: Record<string, unknown> = {
             ...current.result,
             gates,
-            stage: staleGate === "COMMERCIAL_TERMS" ? "COMMERCIAL_CONFIRMATION" : "QUALITY_REVIEW",
+            stage: staleGate === "SOURCE_EVIDENCE" ? "SOURCE_EVIDENCE" : staleGate === "COMMERCIAL_TERMS" ? "COMMERCIAL_CONFIRMATION" : "QUALITY_REVIEW",
             approval: null,
             updatedAt: new Date().toISOString(),
           };
           delete result.purchasePreparation;
-          if (staleGate === "COMMERCIAL_TERMS") {
+          if (staleGate === "SOURCE_EVIDENCE") {
+            delete result.confirmedTerms;
+            delete result.qualityPlan;
+            delete result.quoteCycle;
+            result.reviews = { sourceEvidence: current.reviews.sourceEvidence };
+          } else if (staleGate === "COMMERCIAL_TERMS") {
             delete result.confirmedTerms;
             delete result.qualityPlan;
             result.reviews = { sourceEvidence: current.reviews.sourceEvidence };
@@ -2799,6 +2941,10 @@ export async function requestPurchaseActionApproval(args: {
           throw new SupplyPersistenceError("The approved procurement scope is invalid.", "conflict");
         }
         const procurementInput = record(procurementApproval.executionTask.input);
+        requireCurrentSupplierQualification(
+          procurementInput.sourceEvidenceReview,
+          "The approved supplier qualification expired. Requalify the supplier before final purchase approval.",
+        );
         const qualityPlan = record(procurementInput.qualityPlan);
         const commercial = record(draftResult.commercial);
         if (typeof commercial.quoteValidUntil !== "string" || commercial.quoteValidUntil < todayUtc()) {
@@ -3059,12 +3205,13 @@ export async function decidePurchaseActionApproval(args: {
         }
         const commercial = record(actionInput.commercial);
         const qualityPlan = record(actionInput.qualityPlan);
+        const sourceExpired = !currentSupplierQualification(actionInput.sourceEvidenceReview);
         const quoteExpired = typeof commercial.quoteValidUntil !== "string" || commercial.quoteValidUntil < todayUtc();
         const deliveryExpired = typeof commercial.deliveryDate !== "string" || commercial.deliveryDate < todayUtc();
         const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
         const approvalExpired = approval.expiresAt !== null && approval.expiresAt.getTime() <= Date.now();
-        if (quoteExpired || deliveryExpired || qualityExpired || approvalExpired) {
-          const staleGate = quoteExpired || deliveryExpired || approvalExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
+        if (sourceExpired || quoteExpired || deliveryExpired || qualityExpired || approvalExpired) {
+          const staleGate = sourceExpired ? "SOURCE_EVIDENCE" : quoteExpired || deliveryExpired || approvalExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
           const expiredAt = new Date();
           await tx.supplyApproval.update({
             where: { id: approval.id },
@@ -3078,18 +3225,28 @@ export async function decidePurchaseActionApproval(args: {
             where: { id: purchaseDraft.id },
             data: { status: "CANCELLED", cancelledAt: expiredAt },
           });
+          if (staleGate === "SOURCE_EVIDENCE") {
+            await cancelActiveQuoteCycles(tx, procurementCase.id, args.context.officeId, workspace.id);
+          }
           const expiredResult: Record<string, unknown> = {
             ...current.result,
-            gates: staleGate === "COMMERCIAL_TERMS"
-              ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
-              : { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" },
-            stage: staleGate === "COMMERCIAL_TERMS" ? "COMMERCIAL_CONFIRMATION" : "QUALITY_REVIEW",
+            gates: staleGate === "SOURCE_EVIDENCE"
+              ? { ...current.gates, sourceEvidence: "REVIEW_REQUIRED", commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+              : staleGate === "COMMERCIAL_TERMS"
+                ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+                : { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" },
+            stage: staleGate === "SOURCE_EVIDENCE" ? "SOURCE_EVIDENCE" : staleGate === "COMMERCIAL_TERMS" ? "COMMERCIAL_CONFIRMATION" : "QUALITY_REVIEW",
             approval: null,
             updatedAt: expiredAt.toISOString(),
           };
           delete expiredResult.purchasePreparation;
           delete expiredResult.purchaseAuthorization;
-          if (staleGate === "COMMERCIAL_TERMS") {
+          if (staleGate === "SOURCE_EVIDENCE") {
+            delete expiredResult.confirmedTerms;
+            delete expiredResult.qualityPlan;
+            delete expiredResult.quoteCycle;
+            expiredResult.reviews = { sourceEvidence: current.reviews.sourceEvidence };
+          } else if (staleGate === "COMMERCIAL_TERMS") {
             delete expiredResult.confirmedTerms;
             delete expiredResult.qualityPlan;
             expiredResult.reviews = { sourceEvidence: current.reviews.sourceEvidence };

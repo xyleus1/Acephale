@@ -180,6 +180,26 @@ function displayStoredDate(value: string | null | undefined) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`));
 }
 
+function qualificationValidUntilDefault() {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + 90);
+  return date.toISOString().slice(0, 10);
+}
+
+function supplierQualificationForm(procurementCase: SavedProcurementCase | null | undefined) {
+  const review = procurementCase?.result?.reviews?.sourceEvidence;
+  const sourceUrl = procurementCase?.result?.selectedOption.sourceUrl ?? "";
+  return {
+    relationship: review?.relationship ?? "MANUFACTURER" as "MANUFACTURER" | "AUTHORIZED_DISTRIBUTOR" | "INDEPENDENT_DISTRIBUTOR",
+    identityEvidenceUrl: review?.identityEvidenceUrl ?? sourceUrl,
+    capabilityEvidenceUrl: review?.capabilityEvidenceUrl ?? sourceUrl,
+    authorizationEvidenceUrl: review?.authorizationEvidenceUrl ?? "",
+    validUntil: review?.validUntil ?? qualificationValidUntilDefault(),
+    rejectionReason: review?.rejectionReason ?? "SOURCE_UNVERIFIABLE" as "IDENTITY_UNRESOLVED" | "CAPABILITY_UNRESOLVED" | "AUTHORIZATION_UNRESOLVED" | "SOURCE_UNVERIFIABLE" | "OTHER",
+    note: review?.note ?? "",
+  };
+}
+
 function formatNeedBy(item: AtlasInventoryItem | null) {
   if (!item) return "Not set";
   const value = ATLAS_SOURCING_NEED_BY[item.sku];
@@ -275,6 +295,7 @@ function workstreamState(procurementCase: SavedProcurementCase) {
   if (cycle?.state === "AWAITING_RESPONSE") return "Awaiting quote";
   if (cycle?.state === "DRAFT") return "RFQ draft";
   if (procurementCase.result?.stage === "SOURCE_EVIDENCE") return "Qualify supplier";
+  if (procurementCase.result?.stage === "SUPPLIER_REJECTED") return "Supplier rejected";
   if (procurementCase.result?.stage === "COMMERCIAL_CONFIRMATION") return "Prepare RFQ";
   if (procurementCase.result?.stage === "QUALITY_REVIEW") return "Quality review";
   if (procurementCase.result?.stage === "APPROVAL_PENDING") return "Approval pending";
@@ -356,7 +377,7 @@ export function AtlasProcurementWorkspace({
   const [caseSaveState, setCaseSaveState] = useState<"idle" | "saving" | "error">("idle");
   const [gateActionState, setGateActionState] = useState<"idle" | "saving" | "error">("idle");
   const [gateActionError, setGateActionError] = useState("");
-  const [sourceReviewNote, setSourceReviewNote] = useState("");
+  const [qualificationForm, setQualificationForm] = useState(() => supplierQualificationForm(initialCase));
   const [commercialForm, setCommercialForm] = useState(() => ({
     receivedOn: "",
     price: "",
@@ -581,7 +602,7 @@ export function AtlasProcurementWorkspace({
   useEffect(() => {
     const result = currentCase?.result;
     if (!result) return;
-    setSourceReviewNote("");
+    setQualificationForm(supplierQualificationForm(currentCase));
     setSelectedReplyEvidenceId(null);
     setCommercialForm({
       receivedOn: "",
@@ -897,13 +918,14 @@ export function AtlasProcurementWorkspace({
     }
   }
 
-  function reviewSourceEvidence() {
+  function reviewSourceEvidence(outcome: "QUALIFIED" | "REJECTED") {
     if (!currentCase?.result) return;
     void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/review`, {
       gate: "SOURCE_EVIDENCE",
       expectedSelectionHash: currentCase.result.selectionHash,
-      note: sourceReviewNote,
-    }, "SOURCE_EVIDENCE");
+      outcome,
+      ...qualificationForm,
+    }, currentCase.result.stage === "SUPPLIER_REJECTED" ? "SUPPLIER_REJECTED" : "SOURCE_EVIDENCE");
   }
 
   function saveQuoteRequest() {
@@ -1119,6 +1141,12 @@ export function AtlasProcurementWorkspace({
     && Boolean(commercialForm.quoteReference.trim())
     && Boolean(commercialForm.validUntil)
     && Boolean(selectedReplyEvidenceId || commercialForm.evidenceUrl.trim());
+  const qualificationComplete = Boolean(qualificationForm.identityEvidenceUrl.trim())
+    && Boolean(qualificationForm.capabilityEvidenceUrl.trim())
+    && Boolean(qualificationForm.validUntil)
+    && qualificationForm.note.trim().length >= 10
+    && (qualificationForm.relationship !== "AUTHORIZED_DISTRIBUTOR" || Boolean(qualificationForm.authorizationEvidenceUrl.trim()));
+  const rejectionComplete = qualificationForm.note.trim().length >= 10;
 
   return (
     <motion.section
@@ -1319,7 +1347,7 @@ export function AtlasProcurementWorkspace({
             </dl>
             {currentCase?.result ? (
               <section className={styles.procurementGateGrid} aria-label="Procurement readiness">
-                <div><span data-status={currentCase.result.gates.sourceEvidence} /><p><strong>Supplier evidence</strong><small>{currentCase.result.gates.sourceEvidence === "EVIDENCE_COMPLETE" ? "Supplier source reviewed" : currentCase.result.gates.sourceEvidence === "BLOCKED" ? "Attributable source required" : "Human qualification required"}</small></p></div>
+                <div><span data-status={currentCase.result.gates.sourceEvidence} /><p><strong>Supplier qualification</strong><small>{currentCase.result.stage === "SUPPLIER_REJECTED" ? "Supplier rejected" : currentCase.result.gates.sourceEvidence === "EVIDENCE_COMPLETE" ? `Qualified through ${displayStoredDate(currentCase.result.reviews?.sourceEvidence?.validUntil)}` : currentCase.result.gates.sourceEvidence === "BLOCKED" ? "Attributable evidence required" : "Identity and capability review required"}</small></p></div>
                 <div><span data-status={currentCase.result.gates.commercialTerms} /><p><strong>Commercial terms</strong><small>{currentCase.result.gates.commercialTerms === "EVIDENCE_COMPLETE" ? "Quote terms confirmed" : "Confirm price, currency, MOQ, and delivery"}</small></p></div>
                 <div><span data-status={currentCase.result.gates.qualityPlan} /><p><strong>Quality plan</strong><small>{currentCase.result.gates.qualityPlan === "EVIDENCE_COMPLETE" ? "Acceptance plan recorded" : "Sample or inspection plan required"}</small></p></div>
                 <div><span data-status={currentCase.result.gates.purchaseApproval} /><p><strong>Purchase approval</strong><small>{currentCase.result.gates.purchaseApproval === "APPROVED" ? "Approved for purchase preparation" : currentCase.result.gates.purchaseApproval === "PENDING" ? "Manager decision pending" : currentCase.result.gates.purchaseApproval === "REJECTED" ? "Revision required" : "Blocked until review gates are complete"}</small></p></div>
@@ -1327,12 +1355,24 @@ export function AtlasProcurementWorkspace({
             ) : null}
             {currentCase?.result ? (
               <section className={styles.procurementGateAction} aria-live="polite" data-draft-section={currentCase.result.stage}>
-                {currentCase.result.stage === "SOURCE_EVIDENCE" ? (
+                {currentCase.result.stage === "SOURCE_EVIDENCE" || currentCase.result.stage === "SUPPLIER_REJECTED" ? (
                   <>
-                    <header><small>Gate 1 of 4</small><h4>Qualify the supplier source</h4><p>Open the attributed source, verify that the company and component match, then record what you checked.</p></header>
+                    <header><small>Gate 1 of 4</small><h4>{currentCase.result.stage === "SUPPLIER_REJECTED" ? "Supplier rejected" : "Qualify the supplier"}</h4><p>Verify the business identity, component capability, and commercial relationship before an RFQ can leave Derya.</p></header>
                     {currentCase.result.selectedOption.sourceUrl ? <a href={currentCase.result.selectedOption.sourceUrl} target="_blank" rel="noreferrer">Open attributed supplier source <ArrowRight size={14} /></a> : null}
-                    <label>Review note<textarea value={sourceReviewNote} onChange={(event) => setSourceReviewNote(event.target.value)} placeholder="Verified company identity, product match, and source ownership." /></label>
-                    <button type="button" disabled={gateActionState === "saving" || !currentCase.result.selectedOption.sourceUrl} onClick={reviewSourceEvidence}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} Confirm supplier evidence</button>
+                    <div className={styles.procurementFormGrid}>
+                      <label className={styles.procurementWideField}>Identity evidence URL<input type="url" value={qualificationForm.identityEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, identityEvidenceUrl: event.target.value }))} placeholder="Official company or registry page" /></label>
+                      <label className={styles.procurementWideField}>Component capability URL<input type="url" value={qualificationForm.capabilityEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, capabilityEvidenceUrl: event.target.value }))} placeholder="Product, catalog, or line-card page" /></label>
+                      <label>Supplier relationship<select value={qualificationForm.relationship} onChange={(event) => setQualificationForm((current) => ({ ...current, relationship: event.target.value as typeof current.relationship }))}><option value="MANUFACTURER">Manufacturer</option><option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option><option value="INDEPENDENT_DISTRIBUTOR">Independent distributor</option></select></label>
+                      <label>Valid through<input type="date" value={qualificationForm.validUntil} onChange={(event) => setQualificationForm((current) => ({ ...current, validUntil: event.target.value }))} /></label>
+                      {qualificationForm.relationship === "AUTHORIZED_DISTRIBUTOR" ? <label className={styles.procurementWideField}>Manufacturer authorization URL<input type="url" value={qualificationForm.authorizationEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, authorizationEvidenceUrl: event.target.value }))} placeholder="Manufacturer partner or distributor listing" /></label> : null}
+                      <label>Rejection reason<select value={qualificationForm.rejectionReason} onChange={(event) => setQualificationForm((current) => ({ ...current, rejectionReason: event.target.value as typeof current.rejectionReason }))}><option value="IDENTITY_UNRESOLVED">Identity unresolved</option><option value="CAPABILITY_UNRESOLVED">Capability unresolved</option><option value="AUTHORIZATION_UNRESOLVED">Authorization unresolved</option><option value="SOURCE_UNVERIFIABLE">Source unverifiable</option><option value="OTHER">Other</option></select></label>
+                      <label className={styles.procurementWideField}>Review note<textarea value={qualificationForm.note} onChange={(event) => setQualificationForm((current) => ({ ...current, note: event.target.value }))} placeholder="Record what matched, what did not, and any remaining risk." /></label>
+                    </div>
+                    <div className={styles.procurementDecisionActions}>
+                      <button type="button" disabled={gateActionState === "saving" || !currentCase.result.selectedOption.sourceUrl || !qualificationComplete} onClick={() => reviewSourceEvidence("QUALIFIED")}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} {currentCase.result.stage === "SUPPLIER_REJECTED" ? "Requalify supplier" : "Qualify for RFQ"}</button>
+                      <button type="button" disabled={gateActionState === "saving" || !rejectionComplete} onClick={() => reviewSourceEvidence("REJECTED")}><TriangleAlert size={14} /> Reject supplier</button>
+                    </div>
+                    <p className={styles.procurementPermissionNote}>Qualification permits quote outreach only. It is not a supplier award, compliance clearance, or purchase authorization.</p>
                   </>
                 ) : currentCase.result.stage === "COMMERCIAL_CONFIRMATION" ? (
                   <>
