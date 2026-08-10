@@ -4271,7 +4271,7 @@ Use this file for chronological implementation notes that future agents should s
 ### 2026-08-09 - Add a collapsible Supply OS rail and structural Automations whitespace
 
 - Branch: main
-- Commits: `47b7e13`, `f433857`, `5c00389`, and `0bd45f3`
+- Commits: `53a8de6`, `21e3e44`, `622017b`, and `a4af47b`
 - Task: Make the persistent domain navigation collapsible and make the
   Automations workspace materially airier at desktop widths.
 - Files changed: Supply OS operating shell and styles, Automations styles, new
