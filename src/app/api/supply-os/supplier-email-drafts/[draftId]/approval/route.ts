@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { listProcurementCases } from "@/lib/supply-os/procurement-case-persistence";
+import { findProcurementCaseByRelatedTaskId } from "@/lib/supply-os/procurement-case-persistence";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { requestSupplierEmailApproval } from "@/lib/supply-os/supplier-communication-persistence";
 
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ dr
     const { draftId } = await context.params;
     const access = supplyAccessContext(session);
     await requestSupplierEmailApproval({ context: access, draftId, input: body });
-    const procurementCase = (await listProcurementCases(access)).find((entry) => entry.supplierEmailDraft?.id === draftId);
+    const procurementCase = await findProcurementCaseByRelatedTaskId(access, draftId);
     if (!procurementCase) throw new Error("The supplier email approval could not be reloaded.");
     return NextResponse.json({ procurementCase }, { headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" } });
   } catch (error) {

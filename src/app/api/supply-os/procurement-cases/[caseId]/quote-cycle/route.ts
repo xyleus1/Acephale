@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
-import { listProcurementCases, saveSupplierQuoteRequest } from "@/lib/supply-os/procurement-case-persistence";
+import { findProcurementCaseById, saveSupplierQuoteRequest } from "@/lib/supply-os/procurement-case-persistence";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ca
       caseId,
       input: body,
     });
-    const procurementCase = (await listProcurementCases(access)).find((entry) => entry.id === caseId) ?? result.procurementCase;
+    const procurementCase = await findProcurementCaseById(access, caseId) ?? result.procurementCase;
     return NextResponse.json({ ...result, procurementCase }, {
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
     });

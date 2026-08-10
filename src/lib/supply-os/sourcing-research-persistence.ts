@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  currentSupplyAccessContext,
   requireSupplyWorkspace,
   SupplyPersistenceError,
   type SupplyAccessContext,
@@ -17,31 +18,32 @@ function digest(value: unknown) {
 }
 
 export async function sourcingSystemWorkspace(context: SupplyAccessContext, mode: "view" | "edit") {
+  const accessContext = await currentSupplyAccessContext(context);
   const existing = await prisma.supplyWorkspace.findUnique({
-    where: { officeId_externalKey: { officeId: context.officeId, externalKey: DEMO_WORKSPACE_KEY } },
+    where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: DEMO_WORKSPACE_KEY } },
     select: { id: true },
   });
   if (existing) {
-    await requireSupplyWorkspace(context, existing.id, mode);
+    await requireSupplyWorkspace(accessContext, existing.id, mode);
     return existing;
   }
-  if (context.role === "EMPLOYEE") {
+  if (accessContext.role === "EMPLOYEE") {
     throw new SupplyPersistenceError("You cannot create the procurement workspace.", "forbidden");
   }
   let workspace: { id: string };
   try {
     workspace = await prisma.supplyWorkspace.upsert({
-      where: { officeId_externalKey: { officeId: context.officeId, externalKey: DEMO_WORKSPACE_KEY } },
+      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: DEMO_WORKSPACE_KEY } },
       update: { status: "ACTIVE" },
       create: {
-        officeId: context.officeId,
-        createdByUserId: context.userId,
+        officeId: accessContext.officeId,
+        createdByUserId: accessContext.userId,
         externalKey: DEMO_WORKSPACE_KEY,
         name: "Atlas Robotics procurement",
         members: {
           create: {
-            officeId: context.officeId,
-            userId: context.userId,
+            officeId: accessContext.officeId,
+            userId: accessContext.userId,
             role: "OWNER",
           },
         },
@@ -51,11 +53,11 @@ export async function sourcingSystemWorkspace(context: SupplyAccessContext, mode
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
     workspace = await prisma.supplyWorkspace.findUniqueOrThrow({
-      where: { officeId_externalKey: { officeId: context.officeId, externalKey: DEMO_WORKSPACE_KEY } },
+      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: DEMO_WORKSPACE_KEY } },
       select: { id: true },
     });
   }
-  await requireSupplyWorkspace(context, workspace.id, mode);
+  await requireSupplyWorkspace(accessContext, workspace.id, mode);
   return workspace;
 }
 
@@ -68,13 +70,51 @@ export type PersistedSourcingResearchRun = {
   completedAt: Date | null;
 };
 
-export async function listSourcingResearchRuns(context: SupplyAccessContext, includeRunIds: string[] = []) {
-  const workspace = await sourcingSystemWorkspace(context, "view");
+export type SourcingResearchPage = {
+  runs: PersistedSourcingResearchRun[];
+  nextCursor: string | null;
+};
+
+const DEFAULT_PAGE_SIZE = 24;
+const MAX_PAGE_SIZE = 50;
+
+type ResearchCursor = {
+  createdAt: Date;
+  id: string;
+};
+
+function encodeResearchCursor(run: Pick<PersistedSourcingResearchRun, "id" | "createdAt">) {
+  return Buffer.from(JSON.stringify({ createdAt: run.createdAt.toISOString(), id: run.id }), "utf8").toString("base64url");
+}
+
+function decodeResearchCursor(value: string | undefined): ResearchCursor | null {
+  if (!value) return null;
+  if (value.length > 500) throw new SupplyPersistenceError("The sourcing queue cursor is invalid.", "invalid_input");
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Record<string, unknown>;
+    const createdAt = typeof parsed.createdAt === "string" ? new Date(parsed.createdAt) : null;
+    const id = typeof parsed.id === "string" ? parsed.id.trim() : "";
+    if (!createdAt || Number.isNaN(createdAt.getTime()) || !id || id.length > 220) throw new Error("invalid cursor");
+    return { createdAt, id };
+  } catch {
+    throw new SupplyPersistenceError("The sourcing queue cursor is invalid.", "invalid_input");
+  }
+}
+
+function pageSize(value: number | undefined) {
+  if (value === undefined) return DEFAULT_PAGE_SIZE;
+  if (!Number.isInteger(value) || value < 1 || value > MAX_PAGE_SIZE) {
+    throw new SupplyPersistenceError(`The sourcing queue page size must be between 1 and ${MAX_PAGE_SIZE}.`, "invalid_input");
+  }
+  return value;
+}
+
+async function markAbandonedResearchFailed(context: SupplyAccessContext, workspaceId: string) {
   const staleBefore = new Date(Date.now() - 5 * 60 * 1_000);
   await prisma.supplyCapabilityRun.updateMany({
     where: {
       officeId: context.officeId,
-      workspaceId: workspace.id,
+      workspaceId,
       capabilityKey: CAPABILITY_KEY,
       status: { in: ["QUEUED", "RUNNING"] },
       updatedAt: { lt: staleBefore },
@@ -85,6 +125,58 @@ export async function listSourcingResearchRuns(context: SupplyAccessContext, inc
       failedAt: new Date(),
     },
   });
+}
+
+export async function listSourcingResearchPage(
+  context: SupplyAccessContext,
+  options: { cursor?: string; limit?: number } = {},
+): Promise<SourcingResearchPage> {
+  const workspace = await sourcingSystemWorkspace(context, "view");
+  await markAbandonedResearchFailed(context, workspace.id);
+  const cursor = decodeResearchCursor(options.cursor);
+  const limit = pageSize(options.limit);
+  const where = {
+    officeId: context.officeId,
+    workspaceId: workspace.id,
+    capabilityKey: CAPABILITY_KEY,
+    ...(cursor ? {
+      OR: [
+        { createdAt: { lt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+      ],
+    } : {}),
+  } satisfies Prisma.SupplyCapabilityRunWhereInput;
+  const select = {
+    id: true,
+    status: true,
+    input: true,
+    output: true,
+    createdAt: true,
+    completedAt: true,
+  } satisfies Prisma.SupplyCapabilityRunSelect;
+  const rows = await prisma.supplyCapabilityRun.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    select,
+  });
+  const hasMore = rows.length > limit;
+  const runs = hasMore ? rows.slice(0, limit) : rows;
+  return {
+    runs,
+    nextCursor: hasMore && runs.length ? encodeResearchCursor(runs[runs.length - 1]) : null,
+  };
+}
+
+export async function listSourcingResearchRuns(context: SupplyAccessContext, includeRunIds: string[] = []) {
+  const firstPage = await listSourcingResearchPage(context, { limit: 50 });
+  const secondPage = firstPage.nextCursor
+    ? await listSourcingResearchPage(context, { cursor: firstPage.nextCursor, limit: 10 })
+    : null;
+  const recent = [...firstPage.runs, ...(secondPage?.runs ?? [])];
+  const missingIds = [...new Set(includeRunIds)].filter((id) => !recent.some((run) => run.id === id));
+  if (!missingIds.length) return recent;
+  const workspace = await sourcingSystemWorkspace(context, "view");
   const where = {
     officeId: context.officeId,
     workspaceId: workspace.id,
@@ -98,16 +190,6 @@ export async function listSourcingResearchRuns(context: SupplyAccessContext, inc
     createdAt: true,
     completedAt: true,
   } satisfies Prisma.SupplyCapabilityRunSelect;
-  const recent = await prisma.supplyCapabilityRun.findMany({
-    where: {
-      ...where,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 60,
-    select,
-  });
-  const missingIds = [...new Set(includeRunIds)].filter((id) => !recent.some((run) => run.id === id));
-  if (!missingIds.length) return recent;
   const linked = await prisma.supplyCapabilityRun.findMany({
     where: { ...where, id: { in: missingIds } },
     select,

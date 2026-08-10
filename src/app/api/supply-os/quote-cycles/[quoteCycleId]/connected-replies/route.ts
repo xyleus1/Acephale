@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
-import { listProcurementCases } from "@/lib/supply-os/procurement-case-persistence";
+import { findProcurementCaseByRelatedTaskId } from "@/lib/supply-os/procurement-case-persistence";
 import { captureConnectedSupplierReplies } from "@/lib/supply-os/supplier-reply-persistence";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
     const { quoteCycleId } = await context.params;
     const access = supplyAccessContext(session);
     const result = await captureConnectedSupplierReplies({ context: access, quoteCycleId });
-    const procurementCase = (await listProcurementCases(access)).find((entry) => entry.quoteCycle?.id === quoteCycleId) ?? null;
+    const procurementCase = await findProcurementCaseByRelatedTaskId(access, quoteCycleId);
     return NextResponse.json({ ...result, procurementCase }, {
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
     });

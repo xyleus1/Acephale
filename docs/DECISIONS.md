@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Sourcing history uses cursor pages and exact workstream hydration
+
+- Status: accepted
+- Owner: product and engineering
+- Context: PostgreSQL retained every sourcing research run and procurement
+  case, but the UI loaded only a fixed recent window and joined runs to cases
+  in the browser. Older research could become invisible, and old quote or email
+  actions could fail to reload their parent case after enough newer work.
+- Decision: Page research runs by the stable `(createdAt, id)` order and return
+  one opaque older-work cursor. Load all supplier cases for the exact run IDs
+  on that page. Keep older runs visible as dated saved research instead of
+  collapsing them out of the queue.
+- Action lookup: API routes that mutate a quote cycle, email draft, or email
+  action resolve the parent procurement case through exact task ancestry. They
+  do not scan a capped recent-case list.
+- Access: Every page and ancestry lookup refreshes the current active user and
+  remains office and workspace scoped. Cursor values never weaken tenant
+  filters.
+- Consequences: Queue reads stay bounded while all durable history remains
+  reachable and actionable. No schema, dependency, supplier contact, purchase,
+  or Logistics behavior changes.
+
 ### 2026-08-10 - Connected supplier email uses stable identity and uncertain-delivery recovery
 
 - Status: accepted

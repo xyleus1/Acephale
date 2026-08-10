@@ -251,7 +251,12 @@ clear boundaries.
   let the sourcing queue restore results after navigation, refresh, or another
   authorized office browser opens the workspace.
 - The queue displays the latest run per component plus saved custom requests.
-  Older runs remain canonical for a later history surface.
+  Older runs remain visible as dated saved research and load through a stable
+  server cursor. Each page loads every supplier workstream tied to its exact
+  research-run IDs instead of joining against a capped recent-case window.
+- Quote-cycle and supplier-email routes reload their parent procurement case by
+  exact task ancestry. Old workstreams remain actionable even after the office
+  has more than the legacy recent-case limit.
 - Continuing from comparison creates one non-executable planning
   `SupplyExecutionTask(taskType=PROCUREMENT_CASE)` per shortlisted supplier.
   Supplier workstreams share the immutable research run but keep evidence,

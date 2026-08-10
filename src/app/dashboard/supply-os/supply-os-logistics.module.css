@@ -1238,6 +1238,10 @@
   background: var(--danger);
 }
 
+.inventoryTable tr[data-status="history"] .inventoryStatusDot {
+  background: var(--navy);
+}
+
 .inventoryTable td:first-child button > span:last-child,
 .inventoryTable td:first-child small,
 .inventoryTable td:first-child strong,
@@ -1330,6 +1334,43 @@
   color: var(--ink-muted);
   background: var(--panel-subtle);
   cursor: default;
+}
+
+.sourcingQueuePagination {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: #f8faf9;
+}
+
+.sourcingQueuePagination button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--navy);
+  background: var(--panel);
+  cursor: pointer;
+  font: 620 11px/1 "IBM Plex Sans", sans-serif;
+}
+
+.sourcingQueuePagination button:hover:not(:disabled) {
+  border-color: var(--navy);
+  background: var(--navy-soft);
+}
+
+.sourcingQueuePagination button:disabled {
+  color: var(--ink-muted);
+  cursor: wait;
+}
+
+.sourcingQueuePagination span {
+  color: var(--decision);
+  font-size: 11px;
 }
 
 .sourcingInspector {

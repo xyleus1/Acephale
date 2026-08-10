@@ -29,6 +29,15 @@ export class SupplyPersistenceError extends Error {
   }
 }
 
+export async function currentSupplyAccessContext(context: SupplyAccessContext): Promise<SupplyAccessContext> {
+  const user = await prisma.user.findFirst({
+    where: { id: context.userId, officeId: context.officeId, isActive: true },
+    select: { role: true, canViewWholeOffice: true },
+  });
+  if (!user) throw new SupplyPersistenceError("Your current user no longer has access to this office.", "forbidden");
+  return { ...context, role: user.role, canViewWholeOffice: user.canViewWholeOffice };
+}
+
 function hasOfficeWideAccess(context: SupplyAccessContext) {
   if (context.role === "EMPLOYEE") return false;
   return context.canViewWholeOffice || context.role === "ADMIN" || context.role === "MANAGER";

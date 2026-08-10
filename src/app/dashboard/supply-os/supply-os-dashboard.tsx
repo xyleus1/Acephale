@@ -57,6 +57,7 @@ import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
+  SourcingQueuePage,
   SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 import styles from "./supply-os-logistics.module.css";
@@ -608,6 +609,8 @@ function CaseCommandCenter({
   const [procurementCases, setProcurementCases] = useState<SavedProcurementCase[]>([]);
   const [supplierSenderAccounts, setSupplierSenderAccounts] = useState<SupplierSenderAccount[]>([]);
   const [sourcingDataState, setSourcingDataState] = useState<"loading" | "ready" | "error">("loading");
+  const [sourcingNextCursor, setSourcingNextCursor] = useState<string | null>(null);
+  const [sourcingPageState, setSourcingPageState] = useState<"idle" | "loading" | "error">("idle");
   const [sourcingLoadRevision, setSourcingLoadRevision] = useState(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const domainObjects = useMemo(
@@ -701,22 +704,55 @@ function CaseCommandCenter({
   useEffect(() => {
     const controller = new AbortController();
     setSourcingDataState("loading");
+    setSourcingNextCursor(null);
+    setSourcingPageState("idle");
     void fetch("/api/supply-os/supplier-research", {
       cache: "no-store",
       signal: controller.signal,
       headers: { accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) throw new Error("Saved sourcing work is unavailable.");
-      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[] };
+      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[]; page?: SourcingQueuePage };
       setResearchRuns(payload.runs ?? []);
       setProcurementCases(payload.cases ?? []);
       setSupplierSenderAccounts(payload.senderAccounts ?? []);
+      setSourcingNextCursor(payload.page?.nextCursor ?? null);
       setSourcingDataState("ready");
     }).catch(() => {
       if (!controller.signal.aborted) setSourcingDataState("error");
     });
     return () => controller.abort();
   }, [sourcingLoadRevision]);
+
+  async function loadOlderSourcingWork() {
+    if (!sourcingNextCursor || sourcingPageState === "loading") return;
+    setSourcingPageState("loading");
+    try {
+      const params = new URLSearchParams({ cursor: sourcingNextCursor });
+      const response = await fetch(`/api/supply-os/supplier-research?${params.toString()}`, {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) throw new Error("Older sourcing work is unavailable.");
+      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[]; page?: SourcingQueuePage };
+      setResearchRuns((current) => {
+        const currentIds = new Set(current.map((run) => run.id));
+        return [...current, ...(payload.runs ?? []).filter((run) => !currentIds.has(run.id))];
+      });
+      setProcurementCases((current) => {
+        const currentIds = new Set(current.map((procurementCase) => procurementCase.id));
+        return [...current, ...(payload.cases ?? []).filter((procurementCase) => !currentIds.has(procurementCase.id))];
+      });
+      setSupplierSenderAccounts((current) => {
+        const currentIds = new Set(current.map((account) => account.id));
+        return [...current, ...(payload.senderAccounts ?? []).filter((account) => !currentIds.has(account.id))];
+      });
+      setSourcingNextCursor(payload.page?.nextCursor ?? null);
+      setSourcingPageState("idle");
+    } catch {
+      setSourcingPageState("error");
+    }
+  }
 
   const saveResearchRun = useCallback((run: SavedSourcingResearchRun) => {
     setResearchRuns((current) => [run, ...current.filter((candidate) => candidate.id !== run.id)]);
@@ -838,7 +874,10 @@ function CaseCommandCenter({
             researchRuns={researchRuns}
             procurementCases={procurementCases}
             dataState={sourcingDataState}
+            hasMore={Boolean(sourcingNextCursor)}
+            pageState={sourcingPageState}
             onRetryData={() => setSourcingLoadRevision((revision) => revision + 1)}
+            onLoadMore={loadOlderSourcingWork}
             onStartItemResearch={(item) => startProcurement(item)}
             onOpenSavedResearch={openSavedResearch}
             sourceName={selectedSourceCandidate?.name}

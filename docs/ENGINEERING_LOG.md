@@ -4618,3 +4618,22 @@ Use this file for chronological implementation notes that future agents should s
   concurrent first-create, cross-office write denial, TypeScript, production
   build, diff check, and responsive authenticated browser QA.
 - Boundary: Logistics handoff remains unchanged in this slice.
+
+### 2026-08-10 - Make sourcing history fully resumable
+
+- Branch: supply-os-procurement-queue-v2, targeting main
+- Task: Replace the fixed client-side sourcing join with a bounded, cursor-based
+  server read model and keep every older research run actionable.
+- Behavior: The queue appends stable older-work pages, shows dated saved
+  research, retries failed page loads, and loads all supplier workstreams for
+  the exact research runs returned by each page.
+- Safety: Current user access is refreshed before sourcing workspace reads.
+  Office and workspace scope remain mandatory. Quote-cycle and supplier-email
+  routes use exact task ancestry instead of scanning the newest 120 cases.
+- Verification: Atlas sourcing contract, disposable PostgreSQL pagination,
+  cross-office access, stale-session access, exact-run hydration, 120-case
+  saturation, TypeScript, and whitespace checks.
+- Caveats: Queue order is research creation order. A later operational-priority
+  projection may rank urgent work, but it must not hide historical runs.
+- Boundary: No database migration, dependency, supplier contact, purchase,
+  spend, booking, customs, or Logistics behavior changed.

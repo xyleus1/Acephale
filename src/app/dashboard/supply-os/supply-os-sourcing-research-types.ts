@@ -46,6 +46,10 @@ export type SavedSourcingResearchRun = {
   completedAt: string | null;
 };
 
+export type SourcingQueuePage = {
+  nextCursor: string | null;
+};
+
 export type SupplierSenderAccount = {
   id: string;
   email: string;

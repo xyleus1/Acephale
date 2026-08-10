@@ -5,7 +5,9 @@ import { createSupplyWorkspace, listSupplyWorkspaces, type SupplyAccessContext }
 import {
   decidePurchaseActionApproval,
   decideProcurementApproval,
+  findProcurementCaseByRelatedTaskId,
   listProcurementCases,
+  listProcurementCasesForResearchRuns,
   procurementEvidenceSource,
   recordSupplierQuoteRelease,
   recordSupplierQuoteResponse,
@@ -20,6 +22,7 @@ import {
 } from "../src/lib/supply-os/procurement-case-persistence";
 import {
   completeSourcingResearchRun,
+  listSourcingResearchPage,
   listSourcingResearchRuns,
   startSourcingResearchRun,
 } from "../src/lib/supply-os/sourcing-research-persistence";
@@ -85,6 +88,15 @@ async function main() {
       requestText: "Find four stereo depth cameras",
     };
     const started = await startSourcingResearchRun(context, input);
+    const stale = await startSourcingResearchRun(context, { ...input, componentItemKey: "STALE-1" });
+    const tiedResearchTime = new Date(Date.now() - 60_000);
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyCapabilityRun.updateMany({
+        where: { id: { in: [started.id, stale.id] } },
+        data: { createdAt: tiedResearchTime },
+      });
+    });
     const observedAt = new Date().toISOString();
     const futureDate = (days: number) => {
       const date = new Date();
@@ -134,7 +146,6 @@ async function main() {
       },
     });
 
-    const stale = await startSourcingResearchRun(context, { ...input, componentItemKey: "STALE-1" });
     await prisma.supplyCapabilityRun.update({
       where: { id: stale.id },
       data: { updatedAt: new Date(Date.now() - 10 * 60 * 1_000) },
@@ -146,6 +157,37 @@ async function main() {
     assert.equal(completed?.status, "SUCCEEDED");
     assert.equal(((completed?.output as { candidates?: unknown[] })?.candidates ?? []).length, 2);
     assert.equal(runs.find((run) => run.id === stale.id)?.status, "FAILED", "stale research must become retryable");
+    const firstResearchPage = await listSourcingResearchPage(context, { limit: 1 });
+    assert.equal(firstResearchPage.runs.length, 1);
+    assert.ok(firstResearchPage.nextCursor, "a full sourcing page must return an older-work cursor");
+    const midPaginationRun = await startSourcingResearchRun(context, {
+      ...input,
+      componentItemKey: "MID-PAGINATION-1",
+      componentName: "Newer mid-pagination request",
+    });
+    const secondResearchPage = await listSourcingResearchPage(context, { limit: 1, cursor: firstResearchPage.nextCursor! });
+    assert.equal(secondResearchPage.runs.length, 1);
+    assert.notEqual(secondResearchPage.runs[0]?.id, firstResearchPage.runs[0]?.id, "cursor pages must not repeat research runs");
+    assert.equal(secondResearchPage.nextCursor, null);
+    assert.deepEqual(
+      new Set([...firstResearchPage.runs, ...secondResearchPage.runs].map((run) => run.id)),
+      new Set([started.id, stale.id]),
+      "pagination must keep every durable research run reachable",
+    );
+    assert.equal(
+      [...firstResearchPage.runs, ...secondResearchPage.runs].some((run) => run.id === midPaginationRun.id),
+      false,
+      "a run inserted above the cursor must not shift or duplicate the older page sequence",
+    );
+    assert.equal(
+      (await listSourcingResearchPage(context, { limit: 3 })).runs[0]?.id,
+      midPaginationRun.id,
+      "a fresh queue read must include the run inserted during the prior pagination session",
+    );
+    await assert.rejects(
+      () => listSourcingResearchPage(context, { cursor: "not-a-valid-cursor" }),
+      /cursor is invalid/i,
+    );
     const stored = await prisma.supplyCapabilityRun.findUniqueOrThrow({ where: { id: started.id } });
     assert.ok(stored.inputHash);
     assert.ok(stored.outputHash);
@@ -1472,6 +1514,11 @@ async function main() {
       "public:shortlist-c",
       "public:shortlist-d",
     ]), "restored workstreams must preserve each supplier identity");
+    assert.equal(
+      (await listProcurementCasesForResearchRuns(context, [shortlistRun.id])).length,
+      4,
+      "a sourcing queue page must load every supplier workstream for its exact research runs",
+    );
     const awardCandidates = restoredShortlist.slice(0, 2);
     for (const awardCandidate of awardCandidates) {
       const result = awardCandidate.result as Record<string, unknown>;
@@ -1552,6 +1599,7 @@ async function main() {
     const restrictedContext = { ...context, userId: restrictedUser.id, role: restrictedUser.role, canViewWholeOffice: false };
     const stalePrivilegedContext = { ...restrictedContext, role: "ADMIN", canViewWholeOffice: true };
     await assert.rejects(() => listProcurementCases(restrictedContext), /not found|cannot edit/i, "unassigned employees must not read office procurement cases");
+    await assert.rejects(() => listSourcingResearchPage(stalePrivilegedContext), /current user|not found|cannot edit/i, "a stale privileged session must not read the sourcing queue after demotion");
     await assert.rejects(() => captureConnectedSupplierReplies({
       context: stalePrivilegedContext,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
@@ -1652,6 +1700,7 @@ async function main() {
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
+    assert.equal((await listSourcingResearchPage(foreign)).runs.length, 0, "another office must not page through sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
     await assert.rejects(() => saveProcurementShortlist({
       context: foreign,
@@ -1665,6 +1714,42 @@ async function main() {
     }), /not found|cannot edit|delivered connected Gmail quote request/i, "another office must not capture connected supplier replies");
     await assert.rejects(() => procurementEvidenceSource(foreign, storedQuoteResponse.evidenceId), /not found/i, "another office must not resolve supplier evidence");
     assert.equal((await procurementEvidenceSource(context, storedQuoteResponse.evidenceId)).url, quoteResponseInput.evidenceUrl);
+    const saturationTime = new Date(Date.now() + 60_000);
+    await prisma.supplyExecutionTask.createMany({
+      data: Array.from({ length: 121 }, (_, index) => ({
+        officeId: context.officeId,
+        workspaceId: started.workspaceId,
+        createdByUserId: context.userId,
+        taskKey: `pagination-noise:${suffix}:${index}`,
+        taskType: "PROCUREMENT_CASE",
+        capabilityKey: "plan.procurement_case",
+        status: "PLANNED",
+        requiresApproval: false,
+        input: { researchRunId: `noise-run-${index}` },
+        inputHash: jsonDigest({ researchRunId: `noise-run-${index}` }),
+        updatedAt: saturationTime,
+      })),
+    });
+    assert.equal(
+      (await listProcurementCases(context)).some((entry) => entry.id === returnedCase.id),
+      false,
+      "the legacy recent-case window must reproduce why targeted restoration is required",
+    );
+    assert.equal(
+      (await findProcurementCaseByRelatedTaskId(context, retryQuoteDraft.quoteCycle.id))?.id,
+      returnedCase.id,
+      "related-task lookup must restore an exact older procurement workstream without scanning a capped queue",
+    );
+    assert.equal(
+      (await findProcurementCaseByRelatedTaskId(context, supplierEmailDraft.id))?.id,
+      returnedCase.id,
+      "two-level ancestry must restore an old procurement case from its supplier email draft",
+    );
+    assert.equal(
+      (await findProcurementCaseByRelatedTaskId(context, approvedEmail.action.id))?.id,
+      returnedCase.id,
+      "two-level ancestry must restore an old procurement case from its supplier email action",
+    );
     await assert.rejects(() => decideProcurementApproval({
       context: foreign,
       approvalId: requested.approval.id,

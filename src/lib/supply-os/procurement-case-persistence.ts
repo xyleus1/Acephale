@@ -454,17 +454,37 @@ function purchaseActionView(task: PurchaseActionRecord, fallbackApproval?: Purch
   return { ...action, approval: approvals[0] ?? fallbackApproval ?? null };
 }
 
-export async function listProcurementCases(context: SupplyAccessContext) {
+async function listProcurementCasesMatching(
+  context: SupplyAccessContext,
+  options: { caseIds?: string[]; researchRunIds?: string[]; take?: number } = {},
+) {
   const accessContext = await currentAccessContext(context);
   const workspace = await sourcingSystemWorkspace(accessContext, "view");
+  const researchRunIds = options.researchRunIds
+    ? [...new Set(options.researchRunIds.map((id) => id.trim()).filter(Boolean))]
+    : null;
+  const filteredCaseIds = options.caseIds
+    ? [...new Set(options.caseIds.map((id) => id.trim()).filter(Boolean))]
+    : null;
+  if (researchRunIds && !researchRunIds.length) return [];
+  if (filteredCaseIds && !filteredCaseIds.length) return [];
+  if (researchRunIds && researchRunIds.length > 50) {
+    throw new SupplyPersistenceError("A sourcing queue page cannot include more than 50 research runs.", "invalid_input");
+  }
   const cases = await prisma.supplyExecutionTask.findMany({
     where: {
-      officeId: context.officeId,
+      officeId: accessContext.officeId,
       workspaceId: workspace.id,
       taskType: TASK_TYPE,
+      ...(filteredCaseIds ? { id: { in: filteredCaseIds } } : {}),
+      ...(researchRunIds ? {
+        OR: researchRunIds.map((researchRunId) => ({
+          input: { path: ["researchRunId"], equals: researchRunId },
+        })),
+      } : {}),
     },
     orderBy: { updatedAt: "desc" },
-    take: 120,
+    ...(options.take ? { take: options.take } : {}),
     select: caseSelect,
   });
   if (!cases.length) return [];
@@ -472,7 +492,7 @@ export async function listProcurementCases(context: SupplyAccessContext) {
   const [quoteCycles, purchaseDrafts] = await Promise.all([
     prisma.supplyExecutionTask.findMany({
       where: {
-        officeId: context.officeId,
+        officeId: accessContext.officeId,
         workspaceId: workspace.id,
         parentTaskId: { in: caseIds },
         taskType: QUOTE_CYCLE_TASK_TYPE,
@@ -483,7 +503,7 @@ export async function listProcurementCases(context: SupplyAccessContext) {
     }),
     prisma.supplyExecutionTask.findMany({
       where: {
-        officeId: context.officeId,
+        officeId: accessContext.officeId,
         workspaceId: workspace.id,
         parentTaskId: { in: caseIds },
         taskType: PURCHASE_DRAFT_TASK_TYPE,
@@ -559,6 +579,50 @@ export async function listProcurementCases(context: SupplyAccessContext) {
         : null,
     };
   });
+}
+
+export async function listProcurementCases(context: SupplyAccessContext) {
+  return listProcurementCasesMatching(context, { take: 120 });
+}
+
+export async function listProcurementCasesForResearchRuns(
+  context: SupplyAccessContext,
+  researchRunIds: string[],
+) {
+  return listProcurementCasesMatching(context, { researchRunIds });
+}
+
+export async function findProcurementCaseById(context: SupplyAccessContext, caseId: string) {
+  const cases = await listProcurementCasesMatching(context, { caseIds: [requiredText(caseId, "Procurement case ID", 220)] });
+  return cases[0] ?? null;
+}
+
+export async function findProcurementCaseByRelatedTaskId(
+  context: SupplyAccessContext,
+  relatedTaskId: string,
+) {
+  const accessContext = await currentAccessContext(context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "view");
+  const task = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      id: requiredText(relatedTaskId, "Related procurement task ID", 220),
+      officeId: accessContext.officeId,
+      workspaceId: workspace.id,
+    },
+    select: {
+      id: true,
+      taskType: true,
+      parentTaskId: true,
+      parentTask: { select: { id: true, taskType: true, parentTaskId: true } },
+    },
+  });
+  if (!task) return null;
+  const caseId = task.taskType === TASK_TYPE
+    ? task.id
+    : task.parentTask?.taskType === TASK_TYPE
+      ? task.parentTask.id
+      : task.parentTask?.parentTaskId ?? null;
+  return caseId ? findProcurementCaseById(accessContext, caseId) : null;
 }
 
 export async function procurementEvidenceSource(context: SupplyAccessContext, evidenceId: string) {

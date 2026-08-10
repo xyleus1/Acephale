@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { listProcurementCases } from "@/lib/supply-os/procurement-case-persistence";
+import { findProcurementCaseByRelatedTaskId } from "@/lib/supply-os/procurement-case-persistence";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { saveSupplierEmailDraft } from "@/lib/supply-os/supplier-communication-persistence";
 
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ qu
     const { quoteCycleId } = await context.params;
     const access = supplyAccessContext(session);
     await saveSupplierEmailDraft({ context: access, quoteCycleId, input: body });
-    const procurementCase = (await listProcurementCases(access)).find((entry) => entry.quoteCycle?.id === quoteCycleId);
+    const procurementCase = await findProcurementCaseByRelatedTaskId(access, quoteCycleId);
     if (!procurementCase) throw new Error("The saved supplier email draft could not be reloaded.");
     return NextResponse.json({ procurementCase }, { headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" } });
   } catch (error) {

@@ -2,6 +2,34 @@
 
 ## Latest Update
 
+### Sourcing history is paginated, visible, and actionable
+
+- Inventory and sourcing now loads research through an opaque server cursor
+  ordered by creation time and stable ID. `Load older requests` appends pages
+  without replacing newer queue state and exposes a retry state for transient
+  failures.
+- Prior runs are visible as dated research rows instead of being silently
+  collapsed behind the latest run for a component. Saved results, quote inboxes,
+  order drafts, approvals, and acknowledgments reopen from those rows.
+- Each page loads procurement cases for its exact research-run IDs. The queue no
+  longer depends on an independently capped recent-case list.
+- Quote-cycle and supplier-email API routes reload their parent case through
+  exact task ancestry. A regression test saturates the legacy 120-case window
+  and proves an older quote workstream still reloads.
+- Current active-user state, office scope, workspace access, cursor validation,
+  and cross-office denial are enforced server-side. No database migration,
+  dependency, supplier contact, purchase, spend, or Logistics change was added.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false`
+- `npm run build`
+- Browser QA at 1440x900 and 390x844, including two-page queue loading,
+  saved-research reopen and return, console errors, and horizontal overflow
+- `git diff --check`
+
 ### Supplier quote email is approval-gated and provider-backed
 
 - A saved supplier quote request can now become a revisioned Gmail draft inside

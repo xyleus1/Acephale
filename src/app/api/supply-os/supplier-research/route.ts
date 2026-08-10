@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { searchComponentSuppliers } from "@/lib/supply-os/component-supplier-research";
-import { listProcurementCases } from "@/lib/supply-os/procurement-case-persistence";
+import { listProcurementCasesForResearchRuns } from "@/lib/supply-os/procurement-case-persistence";
 import { listSupplierSenderAccounts } from "@/lib/supply-os/supplier-communication-persistence";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { ResearchRateLimiter } from "@/lib/supply-os/research";
 import {
   completeSourcingResearchRun,
   failSourcingResearchRun,
-  listSourcingResearchRuns,
+  listSourcingResearchPage,
   startSourcingResearchRun,
 } from "@/lib/supply-os/sourcing-research-persistence";
 
@@ -28,20 +28,25 @@ function optionalText(value: unknown, max: number) {
   return requiredText(value, max) ?? null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const context = supplyAccessContext(session);
-    const cases = await listProcurementCases(context);
-    const senderAccounts = await listSupplierSenderAccounts(context);
-    const caseRunIds = cases.flatMap((procurementCase) => {
-      const input = procurementCase.input;
-      if (!input || typeof input !== "object" || Array.isArray(input)) return [];
-      return typeof input.researchRunId === "string" ? [input.researchRunId] : [];
+    const rawLimit = request.nextUrl.searchParams.get("limit");
+    const cursor = request.nextUrl.searchParams.get("cursor") ?? undefined;
+    const page = await listSourcingResearchPage(context, {
+      cursor,
+      limit: rawLimit === null ? undefined : Number(rawLimit),
     });
-    const runs = await listSourcingResearchRuns(context, caseRunIds);
-    return NextResponse.json({ runs, cases, senderAccounts }, {
+    const cases = await listProcurementCasesForResearchRuns(context, page.runs.map((run) => run.id));
+    const senderAccounts = await listSupplierSenderAccounts(context);
+    return NextResponse.json({
+      runs: page.runs,
+      cases,
+      senderAccounts,
+      page: { nextCursor: page.nextCursor },
+    }, {
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
     });
   } catch (error) {

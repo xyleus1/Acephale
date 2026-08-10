@@ -37,6 +37,10 @@ function formatNeedBy(sku: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`));
 }
 
+function formatResearchDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
 export function AtlasInventoryWorkspace({
   selectedSku,
   onSelect,
@@ -44,7 +48,10 @@ export function AtlasInventoryWorkspace({
   researchRuns,
   procurementCases,
   dataState,
+  hasMore,
+  pageState,
   onRetryData,
+  onLoadMore,
   onStartItemResearch,
   onOpenSavedResearch,
   sourceMap,
@@ -58,7 +65,10 @@ export function AtlasInventoryWorkspace({
   researchRuns: SavedSourcingResearchRun[];
   procurementCases: SavedProcurementCase[];
   dataState: "loading" | "ready" | "error";
+  hasMore: boolean;
+  pageState: "idle" | "loading" | "error";
   onRetryData: () => void;
+  onLoadMore: () => void;
   onStartItemResearch: (item: AtlasInventoryItem) => void;
   onOpenSavedResearch: (run: SavedSourcingResearchRun) => void;
   sourceMap?: ReactNode;
@@ -86,6 +96,8 @@ export function AtlasInventoryWorkspace({
   }
   const knownSkus = new Set(ATLAS_ROBOTICS_INVENTORY.map((item) => item.sku));
   const customRuns = [...latestRuns.values()].filter((run) => !knownSkus.has(run.input.componentItemKey));
+  const currentRunIds = new Set([...latestRuns.values()].map((run) => run.id));
+  const additionalRuns = researchRuns.filter((run) => !currentRunIds.has(run.id));
 
   function resultState(run: SavedSourcingResearchRun | undefined) {
     if (!run) return "Not researched";
@@ -134,6 +146,20 @@ export function AtlasInventoryWorkspace({
     return quoted ? `${prefix} · ${quoted} quoted` : `${prefix} · ${caseStage(active)}`;
   }
 
+  function queueActionLabel(run: SavedSourcingResearchRun | undefined, cases: SavedProcurementCase[]) {
+    const procurementCase = cases[0];
+    if (cases.length > 1) return "Open quote inbox";
+    if (procurementCase?.result?.purchaseRelease) return "Review supplier acknowledgment";
+    if (procurementCase?.purchaseAction) return "Review purchase action";
+    if (procurementCase?.purchaseDraft) return "Review order draft";
+    if (procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle) return "Review quote cycle";
+    if (procurementCase) return "Continue procurement";
+    if (run?.status === "SUCCEEDED") return "View results";
+    if (run?.status === "RUNNING") return "Researching";
+    if (run?.status === "FAILED") return "Retry research";
+    return "Start research";
+  }
+
   function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (dataState !== "ready") return;
@@ -170,7 +196,7 @@ export function AtlasInventoryWorkspace({
         <h2>Sourcing queue</h2>
         {dataState === "error"
           ? <button type="button" onClick={onRetryData}>Retry saved work</button>
-          : <span>{dataState === "loading" ? "Loading saved work" : "Illustrative requests"}</span>}
+          : <span>{dataState === "loading" ? "Loading saved work" : "Office-shared work"}</span>}
       </header>
 
       {sourceMap ? (
@@ -204,7 +230,6 @@ export function AtlasInventoryWorkspace({
             {sourcingItems.map((item) => {
               const run = latestRuns.get(item.sku);
               const runCases = run ? casesByRunId.get(run.id) ?? [] : [];
-              const procurementCase = runCases[0];
               return (
               <tr key={item.sku} data-active={item.sku === selectedSku} data-status="shortage">
                 <td>
@@ -223,7 +248,7 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run?.status === "RUNNING"}
                     onClick={() => run?.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onStartItemResearch(item)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : runCases.length > 1 ? "Open quote inbox" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle ? "Review quote cycle" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : queueActionLabel(run, runCases)}
                     <ArrowRight size={13} />
                   </button>
                 </td>
@@ -232,7 +257,6 @@ export function AtlasInventoryWorkspace({
             })}
             {customRuns.map((run) => {
               const runCases = casesByRunId.get(run.id) ?? [];
-              const procurementCase = runCases[0];
               return (
               <tr key={run.id} data-status="request">
                 <td>
@@ -251,14 +275,48 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run.status === "RUNNING"}
                     onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : runCases.length > 1 ? "Open quote inbox" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle ? "Review quote cycle" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : queueActionLabel(run, runCases)} <ArrowRight size={13} />
                   </button>
                 </td>
               </tr>
               );
             })}
+            {additionalRuns.map((run) => {
+              const runCases = casesByRunId.get(run.id) ?? [];
+              return (
+                <tr key={run.id} data-status="history">
+                  <td>
+                    <button type="button" onClick={() => run.status === "SUCCEEDED" && onOpenSavedResearch(run)} disabled={run.status !== "SUCCEEDED"}>
+                      <span className={styles.inventoryStatusDot} />
+                      <span><small>Saved research · {formatResearchDate(run.createdAt)}</small><strong>{run.input.componentName}</strong><em>{run.input.specification || run.input.requestText}</em></span>
+                    </button>
+                  </td>
+                  <td>{run.input.componentItemKey}</td>
+                  <td>{formatResearchDate(run.createdAt)}</td>
+                  <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
+                  <td>
+                    <button
+                      className={styles.sourcingQueueAction}
+                      type="button"
+                      disabled={dataState !== "ready" || run.status === "RUNNING"}
+                      onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
+                    >
+                      {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : queueActionLabel(run, runCases)} <ArrowRight size={13} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+        {hasMore || pageState === "error" ? (
+          <div className={styles.sourcingQueuePagination} aria-live="polite">
+            <button type="button" onClick={onLoadMore} disabled={pageState === "loading"}>
+              {pageState === "loading" ? "Loading older work" : pageState === "error" ? "Retry older work" : "Load older requests"}
+            </button>
+            {pageState === "error" ? <span>Older saved work could not be loaded.</span> : null}
+          </div>
+        ) : null}
       </div>
     </motion.section>
   );
