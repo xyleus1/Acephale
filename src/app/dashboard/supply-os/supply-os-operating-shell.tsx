@@ -103,10 +103,23 @@ export function SupplyOsOperatingShell({
           animate={{ x: 0, opacity: 1 }}
           aria-label="Workspace navigation"
         >
-          <a className={styles.operatingBrand} href="/dashboard/supply-os" aria-label="Derya home">
-            <LogoMark mini />
-            <strong>Derya</strong>
-          </a>
+          <div className={styles.sidebarHeader}>
+            <a className={styles.operatingBrand} href="/dashboard/supply-os" aria-label="Derya home">
+              <LogoMark mini />
+              <strong>Derya</strong>
+            </a>
+            <button
+              className={styles.sidebarToggle}
+              type="button"
+              aria-controls="supply-os-panel-navigation"
+              aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+            </button>
+          </div>
           <nav id="supply-os-panel-navigation" ref={panelNavRef} className={styles.panelNav} aria-label="Workspace sections">
             {PANELS.map((panel, index) => {
               const active = panel.id === activePanel;
@@ -132,20 +145,6 @@ export function SupplyOsOperatingShell({
               );
             })}
           </nav>
-
-          <div className={styles.sidebarFooter}>
-            <button
-              type="button"
-              aria-controls="supply-os-panel-navigation"
-              aria-expanded={!sidebarCollapsed}
-              aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
-              onClick={() => setSidebarCollapsed((current) => !current)}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
-              <span>{sidebarCollapsed ? "Expand" : "Collapse"}</span>
-            </button>
-          </div>
-
         </motion.aside>
 
         <section className={styles.workspace}>

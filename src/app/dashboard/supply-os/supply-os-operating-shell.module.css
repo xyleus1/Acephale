@@ -40,21 +40,29 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 88px minmax(0, 1fr) auto;
+  grid-template-rows: 88px minmax(0, 1fr);
   padding: 0 20px 28px;
   border-right: 1px solid var(--os-line);
   color: var(--os-soft);
   background: #fbfcfb;
 }
 
-.operatingBrand {
+.sidebarHeader {
   height: 88px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin: 0 -20px;
-  padding: 0 28px;
+  padding: 0 20px 0 28px;
   border-bottom: 1px solid var(--os-line);
+}
+
+.operatingBrand {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: var(--os-ink);
   text-decoration: none;
 }
@@ -150,30 +158,23 @@
   box-shadow: 0 0 0 4px rgb(63 108 85 / 10%);
 }
 
-.sidebarFooter {
-  padding-top: 16px;
-  border-top: 1px solid var(--os-line);
-}
-
-.sidebarFooter button {
-  width: 100%;
-  min-height: 46px;
+.sidebarToggle {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 14px;
+  justify-content: center;
+  padding: 0;
   border: 0;
   border-radius: 10px;
   color: var(--os-muted);
   background: transparent;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: left;
   transition: color 140ms ease, background-color 140ms ease;
 }
 
-.sidebarFooter button:hover {
+.sidebarToggle:hover {
   color: var(--os-ink);
   background: var(--os-subtle);
 }
@@ -188,16 +189,18 @@
     padding-left: 12px;
   }
 
-  .shell[data-sidebar-collapsed="true"] .operatingBrand {
-    justify-content: center;
+  .shell[data-sidebar-collapsed="true"] .sidebarHeader {
     margin-right: -12px;
     margin-left: -12px;
-    padding: 0;
+    padding: 0 4px;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .operatingBrand {
+    flex: 0 0 24px;
   }
 
   .shell[data-sidebar-collapsed="true"] .operatingBrand strong,
-  .shell[data-sidebar-collapsed="true"] .liveMapDot,
-  .shell[data-sidebar-collapsed="true"] .sidebarFooter span {
+  .shell[data-sidebar-collapsed="true"] .liveMapDot {
     display: none;
   }
 
@@ -221,10 +224,6 @@
     left: -5px;
   }
 
-  .shell[data-sidebar-collapsed="true"] .sidebarFooter button {
-    justify-content: center;
-    padding: 0;
-  }
 }
 
 .workspace {
@@ -386,7 +385,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .panelNav button,
-  .sidebarFooter button,
+  .sidebarToggle,
   .workspaceControls > button {
     transition: none;
   }
@@ -402,7 +401,7 @@
     padding-left: 14px;
   }
 
-  .operatingBrand {
+  .sidebarHeader {
     margin-right: -14px;
     margin-left: -14px;
     padding: 0 20px;
@@ -456,18 +455,16 @@
     border-bottom: 1px solid var(--os-line);
   }
 
-  .sidebarFooter {
-    display: none;
-  }
-
-  .operatingBrand {
+  .sidebarHeader {
     height: 50px;
-    display: flex;
-    gap: 8px;
     margin: 0;
     padding: 0 10px;
     border-bottom: 0;
     border-radius: 10px;
+  }
+
+  .sidebarToggle {
+    display: none;
   }
 
   .operatingBrand strong {
@@ -553,7 +550,7 @@
     grid-template-columns: 44px minmax(0, 1fr);
   }
 
-  .operatingBrand {
+  .sidebarHeader {
     justify-content: center;
     padding: 0;
   }
