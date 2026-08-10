@@ -2,6 +2,7 @@
 
 import {
   CheckCircle2,
+  ChevronUp,
   CircleDollarSign,
   Clock3,
   FileCheck2,
@@ -10,6 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import type { ReactNode } from "react";
 import {
   ATLAS_ROBOT_DEMAND,
   ATLAS_ROBOTICS_INVENTORY,
@@ -38,62 +40,99 @@ function stageLabel(stage: SourcingStage) {
   return "Not started";
 }
 
-export function AtlasInventoryRail({
+export function AtlasInventoryWorkspace({
   selectedSku,
   onSelect,
+  sourceMap,
+  sourceName,
+  sourceLocation,
+  onHideSourceMap,
 }: {
   selectedSku: string;
   onSelect: (sku: string) => void;
+  sourceMap?: ReactNode;
+  sourceName?: string;
+  sourceLocation?: string;
+  onHideSourceMap?: () => void;
 }) {
   const summary = atlasInventorySummary();
   const reduceMotion = useReducedMotion();
 
   return (
-    <motion.aside
-      className={`${styles.routeRail} ${styles.inventoryRail}`}
+    <motion.section
+      className={styles.inventoryWorkspace}
       aria-label="Atlas Robotics component inventory"
       initial={reduceMotion ? false : { opacity: 0.82, y: 3 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
     >
-      <header>
-        <span>Atlas component inventory</span>
-        <div className={styles.inventoryRailSummary}>
-          <small>{summary.itemCount} stocked parts</small>
-          <small data-alert="true">{summary.shortageCount} shortages</small>
-          <small>{summary.buildableWithInbound} / {summary.demandUnits} robots</small>
-          <small>Illustrative demo</small>
+      <header className={styles.inventoryWorkspaceHeader}>
+        <span>
+          <small>Inventory & sourcing</small>
+          <h2>Component inventory</h2>
+        </span>
+        <div className={styles.inventoryWorkspaceSummary}>
+          <span><strong>{summary.itemCount}</strong> parts</span>
+          <span data-alert="true"><strong>{summary.shortageCount}</strong> shortages</span>
+          <span><strong>{summary.buildableWithInbound} / {summary.demandUnits}</strong> buildable</span>
+          <i>Illustrative</i>
         </div>
       </header>
-      <div className={styles.inventoryRailList}>
-        {ATLAS_ROBOTICS_INVENTORY.map((item) => {
-          const status = inventoryStatus(item);
-          const shortage = shortageQuantity(item);
-          return (
-            <button
-              key={item.sku}
-              type="button"
-              data-active={item.sku === selectedSku}
-              data-status={status}
-              aria-pressed={item.sku === selectedSku}
-              onClick={() => onSelect(item.sku)}
-            >
-              <span className={styles.inventoryStatusDot} />
-              <span className={styles.inventoryItemCopy}>
-                <small>{item.sku}</small>
-                <strong>{item.name}</strong>
-                <em>{item.location}</em>
-              </span>
-              <span className={styles.inventoryQuantity}>
-                <small>Projected</small>
-                <strong>{projectedAvailable(item)} / {requiredForDemand(item)}</strong>
-                <em>{shortage ? `${shortage} short` : status === "watch" ? "Below target" : "Covered"}</em>
-              </span>
-            </button>
-          );
-        })}
+      {sourceMap ? (
+        <motion.section
+          className={styles.inventoryMapDisclosure}
+          aria-label={`Source location for ${sourceName}`}
+          initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 286 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <header>
+            <span><small>Source location</small><strong>{sourceName}</strong><em>{sourceLocation}</em></span>
+            <button type="button" onClick={onHideSourceMap}><ChevronUp size={15} /> Hide map</button>
+          </header>
+          <div>{sourceMap}</div>
+        </motion.section>
+      ) : null}
+      <div className={styles.inventoryTableRegion}>
+        <table className={styles.inventoryTable}>
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Per robot</th>
+              <th>Required</th>
+              <th>On hand</th>
+              <th>Allocated</th>
+              <th>Inbound</th>
+              <th>Projected</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ATLAS_ROBOTICS_INVENTORY.map((item) => {
+              const status = inventoryStatus(item);
+              const shortage = shortageQuantity(item);
+              return (
+                <tr key={item.sku} data-active={item.sku === selectedSku} data-status={status}>
+                  <td>
+                    <button type="button" aria-pressed={item.sku === selectedSku} onClick={() => onSelect(item.sku)}>
+                      <span className={styles.inventoryStatusDot} />
+                      <span><small>{item.sku}</small><strong>{item.name}</strong><em>{item.location}</em></span>
+                    </button>
+                  </td>
+                  <td>{item.quantityPerRobot}</td>
+                  <td>{requiredForDemand(item)}</td>
+                  <td>{item.onHand}</td>
+                  <td>{item.allocated}</td>
+                  <td>{item.confirmedInbound}</td>
+                  <td>{projectedAvailable(item)}</td>
+                  <td><span className={styles.inventoryStatusLabel}>{shortage ? `${shortage} short` : status === "watch" ? "Watch" : "Covered"}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-    </motion.aside>
+    </motion.section>
   );
 }
 
@@ -102,12 +141,14 @@ export function AtlasSourcingInspector({
   stage,
   selectedCandidateId,
   onSelectCandidate,
+  onShowCandidateSource,
   onAdvance,
 }: {
   item: AtlasInventoryItem;
   stage: SourcingStage;
   selectedCandidateId: string | null;
   onSelectCandidate: (candidateId: string) => void;
+  onShowCandidateSource: (candidateId: string) => void;
   onAdvance: () => void;
 }) {
   const shortage = shortageQuantity(item);
@@ -156,8 +197,11 @@ export function AtlasSourcingInspector({
         <section className={styles.sourcingCandidates}>
           <header>
             <span><small>Unqualified candidates</small><h3>{item.candidates.length ? "Compare supply options" : "No sourcing required"}</h3></span>
-            {item.candidates.length ? <i>Demo candidates</i> : null}
+            {selectedCandidate ? (
+              <button type="button" onClick={() => onShowCandidateSource(selectedCandidate.id)}><MapPin size={13} /> Show source</button>
+            ) : null}
           </header>
+          {item.candidates.length ? <div className={styles.candidateProvenance}>Demo candidates · unqualified</div> : null}
           {item.candidates.map((candidate) => {
             const active = candidate.id === selectedCandidate?.id;
             return (

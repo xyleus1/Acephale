@@ -4,6 +4,7 @@ export type AtlasSourcingCandidate = {
   id: string;
   name: string;
   location: string;
+  coordinates: { longitude: number; latitude: number };
   role: "Manufacturer" | "Distributor" | "Contract manufacturer";
   leadTimeDays: number;
   minimumOrderQuantity: number;
@@ -38,8 +39,8 @@ export const ATLAS_ROBOTICS_INVENTORY: AtlasInventoryItem[] = [
     location: "Austin / safety stock",
     targetStock: 58,
     candidates: [
-      { id: "northstar-sensing", name: "Northstar Sensing", location: "Osaka, Japan", role: "Manufacturer", leadTimeDays: 35, minimumOrderQuantity: 4, modeledUnitCostUsd: 1880, fit: "Closest technical match; validation sample and safety file required." },
-      { id: "motion-controls-west", name: "Motion Controls West", location: "Irvine, CA", role: "Distributor", leadTimeDays: 18, minimumOrderQuantity: 2, modeledUnitCostUsd: 2075, fit: "Faster bridge supply; allocation and serial traceability remain unconfirmed." },
+      { id: "northstar-sensing", name: "Northstar Sensing", location: "Osaka, Japan", coordinates: { longitude: 135.5023, latitude: 34.6937 }, role: "Manufacturer", leadTimeDays: 35, minimumOrderQuantity: 4, modeledUnitCostUsd: 1880, fit: "Closest technical match; validation sample and safety file required." },
+      { id: "motion-controls-west", name: "Motion Controls West", location: "Irvine, CA", coordinates: { longitude: -117.8265, latitude: 33.6846 }, role: "Distributor", leadTimeDays: 18, minimumOrderQuantity: 2, modeledUnitCostUsd: 2075, fit: "Faster bridge supply; allocation and serial traceability remain unconfirmed." },
     ],
   },
   {
@@ -53,8 +54,8 @@ export const ATLAS_ROBOTICS_INVENTORY: AtlasInventoryItem[] = [
     location: "Austin / controlled electronics",
     targetStock: 112,
     candidates: [
-      { id: "formosa-machine-vision", name: "Formosa Machine Vision", location: "Hsinchu, Taiwan", role: "Manufacturer", leadTimeDays: 29, minimumOrderQuantity: 20, modeledUnitCostUsd: 438, fit: "Meets mechanical envelope; optical calibration evidence is still missing." },
-      { id: "vector-vision-supply", name: "Vector Vision Supply", location: "San Jose, CA", role: "Distributor", leadTimeDays: 14, minimumOrderQuantity: 4, modeledUnitCostUsd: 485, fit: "Low-MOQ bridge option; long-term allocation is not committed." },
+      { id: "formosa-machine-vision", name: "Formosa Machine Vision", location: "Hsinchu, Taiwan", coordinates: { longitude: 120.9647, latitude: 24.8138 }, role: "Manufacturer", leadTimeDays: 29, minimumOrderQuantity: 20, modeledUnitCostUsd: 438, fit: "Meets mechanical envelope; optical calibration evidence is still missing." },
+      { id: "vector-vision-supply", name: "Vector Vision Supply", location: "San Jose, CA", coordinates: { longitude: -121.8863, latitude: 37.3382 }, role: "Distributor", leadTimeDays: 14, minimumOrderQuantity: 4, modeledUnitCostUsd: 485, fit: "Low-MOQ bridge option; long-term allocation is not committed." },
     ],
   },
   {
@@ -68,8 +69,8 @@ export const ATLAS_ROBOTICS_INVENTORY: AtlasInventoryItem[] = [
     location: "Austin / secure cage",
     targetStock: 30,
     candidates: [
-      { id: "prairie-edge-compute", name: "Prairie Edge Compute", location: "Chicago, IL", role: "Contract manufacturer", leadTimeDays: 24, minimumOrderQuantity: 5, modeledUnitCostUsd: 1260, fit: "Compatible I/O set; thermal and image qualification are required." },
-      { id: "pacific-industrial-computing", name: "Pacific Industrial Computing", location: "Fremont, CA", role: "Distributor", leadTimeDays: 11, minimumOrderQuantity: 1, modeledUnitCostUsd: 1395, fit: "Bridge stock candidate; exact processor revision must be locked." },
+      { id: "prairie-edge-compute", name: "Prairie Edge Compute", location: "Chicago, IL", coordinates: { longitude: -87.6298, latitude: 41.8781 }, role: "Contract manufacturer", leadTimeDays: 24, minimumOrderQuantity: 5, modeledUnitCostUsd: 1260, fit: "Compatible I/O set; thermal and image qualification are required." },
+      { id: "pacific-industrial-computing", name: "Pacific Industrial Computing", location: "Fremont, CA", coordinates: { longitude: -121.9886, latitude: 37.5485 }, role: "Distributor", leadTimeDays: 11, minimumOrderQuantity: 1, modeledUnitCostUsd: 1395, fit: "Bridge stock candidate; exact processor revision must be locked." },
     ],
   },
   {
@@ -83,8 +84,8 @@ export const ATLAS_ROBOTICS_INVENTORY: AtlasInventoryItem[] = [
     location: "Austin / line-side electronics",
     targetStock: 58,
     candidates: [
-      { id: "rhein-motion-controls", name: "Rhein Motion Controls", location: "Stuttgart, Germany", role: "Manufacturer", leadTimeDays: 31, minimumOrderQuantity: 10, modeledUnitCostUsd: 735, fit: "Electrical match; firmware behavior and EMC evidence need review." },
-      { id: "automation-parts-central", name: "Automation Parts Central", location: "Dallas, TX", role: "Distributor", leadTimeDays: 12, minimumOrderQuantity: 2, modeledUnitCostUsd: 810, fit: "Fast bridge option; manufacturer authorization is unverified." },
+      { id: "rhein-motion-controls", name: "Rhein Motion Controls", location: "Stuttgart, Germany", coordinates: { longitude: 9.1829, latitude: 48.7758 }, role: "Manufacturer", leadTimeDays: 31, minimumOrderQuantity: 10, modeledUnitCostUsd: 735, fit: "Electrical match; firmware behavior and EMC evidence need review." },
+      { id: "automation-parts-central", name: "Automation Parts Central", location: "Dallas, TX", coordinates: { longitude: -96.797, latitude: 32.7767 }, role: "Distributor", leadTimeDays: 12, minimumOrderQuantity: 2, modeledUnitCostUsd: 810, fit: "Fast bridge option; manufacturer authorization is unverified." },
     ],
   },
   {
@@ -98,8 +99,8 @@ export const ATLAS_ROBOTICS_INVENTORY: AtlasInventoryItem[] = [
     location: "Austin / hazmat cage",
     targetStock: 30,
     candidates: [
-      { id: "hanseong-energy-systems", name: "Hanseong Energy Systems", location: "Busan, South Korea", role: "Manufacturer", leadTimeDays: 38, minimumOrderQuantity: 10, modeledUnitCostUsd: 2140, fit: "Pack architecture fits; transport test summary and cell traceability required." },
-      { id: "lone-star-battery-integration", name: "Lone Star Battery Integration", location: "Houston, TX", role: "Contract manufacturer", leadTimeDays: 21, minimumOrderQuantity: 4, modeledUnitCostUsd: 2360, fit: "Domestic integration option; final enclosure and BMS validation remain open." },
+      { id: "hanseong-energy-systems", name: "Hanseong Energy Systems", location: "Busan, South Korea", coordinates: { longitude: 129.0756, latitude: 35.1796 }, role: "Manufacturer", leadTimeDays: 38, minimumOrderQuantity: 10, modeledUnitCostUsd: 2140, fit: "Pack architecture fits; transport test summary and cell traceability required." },
+      { id: "lone-star-battery-integration", name: "Lone Star Battery Integration", location: "Houston, TX", coordinates: { longitude: -95.3698, latitude: 29.7604 }, role: "Contract manufacturer", leadTimeDays: 21, minimumOrderQuantity: 4, modeledUnitCostUsd: 2360, fit: "Domestic integration option; final enclosure and BMS validation remain open." },
     ],
   },
   {
