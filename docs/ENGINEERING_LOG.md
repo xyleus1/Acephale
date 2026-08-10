@@ -17,6 +17,27 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-09 - Replace inventory counters with procurement research flow
+
+- Branch: supply-os-procurement-flow, targeting main
+- Commit: see git log
+- Task: Turn Inventory and sourcing into a request-to-recommendation workflow
+  with an in-place dashboard transition, visible source research, option
+  comparison, operator choice, and a draft logistics handoff.
+- Files changed: Supply OS dashboard, sourcing queue, procurement workspace,
+  scoped styles, Atlas demo fixture, sourcing regression contract, architecture
+  decision, handoff, and engineering log.
+- Verification: focused Supply OS routing, product twin, layout, map, sourcing,
+  enterprise design, product copy, TypeScript, production build, whitespace,
+  and authenticated desktop and mobile browser checks pass.
+- Failed/skipped checks: no live web source, supplier system, ERP, purchase
+  order, message, booking, spend, or logistics record was called or changed.
+- Caveats: candidates, prices, delivery dates, quality states, and research
+  progress are illustrative or modeled and are labeled accordingly.
+- Follow-up: connect registered read-only source adapters with persisted source
+  evidence, then create an approval-gated `SupplyAction` that opens Logistics
+  with the accepted sourcing context.
+
 ### 2026-08-07 - Expand Supply OS lanes into multimodal legs
 
 - Branch: feat/supply-os-full-network-demo, targeting main

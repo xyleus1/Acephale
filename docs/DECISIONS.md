@@ -2097,3 +2097,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
   screens.
 - Supersedes: The no-sidebar interface choice in the 2026-08-08 full-width
   product-chrome slice. It does not supersede the single-product route cutover.
+
+### 2026-08-09 - Sourcing is a request-to-recommendation workflow
+
+- Status: accepted
+- Owner: product, design, and engineering
+- Context: A live inventory-count dashboard makes Supply OS look like a weak
+  inventory-management product. Derya's useful job is turning a component need
+  into an evidence-backed supplier decision and then an execution handoff.
+- Decision: Inventory & sourcing opens with a sourcing request composer and a
+  queue of parts that need action. Starting procurement transitions the same
+  dashboard through visible trusted-source research, public discovery, a
+  price/delivery/quality comparison, operator selection, and a draft logistics
+  handoff. Missing commercial inputs remain unknown.
+- Evidence boundary: The robotics flow is explicitly illustrative. Research
+  motion does not claim that a website or supplier system is connected, and
+  modeled prices or dates are labeled modeled.
+- Deferred integration: `Send to logistics` prepares a local draft only in this
+  slice. A later change will create an approval-gated canonical `SupplyAction`
+  and open Logistics with the handoff context. The Logistics panel is unchanged.

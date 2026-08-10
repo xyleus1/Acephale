@@ -242,6 +242,19 @@ clear boundaries.
   provider response.
 - Customs preparation does not replace a licensed broker or importer approval.
 
+### Procurement-to-logistics handoff
+
+- Supplier research stays inside Inventory & sourcing through request, visible
+  source research, option comparison, selection, and a draft handoff.
+- The current UI handoff is illustrative and browser-local. It does not create
+  a purchase order, supplier contact, booking, spend, or logistics record.
+- A later Logistics integration will create a canonical approval-gated
+  `SupplyAction`, prefill cargo, quantity, pickup, destination, need-by date,
+  selected source, and evidence references, then open the Logistics panel by
+  query state.
+- Do not modify the Logistics panel or imply that a handoff was persisted until
+  that canonical action contract is implemented.
+
 ### Execution
 
 - Compile and persist the intended action first.

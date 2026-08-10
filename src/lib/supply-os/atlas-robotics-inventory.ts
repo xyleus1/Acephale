@@ -27,6 +27,14 @@ export type AtlasInventoryItem = {
 
 export const ATLAS_ROBOT_DEMAND = 24;
 
+export const ATLAS_SOURCING_NEED_BY: Record<string, string> = {
+  "SEN-LDR-220": "2026-09-05",
+  "VIS-DPT-410": "2026-09-08",
+  "CMP-IPC-180": "2026-09-12",
+  "DRV-MCU-220": "2026-09-10",
+  "PWR-BAT-512": "2026-09-18",
+};
+
 export const ATLAS_ROBOTICS_INVENTORY: AtlasInventoryItem[] = [
   {
     sku: "SEN-LDR-220",

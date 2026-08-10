@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ResponsiveContainer,
@@ -53,8 +53,8 @@ import { SupplyOsAutomations } from "./supply-os-automations";
 import {
   AtlasInventoryWorkspace,
   AtlasSourcingInspector,
-  type SourcingStage,
 } from "./supply-os-inventory-sourcing";
+import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
 import styles from "./supply-os-logistics.module.css";
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
@@ -580,10 +580,11 @@ function CaseCommandCenter({
       ?? ATLAS_ROBOTICS_INVENTORY[0]?.sku
       ?? "",
   );
-  const [sourcingStages, setSourcingStages] = useState<Record<string, SourcingStage>>({});
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
   const [sourceMapCandidateId, setSourceMapCandidateId] = useState<string | null>(null);
   const [sourceMapObjectId, setSourceMapObjectId] = useState("");
+  const [procurementRequest, setProcurementRequest] = useState<{ requestText: string; itemSku: string | null } | null>(null);
+  const commandStageRef = useRef<HTMLDivElement | null>(null);
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -657,11 +658,20 @@ function CaseCommandCenter({
   const selectedSourceMapObject = sourceMapContext?.map.objects.find((object) => object.id === sourceMapObjectId)
     ?? sourceMapContext?.supplier
     ?? null;
+  const procurementItem = procurementRequest?.itemSku
+    ? ATLAS_ROBOTICS_INVENTORY.find((item) => item.sku === procurementRequest.itemSku) ?? null
+    : null;
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     setInspectorMode(domain.defaultInspector);
   }, [activePanel, domain.defaultInspector]);
+
+  useEffect(() => {
+    if (!procurementRequest) return;
+    commandStageRef.current?.scrollTo({ top: 0, left: 0 });
+    window.scrollTo({ top: 0, left: 0 });
+  }, [procurementRequest]);
 
   function selectNetworkObject(object: SupplyCommandObject) {
     setSelection({ panel: activePanel, objectId: object.id });
@@ -685,20 +695,26 @@ function CaseCommandCenter({
     setSourceMapObjectId(`atlas-source:${candidateId}`);
   }
 
-  function advanceSourcingWorkflow() {
-    if (!selectedInventoryItem || shortageQuantity(selectedInventoryItem) === 0) return;
-    const currentStage = sourcingStages[selectedInventoryItem.sku] ?? "idle";
-    if (currentStage === "review") return;
-    if (!selectedCandidateIds[selectedInventoryItem.sku] && selectedInventoryItem.candidates[0]) {
-      setSelectedCandidateIds((current) => ({
-        ...current,
-        [selectedInventoryItem.sku]: selectedInventoryItem.candidates[0].id,
-      }));
-    }
-    setSourcingStages((current) => ({
-      ...current,
-      [selectedInventoryItem.sku]: currentStage === "idle" ? "shortlist" : "review",
-    }));
+  function startProcurement(item: typeof selectedInventoryItem, requestText?: string) {
+    if (!item) return;
+    setSourceMapCandidateId(null);
+    setSourceMapObjectId("");
+    setProcurementRequest({
+      itemSku: item.sku,
+      requestText: requestText ?? `${shortageQuantity(item)} units of ${item.name} for the next Atlas production run`,
+    });
+  }
+
+  function createProcurementRequest(requestText: string) {
+    const normalized = requestText.toLowerCase();
+    const matchedItem = ATLAS_ROBOTICS_INVENTORY.find((item) => (
+      normalized.includes(item.sku.toLowerCase())
+      || normalized.includes(item.name.toLowerCase())
+    )) ?? null;
+    if (matchedItem) setSelectedInventorySku(matchedItem.sku);
+    setSourceMapCandidateId(null);
+    setSourceMapObjectId("");
+    setProcurementRequest({ requestText, itemSku: matchedItem?.sku ?? null });
   }
 
   return (
@@ -707,12 +723,23 @@ function CaseCommandCenter({
       aria-label={`${domain.railTitle} workspace`}
       data-domain={activePanel}
       data-embedded={!presentationMode}
+      data-procurement={activePanel === "materials" && Boolean(procurementRequest)}
     >
-      <div className={styles.commandMapStage}>
-        {activePanel === "materials" ? (
+      <div ref={commandStageRef} className={styles.commandMapStage}>
+        <AnimatePresence mode="wait" initial={false}>
+        {activePanel === "materials" && procurementRequest ? (
+          <AtlasProcurementWorkspace
+            key={`procurement:${procurementRequest.itemSku ?? procurementRequest.requestText}`}
+            item={procurementItem}
+            requestText={procurementRequest.requestText}
+            onBack={() => setProcurementRequest(null)}
+          />
+        ) : activePanel === "materials" ? (
           <AtlasInventoryWorkspace
+            key="sourcing-queue"
             selectedSku={selectedInventoryItem?.sku ?? ""}
             onSelect={selectInventoryItem}
+            onCreateRequest={createProcurementRequest}
             sourceName={selectedSourceCandidate?.name}
             sourceLocation={selectedSourceCandidate?.location}
             onHideSourceMap={() => {
@@ -809,11 +836,13 @@ function CaseCommandCenter({
             </motion.aside>
           </>
         )}
+        </AnimatePresence>
 
-        {activePanel === "materials" && selectedInventoryItem ? (
+        <AnimatePresence initial={false}>
+        {activePanel === "materials" && selectedInventoryItem && !procurementRequest ? (
           <AtlasSourcingInspector
+            key={`sourcing-inspector:${selectedInventoryItem.sku}`}
             item={selectedInventoryItem}
-            stage={sourcingStages[selectedInventoryItem.sku] ?? "idle"}
             selectedCandidateId={selectedCandidateIds[selectedInventoryItem.sku] ?? null}
             onSelectCandidate={(candidateId) => {
               setSelectedCandidateIds((current) => ({ ...current, [selectedInventoryItem.sku]: candidateId }));
@@ -821,10 +850,11 @@ function CaseCommandCenter({
               setSourceMapObjectId("");
             }}
             onShowCandidateSource={showCandidateSource}
-            onAdvance={advanceSourcingWorkflow}
+            onStartProcurement={() => startProcurement(selectedInventoryItem)}
           />
-        ) : selectedObject ? (
+        ) : activePanel !== "materials" && selectedObject ? (
           <CommandInspector
+            key={`command-inspector:${activePanel}:${selectedObject.id}`}
             dashboard={modelDashboard}
             model={model}
             object={selectedObject}
@@ -835,6 +865,7 @@ function CaseCommandCenter({
             activePanel={activePanel}
           />
         ) : null}
+        </AnimatePresence>
 
       </div>
     </article>

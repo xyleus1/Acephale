@@ -2,6 +2,49 @@
 
 ## Latest Update
 
+### Inventory and sourcing now runs request, research, comparison, and handoff
+
+- Replaced inventory-control counters with a sourcing request composer and a
+  compact queue of component needs. Operators can start from a known Atlas
+  Robotics component or enter a new part request in the composer.
+- Starting procurement now transitions inside the mounted Supply OS workspace.
+  The visible research sequence checks approved records, official manufacturer
+  catalogs, distributor catalogs, and new public sources before showing an
+  option comparison.
+- Added an operator comparison across modeled price, delivery, quality, and
+  source class. The suggested option remains selectable rather than silently
+  becoming an award.
+- Added a draft logistics handoff confirmation. It prepares part, quantity,
+  pickup, destination, delivery, and need-by context without changing the
+  Logistics panel or creating a purchase order, contact, booking, or spend.
+- Unknown free-text requests fail honestly. If no SKU, product name, or
+  manufacturer part number can be resolved, commercial terms remain unknown.
+- The research sequence and Atlas candidates are explicitly illustrative. No
+  website, catalog, or supplier system is presented as live or connected.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-product-twin`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-panel-map-focus`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-enterprise-design`
+- `npm run check:product-copy`
+- `npx tsc --noEmit`
+- Production build with a disposable PostgreSQL URL
+- `git diff --check`
+- Authenticated browser QA covered the queue, visible research sequence,
+  comparison, selection, handoff, unknown request, desktop, and mobile states.
+
+Deferred:
+
+- Live source adapters and canonical office-scoped run persistence are not part
+  of this slice.
+- The Logistics panel remains unchanged. A later slice should create an
+  approval-gated `SupplyAction` and open Logistics with the handoff context.
+
 ### Supply OS navigation now collapses and Automations has structural whitespace
 
 - Added a desktop collapse control to the persistent Supply OS domain rail.

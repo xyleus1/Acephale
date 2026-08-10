@@ -11,6 +11,7 @@ import {
 const root = process.cwd();
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const workbench = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx"), "utf8");
+const procurement = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
 
 assert.ok(ATLAS_ROBOTICS_INVENTORY.length >= 10, "the Atlas fixture should resemble a useful robotics component inventory");
 assert.equal(new Set(ATLAS_ROBOTICS_INVENTORY.map((item) => item.sku)).size, ATLAS_ROBOTICS_INVENTORY.length, "inventory SKUs must be unique");
@@ -35,18 +36,22 @@ assert.ok(summary.buildableWithInbound < summary.demandUnits, "the fixture shoul
 
 assert.match(dashboard, /activePanel === "materials"[\s\S]*AtlasInventoryWorkspace/);
 assert.match(dashboard, /activePanel === "materials" && selectedInventoryItem[\s\S]*AtlasSourcingInspector/);
+assert.match(dashboard, /procurementRequest[\s\S]*AtlasProcurementWorkspace/);
 assert.match(dashboard, /sourceMap=\{sourceMapContext[\s\S]*SupplyOsCommandMap/);
 assert.match(workbench, /Show source/);
 assert.match(workbench, /Hide map/);
-assert.match(workbench, /<th>On hand<\/th>/);
-assert.match(workbench, /<th>Allocated<\/th>/);
-assert.match(workbench, /<th>Inbound<\/th>/);
-assert.match(workbench, /<th>Projected<\/th>/);
+assert.match(workbench, /New sourcing request/);
+assert.match(workbench, /Sourcing queue/);
+assert.match(workbench, /Start procurement/);
+assert.doesNotMatch(workbench, /<th>On hand<\/th>|<th>Allocated<\/th>|<th>Inbound<\/th>|<th>Projected<\/th>/);
 assert.doesNotMatch(workbench, /inventoryRailList/);
-assert.match(workbench, /Start sourcing/);
-assert.match(workbench, /Prepare approval/);
-assert.match(workbench, /Awaiting approval/);
-assert.match(workbench, /No supplier has been contacted or approved/);
+assert.match(procurement, /Approved source library/);
+assert.match(procurement, /Manufacturer catalogs/);
+assert.match(procurement, /Open web discovery/);
+assert.match(procurement, /Price<\/th><th>Delivery<\/th><th>Quality/);
+assert.match(procurement, /Send to logistics/);
+assert.match(procurement, /No live supplier system or website is connected/);
+assert.match(procurement, /No purchase order, supplier contact, booking, or spend was created/);
 assert.doesNotMatch(workbench, /approved supplier|live quote|supplier contacted/i);
 
 console.log("Supply OS Atlas inventory and sourcing workflow contract passed.");
