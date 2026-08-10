@@ -31,6 +31,7 @@ import {
 } from "@/lib/supply-os-case-model";
 import {
   buildSupplyCommandMap,
+  type SupplyCommandMap,
   type SupplyCommandObject,
   type SupplyCommandRoute,
 } from "@/lib/supply-os-command-map";
@@ -50,7 +51,7 @@ import {
 import { SupplyOsCommandMap } from "./supply-os-command-map";
 import { SupplyOsAutomations } from "./supply-os-automations";
 import {
-  AtlasInventoryRail,
+  AtlasInventoryWorkspace,
   AtlasSourcingInspector,
   type SourcingStage,
 } from "./supply-os-inventory-sourcing";
@@ -581,6 +582,8 @@ function CaseCommandCenter({
   );
   const [sourcingStages, setSourcingStages] = useState<Record<string, SourcingStage>>({});
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
+  const [sourceMapCandidateId, setSourceMapCandidateId] = useState<string | null>(null);
+  const [sourceMapObjectId, setSourceMapObjectId] = useState("");
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -596,6 +599,64 @@ function CaseCommandCenter({
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
   const selectedInventoryItem = ATLAS_ROBOTICS_INVENTORY.find((item) => item.sku === selectedInventorySku)
     ?? ATLAS_ROBOTICS_INVENTORY[0];
+  const selectedSourceCandidate = selectedInventoryItem?.candidates.find((candidate) => candidate.id === sourceMapCandidateId)
+    ?? null;
+  const sourceMapContext = useMemo(() => {
+    if (!selectedInventoryItem || !selectedSourceCandidate) return null;
+    const factory = commandMap.objects.find((object) => object.kind === "factory") ?? null;
+    const supplier: SupplyCommandObject = {
+      id: `atlas-source:${selectedSourceCandidate.id}`,
+      kind: "supplier",
+      label: selectedSourceCandidate.name,
+      location: selectedSourceCandidate.location,
+      coordinates: selectedSourceCandidate.coordinates,
+      detail: selectedSourceCandidate.fit,
+      cargo: selectedInventoryItem.name,
+      basis: "inferred",
+      confidence: "low",
+      status: "review",
+      statusLabel: "Demo candidate",
+      nextAction: "Qualify technical fit and commercial terms before outreach.",
+      workstreamId: "supplier_outreach",
+      contacts: [],
+      checks: [{ label: "Qualification evidence", status: "missing" }],
+      priority: null,
+      optimizationIds: [],
+    };
+    const objects = factory ? [supplier, factory] : [supplier];
+    const routes: SupplyCommandRoute[] = factory ? [{
+      id: `atlas-source-route:${selectedSourceCandidate.id}`,
+      edgeId: `atlas-source-edge:${selectedSourceCandidate.id}`,
+      from: supplier.coordinates,
+      to: factory.coordinates,
+      fromLabel: supplier.label,
+      toLabel: factory.label,
+      label: `${supplier.location} to ${factory.location}`,
+      mode: supplier.location.includes("USA") || /, (CA|IL|TX)$/.test(supplier.location) ? "road" : "ocean",
+      cargo: selectedInventoryItem.name,
+      stage: "inbound",
+      basis: "inferred",
+      confidence: "low",
+      priority: null,
+      rateEstimate: null,
+      segments: [{
+        id: `atlas-source-segment:${selectedSourceCandidate.id}`,
+        sequence: 1,
+        mode: supplier.location.includes("USA") || /, (CA|IL|TX)$/.test(supplier.location) ? "road" : "ocean",
+        label: "Modeled source route",
+        from: supplier.coordinates,
+        to: factory.coordinates,
+        fromLabel: supplier.label,
+        toLabel: factory.label,
+        status: "inferred",
+      }],
+    }] : [];
+    const map: SupplyCommandMap = { objects, routes, insights: [] };
+    return { map, supplier };
+  }, [commandMap.objects, selectedInventoryItem, selectedSourceCandidate]);
+  const selectedSourceMapObject = sourceMapContext?.map.objects.find((object) => object.id === sourceMapObjectId)
+    ?? sourceMapContext?.supplier
+    ?? null;
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -610,6 +671,18 @@ function CaseCommandCenter({
   function focusOptimizationAction(actionId: string) {
     const related = commandMap.objects.find((object) => object.optimizationIds.includes(actionId));
     if (related) setSelection({ panel: activePanel, objectId: related.id });
+  }
+
+  function selectInventoryItem(sku: string) {
+    setSelectedInventorySku(sku);
+    setSourceMapCandidateId(null);
+    setSourceMapObjectId("");
+  }
+
+  function showCandidateSource(candidateId: string) {
+    setSelectedCandidateIds((current) => ({ ...current, [selectedInventoryItem.sku]: candidateId }));
+    setSourceMapCandidateId(candidateId);
+    setSourceMapObjectId(`atlas-source:${candidateId}`);
   }
 
   function advanceSourcingWorkflow() {
@@ -636,40 +709,57 @@ function CaseCommandCenter({
       data-embedded={!presentationMode}
     >
       <div className={styles.commandMapStage}>
-        <section className={styles.mapPanel} aria-label={`${domain.railTitle} map`}>
-          <SupplyOsCommandMap
-            commandMap={commandMap}
-            selectedObject={selectedObject}
-            onSelectObject={selectNetworkObject}
-            activePanel={activePanel}
-          />
-
-        </section>
-
         {activePanel === "materials" ? (
-          <AtlasInventoryRail selectedSku={selectedInventoryItem?.sku ?? ""} onSelect={setSelectedInventorySku} />
+          <AtlasInventoryWorkspace
+            selectedSku={selectedInventoryItem?.sku ?? ""}
+            onSelect={selectInventoryItem}
+            sourceName={selectedSourceCandidate?.name}
+            sourceLocation={selectedSourceCandidate?.location}
+            onHideSourceMap={() => {
+              setSourceMapCandidateId(null);
+              setSourceMapObjectId("");
+            }}
+            sourceMap={sourceMapContext ? (
+              <SupplyOsCommandMap
+                key={selectedSourceCandidate?.id}
+                commandMap={sourceMapContext.map}
+                selectedObject={selectedSourceMapObject}
+                onSelectObject={(object) => setSourceMapObjectId(object.id)}
+                activePanel="materials"
+              />
+            ) : undefined}
+          />
         ) : (
-          <motion.aside
-            key={activePanel}
-            className={styles.routeRail}
-            aria-label="Operating network objects"
-            initial={reduceMotion ? false : { opacity: 0.82, y: 3 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <header>
-              <span>{domain.railTitle}</span>
-              <div className={styles.routeRailMeta}>
-                <small>{domainObjects.length} objects</small>
-                <small className={styles.mapDataSources} aria-label="Map data attribution">
-                  Map data
-                  {" "}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OSM</a>
-                  {" · "}<a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
-                  {" · "}<a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OFM</a>
-                </small>
-              </div>
-            </header>
-            <div className={styles.routeRailList}>
+          <>
+            <section className={styles.mapPanel} aria-label={`${domain.railTitle} map`}>
+              <SupplyOsCommandMap
+                commandMap={commandMap}
+                selectedObject={selectedObject}
+                onSelectObject={selectNetworkObject}
+                activePanel={activePanel}
+              />
+            </section>
+            <motion.aside
+              key={activePanel}
+              className={styles.routeRail}
+              aria-label="Operating network objects"
+              initial={reduceMotion ? false : { opacity: 0.82, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <header>
+                <span>{domain.railTitle}</span>
+                <div className={styles.routeRailMeta}>
+                  <small>{domainObjects.length} objects</small>
+                  <small className={styles.mapDataSources} aria-label="Map data attribution">
+                    Map data
+                    {" "}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OSM</a>
+                    {" · "}<a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
+                    {" · "}<a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OFM</a>
+                  </small>
+                </div>
+              </header>
+              <div className={styles.routeRailList}>
               <div className={styles.routeRailGroupLabel}>Operating points</div>
               {networkObjects.map((object) => {
                 const Icon = objectIcon(object.kind);
@@ -715,8 +805,9 @@ function CaseCommandCenter({
                   </button>
                 );
               })}
-            </div>
-          </motion.aside>
+              </div>
+            </motion.aside>
+          </>
         )}
 
         {activePanel === "materials" && selectedInventoryItem ? (
@@ -724,7 +815,12 @@ function CaseCommandCenter({
             item={selectedInventoryItem}
             stage={sourcingStages[selectedInventoryItem.sku] ?? "idle"}
             selectedCandidateId={selectedCandidateIds[selectedInventoryItem.sku] ?? null}
-            onSelectCandidate={(candidateId) => setSelectedCandidateIds((current) => ({ ...current, [selectedInventoryItem.sku]: candidateId }))}
+            onSelectCandidate={(candidateId) => {
+              setSelectedCandidateIds((current) => ({ ...current, [selectedInventoryItem.sku]: candidateId }));
+              setSourceMapCandidateId(null);
+              setSourceMapObjectId("");
+            }}
+            onShowCandidateSource={showCandidateSource}
             onAdvance={advanceSourcingWorkflow}
           />
         ) : selectedObject ? (

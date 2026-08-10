@@ -319,6 +319,12 @@
   background: #edf2ef;
 }
 
+.commandCenter[data-domain="materials"] .commandMapStage {
+  grid-template-columns: minmax(0, 2.6fr) minmax(300px, 0.75fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "materials inspector";
+}
+
 .scenarioWorkbench {
   min-width: 0;
   min-height: 0;
@@ -645,6 +651,11 @@
     grid-template-columns: minmax(0, 3.4fr) minmax(300px, 0.68fr);
     grid-template-rows: minmax(0, 4.2fr) minmax(140px, 0.7fr);
   }
+
+  .commandCenter[data-domain="materials"] .commandMapStage {
+    grid-template-columns: minmax(0, 3.4fr) minmax(300px, 0.68fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
 }
 
 .mapPanel {
@@ -910,54 +921,253 @@
   font-weight: 650;
 }
 
-.inventoryRailSummary {
+.inventoryWorkspace {
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  min-height: 0;
+  display: grid;
+  grid-area: materials;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--panel);
 }
 
-.inventoryRailSummary small[data-alert="true"] {
+.inventoryWorkspaceHeader {
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inventoryWorkspaceHeader > span small,
+.inventoryWorkspaceHeader > span h2 {
+  display: block;
+  margin: 0;
+}
+
+.inventoryWorkspaceHeader > span small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inventoryWorkspaceHeader > span h2 {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 640;
+}
+
+.inventoryWorkspaceSummary {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.inventoryWorkspaceSummary span {
+  white-space: nowrap;
+}
+
+.inventoryWorkspaceSummary strong {
+  color: var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+
+.inventoryWorkspaceSummary span[data-alert="true"],
+.inventoryWorkspaceSummary span[data-alert="true"] strong {
   color: var(--danger);
 }
 
-.inventoryRailList {
+.inventoryWorkspaceSummary i,
+.candidateProvenance {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-muted);
+  background: var(--panel-subtle);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.candidateProvenance {
+  width: fit-content;
+  margin: -2px 0 8px;
+}
+
+.inventoryMapDisclosure {
   min-height: 0;
   display: grid;
-  grid-auto-columns: minmax(248px, 1fr);
-  grid-auto-flow: column;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 9px;
+  grid-template-rows: 52px minmax(0, 1fr);
+  overflow: hidden;
+  border-bottom: 1px solid var(--line-strong);
+  background: #edf2ef;
+}
+
+.inventoryMapDisclosure > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px 7px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.inventoryMapDisclosure > header span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.inventoryMapDisclosure > header small,
+.inventoryMapDisclosure > header strong,
+.inventoryMapDisclosure > header em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventoryMapDisclosure > header small {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.inventoryMapDisclosure > header strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.inventoryMapDisclosure > header em {
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.inventoryMapDisclosure > header button,
+.sourcingCandidates > header button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+.inventoryMapDisclosure > header button:hover,
+.sourcingCandidates > header button:hover {
+  color: var(--navy);
+  border-color: #bdccd3;
+  background: var(--navy-soft);
+}
+
+.inventoryMapDisclosure > div {
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.inventoryTableRegion {
+  min-height: 0;
+  overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
 
-.inventoryRailList > button {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 9px minmax(112px, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 0;
-  border-right: 1px solid var(--line);
-  border-radius: 11px;
+.inventoryTable {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
   color: var(--ink-soft);
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: color 140ms ease-out, background-color 140ms ease-out, transform 140ms ease-out;
+  font-size: 11px;
 }
 
-.inventoryRailList > button:hover,
-.inventoryRailList > button[data-active="true"] {
-  color: var(--ink);
+.inventoryTable th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--ink-muted);
+  background: #f8faf9;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  text-align: right;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.inventoryTable th:first-child {
+  width: 42%;
+  min-width: 290px;
+  padding-left: 18px;
+  text-align: left;
+}
+
+.inventoryTable td {
+  height: 59px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  font-family: "IBM Plex Mono", monospace;
+  text-align: right;
+  white-space: nowrap;
+  transition: background-color 140ms ease-out;
+}
+
+.inventoryTable td:first-child {
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+}
+
+.inventoryTable tr:hover td,
+.inventoryTable tr[data-active="true"] td {
   background: var(--panel-selected);
 }
 
-.inventoryRailList > button:active {
-  transform: scale(0.995);
+.inventoryTable tr[data-active="true"] td:first-child {
+  border-left: 3px solid var(--navy);
+}
+
+.inventoryTable td:first-child button {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 7px 18px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
 }
 
 .inventoryStatusDot {
@@ -967,28 +1177,23 @@
   background: var(--success);
 }
 
-.inventoryRailList > button[data-status="watch"] .inventoryStatusDot {
+.inventoryTable tr[data-status="watch"] .inventoryStatusDot {
   background: var(--decision);
 }
 
-.inventoryRailList > button[data-status="shortage"] .inventoryStatusDot {
+.inventoryTable tr[data-status="shortage"] .inventoryStatusDot {
   background: var(--danger);
 }
 
-.inventoryItemCopy,
-.inventoryQuantity,
-.inventoryItemCopy small,
-.inventoryItemCopy strong,
-.inventoryItemCopy em,
-.inventoryQuantity small,
-.inventoryQuantity strong,
-.inventoryQuantity em {
+.inventoryTable td:first-child button > span:last-child,
+.inventoryTable td:first-child small,
+.inventoryTable td:first-child strong,
+.inventoryTable td:first-child em {
   min-width: 0;
   display: block;
 }
 
-.inventoryItemCopy small,
-.inventoryQuantity small {
+.inventoryTable td:first-child small {
   color: var(--ink-muted);
   font-family: "IBM Plex Mono", monospace;
   font-size: 9px;
@@ -996,7 +1201,7 @@
   text-transform: uppercase;
 }
 
-.inventoryItemCopy strong {
+.inventoryTable td:first-child strong {
   overflow: hidden;
   margin-top: 2px;
   color: var(--ink);
@@ -1006,8 +1211,7 @@
   white-space: nowrap;
 }
 
-.inventoryItemCopy em,
-.inventoryQuantity em {
+.inventoryTable td:first-child em {
   overflow: hidden;
   margin-top: 2px;
   color: var(--ink-muted);
@@ -1017,20 +1221,32 @@
   white-space: nowrap;
 }
 
-.inventoryQuantity {
-  text-align: right;
+.inventoryStatusLabel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 62px;
+  min-height: 24px;
+  padding: 0 7px;
+  border: 1px solid #bfd7c9;
+  border-radius: 7px;
+  color: var(--success);
+  background: var(--success-soft);
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 9px;
+  font-weight: 640;
 }
 
-.inventoryQuantity strong {
-  margin-top: 2px;
-  color: var(--ink);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+.inventoryTable tr[data-status="watch"] .inventoryStatusLabel {
+  border-color: #d8bda9;
+  color: var(--decision);
+  background: var(--decision-soft);
 }
 
-.inventoryRailList > button[data-status="shortage"] .inventoryQuantity em {
+.inventoryTable tr[data-status="shortage"] .inventoryStatusLabel {
+  border-color: #dfc0bc;
   color: var(--danger);
-  font-weight: 650;
+  background: var(--danger-soft);
 }
 
 .sourcingInspector {
@@ -2534,6 +2750,15 @@
     overflow-y: auto;
   }
 
+  .commandCenter[data-domain="materials"] .commandMapStage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(560px, 1fr) minmax(440px, auto);
+    grid-template-areas:
+      "materials"
+      "inspector";
+    overflow-y: auto;
+  }
+
   .scenarioWorkbench {
     height: calc(100% - 36px);
   }
@@ -2608,6 +2833,36 @@
     grid-template-rows: minmax(320px, 48vh) 168px 280px;
     gap: 10px;
     padding: 10px;
+  }
+
+  .commandCenter[data-domain="materials"] .commandMapStage {
+    grid-template-rows: minmax(620px, auto) minmax(560px, auto);
+  }
+
+  .inventoryWorkspaceHeader {
+    min-height: 82px;
+    align-items: flex-start;
+    padding: 12px 14px;
+  }
+
+  .inventoryWorkspaceSummary {
+    max-width: 178px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px 10px;
+  }
+
+  .inventoryWorkspaceSummary i {
+    display: none;
+  }
+
+  .inventoryMapDisclosure > header span {
+    display: grid;
+    gap: 1px;
+  }
+
+  .inventoryMapDisclosure > header small {
+    display: none;
   }
 
   .scenarioWorkbench {
@@ -2726,17 +2981,6 @@
 
   .routeRail > header {
     padding: 0 14px;
-  }
-
-  .inventoryRail > header > span {
-    overflow: hidden;
-    font-size: 13px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .inventoryRailSummary small:not([data-alert="true"]) {
-    display: none;
   }
 
   .routeRailList {

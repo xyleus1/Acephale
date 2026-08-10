@@ -26,8 +26,8 @@ assert.match(commandMap, /const focusActivePanel = useCallback/,
   "the map must expose one deterministic camera operation for tab changes");
 assert.match(commandMap, /focusActivePanel\(true\)/,
   "selecting a tab must animate the camera to its operating context");
-assert.match(commandMap, /activePanel === "materials"[\s\S]*object\.kind === "factory"/,
-  "Inventory and sourcing camera focus must use factory coordinates");
+assert.match(commandMap, /activePanel === "materials"[\s\S]*object\.kind === "supplier"[\s\S]*fitCoordinates\(\[supplier\.coordinates, facility\.coordinates\]/,
+  "Inventory and sourcing source map must frame the selected supplier and facility together");
 assert.match(commandMap, /activePanel === "fulfillment"[\s\S]*object\.kind === "customer"/,
   "Fulfillment camera focus must use customer coordinates");
 assert.match(commandMap, /activePanel === "scenarios"[\s\S]*object\.kind === "customer"/,

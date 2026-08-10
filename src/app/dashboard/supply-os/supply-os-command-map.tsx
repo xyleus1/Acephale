@@ -364,9 +364,14 @@ export function SupplyOsCommandMap({
 
   const focusActivePanel = useCallback((animate = true) => {
     if (activePanel === "materials") {
-      const object = visibleMapObjects.find((object) => object.kind === "factory")
-        ?? visibleMapObjects.find((object) => object.kind === "distribution")
-        ?? visibleMapObjects[0];
+      const supplier = visibleMapObjects.find((object) => object.kind === "supplier");
+      const facility = visibleMapObjects.find((object) => object.kind === "factory")
+        ?? visibleMapObjects.find((object) => object.kind === "distribution");
+      if (supplier && facility) {
+        fitCoordinates([supplier.coordinates, facility.coordinates], animate, 6.2, 5.8);
+        return;
+      }
+      const object = supplier ?? facility ?? visibleMapObjects[0];
       if (object) focusObject(object, animate);
       return;
     }

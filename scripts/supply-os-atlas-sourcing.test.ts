@@ -20,15 +20,29 @@ assert.ok(ATLAS_ROBOTICS_INVENTORY.every((item) => projectedAvailable(item) >= 0
 const shortages = ATLAS_ROBOTICS_INVENTORY.filter((item) => shortageQuantity(item) > 0);
 assert.ok(shortages.length >= 4, "the demo needs multiple actionable shortages");
 assert.ok(shortages.every((item) => item.candidates.length >= 2), "each shortage needs a basic candidate comparison");
-assert.ok(shortages.every((item) => item.candidates.every((candidate) => candidate.leadTimeDays > 0 && candidate.minimumOrderQuantity > 0 && candidate.modeledUnitCostUsd > 0)));
+assert.ok(shortages.every((item) => item.candidates.every((candidate) => (
+  candidate.leadTimeDays > 0
+  && candidate.minimumOrderQuantity > 0
+  && candidate.modeledUnitCostUsd > 0
+  && Number.isFinite(candidate.coordinates.longitude)
+  && Number.isFinite(candidate.coordinates.latitude)
+))));
 
 const summary = atlasInventorySummary();
 assert.equal(summary.itemCount, ATLAS_ROBOTICS_INVENTORY.length);
 assert.equal(summary.shortageCount, shortages.length);
 assert.ok(summary.buildableWithInbound < summary.demandUnits, "the fixture should expose a real build constraint");
 
-assert.match(dashboard, /activePanel === "materials"[\s\S]*AtlasInventoryRail/);
+assert.match(dashboard, /activePanel === "materials"[\s\S]*AtlasInventoryWorkspace/);
 assert.match(dashboard, /activePanel === "materials" && selectedInventoryItem[\s\S]*AtlasSourcingInspector/);
+assert.match(dashboard, /sourceMap=\{sourceMapContext[\s\S]*SupplyOsCommandMap/);
+assert.match(workbench, /Show source/);
+assert.match(workbench, /Hide map/);
+assert.match(workbench, /<th>On hand<\/th>/);
+assert.match(workbench, /<th>Allocated<\/th>/);
+assert.match(workbench, /<th>Inbound<\/th>/);
+assert.match(workbench, /<th>Projected<\/th>/);
+assert.doesNotMatch(workbench, /inventoryRailList/);
 assert.match(workbench, /Start sourcing/);
 assert.match(workbench, /Prepare approval/);
 assert.match(workbench, /Awaiting approval/);
