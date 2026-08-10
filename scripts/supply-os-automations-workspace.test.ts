@@ -22,7 +22,6 @@ assert.match(shell, /nav\.scrollTo\(\{ left: buttonEnd - nav\.clientWidth \}\)/)
 assert.match(dashboard, /activePanel === "automations"[\s\S]*<SupplyOsAutomations/);
 
 for (const label of [
-  "Automation chat",
   "Complete bill of lading",
   "Find suppliers",
   "Request freight rates",
@@ -32,11 +31,17 @@ for (const label of [
   assert.equal(automations.includes(label), true, `automation workspace is missing ${label}`);
 }
 
-assert.match(automations, /function wantsNewAutomation/);
-assert.match(automations, /setAutomations\(\(current\) => \[\.\.\.current, automation\]\)/);
-assert.match(automations, /Operator instruction: \$\{instruction\}/);
-assert.match(automations, /No message, filing, booking, record, or spend action is executed/);
-assert.match(automations, /Nothing has been activated or sent/);
+assert.match(automations, /fetch\("\/api\/supply-os\/automations\/chat"/);
+assert.match(automations, /aria-label="Automation instruction"/);
+assert.match(automations, /aria-label="Automation drafts"/);
+assert.match(automations, /<i>Draft<\/i>/);
+assert.equal(automations.includes("Automation chat"), false);
+assert.equal(automations.includes("Browser draft."), false);
+assert.equal(automations.includes("What should this workflow do?"), false);
+assert.equal(automations.includes("Nothing has been activated or sent"), false);
+assert.equal(automations.includes("New draft"), false);
+assert.equal(automations.includes("function draftName"), false);
+assert.equal(automations.includes("function draftSteps"), false);
 assert.match(automationStyles, /grid-template-columns: minmax\(0, 1\.65fr\) minmax\(340px, 0\.9fr\)/);
 assert.match(automationStyles, /@media \(max-width: 720px\)[\s\S]*\.workspace \{[\s\S]*display: block/);
 

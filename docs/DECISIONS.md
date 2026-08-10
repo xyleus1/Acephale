@@ -79,9 +79,11 @@ Use this log for durable product and engineering decisions. Do not put every imp
   pretending that a text response is a production automation.
 - Consequences: Built-in workflows cover bill of lading preparation, supplier
   search, freight rate requests, customs document checks, and transport
-  exception monitoring. The UI must state that drafts are inactive and cannot
-  send messages, file customs, book freight, write records, or authorize spend.
-  Specific operational icons replace the generic Boxes icon across Supply OS.
+  exception monitoring. The UI labels the selected workflow as `Draft` without
+  repeating a long execution disclaimer. GPT may create or revise draft steps,
+  but the server preserves approval gates and the feature cannot send messages,
+  file customs, book freight, write records, or authorize spend. Specific
+  operational icons replace the generic Boxes icon across Supply OS.
 - Revisit when: office-scoped workflow persistence, version history, typed
   triggers and actions, approval hashes, and idempotent execution workers are
   ready for the Automations surface.

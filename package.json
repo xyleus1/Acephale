@@ -22,6 +22,7 @@
     "test:supply-os-map-dominance": "tsx scripts/supply-os-map-dominance.test.ts",
     "test:supply-os-panel-map-focus": "tsx scripts/supply-os-panel-map-focus.test.ts",
     "test:supply-os-automations": "tsx scripts/supply-os-automations-workspace.test.ts",
+    "test:supply-os-automation-chat": "tsx scripts/supply-os-automation-chat.test.ts",
     "test:supply-os-operations-ui": "tsx scripts/supply-os-operations-ui.test.ts",
     "test:supply-os-scenario-viewport": "tsx scripts/supply-os-scenario-viewport.test.ts",
     "test:supply-os-legacy-routes": "tsx scripts/supply-os-legacy-routes.test.ts",

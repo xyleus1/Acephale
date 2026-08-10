@@ -4,9 +4,7 @@ import {
   Check,
   ChevronRight,
   FileText,
-  LockKeyhole,
-  MessageSquareText,
-  Plus,
+  LoaderCircle,
   Radar,
   Search,
   Send,
@@ -101,48 +99,23 @@ const BUILT_IN_AUTOMATIONS: AutomationDefinition[] = [
   },
 ];
 
-const STARTING_MESSAGES: ChatMessage[] = [
-  {
-    id: "intro",
-    role: "derya",
-    body: "What should this workflow do? Choose a template or describe it here, and I will draft the steps for review.",
-  },
-];
+const STARTING_MESSAGES: ChatMessage[] = [];
 
-function draftName(message: string) {
-  const normalized = message.trim().replace(/^(create|build|make|draft)\s+(a|an|new)?\s*/i, "");
-  if (/bill of lading|\bbol\b/i.test(normalized)) return "Complete bill of lading";
-  if (/supplier|vendor|source/i.test(normalized)) return "Find and qualify suppliers";
-  if (/rate|quote|carrier/i.test(normalized)) return "Collect freight rates";
-  if (/customs|tariff|classification|hts/i.test(normalized)) return "Check customs readiness";
-  if (/track|milestone|exception|delay/i.test(normalized)) return "Monitor transport exceptions";
-  const words = normalized.replace(/[^a-zA-Z0-9\s-]/g, "").split(/\s+/).filter(Boolean).slice(0, 7);
-  return words.length ? `${words[0][0]?.toUpperCase() ?? ""}${words[0].slice(1)} ${words.slice(1).join(" ")}`.trim() : "New automation";
-}
-
-function draftSteps(message: string) {
-  if (/bill of lading|\bbol\b/i.test(message)) return BUILT_IN_AUTOMATIONS[0].steps;
-  if (/supplier|vendor|source/i.test(message)) return BUILT_IN_AUTOMATIONS[1].steps;
-  if (/rate|quote|carrier/i.test(message)) return BUILT_IN_AUTOMATIONS[2].steps;
-  if (/customs|tariff|classification|hts/i.test(message)) return BUILT_IN_AUTOMATIONS[3].steps;
-  if (/track|milestone|exception|delay/i.test(message)) return BUILT_IN_AUTOMATIONS[4].steps;
-  return [
-    "Confirm the trigger, scope, and required records",
-    "Collect evidence and identify missing inputs",
-    "Prepare the operator output",
-    "Hold external actions for operator approval",
-  ];
-}
-
-function wantsNewAutomation(message: string) {
-  return /\b(create|build|make|draft)\b/i.test(message);
-}
+type AutomationChatResponse = {
+  result?: {
+    action: "create" | "update" | "reply";
+    reply: string;
+    automation: Pick<AutomationDefinition, "name" | "purpose" | "steps"> | null;
+  };
+  error?: string;
+};
 
 export function SupplyOsAutomations({ company }: { company: string }) {
   const [automations, setAutomations] = useState(BUILT_IN_AUTOMATIONS);
   const [selectedId, setSelectedId] = useState(BUILT_IN_AUTOMATIONS[0].id);
   const [messages, setMessages] = useState(STARTING_MESSAGES);
   const [message, setMessage] = useState("");
+  const [isDrafting, setIsDrafting] = useState(false);
   const selectedAutomation = useMemo(
     () => automations.find((automation) => automation.id === selectedId) ?? automations[0],
     [automations, selectedId],
@@ -150,140 +123,113 @@ export function SupplyOsAutomations({ company }: { company: string }) {
 
   function selectAutomation(automation: AutomationDefinition) {
     setSelectedId(automation.id);
-    setMessages((current) => [
-      ...current,
-      {
-        id: `selected-${automation.id}-${current.length}`,
-        role: "derya",
-        body: `${automation.name} selected. Its ${automation.steps.length} draft steps are open on the right.`,
-      },
-    ]);
   }
 
-  function submitMessage(event: FormEvent<HTMLFormElement>) {
+  async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const instruction = message.trim();
-    if (!instruction) return;
+    if (!instruction || isDrafting) return;
 
     const operatorMessage: ChatMessage = {
       id: `operator-${Date.now()}`,
       role: "operator",
       body: instruction,
     };
+    const nextMessages = [...messages, operatorMessage];
+    setMessages(nextMessages);
+    setMessage("");
+    setIsDrafting(true);
 
-    if (wantsNewAutomation(instruction)) {
-      const name = draftName(instruction);
-      const automation: AutomationDefinition = {
-        id: `draft-${Date.now()}`,
-        name,
-        purpose: "Created in this browser session",
-        icon: Sparkles,
-        source: "chat draft",
-        steps: [...draftSteps(instruction)],
-      };
-      setAutomations((current) => [...current, automation]);
-      setSelectedId(automation.id);
-      setMessages((current) => [
-        ...current,
-        operatorMessage,
-        {
-          id: `derya-${Date.now()}`,
-          role: "derya",
-          body: `${name} is drafted with ${automation.steps.length} steps. Nothing has been activated or sent.`,
-        },
-      ]);
-      setMessage("");
-      return;
-    }
+    try {
+      const response = await fetch("/api/supply-os/automations/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          company,
+          instruction,
+          selectedAutomation: {
+            name: selectedAutomation.name,
+            purpose: selectedAutomation.purpose,
+            steps: selectedAutomation.steps,
+          },
+          messages: messages.map(({ role, body }) => ({ role, body })),
+        }),
+      });
+      const payload = await response.json().catch(() => null) as AutomationChatResponse | null;
+      if (!response.ok || !payload?.result) {
+        throw new Error(payload?.error || "Workflow drafting failed.");
+      }
 
-    if (/approval|review|sign.?off/i.test(instruction)) {
-      setAutomations((current) => current.map((automation) => {
-        if (automation.id !== selectedAutomation.id) return automation;
-        if (automation.steps.some((step) => /approval|review/i.test(step))) return automation;
-        return { ...automation, steps: [...automation.steps, "Wait for explicit operator approval"] };
-      }));
-      setMessages((current) => [
-        ...current,
-        operatorMessage,
-        {
-          id: `derya-${Date.now()}`,
-          role: "derya",
-          body: `The approval gate is included in ${selectedAutomation.name}. The draft is still inactive.`,
-        },
-      ]);
-      setMessage("");
-      return;
-    }
-
-    setAutomations((current) => current.map((automation) => automation.id === selectedAutomation.id
-      ? { ...automation, steps: [...automation.steps, `Operator instruction: ${instruction}`], source: "chat draft" }
-      : automation));
-    setMessages((current) => [
-      ...current,
-      operatorMessage,
-      {
+      const { action, automation, reply } = payload.result;
+      if (action === "create" && automation) {
+        const id = `draft-${Date.now()}`;
+        setAutomations((current) => [...current, {
+          ...automation,
+          id,
+          icon: Sparkles,
+          source: "chat draft",
+        }]);
+        setSelectedId(id);
+      } else if (action === "update" && automation) {
+        setAutomations((current) => current.map((item) => item.id === selectedAutomation.id
+          ? { ...item, ...automation, source: "chat draft" }
+          : item));
+      }
+      setMessages((current) => [...current, {
         id: `derya-${Date.now()}`,
         role: "derya",
-        body: `I added that instruction to ${selectedAutomation.name}. Review the updated steps on the right.`,
-      },
-    ]);
-    setMessage("");
+        body: reply,
+      }]);
+    } catch (error) {
+      setMessage(instruction);
+      setMessages((current) => [...current, {
+        id: `derya-${Date.now()}`,
+        role: "derya",
+        body: error instanceof Error ? error.message : "Workflow drafting failed.",
+      }]);
+    } finally {
+      setIsDrafting(false);
+    }
   }
 
   return (
     <section className={`${styles.workspace} supply-os-workspace`} aria-label="Automations workspace">
-      <section className={styles.chatPane} aria-label={`Automation chat for ${company}`}>
-        <header className={styles.paneHeader}>
-          <span>
-            <MessageSquareText size={18} aria-hidden="true" />
-            <strong id="automation-chat-title">Automation chat</strong>
-          </span>
-        </header>
-
-        <div className={styles.conversation} aria-live="polite">
+      <section className={styles.chatPane} aria-label={`Workflow editor for ${company}`}>
+        <div className={styles.conversation} aria-live="polite" aria-busy={isDrafting}>
           {messages.map((chatMessage) => (
             <article key={chatMessage.id} data-role={chatMessage.role}>
-              <small>{chatMessage.role === "operator" ? "You" : "Derya"}</small>
               <p>{chatMessage.body}</p>
             </article>
           ))}
         </div>
 
         <form className={styles.composer} onSubmit={submitMessage}>
-          <label className={styles.visuallyHidden} htmlFor="automation-message">Message</label>
           <div>
             <textarea
               id="automation-message"
+              aria-label="Automation instruction"
               rows={3}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder="Create a supplier follow-up, add a review gate, or change a step"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              placeholder="Describe a workflow or change a step"
+              disabled={isDrafting}
             />
-            <button type="submit" disabled={!message.trim()} aria-label="Send automation instruction">
-              <Send size={16} aria-hidden="true" />
-              Send
+            <button type="submit" disabled={!message.trim() || isDrafting} aria-label="Send automation instruction">
+              {isDrafting
+                ? <LoaderCircle className={styles.spinner} size={17} aria-hidden="true" />
+                : <Send size={17} aria-hidden="true" />}
             </button>
           </div>
-          <p><LockKeyhole size={13} aria-hidden="true" /> Browser draft. No message, filing, booking, record, or spend action is executed.</p>
         </form>
       </section>
 
-      <aside className={styles.libraryPane} aria-labelledby="automation-library-title">
-        <header className={styles.paneHeader}>
-          <span>
-            <strong id="automation-library-title">Automations</strong>
-            <small>{automations.length}</small>
-          </span>
-          <button
-            type="button"
-            onClick={() => setMessage("Create a new automation that ")}
-            aria-label="Start a new automation in chat"
-          >
-            <Plus size={16} aria-hidden="true" />
-            New draft
-          </button>
-        </header>
-
+      <aside className={styles.libraryPane} aria-label="Automation drafts">
         <div className={styles.automationList}>
           {automations.map((automation) => {
             const Icon = automation.icon;
@@ -294,6 +240,7 @@ export function SupplyOsAutomations({ company }: { company: string }) {
                 type="button"
                 data-active={selected}
                 aria-pressed={selected}
+                disabled={isDrafting}
                 onClick={() => selectAutomation(automation)}
               >
                 <Icon size={18} strokeWidth={1.8} aria-hidden="true" />

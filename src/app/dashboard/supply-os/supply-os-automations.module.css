@@ -30,71 +30,16 @@
 
 .chatPane {
   display: grid;
-  grid-template-rows: 80px minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   background: var(--os-panel, #ffffff);
 }
 
 .libraryPane {
   display: grid;
-  grid-template-rows: 80px auto minmax(260px, 1fr);
+  grid-template-rows: auto minmax(260px, 1fr);
   overflow: hidden;
   border-left: 1px solid var(--os-line, #e0e4e2);
   background: #fbfcfb;
-}
-
-.paneHeader {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 34px;
-  border-bottom: 1px solid var(--os-line, #e0e4e2);
-}
-
-.paneHeader > span {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.paneHeader strong {
-  overflow: hidden;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.paneHeader small {
-  color: var(--os-muted, #747c78);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  font-style: normal;
-  text-transform: uppercase;
-}
-
-.paneHeader > button {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 14px;
-  border: 1px solid var(--os-line-strong, #c7ceca);
-  border-radius: 10px;
-  color: var(--os-ink, #1b1d1c);
-  background: var(--os-panel, #ffffff);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 620;
-  transition: border-color 140ms ease, background-color 140ms ease;
-}
-
-.paneHeader > button:hover {
-  border-color: var(--os-ink, #1b1d1c);
-  background: var(--os-subtle, #f1f3f2);
 }
 
 .conversation {
@@ -120,16 +65,8 @@
   background: var(--os-selected, #eaf0f2);
 }
 
-.conversation small {
-  color: var(--os-muted, #747c78);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
 .conversation p {
-  margin: 9px 0 0;
+  margin: 0;
   color: var(--os-ink, #1b1d1c);
   font-size: 15px;
   line-height: 1.65;
@@ -175,11 +112,12 @@
 }
 
 .composer button {
+  width: 44px;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 15px;
+  justify-content: center;
+  padding: 0;
   border: 0;
   border-radius: 10px;
   color: #ffffff;
@@ -197,17 +135,6 @@
 .composer button:disabled {
   cursor: not-allowed;
   opacity: 0.34;
-}
-
-.composer > p {
-  width: min(680px, 100%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 11px auto 0;
-  color: var(--os-muted, #747c78);
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .automationList {
@@ -241,6 +168,10 @@
 .automationList > button:hover {
   color: var(--os-ink, #1b1d1c);
   background: var(--os-subtle, #f1f3f2);
+}
+
+.automationList > button:disabled {
+  cursor: wait;
 }
 
 .automationList > button[data-active="true"] {
@@ -352,17 +283,6 @@
   border-top: 1px solid var(--os-line, #e0e4e2);
 }
 
-.visuallyHidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .stepPlan li > span {
   color: var(--os-muted, #747c78);
   font-family: "IBM Plex Mono", monospace;
@@ -411,7 +331,7 @@
 
   .libraryPane {
     min-height: 640px;
-    grid-template-rows: 72px auto minmax(300px, auto);
+    grid-template-rows: auto minmax(300px, auto);
     border-top: 1px solid var(--os-line-strong, #c7ceca);
     border-left: 0;
   }
@@ -424,24 +344,25 @@
     padding: 22px 18px 20px;
   }
 
-  .paneHeader {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
-
-  .composer > div {
-    grid-template-columns: 1fr;
-  }
-
-  .composer button {
-    justify-content: center;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .paneHeader > button,
   .automationList > button,
   .composer button {
     transition: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
+}
+
+.spinner {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
