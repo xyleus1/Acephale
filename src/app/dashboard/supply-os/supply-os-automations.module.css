@@ -94,7 +94,7 @@
 .composer textarea {
   width: 100%;
   min-height: 76px;
-  resize: vertical;
+  resize: none;
   padding: 8px 10px;
   border: 0;
   color: var(--os-ink, #1b1d1c);

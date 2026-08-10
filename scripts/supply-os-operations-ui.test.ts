@@ -32,10 +32,9 @@ assert.match(twin, /Approval required/);
 assert.doesNotMatch(shell, /Build release|Supplier award|Landed cost/);
 assert.doesNotMatch(dashboard, /ListChecks/);
 assert.doesNotMatch(dashboard, /model\.actions\.length\} priorities/);
-assert.match(
-  logisticsStyles,
-  /\.optimizationInspector \.inspectorHeader \{\s*grid-template-columns: minmax\(0, 1fr\);\s*\}/,
-);
+assert.doesNotMatch(dashboard, /<h2>\{model\.profile\}<\/h2>/);
+assert.doesNotMatch(dashboard, /Priorities <small>\{model\.actions\.length\}<\/small>/);
+assert.doesNotMatch(logisticsStyles, /\.optimizationInspector \.inspectorHeader/);
 
 assert.match(twin, /import \{ AnimatePresence, motion \} from "motion\/react"/);
 assert.match(twin, /layoutId="supply-os-tree-selection"/);

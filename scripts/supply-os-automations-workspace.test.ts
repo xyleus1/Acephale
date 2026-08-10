@@ -43,6 +43,8 @@ assert.equal(automations.includes("New draft"), false);
 assert.equal(automations.includes("function draftName"), false);
 assert.equal(automations.includes("function draftSteps"), false);
 assert.match(automationStyles, /grid-template-columns: minmax\(0, 1\.65fr\) minmax\(340px, 0\.9fr\)/);
+assert.match(automationStyles, /\.composer textarea \{[\s\S]*resize: none;/);
+assert.doesNotMatch(automationStyles, /\.composer textarea \{[\s\S]*resize: vertical;/);
 assert.match(automationStyles, /@media \(max-width: 720px\)[\s\S]*\.workspace \{[\s\S]*display: block/);
 
 for (const source of [dashboard, commandMap, productTwin]) {

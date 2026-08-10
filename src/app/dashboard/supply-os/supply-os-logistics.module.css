@@ -2644,10 +2644,6 @@
   background: var(--navy);
 }
 
-.optimizationInspector .inspectorHeader {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .analysisThesis {
   padding: 16px;
   border: 1px solid var(--line);

@@ -926,7 +926,7 @@ function CommandInspector({
       >
         <Tabs.List className={styles.inspectorTabsList} aria-label="Inspector view">
           <Tabs.Trigger value="object">{object.kind === "movement" ? "Transport leg" : "Details"}</Tabs.Trigger>
-          <Tabs.Trigger value="optimization">Priorities <small>{model.actions.length}</small></Tabs.Trigger>
+          <Tabs.Trigger value="optimization">Priorities</Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="object" className={styles.inspectorTabPanel}>
@@ -1024,10 +1024,6 @@ function CommandInspector({
         </Tabs.Content>
 
         <Tabs.Content value="optimization" className={`${styles.inspectorTabPanel} ${styles.optimizationInspector}`}>
-          <header className={styles.inspectorHeader}>
-            <h2>{model.profile}</h2>
-          </header>
-
           <div className={styles.analysisBody}>
             <section className={styles.analysisThesis}>
               <p>{model.networkSummary}</p>

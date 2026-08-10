@@ -2,12 +2,14 @@
 
 ## Latest Update
 
-### Optimization inspector header is reduced to its title
+### Optimization inspector header is removed
 
 - Removed the decorative checklist icon from the optimization inspector.
 - Removed the computed priorities-count badge from the inspector header.
-- Changed the optimization header to one column so the removed icon does not
-  leave an empty gutter beside the title.
+- Removed the remaining profile-title header and the repeated count in the
+  Priorities tab. The ranked priority list now starts the panel directly.
+- Disabled textarea resizing in Automations so the browser drag handle is not
+  exposed in the composer.
 - Added a regression contract for the clean header composition.
 - No optimization data, ranking, selection, schema, tenant boundary, approval
   rule, or external action changed.
@@ -15,6 +17,7 @@
 Verification:
 
 - `node --import tsx scripts/supply-os-operations-ui.test.ts`
+- `node --import tsx scripts/supply-os-automations-workspace.test.ts`
 - `node --import tsx scripts/supply-os-collapsible-navigation.test.ts`
 - `node --import tsx scripts/supply-os-sidebar-map.test.ts`
 - `node --import tsx scripts/supply-os-enterprise-design.test.ts`
@@ -22,11 +25,9 @@ Verification:
 - `npx tsc --noEmit --incremental false`
 - `git diff --check`
 - Changed-diff U+2014 scan
-
-Skipped verification:
-
-- Rendered browser QA could not run because the sandbox blocks the local port
-  required by the browser controller.
+- Authenticated browser QA at 1440 by 1000 confirmed the composer computed
+  `resize` value is `none`, the optimization title block is absent, and the
+  page has no horizontal overflow.
 
 ### Inventory and sourcing now runs request, research, comparison, and handoff
 

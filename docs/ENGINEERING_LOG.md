@@ -4375,20 +4375,20 @@ Use this file for chronological implementation notes that future agents should s
   passed with no horizontal overflow. Local live GPT completion was unavailable
   because the local environment has no `OPENAI_API_KEY`.
 
+### 2026-08-09 - Remove optimization inspector header and composer resize handle
 
-### 2026-08-09 - Remove optimization inspector header clutter
-
-- Branch: fix/clean-optimization-header-20260809
-- Task: Remove the decorative checklist icon and priorities-count badge beside
-  the optimization profile heading.
+- Branch: main
+- Task: Remove the optimization profile header and the Automations textarea
+  resize handle.
 - Files changed: Supply OS dashboard, Logistics styles, operations UI contract,
   handoff, and this log.
-- Design: The optimization header now contains only the profile title and uses
-  one grid column. Priority ranking remains visible in the actionable list
-  below the header.
+- Design: The optimization view now starts directly with its actionable content.
+  Its tab no longer repeats the priority count. The Automations composer keeps
+  its fixed shape without exposing the browser resize affordance.
 - Verification: Operations UI, collapsible navigation, sidebar map, enterprise
   design, product copy, TypeScript, diff-check, and changed-diff U+2014 checks
-  passed.
-- Failed/skipped checks: Rendered browser QA could not start because the
-  sandbox blocks the local port required by the browser controller.
+  passed. Authenticated browser QA at 1440 by 1000 confirmed the composer has
+  no resize affordance, the optimization title block is absent, and the page
+  has no horizontal overflow.
+- Failed/skipped checks: None.
 - Caveats: None. Optimization data and behavior are unchanged.
