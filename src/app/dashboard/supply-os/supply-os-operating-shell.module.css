@@ -366,6 +366,16 @@
   overflow: hidden;
 }
 
+.shell[data-panel="automations"][data-company-index="false"] .panelStage {
+  padding: 36px 40px 40px;
+}
+
+.shell[data-panel="automations"][data-company-index="false"] .panelStage > :global(.supply-os-workspace) {
+  max-width: 1240px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .panelNav button,
   .sidebarFooter button,
@@ -407,6 +417,10 @@
 
   .panelStage {
     padding: 20px;
+  }
+
+  .shell[data-panel="automations"][data-company-index="false"] .panelStage {
+    padding: 24px;
   }
 }
 
@@ -520,6 +534,10 @@
   .panelStage {
     padding: 20px;
   }
+
+  .shell[data-panel="automations"][data-company-index="false"] .panelStage {
+    padding: 20px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -548,6 +566,11 @@
 
 @media (max-width: 720px) {
   .panelStage {
+    padding: 0;
+  }
+
+
+  .shell[data-panel="automations"][data-company-index="false"] .panelStage {
     padding: 0;
   }
 }

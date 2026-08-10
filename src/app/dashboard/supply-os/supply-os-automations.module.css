@@ -5,8 +5,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.9fr);
   overflow: hidden;
-  border: 1px solid var(--os-line-strong, #c7ceca);
-  border-radius: 18px;
+  border: 1px solid var(--os-line, #e0e4e2);
+  border-radius: 16px;
   color: var(--os-ink, #1b1d1c);
   background: var(--os-panel, #ffffff);
 }
@@ -48,7 +48,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 30px;
+  padding: 0 34px;
   border-bottom: 1px solid var(--os-line, #e0e4e2);
 }
 
@@ -100,12 +100,12 @@
 .conversation {
   min-height: 0;
   overflow-y: auto;
-  padding: 44px clamp(32px, 5vw, 72px);
+  padding: 52px clamp(40px, 6vw, 88px);
   overscroll-behavior: contain;
 }
 
 .conversation article {
-  width: min(660px, 88%);
+  width: min(620px, 86%);
   margin-right: auto;
   margin-bottom: 34px;
   margin-left: auto;
@@ -136,13 +136,13 @@
 }
 
 .composer {
-  padding: 26px clamp(32px, 5vw, 72px) 24px;
+  padding: 30px clamp(40px, 6vw, 88px) 28px;
   border-top: 1px solid var(--os-line, #e0e4e2);
   background: var(--os-panel, #ffffff);
 }
 
 .composer > div {
-  width: min(720px, 100%);
+  width: min(680px, 100%);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
@@ -200,7 +200,7 @@
 }
 
 .composer > p {
-  width: min(720px, 100%);
+  width: min(680px, 100%);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -215,8 +215,8 @@
   overflow-y: auto;
   display: grid;
   align-content: start;
-  gap: 4px;
-  padding: 12px;
+  gap: 6px;
+  padding: 16px;
   border-bottom: 1px solid var(--os-line, #e0e4e2);
   overscroll-behavior: contain;
 }
@@ -282,7 +282,7 @@
 .stepPlan {
   min-height: 0;
   overflow-y: auto;
-  padding: 26px 26px 30px;
+  padding: 30px 30px 34px;
   overscroll-behavior: contain;
 }
 
