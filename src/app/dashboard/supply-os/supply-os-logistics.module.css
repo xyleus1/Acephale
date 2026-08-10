@@ -2645,7 +2645,7 @@
 }
 
 .optimizationInspector .inspectorHeader {
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .analysisThesis {

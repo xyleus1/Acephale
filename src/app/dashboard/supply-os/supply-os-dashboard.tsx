@@ -5,7 +5,6 @@ import {
   ArrowRight,
   ExternalLink,
   Factory,
-  ListChecks,
   LoaderCircle,
   MapPin,
   PackageOpen,
@@ -1026,11 +1025,7 @@ function CommandInspector({
 
         <Tabs.Content value="optimization" className={`${styles.inspectorTabPanel} ${styles.optimizationInspector}`}>
           <header className={styles.inspectorHeader}>
-            <span className={styles.inspectorIcon}><ListChecks size={17} strokeWidth={1.8} /></span>
-            <span>
-              <h2>{model.profile}</h2>
-            </span>
-            <i>{model.actions.length} priorities</i>
+            <h2>{model.profile}</h2>
           </header>
 
           <div className={styles.analysisBody}>

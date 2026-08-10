@@ -15,6 +15,14 @@ const twinStyles = readFileSync(
   resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.module.css"),
   "utf8",
 );
+const dashboard = readFileSync(
+  resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"),
+  "utf8",
+);
+const logisticsStyles = readFileSync(
+  resolve(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"),
+  "utf8",
+);
 
 assert.match(shell, /className=\{`\$\{styles\.shell\} supply-os-workspace`\}/);
 assert.match(shell, /shortLabel: "Tracking"/);
@@ -22,6 +30,12 @@ assert.match(shell, /className=\{styles\.operatingBrand\}/);
 assert.match(shell, /<strong>Derya<\/strong>/);
 assert.match(twin, /Approval required/);
 assert.doesNotMatch(shell, /Build release|Supplier award|Landed cost/);
+assert.doesNotMatch(dashboard, /ListChecks/);
+assert.doesNotMatch(dashboard, /model\.actions\.length\} priorities/);
+assert.match(
+  logisticsStyles,
+  /\.optimizationInspector \.inspectorHeader \{\s*grid-template-columns: minmax\(0, 1fr\);\s*\}/,
+);
 
 assert.match(twin, /import \{ AnimatePresence, motion \} from "motion\/react"/);
 assert.match(twin, /layoutId="supply-os-tree-selection"/);

@@ -2,6 +2,32 @@
 
 ## Latest Update
 
+### Optimization inspector header is reduced to its title
+
+- Removed the decorative checklist icon from the optimization inspector.
+- Removed the computed priorities-count badge from the inspector header.
+- Changed the optimization header to one column so the removed icon does not
+  leave an empty gutter beside the title.
+- Added a regression contract for the clean header composition.
+- No optimization data, ranking, selection, schema, tenant boundary, approval
+  rule, or external action changed.
+
+Verification:
+
+- `node --import tsx scripts/supply-os-operations-ui.test.ts`
+- `node --import tsx scripts/supply-os-collapsible-navigation.test.ts`
+- `node --import tsx scripts/supply-os-sidebar-map.test.ts`
+- `node --import tsx scripts/supply-os-enterprise-design.test.ts`
+- `node --import tsx scripts/product-copy-policy.test.ts`
+- `npx tsc --noEmit --incremental false`
+- `git diff --check`
+- Changed-diff U+2014 scan
+
+Skipped verification:
+
+- Rendered browser QA could not run because the sandbox blocks the local port
+  required by the browser controller.
+
 ### Inventory and sourcing now runs request, research, comparison, and handoff
 
 - Replaced inventory-control counters with a sourcing request composer and a
