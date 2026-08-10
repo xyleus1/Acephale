@@ -7,6 +7,7 @@ import {
   listProcurementCases,
   requestProcurementApproval,
   reviewProcurementGate,
+  savePurchaseOrderDraft,
   saveProcurementSelection,
 } from "../src/lib/supply-os/procurement-case-persistence";
 import {
@@ -180,6 +181,7 @@ async function main() {
         price: 125,
         currency: "USD",
         minimumOrderQuantity: 4,
+        unitOfMeasure: "EA",
         deliveryDate: quoteDeliveryDate,
         evidenceUrl: "https://example.com/quote/atlas-410",
         quoteReference: "Q-ATLAS-410",
@@ -195,6 +197,7 @@ async function main() {
         price: 125,
         currency: "USD",
         minimumOrderQuantity: 4,
+        unitOfMeasure: "EA",
         deliveryDate: quoteDeliveryDate,
         evidenceUrl: "https://example.com/quote/expired",
         quoteReference: "Q-EXPIRED",
@@ -210,6 +213,7 @@ async function main() {
         price: 125,
         currency: "USD",
         minimumOrderQuantity: 4,
+        unitOfMeasure: "EA",
         deliveryDate: futureDate(-1),
         evidenceUrl: "https://example.com/quote/missed-delivery",
         quoteReference: "Q-MISSED-DELIVERY",
@@ -226,6 +230,7 @@ async function main() {
         price: 125,
         currency: "USD",
         minimumOrderQuantity: 4,
+        unitOfMeasure: "EA",
         deliveryDate: quoteDeliveryDate,
         evidenceUrl: "https://example.com/quote/atlas-410",
         quoteReference: "Q-ATLAS-410",
@@ -284,7 +289,7 @@ async function main() {
     });
     const approvalInput = approvalTask.input as {
       selectedOption: { name: string };
-      confirmedTerms: { price: number; currency: string; minimumOrderQuantity: number };
+      confirmedTerms: { price: number; currency: string; minimumOrderQuantity: number; unitOfMeasure: string };
       qualityPlan: { method: string };
     };
     assert.equal(approvalTask.taskType, "PROCUREMENT_APPROVAL");
@@ -294,6 +299,7 @@ async function main() {
       price: 125,
       currency: "USD",
       minimumOrderQuantity: 4,
+      unitOfMeasure: "EA",
       deliveryDate: quoteDeliveryDate,
       evidenceUrl: "https://example.com/quote/atlas-410",
       quoteReference: "Q-ATLAS-410",
@@ -328,6 +334,84 @@ async function main() {
       where: { executionTaskId: procurementCase.id, eventType: "PROCUREMENT_APPROVED" },
     }), approvalEventCount, "an identical decision retry must not append duplicate history");
 
+    const purchaseDraftInput = {
+      expectedApprovalId: requested.approval.id,
+      expectedApprovalScopeHash: requested.approval.scopeHash,
+      expectedRevision: 0,
+      quantity: 8,
+      needBy: quoteDeliveryDate,
+      shipTo: "Atlas Austin assembly plant, receiving dock 2",
+      incoterm: "DAP",
+      paymentTerms: "Net 30 after receipt",
+      buyerReference: "ATLAS-VIS-410",
+      notes: "Keep calibration records with the shipment.",
+    } as const;
+    await assert.rejects(() => savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: { ...purchaseDraftInput, quantity: 1 },
+    }), /approved MOQ of 4/i, "order preparation must enforce the approved supplier MOQ");
+    const purchasePrepared = await savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: purchaseDraftInput,
+    });
+    assert.ok(purchasePrepared.purchaseDraft);
+    const preparedResult = purchasePrepared.purchaseDraft!.result as {
+      revision: number;
+      supplier: { name: string; sourceUrl: string };
+      commercial: { unitPrice: string; currency: string; quoteReference: string };
+      totals: { materialSubtotal: string; currency: string };
+    };
+    assert.equal(purchasePrepared.purchaseDraft!.status, "PLANNED");
+    assert.equal(preparedResult.revision, 1);
+    assert.deepEqual((purchasePrepared.procurementCase.result as { purchasePreparation: unknown }).purchasePreparation, {
+      draftTaskId: purchasePrepared.purchaseDraft!.id,
+      state: "DRAFT",
+      revision: 1,
+      orderHash: (purchasePrepared.purchaseDraft!.result as { orderHash: string }).orderHash,
+    }, "the parent case must project the active draft for queue ordering and resume state");
+    assert.equal(preparedResult.supplier.name, "Example supplier", "draft supplier identity must come from the approved immutable scope");
+    assert.equal(preparedResult.supplier.sourceUrl, "https://example.com/");
+    assert.equal(preparedResult.commercial.unitPrice, "125");
+    assert.equal(preparedResult.commercial.currency, "USD");
+    assert.equal(preparedResult.commercial.quoteReference, "Q-ATLAS-410");
+    assert.equal(preparedResult.totals.materialSubtotal, "1000");
+    assert.notEqual(purchasePrepared.purchaseDraft!.inputHash, requested.approval.scopeHash, "purchase draft has its own provenance input hash");
+    const storedPurchaseDraft = await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: purchasePrepared.purchaseDraft!.id },
+    });
+    assert.equal(storedPurchaseDraft.taskType, "PURCHASE_ORDER_DRAFT");
+    assert.equal(storedPurchaseDraft.capabilityKey, "draft.purchase_order");
+    assert.equal(storedPurchaseDraft.requiresApproval, false, "the internal draft itself has no side effect to approve");
+    assert.equal(storedPurchaseDraft.externalRef, null, "a purchase draft must not create an external purchase order");
+    assert.equal(storedPurchaseDraft.externalSystem, null);
+    const purchaseEventCount = await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: purchasePrepared.purchaseDraft!.id },
+    });
+    const identicalPurchaseDraft = await savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: purchaseDraftInput,
+    });
+    assert.equal((identicalPurchaseDraft.purchaseDraft!.result as { revision: number }).revision, 1, "identical retries must not create fake draft revisions");
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: purchasePrepared.purchaseDraft!.id },
+    }), purchaseEventCount, "identical draft retries must not append fake history");
+    const updatedPurchaseDraft = await savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: { ...purchaseDraftInput, expectedRevision: 1, quantity: 10 },
+    });
+    assert.equal((updatedPurchaseDraft.purchaseDraft!.result as { revision: number }).revision, 2);
+    assert.equal((updatedPurchaseDraft.purchaseDraft!.result as { totals: { materialSubtotal: string } }).totals.materialSubtotal, "1250");
+    assert.equal((await listProcurementCases(context))[0]?.purchaseDraft?.id, updatedPurchaseDraft.purchaseDraft!.id, "queue reads must restore the active order draft");
+    await assert.rejects(() => savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: { ...purchaseDraftInput, expectedRevision: 1, quantity: 12 },
+    }), /changed in another session/i, "stale draft edits must not overwrite a newer revision");
+
     const weakEvidenceCase = await saveProcurementSelection({
       context,
       researchRunId: started.id,
@@ -356,6 +440,10 @@ async function main() {
     assert.equal(weakEvidenceResult.gates.commercialTerms, "REVIEW_REQUIRED");
     assert.equal(weakEvidenceResult.gates.purchaseApproval, "BLOCKED");
     assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: requested.approval.id } })).status, "APPROVED", "historical approval remains immutable after the case changes");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: updatedPurchaseDraft.purchaseDraft!.id },
+    })).status, "CANCELLED", "changing supplier scope must cancel the active order draft");
+    assert.equal((await listProcurementCases(context))[0]?.purchaseDraft, null, "cancelled order drafts must leave the active sourcing queue");
     await assert.rejects(() => saveProcurementSelection({
       context,
       researchRunId: started.id,
@@ -452,6 +540,7 @@ async function main() {
         price: 126,
         currency: "USD",
         minimumOrderQuantity: 4,
+        unitOfMeasure: "EA",
         deliveryDate: quoteDeliveryDate,
         evidenceUrl: "https://example.com/quote/retry",
         quoteReference: "Q-RETRY",
@@ -658,6 +747,11 @@ async function main() {
         quality: "Conditional",
       },
     }), /not found|cannot edit/i, "a stale privileged cookie must not change supplier selection after demotion");
+    await assert.rejects(() => savePurchaseOrderDraft({
+      context: stalePrivilegedContext,
+      caseId: procurementCase.id,
+      input: purchaseDraftInput,
+    }), /not found|cannot edit/i, "a stale privileged cookie must not prepare an order after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
@@ -668,6 +762,11 @@ async function main() {
       approvalId: requested.approval.id,
       input: { decision: "APPROVE" },
     }), /not found/i, "another office must not decide a procurement approval");
+    await assert.rejects(() => savePurchaseOrderDraft({
+      context: foreign,
+      caseId: procurementCase.id,
+      input: purchaseDraftInput,
+    }), /not found/i, "another office must not read or update a purchase draft");
 
     console.log("Supply OS sourcing persistence checks passed.");
   } finally {

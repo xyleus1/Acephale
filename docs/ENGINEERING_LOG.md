@@ -17,6 +17,25 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-10 - Persist approved purchase preparation drafts
+
+- Branch: supply-os-purchase-draft, targeting main
+- Commit: see git log
+- Task: Turn an approved sourcing case into a resumable internal order draft
+  without claiming that a purchase order or supplier action exists.
+- Files changed: procurement persistence and purchase-draft route, sourcing
+  client types, in-page procurement workflow, queue state, scoped styles,
+  persistence and UI contracts, architecture, decision record, and handoff.
+- Verification: Atlas sourcing contract, disposable-database sourcing
+  persistence contract, TypeScript, production build, tenant audit, whitespace,
+  product copy, docs, and changed-file U+2014 checks.
+- Caveats: The draft does not contact the supplier, issue a PO, authorize spend,
+  book freight, or open Logistics. Authenticated production interaction still
+  requires a valid operator session.
+- Follow-up: Copy the exact draft into a new immutable order-action input,
+  require a separate admin approval, then implement an idempotent supplier
+  connector and Logistics handoff.
+
 ### 2026-08-10 - Add persistent procurement qualification and exact-scope approval
 
 - Branch: supply-os-procurement-qualification, targeting main

@@ -270,15 +270,24 @@ clear boundaries.
   cancels a pending approval and requires a new attempt. Expired commercial,
   delivery, quality-plan, or approval dates return the case to the relevant
   review gate instead of leaving an un-actionable pending request.
-- Approval only marks the sourcing scope ready for purchase preparation. It
-  does not contact the supplier, create a purchase order, commit spend, book
-  freight, or open a logistics record.
+- Approval marks the sourcing scope ready for purchase preparation. The
+  operator can then save a revisioned `PURCHASE_ORDER_DRAFT` child task with
+  quantity, need-by, ship-to, Incoterm, payment terms, buyer reference, and
+  notes. Supplier identity, price, currency, MOQ, unit of measure, quote
+  reference, delivery date, and quote validity are derived from the immutable
+  approved input. Exact decimal arithmetic produces the material subtotal.
+- The draft is resumable from the sourcing queue and uses optimistic revisions.
+  Identical retries are idempotent. Supplier or gate changes cancel the active
+  draft, and stale approved dates return the case to the relevant review gate.
+- Purchase preparation does not contact the supplier, create a canonical
+  purchase order or PO number, commit spend, book freight, or open a logistics
+  record.
 - Interactive research uses the authenticated, office-rate-limited public web
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.
-- Procurement case, gate reviews, approval request, decision, and hashed event
-  history are office-scoped PostgreSQL records. Unsaved field drafts remain
-  browser state.
+- Procurement case, gate reviews, approval request, decision, purchase draft,
+  and hashed event history are office-scoped PostgreSQL records. Unsaved field
+  edits remain browser state.
 - A later Logistics integration will create a canonical approval-gated
   `SupplyAction`, prefill cargo, quantity, pickup, destination, need-by date,
   selected source, and evidence references, then open the Logistics panel by

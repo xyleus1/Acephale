@@ -91,6 +91,7 @@ export function AtlasInventoryWorkspace({
   }
 
   function caseStage(procurementCase: SavedProcurementCase | undefined) {
+    if (procurementCase?.purchaseDraft?.result?.state === "DRAFT") return "Order draft ready";
     switch (procurementCase?.result?.stage) {
       case "SOURCE_EVIDENCE": return "Source evidence required";
       case "COMMERCIAL_CONFIRMATION": return "Confirm commercial terms";
@@ -190,7 +191,7 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run?.status === "RUNNING"}
                     onClick={() => run?.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onStartItemResearch(item)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
                     <ArrowRight size={13} />
                   </button>
                 </td>
@@ -217,7 +218,7 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run.status === "RUNNING"}
                     onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
                   </button>
                 </td>
               </tr>

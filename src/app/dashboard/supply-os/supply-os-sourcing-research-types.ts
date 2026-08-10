@@ -80,6 +80,7 @@ export type SavedProcurementCase = {
       price: number;
       currency: string;
       minimumOrderQuantity: number;
+      unitOfMeasure: string;
       deliveryDate: string;
       evidenceUrl: string;
       quoteReference: string;
@@ -105,7 +106,52 @@ export type SavedProcurementCase = {
       decidedAt?: string;
       decisionNote?: string | null;
     } | null;
+    purchasePreparation?: {
+      draftTaskId: string;
+      state: "DRAFT";
+      revision: number;
+      orderHash: string;
+    };
     selectionHash: string;
+    updatedAt: string;
+  } | null;
+  purchaseDraft?: {
+    id: string;
+    status: string;
+    taskKey: string;
+    input: {
+      procurementCaseId: string;
+      procurementApprovalId: string;
+      procurementApprovalScopeHash: string;
+    };
+    result: {
+      revision: number;
+      state: "DRAFT";
+      order: {
+        quantity: string;
+        unitOfMeasure: string;
+        needBy: string;
+        shipTo: string;
+        incoterm: "EXW" | "FCA" | "FOB" | "CPT" | "CIP" | "DAP" | "DDP";
+        paymentTerms: string;
+        buyerReference: string | null;
+        notes: string | null;
+      };
+      orderHash: string;
+      supplier: { id: string; name: string; sourceUrl: string | null };
+      commercial: {
+        unitPrice: string;
+        currency: string;
+        minimumOrderQuantity: string;
+        quoteReference: string;
+        quoteValidUntil: string;
+        deliveryDate: string;
+      };
+      totals: { materialSubtotal: string; currency: string };
+      approvedProcurementScope: { approvalId: string; scopeHash: string };
+      updatedAt: string;
+    } | null;
+    createdAt: string;
     updatedAt: string;
   } | null;
   createdAt: string;

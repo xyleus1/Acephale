@@ -127,6 +127,17 @@ function formatCurrency(value: number, currency: string | null = "USD") {
   }).format(value);
 }
 
+function formatMoney(value: string, currency: string) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || !/^[A-Z]{3}$/.test(currency)) return `${value} ${currency}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 function deliveryDate(leadTimeDays: number) {
   const date = new Date("2026-08-09T12:00:00Z");
   date.setUTCDate(date.getUTCDate() + leadTimeDays);
@@ -245,6 +256,7 @@ export function AtlasProcurementWorkspace({
     price: String(initialCase?.result?.confirmedTerms?.price ?? initialCase?.result?.selectedOption.price ?? ""),
     currency: initialCase?.result?.confirmedTerms?.currency ?? initialCase?.result?.selectedOption.currency ?? "USD",
     minimumOrderQuantity: String(initialCase?.result?.confirmedTerms?.minimumOrderQuantity ?? initialCase?.result?.selectedOption.minimumOrderQuantity ?? ""),
+    unitOfMeasure: initialCase?.result?.confirmedTerms?.unitOfMeasure ?? (item ? "EA" : ""),
     deliveryDate: initialCase?.result?.confirmedTerms?.deliveryDate ?? initialCase?.result?.selectedOption.deliveryDate ?? "",
     evidenceUrl: initialCase?.result?.confirmedTerms?.evidenceUrl ?? initialCase?.result?.selectedOption.sourceUrl ?? "",
     quoteReference: initialCase?.result?.confirmedTerms?.quoteReference ?? "",
@@ -255,6 +267,17 @@ export function AtlasProcurementWorkspace({
     acceptanceCriteria: initialCase?.result?.qualityPlan?.acceptanceCriteria ?? "",
     owner: initialCase?.result?.qualityPlan?.owner ?? "",
     targetDate: initialCase?.result?.qualityPlan?.targetDate ?? "",
+  }));
+  const [purchaseForm, setPurchaseForm] = useState(() => ({
+    quantity: initialCase?.purchaseDraft?.result?.order.quantity
+      ?? String(item ? Math.max(shortageQuantity(item), initialCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
+    needBy: initialCase?.purchaseDraft?.result?.order.needBy
+      ?? (item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? initialCase?.result?.confirmedTerms?.deliveryDate ?? "" : initialCase?.result?.confirmedTerms?.deliveryDate ?? ""),
+    shipTo: initialCase?.purchaseDraft?.result?.order.shipTo ?? (item ? "Austin assembly plant" : ""),
+    incoterm: initialCase?.purchaseDraft?.result?.order.incoterm ?? "DAP",
+    paymentTerms: initialCase?.purchaseDraft?.result?.order.paymentTerms ?? "",
+    buyerReference: initialCase?.purchaseDraft?.result?.order.buyerReference ?? "",
+    notes: initialCase?.purchaseDraft?.result?.order.notes ?? "",
   }));
   const [approvalReason, setApprovalReason] = useState("");
   const [approvalNote, setApprovalNote] = useState("");
@@ -294,6 +317,7 @@ export function AtlasProcurementWorkspace({
       price: String(terms?.price ?? result.selectedOption.price ?? ""),
       currency: terms?.currency ?? result.selectedOption.currency ?? "USD",
       minimumOrderQuantity: String(terms?.minimumOrderQuantity ?? result.selectedOption.minimumOrderQuantity ?? ""),
+      unitOfMeasure: terms?.unitOfMeasure ?? (item ? "EA" : ""),
       deliveryDate: terms?.deliveryDate ?? result.selectedOption.deliveryDate ?? "",
       evidenceUrl: terms?.evidenceUrl ?? result.selectedOption.sourceUrl ?? "",
       quoteReference: terms?.quoteReference ?? "",
@@ -310,6 +334,21 @@ export function AtlasProcurementWorkspace({
     setGateActionError("");
     setGateActionState("idle");
   }, [currentCase?.result?.selectionHash]);
+
+  useEffect(() => {
+    const draft = currentCase?.purchaseDraft?.result;
+    setPurchaseForm({
+      quantity: draft?.order.quantity
+        ?? String(item ? Math.max(shortageQuantity(item), currentCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
+      needBy: draft?.order.needBy
+        ?? (item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? currentCase?.result?.confirmedTerms?.deliveryDate ?? "" : currentCase?.result?.confirmedTerms?.deliveryDate ?? ""),
+      shipTo: draft?.order.shipTo ?? (item ? "Austin assembly plant" : ""),
+      incoterm: draft?.order.incoterm ?? "DAP",
+      paymentTerms: draft?.order.paymentTerms ?? "",
+      buyerReference: draft?.order.buyerReference ?? "",
+      notes: draft?.order.notes ?? "",
+    });
+  }, [currentCase?.purchaseDraft?.id, currentCase?.purchaseDraft?.result?.revision, currentCase?.result?.confirmedTerms?.deliveryDate, currentCase?.result?.confirmedTerms?.minimumOrderQuantity, item]);
 
   useEffect(() => {
     if (initialRun) return;
@@ -439,6 +478,7 @@ export function AtlasProcurementWorkspace({
       price: Number(commercialForm.price),
       currency: commercialForm.currency,
       minimumOrderQuantity: Number(commercialForm.minimumOrderQuantity),
+      unitOfMeasure: commercialForm.unitOfMeasure,
       deliveryDate: commercialForm.deliveryDate,
       evidenceUrl: commercialForm.evidenceUrl,
       quoteReference: commercialForm.quoteReference,
@@ -471,6 +511,28 @@ export function AtlasProcurementWorkspace({
       note: approvalNote || null,
     });
   }
+
+  function savePurchaseDraft() {
+    const approval = currentCase?.result?.approval;
+    if (!currentCase?.result || !approval || approval.status !== "APPROVED") return;
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/purchase-draft`, {
+      expectedApprovalId: approval.id,
+      expectedApprovalScopeHash: approval.scopeHash,
+      expectedRevision: currentCase.purchaseDraft?.result?.revision ?? 0,
+      quantity: Number(purchaseForm.quantity),
+      needBy: purchaseForm.needBy,
+      shipTo: purchaseForm.shipTo,
+      incoterm: purchaseForm.incoterm,
+      paymentTerms: purchaseForm.paymentTerms,
+      buyerReference: purchaseForm.buyerReference || null,
+      notes: purchaseForm.notes || null,
+    });
+  }
+
+  const purchaseFormComplete = Number(purchaseForm.quantity) > 0
+    && Boolean(purchaseForm.needBy)
+    && Boolean(purchaseForm.shipTo.trim())
+    && Boolean(purchaseForm.paymentTerms.trim());
 
   return (
     <motion.section
@@ -620,6 +682,7 @@ export function AtlasProcurementWorkspace({
                       <label>Unit price<input type="number" min="0.01" step="0.01" value={commercialForm.price} onChange={(event) => setCommercialForm((current) => ({ ...current, price: event.target.value }))} /></label>
                       <label>Currency<input maxLength={3} value={commercialForm.currency} onChange={(event) => setCommercialForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></label>
                       <label>MOQ<input type="number" min="0.01" step="0.01" value={commercialForm.minimumOrderQuantity} onChange={(event) => setCommercialForm((current) => ({ ...current, minimumOrderQuantity: event.target.value }))} /></label>
+                      <label>Unit<input maxLength={20} value={commercialForm.unitOfMeasure} onChange={(event) => setCommercialForm((current) => ({ ...current, unitOfMeasure: event.target.value.toUpperCase() }))} placeholder="EA" /></label>
                       <label>Delivery date<input type="date" value={commercialForm.deliveryDate} onChange={(event) => setCommercialForm((current) => ({ ...current, deliveryDate: event.target.value }))} /></label>
                       <label>Quote reference<input value={commercialForm.quoteReference} onChange={(event) => setCommercialForm((current) => ({ ...current, quoteReference: event.target.value }))} placeholder="Quote number or dated offer" /></label>
                       <label>Valid until<input type="date" value={commercialForm.validUntil} onChange={(event) => setCommercialForm((current) => ({ ...current, validUntil: event.target.value }))} /></label>
@@ -651,8 +714,27 @@ export function AtlasProcurementWorkspace({
                   </>
                 ) : (
                   <>
-                    <header><small>Approved scope</small><h4>Ready for purchase preparation</h4><p>The sourcing decision is approved. No purchase order, supplier message, booking, shipment, or spend has been created.</p></header>
-                    <button type="button" disabled><PackageCheck size={14} /> Purchase preparation is the next slice</button>
+                    <header><small>Purchase preparation</small><h4>{currentCase.purchaseDraft?.result ? "Order draft" : "Prepare the order"}</h4><p>Supplier and quote evidence come from the approved scope. Add the order fields that were not part of sourcing approval.</p></header>
+                    {currentCase.purchaseDraft?.result ? (
+                      <dl className={styles.purchaseDraftSummary}>
+                        <div><dt>Supplier</dt><dd>{currentCase.purchaseDraft.result.supplier.name}</dd></div>
+                        <div><dt>Material subtotal</dt><dd>{formatMoney(currentCase.purchaseDraft.result.totals.materialSubtotal, currentCase.purchaseDraft.result.totals.currency)}</dd></div>
+                        <div><dt>Quote</dt><dd>{currentCase.purchaseDraft.result.commercial.quoteReference}</dd></div>
+                        <div><dt>Draft revision</dt><dd>{currentCase.purchaseDraft.result.revision}</dd></div>
+                      </dl>
+                    ) : null}
+                    <div className={styles.procurementFormGrid}>
+                      <label>Quantity<input type="number" min="0.01" step="0.01" value={purchaseForm.quantity} onChange={(event) => setPurchaseForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
+                      <label>Approved unit<input readOnly value={currentCase.purchaseDraft?.result?.order.unitOfMeasure ?? currentCase.result.confirmedTerms?.unitOfMeasure ?? "Unknown"} /></label>
+                      <label>Need by<input type="date" value={purchaseForm.needBy} onChange={(event) => setPurchaseForm((current) => ({ ...current, needBy: event.target.value }))} /></label>
+                      <label>Incoterm<select value={purchaseForm.incoterm} onChange={(event) => setPurchaseForm((current) => ({ ...current, incoterm: event.target.value as typeof current.incoterm }))}><option value="EXW">EXW</option><option value="FCA">FCA</option><option value="FOB">FOB</option><option value="CPT">CPT</option><option value="CIP">CIP</option><option value="DAP">DAP</option><option value="DDP">DDP</option></select></label>
+                      <label className={styles.procurementWideField}>Ship to<input value={purchaseForm.shipTo} onChange={(event) => setPurchaseForm((current) => ({ ...current, shipTo: event.target.value }))} placeholder="Facility and receiving location" /></label>
+                      <label>Payment terms<input value={purchaseForm.paymentTerms} onChange={(event) => setPurchaseForm((current) => ({ ...current, paymentTerms: event.target.value }))} placeholder="For example, Net 30" /></label>
+                      <label>Buyer reference<input value={purchaseForm.buyerReference} onChange={(event) => setPurchaseForm((current) => ({ ...current, buyerReference: event.target.value }))} placeholder="Optional internal reference" /></label>
+                      <label className={styles.procurementWideField}>Buyer notes<textarea value={purchaseForm.notes} onChange={(event) => setPurchaseForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional receiving or packaging instructions" /></label>
+                    </div>
+                    <button type="button" disabled={gateActionState === "saving" || !purchaseFormComplete} onClick={savePurchaseDraft}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {currentCase.purchaseDraft?.result ? "Update order draft" : "Save order draft"}</button>
+                    <p className={styles.procurementPermissionNote}>This is internal preparation only. No PO number, supplier contact, payment, booking, or spend is created.</p>
                   </>
                 )}
                 {gateActionState === "error" ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> {gateActionError}</p> : null}

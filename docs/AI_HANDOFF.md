@@ -2,6 +2,32 @@
 
 ## Latest Update
 
+### Approved procurement cases now resume into a persistent order draft
+
+- A case at `PURCHASE_READY` now opens an in-page order preparation form instead
+  of ending at a passive status label.
+- Saving creates or versions an office-scoped `PURCHASE_ORDER_DRAFT` child task.
+  The sourcing queue shows `Order draft ready` and reopens the saved quantity,
+  need-by date, ship-to location, Incoterm, payment terms, buyer reference, and
+  notes after navigation or reload.
+- Supplier identity, quote reference, price, currency, MOQ, unit of measure,
+  delivery date, and quote validity come from the immutable approved scope. The
+  browser cannot replace them with client-authored commercial facts.
+- Quantity and money use exact decimal arithmetic. Updates require the current
+  revision, identical retries do not create fake history, and supplier or gate
+  changes cancel the active draft.
+- Expired approved terms return the case to the relevant review gate. They do
+  not silently create an order from stale evidence.
+- This remains internal preparation. It does not create a PO number, contact a
+  supplier, authorize payment or spend, book freight, or open Logistics.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL migration plus
+  `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false`
+
 ### Procurement qualification and exact-scope approval are now persistent
 
 - The procurement brief now runs four sequential gates in place: supplier

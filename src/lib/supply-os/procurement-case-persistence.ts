@@ -11,6 +11,9 @@ const TASK_TYPE = "PROCUREMENT_CASE";
 const APPROVAL_TASK_TYPE = "PROCUREMENT_APPROVAL";
 const APPROVAL_CAPABILITY = "review.procurement_selection";
 const APPROVAL_REQUIRED_ROLE = "MANAGER";
+const PURCHASE_DRAFT_TASK_TYPE = "PURCHASE_ORDER_DRAFT";
+const PURCHASE_DRAFT_CAPABILITY = "draft.purchase_order";
+const PURCHASE_INCOTERMS = ["EXW", "FCA", "FOB", "CPT", "CIP", "DAP", "DDP"] as const;
 
 function digest(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -60,6 +63,21 @@ function positiveNumber(value: unknown, label: string) {
     throw new SupplyPersistenceError(`${label} must be a positive number.`, "invalid_input");
   }
   return value;
+}
+
+function nonNegativeInteger(value: unknown, label: string) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new SupplyPersistenceError(`${label} must be a non-negative integer.`, "invalid_input");
+  }
+  return value;
+}
+
+function normalizedUnitOfMeasure(value: unknown, label = "Unit of measure") {
+  const unit = requiredText(value, label, 20).toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9 ._/-]{0,19}$/.test(unit)) {
+    throw new SupplyPersistenceError(`${label} contains unsupported characters.`, "invalid_input");
+  }
+  return unit;
 }
 
 function todayUtc() {
@@ -240,6 +258,19 @@ export type ProcurementSelectionInput = {
   quality: "Strong" | "Conditional" | "Unverified";
 };
 
+export type PurchaseOrderDraftInput = {
+  expectedApprovalId: string;
+  expectedApprovalScopeHash: string;
+  expectedRevision: number;
+  quantity: number;
+  needBy: string;
+  shipTo: string;
+  incoterm: (typeof PURCHASE_INCOTERMS)[number];
+  paymentTerms: string;
+  buyerReference?: string | null;
+  notes?: string | null;
+};
+
 function progressionFor(selection: ProcurementSelectionInput) {
   const sourceEvidence = selection.sourceUrl ? "REVIEW_REQUIRED" : "BLOCKED";
   const commercialEvidence = selection.priceType === "Sourced"
@@ -282,10 +313,22 @@ const caseSelect = {
   updatedAt: true,
 } satisfies Prisma.SupplyExecutionTaskSelect;
 
+const purchaseDraftSelect = {
+  id: true,
+  status: true,
+  taskKey: true,
+  input: true,
+  inputHash: true,
+  result: true,
+  resultHash: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.SupplyExecutionTaskSelect;
+
 export async function listProcurementCases(context: SupplyAccessContext) {
   const accessContext = await currentAccessContext(context);
   const workspace = await sourcingSystemWorkspace(accessContext, "view");
-  return prisma.supplyExecutionTask.findMany({
+  const cases = await prisma.supplyExecutionTask.findMany({
     where: {
       officeId: context.officeId,
       workspaceId: workspace.id,
@@ -293,8 +336,25 @@ export async function listProcurementCases(context: SupplyAccessContext) {
     },
     orderBy: { updatedAt: "desc" },
     take: 60,
-    select: caseSelect,
+    select: {
+      ...caseSelect,
+      childTasks: {
+        where: {
+          officeId: context.officeId,
+          workspaceId: workspace.id,
+          taskType: PURCHASE_DRAFT_TASK_TYPE,
+          status: { in: ["PLANNED", "BLOCKED", "READY"] },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+        select: purchaseDraftSelect,
+      },
+    },
   });
+  return cases.map(({ childTasks, ...procurementCase }) => ({
+    ...procurementCase,
+    purchaseDraft: childTasks[0] ?? null,
+  }));
 }
 
 async function cancelPendingApproval(tx: Prisma.TransactionClient, value: Prisma.JsonValue | null) {
@@ -313,6 +373,26 @@ async function cancelPendingApproval(tx: Prisma.TransactionClient, value: Prisma
       data: { status: "CANCELLED", cancelledAt: new Date() },
     });
   }
+}
+
+async function cancelActivePurchaseDrafts(
+  tx: Prisma.TransactionClient,
+  procurementCaseId: string,
+  officeId: string,
+  workspaceId: string,
+  excludeTaskId?: string,
+) {
+  await tx.supplyExecutionTask.updateMany({
+    where: {
+      officeId,
+      workspaceId,
+      parentTaskId: procurementCaseId,
+      taskType: PURCHASE_DRAFT_TASK_TYPE,
+      status: { in: ["PLANNED", "BLOCKED", "READY"] },
+      ...(excludeTaskId ? { id: { not: excludeTaskId } } : {}),
+    },
+    data: { status: "CANCELLED", cancelledAt: new Date() },
+  });
 }
 
 export async function saveProcurementSelection(args: {
@@ -362,7 +442,10 @@ export async function saveProcurementSelection(args: {
           throw new SupplyPersistenceError("Only a planned procurement case can change supplier selection.", "conflict");
         }
         if (record(existing?.result).selectionHash === result.selectionHash) return existing!;
-        if (existing) await cancelPendingApproval(tx, existing.result);
+        if (existing) {
+          await cancelPendingApproval(tx, existing.result);
+          await cancelActivePurchaseDrafts(tx, existing.id, args.context.officeId, workspace.id);
+        }
         const task = existing
           ? await tx.supplyExecutionTask.update({
               where: { id: existing.id },
@@ -454,6 +537,7 @@ export async function reviewProcurementGate(args: {
       price: positiveNumber(body.price, "Price"),
       currency,
       minimumOrderQuantity: positiveNumber(body.minimumOrderQuantity, "Minimum order quantity"),
+      unitOfMeasure: normalizedUnitOfMeasure(body.unitOfMeasure),
       deliveryDate: requireCurrentOrFutureDate(isoDate(body.deliveryDate, "Delivery date"), "Delivery date"),
       evidenceUrl: publicUrl(body.evidenceUrl, "Commercial evidence URL"),
       quoteReference: requiredText(body.quoteReference, "Quote reference", 300),
@@ -518,6 +602,7 @@ export async function reviewProcurementGate(args: {
           review.reviewHash = digest({ sourceUrl: review.sourceUrl, note: review.note });
           if (record(reviews.sourceEvidence).reviewHash === review.reviewHash) return procurementCase;
           await cancelPendingApproval(tx, procurementCase.result);
+          await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
           reviews = { sourceEvidence: review };
           gates = {
             ...gates,
@@ -544,6 +629,7 @@ export async function reviewProcurementGate(args: {
           review.reviewHash = digest(confirmedTerms);
           if (record(reviews.commercialTerms).reviewHash === review.reviewHash) return procurementCase;
           await cancelPendingApproval(tx, procurementCase.result);
+          await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
           reviews = { ...reviews, commercialTerms: review };
           delete reviews.qualityPlan;
           gates = {
@@ -569,6 +655,7 @@ export async function reviewProcurementGate(args: {
           review.reviewHash = digest(qualityPlan);
           if (record(reviews.qualityPlan).reviewHash === review.reviewHash) return procurementCase;
           await cancelPendingApproval(tx, procurementCase.result);
+          await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
           reviews = { ...reviews, qualityPlan: review };
           gates = { ...gates, qualityPlan: "EVIDENCE_COMPLETE", purchaseApproval: "BLOCKED" };
           result = resetApproval({ ...result, qualityPlan }, gates);
@@ -583,6 +670,7 @@ export async function reviewProcurementGate(args: {
           stage: nextStage(gates),
           updatedAt: now,
         };
+        delete result.purchasePreparation;
         const updated = await tx.supplyExecutionTask.update({
           where: { id: procurementCase.id },
           data: { result: inputJson(result), resultHash: digest(result) },
@@ -1038,4 +1126,300 @@ export async function decideProcurementApproval(args: {
     }
   }
   throw new SupplyPersistenceError("Procurement approval could not be decided.", "conflict");
+}
+
+function normalizePurchaseOrderDraft(input: unknown): PurchaseOrderDraftInput {
+  const body = record(input);
+  const quantity = positiveNumber(body.quantity, "Order quantity");
+  if (quantity > 1_000_000_000) {
+    throw new SupplyPersistenceError("Order quantity must not exceed 1,000,000,000.", "invalid_input");
+  }
+  const incoterm = requiredText(body.incoterm, "Incoterm", 3).toUpperCase();
+  if (!PURCHASE_INCOTERMS.includes(incoterm as PurchaseOrderDraftInput["incoterm"])) {
+    throw new SupplyPersistenceError(`Incoterm must be one of: ${PURCHASE_INCOTERMS.join(", ")}.`, "invalid_input");
+  }
+  return {
+    expectedApprovalId: requiredText(body.expectedApprovalId, "Approval ID", 220),
+    expectedApprovalScopeHash: requiredText(body.expectedApprovalScopeHash, "Approval scope hash", 128),
+    expectedRevision: nonNegativeInteger(body.expectedRevision, "Expected draft revision"),
+    quantity,
+    needBy: requireCurrentOrFutureDate(isoDate(body.needBy, "Need-by date"), "Need-by date"),
+    shipTo: requiredText(body.shipTo, "Ship-to location", 500),
+    incoterm: incoterm as PurchaseOrderDraftInput["incoterm"],
+    paymentTerms: requiredText(body.paymentTerms, "Payment terms", 300),
+    buyerReference: optionalText(body.buyerReference, "Buyer reference", 160),
+    notes: optionalText(body.notes, "Buyer notes", 2_000),
+  };
+}
+
+export async function savePurchaseOrderDraft(args: {
+  context: SupplyAccessContext;
+  caseId: string;
+  input: unknown;
+}) {
+  const orderInput = normalizePurchaseOrderDraft(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: {
+            id: args.caseId,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            taskType: TASK_TYPE,
+            status: "PLANNED",
+          },
+          select: caseSelect,
+        });
+        if (!procurementCase) throw new SupplyPersistenceError("Active procurement case was not found.", "not_found");
+        const current = caseResult(procurementCase.result);
+        if (current.result.stage !== "PURCHASE_READY"
+          || current.gates.purchaseApproval !== "APPROVED"
+          || current.approval.id !== orderInput.expectedApprovalId
+          || current.approval.scopeHash !== orderInput.expectedApprovalScopeHash
+          || current.approval.status !== "APPROVED") {
+          throw new SupplyPersistenceError("The approved procurement scope changed. Reload before preparing the order.", "conflict");
+        }
+        const approval = await tx.supplyApproval.findFirst({
+          where: {
+            id: orderInput.expectedApprovalId,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            status: "APPROVED",
+            scopeHash: orderInput.expectedApprovalScopeHash,
+          },
+          include: { executionTask: true },
+        });
+        if (!approval?.executionTask
+          || approval.requiredRole !== APPROVAL_REQUIRED_ROLE
+          || approval.executionTask.taskType !== APPROVAL_TASK_TYPE
+          || approval.executionTask.capabilityKey !== APPROVAL_CAPABILITY
+          || approval.executionTask.parentTaskId !== procurementCase.id
+          || approval.executionTask.inputHash !== approval.scopeHash) {
+          throw new SupplyPersistenceError("The approved procurement scope is invalid.", "conflict");
+        }
+        const approvedInput = record(approval.executionTask.input);
+        const approvedTerms = record(approvedInput.confirmedTerms);
+        const approvedQualityPlan = record(approvedInput.qualityPlan);
+        const approvedSelection = record(approvedInput.selectedOption);
+        if (approvedInput.procurementCaseId !== procurementCase.id) {
+          throw new SupplyPersistenceError("The approved procurement scope points to a different case.", "conflict");
+        }
+        let staleGate: "COMMERCIAL_TERMS" | "QUALITY_PLAN" | null = null;
+        let staleMessage = "";
+        if (typeof approvedTerms.validUntil !== "string" || approvedTerms.validUntil < todayUtc()) {
+          staleGate = "COMMERCIAL_TERMS";
+          staleMessage = "The approved quote expired before order preparation.";
+        } else if (typeof approvedTerms.unitOfMeasure !== "string"
+          || !/^[A-Z0-9][A-Z0-9 ._/-]{0,19}$/.test(approvedTerms.unitOfMeasure)) {
+          staleGate = "COMMERCIAL_TERMS";
+          staleMessage = "The approved quote does not contain a valid unit of measure.";
+        } else if (typeof approvedTerms.deliveryDate !== "string" || approvedTerms.deliveryDate < todayUtc()) {
+          staleGate = "COMMERCIAL_TERMS";
+          staleMessage = "The approved delivery date passed before order preparation.";
+        } else if (typeof approvedQualityPlan.targetDate !== "string" || approvedQualityPlan.targetDate < todayUtc()) {
+          staleGate = "QUALITY_PLAN";
+          staleMessage = "The approved quality-plan date passed before order preparation.";
+        }
+        if (staleGate) {
+          await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
+          const gates = staleGate === "COMMERCIAL_TERMS"
+            ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+            : { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" };
+          const result: Record<string, unknown> = {
+            ...current.result,
+            gates,
+            stage: staleGate === "COMMERCIAL_TERMS" ? "COMMERCIAL_CONFIRMATION" : "QUALITY_REVIEW",
+            approval: null,
+            updatedAt: new Date().toISOString(),
+          };
+          delete result.purchasePreparation;
+          if (staleGate === "COMMERCIAL_TERMS") {
+            delete result.confirmedTerms;
+            delete result.qualityPlan;
+            result.reviews = { sourceEvidence: current.reviews.sourceEvidence };
+          } else {
+            delete result.qualityPlan;
+            result.reviews = {
+              sourceEvidence: current.reviews.sourceEvidence,
+              commercialTerms: current.reviews.commercialTerms,
+            };
+          }
+          const updated = await tx.supplyExecutionTask.update({
+            where: { id: procurementCase.id },
+            data: { result: inputJson(result), resultHash: digest(result) },
+            select: caseSelect,
+          });
+          await appendCaseEvent({
+            tx,
+            caseId: procurementCase.id,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            actorUserId: args.context.userId,
+            eventType: "PURCHASE_PREPARATION_SCOPE_EXPIRED",
+            message: `${staleMessage} The case was returned to review.`,
+            payload: inputJson({ approvalId: approval.id, scopeHash: approval.scopeHash, staleGate }),
+          });
+          return { procurementCase: { ...updated, purchaseDraft: null }, purchaseDraft: null, stale: true };
+        }
+
+        const unitPrice = new Prisma.Decimal(positiveNumber(approvedTerms.price, "Approved unit price"));
+        const minimumOrderQuantity = new Prisma.Decimal(positiveNumber(approvedTerms.minimumOrderQuantity, "Approved minimum order quantity"));
+        const unitOfMeasure = normalizedUnitOfMeasure(approvedTerms.unitOfMeasure, "Approved unit of measure");
+        const quantity = new Prisma.Decimal(orderInput.quantity);
+        if (quantity.lessThan(minimumOrderQuantity)) {
+          throw new SupplyPersistenceError(`Order quantity must meet the approved MOQ of ${minimumOrderQuantity.toString()} ${unitOfMeasure}.`, "invalid_input");
+        }
+        const currency = requiredText(approvedTerms.currency, "Approved currency", 3).toUpperCase();
+        if (!/^[A-Z]{3}$/.test(currency)) {
+          throw new SupplyPersistenceError("Approved currency is invalid.", "conflict");
+        }
+        const order = {
+          quantity: quantity.toString(),
+          unitOfMeasure,
+          needBy: orderInput.needBy,
+          shipTo: orderInput.shipTo,
+          incoterm: orderInput.incoterm,
+          paymentTerms: orderInput.paymentTerms,
+          buyerReference: orderInput.buyerReference,
+          notes: orderInput.notes,
+        };
+        const orderHash = digest(order);
+        const taskKey = `purchase-draft:${procurementCase.id}:${approval.id}`;
+        const taskInput = {
+          procurementCaseId: procurementCase.id,
+          procurementApprovalId: approval.id,
+          procurementApprovalScopeHash: approval.scopeHash,
+        };
+        const existing = await tx.supplyExecutionTask.findFirst({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: procurementCase.id,
+            taskKey,
+            taskType: PURCHASE_DRAFT_TASK_TYPE,
+          },
+          select: purchaseDraftSelect,
+        });
+        const existingResult = record(existing?.result);
+        if (existing && existing.status !== "PLANNED") {
+          throw new SupplyPersistenceError("Only an active purchase draft can be edited.", "conflict");
+        }
+        if (existing && existingResult.orderHash === orderHash) {
+          return { procurementCase: { ...procurementCase, purchaseDraft: existing }, purchaseDraft: existing, stale: false };
+        }
+        const currentRevision = typeof existingResult.revision === "number" ? existingResult.revision : 0;
+        if (existing && orderInput.expectedRevision !== currentRevision) {
+          throw new SupplyPersistenceError("The purchase draft changed in another session. Reload before saving.", "conflict");
+        }
+        if (!existing && orderInput.expectedRevision !== 0) {
+          throw new SupplyPersistenceError("The purchase draft no longer matches this screen. Reload before saving.", "conflict");
+        }
+        const revision = currentRevision + 1;
+        const result = {
+          revision,
+          state: "DRAFT",
+          order,
+          orderHash,
+          supplier: {
+            id: requiredText(approvedSelection.id, "Approved supplier ID", 220),
+            name: requiredText(approvedSelection.name, "Approved supplier name", 220),
+            sourceUrl: publicUrl(approvedSelection.sourceUrl, "Approved supplier source"),
+          },
+          commercial: {
+            unitPrice: unitPrice.toString(),
+            currency,
+            minimumOrderQuantity: minimumOrderQuantity.toString(),
+            quoteReference: requiredText(approvedTerms.quoteReference, "Approved quote reference", 300),
+            quoteValidUntil: approvedTerms.validUntil,
+            deliveryDate: approvedTerms.deliveryDate,
+          },
+          totals: {
+            materialSubtotal: quantity.mul(unitPrice).toDecimalPlaces(2).toString(),
+            currency,
+          },
+          approvedProcurementScope: {
+            approvalId: approval.id,
+            scopeHash: approval.scopeHash,
+          },
+          updatedAt: new Date().toISOString(),
+        };
+        const purchaseDraft = existing
+          ? await tx.supplyExecutionTask.update({
+              where: { id: existing.id },
+              data: { result: inputJson(result), resultHash: digest(result) },
+              select: purchaseDraftSelect,
+            })
+          : await tx.supplyExecutionTask.create({
+              data: {
+                officeId: args.context.officeId,
+                workspaceId: workspace.id,
+                createdByUserId: args.context.userId,
+                parentTaskId: procurementCase.id,
+                taskKey,
+                taskType: PURCHASE_DRAFT_TASK_TYPE,
+                capabilityKey: PURCHASE_DRAFT_CAPABILITY,
+                requiresApproval: false,
+                input: inputJson(taskInput),
+                inputHash: digest(taskInput),
+                result: inputJson(result),
+                resultHash: digest(result),
+                idempotencyKey: taskKey,
+              },
+              select: purchaseDraftSelect,
+            });
+        await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id, purchaseDraft.id);
+        const eventType = existing ? "PURCHASE_DRAFT_UPDATED" : "PURCHASE_DRAFT_CREATED";
+        const projectedCaseResult = {
+          ...current.result,
+          purchasePreparation: {
+            draftTaskId: purchaseDraft.id,
+            state: "DRAFT",
+            revision,
+            orderHash,
+          },
+          updatedAt: result.updatedAt,
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
+          select: caseSelect,
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: purchaseDraft.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType,
+          message: existing ? "Purchase draft was updated." : "Purchase draft was prepared from the approved sourcing scope.",
+          payload: inputJson({ procurementCaseId: procurementCase.id, approvalId: approval.id, orderHash, revision }),
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: procurementCase.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType,
+          message: existing ? "Order preparation draft was updated." : "Order preparation draft is ready for review.",
+          payload: inputJson({ purchaseDraftId: purchaseDraft.id, approvalId: approval.id, orderHash, revision }),
+        });
+        return { procurementCase: { ...updatedCase, purchaseDraft }, purchaseDraft, stale: false };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || attempt === 2) {
+        if (retryableTransactionError(error)) {
+          throw new SupplyPersistenceError("Purchase draft changed concurrently. Reload and retry.", "conflict");
+        }
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Purchase draft could not be saved.", "conflict");
 }

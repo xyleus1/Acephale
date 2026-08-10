@@ -16,6 +16,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Purchase preparation is a versioned draft, not a purchase order
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Manager approval makes a sourcing scope eligible for preparation,
+  but the application has no canonical supplier-order connector or committed
+  purchase-order record. Calling the next screen a PO would overstate what the
+  system has actually done.
+- Decision: Store purchase preparation as a `PURCHASE_ORDER_DRAFT` child of the
+  procurement case. The mutable, revisioned result contains operator-entered
+  delivery instructions while supplier identity and commercial terms are
+  copied from the immutable approved scope. Commercial confirmation must include
+  a unit of measure so quantity, MOQ, and subtotal are dimensionally valid.
+- Concurrency: Use optimistic revisions for edits, make identical retries
+  idempotent, and cancel active drafts when supplier selection or review scope
+  changes.
+- Boundary: The draft has no external reference and performs no contact,
+  commitment, payment, booking, customs, or Logistics mutation. A future order
+  action must copy the exact draft into a new immutable input and obtain its own
+  approval before any connector can execute it.
+
 ### 2026-08-09 - Supply OS desktop navigation can collapse to a numbered rail
 
 - Status: accepted
