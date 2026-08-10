@@ -4245,3 +4245,25 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: introduce an office-scoped workflow model and approval-bound
   execution only when typed triggers, actions, versioning, audit history, and
   idempotent workers are ready.
+
+### 2026-08-09 - Open up the Automations workspace
+
+- Branch: main
+- Commit: `861d538`
+- Task: Keep the existing chat and automation-library split while making the
+  surface airier and less like a dense settings table.
+- Files changed: Automations component and scoped styles, design guidance,
+  handoff, and this engineering log.
+- Design: centered the conversation and composer on readable measures,
+  increased section spacing, removed the repeated company label, softened the
+  template list, and added concise selected-workflow context. DualEntry and
+  Campfire now complement Pallet.com as spacing and composition references.
+- Verification: Automations, shell-routing, sidebar-map, continuous-layout,
+  enterprise-design, operations-UI, product-twin, product-copy, and TypeScript
+  checks pass. Authenticated browser QA passed at 1440 by 1000 and 390 by 844.
+  Draft creation and the inactive execution boundary remain intact.
+- Failed/skipped checks: none at this stage.
+- Caveat: the workflow remains deterministic and browser-session only. It does
+  not persist or execute an external action.
+- Follow-up: keep future automation controls inside the same calm two-pane
+  hierarchy. Do not reintroduce a card grid or full-width chat text.

@@ -12,7 +12,7 @@ The target is 80 percent airy and 20 percent compact operational UI.
 
 Airy means generous negative space, calm grouping, soft geometry, restrained color, strong typography, and one obvious action. It does not mean oversized marketing copy or empty decoration. Compact means tables, dense object lists, evidence details, and operational controls may use space efficiently inside a clearly bounded work area.
 
-Pallet.com is the primary visual reference for whitespace, short labels, soft geometry, and immediate legibility. Kpler, Windward, and Pole Star Global are interaction references for geographic operations, evidence, and selected-object inspection. Do not copy any company's branding, assets, or exact layout.
+Pallet.com is the primary visual reference for whitespace, short labels, soft geometry, and immediate legibility. DualEntry and Campfire are secondary references for editorial spacing, thin dividers, calm selected states, and open panel composition. Kpler, Windward, and Pole Star Global are interaction references for geographic operations, evidence, and selected-object inspection. Do not copy any company's branding, assets, or exact layout.
 
 ## Product copy
 

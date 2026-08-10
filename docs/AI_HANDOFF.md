@@ -2,6 +2,38 @@
 
 ## Latest Update
 
+### Automations workspace now uses the approved airy composition
+
+- Kept the two-pane automation workspace, with chat as the primary surface and
+  templates plus the selected step plan as secondary context.
+- Increased header, conversation, composer, list, and step-plan spacing. Chat
+  content and the composer now use readable centered measures instead of
+  stretching across the full pane.
+- Removed the repeated company label from the chat header, shortened the
+  initial prompt, and renamed the local action to `New draft`.
+- Replaced table-like automation row borders with quiet spacing and one soft
+  selected state. Added the selected automation purpose above its steps.
+- Recorded DualEntry and Campfire as secondary composition references beside
+  Pallet.com. Their branding, assets, color systems, and layouts were not
+  copied.
+- No data, schema, dependency, tenant boundary, approval rule, freight logic,
+  persistence, provider call, or external action changed.
+
+Verification:
+
+- `npm run test:supply-os-automations`
+- `npm run test:supply-os-shell-routing`
+- `npm run test:supply-os-sidebar-map`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-enterprise-design`
+- `npm run test:supply-os-operations-ui`
+- `npm run test:supply-os-product-twin`
+- `npm run check:product-copy`
+- `npx tsc --noEmit`
+- Authenticated browser QA at 1440 by 1000 and 390 by 844. Draft creation,
+  active sixth-tab visibility, zero horizontal overflow, and the inactive
+  execution boundary passed.
+
 ### Browser identity now uses Derya
 
 - Changed the root browser metadata from `Derya Supply OS` to `Derya`.
