@@ -196,10 +196,18 @@
   }
 
   .shell[data-sidebar-collapsed="true"] .operatingBrand strong,
-  .shell[data-sidebar-collapsed="true"] .navCopy,
   .shell[data-sidebar-collapsed="true"] .liveMapDot,
   .shell[data-sidebar-collapsed="true"] .sidebarFooter span {
     display: none;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .navCopy {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .shell[data-sidebar-collapsed="true"] .panelNav button {
