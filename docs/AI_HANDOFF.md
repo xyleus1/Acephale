@@ -2,6 +2,34 @@
 
 ## Latest Update
 
+### Supply OS navigation now collapses and Automations has structural whitespace
+
+- Added a desktop collapse control to the persistent Supply OS domain rail.
+  Expanded navigation remains the default. Collapsed navigation is 84px wide,
+  keeps the six numbered domain targets, preserves accessible names, and stays
+  collapsed while switching domains in the mounted shell.
+- Kept tablet and mobile navigation horizontal and labeled. The desktop
+  collapse control is hidden below 900px.
+- Gave the selected Automations workspace 36 to 40px outer gutters, a centered
+  1240px maximum width, a lighter workspace boundary, and more internal space
+  around chat, the composer, templates, and workflow steps.
+- Added a dedicated collapsible-navigation regression contract without
+  changing existing tests.
+- No schema, dependency, tenant boundary, approval rule, freight logic,
+  persistence, provider call, message, filing, booking, or spend action
+  changed.
+
+Verification:
+
+- `npx tsx scripts/supply-os-collapsible-navigation.test.ts`
+- `npm run test:supply-os-company-navigation`
+- `npm run test:supply-os-automations`
+- `npm run test:supply-os-continuous-layout`
+- `npm run test:supply-os-enterprise-design`
+- `npx tsc --noEmit`
+- Browser QA at 1440 by 1000 and 390 by 844. Collapse, expand, domain
+  switching, active sixth-tab visibility, and zero horizontal overflow passed.
+
 ### Automations workspace now uses the approved airy composition
 
 - Kept the two-pane automation workspace, with chat as the primary surface and

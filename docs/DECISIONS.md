@@ -16,6 +16,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-09 - Supply OS desktop navigation can collapse to a numbered rail
+
+- Status: accepted
+- Owner: product and design
+- Context: The persistent 260px domain sidebar preserved spatial memory but
+  consumed too much width on analysis and automation surfaces. Removing it
+  entirely would weaken wayfinding and make domain switching less predictable.
+- Decision: Keep the sidebar expanded by default and let the operator collapse
+  it to an 84px numbered rail on desktop. Collapsed buttons retain accessible
+  domain names and the active state. Below 900px, keep the existing horizontal
+  labeled navigation and hide the collapse control.
+- Rationale: Operators can reclaim workspace width without losing the stable
+  six-domain map. Two-digit domain numbers remain recognizable without adding
+  another set of decorative or generic icons.
+- Consequences: Collapse state remains local to the mounted shell and survives
+  domain changes in that session. Empty lower-rail space remains intentional.
+  Future lower-rail utilities must work globally and must not duplicate a
+  domain.
+- Revisit when: operators need the collapsed preference persisted across
+  sessions or the domain count no longer fits the numbered rail.
+
 ### 2026-08-09 - Inventory and sourcing share one domain; fulfillment owns customer delivery
 
 - Status: accepted

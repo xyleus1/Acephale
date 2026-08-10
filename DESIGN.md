@@ -125,8 +125,11 @@ Shadows are soft and scarce. Use them only when a panel overlaps a map or anothe
 4. If the ribbon, navigation, and workspace already establish context, start directly with the work object.
 5. One screen should have one visually dominant work area and one dominant next action.
 6. Utility controls belong near the object they affect, not in a generic page hero.
+7. Desktop domain navigation may collapse to a numbered 84px rail. Keep full labels by default, preserve accessible names when collapsed, and return to horizontal labeled navigation below 900px.
 
 The company directory uses rows, not cards. Company creation is inline or uses a dedicated page region. Primary operations do not depend on hover-only or modal-only interactions.
+
+Do not fill unused rail space for visual balance. Lower-rail utilities must be real global actions, visually separated from the domain switcher, and useful from every domain.
 
 ## Maps and operational workspaces
 

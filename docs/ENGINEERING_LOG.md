@@ -4267,3 +4267,28 @@ Use this file for chronological implementation notes that future agents should s
   not persist or execute an external action.
 - Follow-up: keep future automation controls inside the same calm two-pane
   hierarchy. Do not reintroduce a card grid or full-width chat text.
+
+### 2026-08-09 - Add a collapsible Supply OS rail and structural Automations whitespace
+
+- Branch: main
+- Commits: `47b7e13`, `f433857`, `5c00389`, and `0bd45f3`
+- Task: Make the persistent domain navigation collapsible and make the
+  Automations workspace materially airier at desktop widths.
+- Files changed: Supply OS operating shell and styles, Automations styles, new
+  collapsible-navigation regression contract, design system, decisions,
+  handoff, and this log.
+- Design: the expanded 260px rail remains the default. Operators can collapse
+  it to an 84px numbered rail without losing domain names in the accessibility
+  tree. Automations now uses larger outer gutters, a centered 1240px work
+  surface, a lighter boundary, and wider internal spacing.
+- Verification: collapsible-navigation, company-navigation, Automations,
+  continuous-layout, enterprise-design, TypeScript, desktop browser, and
+  mobile browser checks pass. Collapse remains active while switching domains,
+  the mobile sixth tab remains visible, and both checked widths have zero page
+  overflow.
+- Failed/skipped checks: none at this stage.
+- Caveat: collapse preference is session-local and is not persisted across a
+  full page reload.
+- Follow-up: if lower-rail utilities are added, prefer one global search or
+  switcher and one workspace-settings entry. Do not add duplicate domain links
+  merely to occupy blank rail space.
