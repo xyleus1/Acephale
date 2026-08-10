@@ -2390,3 +2390,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Concurrency: Repeated and simultaneous inbox checks deduplicate by provider
   message identity and retry serialization conflicts without duplicating
   evidence or events.
+
+### 2026-08-10 - Sourcing intake uses deterministic readiness before research
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The sourcing composer sent raw free text directly to public supplier
+  research. Vague requests could not resolve useful terms, and `Refine request`
+  discarded the request instead of collecting the missing facts.
+- Decision: Parse free-text requests into a strict draft and require an item,
+  quantity and unit, technical identity, delivery location, and need-by date
+  before public research. GPT extracts and merges facts. Deterministic code owns
+  the readiness decision and exact missing-field list.
+- Storage boundary: Incomplete drafts may remain in browser storage scoped by
+  office, user, and company. Once research starts, the existing canonical,
+  office-scoped research run and procurement case records remain authoritative.
+- Evidence boundary: Intake does not create source evidence. Public research
+  remains attributable and unqualified, and all existing review and approval
+  gates remain in force.
+- Supplier-role boundary: Free-text material research may retain evidenced
+  producers, processors, exporters, and traders in addition to manufacturers
+  and distributors. Catalog component research rejects those material-only
+  roles deterministically.
+- Revisit when incomplete requests need cross-user collaboration or canonical
+  server-side persistence before research begins.

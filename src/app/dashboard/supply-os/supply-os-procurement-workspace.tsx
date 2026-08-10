@@ -11,12 +11,13 @@ import {
   PackageCheck,
   RefreshCw,
   Search,
+  Send,
   ShieldCheck,
   Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ATLAS_SOURCING_NEED_BY,
   shortageQuantity,
@@ -24,6 +25,12 @@ import {
   type AtlasSourcingCandidate,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import { displayedSupplierQuote, supplierQuoteSignals } from "@/lib/supply-os/quote-comparison";
+import type {
+  SourcingConversationMessage,
+  SourcingIntakeResult,
+  SourcingRequestDraft,
+  SourcingRequiredField,
+} from "@/lib/supply-os/sourcing-request-contract";
 import {
   hasDirtyWorkstream,
   markWorkstreamDraft,
@@ -39,7 +46,7 @@ import type {
   SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 
-type ProcurementPhase = "researching" | "compare" | "procure";
+type ProcurementPhase = "request" | "researching" | "compare" | "procure";
 type SourceClass = "Official" | "Trusted" | "New";
 type QualityState = "Strong" | "Conditional" | "Unverified";
 
@@ -124,8 +131,8 @@ const DISCOVERED_OPTIONS: Record<string, AtlasSourcingCandidate> = {
 
 const RESEARCH_STEPS = [
   { label: "Approved source library", detail: "Prior candidates and qualification notes", sourceClass: "Trusted" },
-  { label: "Manufacturer catalogs", detail: "Official product and technical documentation", sourceClass: "Official" },
-  { label: "Distributor catalogs", detail: "Modeled price, lead time, MOQ, and availability", sourceClass: "Trusted" },
+  { label: "Producer and manufacturer sources", detail: "Official product and technical documentation", sourceClass: "Official" },
+  { label: "Distributor and trader sources", detail: "Public price, lead time, MOQ, and availability evidence", sourceClass: "Trusted" },
   { label: "Open web discovery", detail: "New candidates held for human qualification", sourceClass: "New" },
 ] as const;
 
@@ -278,6 +285,9 @@ function workstreamState(procurementCase: SavedProcurementCase) {
 export function AtlasProcurementWorkspace({
   item,
   requestText,
+  initialDraft,
+  initialMissingFields,
+  initialQuestion,
   initialRun,
   initialCase,
   initialCases,
@@ -286,10 +296,14 @@ export function AtlasProcurementWorkspace({
   senderAccounts,
   onResearchSaved,
   onProcurementCaseSaved,
+  onRequestUpdate,
   onBack,
 }: {
   item: AtlasInventoryItem | null;
   requestText: string;
+  initialDraft: SourcingRequestDraft | null;
+  initialMissingFields: SourcingRequiredField[];
+  initialQuestion: string | null;
   initialRun?: SavedSourcingResearchRun | null;
   initialCase?: SavedProcurementCase | null;
   initialCases?: SavedProcurementCase[];
@@ -298,10 +312,41 @@ export function AtlasProcurementWorkspace({
   senderAccounts: SupplierSenderAccount[];
   onResearchSaved: (run: SavedSourcingResearchRun) => void;
   onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
+  onRequestUpdate?: (update: {
+    title: string;
+    draft: SourcingRequestDraft;
+    missingFields: SourcingRequiredField[];
+    lastQuestion: string | null;
+    status: "Clarification needed" | "Researching" | "Research unavailable";
+  }) => void;
   onBack: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const savedRunDraft = initialRun && !item ? {
+    productName: initialRun.input.componentName,
+    quantity: initialRun.input.requestedQuantity ?? null,
+    unit: initialRun.input.requestedUnit ?? null,
+    manufacturer: initialRun.input.manufacturer,
+    partNumber: initialRun.input.mpn,
+    specification: initialRun.input.specification,
+    sourceRegion: initialRun.input.sourceRegion ?? null,
+    deliveryLocation: initialRun.input.deliveryLocation ?? initialRun.input.targetCountry,
+    needByDate: initialRun.input.needByDate ?? null,
+  } satisfies SourcingRequestDraft : null;
+  const startingDraft = initialDraft ?? savedRunDraft;
   const [currentRun, setCurrentRun] = useState<SavedSourcingResearchRun | null>(initialRun ?? null);
+  const [requestDraft, setRequestDraft] = useState<SourcingRequestDraft | null>(startingDraft);
+  const [missingFields, setMissingFields] = useState<SourcingRequiredField[]>(initialMissingFields);
+  const [messages, setMessages] = useState<SourcingConversationMessage[]>(() => item ? [] : [
+    { role: "operator", body: requestText },
+    ...(initialQuestion ? [{ role: "derya", body: initialQuestion } as const] : []),
+  ]);
+  const [answer, setAnswer] = useState("");
+  const [intakeState, setIntakeState] = useState<"idle" | "running" | "error">("idle");
+  const [intakeError, setIntakeError] = useState("");
+  const intakeControllerRef = useRef<AbortController | null>(null);
+  const initialIntakeStartedRef = useRef(false);
+  const onRequestUpdateRef = useRef(onRequestUpdate);
   const [currentCase, setCurrentCase] = useState<SavedProcurementCase | null>(initialCase ?? null);
   const [workstreamCases, setWorkstreamCases] = useState<SavedProcurementCase[]>(
     initialCases?.length ? initialCases : initialCase ? [initialCase] : [],
@@ -384,12 +429,17 @@ export function AtlasProcurementWorkspace({
     note: "",
   }));
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
-  const [researchState, setResearchState] = useState<"running" | "complete" | "degraded">(
-    initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : "running",
+  const [researchState, setResearchState] = useState<"idle" | "running" | "complete" | "degraded">(
+    initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : item ? "running" : "idle",
   );
   const options = useMemo(() => [...buildProcurementOptions(item), ...publicResearchOptions(publicResearch)], [item, publicResearch]);
   const recommended = options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
-  const [phase, setPhase] = useState<ProcurementPhase>(initialCase ? "procure" : initialRun ? "compare" : "researching");
+  const [phase, setPhase] = useState<ProcurementPhase>(() => {
+    if (initialCase) return "procure";
+    if (initialRun) return "compare";
+    if (item) return "researching";
+    return startingDraft && initialMissingFields.length === 0 && !initialQuestion ? "researching" : "request";
+  });
   const [completedSources, setCompletedSources] = useState(initialRun ? RESEARCH_STEPS.length : 0);
   const [selectedOptionId, setSelectedOptionId] = useState(initialCase?.result?.selectedOption.id ?? recommended?.id ?? "");
   const [shortlistedOptionIds, setShortlistedOptionIds] = useState<string[]>(() => {
@@ -433,6 +483,100 @@ export function AtlasProcurementWorkspace({
     requestHash: candidate.requestHash,
     response: candidate.response,
   }))), [quoteComparisons]);
+
+  useEffect(() => {
+    onRequestUpdateRef.current = onRequestUpdate;
+  }, [onRequestUpdate]);
+
+  useEffect(() => () => intakeControllerRef.current?.abort(), []);
+
+  async function submitIntake(message: string, initial = false) {
+    const normalized = message.trim();
+    if (!normalized || intakeState === "running") return;
+    intakeControllerRef.current?.abort();
+    const controller = new AbortController();
+    intakeControllerRef.current = controller;
+    const nextMessages: SourcingConversationMessage[] = initial
+      ? [{ role: "operator", body: normalized }]
+      : [...messages, { role: "operator", body: normalized }];
+    setMessages(nextMessages);
+    setAnswer("");
+    setIntakeError("");
+    setIntakeState("running");
+    try {
+      const response = await fetch("/api/supply-os/sourcing-request", {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: normalized,
+          currentDraft: requestDraft,
+          messages: nextMessages.slice(0, -1),
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { result?: SourcingIntakeResult; error?: string };
+      if (!response.ok || !payload.result) throw new Error(payload.error ?? "The request could not be analyzed.");
+      const result = payload.result;
+      setRequestDraft(result.draft);
+      setMissingFields(result.missingFields);
+      setMessages([...nextMessages, { role: "derya", body: result.reply }]);
+      onRequestUpdateRef.current?.({
+        title: result.draft.productName ?? requestText,
+        draft: result.draft,
+        missingFields: result.missingFields,
+        lastQuestion: result.readyForResearch ? null : result.reply,
+        status: result.readyForResearch ? "Researching" : "Clarification needed",
+      });
+      if (result.readyForResearch) {
+        setCurrentRun(null);
+        setPublicResearch(null);
+        setCompletedSources(0);
+        setResearchState("idle");
+        setPhase("researching");
+      } else {
+        setPhase("request");
+      }
+      setIntakeState("idle");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setIntakeState("error");
+      setIntakeError(error instanceof Error ? error.message : "The request could not be analyzed.");
+    }
+  }
+
+  function answerClarification(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void submitIntake(answer);
+  }
+
+  function refineRequest() {
+    const prompt = "Tell me what to change before I run supplier research again.";
+    setMessages((current) => [...current, { role: "derya", body: prompt }]);
+    setMissingFields([]);
+    setIntakeError("");
+    setIntakeState("idle");
+    setPhase("request");
+    if (requestDraft) {
+      onRequestUpdateRef.current?.({
+        title: requestDraft.productName ?? requestText,
+        draft: requestDraft,
+        missingFields: [],
+        lastQuestion: prompt,
+        status: "Clarification needed",
+      });
+    }
+  }
+
+  useEffect(() => {
+    if (item || initialIntakeStartedRef.current || initialDraft || initialRun) return;
+    initialIntakeStartedRef.current = true;
+    void submitIntake(requestText, true);
+    return () => {
+      initialIntakeStartedRef.current = false;
+      intakeControllerRef.current?.abort();
+    };
+  }, [initialDraft, initialRun, item, requestText]);
 
   useEffect(() => {
     const result = currentCase?.result;
@@ -580,7 +724,7 @@ export function AtlasProcurementWorkspace({
   }, [currentCase?.purchaseAction?.id, currentCase?.purchaseAction?.result?.state, currentCase?.result?.purchaseRelease?.remainingQuantity]);
 
   useEffect(() => {
-    if (initialRun) return;
+    if (phase !== "researching" || (!item && !requestDraft)) return;
     const controller = new AbortController();
     setResearchState("running");
     setPublicResearch(null);
@@ -591,10 +735,17 @@ export function AtlasProcurementWorkspace({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         componentItemKey: item?.sku ?? `request:${requestText.slice(0, 120)}`,
-        componentName: item?.name ?? requestText,
-        specification: item?.specification ?? requestText,
-        targetCountry: "United States",
+        componentName: item?.name ?? requestDraft?.productName ?? requestText,
+        manufacturer: requestDraft?.manufacturer ?? undefined,
+        mpn: requestDraft?.partNumber ?? undefined,
+        specification: item?.specification ?? requestDraft?.specification ?? requestText,
+        targetCountry: item ? "United States" : requestDraft?.deliveryLocation?.slice(0, 120) ?? undefined,
         requestText,
+        requestedQuantity: item ? shortageQuantity(item) : requestDraft?.quantity ?? undefined,
+        requestedUnit: item ? "units" : requestDraft?.unit ?? undefined,
+        sourceRegion: requestDraft?.sourceRegion ?? undefined,
+        deliveryLocation: item ? "Austin, TX, United States" : requestDraft?.deliveryLocation ?? undefined,
+        needByDate: item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? undefined : requestDraft?.needByDate ?? undefined,
       }),
     }).then(async (response) => {
       if (!response.ok) throw new Error("Supplier research did not finish.");
@@ -610,9 +761,18 @@ export function AtlasProcurementWorkspace({
       if (controller.signal.aborted) return;
       setPublicResearch({ candidates: [], degraded: true, warnings: [error instanceof Error ? error.message : "Supplier research did not finish."] });
       setResearchState("degraded");
+      if (requestDraft) {
+        onRequestUpdateRef.current?.({
+          title: requestDraft.productName ?? requestText,
+          draft: requestDraft,
+          missingFields: [],
+          lastQuestion: null,
+          status: "Research unavailable",
+        });
+      }
     });
     return () => controller.abort();
-  }, [initialRun, item, onResearchSaved, requestText]);
+  }, [item, onResearchSaved, phase, requestDraft, requestText]);
 
   useEffect(() => {
     if (phase !== "researching") return;
@@ -973,19 +1133,66 @@ export function AtlasProcurementWorkspace({
         <button type="button" onClick={onBack}><ArrowLeft size={15} /> Back</button>
         <span>
           <small>{item?.sku ?? "New request"}</small>
-          <h2>{item?.name ?? requestText}</h2>
+          <h2>{item?.name ?? requestDraft?.productName ?? requestText}</h2>
         </span>
-        <i>{initialRun ? "Saved research" : "Public research"}</i>
+        <i>{phase === "request" ? "Request intake" : currentRun ? "Saved research" : "Public research"}</i>
       </header>
 
       <nav className={styles.procurementProgress} aria-label="Procurement progress">
-        <span data-active={phase === "researching"} data-complete={phase !== "researching"}><b>01</b> Research</span>
-        <span data-active={phase === "compare"} data-complete={phase === "procure"}><b>02</b> Compare</span>
-        <span data-active={phase === "procure"}><b>03</b> Procure</span>
+        <span data-active={phase === "request"} data-complete={phase !== "request"}><b>01</b> Request</span>
+        <span data-active={phase === "researching"} data-complete={phase === "compare" || phase === "procure"}><b>02</b> Research</span>
+        <span data-active={phase === "compare"} data-complete={phase === "procure"}><b>03</b> Compare</span>
+        <span data-active={phase === "procure"}><b>04</b> Procure</span>
       </nav>
 
       <AnimatePresence mode="wait" initial={false}>
-        {phase === "researching" ? (
+        {phase === "request" ? (
+          <motion.div
+            key="request"
+            className={styles.procurementClarification}
+            initial={reduceMotion ? false : { opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0, y: -5 }}
+            transition={{ duration: 0.16 }}
+          >
+            <section className={styles.procurementRequestSummary}>
+              <small>Request details</small>
+              <h3>{requestDraft?.productName ?? requestText}</h3>
+              <dl>
+                <div><dt>Quantity</dt><dd>{requestDraft?.quantity && requestDraft.unit ? `${requestDraft.quantity.toLocaleString("en-US")} ${requestDraft.unit}` : "Required"}</dd></div>
+                <div><dt>Specification</dt><dd>{requestDraft?.partNumber ?? requestDraft?.specification ?? "Required"}</dd></div>
+                <div><dt>Source region</dt><dd>{requestDraft?.sourceRegion ?? "Any region"}</dd></div>
+                <div><dt>Deliver to</dt><dd>{requestDraft?.deliveryLocation ?? "Required"}</dd></div>
+                <div><dt>Need by</dt><dd>{requestDraft?.needByDate ?? "Required"}</dd></div>
+              </dl>
+              <p><TriangleAlert size={14} /> Web research starts only after the required facts are present.</p>
+            </section>
+            <section className={styles.procurementRequestChat} aria-label="Sourcing request clarification">
+              <div className={styles.procurementRequestMessages} aria-live="polite">
+                {messages.map((message, index) => (
+                  <p key={`${message.role}:${index}`} data-role={message.role}>{message.body}</p>
+                ))}
+                {intakeState === "running" ? <p data-role="derya"><LoaderCircle size={14} className={styles.spin} /> Reading the request</p> : null}
+                {intakeError ? <p data-role="error">{intakeError}</p> : null}
+              </div>
+              <form onSubmit={answerClarification}>
+                <label htmlFor="sourcing-request-answer">Answer</label>
+                <textarea
+                  id="sourcing-request-answer"
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  maxLength={2_000}
+                  rows={3}
+                  placeholder={missingFields.length ? "Provide the missing details" : "Describe what should change"}
+                />
+                <button type="submit" disabled={!answer.trim() || intakeState === "running"}>
+                  {intakeState === "running" ? <LoaderCircle size={15} className={styles.spin} /> : <Send size={15} />}
+                  Send answer
+                </button>
+              </form>
+            </section>
+          </motion.div>
+        ) : phase === "researching" ? (
           <motion.div
             key="researching"
             className={styles.procurementResearch}
@@ -1061,7 +1268,7 @@ export function AtlasProcurementWorkspace({
                 <Globe2 size={24} />
                 <h3>Request added, terms still unknown</h3>
                 <p>The research run could not resolve a manufacturer or part number, so price, delivery, and quality remain unknown.</p>
-                <button type="button" onClick={onBack}>Refine request</button>
+                <button type="button" onClick={refineRequest}>Refine request</button>
               </section>
             )}
           </motion.div>

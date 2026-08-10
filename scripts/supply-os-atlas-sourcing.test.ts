@@ -9,12 +9,19 @@ import {
 } from "../src/lib/supply-os/atlas-robotics-inventory";
 import { displayedSupplierQuote, supplierQuoteSignals } from "../src/lib/supply-os/quote-comparison";
 import { hasDirtyWorkstream, markWorkstreamDraft, resolveWorkstreamDraft } from "../src/lib/supply-os/workstream-drafts";
+import {
+  missingSourcingFields,
+  normalizeSourcingRequestDraft,
+  sourcingQuestionFor,
+} from "../src/lib/supply-os/sourcing-request-contract";
 
 const root = process.cwd();
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const workbench = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx"), "utf8");
 const procurement = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
 const researchRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier-research/route.ts"), "utf8");
+const supplierResearch = readFileSync(resolve(root, "src/lib/supply-os/component-supplier-research.ts"), "utf8");
+const intakeRoute = readFileSync(resolve(root, "src/app/api/supply-os/sourcing-request/route.ts"), "utf8");
 const procurementCasesRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/route.ts"), "utf8");
 const procurementReviewRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/[caseId]/review/route.ts"), "utf8");
 const procurementApprovalRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/[caseId]/approval/route.ts"), "utf8");
@@ -99,14 +106,34 @@ assert.equal(summary.itemCount, ATLAS_ROBOTICS_INVENTORY.length);
 assert.equal(summary.shortageCount, shortages.length);
 assert.ok(summary.buildableWithInbound < summary.demandUnits, "the fixture should expose a real build constraint");
 
+const incompleteRequest = normalizeSourcingRequestDraft({ productName: "Iron ore", sourceRegion: "South America" });
+assert.deepEqual(missingSourcingFields(incompleteRequest), ["quantity", "unit", "technicalIdentity", "deliveryLocation", "needByDate"]);
+assert.match(sourcingQuestionFor(missingSourcingFields(incompleteRequest)), /quantity.*unit of measure.*part number, grade, standard, or technical specification.*delivery city, port, or country.*required delivery date/);
+assert.equal(normalizeSourcingRequestDraft({ quantity: -2, needByDate: "2026-02-30" }).quantity, null);
+assert.equal(normalizeSourcingRequestDraft({ quantity: 2, needByDate: "2026-02-30" }).needByDate, null);
+const completeRequest = normalizeSourcingRequestDraft({
+  productName: "Iron ore",
+  quantity: 50_000,
+  unit: "metric tons",
+  specification: "62 percent Fe fines",
+  sourceRegion: "Brazil",
+  deliveryLocation: "Port of Houston, United States",
+  needByDate: "2026-11-15",
+});
+assert.deepEqual(missingSourcingFields(completeRequest), []);
+
 assert.match(dashboard, /activePanel === "materials"[\s\S]*AtlasInventoryWorkspace/);
 assert.match(dashboard, /activePanel === "materials" && selectedInventoryItem[\s\S]*AtlasSourcingInspector/);
 assert.match(dashboard, /procurementRequest[\s\S]*AtlasProcurementWorkspace/);
+assert.match(dashboard, /pendingSourcingRequests/);
+assert.match(dashboard, /openPendingSourcingRequest/);
 assert.match(dashboard, /sourceMap=\{sourceMapContext[\s\S]*SupplyOsCommandMap/);
 assert.match(workbench, /Show source/);
 assert.match(workbench, /Hide map/);
 assert.match(workbench, /New sourcing request/);
 assert.match(workbench, /Sourcing queue/);
+assert.match(workbench, /pendingRequests\.map/);
+assert.match(workbench, /Clarification needed/);
 assert.match(workbench, /Start procurement/);
 assert.match(workbench, /<th>Action<\/th>/);
 assert.match(workbench, /Start research/);
@@ -130,7 +157,8 @@ assert.doesNotMatch(workbench, /<th>Next step<\/th>/);
 assert.doesNotMatch(workbench, /<th>On hand<\/th>|<th>Allocated<\/th>|<th>Inbound<\/th>|<th>Projected<\/th>/);
 assert.doesNotMatch(workbench, /inventoryRailList/);
 assert.match(procurement, /Approved source library/);
-assert.match(procurement, /Manufacturer catalogs/);
+assert.match(procurement, /Producer and manufacturer sources/);
+assert.match(procurement, /Distributor and trader sources/);
 assert.match(procurement, /Open web discovery/);
 assert.match(procurement, /Price<\/th><th>Delivery<\/th><th>Quality/);
 assert.match(procurement, /Create .*workstream/);
@@ -183,6 +211,11 @@ assert.match(procurement, /Derya did not send the release/);
 assert.match(procurement, /remain internal/i);
 assert.match(procurement, /\/api\/supply-os\/procurement-cases/);
 assert.match(procurement, /\/api\/supply-os\/supplier-research/);
+assert.match(procurement, /\/api\/supply-os\/sourcing-request/);
+assert.match(procurement, /Sourcing request clarification/);
+assert.match(procurement, /Web research starts only after the required facts are present/);
+assert.match(procurement, /onClick=\{refineRequest\}>Refine request/);
+assert.doesNotMatch(procurement, /onClick=\{onBack\}>Refine request/);
 assert.match(procurement, /Live public web research is running/);
 assert.match(procurement, /View source/);
 assert.match(procurement, /Modeled[\s\S]*Sourced[\s\S]*Unknown/);
@@ -196,8 +229,18 @@ assert.match(researchRoute, /completeSourcingResearchRun/);
 assert.match(researchRoute, /listProcurementCasesForResearchRuns/);
 assert.match(researchRoute, /listSourcingResearchPage/);
 assert.match(researchRoute, /nextCursor/);
+assert.match(researchRoute, /Complete the sourcing request before supplier research/);
+assert.match(supplierResearch, /requestKind: openRequest \? "OPEN_REQUEST" : "CATALOG_COMPONENT"/);
+assert.match(supplierResearch, /PRODUCER/);
+assert.match(supplierResearch, /EXPORTER/);
+assert.match(supplierResearch, /TRADER/);
 assert.match(researchRoute, /cache-control/);
 assert.doesNotMatch(researchRoute, /body\?\.officeId|body\["officeId"\]/);
+assert.match(intakeRoute, /getSession/);
+assert.match(intakeRoute, /ResearchRateLimiter/);
+assert.match(intakeRoute, /analyzeSourcingRequest/);
+assert.match(intakeRoute, /cache-control/);
+assert.doesNotMatch(intakeRoute, /body\?\.officeId|body\["officeId"\]/);
 assert.match(researchPersistence, /SupplyCapabilityRun|supplyCapabilityRun/);
 assert.match(researchPersistence, /officeId: context\.officeId/);
 assert.match(researchPersistence, /capabilityKey: CAPABILITY_KEY/);

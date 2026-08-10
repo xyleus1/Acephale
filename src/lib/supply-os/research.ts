@@ -20,7 +20,13 @@ export type EvidenceEnvelope<T> = {
   freshness: "FRESH" | "STALE" | "UNKNOWN";
 };
 
-export type SupplierCandidateRole = "MANUFACTURER" | "DISTRIBUTOR";
+export type SupplierCandidateRole =
+  | "MANUFACTURER"
+  | "DISTRIBUTOR"
+  | "PRODUCER"
+  | "PROCESSOR"
+  | "EXPORTER"
+  | "TRADER";
 export type ProviderRole = "TRUCK_CARRIER" | "CUSTOMS_BROKER" | "FREIGHT_FORWARDER" | "OCEAN_CARRIER" | "AIR_CARRIER" | "THREE_PL";
 
 export type SupplierCandidate = {
@@ -141,6 +147,12 @@ function slug(value: string, index: number) {
   return normalized ? `${normalized}-${index + 1}` : `candidate-${index + 1}`;
 }
 
+function allowedSupplierRoles(componentItemKey: string): readonly SupplierCandidateRole[] {
+  return componentItemKey.startsWith("request:")
+    ? ["MANUFACTURER", "DISTRIBUTOR", "PRODUCER", "PROCESSOR", "EXPORTER", "TRADER"]
+    : ["MANUFACTURER", "DISTRIBUTOR"];
+}
+
 export function normalizeSupplierResearch(args: {
   officeId: string;
   workspaceId: string;
@@ -164,9 +176,10 @@ export function normalizeSupplierResearch(args: {
     const requestedWebsite = normalizeUrl(candidate.website);
     const officialSources = sourceUrls.filter((url) => allowed.get(url)?.sourceType === "OFFICIAL");
     const website = requestedWebsite && officialSources.some((url) => sameDomain(url, requestedWebsite)) ? requestedWebsite : officialSources[0] ?? null;
+    const allowedRoles = allowedSupplierRoles(args.componentItemKey);
     const roles = [...new Set((Array.isArray(candidate.roles) ? candidate.roles : [])
       .map((role) => text(role).toUpperCase())
-      .filter((role): role is SupplierCandidateRole => role === "MANUFACTURER" || role === "DISTRIBUTOR"))].sort();
+      .filter((role): role is SupplierCandidateRole => allowedRoles.includes(role as SupplierCandidateRole)))].sort();
     const common = { allowed, now };
     const country = envelope({ raw: candidate.country, parse: stringValue, ...common });
     const facility = envelope({ raw: candidate.facility, parse: stringValue, ...common });

@@ -89,6 +89,42 @@ assert.equal(candidate.price.state, "PARTIAL");
 assert.equal(candidate.leadTimeDays.freshness, "STALE");
 assert.equal(candidate.status, "REVIEW_REQUIRED");
 
+const componentWithMaterialRole = normalizeSupplierResearch({
+  officeId: "office-a",
+  workspaceId: "workspace-a",
+  componentItemKey: "RADIO-1",
+  raw: { candidates: [{ ...rawCandidate.candidates[0], roles: ["PRODUCER"] }] },
+  providerSources: [official, publicSource],
+  now,
+});
+assert.deepEqual(componentWithMaterialRole.candidates[0]?.roles, [], "catalog components must reject material-only supplier roles");
+assert.equal(componentWithMaterialRole.candidates[0]?.status, "UNSUPPORTED");
+
+const materialCandidate = normalizeSupplierResearch({
+  officeId: "office-a",
+  workspaceId: "workspace-a",
+  componentItemKey: "request:iron-ore",
+  raw: {
+    candidates: [{
+      ...rawCandidate.candidates[0],
+      companyName: "Ore Producer",
+      website: "https://radio.example/",
+      roles: ["PRODUCER", "EXPORTER", "INVENTED_ROLE"],
+      productCapability: {
+        value: "62 percent Fe iron ore fines",
+        state: "SUPPORTED",
+        confidence: 0.9,
+        sourceUrls: [official.url],
+        observedAt: "2026-08-01",
+      },
+    }],
+  },
+  providerSources: [official, publicSource],
+  now,
+});
+assert.deepEqual(materialCandidate.candidates[0]?.roles, ["EXPORTER", "PRODUCER"]);
+assert.equal(materialCandidate.candidates[0]?.status, "REVIEW_REQUIRED", "supported material producers must survive supplier normalization");
+
 const duplicateModelIds = normalizeSupplierResearch({
   officeId: "office-a",
   workspaceId: "workspace-a",

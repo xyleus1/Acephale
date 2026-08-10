@@ -2,6 +2,28 @@
 
 ## Latest Update
 
+### Free-text sourcing requests clarify before supplier research
+
+- New free-text requests enter the sourcing queue immediately and remain in
+  office, user, and company scoped browser storage until research is persisted.
+- An authenticated, rate-limited intake route uses a strict GPT response to
+  extract the item, quantity, unit, manufacturer, part number, specification,
+  source region, delivery location, and need-by date.
+- Deterministic rules require the item, quantity and unit, technical identity,
+  delivery location, and need-by date before public supplier research starts.
+- Missing facts open an inline clarification conversation. Each answer updates
+  the visible request summary. A complete request starts the existing
+  attributable research run and then uses the canonical persisted procurement
+  workflow already on `main`.
+- Generic material requests use an open-request research mode that can retain
+  evidenced producers, processors, exporters, traders, manufacturers, and
+  distributors. Catalog component research remains limited to manufacturers
+  and distributors.
+- `Refine request` now reopens that conversation and can start a new research
+  run. It no longer returns the operator to an empty composer.
+- Public results remain unqualified candidates. Intake does not contact a
+  supplier, approve a source, issue a purchase order, book freight, or spend.
+
 ### Sourcing history is paginated, visible, and actionable
 
 - Inventory and sourcing now loads research through an opaque server cursor
@@ -23,6 +45,7 @@
 Verification:
 
 - `npm run test:supply-os-atlas-sourcing`
+- `npm run test:supply-os-ingestion-research`
 - disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
 - `npx tsc --noEmit --pretty false`
 - `npm run build`

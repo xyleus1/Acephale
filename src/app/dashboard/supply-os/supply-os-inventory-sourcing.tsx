@@ -17,11 +17,25 @@ import {
   shortageQuantity,
   type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
+import type {
+  SourcingRequestDraft,
+  SourcingRequiredField,
+} from "@/lib/supply-os/sourcing-request-contract";
 import styles from "./supply-os-logistics.module.css";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
 } from "./supply-os-sourcing-research-types";
+
+export type PendingSourcingQueueItem = {
+  id: string;
+  requestText: string;
+  title: string;
+  draft: SourcingRequestDraft | null;
+  missingFields: SourcingRequiredField[];
+  lastQuestion: string | null;
+  status: "Clarification needed" | "Researching" | "Research unavailable";
+};
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -45,6 +59,8 @@ export function AtlasInventoryWorkspace({
   selectedSku,
   onSelect,
   onCreateRequest,
+  pendingRequests,
+  onOpenPendingRequest,
   researchRuns,
   procurementCases,
   dataState,
@@ -62,6 +78,8 @@ export function AtlasInventoryWorkspace({
   selectedSku: string;
   onSelect: (sku: string) => void;
   onCreateRequest: (query: string) => void;
+  pendingRequests: PendingSourcingQueueItem[];
+  onOpenPendingRequest: (request: PendingSourcingQueueItem) => void;
   researchRuns: SavedSourcingResearchRun[];
   procurementCases: SavedProcurementCase[];
   dataState: "loading" | "ready" | "error";
@@ -166,6 +184,7 @@ export function AtlasInventoryWorkspace({
     const normalized = query.trim();
     if (!normalized) return;
     onCreateRequest(normalized);
+    setQuery("");
   }
 
   return (
@@ -196,7 +215,7 @@ export function AtlasInventoryWorkspace({
         <h2>Sourcing queue</h2>
         {dataState === "error"
           ? <button type="button" onClick={onRetryData}>Retry saved work</button>
-          : <span>{dataState === "loading" ? "Loading saved work" : "Office-shared work"}</span>}
+          : <span>{dataState === "loading" ? "Loading saved work" : pendingRequests.length ? `${pendingRequests.length} request${pendingRequests.length === 1 ? "" : "s"} need input` : "Office-shared work"}</span>}
       </header>
 
       {sourceMap ? (
@@ -227,6 +246,27 @@ export function AtlasInventoryWorkspace({
             </tr>
           </thead>
           <tbody>
+            {pendingRequests.map((request, index) => {
+              const draft = request.draft;
+              return (
+                <tr key={request.id} data-status="watch">
+                  <td>
+                    <button type="button" onClick={() => onOpenPendingRequest(request)}>
+                      <span className={styles.inventoryStatusDot} />
+                      <span>
+                        <small>{`NEW-${String(index + 1).padStart(3, "0")}`}</small>
+                        <strong>{request.title}</strong>
+                        <em>{draft?.specification ?? request.requestText}</em>
+                      </span>
+                    </button>
+                  </td>
+                  <td>{draft?.quantity && draft.unit ? `${draft.quantity.toLocaleString("en-US")} ${draft.unit}` : "Not set"}</td>
+                  <td>{draft?.needByDate ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${draft.needByDate}T12:00:00Z`)) : "Not set"}</td>
+                  <td>{request.status}</td>
+                  <td><button type="button" className={styles.sourcingQueueAction} onClick={() => onOpenPendingRequest(request)}>Continue <ArrowRight size={13} /></button></td>
+                </tr>
+              );
+            })}
             {sourcingItems.map((item) => {
               const run = latestRuns.get(item.sku);
               const runCases = run ? casesByRunId.get(run.id) ?? [] : [];

@@ -40,6 +40,11 @@ export type SavedSourcingResearchRun = {
     specification: string | null;
     targetCountry: string | null;
     requestText: string;
+    requestedQuantity?: number | null;
+    requestedUnit?: string | null;
+    sourceRegion?: string | null;
+    deliveryLocation?: string | null;
+    needByDate?: string | null;
   };
   output: PublicResearchResult | null;
   createdAt: string;

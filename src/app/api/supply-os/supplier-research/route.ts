@@ -6,6 +6,10 @@ import { listSupplierSenderAccounts } from "@/lib/supply-os/supplier-communicati
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { ResearchRateLimiter } from "@/lib/supply-os/research";
 import {
+  missingSourcingFields,
+  normalizeSourcingRequestDraft,
+} from "@/lib/supply-os/sourcing-request-contract";
+import {
   completeSourcingResearchRun,
   failSourcingResearchRun,
   listSourcingResearchPage,
@@ -26,6 +30,11 @@ function requiredText(value: unknown, max: number) {
 function optionalText(value: unknown, max: number) {
   if (value === undefined || value === null || value === "") return undefined;
   return requiredText(value, max) ?? null;
+}
+
+function optionalPositiveNumber(value: unknown) {
+  if (value === undefined || value === null) return undefined;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export async function GET(request: NextRequest) {
@@ -66,8 +75,42 @@ export async function POST(request: NextRequest) {
   const specification = optionalText(body?.specification, 1_000);
   const targetCountry = optionalText(body?.targetCountry, 120);
   const requestText = optionalText(body?.requestText, 500);
-  if (!componentItemKey || !componentName || manufacturer === null || mpn === null || specification === null || targetCountry === null || requestText === null) {
+  const requestedQuantity = optionalPositiveNumber(body?.requestedQuantity);
+  const requestedUnit = optionalText(body?.requestedUnit, 40);
+  const sourceRegion = optionalText(body?.sourceRegion, 180);
+  const deliveryLocation = optionalText(body?.deliveryLocation, 240);
+  const needByDate = optionalText(body?.needByDate, 10);
+  if (
+    !componentItemKey
+    || !componentName
+    || manufacturer === null
+    || mpn === null
+    || specification === null
+    || targetCountry === null
+    || requestText === null
+    || requestedQuantity === null
+    || requestedUnit === null
+    || sourceRegion === null
+    || deliveryLocation === null
+    || needByDate === null
+  ) {
     return NextResponse.json({ error: "A valid component request is required." }, { status: 400 });
+  }
+  if (componentItemKey.startsWith("request:")) {
+    const missingFields = missingSourcingFields(normalizeSourcingRequestDraft({
+      productName: componentName,
+      quantity: requestedQuantity,
+      unit: requestedUnit,
+      manufacturer,
+      partNumber: mpn,
+      specification,
+      sourceRegion,
+      deliveryLocation,
+      needByDate,
+    }));
+    if (missingFields.length) {
+      return NextResponse.json({ error: "Complete the sourcing request before supplier research." }, { status: 400 });
+    }
   }
   if (!limiter.consume(`${session.officeId}:${session.userId}`)) {
     return NextResponse.json({ error: "Supplier research rate limit reached." }, { status: 429 });
@@ -82,6 +125,11 @@ export async function POST(request: NextRequest) {
     specification: specification ?? null,
     targetCountry: targetCountry ?? null,
     requestText: requestText ?? componentName,
+    requestedQuantity: requestedQuantity ?? null,
+    requestedUnit: requestedUnit ?? null,
+    sourceRegion: sourceRegion ?? null,
+    deliveryLocation: deliveryLocation ?? null,
+    needByDate: needByDate ?? null,
   };
   const run = await startSourcingResearchRun(context, input);
   try {
@@ -94,6 +142,11 @@ export async function POST(request: NextRequest) {
       mpn,
       specification,
       targetCountry,
+      requestedQuantity,
+      requestedUnit,
+      sourceRegion,
+      deliveryLocation,
+      needByDate,
     });
     const completedRun = await completeSourcingResearchRun({
       context,

@@ -38,6 +38,10 @@ import { companyNameHint } from "@/lib/supply-os-company-identity";
 import { buildSupplyOptimizationModel } from "@/lib/supply-os-optimization-engine";
 import type { SupplyOsPanel } from "@/lib/supply-os/panel-routing";
 import {
+  missingSourcingFields,
+  normalizeSourcingRequestDraft,
+} from "@/lib/supply-os/sourcing-request-contract";
+import {
   loadSupplyCases,
   removeLegacySupplyCaseStorage,
   supplyCaseStorageKeys,
@@ -52,6 +56,7 @@ import { SupplyOsAutomations } from "./supply-os-automations";
 import {
   AtlasInventoryWorkspace,
   AtlasSourcingInspector,
+  type PendingSourcingQueueItem,
 } from "./supply-os-inventory-sourcing";
 import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
 import type {
@@ -61,6 +66,12 @@ import type {
   SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 import styles from "./supply-os-logistics.module.css";
+
+function storedText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim().slice(0, maxLength);
+  return normalized || null;
+}
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
   const storedName = dashboard.companyName?.trim();
@@ -536,6 +547,7 @@ export function SupplyOsDashboardWorkspace({
             dashboard={currentCase}
             presentationMode={presentationMode}
             activePanel={activePanel}
+            storageScope={storageScope}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
           />
@@ -568,12 +580,14 @@ function CaseCommandCenter({
   dashboard,
   presentationMode,
   activePanel,
+  storageScope,
   canApproveProcurement,
   canAuthorizePurchase,
 }: {
   dashboard: SupplyCaseDashboard;
   presentationMode: boolean;
   activePanel: SupplyOsPanel;
+  storageScope: string;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
 }) {
@@ -598,9 +612,15 @@ function CaseCommandCenter({
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
   const [sourceMapCandidateId, setSourceMapCandidateId] = useState<string | null>(null);
   const [sourceMapObjectId, setSourceMapObjectId] = useState("");
+  const [pendingSourcingRequests, setPendingSourcingRequests] = useState<PendingSourcingQueueItem[]>([]);
+  const [pendingSourcingStorageReady, setPendingSourcingStorageReady] = useState(false);
   const [procurementRequest, setProcurementRequest] = useState<{
+    requestId: string | null;
     requestText: string;
     itemSku: string | null;
+    initialDraft: PendingSourcingQueueItem["draft"];
+    initialMissingFields: PendingSourcingQueueItem["missingFields"];
+    initialQuestion: string | null;
     savedRun?: SavedSourcingResearchRun | null;
     savedCase?: SavedProcurementCase | null;
     savedCases?: SavedProcurementCase[];
@@ -613,6 +633,11 @@ function CaseCommandCenter({
   const [sourcingPageState, setSourcingPageState] = useState<"idle" | "loading" | "error">("idle");
   const [sourcingLoadRevision, setSourcingLoadRevision] = useState(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
+  const activePendingRequestIdRef = useRef<string | null>(null);
+  const pendingSourcingStorageKey = useMemo(
+    () => `derya:supply-os:${storageScope}:${modelDashboard.id}:sourcing-requests:v1`,
+    [modelDashboard.id, storageScope],
+  );
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -696,6 +721,55 @@ function CaseCommandCenter({
   }, [activePanel, domain.defaultInspector]);
 
   useEffect(() => {
+    activePendingRequestIdRef.current = procurementRequest?.requestId ?? null;
+  }, [procurementRequest?.requestId]);
+
+  useEffect(() => {
+    setPendingSourcingStorageReady(false);
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(pendingSourcingStorageKey) ?? "[]") as unknown;
+      const statuses = new Set<PendingSourcingQueueItem["status"]>([
+        "Clarification needed",
+        "Researching",
+        "Research unavailable",
+      ]);
+      const requests = Array.isArray(parsed) ? parsed.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const request = value as Record<string, unknown>;
+        const id = storedText(request.id, 100);
+        const requestText = storedText(request.requestText, 240);
+        const title = storedText(request.title, 240);
+        if (!id || !requestText || !title || !statuses.has(request.status as PendingSourcingQueueItem["status"])) return [];
+        const draft = request.draft && typeof request.draft === "object" && !Array.isArray(request.draft)
+          ? normalizeSourcingRequestDraft(request.draft)
+          : null;
+        return [{
+          id,
+          requestText,
+          title,
+          draft,
+          missingFields: draft ? missingSourcingFields(draft) : [],
+          lastQuestion: storedText(request.lastQuestion, 500),
+          status: request.status as PendingSourcingQueueItem["status"],
+        } satisfies PendingSourcingQueueItem];
+      }).slice(0, 20) : [];
+      setPendingSourcingRequests(requests);
+    } catch {
+      setPendingSourcingRequests([]);
+    }
+    setPendingSourcingStorageReady(true);
+  }, [pendingSourcingStorageKey]);
+
+  useEffect(() => {
+    if (!pendingSourcingStorageReady) return;
+    try {
+      window.localStorage.setItem(pendingSourcingStorageKey, JSON.stringify(pendingSourcingRequests.slice(0, 20)));
+    } catch {
+      // Browser storage is optional. The mounted queue remains usable.
+    }
+  }, [pendingSourcingRequests, pendingSourcingStorageKey, pendingSourcingStorageReady]);
+
+  useEffect(() => {
     if (!procurementRequest) return;
     commandStageRef.current?.scrollTo({ top: 0, left: 0 });
     window.scrollTo({ top: 0, left: 0 });
@@ -756,6 +830,13 @@ function CaseCommandCenter({
 
   const saveResearchRun = useCallback((run: SavedSourcingResearchRun) => {
     setResearchRuns((current) => [run, ...current.filter((candidate) => candidate.id !== run.id)]);
+    const requestId = activePendingRequestIdRef.current;
+    if (requestId) {
+      setPendingSourcingRequests((current) => current.filter((request) => request.id !== requestId));
+    }
+    setProcurementRequest((current) => current?.requestText === run.input.requestText
+      ? { ...current, requestId: null, savedRun: run }
+      : current);
   }, []);
 
   const saveProcurementCase = useCallback((procurementCase: SavedProcurementCase) => {
@@ -804,8 +885,12 @@ function CaseCommandCenter({
     setSourceMapCandidateId(null);
     setSourceMapObjectId("");
     setProcurementRequest({
+      requestId: null,
       itemSku: item.sku,
       requestText: requestText ?? `${shortageQuantity(item)} units of ${item.name} for the next Atlas production run`,
+      initialDraft: null,
+      initialMissingFields: [],
+      initialQuestion: null,
     });
   }
 
@@ -818,7 +903,57 @@ function CaseCommandCenter({
     if (matchedItem) setSelectedInventorySku(matchedItem.sku);
     setSourceMapCandidateId(null);
     setSourceMapObjectId("");
-    setProcurementRequest({ requestText, itemSku: matchedItem?.sku ?? null });
+    if (matchedItem) {
+      setProcurementRequest({
+        requestId: null,
+        requestText,
+        itemSku: matchedItem.sku,
+        initialDraft: null,
+        initialMissingFields: [],
+        initialQuestion: null,
+      });
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    const request: PendingSourcingQueueItem = {
+      id: requestId,
+      requestText,
+      title: requestText,
+      draft: null,
+      missingFields: [],
+      lastQuestion: null,
+      status: "Clarification needed",
+    };
+    setPendingSourcingRequests((current) => [request, ...current]);
+    setProcurementRequest({
+      requestId,
+      requestText,
+      itemSku: null,
+      initialDraft: null,
+      initialMissingFields: [],
+      initialQuestion: null,
+    });
+  }
+
+  function openPendingSourcingRequest(request: PendingSourcingQueueItem) {
+    setSourceMapCandidateId(null);
+    setSourceMapObjectId("");
+    setProcurementRequest({
+      requestId: request.id,
+      requestText: request.requestText,
+      itemSku: null,
+      initialDraft: request.draft,
+      initialMissingFields: request.missingFields,
+      initialQuestion: request.lastQuestion,
+    });
+  }
+
+  function updatePendingSourcingRequest(requestId: string, update: Partial<PendingSourcingQueueItem>) {
+    setPendingSourcingRequests((current) => current.map((request) => (
+      request.id === requestId
+        ? { ...request, ...update, id: request.id, requestText: request.requestText }
+        : request
+    )));
   }
 
   function openSavedResearch(run: SavedSourcingResearchRun) {
@@ -832,8 +967,22 @@ function CaseCommandCenter({
       ?? savedCases[0]
       ?? null;
     setProcurementRequest({
+      requestId: null,
       requestText: run.input.requestText || run.input.componentName,
       itemSku: matchedItem?.sku ?? null,
+      initialDraft: matchedItem ? null : {
+        productName: run.input.componentName,
+        quantity: run.input.requestedQuantity ?? null,
+        unit: run.input.requestedUnit ?? null,
+        manufacturer: run.input.manufacturer,
+        partNumber: run.input.mpn,
+        specification: run.input.specification,
+        sourceRegion: run.input.sourceRegion ?? null,
+        deliveryLocation: run.input.deliveryLocation ?? run.input.targetCountry,
+        needByDate: run.input.needByDate ?? null,
+      },
+      initialMissingFields: [],
+      initialQuestion: null,
       savedRun: run,
       savedCase,
       savedCases,
@@ -855,6 +1004,9 @@ function CaseCommandCenter({
             key={`procurement:${procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
             requestText={procurementRequest.requestText}
+            initialDraft={procurementRequest.initialDraft}
+            initialMissingFields={procurementRequest.initialMissingFields}
+            initialQuestion={procurementRequest.initialQuestion}
             initialRun={procurementRequest.savedRun}
             initialCase={procurementRequest.savedCase}
             initialCases={procurementRequest.savedCases}
@@ -863,6 +1015,9 @@ function CaseCommandCenter({
             senderAccounts={supplierSenderAccounts}
             onResearchSaved={saveResearchRun}
             onProcurementCaseSaved={saveProcurementCase}
+            onRequestUpdate={procurementRequest.requestId
+              ? (update) => updatePendingSourcingRequest(procurementRequest.requestId!, update)
+              : undefined}
             onBack={() => setProcurementRequest(null)}
           />
         ) : activePanel === "materials" ? (
@@ -871,6 +1026,8 @@ function CaseCommandCenter({
             selectedSku={selectedInventoryItem?.sku ?? ""}
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}
+            pendingRequests={pendingSourcingRequests}
+            onOpenPendingRequest={openPendingSourcingRequest}
             researchRuns={researchRuns}
             procurementCases={procurementCases}
             dataState={sourcingDataState}

@@ -1818,6 +1818,183 @@
   font-weight: 560;
 }
 
+.procurementClarification {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  overflow: hidden;
+}
+
+.procurementRequestSummary {
+  min-width: 0;
+  padding: 36px 40px;
+  border-right: 1px solid var(--line);
+  background: #fbfcfb;
+}
+
+.procurementRequestSummary > small,
+.procurementRequestSummary dt,
+.procurementRequestChat form label {
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.procurementRequestSummary h3 {
+  margin: 8px 0 26px;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 640;
+  line-height: 1.18;
+}
+
+.procurementRequestSummary dl {
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.procurementRequestSummary dl > div {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.procurementRequestSummary dt,
+.procurementRequestSummary dd {
+  margin: 0;
+}
+
+.procurementRequestSummary dd {
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.procurementRequestSummary > p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 20px 0 0;
+  color: var(--decision);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.procurementRequestChat {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  background: var(--panel);
+}
+
+.procurementRequestMessages {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 34px;
+}
+
+.procurementRequestMessages p {
+  width: fit-content;
+  max-width: min(620px, 88%);
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink-soft);
+  background: var(--panel-subtle);
+  font-size: 12px;
+  line-height: 1.48;
+}
+
+.procurementRequestMessages p[data-role="operator"] {
+  margin-left: auto;
+  color: var(--panel);
+  border-color: var(--navy);
+  background: var(--navy);
+}
+
+.procurementRequestMessages p[data-role="derya"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.procurementRequestMessages p[data-role="error"] {
+  color: var(--danger);
+  border-color: #e4c7c2;
+  background: #fbf3f1;
+}
+
+.procurementRequestChat form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 16px;
+  border-top: 1px solid var(--line-strong);
+}
+
+.procurementRequestChat form label {
+  grid-column: 1 / -1;
+}
+
+.procurementRequestChat textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  outline: 0;
+  color: var(--ink);
+  background: var(--panel);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.procurementRequestChat textarea:focus {
+  border-color: var(--navy);
+}
+
+.procurementRequestChat textarea:focus-visible,
+.procurementRequestChat form button:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.procurementRequestChat form button {
+  min-width: 118px;
+  min-height: 44px;
+  align-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid var(--navy);
+  border-radius: 10px;
+  color: var(--panel);
+  background: var(--navy);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 640;
+}
+
+.procurementRequestChat form button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.procurementRequestChat form button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
 .procurementResearch {
   min-width: 0;
   min-height: 0;
@@ -3764,6 +3941,37 @@
 
   .procurementResearch {
     grid-template-columns: minmax(230px, 0.72fr) minmax(390px, 1.28fr);
+  }
+
+  .procurementClarification {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .procurementRequestSummary {
+    padding: 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .procurementRequestSummary h3 {
+    font-size: 21px;
+  }
+
+  .procurementRequestChat {
+    min-height: 460px;
+  }
+
+  .procurementRequestMessages {
+    padding: 20px 16px;
+  }
+
+  .procurementRequestChat form {
+    grid-template-columns: 1fr;
+  }
+
+  .procurementRequestChat form button {
+    width: 100%;
   }
 
   .procurementResearchLead {

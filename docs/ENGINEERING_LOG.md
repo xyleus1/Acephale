@@ -4637,3 +4637,22 @@ Use this file for chronological implementation notes that future agents should s
   projection may rank urgent work, but it must not hide historical runs.
 - Boundary: No database migration, dependency, supplier contact, purchase,
   spend, booking, customs, or Logistics behavior changed.
+
+### 2026-08-10 - Add sourcing clarification before public research
+
+- Branch: `codex/procurement-request-refinement`, rebased onto procurement PR
+  #116.
+- Task: Add free-text requests to the queue, collect missing parameters in an
+  inline conversation, and start public research only after deterministic
+  readiness checks pass.
+- Integration: The intake flow was forward-ported onto the canonical research,
+  procurement case, supplier reply, and competitive quote workflow. It does not
+  replace or bypass those records.
+- Files changed: sourcing request extractor and route, supplier research input,
+  procurement workspace, browser-scoped pending queue, styles, tests, decisions,
+  and handoff.
+- Verification: Atlas sourcing contract, ingestion and research trust contract,
+  TypeScript, production build with disposable PostgreSQL-shaped URLs, and diff
+  checks.
+- Boundary: Pending drafts are browser-local. Research runs and downstream
+  procurement work remain office-scoped canonical records with human approval.
