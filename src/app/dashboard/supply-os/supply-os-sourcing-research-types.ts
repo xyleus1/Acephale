@@ -116,12 +116,22 @@ export type SavedProcurementCase = {
       actionTaskId: string;
       approvalId: string;
       scopeHash: string;
-      status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+      status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
       draftTaskId: string;
       draftRevision: number;
       decidedByUserId?: string;
       decidedAt?: string;
       decisionNote?: string | null;
+    };
+    purchaseRelease?: {
+      state: "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
+      orderedQuantity: string;
+      acknowledgedQuantity: string;
+      remainingQuantity: string;
+      unitOfMeasure: string;
+      lastSupplierOrderReference: string;
+      lastConfirmedDeliveryDate: string;
+      updatedAt: string;
     };
     selectionHash: string;
     updatedAt: string;
@@ -168,7 +178,7 @@ export type SavedProcurementCase = {
   } | null;
   purchaseAction?: {
     id: string;
-    status: "PLANNED" | "BLOCKED" | "READY" | "CANCELLED";
+    status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
     taskKey: string;
     taskType: "PURCHASE_ORDER_ACTION";
     capabilityKey: "authorize.purchase_order";
@@ -208,7 +218,7 @@ export type SavedProcurementCase = {
       };
     };
     inputHash: string;
-    result: {
+    result: ({
       state: "AUTHORIZED" | "REJECTED";
       approvalId: string;
       scopeHash: string;
@@ -216,7 +226,42 @@ export type SavedProcurementCase = {
       decidedAt: string;
       decisionNote: string | null;
       externalSideEffect: false;
-    } | null;
+    } | {
+      state: "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
+      authorization: {
+        approvalId: string;
+        scopeHash: string;
+        decidedByUserId: string | null;
+        decidedAt: string | null;
+      };
+      orderedQuantity: string;
+      acknowledgedQuantity: string;
+      remainingQuantity: string;
+      unitOfMeasure: string;
+      acknowledgments: Array<{
+        channel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
+        releasedOn: string;
+        acknowledgedOn: string;
+        supplierOrderReference: string;
+        acceptedQuantity: string;
+        unitOfMeasure: string;
+        confirmedDeliveryDate: string;
+        evidenceUrl: string;
+        note: string | null;
+        acknowledgmentHash: string;
+        recordedByUserId: string;
+        recordedAt: string;
+      }>;
+      totals: { acknowledgedMaterialValue: string; currency: string };
+      lastAcknowledgment: {
+        supplierOrderReference: string;
+        acceptedQuantity: string;
+        confirmedDeliveryDate: string;
+        evidenceUrl: string;
+      };
+      externalSideEffect: "RECORDED_ONLY";
+      updatedAt: string;
+    }) | null;
     approval: {
       id: string;
       status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";

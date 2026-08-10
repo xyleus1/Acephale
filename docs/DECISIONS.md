@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Supplier acknowledgment is recorded evidence, not a claimed connector send
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A final purchase authorization is not proof that the supplier
+  received or accepted an order. Derya does not yet have a supplier-order
+  connector or canonical external purchase-order record.
+- Decision: Let an admin or manager record an externally received supplier
+  acknowledgment against the immutable authorized purchase action. Each entry
+  stores channel, release and acknowledgment dates, supplier reference,
+  accepted quantity, confirmed delivery, public evidence URL, actor, timestamp,
+  and a deterministic hash.
+- Lifecycle: The first entry moves the authorized action and draft from `READY`
+  to `RUNNING`. Partial acceptances accumulate without exceeding the authorized
+  quantity. Full cumulative acceptance moves both records to `SUCCEEDED`.
+  Identical retries are idempotent. Once acknowledgment begins, upstream
+  supplier and order scope cannot change; a new procurement case is required.
+- Boundary: This records an external event. It does not send a supplier message,
+  create a canonical PO, commit payment, book freight, or create a Logistics
+  handoff. Only a fully acknowledged quantity may become input to the later
+  Logistics handoff contract.
+
 ### 2026-08-10 - Final purchase authorization binds the full order, not a plan label
 
 - Status: accepted

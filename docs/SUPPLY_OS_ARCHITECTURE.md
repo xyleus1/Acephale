@@ -288,16 +288,29 @@ clear boundaries.
   draft revision. Approval moves the action and draft to `READY`, which freezes
   the exact authorized scope. An upstream supplier or gate change cancels a
   `READY` action that has not been externally executed.
-- Purchase preparation does not contact the supplier, create a canonical
-  purchase order or PO number, commit spend, book freight, or open a logistics
-  record.
+- An admin or manager may record an externally received supplier acknowledgment
+  against the frozen action. Every entry is hashed and stores its channel,
+  release date, acknowledgment date, supplier reference, accepted quantity,
+  confirmed delivery date, evidence URL, actor, and timestamp. The release date
+  cannot predate final authorization or exceed the approved quote validity.
+- The first acknowledgment moves the action and draft to `RUNNING`. Partial
+  acceptance accumulates against the exact authorized quantity. Full acceptance
+  moves both records to `SUCCEEDED`. Identical retries are idempotent and an
+  operator cannot accept more than the remaining quantity.
+- Once supplier acknowledgment begins, the upstream supplier and order scope
+  are immutable. A changed scope requires a new procurement case. This prevents
+  external evidence from being silently attached to a different order.
+- Purchase preparation and acknowledgment recording do not contact the
+  supplier, create a canonical purchase order or PO number, commit spend, book
+  freight, or open a logistics record.
 - Interactive research uses the authenticated, office-rate-limited public web
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.
 - Procurement case, gate reviews, sourcing approval, purchase draft, final
   purchase action, action approval, and hashed event history are office-scoped
   PostgreSQL records. Unsaved field edits remain browser state.
-- A later Logistics integration will create a canonical approval-gated
+- After full supplier acknowledgment, a later Logistics integration will create
+  a canonical approval-gated
   `SupplyAction`, prefill cargo, quantity, pickup, destination, need-by date,
   selected source, and evidence references, then open the Logistics panel by
   query state.

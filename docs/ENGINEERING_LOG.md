@@ -17,6 +17,23 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-10 - Record partial and full supplier acknowledgment
+
+- Branch: supply-os-supplier-acknowledgment, targeting main
+- Commit: see git log
+- Task: Persist externally received supplier acceptance against the exact
+  authorized order while keeping supplier and Logistics side effects off.
+- Files changed: procurement persistence and acknowledgment route, sourcing
+  types, in-page acceptance controls, queue state, database and UI contracts,
+  architecture, decision record, and handoff.
+- Verification: Atlas sourcing contract, disposable-database lifecycle and
+  tenant contract, TypeScript, layout contracts, product copy, whitespace, and
+  changed-file U+2014 checks.
+- Caveats: The workflow records evidence only. It does not send an order, create
+  a canonical PO, pay, book freight, or create a Logistics handoff.
+- Follow-up: Create the approval-gated Logistics handoff only from a fully
+  acknowledged order scope.
+
 ### 2026-08-10 - Bind final purchase approval to the complete order scope
 
 - Branch: supply-os-purchase-action, targeting main

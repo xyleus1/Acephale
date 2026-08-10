@@ -91,6 +91,11 @@ export function AtlasInventoryWorkspace({
   }
 
   function caseStage(procurementCase: SavedProcurementCase | undefined) {
+    if (procurementCase?.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
+    if (procurementCase?.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") {
+      const release = procurementCase.result.purchaseRelease;
+      return `${release.acknowledgedQuantity} ${release.unitOfMeasure} accepted, ${release.remainingQuantity} open`;
+    }
     if (procurementCase?.purchaseAction?.approval?.status === "APPROVED") return "Approved to issue";
     if (procurementCase?.purchaseAction?.approval?.status === "PENDING") return "Final purchase approval pending";
     if (procurementCase?.purchaseAction?.approval?.status === "REJECTED") return "Purchase action revision required";
@@ -194,7 +199,7 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run?.status === "RUNNING"}
                     onClick={() => run?.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onStartItemResearch(item)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase ? "Continue procurement" : run?.status === "SUCCEEDED" ? "View results" : run?.status === "RUNNING" ? "Researching" : run?.status === "FAILED" ? "Retry research" : "Start research"}
                     <ArrowRight size={13} />
                   </button>
                 </td>
@@ -221,7 +226,7 @@ export function AtlasInventoryWorkspace({
                     disabled={dataState !== "ready" || run.status === "RUNNING"}
                     onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
                   >
-                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
+                    {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : procurementCase?.result?.purchaseRelease ? "Review supplier acknowledgment" : procurementCase?.purchaseAction ? "Review purchase action" : procurementCase?.purchaseDraft ? "Review order draft" : procurementCase ? "Continue procurement" : run.status === "SUCCEEDED" ? "View results" : run.status === "RUNNING" ? "Researching" : "Retry research"} <ArrowRight size={13} />
                   </button>
                 </td>
               </tr>

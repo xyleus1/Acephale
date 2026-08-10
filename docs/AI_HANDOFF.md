@@ -2,6 +2,30 @@
 
 ## Latest Update
 
+### Supplier acceptance is persistent, cumulative, and resumable
+
+- An admin or manager can record an externally received supplier acknowledgment
+  from the authorized purchase action without leaving Supply OS.
+- Each entry binds channel, release date, acknowledgment date, supplier order
+  reference, accepted quantity, confirmed delivery date, evidence URL, note,
+  operator, timestamp, and hash to the immutable authorized order scope.
+- Partial acceptances keep the purchase action open and show accepted and
+  remaining quantity in the sourcing queue. Full cumulative acceptance closes
+  the action and marks the order ready for a future Logistics handoff.
+- Repeated identical submissions are idempotent. Accepted quantity cannot
+  exceed the authorized order, and release cannot predate approval or occur
+  after quote validity. Supplier or gate scope cannot change after acceptance
+  recording starts.
+- This is evidence recording only. Derya did not send the order, create a
+  canonical PO, pay the supplier, book freight, or create a Logistics record.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL migration plus
+  `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false`
+
 ### Purchase drafts now progress to exact-scope final authorization
 
 - A saved order draft can be submitted for final admin approval from the same

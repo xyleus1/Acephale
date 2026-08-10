@@ -17,6 +17,7 @@ const PURCHASE_ACTION_TASK_TYPE = "PURCHASE_ORDER_ACTION";
 const PURCHASE_ACTION_CAPABILITY = "authorize.purchase_order";
 const PURCHASE_ACTION_REQUIRED_ROLE = "ADMIN";
 const PURCHASE_INCOTERMS = ["EXW", "FCA", "FOB", "CPT", "CIP", "DAP", "DDP"] as const;
+const PURCHASE_RELEASE_CHANNELS = ["EMAIL", "SUPPLIER_PORTAL", "EDI", "PHONE_CONFIRMED", "OTHER"] as const;
 
 function digest(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -90,6 +91,13 @@ function todayUtc() {
 function requireCurrentOrFutureDate(value: string, label: string) {
   if (value < todayUtc()) {
     throw new SupplyPersistenceError(`${label} cannot be in the past.`, "invalid_input");
+  }
+  return value;
+}
+
+function requireCurrentOrPastDate(value: string, label: string) {
+  if (value > todayUtc()) {
+    throw new SupplyPersistenceError(`${label} cannot be in the future.`, "invalid_input");
   }
   return value;
 }
@@ -386,7 +394,7 @@ export async function listProcurementCases(context: SupplyAccessContext) {
           officeId: context.officeId,
           workspaceId: workspace.id,
           taskType: PURCHASE_DRAFT_TASK_TYPE,
-          status: { in: ["PLANNED", "BLOCKED", "READY"] },
+          status: { in: ["PLANNED", "BLOCKED", "READY", "RUNNING", "SUCCEEDED"] },
         },
         orderBy: { updatedAt: "desc" },
         take: 1,
@@ -397,7 +405,7 @@ export async function listProcurementCases(context: SupplyAccessContext) {
               officeId: context.officeId,
               workspaceId: workspace.id,
               taskType: PURCHASE_ACTION_TASK_TYPE,
-              status: { in: ["PLANNED", "BLOCKED", "READY"] },
+              status: { in: ["PLANNED", "BLOCKED", "READY", "RUNNING", "SUCCEEDED"] },
             },
             orderBy: { updatedAt: "desc" },
             take: 1,
@@ -447,6 +455,31 @@ async function cancelActivePurchaseDrafts(
   workspaceId: string,
   excludeTaskId?: string,
 ) {
+  const caseDrafts = await tx.supplyExecutionTask.findMany({
+    where: {
+      officeId,
+      workspaceId,
+      parentTaskId: procurementCaseId,
+      taskType: PURCHASE_DRAFT_TASK_TYPE,
+    },
+    select: { id: true },
+  });
+  const caseDraftIds = caseDrafts.map((draft) => draft.id);
+  if (caseDraftIds.length) {
+    const releasedAction = await tx.supplyExecutionTask.findFirst({
+      where: {
+        officeId,
+        workspaceId,
+        parentTaskId: { in: caseDraftIds },
+        taskType: PURCHASE_ACTION_TASK_TYPE,
+        status: { in: ["RUNNING", "SUCCEEDED"] },
+      },
+      select: { id: true },
+    });
+    if (releasedAction) {
+      throw new SupplyPersistenceError("Supplier acknowledgment has started. Create a new procurement case instead of changing this released scope.", "conflict");
+    }
+  }
   const drafts = await tx.supplyExecutionTask.findMany({
     where: {
       officeId,
@@ -2076,4 +2109,343 @@ export async function decidePurchaseActionApproval(args: {
     }
   }
   throw new SupplyPersistenceError("Purchase authorization could not be decided.", "conflict");
+}
+
+function normalizeSupplierAcknowledgment(input: unknown) {
+  const body = record(input);
+  const channel = requiredText(body.channel, "Release channel", 40).toUpperCase();
+  if (!PURCHASE_RELEASE_CHANNELS.includes(channel as (typeof PURCHASE_RELEASE_CHANNELS)[number])) {
+    throw new SupplyPersistenceError(`Release channel must be one of: ${PURCHASE_RELEASE_CHANNELS.join(", ")}.`, "invalid_input");
+  }
+  const releasedOn = requireCurrentOrPastDate(isoDate(body.releasedOn, "Release date"), "Release date");
+  const acknowledgedOn = requireCurrentOrPastDate(isoDate(body.acknowledgedOn, "Acknowledgment date"), "Acknowledgment date");
+  if (acknowledgedOn < releasedOn) {
+    throw new SupplyPersistenceError("Acknowledgment date cannot precede the release date.", "invalid_input");
+  }
+  const confirmedDeliveryDate = isoDate(body.confirmedDeliveryDate, "Confirmed delivery date");
+  if (confirmedDeliveryDate < acknowledgedOn) {
+    throw new SupplyPersistenceError("Confirmed delivery date cannot precede the acknowledgment date.", "invalid_input");
+  }
+  const acceptedQuantity = positiveNumber(body.acceptedQuantity, "Accepted quantity");
+  if (acceptedQuantity > 1_000_000_000) {
+    throw new SupplyPersistenceError("Accepted quantity must not exceed 1,000,000,000.", "invalid_input");
+  }
+  return {
+    channel: channel as (typeof PURCHASE_RELEASE_CHANNELS)[number],
+    releasedOn,
+    acknowledgedOn,
+    supplierOrderReference: requiredText(body.supplierOrderReference, "Supplier order reference", 300),
+    acceptedQuantity,
+    confirmedDeliveryDate,
+    evidenceUrl: publicUrl(body.evidenceUrl, "Acknowledgment evidence URL"),
+    note: optionalText(body.note, "Acknowledgment note", 2_000),
+  };
+}
+
+export async function recordPurchaseOrderAcknowledgment(args: {
+  context: SupplyAccessContext;
+  actionId: string;
+  input: unknown;
+}) {
+  const acknowledgmentInput = normalizeSupplierAcknowledgment(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  if (!["ADMIN", "MANAGER"].includes(accessContext.role)) {
+    throw new SupplyPersistenceError("Only an admin or manager can record supplier acknowledgment.", "forbidden");
+  }
+  const found = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      id: args.actionId,
+      officeId: args.context.officeId,
+      taskType: PURCHASE_ACTION_TASK_TYPE,
+      capabilityKey: PURCHASE_ACTION_CAPABILITY,
+    },
+    select: {
+      workspaceId: true,
+      parentTaskId: true,
+      parentTask: { select: { parentTaskId: true } },
+    },
+  });
+  const purchaseDraftId = found?.parentTaskId;
+  const procurementCaseId = found?.parentTask?.parentTaskId;
+  if (!found || !purchaseDraftId || !procurementCaseId) {
+    throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
+  }
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
+
+  for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: { id: procurementCaseId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: TASK_TYPE },
+          select: caseSelect,
+        });
+        const purchaseDraft = await tx.supplyExecutionTask.findFirst({
+          where: {
+            id: purchaseDraftId,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: procurementCaseId,
+            taskType: PURCHASE_DRAFT_TASK_TYPE,
+            status: { in: ["READY", "RUNNING", "SUCCEEDED"] },
+          },
+          select: purchaseDraftSelect,
+        });
+        const purchaseAction = await tx.supplyExecutionTask.findFirst({
+          where: {
+            id: args.actionId,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: purchaseDraftId,
+            taskType: PURCHASE_ACTION_TASK_TYPE,
+            capabilityKey: PURCHASE_ACTION_CAPABILITY,
+            status: { in: ["READY", "RUNNING", "SUCCEEDED"] },
+          },
+          select: purchaseActionSelect,
+        });
+        if (!procurementCase || !purchaseDraft || !purchaseAction) {
+          throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
+        }
+        const approval = await tx.supplyApproval.findFirst({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            executionTaskId: purchaseAction.id,
+            status: "APPROVED",
+            scopeHash: purchaseAction.inputHash,
+            requiredRole: PURCHASE_ACTION_REQUIRED_ROLE,
+          },
+          orderBy: { requestedAt: "desc" },
+          include: { decidedBy: { select: { role: true, isActive: true } } },
+        });
+        if (!approval) throw new SupplyPersistenceError("Purchase action no longer has an exact-scope approval.", "conflict");
+        const current = caseResult(procurementCase.result);
+        const authorization = record(current.result.purchaseAuthorization);
+        if (authorization.actionTaskId !== purchaseAction.id
+          || authorization.approvalId !== approval.id
+          || authorization.scopeHash !== approval.scopeHash
+          || !["APPROVED", "PARTIALLY_ACKNOWLEDGED", "ACKNOWLEDGED"].includes(String(authorization.status))) {
+          throw new SupplyPersistenceError("The procurement case no longer points to this authorized action.", "conflict");
+        }
+
+        const actionInput = record(purchaseAction.input);
+        const order = record(actionInput.order);
+        const commercial = record(actionInput.commercial);
+        let orderedQuantity: Prisma.Decimal;
+        let unitPrice: Prisma.Decimal;
+        try {
+          orderedQuantity = new Prisma.Decimal(requiredText(order.quantity, "Authorized order quantity", 80));
+          unitPrice = new Prisma.Decimal(requiredText(commercial.unitPrice, "Authorized unit price", 80));
+        } catch {
+          throw new SupplyPersistenceError("Authorized order quantity or price is invalid.", "conflict");
+        }
+        if (!orderedQuantity.isPositive() || !unitPrice.isPositive()) {
+          throw new SupplyPersistenceError("Authorized order quantity or price is invalid.", "conflict");
+        }
+        const unitOfMeasure = normalizedUnitOfMeasure(order.unitOfMeasure, "Authorized unit of measure");
+        const currency = requiredText(commercial.currency, "Authorized currency", 3).toUpperCase();
+        if (!/^[A-Z]{3}$/.test(currency)) throw new SupplyPersistenceError("Authorized currency is invalid.", "conflict");
+        const quoteValidUntil = isoDate(commercial.quoteValidUntil, "Authorized quote validity date");
+        const approvalDate = approval.decidedAt?.toISOString().slice(0, 10) ?? null;
+        if (!approvalDate || acknowledgmentInput.releasedOn < approvalDate) {
+          throw new SupplyPersistenceError("Supplier release cannot precede final purchase authorization.", "invalid_input");
+        }
+        if (acknowledgmentInput.releasedOn > quoteValidUntil) {
+          throw new SupplyPersistenceError("Supplier release occurred after the authorized quote expired.", "conflict");
+        }
+
+        const existingResult = record(purchaseAction.result);
+        const acknowledgments = Array.isArray(existingResult.acknowledgments)
+          ? existingResult.acknowledgments.map((value) => record(value))
+          : [];
+        if (!acknowledgments.length && (!approval.decidedBy?.isActive || approval.decidedBy.role !== PURCHASE_ACTION_REQUIRED_ROLE)) {
+          throw new SupplyPersistenceError("The purchase authorization no longer has an active admin decision.", "conflict");
+        }
+        const acceptedQuantity = new Prisma.Decimal(acknowledgmentInput.acceptedQuantity);
+        const normalizedAcknowledgment = {
+          channel: acknowledgmentInput.channel,
+          releasedOn: acknowledgmentInput.releasedOn,
+          acknowledgedOn: acknowledgmentInput.acknowledgedOn,
+          supplierOrderReference: acknowledgmentInput.supplierOrderReference,
+          acceptedQuantity: acceptedQuantity.toString(),
+          unitOfMeasure,
+          confirmedDeliveryDate: acknowledgmentInput.confirmedDeliveryDate,
+          evidenceUrl: acknowledgmentInput.evidenceUrl,
+          note: acknowledgmentInput.note,
+        };
+        const acknowledgmentHash = digest(normalizedAcknowledgment);
+        const repeated = acknowledgments.find((value) => value.acknowledgmentHash === acknowledgmentHash);
+        if (repeated) {
+          return {
+            procurementCase: { ...procurementCase, purchaseDraft, purchaseAction: purchaseActionView(purchaseAction, approval) },
+            purchaseDraft,
+            purchaseAction: purchaseActionView(purchaseAction, approval),
+            acknowledgment: repeated,
+          };
+        }
+        if (purchaseAction.status === "SUCCEEDED") {
+          throw new SupplyPersistenceError("The authorized order is already fully acknowledged.", "conflict");
+        }
+        let previouslyAccepted = new Prisma.Decimal(0);
+        try {
+          for (const prior of acknowledgments) {
+            previouslyAccepted = previouslyAccepted.add(requiredText(prior.acceptedQuantity, "Stored accepted quantity", 80));
+          }
+        } catch {
+          throw new SupplyPersistenceError("Stored supplier acknowledgment quantity is invalid.", "conflict");
+        }
+        const remainingBefore = orderedQuantity.sub(previouslyAccepted);
+        if (!remainingBefore.isPositive() || acceptedQuantity.greaterThan(remainingBefore)) {
+          throw new SupplyPersistenceError(`Accepted quantity cannot exceed the remaining ${remainingBefore.toString()} ${unitOfMeasure}.`, "invalid_input");
+        }
+        const now = new Date();
+        const acknowledgment = {
+          ...normalizedAcknowledgment,
+          acknowledgmentHash,
+          recordedByUserId: args.context.userId,
+          recordedAt: now.toISOString(),
+        };
+        const acknowledgedQuantity = previouslyAccepted.add(acceptedQuantity);
+        const remainingQuantity = orderedQuantity.sub(acknowledgedQuantity);
+        const complete = remainingQuantity.isZero();
+        const result = {
+          state: complete ? "ACKNOWLEDGED" : "PARTIALLY_ACKNOWLEDGED",
+          authorization: {
+            approvalId: approval.id,
+            scopeHash: approval.scopeHash,
+            decidedByUserId: approval.decidedByUserId,
+            decidedAt: approval.decidedAt?.toISOString() ?? null,
+          },
+          orderedQuantity: orderedQuantity.toString(),
+          acknowledgedQuantity: acknowledgedQuantity.toString(),
+          remainingQuantity: remainingQuantity.toString(),
+          unitOfMeasure,
+          acknowledgments: [...acknowledgments, acknowledgment],
+          totals: {
+            acknowledgedMaterialValue: acknowledgedQuantity.mul(unitPrice).toDecimalPlaces(2).toString(),
+            currency,
+          },
+          lastAcknowledgment: acknowledgment,
+          externalSideEffect: "RECORDED_ONLY",
+          updatedAt: now.toISOString(),
+        };
+
+        if (purchaseAction.status === "READY") {
+          await tx.supplyExecutionTask.update({
+            where: { id: purchaseAction.id },
+            data: { status: "RUNNING", startedAt: now, result: inputJson(result), resultHash: digest(result) },
+          });
+          await tx.supplyExecutionTask.update({
+            where: { id: purchaseDraft.id },
+            data: { status: "RUNNING", startedAt: now },
+          });
+        } else {
+          await tx.supplyExecutionTask.update({
+            where: { id: purchaseAction.id },
+            data: { result: inputJson(result), resultHash: digest(result) },
+          });
+        }
+        if (complete) {
+          await tx.supplyExecutionTask.update({
+            where: { id: purchaseAction.id },
+            data: { status: "SUCCEEDED", completedAt: now, result: inputJson(result), resultHash: digest(result) },
+          });
+          await tx.supplyExecutionTask.update({
+            where: { id: purchaseDraft.id },
+            data: { status: "SUCCEEDED", completedAt: now },
+          });
+        }
+
+        const releaseState = complete ? "ACKNOWLEDGED" : "PARTIALLY_ACKNOWLEDGED";
+        const projectedCaseResult = {
+          ...current.result,
+          purchaseAuthorization: {
+            ...authorization,
+            status: releaseState,
+          },
+          purchaseRelease: {
+            state: releaseState,
+            orderedQuantity: orderedQuantity.toString(),
+            acknowledgedQuantity: acknowledgedQuantity.toString(),
+            remainingQuantity: remainingQuantity.toString(),
+            unitOfMeasure,
+            lastSupplierOrderReference: acknowledgment.supplierOrderReference,
+            lastConfirmedDeliveryDate: acknowledgment.confirmedDeliveryDate,
+            updatedAt: now.toISOString(),
+          },
+          updatedAt: now.toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
+          select: caseSelect,
+        });
+        const sequence = await tx.supplyExecutionEvent.aggregate({
+          where: { executionTaskId: purchaseAction.id },
+          _max: { sequence: true },
+        });
+        await tx.supplyExecutionEvent.create({
+          data: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            executionTaskId: purchaseAction.id,
+            actorUserId: args.context.userId,
+            sequence: (sequence._max.sequence ?? 0) + 1,
+            eventType: complete ? "SUPPLIER_ORDER_ACKNOWLEDGED" : "SUPPLIER_ORDER_PARTIALLY_ACKNOWLEDGED",
+            status: complete ? "SUCCEEDED" : "RUNNING",
+            message: complete
+              ? "The supplier acknowledgment covers the full authorized quantity."
+              : "The supplier acknowledged part of the authorized quantity.",
+            payload: inputJson({ acknowledgment, acknowledgedQuantity: acknowledgedQuantity.toString(), remainingQuantity: remainingQuantity.toString() }),
+            payloadHash: digest({ acknowledgment, acknowledgedQuantity: acknowledgedQuantity.toString(), remainingQuantity: remainingQuantity.toString() }),
+            idempotencyKey: `supplier-ack:${acknowledgmentHash}`,
+          },
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: procurementCase.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType: complete ? "SUPPLIER_ORDER_ACKNOWLEDGED" : "SUPPLIER_ORDER_PARTIALLY_ACKNOWLEDGED",
+          status: complete ? "SUCCEEDED" : "RUNNING",
+          message: complete
+            ? "Supplier acknowledgment covers the full authorized order quantity."
+            : "Supplier acknowledgment leaves an authorized quantity open.",
+          payload: inputJson({
+            purchaseActionId: purchaseAction.id,
+            acknowledgmentHash,
+            acknowledgedQuantity: acknowledgedQuantity.toString(),
+            remainingQuantity: remainingQuantity.toString(),
+          }),
+        });
+        const storedAction = await tx.supplyExecutionTask.findUniqueOrThrow({
+          where: { id: purchaseAction.id },
+          select: purchaseActionSelect,
+        });
+        const storedDraft = await tx.supplyExecutionTask.findUniqueOrThrow({
+          where: { id: purchaseDraft.id },
+          select: purchaseDraftSelect,
+        });
+        return {
+          procurementCase: { ...updatedCase, purchaseDraft: storedDraft, purchaseAction: purchaseActionView(storedAction, approval) },
+          purchaseDraft: storedDraft,
+          purchaseAction: purchaseActionView(storedAction, approval),
+          acknowledgment,
+        };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || transactionAttempt === 2) {
+        if (retryableTransactionError(error)) {
+          throw new SupplyPersistenceError("Supplier acknowledgment changed concurrently. Reload and retry.", "conflict");
+        }
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Supplier acknowledgment could not be recorded.", "conflict");
 }
