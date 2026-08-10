@@ -43,8 +43,17 @@ import {
   supplyCaseStorageKeys,
   visibleSupplyCases,
 } from "./supply-os-storage";
+import {
+  ATLAS_ROBOTICS_INVENTORY,
+  shortageQuantity,
+} from "@/lib/supply-os/atlas-robotics-inventory";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
 import { SupplyOsAutomations } from "./supply-os-automations";
+import {
+  AtlasInventoryRail,
+  AtlasSourcingInspector,
+  type SourcingStage,
+} from "./supply-os-inventory-sourcing";
 import styles from "./supply-os-logistics.module.css";
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
@@ -565,6 +574,13 @@ function CaseCommandCenter({
     ?? null;
   const [selection, setSelection] = useState({ panel: activePanel, objectId: initialObject?.id ?? "" });
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
+  const [selectedInventorySku, setSelectedInventorySku] = useState(
+    ATLAS_ROBOTICS_INVENTORY.find((item) => shortageQuantity(item) > 0)?.sku
+      ?? ATLAS_ROBOTICS_INVENTORY[0]?.sku
+      ?? "",
+  );
+  const [sourcingStages, setSourcingStages] = useState<Record<string, SourcingStage>>({});
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
     [commandMap.objects, domain.objectKinds],
@@ -578,6 +594,8 @@ function CaseCommandCenter({
     : preferredObject ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
+  const selectedInventoryItem = ATLAS_ROBOTICS_INVENTORY.find((item) => item.sku === selectedInventorySku)
+    ?? ATLAS_ROBOTICS_INVENTORY[0];
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -592,6 +610,22 @@ function CaseCommandCenter({
   function focusOptimizationAction(actionId: string) {
     const related = commandMap.objects.find((object) => object.optimizationIds.includes(actionId));
     if (related) setSelection({ panel: activePanel, objectId: related.id });
+  }
+
+  function advanceSourcingWorkflow() {
+    if (!selectedInventoryItem || shortageQuantity(selectedInventoryItem) === 0) return;
+    const currentStage = sourcingStages[selectedInventoryItem.sku] ?? "idle";
+    if (currentStage === "review") return;
+    if (!selectedCandidateIds[selectedInventoryItem.sku] && selectedInventoryItem.candidates[0]) {
+      setSelectedCandidateIds((current) => ({
+        ...current,
+        [selectedInventoryItem.sku]: selectedInventoryItem.candidates[0].id,
+      }));
+    }
+    setSourcingStages((current) => ({
+      ...current,
+      [selectedInventoryItem.sku]: currentStage === "idle" ? "shortlist" : "review",
+    }));
   }
 
   return (
@@ -612,76 +646,88 @@ function CaseCommandCenter({
 
         </section>
 
-        <motion.aside
-          key={activePanel}
-          className={styles.routeRail}
-          aria-label="Operating network objects"
-          initial={reduceMotion ? false : { opacity: 0.82, y: 3 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <header>
-            <span>{domain.railTitle}</span>
-            <div className={styles.routeRailMeta}>
-              <small>{domainObjects.length} objects</small>
-              <small className={styles.mapDataSources} aria-label="Map data attribution">
-                Map data
-                {" "}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OSM</a>
-                {" · "}<a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
-                {" · "}<a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OFM</a>
-              </small>
+        {activePanel === "materials" ? (
+          <AtlasInventoryRail selectedSku={selectedInventoryItem?.sku ?? ""} onSelect={setSelectedInventorySku} />
+        ) : (
+          <motion.aside
+            key={activePanel}
+            className={styles.routeRail}
+            aria-label="Operating network objects"
+            initial={reduceMotion ? false : { opacity: 0.82, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <header>
+              <span>{domain.railTitle}</span>
+              <div className={styles.routeRailMeta}>
+                <small>{domainObjects.length} objects</small>
+                <small className={styles.mapDataSources} aria-label="Map data attribution">
+                  Map data
+                  {" "}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OSM</a>
+                  {" · "}<a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
+                  {" · "}<a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OFM</a>
+                </small>
+              </div>
+            </header>
+            <div className={styles.routeRailList}>
+              <div className={styles.routeRailGroupLabel}>Operating points</div>
+              {networkObjects.map((object) => {
+                const Icon = objectIcon(object.kind);
+                return (
+                  <button
+                    key={object.id}
+                    type="button"
+                    data-active={object.id === selectedObject?.id}
+                    data-status={object.status}
+                    aria-pressed={object.id === selectedObject?.id}
+                    onClick={() => selectNetworkObject(object)}
+                  >
+                    <span className={styles.routeRailIcon}><Icon size={15} strokeWidth={1.8} /></span>
+                    <span className={styles.routeRailCopy}>
+                      <small>{objectKindLabel(object.kind)}</small>
+                      <strong>{object.label}</strong>
+                      <em>{object.location}</em>
+                    </span>
+                    <i className={styles.routeRailStatus} />
+                  </button>
+                );
+              })}
+              {transportObjects.length ? <div className={styles.routeRailGroupLabel}>Transport legs</div> : null}
+              {transportObjects.map((object) => {
+                const Icon = objectIcon(object.kind);
+                return (
+                  <button
+                    key={object.id}
+                    type="button"
+                    className={styles.routeRailLeg}
+                    data-active={object.id === selectedObject?.id}
+                    data-status={object.status}
+                    aria-pressed={object.id === selectedObject?.id}
+                    onClick={() => selectNetworkObject(object)}
+                  >
+                    <span className={styles.routeRailIcon}><Icon size={15} strokeWidth={1.8} /></span>
+                    <span className={styles.routeRailCopy}>
+                      <small>{object.location}</small>
+                      <strong>{object.label}</strong>
+                      <em>{object.rateEstimate ? `${object.rateEstimate.distanceMiles.toLocaleString()} mi, ${formatCurrency(object.rateEstimate.low)} to ${formatCurrency(object.rateEstimate.high)}` : "Open for carrier comparison"}</em>
+                    </span>
+                    {object.priority ? <i className={styles.routeRailPriority}>P{object.priority.priority}</i> : <i className={styles.routeRailStatus} />}
+                  </button>
+                );
+              })}
             </div>
-          </header>
-          <div className={styles.routeRailList}>
-            <div className={styles.routeRailGroupLabel}>Operating points</div>
-            {networkObjects.map((object) => {
-              const Icon = objectIcon(object.kind);
-              return (
-                <button
-                  key={object.id}
-                  type="button"
-                  data-active={object.id === selectedObject?.id}
-                  data-status={object.status}
-                  aria-pressed={object.id === selectedObject?.id}
-                  onClick={() => selectNetworkObject(object)}
-                >
-                  <span className={styles.routeRailIcon}><Icon size={15} strokeWidth={1.8} /></span>
-                  <span className={styles.routeRailCopy}>
-                    <small>{objectKindLabel(object.kind)}</small>
-                    <strong>{object.label}</strong>
-                    <em>{object.location}</em>
-                  </span>
-                  <i className={styles.routeRailStatus} />
-                </button>
-              );
-            })}
-            {transportObjects.length ? <div className={styles.routeRailGroupLabel}>Transport legs</div> : null}
-            {transportObjects.map((object) => {
-              const Icon = objectIcon(object.kind);
-              return (
-                <button
-                  key={object.id}
-                  type="button"
-                  className={styles.routeRailLeg}
-                  data-active={object.id === selectedObject?.id}
-                  data-status={object.status}
-                  aria-pressed={object.id === selectedObject?.id}
-                  onClick={() => selectNetworkObject(object)}
-                >
-                  <span className={styles.routeRailIcon}><Icon size={15} strokeWidth={1.8} /></span>
-                  <span className={styles.routeRailCopy}>
-                    <small>{object.location}</small>
-                    <strong>{object.label}</strong>
-                    <em>{object.rateEstimate ? `${object.rateEstimate.distanceMiles.toLocaleString()} mi, ${formatCurrency(object.rateEstimate.low)} to ${formatCurrency(object.rateEstimate.high)}` : "Open for carrier comparison"}</em>
-                  </span>
-                  {object.priority ? <i className={styles.routeRailPriority}>P{object.priority.priority}</i> : <i className={styles.routeRailStatus} />}
-                </button>
-              );
-            })}
-          </div>
-        </motion.aside>
+          </motion.aside>
+        )}
 
-        {selectedObject ? (
+        {activePanel === "materials" && selectedInventoryItem ? (
+          <AtlasSourcingInspector
+            item={selectedInventoryItem}
+            stage={sourcingStages[selectedInventoryItem.sku] ?? "idle"}
+            selectedCandidateId={selectedCandidateIds[selectedInventoryItem.sku] ?? null}
+            onSelectCandidate={(candidateId) => setSelectedCandidateIds((current) => ({ ...current, [selectedInventoryItem.sku]: candidateId }))}
+            onAdvance={advanceSourcingWorkflow}
+          />
+        ) : selectedObject ? (
           <CommandInspector
             dashboard={modelDashboard}
             model={model}

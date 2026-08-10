@@ -27,6 +27,7 @@
     "test:supply-os-legacy-routes": "tsx scripts/supply-os-legacy-routes.test.ts",
     "test:supply-os-product-twin": "tsx scripts/supply-os-product-twin.test.ts",
     "test:supply-os-snapshot-twin": "tsx scripts/supply-os-snapshot-twin.test.ts",
+    "test:supply-os-atlas-sourcing": "tsx scripts/supply-os-atlas-sourcing.test.ts",
     "test:supply-os-csv-import": "tsx scripts/supply-os-csv-import.test.ts",
     "test:supply-os-ingestion-research": "tsx scripts/supply-os-ingestion-research.test.ts",
     "test:supply-os-persistence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-persistence.test.ts",
