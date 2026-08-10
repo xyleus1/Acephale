@@ -2326,6 +2326,60 @@
   padding: 10px 12px;
 }
 
+.purchaseApprovalRequest,
+.purchaseAuthorizationState {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.purchaseApprovalRequest > p,
+.purchaseAuthorizationState p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.purchaseApprovalRequest > button {
+  width: fit-content;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--navy);
+  border-radius: 9px;
+  color: #fff;
+  background: var(--navy);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.purchaseApprovalRequest > button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.purchaseAuthorizationState {
+  grid-template-columns: auto minmax(0, 1fr);
+  color: var(--success);
+  border-color: #bad7c4;
+  background: var(--success-soft);
+}
+
+.purchaseAuthorizationState strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
 .procurementGateAction > a {
   width: fit-content;
   display: inline-flex;

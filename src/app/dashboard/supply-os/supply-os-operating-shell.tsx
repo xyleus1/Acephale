@@ -40,12 +40,14 @@ export function SupplyOsOperatingShell({
   initialPanel,
   canCreateCompany,
   canApproveProcurement,
+  canAuthorizePurchase,
 }: {
   storageScope: string;
   presentationMode: boolean;
   initialPanel?: string;
   canCreateCompany: boolean;
   canApproveProcurement: boolean;
+  canAuthorizePurchase: boolean;
 }) {
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
@@ -88,7 +90,7 @@ export function SupplyOsOperatingShell({
   }, []);
 
   if (presentationMode) {
-    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} canApproveProcurement={canApproveProcurement} />;
+    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
   }
 
   return (
@@ -182,6 +184,7 @@ export function SupplyOsOperatingShell({
                 presentationMode={false}
                 activePanel={activePanel}
                 canApproveProcurement={canApproveProcurement}
+                canAuthorizePurchase={canAuthorizePurchase}
               />
             )}
           </div>

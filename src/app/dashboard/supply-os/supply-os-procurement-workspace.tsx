@@ -232,6 +232,7 @@ export function AtlasProcurementWorkspace({
   initialRun,
   initialCase,
   canApproveProcurement,
+  canAuthorizePurchase,
   onResearchSaved,
   onProcurementCaseSaved,
   onBack,
@@ -241,6 +242,7 @@ export function AtlasProcurementWorkspace({
   initialRun?: SavedSourcingResearchRun | null;
   initialCase?: SavedProcurementCase | null;
   canApproveProcurement: boolean;
+  canAuthorizePurchase: boolean;
   onResearchSaved: (run: SavedSourcingResearchRun) => void;
   onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
   onBack: () => void;
@@ -281,6 +283,8 @@ export function AtlasProcurementWorkspace({
   }));
   const [approvalReason, setApprovalReason] = useState("");
   const [approvalNote, setApprovalNote] = useState("");
+  const [purchaseApprovalReason, setPurchaseApprovalReason] = useState("");
+  const [purchaseDecisionNote, setPurchaseDecisionNote] = useState("");
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
   const [researchState, setResearchState] = useState<"running" | "complete" | "degraded">(
     initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : "running",
@@ -331,6 +335,8 @@ export function AtlasProcurementWorkspace({
     });
     setApprovalReason("");
     setApprovalNote("");
+    setPurchaseApprovalReason("");
+    setPurchaseDecisionNote("");
     setGateActionError("");
     setGateActionState("idle");
   }, [currentCase?.result?.selectionHash]);
@@ -529,10 +535,31 @@ export function AtlasProcurementWorkspace({
     });
   }
 
+  function requestPurchaseApproval() {
+    const draft = currentCase?.purchaseDraft;
+    if (!currentCase?.result || !draft?.result || !draft.resultHash) return;
+    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/purchase-action`, {
+      expectedDraftTaskId: draft.id,
+      expectedDraftResultHash: draft.resultHash,
+      expectedDraftRevision: draft.result.revision,
+      reason: purchaseApprovalReason,
+    });
+  }
+
+  function decidePurchaseAction(decision: "APPROVE" | "REJECT") {
+    const approvalId = currentCase?.purchaseAction?.approval?.id;
+    if (!approvalId) return;
+    void runCaseAction(`/api/supply-os/purchase-action-approvals/${approvalId}/decision`, {
+      decision,
+      note: purchaseDecisionNote || null,
+    });
+  }
+
   const purchaseFormComplete = Number(purchaseForm.quantity) > 0
     && Boolean(purchaseForm.needBy)
     && Boolean(purchaseForm.shipTo.trim())
     && Boolean(purchaseForm.paymentTerms.trim());
+  const purchaseActionStatus = currentCase?.purchaseAction?.approval?.status ?? null;
 
   return (
     <motion.section
@@ -714,7 +741,11 @@ export function AtlasProcurementWorkspace({
                   </>
                 ) : (
                   <>
-                    <header><small>Purchase preparation</small><h4>{currentCase.purchaseDraft?.result ? "Order draft" : "Prepare the order"}</h4><p>Supplier and quote evidence come from the approved scope. Add the order fields that were not part of sourcing approval.</p></header>
+                    <header>
+                      <small>{purchaseActionStatus === "APPROVED" ? "Purchase action authorized" : purchaseActionStatus === "PENDING" ? "Final approval pending" : "Purchase preparation"}</small>
+                      <h4>{purchaseActionStatus === "APPROVED" ? "Approved to issue" : currentCase.purchaseDraft?.result ? "Order draft" : "Prepare the order"}</h4>
+                      <p>{purchaseActionStatus === "APPROVED" ? "The exact supplier, quantity, price, destination, and terms are frozen under an admin approval hash." : "Supplier and quote evidence come from the approved scope. Add the order fields that were not part of sourcing approval."}</p>
+                    </header>
                     {currentCase.purchaseDraft?.result ? (
                       <dl className={styles.purchaseDraftSummary}>
                         <div><dt>Supplier</dt><dd>{currentCase.purchaseDraft.result.supplier.name}</dd></div>
@@ -723,24 +754,46 @@ export function AtlasProcurementWorkspace({
                         <div><dt>Draft revision</dt><dd>{currentCase.purchaseDraft.result.revision}</dd></div>
                       </dl>
                     ) : null}
-                    <div className={styles.procurementFormGrid}>
-                      <label>Quantity<input type="number" min="0.01" step="0.01" value={purchaseForm.quantity} onChange={(event) => setPurchaseForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
-                      <label>Approved unit<input readOnly value={currentCase.purchaseDraft?.result?.order.unitOfMeasure ?? currentCase.result.confirmedTerms?.unitOfMeasure ?? "Unknown"} /></label>
-                      <label>Need by<input type="date" value={purchaseForm.needBy} onChange={(event) => setPurchaseForm((current) => ({ ...current, needBy: event.target.value }))} /></label>
-                      <label>Incoterm<select value={purchaseForm.incoterm} onChange={(event) => setPurchaseForm((current) => ({ ...current, incoterm: event.target.value as typeof current.incoterm }))}><option value="EXW">EXW</option><option value="FCA">FCA</option><option value="FOB">FOB</option><option value="CPT">CPT</option><option value="CIP">CIP</option><option value="DAP">DAP</option><option value="DDP">DDP</option></select></label>
-                      <label className={styles.procurementWideField}>Ship to<input value={purchaseForm.shipTo} onChange={(event) => setPurchaseForm((current) => ({ ...current, shipTo: event.target.value }))} placeholder="Facility and receiving location" /></label>
-                      <label>Payment terms<input value={purchaseForm.paymentTerms} onChange={(event) => setPurchaseForm((current) => ({ ...current, paymentTerms: event.target.value }))} placeholder="For example, Net 30" /></label>
-                      <label>Buyer reference<input value={purchaseForm.buyerReference} onChange={(event) => setPurchaseForm((current) => ({ ...current, buyerReference: event.target.value }))} placeholder="Optional internal reference" /></label>
-                      <label className={styles.procurementWideField}>Buyer notes<textarea value={purchaseForm.notes} onChange={(event) => setPurchaseForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional receiving or packaging instructions" /></label>
-                    </div>
-                    <button type="button" disabled={gateActionState === "saving" || !purchaseFormComplete} onClick={savePurchaseDraft}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {currentCase.purchaseDraft?.result ? "Update order draft" : "Save order draft"}</button>
-                    <p className={styles.procurementPermissionNote}>This is internal preparation only. No PO number, supplier contact, payment, booking, or spend is created.</p>
+                    {purchaseActionStatus === "APPROVED" ? (
+                      <section className={styles.purchaseAuthorizationState}>
+                        <ShieldCheck size={20} />
+                        <div><strong>Exact order scope authorized</strong><p>No supplier connector has executed it. No PO number, message, payment, booking, or Logistics record exists yet.</p></div>
+                      </section>
+                    ) : (
+                      <>
+                        <div className={styles.procurementFormGrid}>
+                          <label>Quantity<input type="number" min="0.01" step="0.01" value={purchaseForm.quantity} onChange={(event) => setPurchaseForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
+                          <label>Approved unit<input readOnly value={currentCase.purchaseDraft?.result?.order.unitOfMeasure ?? currentCase.result.confirmedTerms?.unitOfMeasure ?? "Unknown"} /></label>
+                          <label>Need by<input type="date" value={purchaseForm.needBy} onChange={(event) => setPurchaseForm((current) => ({ ...current, needBy: event.target.value }))} /></label>
+                          <label>Incoterm<select value={purchaseForm.incoterm} onChange={(event) => setPurchaseForm((current) => ({ ...current, incoterm: event.target.value as typeof current.incoterm }))}><option value="EXW">EXW</option><option value="FCA">FCA</option><option value="FOB">FOB</option><option value="CPT">CPT</option><option value="CIP">CIP</option><option value="DAP">DAP</option><option value="DDP">DDP</option></select></label>
+                          <label className={styles.procurementWideField}>Ship to<input value={purchaseForm.shipTo} onChange={(event) => setPurchaseForm((current) => ({ ...current, shipTo: event.target.value }))} placeholder="Facility and receiving location" /></label>
+                          <label>Payment terms<input value={purchaseForm.paymentTerms} onChange={(event) => setPurchaseForm((current) => ({ ...current, paymentTerms: event.target.value }))} placeholder="For example, Net 30" /></label>
+                          <label>Buyer reference<input value={purchaseForm.buyerReference} onChange={(event) => setPurchaseForm((current) => ({ ...current, buyerReference: event.target.value }))} placeholder="Optional internal reference" /></label>
+                          <label className={styles.procurementWideField}>Buyer notes<textarea value={purchaseForm.notes} onChange={(event) => setPurchaseForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional receiving or packaging instructions" /></label>
+                        </div>
+                        <button type="button" disabled={gateActionState === "saving" || !purchaseFormComplete} onClick={savePurchaseDraft}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {purchaseActionStatus === "PENDING" ? "Update draft and cancel pending approval" : currentCase.purchaseDraft?.result ? "Update order draft" : "Save order draft"}</button>
+                        {purchaseActionStatus === "REJECTED" ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> This exact order scope was rejected. Revise and save the draft before requesting approval again.</p> : null}
+                        {currentCase.purchaseDraft?.result && !purchaseActionStatus ? (
+                          <section className={styles.purchaseApprovalRequest}>
+                            <label>Final approval reason<textarea value={purchaseApprovalReason} onChange={(event) => setPurchaseApprovalReason(event.target.value)} placeholder="Explain why this exact order should be authorized for supplier execution." /></label>
+                            <button type="button" disabled={gateActionState === "saving" || purchaseApprovalReason.trim().length === 0} onClick={requestPurchaseApproval}><ShieldCheck size={14} /> Request final admin approval</button>
+                          </section>
+                        ) : null}
+                        {purchaseActionStatus === "PENDING" ? (
+                          <section className={styles.purchaseApprovalRequest}>
+                            <p>The immutable purchase action is waiting for an admin. Editing and saving the draft cancels this request.</p>
+                            {canAuthorizePurchase ? <><label>Authorization note<textarea value={purchaseDecisionNote} onChange={(event) => setPurchaseDecisionNote(event.target.value)} placeholder="Record why this exact order may or may not be issued." /></label><div className={styles.procurementDecisionActions}><button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseAction("APPROVE")}><Check size={14} /> Authorize exact order</button><button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseAction("REJECT")}><TriangleAlert size={14} /> Reject order</button></div></> : <p className={styles.procurementPermissionNote}>Only an admin can decide this final purchase action.</p>}
+                          </section>
+                        ) : null}
+                        <p className={styles.procurementPermissionNote}>The draft and approval request remain internal. No PO number, supplier contact, payment, booking, or spend is created.</p>
+                      </>
+                    )}
                   </>
                 )}
                 {gateActionState === "error" ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> {gateActionError}</p> : null}
               </section>
             ) : null}
-            <p><ShieldCheck size={15} /> {currentCase?.result?.stage === "PURCHASE_READY" ? "This scope is approved for purchase preparation. No purchase order, supplier contact, booking, or spend was created." : "Qualification, commercial terms, quality plan, and approval remain required. No purchase order, supplier contact, booking, or spend was created."}</p>
+            <p><ShieldCheck size={15} /> {purchaseActionStatus === "APPROVED" ? "The exact order is authorized but has not been externally executed." : currentCase?.result?.stage === "PURCHASE_READY" ? "This scope is approved for purchase preparation. No purchase order, supplier contact, booking, or spend was created." : "Qualification, commercial terms, quality plan, and approval remain required. No purchase order, supplier contact, booking, or spend was created."}</p>
             <div className={styles.procurementCaseActions}>
               <button type="button" onClick={() => setPhase("compare")}><ArrowLeft size={15} /> Review alternatives</button>
               <button type="button" onClick={onBack}>Back to sourcing</button>

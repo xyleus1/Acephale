@@ -3,8 +3,10 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { createSupplyWorkspace, listSupplyWorkspaces, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import {
+  decidePurchaseActionApproval,
   decideProcurementApproval,
   listProcurementCases,
+  requestPurchaseActionApproval,
   requestProcurementApproval,
   reviewProcurementGate,
   savePurchaseOrderDraft,
@@ -412,6 +414,183 @@ async function main() {
       input: { ...purchaseDraftInput, expectedRevision: 1, quantity: 12 },
     }), /changed in another session/i, "stale draft edits must not overwrite a newer revision");
 
+    await assert.rejects(() => requestPurchaseActionApproval({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        expectedDraftTaskId: updatedPurchaseDraft.purchaseDraft!.id,
+        expectedDraftResultHash: updatedPurchaseDraft.purchaseDraft!.resultHash,
+        expectedDraftRevision: 1,
+        reason: "Stale final approval request.",
+      },
+    }), /purchase draft changed/i, "final approval must reject a stale draft revision");
+    const firstPurchaseAction = await requestPurchaseActionApproval({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        expectedDraftTaskId: updatedPurchaseDraft.purchaseDraft!.id,
+        expectedDraftResultHash: updatedPurchaseDraft.purchaseDraft!.resultHash,
+        expectedDraftRevision: 2,
+        reason: "Authorize the exact supported order scope.",
+      },
+    });
+    assert.equal(firstPurchaseAction.purchaseAction.status, "PLANNED");
+    assert.equal(firstPurchaseAction.purchaseAction.taskType, "PURCHASE_ORDER_ACTION");
+    assert.equal(firstPurchaseAction.purchaseAction.capabilityKey, "authorize.purchase_order");
+    assert.equal(firstPurchaseAction.approval.status, "PENDING");
+    assert.equal(firstPurchaseAction.approval.requiredRole, "ADMIN");
+    assert.equal(firstPurchaseAction.approval.scopeHash, firstPurchaseAction.purchaseAction.inputHash);
+    const immutablePurchaseInput = firstPurchaseAction.purchaseAction.input as {
+      action: string;
+      purchaseDraftRevision: number;
+      order: { quantity: string; shipTo: string };
+      supplier: { name: string };
+      commercial: { unitPrice: string; quoteReference: string };
+      totals: { materialSubtotal: string };
+      qualityPlan: { method: string };
+    };
+    assert.equal(immutablePurchaseInput.action, "PLACE_ORDER");
+    assert.equal(immutablePurchaseInput.purchaseDraftRevision, 2);
+    assert.equal(immutablePurchaseInput.order.quantity, "10");
+    assert.equal(immutablePurchaseInput.order.shipTo, purchaseDraftInput.shipTo);
+    assert.equal(immutablePurchaseInput.supplier.name, "Example supplier");
+    assert.equal(immutablePurchaseInput.commercial.unitPrice, "125");
+    assert.equal(immutablePurchaseInput.commercial.quoteReference, "Q-ATLAS-410");
+    assert.equal(immutablePurchaseInput.totals.materialSubtotal, "1250");
+    assert.equal(immutablePurchaseInput.qualityPlan.method, "SAMPLE");
+    assert.equal(firstPurchaseAction.purchaseAction.externalSystem, null);
+    assert.equal(firstPurchaseAction.purchaseAction.externalRef, null, "requesting approval must not issue a PO");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: firstPurchaseAction.purchaseAction.id } })).requiresApproval, true);
+    const repeatedPurchaseAction = await requestPurchaseActionApproval({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        expectedDraftTaskId: updatedPurchaseDraft.purchaseDraft!.id,
+        expectedDraftResultHash: updatedPurchaseDraft.purchaseDraft!.resultHash,
+        expectedDraftRevision: 2,
+        reason: "Retry should return the same pending action.",
+      },
+    });
+    assert.equal(repeatedPurchaseAction.purchaseAction.id, firstPurchaseAction.purchaseAction.id, "identical approval retries must be idempotent");
+    assert.equal(repeatedPurchaseAction.approval.id, firstPurchaseAction.approval.id);
+
+    const revisedPurchaseDraft = await savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: { ...purchaseDraftInput, expectedRevision: 2, quantity: 12 },
+    });
+    assert.equal((revisedPurchaseDraft.purchaseDraft!.result as { revision: number }).revision, 3);
+    assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: firstPurchaseAction.approval.id } })).status, "CANCELLED", "editing a draft must cancel its pending final approval");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: firstPurchaseAction.purchaseAction.id } })).status, "CANCELLED");
+    assert.equal(revisedPurchaseDraft.procurementCase.purchaseAction, null);
+    await assert.rejects(() => decidePurchaseActionApproval({
+      context,
+      approvalId: firstPurchaseAction.approval.id,
+      input: { decision: "APPROVE", note: "Stale action must not authorize." },
+    }), /already been decided/i, "a cancelled final approval cannot authorize an edited draft");
+
+    const finalPurchaseAction = await requestPurchaseActionApproval({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        expectedDraftTaskId: revisedPurchaseDraft.purchaseDraft!.id,
+        expectedDraftResultHash: revisedPurchaseDraft.purchaseDraft!.resultHash,
+        expectedDraftRevision: 3,
+        reason: "Authorize revised quantity and exact commercial scope.",
+      },
+    });
+    await assert.rejects(() => decidePurchaseActionApproval({
+      context: managerContext,
+      approvalId: finalPurchaseAction.approval.id,
+      input: { decision: "APPROVE", note: "Manager cannot authorize spend." },
+    }), /only an admin/i, "a manager approval cannot substitute for final admin authorization");
+    const secondAdmin = await prisma.user.create({
+      data: {
+        officeId: context.officeId,
+        email: `sourcing-admin-${suffix}@example.test`,
+        passwordHash: "verification-only",
+        fullName: "Purchase administrator",
+        role: "ADMIN",
+        canViewWholeOffice: true,
+      },
+    });
+    const secondAdminContext = { ...context, userId: secondAdmin.id, role: secondAdmin.role };
+    await assert.rejects(() => decidePurchaseActionApproval({
+      context,
+      approvalId: finalPurchaseAction.approval.id,
+      input: { decision: "APPROVE", note: "Self authorization attempt." },
+    }), /different admin/i, "the requester cannot self-authorize when another admin is available");
+    const rejectedPurchase = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: finalPurchaseAction.approval.id,
+      input: { decision: "REJECT", note: "Increase the quantity to cover the production buffer." },
+    });
+    assert.equal(rejectedPurchase.purchaseAction.status, "BLOCKED");
+    assert.equal(rejectedPurchase.purchaseDraft.status, "PLANNED", "a rejected action must leave the draft editable");
+    assert.equal((rejectedPurchase.procurementCase.result as { purchaseAuthorization: { status: string } }).purchaseAuthorization.status, "REJECTED");
+    await assert.rejects(() => requestPurchaseActionApproval({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        expectedDraftTaskId: rejectedPurchase.purchaseDraft.id,
+        expectedDraftResultHash: rejectedPurchase.purchaseDraft.resultHash,
+        expectedDraftRevision: 3,
+        reason: "Retry rejected scope without revision.",
+      },
+    }), /exact order scope was rejected/i, "a rejected immutable scope cannot be resubmitted unchanged");
+    const draftAfterRejection = await savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: { ...purchaseDraftInput, expectedRevision: 3, quantity: 14 },
+    });
+    assert.equal((draftAfterRejection.purchaseDraft!.result as { revision: number }).revision, 4);
+    const authorizedAction = await requestPurchaseActionApproval({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        expectedDraftTaskId: draftAfterRejection.purchaseDraft!.id,
+        expectedDraftResultHash: draftAfterRejection.purchaseDraft!.resultHash,
+        expectedDraftRevision: 4,
+        reason: "Authorize revised buffered quantity and exact commercial scope.",
+      },
+    });
+    await assert.rejects(() => decidePurchaseActionApproval({
+      context,
+      approvalId: authorizedAction.approval.id,
+      input: { decision: "APPROVE", note: "Self authorization attempt." },
+    }), /different admin/i, "the requester cannot self-authorize a revised scope when another admin is available");
+    const authorizedPurchase = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: authorizedAction.approval.id,
+      input: { decision: "APPROVE", note: "Exact quantity, supplier, quote, and destination authorized." },
+    });
+    assert.equal(authorizedPurchase.purchaseAction.status, "READY");
+    assert.equal(authorizedPurchase.purchaseDraft.status, "READY", "authorization freezes the approved draft");
+    assert.equal((authorizedPurchase.purchaseAction.result as { state: string; externalSideEffect: boolean }).state, "AUTHORIZED");
+    assert.equal((authorizedPurchase.purchaseAction.result as { externalSideEffect: boolean }).externalSideEffect, false);
+    assert.equal(authorizedPurchase.purchaseAction.externalRef, null, "authorization must not claim that a PO was issued");
+    assert.equal((authorizedPurchase.procurementCase.result as { purchaseAuthorization: { status: string } }).purchaseAuthorization.status, "APPROVED");
+    const authorizedEventCount = await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: authorizedAction.purchaseAction.id, eventType: "PURCHASE_ACTION_AUTHORIZED" },
+    });
+    const authorizedRetry = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: authorizedAction.approval.id,
+      input: { decision: "APPROVE", note: "Exact quantity, supplier, quote, and destination authorized." },
+    });
+    assert.equal(authorizedRetry.purchaseAction.status, "READY");
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: authorizedAction.purchaseAction.id, eventType: "PURCHASE_ACTION_AUTHORIZED" },
+    }), authorizedEventCount, "an identical authorization retry must not append fake history");
+    const restoredAuthorizedCase = (await listProcurementCases(context))[0];
+    assert.equal(restoredAuthorizedCase?.purchaseAction?.id, authorizedAction.purchaseAction.id, "the sourcing queue must restore the approved purchase action");
+    assert.equal(restoredAuthorizedCase?.purchaseAction?.approval?.status, "APPROVED");
+    await assert.rejects(() => savePurchaseOrderDraft({
+      context,
+      caseId: procurementCase.id,
+      input: { ...purchaseDraftInput, expectedRevision: 4, quantity: 16 },
+    }), /only an active purchase draft/i, "an authorized order scope must be frozen against later draft edits");
+
     const weakEvidenceCase = await saveProcurementSelection({
       context,
       researchRunId: started.id,
@@ -443,6 +622,9 @@ async function main() {
     assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
       where: { id: updatedPurchaseDraft.purchaseDraft!.id },
     })).status, "CANCELLED", "changing supplier scope must cancel the active order draft");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: authorizedAction.purchaseAction.id },
+    })).status, "CANCELLED", "changing supplier scope must invalidate an approved but unexecuted purchase action");
     assert.equal((await listProcurementCases(context))[0]?.purchaseDraft, null, "cancelled order drafts must leave the active sourcing queue");
     await assert.rejects(() => saveProcurementSelection({
       context,
@@ -752,6 +934,11 @@ async function main() {
       caseId: procurementCase.id,
       input: purchaseDraftInput,
     }), /not found|cannot edit/i, "a stale privileged cookie must not prepare an order after demotion");
+    await assert.rejects(() => decidePurchaseActionApproval({
+      context: stalePrivilegedContext,
+      approvalId: authorizedAction.approval.id,
+      input: { decision: "APPROVE" },
+    }), /current user|only an admin/i, "a stale privileged cookie must not retain purchase authorization power after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
@@ -767,6 +954,11 @@ async function main() {
       caseId: procurementCase.id,
       input: purchaseDraftInput,
     }), /not found/i, "another office must not read or update a purchase draft");
+    await assert.rejects(() => decidePurchaseActionApproval({
+      context: foreign,
+      approvalId: authorizedAction.approval.id,
+      input: { decision: "APPROVE" },
+    }), /not found/i, "another office must not decide a purchase action approval");
 
     console.log("Supply OS sourcing persistence checks passed.");
   } finally {

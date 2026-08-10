@@ -279,15 +279,24 @@ clear boundaries.
 - The draft is resumable from the sourcing queue and uses optimistic revisions.
   Identical retries are idempotent. Supplier or gate changes cancel the active
   draft, and stale approved dates return the case to the relevant review gate.
+- A prepared draft may be copied into an immutable `PURCHASE_ORDER_ACTION` child
+  task. That action input contains the full supplier, order, commercial,
+  evidence, quality, and prior-approval scope plus the exact draft revision and
+  result hash. Final admin approval binds to the action input hash, not to a
+  mutable case projection or a generic plan reference.
+- Editing a draft cancels its pending action approval. Rejection requires a new
+  draft revision. Approval moves the action and draft to `READY`, which freezes
+  the exact authorized scope. An upstream supplier or gate change cancels a
+  `READY` action that has not been externally executed.
 - Purchase preparation does not contact the supplier, create a canonical
   purchase order or PO number, commit spend, book freight, or open a logistics
   record.
 - Interactive research uses the authenticated, office-rate-limited public web
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.
-- Procurement case, gate reviews, approval request, decision, purchase draft,
-  and hashed event history are office-scoped PostgreSQL records. Unsaved field
-  edits remain browser state.
+- Procurement case, gate reviews, sourcing approval, purchase draft, final
+  purchase action, action approval, and hashed event history are office-scoped
+  PostgreSQL records. Unsaved field edits remain browser state.
 - A later Logistics integration will create a canonical approval-gated
   `SupplyAction`, prefill cargo, quantity, pickup, destination, need-by date,
   selected source, and evidence references, then open the Logistics panel by

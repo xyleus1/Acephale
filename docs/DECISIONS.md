@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Final purchase authorization binds the full order, not a plan label
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The generic `action.execute` contract contains only a plan reference
+  and action name. Reusing it for procurement would let an approval appear to
+  cover a purchase without binding supplier, quantity, price, destination, or
+  payment terms.
+- Decision: Create an immutable `PURCHASE_ORDER_ACTION` child task from the
+  current server-owned order draft. Its input copies the complete order,
+  commercial terms, supplier evidence, quality plan, procurement approval,
+  draft revision, and result hash. A separate admin approval binds directly to
+  that input hash.
+- Lifecycle: Draft edits cancel pending action approvals. Rejected scopes require
+  a new draft revision. Authorization freezes the draft. Upstream supplier or
+  evidence changes cancel an authorized but unexecuted action while preserving
+  its historical approval record.
+- Roles: Managers and admins may approve the sourcing scope. Only admins may
+  authorize the final purchase action, with conditional separation of duties
+  when another active admin exists.
+- Boundary: `READY` means approved for a future controlled connector. It does
+  not mean a purchase order was issued. Logistics remains unchanged until a
+  supplier acknowledgment and explicit handoff contract exist.
+
 ### 2026-08-10 - Purchase preparation is a versioned draft, not a purchase order
 
 - Status: accepted

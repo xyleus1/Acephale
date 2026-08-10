@@ -13,6 +13,9 @@ const APPROVAL_CAPABILITY = "review.procurement_selection";
 const APPROVAL_REQUIRED_ROLE = "MANAGER";
 const PURCHASE_DRAFT_TASK_TYPE = "PURCHASE_ORDER_DRAFT";
 const PURCHASE_DRAFT_CAPABILITY = "draft.purchase_order";
+const PURCHASE_ACTION_TASK_TYPE = "PURCHASE_ORDER_ACTION";
+const PURCHASE_ACTION_CAPABILITY = "authorize.purchase_order";
+const PURCHASE_ACTION_REQUIRED_ROLE = "ADMIN";
 const PURCHASE_INCOTERMS = ["EXW", "FCA", "FOB", "CPT", "CIP", "DAP", "DDP"] as const;
 
 function digest(value: unknown) {
@@ -325,6 +328,46 @@ const purchaseDraftSelect = {
   updatedAt: true,
 } satisfies Prisma.SupplyExecutionTaskSelect;
 
+const purchaseActionSelect = {
+  id: true,
+  status: true,
+  taskKey: true,
+  taskType: true,
+  capabilityKey: true,
+  input: true,
+  inputHash: true,
+  result: true,
+  resultHash: true,
+  externalSystem: true,
+  externalRef: true,
+  createdAt: true,
+  updatedAt: true,
+  approvals: {
+    orderBy: { requestedAt: "desc" },
+    take: 1,
+    select: {
+      id: true,
+      status: true,
+      requiredRole: true,
+      scopeHash: true,
+      requestReason: true,
+      requestedByUserId: true,
+      decidedByUserId: true,
+      decisionNote: true,
+      requestedAt: true,
+      decidedAt: true,
+      expiresAt: true,
+    },
+  },
+} satisfies Prisma.SupplyExecutionTaskSelect;
+
+type PurchaseActionRecord = Prisma.SupplyExecutionTaskGetPayload<{ select: typeof purchaseActionSelect }>;
+
+function purchaseActionView(task: PurchaseActionRecord, fallbackApproval?: PurchaseActionRecord["approvals"][number] | null) {
+  const { approvals, ...action } = task;
+  return { ...action, approval: approvals[0] ?? fallbackApproval ?? null };
+}
+
 export async function listProcurementCases(context: SupplyAccessContext) {
   const accessContext = await currentAccessContext(context);
   const workspace = await sourcingSystemWorkspace(accessContext, "view");
@@ -347,14 +390,36 @@ export async function listProcurementCases(context: SupplyAccessContext) {
         },
         orderBy: { updatedAt: "desc" },
         take: 1,
-        select: purchaseDraftSelect,
+        select: {
+          ...purchaseDraftSelect,
+          childTasks: {
+            where: {
+              officeId: context.officeId,
+              workspaceId: workspace.id,
+              taskType: PURCHASE_ACTION_TASK_TYPE,
+              status: { in: ["PLANNED", "BLOCKED", "READY"] },
+            },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: purchaseActionSelect,
+          },
+        },
       },
     },
   });
-  return cases.map(({ childTasks, ...procurementCase }) => ({
-    ...procurementCase,
-    purchaseDraft: childTasks[0] ?? null,
-  }));
+  return cases.map(({ childTasks, ...procurementCase }) => {
+    const activeDraft = childTasks[0] ?? null;
+    if (!activeDraft) return { ...procurementCase, purchaseDraft: null, purchaseAction: null };
+    const { childTasks: purchaseActions, ...purchaseDraft } = activeDraft;
+    const activeAction = purchaseActions[0] ?? null;
+    return {
+      ...procurementCase,
+      purchaseDraft,
+      purchaseAction: activeAction
+        ? purchaseActionView(activeAction)
+        : null,
+    };
+  });
 }
 
 async function cancelPendingApproval(tx: Prisma.TransactionClient, value: Prisma.JsonValue | null) {
@@ -382,6 +447,41 @@ async function cancelActivePurchaseDrafts(
   workspaceId: string,
   excludeTaskId?: string,
 ) {
+  const drafts = await tx.supplyExecutionTask.findMany({
+    where: {
+      officeId,
+      workspaceId,
+      parentTaskId: procurementCaseId,
+      taskType: PURCHASE_DRAFT_TASK_TYPE,
+      status: { in: ["PLANNED", "BLOCKED", "READY"] },
+      ...(excludeTaskId ? { id: { not: excludeTaskId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (drafts.length) {
+    const draftIds = drafts.map((draft) => draft.id);
+    const actions = await tx.supplyExecutionTask.findMany({
+      where: {
+        officeId,
+        workspaceId,
+        parentTaskId: { in: draftIds },
+        taskType: PURCHASE_ACTION_TASK_TYPE,
+        status: { in: ["PLANNED", "BLOCKED", "READY"] },
+      },
+      select: { id: true },
+    });
+    const actionIds = actions.map((action) => action.id);
+    if (actionIds.length) {
+      await tx.supplyApproval.updateMany({
+        where: { officeId, workspaceId, executionTaskId: { in: actionIds }, status: "PENDING" },
+        data: { status: "CANCELLED", decidedAt: new Date(), decisionNote: "Purchase draft scope changed." },
+      });
+      await tx.supplyExecutionTask.updateMany({
+        where: { id: { in: actionIds }, officeId, workspaceId },
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      });
+    }
+  }
   await tx.supplyExecutionTask.updateMany({
     where: {
       officeId,
@@ -391,6 +491,34 @@ async function cancelActivePurchaseDrafts(
       status: { in: ["PLANNED", "BLOCKED", "READY"] },
       ...(excludeTaskId ? { id: { not: excludeTaskId } } : {}),
     },
+    data: { status: "CANCELLED", cancelledAt: new Date() },
+  });
+}
+
+async function cancelActivePurchaseActions(
+  tx: Prisma.TransactionClient,
+  purchaseDraftId: string,
+  officeId: string,
+  workspaceId: string,
+) {
+  const actions = await tx.supplyExecutionTask.findMany({
+    where: {
+      officeId,
+      workspaceId,
+      parentTaskId: purchaseDraftId,
+      taskType: PURCHASE_ACTION_TASK_TYPE,
+      status: { in: ["PLANNED", "BLOCKED", "READY"] },
+    },
+    select: { id: true },
+  });
+  const actionIds = actions.map((action) => action.id);
+  if (!actionIds.length) return;
+  await tx.supplyApproval.updateMany({
+    where: { officeId, workspaceId, executionTaskId: { in: actionIds }, status: "PENDING" },
+    data: { status: "CANCELLED", decidedAt: new Date(), decisionNote: "Purchase draft scope changed." },
+  });
+  await tx.supplyExecutionTask.updateMany({
+    where: { id: { in: actionIds }, officeId, workspaceId },
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
 }
@@ -1320,6 +1448,9 @@ export async function savePurchaseOrderDraft(args: {
         if (!existing && orderInput.expectedRevision !== 0) {
           throw new SupplyPersistenceError("The purchase draft no longer matches this screen. Reload before saving.", "conflict");
         }
+        if (existing) {
+          await cancelActivePurchaseActions(tx, existing.id, args.context.officeId, workspace.id);
+        }
         const revision = currentRevision + 1;
         const result = {
           revision,
@@ -1375,7 +1506,7 @@ export async function savePurchaseOrderDraft(args: {
             });
         await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id, purchaseDraft.id);
         const eventType = existing ? "PURCHASE_DRAFT_UPDATED" : "PURCHASE_DRAFT_CREATED";
-        const projectedCaseResult = {
+        const projectedCaseResult: Record<string, unknown> = {
           ...current.result,
           purchasePreparation: {
             draftTaskId: purchaseDraft.id,
@@ -1385,6 +1516,7 @@ export async function savePurchaseOrderDraft(args: {
           },
           updatedAt: result.updatedAt,
         };
+        delete projectedCaseResult.purchaseAuthorization;
         const updatedCase = await tx.supplyExecutionTask.update({
           where: { id: procurementCase.id },
           data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
@@ -1410,7 +1542,7 @@ export async function savePurchaseOrderDraft(args: {
           message: existing ? "Order preparation draft was updated." : "Order preparation draft is ready for review.",
           payload: inputJson({ purchaseDraftId: purchaseDraft.id, approvalId: approval.id, orderHash, revision }),
         });
-        return { procurementCase: { ...updatedCase, purchaseDraft }, purchaseDraft, stale: false };
+        return { procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: null }, purchaseDraft, purchaseAction: null, stale: false };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (!retryableTransactionError(error) || attempt === 2) {
@@ -1422,4 +1554,526 @@ export async function savePurchaseOrderDraft(args: {
     }
   }
   throw new SupplyPersistenceError("Purchase draft could not be saved.", "conflict");
+}
+
+function purchaseActionRequest(input: unknown) {
+  const body = record(input);
+  return {
+    expectedDraftTaskId: requiredText(body.expectedDraftTaskId, "Purchase draft ID", 220),
+    expectedDraftResultHash: requiredText(body.expectedDraftResultHash, "Purchase draft result hash", 128),
+    expectedDraftRevision: nonNegativeInteger(body.expectedDraftRevision, "Expected draft revision"),
+    reason: requiredText(body.reason, "Purchase approval reason", 2_000),
+  };
+}
+
+export async function requestPurchaseActionApproval(args: {
+  context: SupplyAccessContext;
+  caseId: string;
+  input: unknown;
+}) {
+  const request = purchaseActionRequest(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+
+  for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.caseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${request.expectedDraftTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${request.expectedDraftTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
+
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: {
+            id: args.caseId,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            taskType: TASK_TYPE,
+            status: "PLANNED",
+          },
+          select: caseSelect,
+        });
+        if (!procurementCase) throw new SupplyPersistenceError("Active procurement case was not found.", "not_found");
+        const current = caseResult(procurementCase.result);
+        if (current.result.stage !== "PURCHASE_READY"
+          || current.gates.purchaseApproval !== "APPROVED"
+          || current.approval.status !== "APPROVED") {
+          throw new SupplyPersistenceError("The sourcing scope is not approved for purchase preparation.", "conflict");
+        }
+
+        const purchaseDraft = await tx.supplyExecutionTask.findFirst({
+          where: {
+            id: request.expectedDraftTaskId,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: procurementCase.id,
+            taskType: PURCHASE_DRAFT_TASK_TYPE,
+            capabilityKey: PURCHASE_DRAFT_CAPABILITY,
+            status: "PLANNED",
+          },
+          select: purchaseDraftSelect,
+        });
+        if (!purchaseDraft?.result || !purchaseDraft.resultHash) {
+          throw new SupplyPersistenceError("An active purchase draft was not found.", "not_found");
+        }
+        const draftResult = record(purchaseDraft.result);
+        if (purchaseDraft.resultHash !== request.expectedDraftResultHash
+          || draftResult.revision !== request.expectedDraftRevision) {
+          throw new SupplyPersistenceError("The purchase draft changed. Reload before requesting approval.", "conflict");
+        }
+        const projectedDraft = record(current.result.purchasePreparation);
+        if (projectedDraft.draftTaskId !== purchaseDraft.id
+          || projectedDraft.revision !== request.expectedDraftRevision
+          || projectedDraft.orderHash !== draftResult.orderHash) {
+          throw new SupplyPersistenceError("The procurement case no longer points to this purchase draft.", "conflict");
+        }
+
+        const procurementApproval = await tx.supplyApproval.findFirst({
+          where: {
+            id: requiredText(current.approval.id, "Procurement approval ID", 220),
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            status: "APPROVED",
+            scopeHash: requiredText(current.approval.scopeHash, "Procurement approval scope", 128),
+          },
+          include: { executionTask: true },
+        });
+        if (!procurementApproval?.executionTask
+          || procurementApproval.executionTask.taskType !== APPROVAL_TASK_TYPE
+          || procurementApproval.executionTask.capabilityKey !== APPROVAL_CAPABILITY
+          || procurementApproval.executionTask.parentTaskId !== procurementCase.id
+          || procurementApproval.executionTask.inputHash !== procurementApproval.scopeHash) {
+          throw new SupplyPersistenceError("The approved procurement scope is invalid.", "conflict");
+        }
+        const procurementInput = record(procurementApproval.executionTask.input);
+        const qualityPlan = record(procurementInput.qualityPlan);
+        const commercial = record(draftResult.commercial);
+        if (typeof commercial.quoteValidUntil !== "string" || commercial.quoteValidUntil < todayUtc()) {
+          throw new SupplyPersistenceError("The approved quote expired. Confirm current commercial terms before final purchase approval.", "conflict");
+        }
+        if (typeof commercial.deliveryDate !== "string" || commercial.deliveryDate < todayUtc()) {
+          throw new SupplyPersistenceError("The approved delivery date passed. Confirm current commercial terms before final purchase approval.", "conflict");
+        }
+        if (typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc()) {
+          throw new SupplyPersistenceError("The approved quality-plan date passed. Record a current quality plan before final purchase approval.", "conflict");
+        }
+
+        const immutableInput = {
+          action: "PLACE_ORDER",
+          procurementCaseId: procurementCase.id,
+          purchaseDraftId: purchaseDraft.id,
+          purchaseDraftRevision: request.expectedDraftRevision,
+          purchaseDraftResultHash: purchaseDraft.resultHash,
+          order: record(draftResult.order),
+          supplier: record(draftResult.supplier),
+          commercial,
+          totals: record(draftResult.totals),
+          procurementApproval: {
+            id: procurementApproval.id,
+            scopeHash: procurementApproval.scopeHash,
+          },
+          sourceEvidenceReview: record(procurementInput.sourceEvidenceReview),
+          qualityPlan,
+        };
+        const scopeHash = digest(immutableInput);
+        const existing = await tx.supplyExecutionTask.findFirst({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: purchaseDraft.id,
+            taskType: PURCHASE_ACTION_TASK_TYPE,
+            capabilityKey: PURCHASE_ACTION_CAPABILITY,
+            inputHash: scopeHash,
+          },
+          orderBy: { createdAt: "desc" },
+          select: purchaseActionSelect,
+        });
+        const existingApproval = existing?.approvals[0] ?? null;
+        if (existing && existingApproval?.status === "PENDING" && existing.status === "PLANNED") {
+          const purchaseAction = purchaseActionView(existing);
+          return {
+            procurementCase: { ...procurementCase, purchaseDraft, purchaseAction },
+            purchaseAction,
+            approval: existingApproval,
+          };
+        }
+        if (existing && existingApproval?.status === "APPROVED" && existing.status === "READY") {
+          const purchaseAction = purchaseActionView(existing);
+          return {
+            procurementCase: { ...procurementCase, purchaseDraft, purchaseAction },
+            purchaseAction,
+            approval: existingApproval,
+          };
+        }
+        if (existing && existingApproval?.status === "REJECTED") {
+          throw new SupplyPersistenceError("This exact order scope was rejected. Revise the draft before requesting approval again.", "conflict");
+        }
+
+        const priorAttempts = await tx.supplyExecutionTask.count({
+          where: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: purchaseDraft.id,
+            taskType: PURCHASE_ACTION_TASK_TYPE,
+            inputHash: scopeHash,
+          },
+        });
+        const attempt = priorAttempts + 1;
+        const taskKey = `purchase-action:${purchaseDraft.id}:${scopeHash}:${attempt}`;
+        const actionTask = await tx.supplyExecutionTask.create({
+          data: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            createdByUserId: args.context.userId,
+            parentTaskId: purchaseDraft.id,
+            taskKey,
+            taskType: PURCHASE_ACTION_TASK_TYPE,
+            capabilityKey: PURCHASE_ACTION_CAPABILITY,
+            status: "PLANNED",
+            requiresApproval: true,
+            input: inputJson(immutableInput),
+            inputHash: scopeHash,
+            idempotencyKey: taskKey,
+          },
+          select: purchaseActionSelect,
+        });
+        const approval = await tx.supplyApproval.create({
+          data: {
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            executionTaskId: actionTask.id,
+            requestedByUserId: args.context.userId,
+            requiredRole: PURCHASE_ACTION_REQUIRED_ROLE,
+            scopeHash,
+            requestReason: request.reason,
+            requestContext: inputJson({
+              procurementCaseId: procurementCase.id,
+              purchaseDraftId: purchaseDraft.id,
+              purchaseDraftRevision: request.expectedDraftRevision,
+            }),
+            idempotencyKey: `purchase-action:${actionTask.id}:${scopeHash}`,
+            expiresAt: new Date(`${commercial.quoteValidUntil}T23:59:59.999Z`),
+          },
+        });
+        const projectedCaseResult = {
+          ...current.result,
+          purchaseAuthorization: {
+            actionTaskId: actionTask.id,
+            approvalId: approval.id,
+            scopeHash,
+            status: "PENDING",
+            draftTaskId: purchaseDraft.id,
+            draftRevision: request.expectedDraftRevision,
+          },
+          updatedAt: new Date().toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
+          select: caseSelect,
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: actionTask.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType: "PURCHASE_ACTION_APPROVAL_REQUESTED",
+          message: "The exact purchase draft was submitted for final approval.",
+          payload: inputJson({ procurementCaseId: procurementCase.id, purchaseDraftId: purchaseDraft.id, scopeHash }),
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: procurementCase.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType: "PURCHASE_ACTION_APPROVAL_REQUESTED",
+          message: "Final purchase approval was requested for the current order draft.",
+          payload: inputJson({ purchaseActionId: actionTask.id, approvalId: approval.id, scopeHash }),
+        });
+        const purchaseAction = purchaseActionView(actionTask, approval);
+        return {
+          procurementCase: { ...updatedCase, purchaseDraft, purchaseAction },
+          purchaseAction,
+          approval,
+        };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || transactionAttempt === 2) {
+        if (retryableTransactionError(error)) {
+          throw new SupplyPersistenceError("Purchase approval changed concurrently. Reload and retry.", "conflict");
+        }
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Purchase approval could not be requested.", "conflict");
+}
+
+export async function decidePurchaseActionApproval(args: {
+  context: SupplyAccessContext;
+  approvalId: string;
+  input: unknown;
+}) {
+  const accessContext = await currentAccessContext(args.context);
+  if (accessContext.role !== "ADMIN") {
+    throw new SupplyPersistenceError("Only an admin can authorize a purchase action.", "forbidden");
+  }
+  const body = record(args.input);
+  const decision = body.decision;
+  if (decision !== "APPROVE" && decision !== "REJECT") {
+    throw new SupplyPersistenceError("Decision must be APPROVE or REJECT.", "invalid_input");
+  }
+  const note = optionalText(body.note, "Approval note", 2_000);
+  const found = await prisma.supplyApproval.findFirst({
+    where: { id: args.approvalId, officeId: args.context.officeId },
+    select: {
+      workspaceId: true,
+      executionTask: {
+        select: {
+          id: true,
+          parentTaskId: true,
+          taskType: true,
+          capabilityKey: true,
+          parentTask: { select: { id: true, parentTaskId: true } },
+        },
+      },
+    },
+  });
+  const purchaseDraftId = found?.executionTask?.parentTaskId;
+  const procurementCaseId = found?.executionTask?.parentTask?.parentTaskId;
+  if (!found || !purchaseDraftId || !procurementCaseId
+    || found.executionTask?.taskType !== PURCHASE_ACTION_TASK_TYPE
+    || found.executionTask.capabilityKey !== PURCHASE_ACTION_CAPABILITY) {
+    throw new SupplyPersistenceError("Purchase action approval was not found.", "not_found");
+  }
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Purchase action approval was not found.", "not_found");
+  const targetStatus = decision === "APPROVE" ? "APPROVED" : "REJECTED";
+
+  for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${found.executionTask!.id} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyApproval" WHERE "id" = ${args.approvalId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: { id: procurementCaseId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: TASK_TYPE },
+          select: caseSelect,
+        });
+        const purchaseDraft = await tx.supplyExecutionTask.findFirst({
+          where: { id: purchaseDraftId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: PURCHASE_DRAFT_TASK_TYPE },
+          select: purchaseDraftSelect,
+        });
+        const approval = await tx.supplyApproval.findFirst({
+          where: { id: args.approvalId, officeId: args.context.officeId, workspaceId: workspace.id },
+          include: { executionTask: true },
+        });
+        if (!procurementCase || !purchaseDraft || !approval?.executionTask
+          || approval.executionTask.id !== found.executionTask!.id
+          || approval.executionTask.parentTaskId !== purchaseDraft.id
+          || approval.executionTask.taskType !== PURCHASE_ACTION_TASK_TYPE
+          || approval.executionTask.capabilityKey !== PURCHASE_ACTION_CAPABILITY
+          || approval.requiredRole !== PURCHASE_ACTION_REQUIRED_ROLE
+          || approval.scopeHash !== approval.executionTask.inputHash) {
+          throw new SupplyPersistenceError("Purchase action approval scope is invalid.", "conflict");
+        }
+        const current = caseResult(procurementCase.result);
+        const actionInput = record(approval.executionTask.input);
+        const authorization = record(current.result.purchaseAuthorization);
+        if (approval.status === targetStatus && approval.decidedByUserId === args.context.userId) {
+          const selectedAction = await tx.supplyExecutionTask.findUniqueOrThrow({
+            where: { id: approval.executionTask.id },
+            select: purchaseActionSelect,
+          });
+          const purchaseAction = purchaseActionView(selectedAction, approval);
+          return { procurementCase: { ...procurementCase, purchaseDraft, purchaseAction }, purchaseAction, approval };
+        }
+        if (approval.status !== "PENDING") {
+          throw new SupplyPersistenceError("This purchase action approval has already been decided.", "conflict");
+        }
+        if (approval.executionTask.status !== "PLANNED"
+          || purchaseDraft.status !== "PLANNED"
+          || purchaseDraft.resultHash !== actionInput.purchaseDraftResultHash
+          || authorization.actionTaskId !== approval.executionTask.id
+          || authorization.approvalId !== approval.id
+          || authorization.scopeHash !== approval.scopeHash
+          || authorization.status !== "PENDING") {
+          throw new SupplyPersistenceError("The purchase draft changed after approval was requested.", "conflict");
+        }
+        const commercial = record(actionInput.commercial);
+        const qualityPlan = record(actionInput.qualityPlan);
+        const quoteExpired = typeof commercial.quoteValidUntil !== "string" || commercial.quoteValidUntil < todayUtc();
+        const deliveryExpired = typeof commercial.deliveryDate !== "string" || commercial.deliveryDate < todayUtc();
+        const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
+        const approvalExpired = approval.expiresAt !== null && approval.expiresAt.getTime() <= Date.now();
+        if (quoteExpired || deliveryExpired || qualityExpired || approvalExpired) {
+          const staleGate = quoteExpired || deliveryExpired || approvalExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
+          const expiredAt = new Date();
+          await tx.supplyApproval.update({
+            where: { id: approval.id },
+            data: { status: "EXPIRED", decidedAt: expiredAt, decisionNote: "Approved purchase inputs expired before authorization." },
+          });
+          await tx.supplyExecutionTask.update({
+            where: { id: approval.executionTask.id },
+            data: { status: "CANCELLED", cancelledAt: expiredAt },
+          });
+          await tx.supplyExecutionTask.update({
+            where: { id: purchaseDraft.id },
+            data: { status: "CANCELLED", cancelledAt: expiredAt },
+          });
+          const expiredResult: Record<string, unknown> = {
+            ...current.result,
+            gates: staleGate === "COMMERCIAL_TERMS"
+              ? { ...current.gates, commercialTerms: "REVIEW_REQUIRED", qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" }
+              : { ...current.gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" },
+            stage: staleGate === "COMMERCIAL_TERMS" ? "COMMERCIAL_CONFIRMATION" : "QUALITY_REVIEW",
+            approval: null,
+            updatedAt: expiredAt.toISOString(),
+          };
+          delete expiredResult.purchasePreparation;
+          delete expiredResult.purchaseAuthorization;
+          if (staleGate === "COMMERCIAL_TERMS") {
+            delete expiredResult.confirmedTerms;
+            delete expiredResult.qualityPlan;
+            expiredResult.reviews = { sourceEvidence: current.reviews.sourceEvidence };
+          } else {
+            delete expiredResult.qualityPlan;
+            expiredResult.reviews = {
+              sourceEvidence: current.reviews.sourceEvidence,
+              commercialTerms: current.reviews.commercialTerms,
+            };
+          }
+          const updatedCase = await tx.supplyExecutionTask.update({
+            where: { id: procurementCase.id },
+            data: { result: inputJson(expiredResult), resultHash: digest(expiredResult) },
+            select: caseSelect,
+          });
+          await appendCaseEvent({
+            tx,
+            caseId: procurementCase.id,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            actorUserId: args.context.userId,
+            eventType: "PURCHASE_ACTION_APPROVAL_EXPIRED",
+            status: "CANCELLED",
+            message: "Final purchase approval expired and the case returned to review.",
+            payload: inputJson({ purchaseActionId: approval.executionTask.id, approvalId: approval.id, staleGate }),
+          });
+          return {
+            procurementCase: { ...updatedCase, purchaseDraft: null, purchaseAction: null },
+            purchaseDraft: null,
+            purchaseAction: null,
+            approval: { ...approval, status: "EXPIRED", decidedAt: expiredAt },
+            stale: true,
+          };
+        }
+
+        if (approval.requestedByUserId === args.context.userId) {
+          const alternativeAdmins = await tx.user.count({
+            where: {
+              officeId: args.context.officeId,
+              id: { not: args.context.userId },
+              isActive: true,
+              role: "ADMIN",
+            },
+          });
+          if (alternativeAdmins > 0) {
+            throw new SupplyPersistenceError("A different admin is available, so self-authorization is blocked.", "forbidden");
+          }
+        }
+        const decidedAt = new Date();
+        await tx.supplyApproval.update({
+          where: { id: approval.id },
+          data: { status: targetStatus, decidedByUserId: args.context.userId, decidedAt, decisionNote: note },
+        });
+        const actionResult = {
+          state: decision === "APPROVE" ? "AUTHORIZED" : "REJECTED",
+          approvalId: approval.id,
+          scopeHash: approval.scopeHash,
+          decidedByUserId: args.context.userId,
+          decidedAt: decidedAt.toISOString(),
+          decisionNote: note,
+          externalSideEffect: false,
+        };
+        const purchaseAction = await tx.supplyExecutionTask.update({
+          where: { id: approval.executionTask.id },
+          data: {
+            status: decision === "APPROVE" ? "READY" : "BLOCKED",
+            result: inputJson(actionResult),
+            resultHash: digest(actionResult),
+          },
+          select: purchaseActionSelect,
+        });
+        const updatedDraft = await tx.supplyExecutionTask.update({
+          where: { id: purchaseDraft.id },
+          data: { status: decision === "APPROVE" ? "READY" : "PLANNED" },
+          select: purchaseDraftSelect,
+        });
+        const projectedCaseResult = {
+          ...current.result,
+          purchaseAuthorization: {
+            ...authorization,
+            status: targetStatus,
+            decidedByUserId: args.context.userId,
+            decidedAt: decidedAt.toISOString(),
+            decisionNote: note,
+          },
+          updatedAt: decidedAt.toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
+          select: caseSelect,
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: approval.executionTask.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType: decision === "APPROVE" ? "PURCHASE_ACTION_AUTHORIZED" : "PURCHASE_ACTION_REJECTED",
+          status: decision === "APPROVE" ? "READY" : "BLOCKED",
+          message: decision === "APPROVE"
+            ? "The exact purchase action is authorized for controlled execution. No external side effect was performed."
+            : "The purchase action was rejected for revision.",
+          payload: inputJson(actionResult),
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: procurementCase.id,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          actorUserId: args.context.userId,
+          eventType: decision === "APPROVE" ? "PURCHASE_ACTION_AUTHORIZED" : "PURCHASE_ACTION_REJECTED",
+          status: decision === "APPROVE" ? "READY" : "BLOCKED",
+          message: decision === "APPROVE"
+            ? "The order scope is approved for controlled supplier execution."
+            : "The order draft requires revision before another approval request.",
+          payload: inputJson({ purchaseActionId: approval.executionTask.id, approvalId: approval.id, scopeHash: approval.scopeHash, note }),
+        });
+        const actionWithApproval = {
+          ...purchaseActionView(purchaseAction),
+          approval: { ...approval, status: targetStatus, decidedByUserId: args.context.userId, decidedAt, decisionNote: note },
+        };
+        return {
+          procurementCase: { ...updatedCase, purchaseDraft: updatedDraft, purchaseAction: actionWithApproval },
+          purchaseDraft: updatedDraft,
+          purchaseAction: actionWithApproval,
+          approval: actionWithApproval.approval,
+          stale: false,
+        };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || transactionAttempt === 2) {
+        if (retryableTransactionError(error)) {
+          throw new SupplyPersistenceError("Purchase authorization changed concurrently. Reload and retry.", "conflict");
+        }
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Purchase authorization could not be decided.", "conflict");
 }

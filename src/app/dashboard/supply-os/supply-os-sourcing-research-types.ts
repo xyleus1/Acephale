@@ -112,6 +112,17 @@ export type SavedProcurementCase = {
       revision: number;
       orderHash: string;
     };
+    purchaseAuthorization?: {
+      actionTaskId: string;
+      approvalId: string;
+      scopeHash: string;
+      status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+      draftTaskId: string;
+      draftRevision: number;
+      decidedByUserId?: string;
+      decidedAt?: string;
+      decisionNote?: string | null;
+    };
     selectionHash: string;
     updatedAt: string;
   } | null;
@@ -124,6 +135,7 @@ export type SavedProcurementCase = {
       procurementApprovalId: string;
       procurementApprovalScopeHash: string;
     };
+    resultHash: string | null;
     result: {
       revision: number;
       state: "DRAFT";
@@ -151,6 +163,75 @@ export type SavedProcurementCase = {
       approvedProcurementScope: { approvalId: string; scopeHash: string };
       updatedAt: string;
     } | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  purchaseAction?: {
+    id: string;
+    status: "PLANNED" | "BLOCKED" | "READY" | "CANCELLED";
+    taskKey: string;
+    taskType: "PURCHASE_ORDER_ACTION";
+    capabilityKey: "authorize.purchase_order";
+    input: {
+      action: "PLACE_ORDER";
+      procurementCaseId: string;
+      purchaseDraftId: string;
+      purchaseDraftRevision: number;
+      purchaseDraftResultHash: string;
+      order: {
+        quantity: string;
+        unitOfMeasure: string;
+        needBy: string;
+        shipTo: string;
+        incoterm: "EXW" | "FCA" | "FOB" | "CPT" | "CIP" | "DAP" | "DDP";
+        paymentTerms: string;
+        buyerReference: string | null;
+        notes: string | null;
+      };
+      supplier: { id: string; name: string; sourceUrl: string | null };
+      commercial: {
+        unitPrice: string;
+        currency: string;
+        minimumOrderQuantity: string;
+        quoteReference: string;
+        quoteValidUntil: string;
+        deliveryDate: string;
+      };
+      totals: { materialSubtotal: string; currency: string };
+      procurementApproval: { id: string; scopeHash: string };
+      sourceEvidenceReview: Record<string, unknown>;
+      qualityPlan: {
+        method: "SAMPLE" | "PRE_SHIPMENT_INSPECTION" | "DOCUMENT_REVIEW";
+        acceptanceCriteria: string;
+        owner: string;
+        targetDate: string;
+      };
+    };
+    inputHash: string;
+    result: {
+      state: "AUTHORIZED" | "REJECTED";
+      approvalId: string;
+      scopeHash: string;
+      decidedByUserId: string;
+      decidedAt: string;
+      decisionNote: string | null;
+      externalSideEffect: false;
+    } | null;
+    approval: {
+      id: string;
+      status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+      requiredRole: "ADMIN";
+      scopeHash: string;
+      requestReason: string;
+      requestedByUserId: string | null;
+      decidedByUserId: string | null;
+      decisionNote: string | null;
+      requestedAt: string;
+      decidedAt: string | null;
+      expiresAt: string | null;
+    } | null;
+    externalSystem: null;
+    externalRef: null;
     createdAt: string;
     updatedAt: string;
   } | null;

@@ -2,6 +2,34 @@
 
 ## Latest Update
 
+### Purchase drafts now progress to exact-scope final authorization
+
+- A saved order draft can be submitted for final admin approval from the same
+  in-page procurement workspace.
+- Supply OS copies the full server-owned draft into an immutable
+  `PURCHASE_ORDER_ACTION` input: supplier, order quantity and unit, destination,
+  Incoterm, payment terms, quote terms, subtotal, source review, quality plan,
+  procurement approval, draft revision, and draft result hash.
+- The final `SupplyApproval.scopeHash` equals that immutable action input hash.
+  Managers may approve sourcing, but only an active admin may authorize the
+  final purchase action. Self-authorization is blocked when another active admin
+  exists.
+- Editing a draft cancels its pending final approval. A rejected scope must be
+  revised before resubmission. An approved action freezes the draft, and an
+  upstream supplier or evidence change cancels the approved but unexecuted
+  action.
+- Queue rows now resume into `Final purchase approval pending`, `Purchase action
+  revision required`, or `Approved to issue` states.
+- Authorization is not execution. No PO number, supplier message, payment,
+  booking, customs action, or Logistics record is created.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL migration plus
+  `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false`
+
 ### Approved procurement cases now resume into a persistent order draft
 
 - A case at `PURCHASE_READY` now opens an in-page order preparation form instead

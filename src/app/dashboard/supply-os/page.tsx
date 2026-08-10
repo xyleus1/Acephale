@@ -33,6 +33,7 @@ export default async function SupplyOsPage({
         initialPanel={params.panel}
         canCreateCompany={currentUser.role === "ADMIN"}
         canApproveProcurement={currentUser.role === "ADMIN" || currentUser.role === "MANAGER"}
+        canAuthorizePurchase={currentUser.role === "ADMIN"}
       />
     </div>
   );

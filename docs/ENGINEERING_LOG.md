@@ -17,6 +17,24 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-10 - Bind final purchase approval to the complete order scope
+
+- Branch: supply-os-purchase-action, targeting main
+- Commit: see git log
+- Task: Progress a persistent order draft into a separately approved immutable
+  purchase action while keeping all supplier and Logistics side effects off.
+- Files changed: procurement persistence and action routes, sourcing types,
+  in-page procurement controls, queue state, role propagation, scoped styles,
+  persistence and UI contracts, architecture, decisions, and handoff.
+- Verification: Atlas sourcing contract, disposable-database lifecycle and
+  tenant contract, TypeScript, production build, Supply OS layout contracts,
+  product copy, docs, tenant audit, whitespace, and changed-file U+2014 checks.
+- Caveats: `READY` is authorization only. No supplier connector, canonical PO,
+  payment, booking, customs mutation, or Logistics handoff exists in this slice.
+- Follow-up: Implement a provider-specific, idempotent release connector with
+  acknowledgment storage. Only then create a Logistics handoff from the
+  acknowledged order scope.
+
 ### 2026-08-10 - Persist approved purchase preparation drafts
 
 - Branch: supply-os-purchase-draft, targeting main
