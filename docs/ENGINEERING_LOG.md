@@ -4801,3 +4801,22 @@ Use this file for chronological implementation notes that future agents should s
   rejection return-to-sourcing.
 - Boundary: No schema, dependency, payment, inventory, booking, customs, or
   Logistics behavior changed.
+
+### 2026-08-11 - Recover stale revised-order authorization scopes
+
+- Branch: `supply-os-authorization-freshness`, targeting `main`.
+- Task: Remove the dead end created when supplier qualification or an approved
+  quality plan expires after a replacement draft exists.
+- Behavior: Request, approval, manual release, and connected Gmail send
+  boundaries return stale revised orders to the supplier shortlist. The
+  transition cancels the unusable replacement chain while preserving the
+  original released supplier order and immutable evidence history.
+- Safety: The connected-email claim checks freshness before the provider call.
+  Unresolved provider delivery blocks recovery. Durable case and exception
+  projections retain the stale gate, cancelled replacement IDs, actor, and
+  timestamp.
+- Verification: Atlas sourcing contract, TypeScript, disposable PostgreSQL
+  request and pending-action recovery, released-order preservation, approval
+  expiry, event idempotency, and the full existing sourcing lifecycle.
+- Boundary: No migration, dependency, supplier contact, spend, payment,
+  inventory, booking, customs, or Logistics behavior changed.

@@ -7961,3 +7961,30 @@ Trust boundary:
 - Supplier rejection creates a persistent return-to-sourcing state and returns
   the buyer to the shortlist; it cannot be retained or converted into a revised
   order. No payment, inventory, booking, customs, or Logistics state is created.
+
+## Supply OS replacement authorization freshness, August 11
+
+Status:
+
+- Implemented on `supply-os-authorization-freshness`, targeting `main`.
+- No Prisma migration or new dependency is required.
+
+Operator result:
+
+- If supplier qualification or the quality-plan checkpoint expires while a
+  replacement order is being prepared, approved, or sent, the supplier
+  workstream returns to comparison instead of becoming stuck.
+- The sourcing queue records whether qualification or quality evidence expired.
+  The original released order remains active and visible until the buyer chooses
+  and qualifies a valid source.
+- Stale replacement drafts, actions, pending approvals, and unsent connected
+  email tasks are cancelled as one recovery transition.
+
+Trust boundary:
+
+- Connected Gmail revalidates freshness before calling the provider. It does
+  not send a replacement supported by expired evidence.
+- Unknown or in-flight provider delivery cannot be erased by the recovery path;
+  it must be reconciled first.
+- The recovery state does not contact a supplier, commit spend, supersede the
+  existing order, or create Logistics, customs, payment, or inventory state.

@@ -119,6 +119,7 @@ export type SupplierOrderException = {
   status: "OPEN_REVIEW" | "RESOLVED_KEEP_ORIGINAL" | "REVISION_REQUIRED" | "REVISION_DRAFTED" | "REVISION_AUTHORIZED" | "REVISION_RELEASED" | "RETURNED_TO_SOURCING";
   resolution?: {
     disposition: "KEEP_ORIGINAL" | "REQUIRE_REAUTHORIZATION" | "RETURN_TO_SOURCING";
+    reasonCode?: "SUPPLIER_REJECTED" | "SOURCE_EVIDENCE_EXPIRED" | "COMMERCIAL_TERMS_EXPIRED" | "QUALITY_PLAN_EXPIRED";
     note: string;
     decidedByUserId: string;
     decidedAt: string;
@@ -144,6 +145,12 @@ export type SupplierOrderException = {
     scopeHash: string;
     releaseHash: string;
     releasedAt: string;
+  };
+  staleRevision?: {
+    staleGate: "SOURCE_EVIDENCE" | "COMMERCIAL_TERMS" | "QUALITY_PLAN";
+    replacementDraftTaskId: string | null;
+    replacementPurchaseActionId: string | null;
+    detectedAt: string;
   };
   recordedByUserId: string;
   recordedAt: string;
@@ -284,7 +291,7 @@ export type SavedProcurementCase = {
       updatedAt: string;
     };
     purchaseRevision?: {
-      state: "DRAFT" | "APPROVAL_PENDING" | "REJECTED" | "AUTHORIZED" | "EXPIRED" | "RELEASED";
+      state: "DRAFT" | "APPROVAL_PENDING" | "REJECTED" | "AUTHORIZED" | "EXPIRED" | "RETURNED_TO_SOURCING" | "RELEASED";
       replacesPurchaseActionId: string;
       supersededReleaseHash: string;
       supplierExceptionHash: string;
@@ -299,12 +306,14 @@ export type SavedProcurementCase = {
       decidedByUserId?: string;
       decidedAt?: string;
       decisionNote?: string | null;
+      staleGate?: "SOURCE_EVIDENCE" | "COMMERCIAL_TERMS" | "QUALITY_PLAN";
       updatedAt: string;
     };
     sourcingReturn?: {
       state: "REQUIRED";
       purchaseActionId: string;
       supplierExceptionHash: string;
+      reasonCode?: "SUPPLIER_REJECTED" | "SOURCE_EVIDENCE_EXPIRED" | "COMMERCIAL_TERMS_EXPIRED" | "QUALITY_PLAN_EXPIRED";
       reason: string;
       recordedByUserId: string;
       recordedAt: string;

@@ -25,7 +25,11 @@ import {
   type SupplierEmailSent,
 } from "./supplier-email-provider";
 import { currentSupplierQualification, supplierQualificationValidOn } from "./supplier-qualification";
-import { finalizeReplacementSupersession } from "./purchase-order-revision";
+import {
+  finalizeReplacementSupersession,
+  returnStaleReplacementToSourcing,
+  type ReplacementFreshnessGate,
+} from "./purchase-order-revision";
 
 export const PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE = "PURCHASE_ORDER_EMAIL_DRAFT";
 export const PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE = "PURCHASE_ORDER_EMAIL_ACTION";
@@ -68,6 +72,7 @@ async function activeOrderScope(tx: Prisma.TransactionClient, args: {
   workspaceId: string;
   purchaseActionId: string;
   expectedScopeHash: string;
+  allowStaleReplacement?: boolean;
 }) {
   const action = await tx.supplyExecutionTask.findFirst({
     where: {
@@ -101,15 +106,30 @@ async function activeOrderScope(tx: Prisma.TransactionClient, args: {
     throw new SupplyPersistenceError("The purchase authorization no longer has an active admin decision.", "conflict");
   }
   const input = record(action.input);
-  if (!currentSupplierQualification(input.sourceEvidenceReview)) {
-    throw new SupplyPersistenceError("Supplier qualification is missing or expired. Requalify before sending the order.", "conflict");
-  }
   const commercial = record(input.commercial);
-  if (isoDate(commercial.quoteValidUntil, "Authorized quote validity date") < todayUtc()) {
-    throw new SupplyPersistenceError("The authorized quote expired before order delivery.", "conflict");
+  const qualityPlan = record(input.qualityPlan);
+  const sourceExpired = !currentSupplierQualification(input.sourceEvidenceReview);
+  const quoteExpired = isoDate(commercial.quoteValidUntil, "Authorized quote validity date") < todayUtc();
+  const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
+  const staleGate: ReplacementFreshnessGate | null = sourceExpired
+    ? "SOURCE_EVIDENCE"
+    : quoteExpired
+      ? "COMMERCIAL_TERMS"
+      : qualityExpired
+        ? "QUALITY_PLAN"
+        : null;
+  if (staleGate && (!args.allowStaleReplacement || !Object.keys(record(input.revisionContext)).length)) {
+    throw new SupplyPersistenceError(
+      sourceExpired
+        ? "Supplier qualification is missing or expired. Requalify before sending the order."
+        : quoteExpired
+          ? "The authorized quote expired before order delivery."
+          : "The approved quality plan expired before order delivery.",
+      "conflict",
+    );
   }
   const order = record(input.order);
-  return { action, approval, input, commercial, order };
+  return { action, approval, input, commercial, order, staleGate };
 }
 
 export async function listPurchaseOrderCommunicationTasks(args: {
@@ -445,8 +465,32 @@ export async function sendPurchaseOrderEmailAction(args: { context: SupplyAccess
     const action = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE }, select: communicationTaskSelect });
     if (!action) throw new SupplyPersistenceError("Purchase order email action was not found.", "not_found");
     if (action.status === "SUCCEEDED") return { alreadySent: action, input: null, rfcMessageId: null };
-    const scope = await activeOrderScope(tx, { officeId: accessContext.officeId, workspaceId: workspace.id, purchaseActionId, expectedScopeHash: requiredText(actionInput.purchaseActionScopeHash, "Authorized order scope hash", 128) });
+    const scope = await activeOrderScope(tx, {
+      officeId: accessContext.officeId,
+      workspaceId: workspace.id,
+      purchaseActionId,
+      expectedScopeHash: requiredText(actionInput.purchaseActionScopeHash, "Authorized order scope hash", 128),
+      allowStaleReplacement: true,
+    });
     if (record(record(scope.action.result).release).releaseHash) throw new SupplyPersistenceError("The purchase order was already released.", "conflict");
+    if (scope.staleGate) {
+      await returnStaleReplacementToSourcing({
+        tx,
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+        procurementCaseId,
+        actorUserId: accessContext.userId,
+        revisionContext: record(scope.input.revisionContext),
+        replacementDraftId: scope.action.parentTaskId,
+        replacementActionId: scope.action.id,
+        staleGate: scope.staleGate,
+      });
+      const cancelledAction = await tx.supplyExecutionTask.findUniqueOrThrow({
+        where: { id: action.id },
+        select: communicationTaskSelect,
+      });
+      return { alreadySent: cancelledAction, input: null, rfcMessageId: null };
+    }
     const prior = record(action.result);
     const retryableRunning = action.status === "RUNNING" && ["RETRY_READY", "SEND_FAILED"].includes(String(prior.state));
     if ((action.status === "RUNNING" && !retryableRunning) || action.status === "BLOCKED" || prior.state === "SENDING") throw new SupplyPersistenceError("Order email delivery is unresolved or blocked. Reconcile it before another send.", "conflict");

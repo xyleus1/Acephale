@@ -126,7 +126,11 @@ export function AtlasInventoryWorkspace({
   }
 
   function caseStage(procurementCase: SavedProcurementCase | undefined) {
-    if (procurementCase?.result?.sourcingReturn?.state === "REQUIRED") return "Supplier rejected, choose another source";
+    if (procurementCase?.result?.sourcingReturn?.state === "REQUIRED") {
+      return procurementCase.result.sourcingReturn.reasonCode === "SUPPLIER_REJECTED"
+        ? "Supplier rejected, choose another source"
+        : "Approval evidence expired, choose another source";
+    }
     if (procurementCase?.result?.purchaseRevision?.state === "APPROVAL_PENDING") return "Revised order approval pending";
     if (procurementCase?.result?.purchaseRevision?.state === "REJECTED") return "Revised order needs changes";
     if (procurementCase?.result?.purchaseRevision?.state === "AUTHORIZED") return "Revised order authorized";

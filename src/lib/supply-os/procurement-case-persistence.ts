@@ -19,7 +19,10 @@ import {
   PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE,
   PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE,
 } from "./purchase-order-communication-persistence";
-import { finalizeReplacementSupersession } from "./purchase-order-revision";
+import {
+  finalizeReplacementSupersession,
+  returnStaleReplacementToSourcing,
+} from "./purchase-order-revision";
 
 const RESEARCH_CAPABILITY = "research.supplier_candidates";
 const TASK_TYPE = "PROCUREMENT_CASE";
@@ -3159,11 +3162,9 @@ export async function requestPurchaseActionApproval(args: {
           throw new SupplyPersistenceError("The approved procurement scope is invalid.", "conflict");
         }
         const procurementInput = record(procurementApproval.executionTask.input);
-        requireCurrentSupplierQualification(
-          procurementInput.sourceEvidenceReview,
-          "The approved supplier qualification expired. Requalify the supplier before final purchase approval.",
-        );
+        const sourceExpired = !currentSupplierQualification(procurementInput.sourceEvidenceReview);
         const qualityPlan = record(procurementInput.qualityPlan);
+        const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
         const commercial = record(draftResult.commercial);
         if (typeof commercial.quoteValidUntil !== "string" || commercial.quoteValidUntil < todayUtc()) {
           throw new SupplyPersistenceError("The approved quote expired. Confirm current commercial terms before final purchase approval.", "conflict");
@@ -3171,10 +3172,6 @@ export async function requestPurchaseActionApproval(args: {
         if (typeof commercial.deliveryDate !== "string" || commercial.deliveryDate < todayUtc()) {
           throw new SupplyPersistenceError("The approved delivery date passed. Confirm current commercial terms before final purchase approval.", "conflict");
         }
-        if (typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc()) {
-          throw new SupplyPersistenceError("The approved quality-plan date passed. Record a current quality plan before final purchase approval.", "conflict");
-        }
-
         const revisionContext = record(draftResult.revisionContext);
         const isRevisedOrder = Object.keys(revisionContext).length > 0;
         if (isRevisedOrder) {
@@ -3239,6 +3236,34 @@ export async function requestPurchaseActionApproval(args: {
             || commercial.quoteEvidenceHash !== supplierExceptionHash) {
             throw new SupplyPersistenceError("The revised commercial terms lost their supplier exception evidence.", "conflict");
           }
+        }
+
+        if (sourceExpired || qualityExpired) {
+          if (!isRevisedOrder) {
+            throw new SupplyPersistenceError(
+              sourceExpired
+                ? "The approved supplier qualification expired. Requalify the supplier before final purchase approval."
+                : "The approved quality-plan date passed. Record a current quality plan before final purchase approval.",
+              "conflict",
+            );
+          }
+          const updatedCase = await returnStaleReplacementToSourcing({
+            tx,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            procurementCaseId: procurementCase.id,
+            actorUserId: args.context.userId,
+            revisionContext,
+            replacementDraftId: purchaseDraft.id,
+            staleGate: sourceExpired ? "SOURCE_EVIDENCE" : "QUALITY_PLAN",
+          });
+          return {
+            procurementCase: { ...updatedCase, purchaseDraft: null, purchaseAction: null },
+            purchaseDraft: null,
+            purchaseAction: null,
+            approval: null,
+            stale: true,
+          };
         }
 
         const immutableInput = {
@@ -3571,6 +3596,26 @@ export async function decidePurchaseActionApproval(args: {
         if (sourceExpired || quoteExpired || deliveryExpired || qualityExpired || approvalExpired) {
           const staleGate = sourceExpired ? "SOURCE_EVIDENCE" : quoteExpired || deliveryExpired || approvalExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
           const expiredAt = new Date();
+          if (isRevisedOrder && (sourceExpired || qualityExpired)) {
+            const updatedCase = await returnStaleReplacementToSourcing({
+              tx,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              procurementCaseId: procurementCase.id,
+              actorUserId: args.context.userId,
+              revisionContext,
+              replacementDraftId: purchaseDraft.id,
+              replacementActionId: approval.executionTask.id,
+              staleGate: sourceExpired ? "SOURCE_EVIDENCE" : "QUALITY_PLAN",
+            });
+            return {
+              procurementCase: { ...updatedCase, purchaseDraft: null, purchaseAction: null },
+              purchaseDraft: null,
+              purchaseAction: null,
+              approval: { ...approval, status: "EXPIRED", decidedAt: expiredAt },
+              stale: true,
+            };
+          }
           if (isRevisedOrder) {
             await tx.supplyApproval.update({
               where: { id: approval.id },
@@ -4038,16 +4083,46 @@ export async function recordPurchaseOrderRelease(args: {
         const actionInput = record(purchaseAction.input);
         const order = record(actionInput.order);
         const commercial = record(actionInput.commercial);
+        const revisionContext = record(actionInput.revisionContext);
+        const qualityPlan = record(actionInput.qualityPlan);
         const quoteValidUntil = isoDate(commercial.quoteValidUntil, "Authorized quote validity date");
         const approvalDate = approval.decidedAt?.toISOString().slice(0, 10) ?? null;
         if (!approvalDate || releaseInput.releasedOn < approvalDate) {
           throw new SupplyPersistenceError("Purchase order release cannot precede final purchase authorization.", "invalid_input");
         }
-        if (releaseInput.releasedOn > quoteValidUntil) {
-          throw new SupplyPersistenceError("Purchase order release occurred after the authorized quote expired.", "conflict");
-        }
-        if (!supplierQualificationValidOn(actionInput.sourceEvidenceReview, releaseInput.releasedOn)) {
-          throw new SupplyPersistenceError("Supplier qualification was not valid on the purchase order release date.", "conflict");
+        const quoteExpired = releaseInput.releasedOn > quoteValidUntil;
+        const sourceExpired = !supplierQualificationValidOn(actionInput.sourceEvidenceReview, releaseInput.releasedOn);
+        const qualityExpired = typeof qualityPlan.targetDate !== "string" || releaseInput.releasedOn > qualityPlan.targetDate;
+        if (quoteExpired || sourceExpired || qualityExpired) {
+          if (Object.keys(revisionContext).length) {
+            const staleGate = sourceExpired ? "SOURCE_EVIDENCE" : quoteExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
+            const updatedCase = await returnStaleReplacementToSourcing({
+              tx,
+              officeId: accessContext.officeId,
+              workspaceId: workspace.id,
+              procurementCaseId: procurementCase.id,
+              actorUserId: accessContext.userId,
+              revisionContext,
+              replacementDraftId: purchaseDraft.id,
+              replacementActionId: purchaseAction.id,
+              staleGate,
+            });
+            return {
+              procurementCase: { ...updatedCase, purchaseDraft: null, purchaseAction: null },
+              purchaseDraft: null,
+              purchaseAction: null,
+              release: null,
+              stale: true,
+            };
+          }
+          throw new SupplyPersistenceError(
+            sourceExpired
+              ? "Supplier qualification was not valid on the purchase order release date."
+              : quoteExpired
+                ? "Purchase order release occurred after the authorized quote expired."
+                : "The approved quality plan expired before purchase order release.",
+            "conflict",
+          );
         }
         const needBy = isoDate(order.needBy, "Authorized order need-by date");
         if (releaseInput.acknowledgmentDueOn > needBy) {
@@ -5021,6 +5096,7 @@ export async function resolveSupplierOrderException(args: {
           state: "REQUIRED",
           purchaseActionId: purchaseAction.id,
           supplierExceptionHash: resolutionInput.exceptionHash,
+          reasonCode: "SUPPLIER_REJECTED",
           reason: resolutionInput.note,
           recordedByUserId: accessContext.userId,
           recordedAt: now.toISOString(),
@@ -5130,13 +5206,28 @@ export async function prepareRevisedPurchaseOrder(args: {
     const originalOrder = record(actionInput.order);
     const originalCommercial = record(actionInput.commercial);
     const procurementApproval = record(actionInput.procurementApproval);
-    requireCurrentSupplierQualification(
-      actionInput.sourceEvidenceReview,
-      "The supplier qualification expired. Requalify the supplier before preparing a revised order.",
-    );
     const qualityPlan = record(actionInput.qualityPlan);
-    if (typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc()) {
-      throw new SupplyPersistenceError("The approved quality plan expired. Record a current quality plan before preparing a revised order.", "conflict");
+    const sourceExpired = !currentSupplierQualification(actionInput.sourceEvidenceReview);
+    const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
+    if (sourceExpired || qualityExpired) {
+      const updatedCase = await returnStaleReplacementToSourcing({
+        tx,
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+        procurementCaseId: procurementCase.id,
+        actorUserId: accessContext.userId,
+        revisionContext: {
+          replacesPurchaseActionId: purchaseAction.id,
+          supplierExceptionHash: exceptionHash,
+        },
+        staleGate: sourceExpired ? "SOURCE_EVIDENCE" : "QUALITY_PLAN",
+      });
+      return {
+        procurementCase: { ...updatedCase, purchaseDraft: null, purchaseAction: purchaseActionView(purchaseAction) },
+        purchaseDraft: null,
+        purchaseAction: purchaseActionView(purchaseAction),
+        stale: true,
+      };
     }
     const approval = await tx.supplyApproval.findFirst({
       where: {

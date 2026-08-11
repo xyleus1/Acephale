@@ -2573,3 +2573,25 @@ Use this log for durable product and engineering decisions. Do not put every imp
   supplier shortlist.
 - Boundary: Revised-order authorization and release do not create payment,
   inventory, booking, customs, or Logistics state.
+
+### 2026-08-11 - Expired replacement evidence returns the buyer to sourcing
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A replacement order can outlive the supplier qualification or
+  quality-plan evidence copied into its authorization scope. Merely rejecting
+  the next action leaves a dead replacement draft and no valid operator path.
+- Decision: If supplier qualification or the quality plan expires before a
+  revised order is authorized or released, cancel the replacement draft,
+  purchase action, pending approvals, and unsent communication tasks. Preserve
+  the original supplier-facing order and record a durable return-to-sourcing
+  reason against the supplier exception and procurement case.
+- Connected delivery: Revalidate before the Gmail provider call. Stale evidence
+  must return the buyer to sourcing without sending a message. Uncertain or
+  in-flight provider delivery must be reconciled before recovery can proceed.
+- Commercial expiry: Before authorization, expired quote, delivery, or approval
+  inputs keep the replacement draft recoverable in place. After authorization,
+  expiry at release returns the buyer to sourcing because the approved action
+  is immutable and cannot absorb refreshed commercial terms.
+- Boundary: Recovery does not supersede the original order, contact another
+  supplier, create a purchase order, commit spend, or open Logistics.

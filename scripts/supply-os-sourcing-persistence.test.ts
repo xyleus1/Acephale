@@ -48,6 +48,7 @@ import {
 } from "../src/lib/supply-os/purchase-order-communication-persistence";
 import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
 import { captureConnectedPurchaseOrderReplies, captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
+import { returnStaleReplacementToSourcing } from "../src/lib/supply-os/purchase-order-revision";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -2553,6 +2554,479 @@ async function main() {
     const oldActionWhileDrafting = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
     assert.equal(oldActionWhileDrafting.status, "RUNNING", "preparing a replacement must not supersede the released order before approval");
     assert.equal((oldActionWhileDrafting.result as { release: { releaseHash: string } }).release.releaseHash, deliveredOrderResult.releaseHash, "replacement preparation must preserve the old release evidence");
+
+    const cloneRevisionDraftFixture = async (label: string, targetDate: string, qualificationValidUntil?: string) => {
+      const templateCase = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedCase.id } });
+      const templateReleasedDraft = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedDraft.id } });
+      const templateReleasedAction = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
+      const templateRevisionDraft = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: revisedDraft!.id } });
+      const templateRevisionResult = JSON.parse(JSON.stringify(templateRevisionDraft.result)) as Record<string, unknown>;
+      const templateRevisionContext = templateRevisionResult.revisionContext as Record<string, unknown>;
+      const templateEvidence = await prisma.supplyEvidence.findUniqueOrThrow({
+        where: { id: String(templateRevisionContext.supplierExceptionEvidenceId) },
+      });
+      const templateProcurementApproval = await prisma.supplyApproval.findUniqueOrThrow({
+        where: { id: clonedProcurementApproval.id },
+        include: { executionTask: true },
+      });
+
+      const fixtureCase = await prisma.supplyExecutionTask.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          createdByUserId: context.userId,
+          taskKey: `procurement:stale-revision:${label}:${suffix}`,
+          taskType: "PROCUREMENT_CASE",
+          capabilityKey: templateCase.capabilityKey,
+          status: "PLANNED",
+          requiresApproval: false,
+          input: templateCase.input,
+          inputHash: templateCase.inputHash,
+        },
+      });
+      const templateProcurementApprovalInput = JSON.parse(JSON.stringify(templateProcurementApproval.executionTask!.input)) as {
+        qualityPlan: Record<string, unknown>;
+        sourceEvidenceReview: Record<string, unknown>;
+        [key: string]: unknown;
+      };
+      const procurementApprovalInput = {
+        ...templateProcurementApprovalInput,
+        procurementCaseId: fixtureCase.id,
+        qualityPlan: {
+          ...templateProcurementApprovalInput.qualityPlan,
+          targetDate,
+        },
+        sourceEvidenceReview: {
+          ...templateProcurementApprovalInput.sourceEvidenceReview,
+          validUntil: qualificationValidUntil ?? templateProcurementApprovalInput.sourceEvidenceReview.validUntil,
+        },
+      };
+      const procurementApprovalScopeHash = jsonDigest(procurementApprovalInput);
+      const fixtureProcurementApprovalTask = await prisma.supplyExecutionTask.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          createdByUserId: context.userId,
+          parentTaskId: fixtureCase.id,
+          taskKey: `procurement-approval:stale-revision:${label}:${suffix}`,
+          taskType: "PROCUREMENT_APPROVAL",
+          capabilityKey: "review.procurement_selection",
+          status: "PLANNED",
+          requiresApproval: true,
+          input: procurementApprovalInput,
+          inputHash: procurementApprovalScopeHash,
+          result: { state: "APPROVED" },
+          resultHash: jsonDigest({ state: "APPROVED" }),
+        },
+      });
+      const pendingFixtureProcurementApproval = await prisma.supplyApproval.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          executionTaskId: fixtureProcurementApprovalTask.id,
+          requestedByUserId: context.userId,
+          status: "PENDING",
+          requiredRole: "MANAGER",
+          scopeHash: procurementApprovalScopeHash,
+          requestReason: "Stale revised-order recovery fixture.",
+          idempotencyKey: `procurement-approval-stale-revision:${label}:${suffix}`,
+          requestedAt: new Date(),
+        },
+      });
+      const fixtureProcurementApproval = await prisma.supplyApproval.update({
+        where: { id: pendingFixtureProcurementApproval.id },
+        data: {
+          status: "APPROVED",
+          decidedByUserId: managerContext.userId,
+          decisionNote: "The original sourcing scope was approved before its freshness gate elapsed.",
+          decidedAt: new Date(),
+        },
+      });
+      await prisma.supplyExecutionTask.update({ where: { id: fixtureProcurementApprovalTask.id }, data: { status: "READY" } });
+      await prisma.supplyExecutionTask.update({ where: { id: fixtureProcurementApprovalTask.id }, data: { status: "RUNNING", startedAt: new Date() } });
+      await prisma.supplyExecutionTask.update({ where: { id: fixtureProcurementApprovalTask.id }, data: { status: "SUCCEEDED", completedAt: new Date() } });
+      const fixtureReleasedDraft = await prisma.supplyExecutionTask.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          createdByUserId: context.userId,
+          parentTaskId: fixtureCase.id,
+          taskKey: `purchase-order-draft:stale-revision:${label}:${suffix}`,
+          taskType: "PURCHASE_ORDER_DRAFT",
+          capabilityKey: "draft.purchase_order",
+          status: "PLANNED",
+          requiresApproval: false,
+          input: templateReleasedDraft.input,
+          inputHash: templateReleasedDraft.inputHash,
+          result: templateReleasedDraft.result ?? undefined,
+          resultHash: templateReleasedDraft.resultHash,
+        },
+      });
+      await prisma.supplyExecutionTask.update({ where: { id: fixtureReleasedDraft.id }, data: { status: "READY" } });
+      await prisma.supplyExecutionTask.update({ where: { id: fixtureReleasedDraft.id }, data: { status: "RUNNING", startedAt: new Date() } });
+      const fixtureReleasedAction = await prisma.supplyExecutionTask.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          createdByUserId: context.userId,
+          parentTaskId: fixtureReleasedDraft.id,
+          taskKey: `purchase-order-action:stale-revision:${label}:${suffix}`,
+          taskType: "PURCHASE_ORDER_ACTION",
+          capabilityKey: "authorize.purchase_order",
+          status: "PLANNED",
+          requiresApproval: true,
+          input: templateReleasedAction.input,
+          inputHash: templateReleasedAction.inputHash,
+        },
+      });
+      const pendingFixtureActionApproval = await prisma.supplyApproval.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          executionTaskId: fixtureReleasedAction.id,
+          requestedByUserId: context.userId,
+          status: "PENDING",
+          requiredRole: "ADMIN",
+          scopeHash: fixtureReleasedAction.inputHash,
+          requestReason: "Stale revised-order released-action fixture.",
+          requestedAt: new Date(),
+          idempotencyKey: `purchase-action-stale-revision:${label}:${suffix}`,
+        },
+      });
+      await prisma.supplyApproval.update({
+        where: { id: pendingFixtureActionApproval.id },
+        data: {
+          status: "APPROVED",
+          decidedByUserId: secondAdminContext.userId,
+          decisionNote: "Fixture order was authorized before release.",
+          decidedAt: new Date(),
+        },
+      });
+      await prisma.supplyExecutionTask.update({ where: { id: fixtureReleasedAction.id }, data: { status: "READY" } });
+      await prisma.supplyExecutionTask.update({ where: { id: fixtureReleasedAction.id }, data: { status: "RUNNING", startedAt: new Date() } });
+      const fixtureEvidence = await prisma.supplyEvidence.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          executionTaskId: fixtureReleasedAction.id,
+          createdByUserId: context.userId,
+          evidenceKey: `supplier-order-exception:stale-revision:${label}:${suffix}`,
+          kind: templateEvidence.kind,
+          sourceType: templateEvidence.sourceType,
+          sourceUri: templateEvidence.sourceUri,
+          sourceRecordId: templateEvidence.sourceRecordId,
+          sourceVersion: templateEvidence.sourceVersion,
+          title: templateEvidence.title,
+          excerpt: templateEvidence.excerpt,
+          payload: templateEvidence.payload ?? undefined,
+          contentHash: templateEvidence.contentHash,
+          confidence: templateEvidence.confidence,
+          observedAt: templateEvidence.observedAt,
+          capturedAt: templateEvidence.capturedAt,
+        },
+      });
+      const commercial = {
+        ...(templateRevisionResult.commercial as Record<string, unknown>),
+        quoteEvidenceId: fixtureEvidence.id,
+      };
+      const replacementScopeHash = jsonDigest({ order: templateRevisionResult.order, commercial });
+      const revisionContext = {
+        ...templateRevisionContext,
+        replacesPurchaseActionId: fixtureReleasedAction.id,
+        replacesPurchaseDraftId: fixtureReleasedDraft.id,
+        supplierExceptionEvidenceId: fixtureEvidence.id,
+        replacementScopeHash,
+      };
+      const fixtureRevisionResult = {
+        ...templateRevisionResult,
+        commercial,
+        approvedProcurementScope: { approvalId: fixtureProcurementApproval.id, scopeHash: fixtureProcurementApproval.scopeHash },
+        revisionContext,
+      };
+      const fixtureRevisionInput = {
+        procurementCaseId: fixtureCase.id,
+        procurementApprovalId: fixtureProcurementApproval.id,
+        procurementApprovalScopeHash: fixtureProcurementApproval.scopeHash,
+        revisionContext,
+      };
+      const fixtureRevisionDraft = await prisma.supplyExecutionTask.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: templateCase.workspaceId,
+          createdByUserId: context.userId,
+          parentTaskId: fixtureCase.id,
+          taskKey: `purchase-revision:stale-revision:${label}:${suffix}`,
+          taskType: "PURCHASE_ORDER_DRAFT",
+          capabilityKey: "draft.purchase_order",
+          status: "PLANNED",
+          requiresApproval: false,
+          input: fixtureRevisionInput,
+          inputHash: jsonDigest(fixtureRevisionInput),
+          result: fixtureRevisionResult,
+          resultHash: jsonDigest(fixtureRevisionResult),
+        },
+      });
+      const fixtureReleasedResult = JSON.parse(JSON.stringify(templateReleasedAction.result)) as {
+        supplierOrderExceptions: Array<Record<string, unknown>>;
+        [key: string]: unknown;
+      };
+      fixtureReleasedResult.supplierOrderExceptions = fixtureReleasedResult.supplierOrderExceptions.map((entry) => entry.exceptionHash === termsException.exception.exceptionHash ? {
+        ...entry,
+        evidenceId: fixtureEvidence.id,
+        status: "REVISION_DRAFTED",
+        replacementDraft: {
+          ...((entry.replacementDraft as Record<string, unknown>) ?? {}),
+          taskId: fixtureRevisionDraft.id,
+          replacementScopeHash,
+        },
+      } : entry);
+      await prisma.supplyExecutionTask.update({
+        where: { id: fixtureReleasedAction.id },
+        data: { result: fixtureReleasedResult, resultHash: jsonDigest(fixtureReleasedResult) },
+      });
+      const fixtureCaseResult = JSON.parse(JSON.stringify(templateCase.result)) as Record<string, unknown>;
+      fixtureCaseResult.approval = {
+        id: fixtureProcurementApproval.id,
+        taskId: fixtureProcurementApprovalTask.id,
+        scopeHash: fixtureProcurementApproval.scopeHash,
+        status: "APPROVED",
+        requestedAt: fixtureProcurementApproval.requestedAt.toISOString(),
+        decidedAt: fixtureProcurementApproval.decidedAt!.toISOString(),
+        decisionNote: fixtureProcurementApproval.decisionNote,
+      };
+      fixtureCaseResult.purchasePreparation = {
+        draftTaskId: fixtureRevisionDraft.id,
+        state: "DRAFT",
+        revision: templateRevisionResult.revision,
+        orderHash: templateRevisionResult.orderHash,
+      };
+      fixtureCaseResult.purchaseRevision = {
+        state: "DRAFT",
+        replacesPurchaseActionId: fixtureReleasedAction.id,
+        supersededReleaseHash: revisionContext.supersededReleaseHash,
+        supplierExceptionHash: revisionContext.supplierExceptionHash,
+        supplierExceptionEvidenceId: fixtureEvidence.id,
+        replacementDraftTaskId: fixtureRevisionDraft.id,
+        replacementDraftRevision: templateRevisionResult.revision,
+        replacementScopeHash,
+        updatedAt: new Date().toISOString(),
+      };
+      delete fixtureCaseResult.purchaseAuthorization;
+      delete fixtureCaseResult.sourcingReturn;
+      await prisma.supplyExecutionTask.update({
+        where: { id: fixtureCase.id },
+        data: { result: fixtureCaseResult, resultHash: jsonDigest(fixtureCaseResult) },
+      });
+      return {
+        procurementCase: fixtureCase,
+        releasedDraft: fixtureReleasedDraft,
+        releasedAction: fixtureReleasedAction,
+        replacementDraft: fixtureRevisionDraft,
+        revisionContext,
+      };
+    };
+
+    const staleRequestFixture = await cloneRevisionDraftFixture("request", futureDate(-1));
+    const staleRequestResult = await requestPurchaseActionApproval({
+      context,
+      caseId: staleRequestFixture.procurementCase.id,
+      input: {
+        expectedDraftTaskId: staleRequestFixture.replacementDraft.id,
+        expectedDraftResultHash: staleRequestFixture.replacementDraft.resultHash!,
+        expectedDraftRevision: 1,
+        reason: "This request must return to sourcing because its quality plan is stale.",
+      },
+    });
+    assert.equal(staleRequestResult.stale, true);
+    assert.equal(staleRequestResult.purchaseDraft, null);
+    assert.equal((staleRequestResult.procurementCase.result as { sourcingReturn: { reasonCode: string }; purchaseRevision: { state: string; staleGate: string } }).sourcingReturn.reasonCode, "QUALITY_PLAN_EXPIRED");
+    assert.equal((staleRequestResult.procurementCase.result as { purchaseRevision: { state: string } }).purchaseRevision.state, "RETURNED_TO_SOURCING");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleRequestFixture.releasedAction.id } })).status, "RUNNING", "stale replacement recovery must preserve the supplier-facing order");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleRequestFixture.replacementDraft.id } })).status, "CANCELLED", "stale replacement recovery must cancel the unusable replacement draft");
+
+    const staleSourceFixture = await cloneRevisionDraftFixture("source-request", qualityTargetDate, futureDate(-1));
+    const staleSourceResult = await requestPurchaseActionApproval({
+      context,
+      caseId: staleSourceFixture.procurementCase.id,
+      input: {
+        expectedDraftTaskId: staleSourceFixture.replacementDraft.id,
+        expectedDraftResultHash: staleSourceFixture.replacementDraft.resultHash!,
+        expectedDraftRevision: 1,
+        reason: "This request must return to sourcing because supplier qualification expired.",
+      },
+    });
+    assert.equal(staleSourceResult.stale, true);
+    assert.equal((staleSourceResult.procurementCase.result as { sourcingReturn: { reasonCode: string } }).sourcingReturn.reasonCode, "SOURCE_EVIDENCE_EXPIRED");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleSourceFixture.releasedAction.id } })).status, "RUNNING");
+
+    const staleDecisionFixture = await cloneRevisionDraftFixture("decision", qualityTargetDate);
+    const staleDecisionRequest = await requestPurchaseActionApproval({
+      context,
+      caseId: staleDecisionFixture.procurementCase.id,
+      input: {
+        expectedDraftTaskId: staleDecisionFixture.replacementDraft.id,
+        expectedDraftResultHash: staleDecisionFixture.replacementDraft.resultHash!,
+        expectedDraftRevision: 1,
+        reason: "Prepare a pending replacement action for stale-scope cancellation coverage.",
+      },
+    });
+    const staleEmailDraftInput = { purchaseActionId: staleDecisionRequest.purchaseAction!.id, fixture: "stale-retry" };
+    const staleEmailDraft = await prisma.supplyExecutionTask.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: staleDecisionFixture.procurementCase.workspaceId,
+        createdByUserId: context.userId,
+        parentTaskId: staleDecisionFixture.replacementDraft.id,
+        taskKey: `purchase-order-email-draft:stale-revision:${suffix}`,
+        taskType: "PURCHASE_ORDER_EMAIL_DRAFT",
+        capabilityKey: "contact.supplier_purchase_order_email",
+        status: "PLANNED",
+        requiresApproval: false,
+        input: staleEmailDraftInput,
+        inputHash: jsonDigest(staleEmailDraftInput),
+      },
+    });
+    await prisma.supplyExecutionTask.update({ where: { id: staleEmailDraft.id }, data: { status: "READY" } });
+    await prisma.supplyExecutionTask.update({ where: { id: staleEmailDraft.id }, data: { status: "RUNNING", startedAt: new Date() } });
+    const staleEmailActionInput = { purchaseActionId: staleDecisionRequest.purchaseAction!.id, draftId: staleEmailDraft.id, fixture: "stale-retry" };
+    const staleEmailAction = await prisma.supplyExecutionTask.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: staleDecisionFixture.procurementCase.workspaceId,
+        createdByUserId: context.userId,
+        parentTaskId: staleDecisionFixture.replacementDraft.id,
+        taskKey: `purchase-order-email-action:stale-revision:${suffix}`,
+        taskType: "PURCHASE_ORDER_EMAIL_ACTION",
+        capabilityKey: "contact.supplier_purchase_order_email",
+        status: "PLANNED",
+        requiresApproval: true,
+        input: staleEmailActionInput,
+        inputHash: jsonDigest(staleEmailActionInput),
+      },
+    });
+    const pendingStaleEmailApproval = await prisma.supplyApproval.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: staleDecisionFixture.procurementCase.workspaceId,
+        executionTaskId: staleEmailAction.id,
+        requestedByUserId: context.userId,
+        status: "PENDING",
+        requiredRole: "MANAGER",
+        scopeHash: staleEmailAction.inputHash,
+        requestReason: "Stale connected-order retry fixture.",
+        idempotencyKey: `purchase-order-email-stale-revision:${suffix}`,
+      },
+    });
+    await prisma.supplyApproval.update({
+      where: { id: pendingStaleEmailApproval.id },
+      data: { status: "APPROVED", decidedByUserId: managerContext.userId, decidedAt: new Date(), decisionNote: "Fixture email scope approved." },
+    });
+    await prisma.supplyExecutionTask.update({ where: { id: staleEmailAction.id }, data: { status: "READY" } });
+    await prisma.supplyExecutionTask.update({
+      where: { id: staleEmailAction.id },
+      data: { status: "RUNNING", startedAt: new Date(), result: { state: "RETRY_READY", attempt: 1 }, resultHash: jsonDigest({ state: "RETRY_READY", attempt: 1 }) },
+    });
+    const staleDecisionResult = await prisma.$transaction((tx) => returnStaleReplacementToSourcing({
+      tx,
+      officeId: context.officeId,
+      workspaceId: staleDecisionFixture.procurementCase.workspaceId,
+      procurementCaseId: staleDecisionFixture.procurementCase.id,
+      actorUserId: secondAdminContext.userId,
+      revisionContext: staleDecisionFixture.revisionContext,
+      replacementDraftId: staleDecisionFixture.replacementDraft.id,
+      replacementActionId: staleDecisionRequest.purchaseAction!.id,
+      staleGate: "QUALITY_PLAN",
+    }));
+    assert.equal((staleDecisionResult.result as { sourcingReturn: { reasonCode: string } }).sourcingReturn.reasonCode, "QUALITY_PLAN_EXPIRED");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleDecisionRequest.purchaseAction!.id } })).status, "CANCELLED");
+    assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: staleDecisionRequest.approval!.id } })).status, "EXPIRED");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleDecisionFixture.releasedAction.id } })).status, "RUNNING");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleEmailDraft.id } })).status, "CANCELLED");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleEmailAction.id } })).status, "CANCELLED");
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: staleDecisionFixture.procurementCase.id, eventType: "REVISED_PURCHASE_RETURNED_TO_SOURCING" } }), 1);
+    await prisma.$transaction((tx) => returnStaleReplacementToSourcing({
+      tx,
+      officeId: context.officeId,
+      workspaceId: staleDecisionFixture.procurementCase.workspaceId,
+      procurementCaseId: staleDecisionFixture.procurementCase.id,
+      actorUserId: secondAdminContext.userId,
+      revisionContext: staleDecisionFixture.revisionContext,
+      replacementDraftId: staleDecisionFixture.replacementDraft.id,
+      replacementActionId: staleDecisionRequest.purchaseAction!.id,
+      staleGate: "QUALITY_PLAN",
+    }));
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: staleDecisionFixture.procurementCase.id, eventType: "REVISED_PURCHASE_RETURNED_TO_SOURCING" } }), 1, "stale recovery retries must not append fake history");
+
+    const staleSendFixture = await cloneRevisionDraftFixture("connected-send", futureDate(0));
+    const staleSendApprovalRequest = await requestPurchaseActionApproval({
+      context,
+      caseId: staleSendFixture.procurementCase.id,
+      input: {
+        expectedDraftTaskId: staleSendFixture.replacementDraft.id,
+        expectedDraftResultHash: staleSendFixture.replacementDraft.resultHash!,
+        expectedDraftRevision: 1,
+        reason: "Authorize the replacement before its quality checkpoint expires.",
+      },
+    });
+    const staleSendAuthorized = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: staleSendApprovalRequest.approval!.id,
+      input: { decision: "APPROVE", note: "The replacement scope is current today." },
+    });
+    const staleSendEmailDraft = await savePurchaseOrderEmailDraft({
+      context,
+      purchaseActionId: staleSendAuthorized.purchaseAction!.id,
+      input: {
+        expectedActionScopeHash: staleSendAuthorized.purchaseAction!.inputHash,
+        expectedRevision: 0,
+        senderAccountId: orderSenderAccount.id,
+        recipient: "orders@example.com",
+        subject: "Replacement order freshness verification",
+        body: "Please accept the exact replacement order attached to this approved supplier exception.",
+        purchaseOrderReference: `PO-STALE-${suffix}`,
+        acknowledgmentDueOn: futureDate(2),
+        note: "This fixture must fail closed if the approval evidence expires before delivery.",
+      },
+    });
+    const staleSendEmailApprovalRequest = await requestPurchaseOrderEmailApproval({
+      context,
+      draftId: staleSendEmailDraft.id,
+      input: { expectedResultHash: staleSendEmailDraft.resultHash, reason: "Approve the exact connected replacement message." },
+    });
+    const staleSendEmailAuthorized = await decidePurchaseOrderEmailApproval({
+      context: managerContext,
+      approvalId: staleSendEmailApprovalRequest.approval.id,
+      input: { decision: "APPROVE", note: "The exact message is approved while its order scope is current." },
+    });
+    let staleProviderCalls = 0;
+    const staleProvider: SupplierEmailProvider = {
+      send: async () => {
+        staleProviderCalls += 1;
+        return { state: "SENT", provider: "GMAIL", providerMessageId: "must-not-send", providerThreadId: "must-not-send", sourceUrl: "https://mail.google.com/" };
+      },
+    };
+    const OriginalDate = globalThis.Date;
+    const nextDay = OriginalDate.now() + 86_400_000;
+    class NextDayDate extends OriginalDate {
+      constructor(value?: string | number | Date) {
+        super(value === undefined ? nextDay : value);
+      }
+      static now() {
+        return nextDay;
+      }
+    }
+    globalThis.Date = NextDayDate as unknown as DateConstructor;
+    let staleSendResult;
+    try {
+      staleSendResult = await sendPurchaseOrderEmailAction({ context, actionId: staleSendEmailAuthorized.action.id, provider: staleProvider });
+    } finally {
+      globalThis.Date = OriginalDate;
+    }
+    assert.equal(staleProviderCalls, 0, "expired replacement evidence must block the provider call");
+    assert.equal(staleSendResult.status, "CANCELLED");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleSendFixture.releasedAction.id } })).status, "RUNNING");
+    assert.equal(((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: staleSendFixture.procurementCase.id } })).result as { sourcingReturn: { reasonCode: string } }).sourcingReturn.reasonCode, "QUALITY_PLAN_EXPIRED");
+
     const replacementApprovalRequest = await requestPurchaseActionApproval({
       context,
       caseId: clonedCase.id,
