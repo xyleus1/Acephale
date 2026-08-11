@@ -375,6 +375,20 @@ clear boundaries.
   `RELEASED` queue state. Identical or concurrent retries converge on the same
   evidence record and event. A changed release cannot overwrite an order that
   was already issued externally.
+- When the acknowledgment due date arrives, an operator may prepare a revisioned
+  `PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT`. The immutable follow-up action pins the
+  active purchase action, release hash, remaining quantity, Gmail account,
+  supplier recipient, message, and draft revision. Manager approval binds to
+  that exact input before delivery.
+- A follow-up threads against the connected purchase-order message or the latest
+  sent follow-up when provider lineage exists. Delivery uses a stable RFC
+  message ID and the same fail-closed unknown-delivery reconciliation used by
+  other supplier communication. Definitive delivery appends immutable
+  `PURCHASE_ORDER_FOLLOWUP` evidence and released-order history.
+- A supplier acknowledgment or order exception cancels safe unsent follow-up
+  work. It cannot erase an in-flight or uncertain provider call. Captured replies
+  remain evidence for manual structured review and never infer accepted
+  quantity, delivery, or changed commercial terms.
 - An admin or manager may then record externally received supplier
   acknowledgment only against that release hash. Every entry stores its
   acknowledgment date, supplier reference, accepted quantity, confirmed

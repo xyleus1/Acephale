@@ -290,7 +290,7 @@ function workstreamState(procurementCase: SavedProcurementCase) {
   const acknowledgmentOverdue = purchaseRelease
     && purchaseRelease.release
     && purchaseRelease.state !== "ACKNOWLEDGED"
-    && purchaseRelease.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10);
+    && purchaseRelease.release.acknowledgmentDueOn <= new Date().toISOString().slice(0, 10);
   if (procurementCase.result?.sourcingReturn?.state === "REQUIRED") {
     return procurementCase.result.sourcingReturn.reasonCode === "SUPPLIER_REJECTED"
       ? "Supplier rejected, choose another source"
@@ -300,7 +300,12 @@ function workstreamState(procurementCase: SavedProcurementCase) {
   if (procurementCase.result?.purchaseRevision?.state === "REJECTED") return "Revised order needs changes";
   if (procurementCase.result?.purchaseRevision?.state === "AUTHORIZED") return "Revised order authorized";
   if (procurementCase.result?.purchaseRevision?.state === "DRAFT") return "Revised order draft";
+  if (["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"].includes(procurementCase.purchaseOrderFollowUpAction?.result?.state ?? "")) return "Follow-up delivery unresolved";
   if (procurementCase.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
+  if (procurementCase.purchaseOrderFollowUpAction?.result?.state === "SENT") return "Supplier follow-up sent";
+  if (procurementCase.purchaseOrderFollowUpAction?.approval?.status === "PENDING") return "Follow-up approval pending";
+  if (procurementCase.purchaseOrderFollowUpAction?.approval?.status === "APPROVED") return "Follow-up approved";
+  if (procurementCase.purchaseOrderFollowUpDraft) return "Follow-up draft";
   if (acknowledgmentOverdue) return "Supplier response overdue";
   if (procurementCase.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") return "Partially acknowledged";
   if (procurementCase.result?.purchaseRelease?.state === "RELEASED") return "Order released";
@@ -389,6 +394,7 @@ export function AtlasProcurementWorkspace({
   const intakeControllerRef = useRef<AbortController | null>(null);
   const initialIntakeStartedRef = useRef(false);
   const onRequestUpdateRef = useRef(onRequestUpdate);
+  const followUpHydrationKeyRef = useRef("");
   const [currentCase, setCurrentCase] = useState<SavedProcurementCase | null>(initialCase ?? null);
   const [workstreamCases, setWorkstreamCases] = useState<SavedProcurementCase[]>(
     initialCases?.length ? initialCases : initialCase ? [initialCase] : [],
@@ -478,6 +484,22 @@ export function AtlasProcurementWorkspace({
   const [purchaseOrderEmailApprovalReason, setPurchaseOrderEmailApprovalReason] = useState("The exact authorized purchase order and supplier message are ready for release review.");
   const [purchaseOrderEmailDecisionNote, setPurchaseOrderEmailDecisionNote] = useState("");
   const [purchaseOrderEmailRecoveryNote, setPurchaseOrderEmailRecoveryNote] = useState("");
+  const [purchaseOrderFollowUpForm, setPurchaseOrderFollowUpForm] = useState(() => ({
+    senderAccountId: initialCase?.purchaseOrderFollowUpDraft?.result?.message.senderAccountId
+      ?? initialCase?.purchaseOrderEmailDraft?.result?.message.senderAccountId
+      ?? senderAccounts[0]?.id
+      ?? "",
+    recipient: initialCase?.purchaseOrderFollowUpDraft?.result?.message.recipient
+      ?? initialCase?.purchaseOrderEmailDraft?.result?.message.recipient
+      ?? "",
+    subject: initialCase?.purchaseOrderFollowUpDraft?.result?.message.subject
+      ?? `Follow-up: ${initialCase?.result?.purchaseRelease?.release?.purchaseOrderReference || initialCase?.purchaseDraft?.result?.order.buyerReference || item?.name || requestText}`,
+    body: initialCase?.purchaseOrderFollowUpDraft?.result?.message.body ?? "",
+    note: initialCase?.purchaseOrderFollowUpDraft?.result?.followUp.note ?? "",
+  }));
+  const [purchaseOrderFollowUpApprovalReason, setPurchaseOrderFollowUpApprovalReason] = useState("The released order is awaiting supplier acknowledgment and this exact follow-up is ready for review.");
+  const [purchaseOrderFollowUpDecisionNote, setPurchaseOrderFollowUpDecisionNote] = useState("");
+  const [purchaseOrderFollowUpRecoveryNote, setPurchaseOrderFollowUpRecoveryNote] = useState("");
   const [selectedAcknowledgmentReplyEvidenceId, setSelectedAcknowledgmentReplyEvidenceId] = useState<string | null>(null);
   const [purchaseReleaseForm, setPurchaseReleaseForm] = useState(() => ({
     channel: "EMAIL" as "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER",
@@ -879,6 +901,52 @@ export function AtlasProcurementWorkspace({
   }, [currentCase?.purchaseAction?.id, currentCase?.purchaseAction?.inputHash, currentCase?.purchaseOrderEmailDraft?.id, senderAccounts]);
 
   useEffect(() => {
+    const release = currentCase?.result?.purchaseRelease;
+    const releaseRecord = release?.release;
+    if (!currentCase || !release || !releaseRecord || release.state === "ACKNOWLEDGED") return;
+    const stored = currentCase.purchaseOrderFollowUpDraft?.result;
+    const hydrationKey = [
+      currentCase.id,
+      releaseRecord.releaseHash,
+      currentCase.purchaseOrderFollowUpDraft?.id ?? "new",
+      currentCase.purchaseOrderFollowUpDraft?.resultHash ?? "",
+    ].join(":");
+    if (followUpHydrationKeyRef.current === hydrationKey) return;
+    followUpHydrationKeyRef.current = hydrationKey;
+    if (stored) {
+      setPurchaseOrderFollowUpForm({
+        senderAccountId: stored.message.senderAccountId,
+        recipient: stored.message.recipient,
+        subject: stored.message.subject,
+        body: stored.message.body,
+        note: stored.followUp.note ?? "",
+      });
+      return;
+    }
+    const supplier = currentCase.result?.selectedOption.name ?? "supplier";
+    const remaining = release.remainingQuantity;
+    const unit = release.unitOfMeasure;
+    const reference = releaseRecord.purchaseOrderReference;
+    setPurchaseOrderFollowUpForm((current) => ({
+      ...current,
+      senderAccountId: current.senderAccountId || senderAccounts[0]?.id || "",
+      recipient: currentCase.purchaseOrderEmailDraft?.result?.message.recipient || "",
+      subject: `Follow-up: purchase order ${reference}`,
+      body: [
+        "Hello,",
+        "",
+        `Please confirm the remaining ${remaining} ${unit} on purchase order ${reference}.`,
+        `Acknowledgment was due ${releaseRecord.acknowledgmentDueOn}.`,
+        "Please provide your supplier order reference and confirmed delivery date.",
+        "",
+        "Thank you,",
+        "Derya Supply Operations",
+      ].join("\n"),
+      note: `Acknowledgment follow-up for ${supplier}.`,
+    }));
+  }, [currentCase, senderAccounts]);
+
+  useEffect(() => {
     if (phase !== "researching" || (!item && !requestDraft)) return;
     const controller = new AbortController();
     setResearchState("running");
@@ -1043,6 +1111,12 @@ export function AtlasProcurementWorkspace({
         purchaseOrderEmailAction: payload.procurementCase.purchaseOrderEmailAction !== undefined
           ? payload.procurementCase.purchaseOrderEmailAction
           : currentCase.purchaseOrderEmailAction ?? null,
+        purchaseOrderFollowUpDraft: payload.procurementCase.purchaseOrderFollowUpDraft !== undefined
+          ? payload.procurementCase.purchaseOrderFollowUpDraft
+          : currentCase.purchaseOrderFollowUpDraft ?? null,
+        purchaseOrderFollowUpAction: payload.procurementCase.purchaseOrderFollowUpAction !== undefined
+          ? payload.procurementCase.purchaseOrderFollowUpAction
+          : currentCase.purchaseOrderFollowUpAction ?? null,
       };
       setCurrentCase(nextCase);
       setDirtyDrafts((current) => resolveWorkstreamDraft(current, actionCaseId, resolvedDraftSection));
@@ -1308,6 +1382,48 @@ export function AtlasProcurementWorkspace({
     }, operation === "RESET" ? "purchase-order-email-recovery" : undefined);
   }
 
+  function savePurchaseOrderFollowUp() {
+    const action = currentCase?.purchaseAction;
+    const release = currentCase?.result?.purchaseRelease?.release;
+    if (!action || !release || currentCase?.result?.purchaseRelease?.state === "ACKNOWLEDGED") return;
+    void runCaseAction(`/api/supply-os/purchase-actions/${action.id}/follow-up-email-draft`, {
+      expectedActionScopeHash: action.inputHash,
+      expectedReleaseHash: release.releaseHash,
+      expectedRevision: currentCase.purchaseOrderFollowUpDraft?.status === "SUCCEEDED"
+        ? 0
+        : currentCase.purchaseOrderFollowUpDraft?.result?.revision ?? 0,
+      ...purchaseOrderFollowUpForm,
+      note: purchaseOrderFollowUpForm.note || null,
+    }, "purchase-order-followup-draft");
+  }
+
+  function requestPurchaseOrderFollowUpReview() {
+    const draft = currentCase?.purchaseOrderFollowUpDraft;
+    if (!draft?.resultHash || draft.status === "SUCCEEDED") return;
+    void runCaseAction(`/api/supply-os/purchase-order-follow-up-email-drafts/${draft.id}/approval`, {
+      expectedResultHash: draft.resultHash,
+      reason: purchaseOrderFollowUpApprovalReason,
+    }, "purchase-order-followup-approval");
+  }
+
+  function decidePurchaseOrderFollowUp(decision: "APPROVE" | "REJECT") {
+    const approvalId = currentCase?.purchaseOrderFollowUpAction?.approval?.id;
+    if (!approvalId) return;
+    void runCaseAction(`/api/supply-os/purchase-order-follow-up-email-approvals/${approvalId}/decision`, {
+      decision,
+      note: purchaseOrderFollowUpDecisionNote || null,
+    }, "purchase-order-followup-decision");
+  }
+
+  function runPurchaseOrderFollowUpDelivery(operation: "SEND" | "RECONCILE" | "RESET") {
+    const actionId = currentCase?.purchaseOrderFollowUpAction?.id;
+    if (!actionId) return;
+    void runCaseAction(`/api/supply-os/purchase-order-follow-up-email-actions/${actionId}/delivery`, {
+      operation,
+      ...(operation === "RESET" ? { confirmedNotSent: true, note: purchaseOrderFollowUpRecoveryNote } : {}),
+    }, operation === "RESET" ? "purchase-order-followup-recovery" : undefined);
+  }
+
   function checkConnectedPurchaseOrderReplies() {
     const actionId = currentCase?.purchaseAction?.id;
     if (!actionId) return;
@@ -1433,6 +1549,16 @@ export function AtlasProcurementWorkspace({
     && Boolean(purchaseOrderEmailForm.body.trim())
     && Boolean(purchaseOrderEmailForm.purchaseOrderReference.trim())
     && Boolean(purchaseOrderEmailForm.acknowledgmentDueOn);
+  const acknowledgmentOverdue = Boolean(
+    currentCase?.result?.purchaseRelease?.release
+      && currentCase.result.purchaseRelease.state !== "ACKNOWLEDGED"
+      && currentCase.result.purchaseRelease.release.acknowledgmentDueOn <= new Date().toISOString().slice(0, 10),
+  );
+  const purchaseOrderFollowUpFormComplete = Boolean(purchaseOrderFollowUpForm.senderAccountId)
+    && Boolean(purchaseOrderFollowUpForm.recipient.trim())
+    && Boolean(purchaseOrderFollowUpForm.subject.trim())
+    && Boolean(purchaseOrderFollowUpForm.body.trim());
+  const purchaseOrderFollowUpNeedsRevision = currentCase?.purchaseOrderFollowUpAction?.approval?.status === "REJECTED";
   const acknowledgmentFormComplete = Boolean(acknowledgmentForm.acknowledgedOn)
     && Boolean(acknowledgmentForm.supplierOrderReference.trim())
     && Number(acknowledgmentForm.acceptedQuantity) > 0
@@ -1966,7 +2092,7 @@ export function AtlasProcurementWorkspace({
                           </section>
                         ) : purchaseReleaseResult?.release && canApproveProcurement ? (
                           <section className={styles.purchaseApprovalRequest} data-draft-section="supplier-acknowledgment">
-                            {purchaseReleaseResult.externalSideEffect === "CONNECTED_PROVIDER" ? (
+                            {purchaseReleaseResult.externalSideEffect === "CONNECTED_PROVIDER" || currentCase.purchaseOrderFollowUpAction?.result?.state === "SENT" ? (
                               <>
                                 <p><strong>Connected supplier acknowledgment inbox</strong></p>
                                 <p>Sync the exact Gmail order thread. Replies are durable evidence, but the operator must still confirm quantity, supplier reference, and delivery date.</p>
@@ -1986,6 +2112,59 @@ export function AtlasProcurementWorkspace({
                                   </section>
                                 ))}
                               </>
+                            ) : null}
+                            {acknowledgmentOverdue && !openSupplierExceptions.length && !supplierRevisionRequired && !sourcingReturnRequired ? (
+                              <section className={styles.purchaseApprovalRequest} data-draft-section="purchase-order-followup-draft">
+                                <p><strong>Supplier follow-up</strong></p>
+                                <p>Acknowledgment was due {displayStoredDate(purchaseReleaseResult.release.acknowledgmentDueOn)}. The exact released order and message require approval before Gmail delivery.</p>
+                                {(purchaseReleaseResult.followUps ?? []).map((followUp) => (
+                                  <p key={followUp.followUpHash}>Follow-up {followUp.followUpNumber} sent <time dateTime={followUp.sentAt}>{displayStoredDate(followUp.sentAt.slice(0, 10))}</time>. <a href={evidenceHref(followUp.evidenceId, followUp.sourceUrl)} target="_blank" rel="noreferrer">Open evidence</a></p>
+                                ))}
+                                {senderAccounts.length ? (
+                                  <div className={styles.procurementFormGrid}>
+                                    <label>From<select value={purchaseOrderFollowUpForm.senderAccountId} onChange={(event) => setPurchaseOrderFollowUpForm((current) => ({ ...current, senderAccountId: event.target.value }))}>{senderAccounts.map((account) => <option key={account.id} value={account.id}>{account.email}</option>)}</select></label>
+                                    <label>Supplier email<input type="email" value={purchaseOrderFollowUpForm.recipient} onChange={(event) => setPurchaseOrderFollowUpForm((current) => ({ ...current, recipient: event.target.value }))} placeholder="orders@supplier.com" /></label>
+                                    <label className={styles.procurementWideField}>Subject<input value={purchaseOrderFollowUpForm.subject} onChange={(event) => setPurchaseOrderFollowUpForm((current) => ({ ...current, subject: event.target.value }))} /></label>
+                                    <label className={styles.procurementWideField}>Message<textarea value={purchaseOrderFollowUpForm.body} onChange={(event) => setPurchaseOrderFollowUpForm((current) => ({ ...current, body: event.target.value }))} /></label>
+                                    <label className={styles.procurementWideField}>Internal note<textarea value={purchaseOrderFollowUpForm.note} onChange={(event) => setPurchaseOrderFollowUpForm((current) => ({ ...current, note: event.target.value }))} /></label>
+                                  </div>
+                                ) : <p>No connected Gmail sender is available for this office.</p>}
+                                {senderAccounts.length && (!currentCase.purchaseOrderFollowUpAction || currentCase.purchaseOrderFollowUpAction.result?.state === "SENT" || purchaseOrderFollowUpNeedsRevision) ? (
+                                  <button type="button" disabled={gateActionState === "saving" || !purchaseOrderFollowUpFormComplete} onClick={savePurchaseOrderFollowUp}><Mail size={14} /> {currentCase.purchaseOrderFollowUpAction?.result?.state === "SENT" ? "Prepare another follow-up" : currentCase.purchaseOrderFollowUpDraft ? "Save follow-up revision" : "Save follow-up draft"}</button>
+                                ) : null}
+                                {currentCase.purchaseOrderFollowUpDraft?.result && currentCase.purchaseOrderFollowUpDraft.status !== "SUCCEEDED" && !currentCase.purchaseOrderFollowUpAction ? (
+                                  <>
+                                    <label data-draft-section="purchase-order-followup-approval">Approval reason<textarea value={purchaseOrderFollowUpApprovalReason} onChange={(event) => setPurchaseOrderFollowUpApprovalReason(event.target.value)} /></label>
+                                    <button type="button" disabled={gateActionState === "saving" || !purchaseOrderFollowUpApprovalReason.trim()} onClick={requestPurchaseOrderFollowUpReview}><ShieldCheck size={14} /> Request follow-up approval</button>
+                                  </>
+                                ) : null}
+                                {currentCase.purchaseOrderFollowUpAction?.approval?.status === "PENDING" ? (
+                                  canApproveProcurement ? (
+                                    <>
+                                      <label data-draft-section="purchase-order-followup-decision">Decision note<textarea value={purchaseOrderFollowUpDecisionNote} onChange={(event) => setPurchaseOrderFollowUpDecisionNote(event.target.value)} placeholder="Optional approval or rejection context" /></label>
+                                      <div className={styles.purchaseDecisionActions}>
+                                        <button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseOrderFollowUp("APPROVE")}><Check size={14} /> Approve follow-up</button>
+                                        <button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseOrderFollowUp("REJECT")}><TriangleAlert size={14} /> Reject</button>
+                                      </div>
+                                    </>
+                                  ) : <p>Manager approval is pending for this exact supplier follow-up.</p>
+                                ) : null}
+                                {currentCase.purchaseOrderFollowUpAction?.approval?.status === "APPROVED" && (currentCase.purchaseOrderFollowUpAction.status === "READY" || ["RETRY_READY", "SEND_FAILED"].includes(currentCase.purchaseOrderFollowUpAction.result?.state ?? "")) ? (
+                                  <button type="button" disabled={gateActionState === "saving"} onClick={() => runPurchaseOrderFollowUpDelivery("SEND")}><Send size={14} /> {currentCase.purchaseOrderFollowUpAction.result?.state === "SEND_FAILED" ? "Retry rejected follow-up" : "Send approved follow-up"}</button>
+                                ) : null}
+                                {["SENDING", "DELIVERY_UNKNOWN"].includes(currentCase.purchaseOrderFollowUpAction?.result?.state ?? "") ? (
+                                  <>
+                                    <p>Gmail delivery is unresolved. Sending again is blocked until Derya checks the stable message ID.</p>
+                                    <button type="button" disabled={gateActionState === "saving"} onClick={() => runPurchaseOrderFollowUpDelivery("RECONCILE")}><RefreshCw size={14} /> Check follow-up delivery</button>
+                                  </>
+                                ) : null}
+                                {currentCase.purchaseOrderFollowUpAction?.result?.state === "NOT_FOUND_REVIEW_REQUIRED" ? (
+                                  <>
+                                    <p>Gmail did not find the follow-up. A manager must verify non-delivery before one new attempt is allowed.</p>
+                                    {canApproveProcurement ? <><label data-draft-section="purchase-order-followup-recovery">Recovery note<textarea value={purchaseOrderFollowUpRecoveryNote} onChange={(event) => setPurchaseOrderFollowUpRecoveryNote(event.target.value)} placeholder="Explain how non-delivery was verified." /></label><button type="button" disabled={gateActionState === "saving" || purchaseOrderFollowUpRecoveryNote.trim().length < 10} onClick={() => runPurchaseOrderFollowUpDelivery("RESET")}><RefreshCw size={14} /> Confirm non-delivery and enable retry</button></> : null}
+                                  </>
+                                ) : null}
+                              </section>
                             ) : null}
                             {supplierOrderExceptions.map((entry) => (
                               <section className={styles.purchaseApprovalRequest} key={entry.exceptionHash}>

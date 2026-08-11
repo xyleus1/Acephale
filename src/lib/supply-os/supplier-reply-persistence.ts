@@ -7,6 +7,7 @@ import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence"
 import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
 import { SUPPLIER_EMAIL_ACTION_TASK_TYPE } from "./supplier-communication-persistence";
 import { PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE } from "./purchase-order-communication-persistence";
+import { PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE } from "./purchase-order-followup-persistence";
 
 const QUOTE_CYCLE_TASK_TYPE = "SUPPLIER_QUOTE_CYCLE";
 const PROCUREMENT_CASE_TASK_TYPE = "PROCUREMENT_CASE";
@@ -355,9 +356,8 @@ export async function captureConnectedPurchaseOrderReplies(args: {
   const release = record(purchaseResult.release);
   if (!purchaseAction || !purchaseDraftId || !procurementCaseId
     || !["RELEASED", "PARTIALLY_ACKNOWLEDGED"].includes(String(purchaseResult.state))
-    || release.channel !== "EMAIL"
-    || purchaseResult.externalSideEffect !== "CONNECTED_PROVIDER") {
-    throw new SupplyPersistenceError("A released connected Gmail purchase order was not found.", "conflict");
+    || typeof release.releaseHash !== "string") {
+    throw new SupplyPersistenceError("A released purchase order awaiting supplier acknowledgment was not found.", "conflict");
   }
 
   const candidateActions = await prisma.supplyExecutionTask.findMany({
@@ -365,7 +365,7 @@ export async function captureConnectedPurchaseOrderReplies(args: {
       officeId: accessContext.officeId,
       workspaceId: workspace.id,
       parentTaskId: purchaseDraftId,
-      taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE,
+      taskType: { in: [PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE, PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE] },
       status: "SUCCEEDED",
       externalSystem: "GMAIL",
     },
@@ -381,7 +381,7 @@ export async function captureConnectedPurchaseOrderReplies(args: {
       && result.releaseHash === release.releaseHash
       && result.state === "SENT";
   });
-  if (!emailAction) throw new SupplyPersistenceError("The connected purchase order delivery receipt was not found.", "conflict");
+  if (!emailAction) throw new SupplyPersistenceError("A connected purchase order or follow-up delivery receipt was not found.", "conflict");
 
   const emailInput = record(emailAction.input);
   const emailResult = record(emailAction.result);
@@ -425,13 +425,12 @@ export async function captureConnectedPurchaseOrderReplies(args: {
     const [currentCase, currentPurchaseAction, currentEmailAction] = await Promise.all([
       tx.supplyExecutionTask.findFirst({ where: { id: procurementCaseId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PROCUREMENT_CASE_TASK_TYPE, status: "PLANNED" } }),
       tx.supplyExecutionTask.findFirst({ where: { id: purchaseAction.id, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ACTION_TASK_TYPE, status: "RUNNING" } }),
-      tx.supplyExecutionTask.findFirst({ where: { id: emailAction.id, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE, status: "SUCCEEDED" } }),
+      tx.supplyExecutionTask.findFirst({ where: { id: emailAction.id, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: { in: [PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE, PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE] }, status: "SUCCEEDED" } }),
     ]);
     const currentResult = record(currentPurchaseAction?.result);
     const currentRelease = record(currentResult.release);
     if (!currentCase || !currentPurchaseAction || !currentEmailAction
       || !["RELEASED", "PARTIALLY_ACKNOWLEDGED"].includes(String(currentResult.state))
-      || currentResult.externalSideEffect !== "CONNECTED_PROVIDER"
       || currentRelease.releaseHash !== release.releaseHash
       || record(currentEmailAction.result).releaseHash !== release.releaseHash
       || record(currentEmailAction.result).state !== "SENT") {
@@ -463,6 +462,7 @@ export async function captureConnectedPurchaseOrderReplies(args: {
       const evidencePayload = {
         purchaseActionId: currentPurchaseAction.id,
         purchaseOrderEmailActionId: currentEmailAction.id,
+        purchaseOrderCommunicationActionId: currentEmailAction.id,
         releaseHash: currentRelease.releaseHash,
         localMessageId: email.id,
         providerMessageId: email.gmailMessageId,

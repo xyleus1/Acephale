@@ -2,6 +2,34 @@
 
 ## Latest Update
 
+### Overdue released orders now have a durable supplier follow-up
+
+- The sourcing queue no longer stops at `Supplier response overdue`. An
+  operator can draft a connected-Gmail follow-up against the exact active order
+  release and remaining quantity, obtain manager approval, deliver it, and
+  resume the workstream after navigation or refresh.
+- The message threads against the connected purchase-order email or latest
+  follow-up when provider identifiers exist. Each definitive send persists its
+  Gmail receipt, local email record, connected-provider evidence, and follow-up
+  history on the released order.
+- Timeout and ambiguous provider results block duplicate delivery. The operator
+  must reconcile the stable message ID, document verified non-delivery, and then
+  retry. Identical and concurrent saves or sends converge.
+- Recording an acknowledgment or supplier exception cancels safe unsent
+  follow-up work. It does not hide an in-flight or uncertain send. Connected
+  replies remain evidence that requires manual quantity, delivery, or exception
+  review.
+- No schema, dependency, payment, booking, customs, inventory, or Logistics
+  behavior changed.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npm run test:supply-os-supplier-email-provider`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `git diff --check`
+
 ### Authorized orders now have a durable release checkpoint
 
 - Final purchase authorization no longer jumps directly to supplier

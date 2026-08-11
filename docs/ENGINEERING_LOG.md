@@ -4820,3 +4820,23 @@ Use this file for chronological implementation notes that future agents should s
   expiry, event idempotency, and the full existing sourcing lifecycle.
 - Boundary: No migration, dependency, supplier contact, spend, payment,
   inventory, booking, customs, or Logistics behavior changed.
+
+### 2026-08-11 - Add approval-gated supplier acknowledgment follow-up
+
+- Branch: `supply-os-supplier-followup`, targeting `main`.
+- Task: Turn an overdue released-order warning into a durable connected-Gmail
+  follow-up workflow without changing Logistics.
+- Behavior: Operators can save a revisioned message, request and decide exact
+  message approval, send or reconcile delivery, resume every state from the
+  sourcing queue, and inspect persistent follow-up history and evidence.
+- Safety: Current user, office, workspace, release hash, purchase-action scope,
+  remaining quantity, recipient, due date, Gmail account, approval scope, and
+  provider receipt are revalidated. Stable message identity and serializable
+  retries prevent duplicate supplier contact. A response cancels only safe
+  unsent follow-up work.
+- Verification: Atlas sourcing contract, supplier email provider checks,
+  TypeScript, and disposable PostgreSQL lifecycle coverage for concurrent
+  drafts, approval, unknown delivery, reconciliation, retry, evidence, queue
+  restoration, stale sessions, and cross-office denial.
+- Boundary: No migration, dependency, payment, inventory, booking, customs, or
+  Logistics behavior changed.

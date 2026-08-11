@@ -137,7 +137,11 @@ export function AtlasInventoryWorkspace({
     if (procurementCase?.result?.purchaseRevision?.state === "DRAFT") return "Revised order draft ready";
     if (procurementCase?.result?.purchaseRelease?.revisionRequiredCount) return "New order authorization required";
     if (procurementCase?.result?.purchaseRelease?.openSupplierExceptionCount) return "Supplier order exception review";
+    if (["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"].includes(procurementCase?.purchaseOrderFollowUpAction?.result?.state ?? "")) return "Follow-up delivery unresolved";
     if (procurementCase?.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
+    if (procurementCase?.purchaseOrderFollowUpAction?.result?.state === "SENT") return "Supplier follow-up sent";
+    if (procurementCase?.purchaseOrderFollowUpAction?.approval?.status === "PENDING") return "Follow-up approval pending";
+    if (procurementCase?.purchaseOrderFollowUpDraft) return "Supplier follow-up draft";
     if (procurementCase?.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") {
       const release = procurementCase.result.purchaseRelease;
       return `${release.acknowledgedQuantity} ${release.unitOfMeasure} accepted, ${release.remainingQuantity} open`;
@@ -193,7 +197,12 @@ export function AtlasInventoryWorkspace({
     if (procurementCase?.result?.purchaseRevision?.state === "DRAFT") return "Review revised order draft";
     if (release?.revisionRequiredCount) return "Prepare revised order authorization";
     if (release?.openSupplierExceptionCount) return "Review supplier order exception";
-    if (release?.release && release.state !== "ACKNOWLEDGED" && release.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10)) return "Chase supplier acknowledgment";
+    if (["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"].includes(procurementCase?.purchaseOrderFollowUpAction?.result?.state ?? "")) return "Resolve follow-up delivery";
+    if (procurementCase?.purchaseOrderFollowUpAction?.approval?.status === "PENDING") return "Review follow-up approval";
+    if (procurementCase?.purchaseOrderFollowUpAction?.approval?.status === "APPROVED") return "Send supplier follow-up";
+    if (procurementCase?.purchaseOrderFollowUpDraft && procurementCase.purchaseOrderFollowUpDraft.status !== "SUCCEEDED") return "Review follow-up draft";
+    if (procurementCase?.purchaseOrderFollowUpAction?.result?.state === "SENT") return "Check supplier reply";
+    if (release?.release && release.state !== "ACKNOWLEDGED" && release.release.acknowledgmentDueOn <= new Date().toISOString().slice(0, 10)) return "Chase supplier acknowledgment";
     if (release?.state !== "ACKNOWLEDGED" && release?.unreviewedConnectedReplyCount) return "Review supplier order reply";
     if (procurementCase?.result?.purchaseRelease?.state === "RELEASED") return "Record supplier acknowledgment";
     if (procurementCase?.result?.purchaseRelease) return "Review supplier acknowledgment";

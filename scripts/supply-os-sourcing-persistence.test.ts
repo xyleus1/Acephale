@@ -46,6 +46,14 @@ import {
   savePurchaseOrderEmailDraft,
   sendPurchaseOrderEmailAction,
 } from "../src/lib/supply-os/purchase-order-communication-persistence";
+import {
+  decidePurchaseOrderFollowUpApproval,
+  reconcilePurchaseOrderFollowUpAction,
+  requestPurchaseOrderFollowUpApproval,
+  resetPurchaseOrderFollowUpForRetry,
+  savePurchaseOrderFollowUpDraft,
+  sendPurchaseOrderFollowUpAction,
+} from "../src/lib/supply-os/purchase-order-followup-persistence";
 import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
 import { captureConnectedPurchaseOrderReplies, captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
 import { returnStaleReplacementToSourcing } from "../src/lib/supply-os/purchase-order-revision";
@@ -919,7 +927,7 @@ async function main() {
       subject: "Purchase order ATLAS-VIS-410",
       body: "Please accept the attached authorized purchase order and confirm the delivery date.",
       purchaseOrderReference: "ATLAS-VIS-410",
-      acknowledgmentDueOn: futureDate(3),
+      acknowledgmentDueOn: futureDate(0),
       note: "Connected Gmail order release test.",
     } as const;
     const orderEmailDraft = await savePurchaseOrderEmailDraft({
@@ -1738,7 +1746,7 @@ async function main() {
       expectedScopeHash: releaseAction.purchaseAction.inputHash,
       channel: "EMAIL",
       releasedOn: futureDate(0),
-      acknowledgmentDueOn: futureDate(3),
+      acknowledgmentDueOn: futureDate(0),
       purchaseOrderReference: "PO-ATLAS-001",
       evidenceUrl: "https://example.com/purchase-orders/PO-ATLAS-001",
       note: "Authorized order issued through the buyer mailbox.",
@@ -1865,6 +1873,136 @@ async function main() {
       where: { executionTaskId: releaseAction.purchaseAction.id, eventType: "SUPPLIER_ORDER_PARTIALLY_ACKNOWLEDGED" },
     }), partialEventCount, "identical acknowledgment retries must not append fake history");
     assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: releaseAction.purchaseAction.id, kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT" } }), acknowledgmentEvidenceCount, "identical acknowledgments must not duplicate evidence");
+    const followUpDraftInput = {
+      expectedActionScopeHash: releaseAction.purchaseAction.inputHash,
+      expectedReleaseHash: releaseRecord.releaseHash,
+      expectedRevision: 0,
+      senderAccountId: orderSenderAccount.id,
+      recipient: "orders@example.com",
+      subject: "Follow-up: purchase order PO-ATLAS-001",
+      body: "Please confirm the remaining 8 EA on purchase order PO-ATLAS-001 and provide the supplier order reference and delivery date.",
+      note: "Supplier acknowledgment is due for the remaining order quantity.",
+    } as const;
+    const concurrentFollowUpDrafts = await Promise.all([
+      savePurchaseOrderFollowUpDraft({ context, purchaseActionId: releaseAction.purchaseAction.id, input: followUpDraftInput }),
+      savePurchaseOrderFollowUpDraft({ context, purchaseActionId: releaseAction.purchaseAction.id, input: followUpDraftInput }),
+    ]);
+    const followUpDraft = concurrentFollowUpDrafts[0];
+    assert.equal(concurrentFollowUpDrafts[1].id, followUpDraft.id, "concurrent identical supplier follow-up drafts must converge");
+    assert.equal(followUpDraft.taskType, "PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT");
+    assert.equal((followUpDraft.result as { followUp: { followUpNumber: number; remainingQuantity: string } }).followUp.followUpNumber, 1);
+    assert.equal((followUpDraft.result as { followUp: { remainingQuantity: string } }).followUp.remainingQuantity, "8");
+    const followUpApprovalRequest = await requestPurchaseOrderFollowUpApproval({
+      context,
+      draftId: followUpDraft.id,
+      input: { expectedResultHash: followUpDraft.resultHash, reason: "Approve the exact released-order acknowledgment follow-up." },
+    });
+    const followUpApproved = await decidePurchaseOrderFollowUpApproval({
+      context: managerContext,
+      approvalId: followUpApprovalRequest.approval.id,
+      input: { decision: "APPROVE", note: "The remaining quantity and released order reference match." },
+    });
+    let markFollowUpProviderStarted!: () => void;
+    let releaseFollowUpProvider!: () => void;
+    let followUpReconciliationCalls = 0;
+    const followUpProviderStarted = new Promise<void>((resolve) => { markFollowUpProviderStarted = resolve; });
+    const followUpProviderRelease = new Promise<void>((resolve) => { releaseFollowUpProvider = resolve; });
+    const uncertainFollowUpProvider: SupplierEmailProvider = {
+      send: async () => {
+        markFollowUpProviderStarted();
+        await followUpProviderRelease;
+        return { state: "UNKNOWN", error: "Simulated timeout after the follow-up request." };
+      },
+      reconcile: async () => {
+        followUpReconciliationCalls += 1;
+        return { state: "NOT_FOUND" };
+      },
+    };
+    const pendingUncertainFollowUp = sendPurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: uncertainFollowUpProvider });
+    await followUpProviderStarted;
+    await assert.rejects(
+      () => reconcilePurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: uncertainFollowUpProvider }),
+      /still in progress/i,
+      "a second tab must not reconcile while the original Gmail call is still active",
+    );
+    assert.equal(followUpReconciliationCalls, 0, "an in-flight send must not call Gmail reconciliation");
+    releaseFollowUpProvider();
+    const uncertainFollowUp = await pendingUncertainFollowUp;
+    assert.equal((uncertainFollowUp.result as { state: string }).state, "DELIVERY_UNKNOWN");
+    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      context,
+      actionId: releaseAction.purchaseAction.id,
+      input: {
+        ...acknowledgmentInput,
+        supplierOrderReference: "ACK-BLOCKED-WHILE-SEND-UNKNOWN",
+        acceptedQuantity: 8,
+        evidenceUrl: "https://example.com/acknowledgments/blocked-while-send-unknown",
+      },
+    }), /follow-up delivery is unresolved/i, "supplier response recording must not hide an unresolved outbound follow-up");
+    const followUpNotFound = await reconcilePurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: uncertainFollowUpProvider });
+    assert.equal((followUpNotFound.result as { state: string }).state, "NOT_FOUND_REVIEW_REQUIRED");
+    assert.equal(followUpReconciliationCalls, 1);
+    const followUpRetryReady = await resetPurchaseOrderFollowUpForRetry({
+      context: managerContext,
+      actionId: followUpApproved.action.id,
+      input: { confirmedNotSent: true, note: "Verified the stable follow-up Message-ID is absent from the connected Gmail Sent folder." },
+    });
+    assert.equal((followUpRetryReady.result as { state: string }).state, "RETRY_READY");
+    let followUpProviderCalls = 0;
+    const sentFollowUpProvider: SupplierEmailProvider = {
+      send: async (message) => {
+        followUpProviderCalls += 1;
+        assert.equal(message.recipient, "orders@example.com");
+        return {
+          state: "SENT",
+          provider: "GMAIL",
+          providerMessageId: `gmail-purchase-followup-${suffix}`,
+          providerThreadId: `gmail-purchase-followup-thread-${suffix}`,
+          sourceUrl: `https://mail.google.com/mail/u/${encodeURIComponent(message.senderEmail)}/#sent/gmail-purchase-followup-thread-${suffix}`,
+        };
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    const sentFollowUp = await sendPurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: sentFollowUpProvider });
+    const sentFollowUpResult = sentFollowUp.result as { state: string; evidenceId: string; followUpHash: string; followUpNumber: number };
+    assert.equal(sentFollowUpResult.state, "SENT");
+    assert.equal(sentFollowUpResult.followUpNumber, 1);
+    assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: sentFollowUpResult.evidenceId } })).kind, "PURCHASE_ORDER_FOLLOWUP");
+    const followUpRetry = await sendPurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: sentFollowUpProvider });
+    assert.equal((followUpRetry.result as { followUpHash: string }).followUpHash, sentFollowUpResult.followUpHash);
+    assert.equal(followUpProviderCalls, 1, "a lost follow-up response must not contact the supplier twice");
+    const restoredFollowUpCase = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    assert.equal(restoredFollowUpCase?.purchaseOrderFollowUpAction?.result?.state, "SENT", "the sourcing queue must restore the supplier follow-up receipt");
+    assert.equal(restoredFollowUpCase?.result?.purchaseRelease?.followUps?.length, 1, "the released order projection must retain follow-up history");
+    const secondFollowUpDraft = await savePurchaseOrderFollowUpDraft({
+      context,
+      purchaseActionId: releaseAction.purchaseAction.id,
+      input: { ...followUpDraftInput, expectedRevision: 0, subject: "Second follow-up: purchase order PO-ATLAS-001" },
+    });
+    assert.equal((secondFollowUpDraft.result as { followUp: { followUpNumber: number } }).followUp.followUpNumber, 2);
+    const secondFollowUpApproval = await requestPurchaseOrderFollowUpApproval({
+      context,
+      draftId: secondFollowUpDraft.id,
+      input: { expectedResultHash: secondFollowUpDraft.resultHash, reason: "Review the second acknowledgment follow-up." },
+    });
+    await decidePurchaseOrderFollowUpApproval({
+      context: managerContext,
+      approvalId: secondFollowUpApproval.approval.id,
+      input: { decision: "REJECT", note: "The subject needs a clearer escalation request." },
+    });
+    const revisedSecondFollowUpDraft = await savePurchaseOrderFollowUpDraft({
+      context,
+      purchaseActionId: releaseAction.purchaseAction.id,
+      input: {
+        ...followUpDraftInput,
+        expectedRevision: (secondFollowUpDraft.result as { revision: number }).revision,
+        subject: "Escalation: purchase order PO-ATLAS-001 acknowledgment required",
+      },
+    });
+    assert.notEqual(revisedSecondFollowUpDraft.id, secondFollowUpDraft.id, "a rejected follow-up must reopen as a new draft revision");
+    const restoredRevisedFollowUp = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    assert.equal(restoredRevisedFollowUp?.purchaseOrderFollowUpDraft?.id, revisedSecondFollowUpDraft.id);
+    assert.equal(restoredRevisedFollowUp?.purchaseOrderFollowUpAction, null, "a rejected action must not strand the revised follow-up behind the old decision");
     const fullAcknowledgment = await recordPurchaseOrderAcknowledgment({
       context,
       actionId: releaseAction.purchaseAction.id,
@@ -1892,6 +2030,7 @@ async function main() {
     assert.equal(fullResult.totals.acknowledgedMaterialValue, "1764");
     assert.equal(fullResult.acknowledgments.length, 2);
     assert.equal(fullResult.externalSideEffect, "RECORDED_ONLY");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: revisedSecondFollowUpDraft.id } })).status, "CANCELLED", "a recorded supplier response must cancel an unsent follow-up draft");
     assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
       where: { id: retryQuoteDraft.quoteCycle.id },
       select: { status: true },
@@ -3742,6 +3881,11 @@ async function main() {
       purchaseActionId: clonedAction.id,
       input: connectedOrderDraftInput,
     }), /current user|not found|cannot edit/i, "a stale privileged cookie must not prepare a connected purchase order email after demotion");
+    await assert.rejects(() => savePurchaseOrderFollowUpDraft({
+      context: stalePrivilegedContext,
+      purchaseActionId: releaseAction.purchaseAction.id,
+      input: followUpDraftInput,
+    }), /current user|not found|cannot edit/i, "a stale privileged cookie must not prepare a supplier follow-up after demotion");
     await assert.rejects(() => captureConnectedPurchaseOrderReplies({
       context: stalePrivilegedContext,
       purchaseActionId: clonedAction.id,
@@ -3872,6 +4016,11 @@ async function main() {
       actionId: connectedOrderApproved.action.id,
       provider: uncertainOrderProvider,
     }), /not found/i, "another office must not send a connected purchase order email");
+    await assert.rejects(() => sendPurchaseOrderFollowUpAction({
+      context: foreign,
+      actionId: followUpApproved.action.id,
+      provider: sentFollowUpProvider,
+    }), /not found/i, "another office must not send a supplier follow-up");
     await assert.rejects(() => captureConnectedPurchaseOrderReplies({
       context: foreign,
       purchaseActionId: clonedAction.id,

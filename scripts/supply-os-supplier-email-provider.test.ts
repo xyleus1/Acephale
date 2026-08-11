@@ -45,6 +45,24 @@ async function main() {
   assert.match(decoded, /Message-ID: <supply-action-1@derya\.ai>\r\n/);
   assert.ok(!decoded.includes("\r\nBcc: attacker@example.com\r\n"), "header newlines must not create injected headers");
 
+  let threadedRequest: { url: string; init?: RequestInit } | null = null;
+  const threadedProvider = providerWith(async (url, init) => {
+    threadedRequest = { url: String(url), init };
+    return response(200, { id: "gmail-message-followup", threadId: "gmail-thread-original" });
+  });
+  const threaded = await threadedProvider.send({
+    ...input,
+    rfcMessageId: "<supply-followup-2@derya.ai>",
+    providerThreadId: "gmail-thread-original",
+    inReplyToRfcMessageId: "<supply-action-1@derya.ai>",
+  });
+  assert.equal(threaded.state, "SENT");
+  const threadedBody = JSON.parse(String(threadedRequest?.init?.body)) as { raw: string; threadId?: string };
+  assert.equal(threadedBody.threadId, "gmail-thread-original");
+  const threadedRaw = Buffer.from(threadedBody.raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+  assert.match(threadedRaw, /In-Reply-To: <supply-action-1@derya\.ai>\r\n/);
+  assert.match(threadedRaw, /References: <supply-action-1@derya\.ai>\r\n/);
+
   for (const status of [401, 403]) {
     const result = await providerWith(async () => response(status, "permission denied")).send(input);
     assert.deepEqual(result, { state: "REJECTED", error: "Gmail send permission is missing. Reconnect the selected inbox.", needsReauth: true });

@@ -81,6 +81,8 @@ type SupplierEmailMessage = {
   recipient: string;
   subject: string;
   body: string;
+  providerThreadId?: string | null;
+  inReplyToRfcMessageId?: string | null;
 };
 
 export type ConnectedSupplierReply = {
@@ -278,9 +280,25 @@ export type SavedProcurementCase = {
         evidenceId: string;
         note: string | null;
         releaseHash: string;
+        providerThreadId?: string;
+        rfcMessageId?: string;
         recordedByUserId: string;
         recordedAt: string;
       };
+      followUps?: Array<{
+        releaseHash: string;
+        followUpNumber: number;
+        remainingQuantity: string;
+        messageHash: string;
+        providerMessageId: string;
+        providerThreadId: string;
+        rfcMessageId: string;
+        sourceUrl: string;
+        evidenceId: string;
+        followUpHash: string;
+        sentAt: string;
+      }>;
+      lastFollowUpAt?: string;
       lastSupplierOrderReference?: string;
       lastConfirmedDeliveryDate?: string;
       connectedReplyCount?: number;
@@ -492,6 +510,63 @@ export type SavedProcurementCase = {
     createdAt: string;
     updatedAt: string;
   } | null;
+  purchaseOrderFollowUpDraft?: {
+    id: string;
+    status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
+    resultHash: string | null;
+    result: {
+      revision: number;
+      message: SupplierEmailMessage;
+      followUp: {
+        releaseHash: string;
+        followUpNumber: number;
+        purchaseOrderReference: string;
+        acknowledgmentDueOn: string;
+        remainingQuantity: string;
+        unitOfMeasure: string;
+        note: string | null;
+      };
+      messageHash: string;
+      approval: { id: string; actionId: string; status: SupplierEmailApproval["status"] } | null;
+      updatedAt: string;
+    } | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  purchaseOrderFollowUpAction?: {
+    id: string;
+    status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
+    input: {
+      procurementCaseId: string;
+      purchaseDraftId: string;
+      purchaseActionId: string;
+      purchaseActionScopeHash: string;
+      releaseHash: string;
+      followUpNumber: number;
+      draftId: string;
+      draftRevision: number;
+      draftMessageHash: string;
+      message: SupplierEmailMessage;
+    };
+    inputHash: string;
+    result: {
+      state: "APPROVED" | "REJECTED" | "SENDING" | "SEND_FAILED" | "DELIVERY_UNKNOWN" | "NOT_FOUND_REVIEW_REQUIRED" | "RETRY_READY" | "SENT";
+      attempt?: number;
+      rfcMessageId?: string;
+      error?: string;
+      sourceUrl?: string;
+      evidenceId?: string;
+      releaseHash?: string;
+      followUpNumber?: number;
+      followUpHash?: string;
+      sentAt?: string;
+    } | null;
+    approval: SupplierEmailApproval | null;
+    externalSystem: string | null;
+    externalRef: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   purchaseDraft?: {
     id: string;
     status: string;
@@ -613,6 +688,8 @@ export type SavedProcurementCase = {
         evidenceId: string;
         note: string | null;
         releaseHash: string;
+        providerThreadId?: string;
+        rfcMessageId?: string;
         recordedByUserId: string;
         recordedAt: string;
       };
@@ -649,6 +726,20 @@ export type SavedProcurementCase = {
       connectedAcknowledgmentReplies?: ConnectedSupplierReply[];
       lastAcknowledgmentSyncAt?: string;
       supplierOrderExceptions?: SupplierOrderException[];
+      followUps?: Array<{
+        releaseHash: string;
+        followUpNumber: number;
+        remainingQuantity: string;
+        messageHash: string;
+        providerMessageId: string;
+        providerThreadId: string;
+        rfcMessageId: string;
+        sourceUrl: string;
+        evidenceId: string;
+        followUpHash: string;
+        sentAt: string;
+      }>;
+      lastFollowUpAt?: string;
       openSupplierExceptionCount?: number;
       revisionRequiredCount?: number;
       externalSideEffect: "RECORDED_ONLY" | "CONNECTED_PROVIDER";

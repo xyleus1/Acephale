@@ -20,6 +20,12 @@ import {
   PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE,
 } from "./purchase-order-communication-persistence";
 import {
+  cancelSafePurchaseOrderFollowUps,
+  listPurchaseOrderFollowUpTasks,
+  PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE,
+  PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT_TASK_TYPE,
+} from "./purchase-order-followup-persistence";
+import {
   finalizeReplacementSupersession,
   returnStaleReplacementToSourcing,
 } from "./purchase-order-revision";
@@ -650,13 +656,18 @@ async function listProcurementCasesMatching(
   for (const purchaseDraft of purchaseDrafts) {
     if (purchaseDraft.parentTaskId && !purchaseDraftByCase.has(purchaseDraft.parentTaskId)) purchaseDraftByCase.set(purchaseDraft.parentTaskId, purchaseDraft);
   }
-  const [communicationTasks, purchaseOrderCommunicationTasks] = await Promise.all([
+  const [communicationTasks, purchaseOrderCommunicationTasks, purchaseOrderFollowUpTasks] = await Promise.all([
     listSupplierCommunicationTasks({
       context: accessContext,
       workspaceId: workspace.id,
       quoteCycleIds: quoteCycles.map((quoteCycle) => quoteCycle.id),
     }),
     listPurchaseOrderCommunicationTasks({
+      context: accessContext,
+      workspaceId: workspace.id,
+      purchaseDraftIds: purchaseDrafts.map((purchaseDraft) => purchaseDraft.id),
+    }),
+    listPurchaseOrderFollowUpTasks({
       context: accessContext,
       workspaceId: workspace.id,
       purchaseDraftIds: purchaseDrafts.map((purchaseDraft) => purchaseDraft.id),
@@ -684,6 +695,17 @@ async function listProcurementCasesMatching(
         : null;
     if (target && !target.has(task.parentTaskId)) target.set(task.parentTaskId, task);
   }
+  const purchaseOrderFollowUpDraftByPurchaseDraft = new Map<string, (typeof purchaseOrderFollowUpTasks)[number]>();
+  const purchaseOrderFollowUpActionByDraft = new Map<string, (typeof purchaseOrderFollowUpTasks)[number]>();
+  for (const task of purchaseOrderFollowUpTasks) {
+    if (task.taskType === PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT_TASK_TYPE && task.parentTaskId && !purchaseOrderFollowUpDraftByPurchaseDraft.has(task.parentTaskId)) {
+      purchaseOrderFollowUpDraftByPurchaseDraft.set(task.parentTaskId, task);
+    }
+    if (task.taskType === PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE) {
+      const draftId = record(task.input).draftId;
+      if (typeof draftId === "string" && !purchaseOrderFollowUpActionByDraft.has(draftId)) purchaseOrderFollowUpActionByDraft.set(draftId, task);
+    }
+  }
   return cases.map((rawProcurementCase) => {
     const { procurementCase, requiresRequalification } = projectQualificationState(rawProcurementCase);
     if (requiresRequalification) {
@@ -696,6 +718,8 @@ async function listProcurementCasesMatching(
         purchaseAction: null,
         purchaseOrderEmailDraft: null,
         purchaseOrderEmailAction: null,
+        purchaseOrderFollowUpDraft: null,
+        purchaseOrderFollowUpAction: null,
       };
     }
     const quoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
@@ -717,7 +741,7 @@ async function listProcurementCasesMatching(
         })()
       : null;
     const activeDraft = purchaseDraftByCase.get(procurementCase.id) ?? null;
-    if (!activeDraft) return { ...procurementCase, quoteCycle, supplierEmailDraft, supplierEmailAction, purchaseDraft: null, purchaseAction: null, purchaseOrderEmailDraft: null, purchaseOrderEmailAction: null };
+    if (!activeDraft) return { ...procurementCase, quoteCycle, supplierEmailDraft, supplierEmailAction, purchaseDraft: null, purchaseAction: null, purchaseOrderEmailDraft: null, purchaseOrderEmailAction: null, purchaseOrderFollowUpDraft: null, purchaseOrderFollowUpAction: null };
     const { childTasks: purchaseActions, ...purchaseDraft } = activeDraft;
     const activeAction = purchaseActions[0] ?? null;
     const purchaseOrderEmailDraft = purchaseOrderEmailDraftByPurchaseDraft.get(purchaseDraft.id) ?? null;
@@ -725,6 +749,16 @@ async function listProcurementCasesMatching(
     const purchaseOrderEmailAction = rawPurchaseOrderEmailAction
       ? (() => {
           const { approvals, ...task } = rawPurchaseOrderEmailAction;
+          return { ...task, approval: approvals[0] ?? null };
+        })()
+      : null;
+    const purchaseOrderFollowUpDraft = purchaseOrderFollowUpDraftByPurchaseDraft.get(purchaseDraft.id) ?? null;
+    const rawPurchaseOrderFollowUpAction = purchaseOrderFollowUpDraft
+      ? purchaseOrderFollowUpActionByDraft.get(purchaseOrderFollowUpDraft.id) ?? null
+      : null;
+    const purchaseOrderFollowUpAction = rawPurchaseOrderFollowUpAction
+      ? (() => {
+          const { approvals, ...task } = rawPurchaseOrderFollowUpAction;
           return { ...task, approval: approvals[0] ?? null };
         })()
       : null;
@@ -739,6 +773,8 @@ async function listProcurementCasesMatching(
         : null,
       purchaseOrderEmailDraft,
       purchaseOrderEmailAction,
+      purchaseOrderFollowUpDraft,
+      purchaseOrderFollowUpAction,
     };
   });
 }
@@ -803,6 +839,7 @@ export async function procurementEvidenceSource(context: SupplyAccessContext, ev
           "SUPPLIER_QUOTE_REPLY_EMAIL",
           "SUPPLIER_QUOTE_RESPONSE",
           "PURCHASE_ORDER_RELEASE",
+          "PURCHASE_ORDER_FOLLOWUP",
           "SUPPLIER_ORDER_ACKNOWLEDGMENT_REPLY_EMAIL",
           "SUPPLIER_ORDER_ACKNOWLEDGMENT",
         ],
@@ -4509,6 +4546,13 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           || release.actionScopeHash !== purchaseAction.inputHash) {
           throw new SupplyPersistenceError("Supplier acknowledgment does not match the durable purchase order release.", "conflict");
         }
+        await cancelSafePurchaseOrderFollowUps({
+          tx,
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          purchaseDraftId,
+          reason: "Supplier response was recorded before the pending follow-up was sent.",
+        });
         const releaseChannel = requiredText(release.channel, "Stored release channel", 40).toUpperCase();
         if (!PURCHASE_RELEASE_CHANNELS.includes(releaseChannel as (typeof PURCHASE_RELEASE_CHANNELS)[number])) {
           throw new SupplyPersistenceError("Stored purchase order release channel is invalid.", "conflict");
@@ -4890,6 +4934,13 @@ export async function recordSupplierOrderException(args: {
           || release.actionScopeHash !== purchaseAction.inputHash) {
           throw new SupplyPersistenceError("Supplier exception does not match the durable released order.", "conflict");
         }
+        await cancelSafePurchaseOrderFollowUps({
+          tx,
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          purchaseDraftId,
+          reason: "Supplier changed the released order before the pending follow-up was sent.",
+        });
         const actionInput = record(purchaseAction.input);
         const order = record(actionInput.order);
         const commercial = record(actionInput.commercial);

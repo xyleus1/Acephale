@@ -16,6 +16,31 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-11 - Supplier acknowledgment follow-up is a separate approved communication
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A released order can pass its acknowledgment due date without a
+  supplier response. A queue warning without a durable follow-up action leaves
+  the buyer to improvise in Gmail and loses the exact message, approval, and
+  delivery history.
+- Decision: Create a revisioned connected-Gmail follow-up draft and an immutable
+  communication action bound to the exact active purchase action, release hash,
+  remaining quantity, supplier recipient, and message. Require manager approval
+  before delivery. Follow-ups may start only when acknowledgment is due.
+- Delivery: Thread against the connected order message or latest follow-up when
+  provider lineage exists. Use a stable RFC message ID, uncertain-delivery
+  reconciliation, documented not-sent recovery, and idempotent retries. Persist
+  each definitive send as connected-provider evidence and append it to the
+  released-order history.
+- Response boundary: A recorded acknowledgment or supplier exception cancels
+  only safe unsent follow-up work. In-flight or uncertain delivery must be
+  reconciled first. Replies remain review evidence; operators still confirm
+  quantity, delivery, and changed terms.
+- Consequences: The sourcing queue can resume draft, approval, recovery, sent,
+  and reply-review states. This does not create payment, booking, customs,
+  inventory, or Logistics state.
+
 ### 2026-08-10 - Purchase order release is separate from supplier acknowledgment
 
 - Status: accepted

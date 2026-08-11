@@ -11,6 +11,8 @@ export type SupplierEmailSendInput = {
   subject: string;
   body: string;
   rfcMessageId: string;
+  providerThreadId?: string | null;
+  inReplyToRfcMessageId?: string | null;
 };
 
 export type SupplierEmailSent = {
@@ -104,6 +106,10 @@ export function createGmailSupplierEmailProvider(
       `To: ${cleanHeader(input.recipient)}`,
       `Subject: ${cleanHeader(input.subject)}`,
       `Message-ID: ${cleanHeader(input.rfcMessageId)}`,
+      ...(input.inReplyToRfcMessageId ? [
+        `In-Reply-To: ${cleanHeader(input.inReplyToRfcMessageId)}`,
+        `References: ${cleanHeader(input.inReplyToRfcMessageId)}`,
+      ] : []),
       "MIME-Version: 1.0",
       "Content-Type: text/plain; charset=\"UTF-8\"",
     ];
@@ -113,7 +119,10 @@ export function createGmailSupplierEmailProvider(
       response = await request("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ raw }),
+        body: JSON.stringify({
+          raw,
+          ...(input.providerThreadId ? { threadId: cleanHeader(input.providerThreadId) } : {}),
+        }),
         signal: AbortSignal.timeout(20_000),
       });
     } catch (error) {
