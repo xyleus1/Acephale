@@ -362,6 +362,26 @@ async function main() {
       evidenceUrl: "https://example.com/quote-requests/atlas-410",
       note: "Buyer sent the quote request from the supplier thread.",
     } as const;
+    const preReleaseCase = await prisma.supplyExecutionTask.findUniqueOrThrow({
+      where: { id: procurementCase.id },
+      select: { result: true },
+    });
+    const preReleaseResult = structuredClone(preReleaseCase.result) as Record<string, unknown>;
+    const expiredPreReleaseResult = structuredClone(preReleaseResult) as Record<string, unknown>;
+    (expiredPreReleaseResult.reviews as { sourceEvidence: { validUntil: string } }).sourceEvidence.validUntil = futureDate(-1);
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: expiredPreReleaseResult, resultHash: jsonDigest(expiredPreReleaseResult) },
+    });
+    await assert.rejects(
+      () => recordSupplierQuoteRelease({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteReleaseInput }),
+      /qualification was not valid on the release date/i,
+      "expired qualification must block a newly recorded supplier contact",
+    );
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: preReleaseResult, resultHash: jsonDigest(preReleaseResult) },
+    });
     const quoteReleased = await recordSupplierQuoteRelease({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteReleaseInput });
     assert.equal(quoteReleased.quoteCycle.status, "RUNNING");
     assert.equal((quoteReleased.quoteCycle.result as { state: string; externalSideEffect: string }).state, "AWAITING_RESPONSE");
@@ -373,9 +393,21 @@ async function main() {
     assert.equal(quoteReleaseEvidence.sourceUri, quoteReleaseInput.evidenceUrl);
     const releaseEvidenceCount = await prisma.supplyEvidence.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_RELEASE" } });
     const releaseEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED" } });
+    const postReleaseCase = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: procurementCase.id }, select: { result: true } });
+    const postReleaseResult = structuredClone(postReleaseCase.result) as Record<string, unknown>;
+    const expiredPostReleaseResult = structuredClone(postReleaseResult) as Record<string, unknown>;
+    (expiredPostReleaseResult.reviews as { sourceEvidence: { validUntil: string } }).sourceEvidence.validUntil = futureDate(-1);
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: expiredPostReleaseResult, resultHash: jsonDigest(expiredPostReleaseResult) },
+    });
     await recordSupplierQuoteRelease({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteReleaseInput });
     assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REQUEST_RELEASE_RECORDED" } }), releaseEventCount, "identical release retries must be idempotent");
     assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_RELEASE" } }), releaseEvidenceCount, "identical release retries must not duplicate evidence");
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: postReleaseResult, resultHash: jsonDigest(postReleaseResult) },
+    });
     await assert.rejects(() => saveSupplierQuoteRequest({
       context,
       caseId: procurementCase.id,
@@ -441,6 +473,28 @@ async function main() {
       caseId: procurementCase.id,
       input: { gate: "COMMERCIAL_TERMS", expectedSelectionHash: selectionHash, quoteCycleTaskId: quoteDraft.quoteCycle.id, responseHash: "missing-response" },
     }), /response was not found/i, "commercial review must select a canonical stored response");
+    const preCommercialCase = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: procurementCase.id }, select: { result: true } });
+    const preCommercialResult = structuredClone(preCommercialCase.result) as Record<string, unknown>;
+    const expiredPreCommercialResult = structuredClone(preCommercialResult) as Record<string, unknown>;
+    (expiredPreCommercialResult.reviews as { sourceEvidence: { validUntil: string } }).sourceEvidence.validUntil = futureDate(-1);
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: expiredPreCommercialResult, resultHash: jsonDigest(expiredPreCommercialResult) },
+    });
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "COMMERCIAL_TERMS",
+        expectedSelectionHash: selectionHash,
+        quoteCycleTaskId: quoteDraft.quoteCycle.id,
+        responseHash: storedQuoteResponse.responseHash,
+      },
+    }), /qualification is missing or expired/i, "qualification expiry must block commercial confirmation");
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: preCommercialResult, resultHash: jsonDigest(preCommercialResult) },
+    });
     const termsReviewed = await reviewProcurementGate({
       context,
       caseId: procurementCase.id,
@@ -452,6 +506,29 @@ async function main() {
       },
     });
     assert.equal((termsReviewed.result as { stage: string }).stage, "QUALITY_REVIEW");
+    const preQualityResult = structuredClone(termsReviewed.result) as Record<string, unknown>;
+    const expiredPreQualityResult = structuredClone(preQualityResult) as Record<string, unknown>;
+    (expiredPreQualityResult.reviews as { sourceEvidence: { validUntil: string } }).sourceEvidence.validUntil = futureDate(-1);
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: expiredPreQualityResult, resultHash: jsonDigest(expiredPreQualityResult) },
+    });
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "QUALITY_PLAN",
+        expectedSelectionHash: selectionHash,
+        method: "SAMPLE",
+        acceptanceCriteria: "Verify calibration, connector fit, image depth accuracy, and serial traceability.",
+        owner: "Atlas vision engineering",
+        targetDate: qualityTargetDate,
+      },
+    }), /qualification is missing or expired/i, "qualification expiry must block quality planning");
+    await prisma.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: preQualityResult, resultHash: jsonDigest(preQualityResult) },
+    });
     await assert.rejects(() => reviewProcurementGate({
       context,
       caseId: procurementCase.id,
@@ -961,6 +1038,32 @@ async function main() {
         accessToken: "test-only-token",
       },
     });
+    const qualifiedEmailCase = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: returnedCase.id }, select: { result: true } });
+    const qualifiedEmailCaseResult = structuredClone(qualifiedEmailCase.result) as Record<string, unknown>;
+    const expiredEmailCaseResult = structuredClone(qualifiedEmailCaseResult) as Record<string, unknown>;
+    (expiredEmailCaseResult.reviews as { sourceEvidence: { validUntil: string } }).sourceEvidence.validUntil = futureDate(-1);
+    const changedEmailQualificationResult = structuredClone(qualifiedEmailCaseResult) as Record<string, unknown>;
+    (changedEmailQualificationResult.reviews as { sourceEvidence: { reviewHash: string } }).sourceEvidence.reviewHash = "replacement-qualification-review-hash";
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: expiredEmailCaseResult, resultHash: jsonDigest(expiredEmailCaseResult) },
+    });
+    await assert.rejects(() => saveSupplierEmailDraft({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      input: {
+        expectedRequestHash: retryRequestHash,
+        expectedRevision: 0,
+        senderAccountId: senderAccount.id,
+        recipient: "quotes@example.com",
+        subject: "Quote request: calibrated stereo depth cameras",
+        body: "Please quote 14 EA calibrated stereo depth cameras for delivery to Austin.",
+      },
+    }), /qualification is missing or expired/i, "expired qualification must block supplier email drafting on the server");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: qualifiedEmailCaseResult, resultHash: jsonDigest(qualifiedEmailCaseResult) },
+    });
     const supplierEmailDraft = await saveSupplierEmailDraft({
       context,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
@@ -974,7 +1077,20 @@ async function main() {
       },
     });
     assert.equal((await listProcurementCases(context))[0]?.supplierEmailDraft?.id, supplierEmailDraft.id, "the sourcing queue must restore the connected email draft");
-    const emailApprovalRequest = await requestSupplierEmailApproval({
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: expiredEmailCaseResult, resultHash: jsonDigest(expiredEmailCaseResult) },
+    });
+    await assert.rejects(() => requestSupplierEmailApproval({
+      context,
+      draftId: supplierEmailDraft.id,
+      input: { expectedResultHash: supplierEmailDraft.resultHash, reason: "Release the exact supplier quote request through the connected buyer inbox." },
+    }), /qualification is missing or expired/i, "expired qualification must block a supplier email approval request");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: qualifiedEmailCaseResult, resultHash: jsonDigest(qualifiedEmailCaseResult) },
+    });
+    let emailApprovalRequest = await requestSupplierEmailApproval({
       context,
       draftId: supplierEmailDraft.id,
       input: { expectedResultHash: supplierEmailDraft.resultHash, reason: "Release the exact supplier quote request through the connected buyer inbox." },
@@ -983,15 +1099,107 @@ async function main() {
     assert.equal(emailScope.message.recipient, "quotes@example.com");
     assert.equal(emailScope.message.subject, "Quote request: calibrated stereo depth cameras");
     assert.ok(emailScope.draftMessageHash, "approval must bind the exact draft message hash");
+    assert.ok((emailApprovalRequest.action.input as { supplierQualificationHash?: string }).supplierQualificationHash, "approval must bind the exact supplier qualification review");
+    const repeatedEmailApprovalRequest = await requestSupplierEmailApproval({
+      context,
+      draftId: supplierEmailDraft.id,
+      input: { expectedResultHash: supplierEmailDraft.resultHash, reason: "Release the exact supplier quote request through the connected buyer inbox." },
+    });
+    assert.equal(repeatedEmailApprovalRequest.action.id, emailApprovalRequest.action.id, "a lost approval-request response must retry to the same action");
+    assert.equal(repeatedEmailApprovalRequest.approval.id, emailApprovalRequest.approval.id, "approval request retries must not duplicate pending approvals");
+    const legacyActionId = emailApprovalRequest.action.id;
+    const legacyApprovalId = emailApprovalRequest.approval.id;
+    const legacyActionInput = structuredClone(emailApprovalRequest.action.input) as Record<string, unknown>;
+    delete legacyActionInput.supplierQualificationHash;
+    delete legacyActionInput.supplierQualificationValidUntil;
+    const legacyInputHash = jsonDigest(legacyActionInput);
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyExecutionTask.update({
+        where: { id: legacyActionId },
+        data: { input: legacyActionInput, inputHash: legacyInputHash },
+      });
+      await tx.supplyApproval.update({
+        where: { id: legacyApprovalId },
+        data: { scopeHash: legacyInputHash },
+      });
+    });
+    const legacyProjectedCase = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    assert.equal(legacyProjectedCase?.supplierEmailAction, null, "legacy unscoped approvals must reopen the request-approval path");
+    emailApprovalRequest = await requestSupplierEmailApproval({
+      context,
+      draftId: supplierEmailDraft.id,
+      input: { expectedResultHash: emailApprovalRequest.draft.resultHash, reason: "Replace the legacy approval with qualification-scoped supplier contact approval." },
+    });
+    assert.notEqual(emailApprovalRequest.action.id, legacyActionId, "legacy email actions must be replaced instead of silently grandfathered");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: legacyActionId } })).status, "CANCELLED");
+    assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: legacyApprovalId } })).status, "CANCELLED");
+    assert.ok((emailApprovalRequest.action.input as { supplierQualificationHash?: string }).supplierQualificationHash, "replacement approval must bind the current qualification hash");
     await assert.rejects(() => decideSupplierEmailApproval({
       context,
       approvalId: emailApprovalRequest.approval.id,
       input: { decision: "APPROVE" },
     }), /different eligible approver/i, "supplier email self-approval must be blocked when another approver is available");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: changedEmailQualificationResult, resultHash: jsonDigest(changedEmailQualificationResult) },
+    });
+    await assert.rejects(() => decideSupplierEmailApproval({
+      context: managerContext,
+      approvalId: emailApprovalRequest.approval.id,
+      input: { decision: "APPROVE", note: "Exact recipient and message approved." },
+    }), /qualification changed after email approval was requested/i, "a new qualification review must stale the pending supplier contact approval");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: expiredEmailCaseResult, resultHash: jsonDigest(expiredEmailCaseResult) },
+    });
+    await assert.rejects(() => decideSupplierEmailApproval({
+      context: managerContext,
+      approvalId: emailApprovalRequest.approval.id,
+      input: { decision: "APPROVE", note: "Exact recipient and message approved." },
+    }), /qualification is missing or expired/i, "qualification expiry must stale a pending supplier contact approval");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: qualifiedEmailCaseResult, resultHash: jsonDigest(qualifiedEmailCaseResult) },
+    });
     const approvedEmail = await decideSupplierEmailApproval({
       context: managerContext,
       approvalId: emailApprovalRequest.approval.id,
       input: { decision: "APPROVE", note: "Exact recipient and message approved." },
+    });
+    let expiredQualificationSendCount = 0;
+    const shouldNotSendProvider: SupplierEmailProvider = {
+      async send() {
+        expiredQualificationSendCount += 1;
+        return { state: "UNKNOWN", error: "This provider must never be called." };
+      },
+      async reconcile() {
+        return { state: "NOT_FOUND" };
+      },
+    };
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: changedEmailQualificationResult, resultHash: jsonDigest(changedEmailQualificationResult) },
+    });
+    await assert.rejects(
+      () => sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: shouldNotSendProvider }),
+      /qualification changed after this email was approved/i,
+      "a still-current replacement qualification must stale the approved supplier email",
+    );
+    assert.equal(expiredQualificationSendCount, 0, "the provider must not be called when the qualification review hash changes");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: expiredEmailCaseResult, resultHash: jsonDigest(expiredEmailCaseResult) },
+    });
+    await assert.rejects(
+      () => sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: shouldNotSendProvider }),
+      /qualification is missing or expired/i,
+      "qualification expiry must block the final supplier contact side effect",
+    );
+    assert.equal(expiredQualificationSendCount, 0, "the provider must not be called after qualification expires");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: qualifiedEmailCaseResult, resultHash: jsonDigest(qualifiedEmailCaseResult) },
     });
     await prisma.emailAccount.update({ where: { id: senderAccount.id }, data: { email: `changed-${suffix}@example.test` } });
     const changedSenderResult = await gmailSupplierEmailProvider.send({
@@ -1005,6 +1213,78 @@ async function main() {
     });
     assert.equal(changedSenderResult.state, "REJECTED", "a sender identity change must invalidate the approved message before Gmail is called");
     await prisma.emailAccount.update({ where: { id: senderAccount.id }, data: { email: senderAccount.email } });
+    const approvedActionResult = structuredClone(approvedEmail.action.result);
+    const approvedDraftResult = structuredClone(approvedEmail.draft.result);
+    let releaseLateSend: (() => void) | null = null;
+    let markLateSendStarted: (() => void) | null = null;
+    let releaseLateReconcile: (() => void) | null = null;
+    let markLateReconcileStarted: (() => void) | null = null;
+    const lateSendStarted = new Promise<void>((resolve) => { markLateSendStarted = resolve; });
+    const lateSendRelease = new Promise<void>((resolve) => { releaseLateSend = resolve; });
+    const lateReconcileStarted = new Promise<void>((resolve) => { markLateReconcileStarted = resolve; });
+    const lateReconcileRelease = new Promise<void>((resolve) => { releaseLateReconcile = resolve; });
+    const lateUnknownSendProvider: SupplierEmailProvider = {
+      async send() {
+        markLateSendStarted?.();
+        await lateSendRelease;
+        return { state: "UNKNOWN", error: "Original request timed out after reconciliation completed." };
+      },
+      async reconcile() {
+        return { state: "NOT_FOUND" };
+      },
+    };
+    const lateUnknownReconcileProvider: SupplierEmailProvider = {
+      async send() {
+        return { state: "REJECTED", error: "Send is not used by the reconciliation race test." };
+      },
+      async reconcile() {
+        markLateReconcileStarted?.();
+        await lateReconcileRelease;
+        return { state: "UNKNOWN", error: "Late reconciliation result must not overwrite SENT." };
+      },
+    };
+    const lateSend = sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: lateUnknownSendProvider });
+    await lateSendStarted;
+    const lateReconciliation = reconcileSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: lateUnknownReconcileProvider });
+    await lateReconcileStarted;
+    const sendingAction = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: approvedEmail.action.id } });
+    const sendingResult = sendingAction.result as { rfcMessageId: string };
+    const simulatedSentResult = {
+      state: "SENT",
+      rfcMessageId: sendingResult.rfcMessageId,
+      provider: "GMAIL",
+      providerMessageId: "simulated-reconciled-message",
+      sentAt: new Date().toISOString(),
+    };
+    const simulatedSentAt = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyExecutionTask.update({
+        where: { id: approvedEmail.action.id },
+        data: { status: "SUCCEEDED", result: simulatedSentResult, resultHash: jsonDigest(simulatedSentResult), startedAt: simulatedSentAt, completedAt: simulatedSentAt },
+      });
+      await tx.supplyExecutionTask.update({
+        where: { id: approvedEmail.draft.id },
+        data: { status: "SUCCEEDED", startedAt: simulatedSentAt, completedAt: simulatedSentAt },
+      });
+    });
+    releaseLateSend?.();
+    releaseLateReconcile?.();
+    const [lateSendResult, lateReconcileResult] = await Promise.all([lateSend, lateReconciliation]);
+    assert.equal(lateSendResult.status, "SUCCEEDED", "a late original timeout must not overwrite a reconciled send");
+    assert.equal(lateReconcileResult.status, "SUCCEEDED", "a late reconciliation miss must not overwrite a definitive send");
+    assert.equal(((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: approvedEmail.action.id } })).result as { state: string }).state, "SENT");
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyExecutionTask.update({
+        where: { id: approvedEmail.action.id },
+        data: { status: "READY", result: approvedActionResult as object, resultHash: jsonDigest(approvedActionResult), completedAt: null, startedAt: null },
+      });
+      await tx.supplyExecutionTask.update({
+        where: { id: approvedEmail.draft.id },
+        data: { status: "READY", result: approvedDraftResult as object, resultHash: jsonDigest(approvedDraftResult), completedAt: null, startedAt: null },
+      });
+    });
     let uncertainSendCount = 0;
     let releaseProviderSend: (() => void) | null = null;
     let markProviderStarted: (() => void) | null = null;
@@ -1023,6 +1303,17 @@ async function main() {
     };
     const firstSend = sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider });
     await providerStarted;
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: {
+        gate: "SOURCE_EVIDENCE",
+        expectedSelectionHash: returnedHash,
+        outcome: "REJECTED",
+        rejectionReason: "SOURCE_UNVERIFIABLE",
+        note: "Attempted rejection while supplier email delivery was still unresolved.",
+      },
+    }), /delivery is unresolved/i, "qualification changes must not cancel a supplier email while its provider call is in flight");
     await assert.rejects(
       () => sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider }),
       /reconcile/i,
@@ -1033,10 +1324,32 @@ async function main() {
     const uncertainEmail = await firstSend;
     assert.equal((uncertainEmail.result as { state: string }).state, "DELIVERY_UNKNOWN");
     assert.equal(uncertainEmail.status, "RUNNING", "unknown delivery must hold the action in an unresolved state");
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: {
+        gate: "SOURCE_EVIDENCE",
+        expectedSelectionHash: returnedHash,
+        outcome: "REJECTED",
+        rejectionReason: "SOURCE_UNVERIFIABLE",
+        note: "Attempted rejection while supplier email delivery remained unknown.",
+      },
+    }), /delivery is unresolved/i, "unknown delivery must block qualification changes until reconciliation");
     await assert.rejects(() => sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider }), /reconcile/i, "unknown delivery must block automatic resend");
     assert.equal(uncertainSendCount, 1);
     const notFoundEmail = await reconcileSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider });
     assert.equal((notFoundEmail.result as { state: string }).state, "NOT_FOUND_REVIEW_REQUIRED");
+    await assert.rejects(() => reviewProcurementGate({
+      context,
+      caseId: returnedCase.id,
+      input: {
+        gate: "SOURCE_EVIDENCE",
+        expectedSelectionHash: returnedHash,
+        outcome: "REJECTED",
+        rejectionReason: "SOURCE_UNVERIFIABLE",
+        note: "Attempted rejection before a human resolved the not-found delivery state.",
+      },
+    }), /delivery is unresolved/i, "not-found delivery review must block qualification changes until the retry decision is recorded");
     await assert.rejects(() => resetSupplierEmailForRetry({
       context: managerContext,
       actionId: approvedEmail.action.id,
@@ -1068,6 +1381,16 @@ async function main() {
     assert.equal(providerSendCount, 1);
     await sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: sentProvider });
     assert.equal(providerSendCount, 1, "an identical send retry must not call Gmail twice");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: expiredEmailCaseResult, resultHash: jsonDigest(expiredEmailCaseResult) },
+    });
+    await sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: sentProvider });
+    assert.equal(providerSendCount, 1, "a recorded successful send must remain idempotent after qualification later expires");
+    await prisma.supplyExecutionTask.update({
+      where: { id: returnedCase.id },
+      data: { result: qualifiedEmailCaseResult, resultHash: jsonDigest(qualifiedEmailCaseResult) },
+    });
     const connectedQuoteCycle = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: retryQuoteDraft.quoteCycle.id } });
     assert.equal(connectedQuoteCycle.status, "RUNNING");
     assert.equal((connectedQuoteCycle.result as { externalSideEffect: string }).externalSideEffect, "CONNECTED_PROVIDER");
@@ -1620,6 +1943,7 @@ async function main() {
             validUntil: futureDate(90),
             note: "Supplier identity and component capability were reviewed for the concurrent award test.",
             reviewHash: "award-test-source-review",
+            reviewedAt: new Date().toISOString(),
           },
           commercialTerms: { reviewHash: "award-test-commercial-review" },
           qualityPlan: { reviewHash: "award-test-quality-review" },

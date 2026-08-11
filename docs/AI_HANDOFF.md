@@ -2,6 +2,33 @@
 
 ## Latest Update
 
+### Supplier contact now fails closed at the actual release boundary
+
+- Connected supplier email approval now pins the exact qualification review
+  hash and validity date. Drafting, approval request, approval decision, and the
+  final send claim all recheck current qualification on the server.
+- The send claim locks the procurement case before the quote cycle and email
+  action. Gmail is never called when qualification expired or changed after
+  approval.
+- Manual external RFQ release requires qualification valid on the recorded
+  release date. Identical retries remain idempotent after the release already
+  exists.
+- Provider receipts still persist after a provider call. Qualification changes
+  cannot erase or hide contact that may already have occurred. A definitive
+  send is terminal against late timeout and reconciliation writes.
+- Pre-release email actions without a qualification hash are not grandfathered
+  and do not strand the operator. Safe unsent actions reopen the same draft for
+  a newly scoped approval. Unresolved deliveries remain visible for recovery.
+- No schema, connector, purchase, spend, booking, customs, or Logistics behavior
+  changed.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `git diff --check`
+
 ### Supplier qualification is structured, expiring, and reversible
 
 - Gate 1 no longer accepts one URL plus a free-text confirmation. A supplier

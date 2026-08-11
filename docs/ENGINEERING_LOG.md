@@ -4676,3 +4676,26 @@ Use this file for chronological implementation notes that future agents should s
   build, whitespace, and changed-file U+2014 checks.
 - Boundary: No schema, dependency, supplier contact, purchase execution, spend,
   booking, customs, or Logistics behavior changed.
+
+### 2026-08-10 - Revalidate qualification at supplier contact release
+
+- Branch: supply-os-qualified-release-v4, targeting main
+- Commit: see git log
+- Task: Close the stale-authorization window between supplier qualification,
+  email approval, and actual supplier contact.
+- Behavior: Connected-email approval pins the qualification review hash and
+  validity. Draft, approval, and final send boundaries revalidate it. Manual
+  release requires qualification valid on the recorded release date.
+- Safety: The send claim locks the procurement case first and refuses to call
+  the provider after expiry or requalification. Once a provider call starts,
+  its receipt remains durable evidence. Existing release retries stay
+  idempotent. Late provider or reconciliation misses cannot overwrite `SENT`.
+  Legacy unsent approvals are replaced with qualification-scoped approvals;
+  unresolved legacy delivery remains recoverable instead of being hidden.
+- Verification: Atlas sourcing contract, disposable PostgreSQL sourcing
+  lifecycle with provider-call denial assertions, TypeScript, production build,
+  whitespace, and changed-file U+2014 checks.
+- Failed check: Repository-wide strict tenant audit still reports nine existing
+  findings outside this change. No changed Supply OS file is named by the audit.
+- Boundary: No schema, dependency, purchase, spend, booking, customs, or
+  Logistics behavior changed.

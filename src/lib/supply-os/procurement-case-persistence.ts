@@ -6,6 +6,10 @@ import { prisma } from "@/lib/prisma";
 import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
 import {
+  currentSupplierQualification,
+  supplierQualificationValidOn,
+} from "./supplier-qualification";
+import {
   listSupplierCommunicationTasks,
   SUPPLIER_EMAIL_ACTION_TASK_TYPE,
   SUPPLIER_EMAIL_DRAFT_TASK_TYPE,
@@ -155,13 +159,6 @@ function nextStage(gates: Record<string, unknown>) {
   if (gates.purchaseApproval === "PENDING") return "APPROVAL_PENDING";
   if (gates.purchaseApproval === "APPROVED") return "PURCHASE_READY";
   return "APPROVAL";
-}
-
-function currentSupplierQualification(value: unknown) {
-  const review = record(value);
-  return review.outcome === "QUALIFIED"
-    && typeof review.validUntil === "string"
-    && review.validUntil >= todayUtc();
 }
 
 function requireCurrentSupplierQualification(value: unknown, message: string) {
@@ -623,6 +620,11 @@ async function listProcurementCasesMatching(
     const candidateSupplierEmailAction = quoteCycle ? emailActionByQuoteCycle.get(quoteCycle.id) ?? null : null;
     const rawSupplierEmailAction = candidateSupplierEmailAction
       && record(candidateSupplierEmailAction.input).draftMessageHash === record(supplierEmailDraft?.result).messageHash
+      && (
+        typeof record(candidateSupplierEmailAction.input).supplierQualificationHash === "string"
+        || candidateSupplierEmailAction.status === "SUCCEEDED"
+        || ["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"].includes(String(record(candidateSupplierEmailAction.result).state))
+      )
       ? candidateSupplierEmailAction
       : null;
     const supplierEmailAction = rawSupplierEmailAction
@@ -746,6 +748,36 @@ async function cancelActiveQuoteCycles(
   officeId: string,
   workspaceId: string,
 ) {
+  const quoteCycles = await tx.supplyExecutionTask.findMany({
+    where: {
+      officeId,
+      workspaceId,
+      parentTaskId: procurementCaseId,
+      taskType: QUOTE_CYCLE_TASK_TYPE,
+      status: { in: ["PLANNED", "RUNNING"] },
+    },
+    select: { id: true },
+  });
+  if (quoteCycles.length) {
+    const communicationActions = await tx.supplyExecutionTask.findMany({
+      where: {
+        officeId,
+        workspaceId,
+        parentTaskId: { in: quoteCycles.map((cycle) => cycle.id) },
+        taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE,
+        status: { in: ["READY", "RUNNING", "BLOCKED"] },
+      },
+      select: { result: true },
+    });
+    const unresolved = communicationActions.some((action) => [
+      "SENDING",
+      "DELIVERY_UNKNOWN",
+      "NOT_FOUND_REVIEW_REQUIRED",
+    ].includes(String(record(action.result).state)));
+    if (unresolved) {
+      throw new SupplyPersistenceError("Supplier email delivery is unresolved. Reconcile it before changing qualification.", "conflict");
+    }
+  }
   await tx.supplyExecutionTask.updateMany({
     where: {
       officeId,
@@ -1390,6 +1422,9 @@ export async function recordSupplierQuoteRelease(args: {
         if (typeof existingRelease.releaseHash === "string" || quoteCycle.status !== "PLANNED") {
           throw new SupplyPersistenceError("A different external release is already recorded for this quote request.", "conflict");
         }
+        if (!supplierQualificationValidOn(current.reviews.sourceEvidence, releaseInput.releasedOn)) {
+          throw new SupplyPersistenceError("Supplier qualification was not valid on the release date. Requalify the supplier before recording contact.", "conflict");
+        }
         const activeSupplierEmail = await tx.supplyExecutionTask.findFirst({
           where: {
             officeId: args.context.officeId,
@@ -1820,6 +1855,10 @@ export async function reviewProcurementGate(args: {
           if (gates.sourceEvidence !== "EVIDENCE_COMPLETE") {
             throw new SupplyPersistenceError("Review supplier evidence before confirming commercial terms.", "conflict");
           }
+          requireCurrentSupplierQualification(
+            reviews.sourceEvidence,
+            "Supplier qualification is missing or expired. Requalify the supplier before confirming commercial terms.",
+          );
           await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${quoteCycleTaskId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
           const quoteCycle = await tx.supplyExecutionTask.findFirst({
             where: {
@@ -1962,6 +2001,10 @@ export async function reviewProcurementGate(args: {
           if (gates.sourceEvidence !== "EVIDENCE_COMPLETE" || gates.commercialTerms !== "EVIDENCE_COMPLETE") {
             throw new SupplyPersistenceError("Complete supplier and commercial review before recording a quality plan.", "conflict");
           }
+          requireCurrentSupplierQualification(
+            reviews.sourceEvidence,
+            "Supplier qualification is missing or expired. Requalify the supplier before recording a quality plan.",
+          );
           const qualityPlan = qualityPlanInput!;
           review = {
             ...qualityPlan,

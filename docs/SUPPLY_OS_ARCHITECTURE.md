@@ -280,8 +280,12 @@ clear boundaries.
   Rejected workstreams remain visible and may later be requalified without
   deleting their prior evidence or events.
 - Missing, legacy free-text, and expired qualification reviews reopen Gate 1.
-  RFQ preparation, sourcing approval, order preparation, and final purchase
-  authorization fail closed until qualification is current.
+  RFQ preparation, manual release, connected-email drafting and approval,
+  connected send, sourcing approval, order preparation, and final purchase
+  authorization fail closed until qualification is current. Connected-email
+  approval pins the exact qualification review hash. The send transaction locks
+  and revalidates that procurement scope immediately before the provider call.
+  A manual release requires qualification valid on its recorded release date.
 - Quote and delivery confirmation requires a persistent
   `SUPPLIER_QUOTE_CYCLE` child task. A revisioned request records quantity,
   unit, need-by, destination, response deadline, requirements, and notes. The
@@ -303,6 +307,13 @@ clear boundaries.
   malformed receipt becomes unknown delivery and blocks resend. Reconciliation
   searches Gmail by the stable message ID. A manager must document verified
   non-delivery before one new attempt receives a new message ID.
+- If qualification expires before the durable send claim, the provider is not
+  called. If the provider has already been called, delivery evidence is always
+  persisted even when qualification changes during the network request. `SENT`
+  is terminal, so a late timeout or reconciliation miss cannot reopen delivery.
+  Legacy unsent approvals without a qualification hash are replaced through the
+  normal request-approval action; unresolved legacy sends remain visible until
+  reconciliation is complete.
 - After a connected send, `Check connected inbox` runs the office-scoped Gmail
   synchronizer and inspects the exact provider thread. Only inbound messages
   from the approved supplier address and after the send receipt are eligible.

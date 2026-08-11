@@ -16,6 +16,35 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Supplier contact revalidates qualification at release
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Checking supplier qualification only when an RFQ is prepared leaves
+  a stale-authorization window. A qualification can expire or be replaced after
+  drafting or approval but before the operator actually contacts the supplier.
+- Decision: Bind the exact supplier-qualification review hash and validity date
+  into connected-email approval scope. Recheck current qualification when the
+  draft is saved, approval is requested, approval is granted, and the send is
+  durably claimed immediately before Gmail is called. A manual external release
+  also requires qualification that was valid on the recorded release date.
+- Concurrency: Contact claims lock the procurement case before the quote cycle
+  and communication action. Qualification changes and sends therefore cannot
+  cross the side-effect boundary on stale state.
+- Receipt rule: Once a provider may have accepted a message, its definitive or
+  uncertain receipt must still be persisted. Qualification expiry never erases
+  evidence of contact that already occurred. Identical recorded-release retries
+  remain idempotent. A definitive `SENT` result is terminal: late timeout or
+  reconciliation responses cannot downgrade it to unknown or retryable state.
+- Upgrade path: Pending and approved email actions created before qualification
+  was part of approval scope are never grandfathered. Safe unsent actions are
+  hidden as stale and atomically replaced when the operator requests approval
+  again for the same draft. Unresolved deliveries remain visible and must be
+  reconciled first.
+- Consequences: An earlier approval is not permanent permission to contact a
+  supplier. Requalification requires a newly scoped approval before another
+  connected send. No schema, connector, purchase, or Logistics behavior changes.
+
 ### 2026-08-10 - Supplier qualification is a structured, expiring decision
 
 - Status: accepted
