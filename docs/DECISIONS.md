@@ -2510,3 +2510,23 @@ Use this log for durable product and engineering decisions. Do not put every imp
   connected-email delivery is active or unresolved.
 - Boundary: This does not create a canonical purchase order, payment, booking,
   customs filing, or Logistics handoff.
+
+### 2026-08-10 - Connected order replies are evidence, not acceptance
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A delivered purchase order is not complete until the supplier
+  confirms accepted quantity and delivery. A reply such as "received" proves a
+  message exists but does not prove full commercial acceptance.
+- Decision: Supply OS may sync only the exact connected Gmail account, purchase
+  order thread, post-send window, and approved supplier address. Matching
+  replies become immutable connected-provider evidence attached to the released
+  purchase action.
+- Review boundary: An operator must select the reply and enter the supplier
+  order reference, accepted quantity, and confirmed delivery date. The reply
+  date is pinned from Gmail. One reply may support only one quantity-bearing
+  acknowledgment.
+- Persistence: Partial acknowledgments retain the captured inbox and connected
+  release lineage so the operator can resume and capture later replies.
+- Boundary: Email text is not automatically extracted into accepted quantity,
+  delivery, payment, Logistics, or inventory state.

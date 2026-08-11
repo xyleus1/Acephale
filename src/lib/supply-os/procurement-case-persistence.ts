@@ -745,6 +745,7 @@ export async function procurementEvidenceSource(context: SupplyAccessContext, ev
           "SUPPLIER_QUOTE_REPLY_EMAIL",
           "SUPPLIER_QUOTE_RESPONSE",
           "PURCHASE_ORDER_RELEASE",
+          "SUPPLIER_ORDER_ACKNOWLEDGMENT_REPLY_EMAIL",
           "SUPPLIER_ORDER_ACKNOWLEDGMENT",
         ],
       },
@@ -3831,6 +3832,7 @@ export async function recordPurchaseOrderRelease(args: {
 
 function normalizeSupplierAcknowledgment(input: unknown) {
   const body = record(input);
+  const connectedReplyEvidenceId = optionalText(body.connectedReplyEvidenceId, "Connected supplier reply evidence ID", 220);
   const acknowledgedOn = requireCurrentOrPastDate(isoDate(body.acknowledgedOn, "Acknowledgment date"), "Acknowledgment date");
   const confirmedDeliveryDate = isoDate(body.confirmedDeliveryDate, "Confirmed delivery date");
   if (confirmedDeliveryDate < acknowledgedOn) {
@@ -3846,7 +3848,10 @@ function normalizeSupplierAcknowledgment(input: unknown) {
     supplierOrderReference: requiredText(body.supplierOrderReference, "Supplier order reference", 300),
     acceptedQuantity,
     confirmedDeliveryDate,
-    evidenceUrl: publicUrl(body.evidenceUrl, "Acknowledgment evidence URL"),
+    evidenceUrl: connectedReplyEvidenceId
+      ? optionalText(body.evidenceUrl, "Acknowledgment evidence URL", 2_000)
+      : publicUrl(body.evidenceUrl, "Acknowledgment evidence URL"),
+    connectedReplyEvidenceId,
     note: optionalText(body.note, "Acknowledgment note", 2_000),
   };
 }
@@ -4009,7 +4014,6 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           throw new SupplyPersistenceError("Stored purchase order release no longer matches the final authorization and quote validity.", "conflict");
         }
         const releaseEvidenceId = requiredText(release.evidenceId, "Purchase order release evidence ID", 220);
-        const releaseEvidenceUrl = publicUrl(release.evidenceUrl, "Purchase order release evidence URL");
         const releaseEvidence = await tx.supplyEvidence.findFirst({
           where: {
             id: releaseEvidenceId,
@@ -4017,17 +4021,61 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             workspaceId: workspace.id,
             executionTaskId: purchaseAction.id,
             kind: "PURCHASE_ORDER_RELEASE",
-            sourceUri: releaseEvidenceUrl,
             contentHash: release.releaseHash,
           },
-          select: { id: true },
+          select: { id: true, sourceType: true, sourceUri: true },
         });
-        if (!releaseEvidence) {
+        if (!releaseEvidence?.sourceUri) {
+          throw new SupplyPersistenceError("Purchase order release evidence no longer matches the authorized action.", "conflict");
+        }
+        const releaseEvidenceUrl = releaseEvidence.sourceType === "CONNECTED_PROVIDER"
+          ? connectedProviderUrl(release.evidenceUrl, "Purchase order release evidence URL")
+          : publicUrl(release.evidenceUrl, "Purchase order release evidence URL");
+        const storedReleaseEvidenceUrl = releaseEvidence.sourceType === "CONNECTED_PROVIDER"
+          ? connectedProviderUrl(releaseEvidence.sourceUri, "Stored purchase order release evidence URL")
+          : publicUrl(releaseEvidence.sourceUri, "Stored purchase order release evidence URL");
+        if (releaseEvidenceUrl !== storedReleaseEvidenceUrl) {
           throw new SupplyPersistenceError("Purchase order release evidence no longer matches the authorized action.", "conflict");
         }
         const acknowledgments = Array.isArray(existingResult.acknowledgments)
           ? existingResult.acknowledgments.map((value) => record(value))
           : [];
+        let acknowledgmentEvidenceUrl = acknowledgmentInput.evidenceUrl;
+        let acknowledgmentEvidenceType: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER" = "OPERATOR_RECORDED_EXTERNAL";
+        let acknowledgmentSourceRecordId = acknowledgmentInput.supplierOrderReference;
+        let sourceEvidenceId: string | null = null;
+        if (acknowledgmentInput.connectedReplyEvidenceId) {
+          const connectedEvidence = await tx.supplyEvidence.findFirst({
+            where: {
+              id: acknowledgmentInput.connectedReplyEvidenceId,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              executionTaskId: purchaseAction.id,
+              kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT_REPLY_EMAIL",
+              sourceType: "CONNECTED_PROVIDER",
+            },
+            select: { id: true, sourceUri: true, sourceRecordId: true, observedAt: true, payload: true },
+          });
+          const connectedPayload = record(connectedEvidence?.payload);
+          if (!connectedEvidence?.sourceUri
+            || !connectedEvidence.sourceRecordId
+            || !connectedEvidence.observedAt
+            || connectedPayload.purchaseActionId !== purchaseAction.id
+            || connectedPayload.releaseHash !== release.releaseHash) {
+            throw new SupplyPersistenceError("Connected supplier reply evidence no longer matches this released order.", "conflict");
+          }
+          const connectedUrl = connectedProviderUrl(connectedEvidence.sourceUri, "Connected supplier acknowledgment evidence URL");
+          if (acknowledgmentInput.evidenceUrl && connectedProviderUrl(acknowledgmentInput.evidenceUrl, "Acknowledgment evidence URL") !== connectedUrl) {
+            throw new SupplyPersistenceError("Acknowledgment evidence URL does not match the selected connected supplier reply.", "conflict");
+          }
+          if (acknowledgmentInput.acknowledgedOn !== connectedEvidence.observedAt.toISOString().slice(0, 10)) {
+            throw new SupplyPersistenceError("Acknowledgment date must match the selected connected supplier reply.", "conflict");
+          }
+          sourceEvidenceId = connectedEvidence.id;
+          acknowledgmentEvidenceUrl = connectedUrl;
+          acknowledgmentEvidenceType = "CONNECTED_PROVIDER";
+          acknowledgmentSourceRecordId = connectedEvidence.sourceRecordId;
+        }
         if (!acknowledgments.length && (!approval.decidedBy?.isActive || approval.decidedBy.role !== PURCHASE_ACTION_REQUIRED_ROLE)) {
           throw new SupplyPersistenceError("The purchase authorization no longer has an active admin decision.", "conflict");
         }
@@ -4042,7 +4090,8 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           acceptedQuantity: acceptedQuantity.toString(),
           unitOfMeasure,
           confirmedDeliveryDate: acknowledgmentInput.confirmedDeliveryDate,
-          evidenceUrl: acknowledgmentInput.evidenceUrl,
+          evidenceUrl: requiredText(acknowledgmentEvidenceUrl, "Acknowledgment evidence URL", 2_000),
+          ...(sourceEvidenceId ? { sourceEvidenceId } : {}),
           note: acknowledgmentInput.note,
         };
         const acknowledgmentHash = digest(normalizedAcknowledgment);
@@ -4054,6 +4103,9 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             purchaseAction: purchaseActionView(purchaseAction, approval),
             acknowledgment: repeated,
           };
+        }
+        if (sourceEvidenceId && acknowledgments.some((value) => value.sourceEvidenceId === sourceEvidenceId)) {
+          throw new SupplyPersistenceError("This connected supplier reply was already used for an acknowledgment.", "conflict");
         }
         if (purchaseAction.status === "SUCCEEDED") {
           throw new SupplyPersistenceError("The authorized order is already fully acknowledged.", "conflict");
@@ -4079,8 +4131,9 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           actorUserId: args.context.userId,
           kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT",
           title: `Supplier acknowledgment ${acknowledgmentInput.supplierOrderReference}`,
-          sourceUri: acknowledgmentInput.evidenceUrl,
-          sourceRecordId: acknowledgmentInput.supplierOrderReference,
+          sourceType: acknowledgmentEvidenceType,
+          sourceUri: normalizedAcknowledgment.evidenceUrl,
+          sourceRecordId: acknowledgmentSourceRecordId,
           observedOn: acknowledgmentInput.acknowledgedOn,
           contentHash: acknowledgmentHash,
           payload: inputJson(normalizedAcknowledgment),
@@ -4095,6 +4148,17 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         const acknowledgedQuantity = previouslyAccepted.add(acceptedQuantity);
         const remainingQuantity = orderedQuantity.sub(acknowledgedQuantity);
         const complete = remainingQuantity.isZero();
+        const connectedAcknowledgmentReplies = Array.isArray(existingResult.connectedAcknowledgmentReplies)
+          ? existingResult.connectedAcknowledgmentReplies.map((value) => {
+              const reply = record(value);
+              return sourceEvidenceId && reply.evidenceId === sourceEvidenceId
+                ? { ...reply, reviewState: "USED_AS_ACKNOWLEDGMENT", acknowledgmentHash }
+                : reply;
+            })
+          : [];
+        const lastAcknowledgmentSyncAt = typeof existingResult.lastAcknowledgmentSyncAt === "string"
+          ? existingResult.lastAcknowledgmentSyncAt
+          : null;
         const result = {
           state: complete ? "ACKNOWLEDGED" : "PARTIALLY_ACKNOWLEDGED",
           authorization: {
@@ -4109,12 +4173,16 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           remainingQuantity: remainingQuantity.toString(),
           unitOfMeasure,
           acknowledgments: [...acknowledgments, acknowledgment],
+          connectedAcknowledgmentReplies,
+          lastAcknowledgmentSyncAt,
           totals: {
             acknowledgedMaterialValue: acknowledgedQuantity.mul(unitPrice).toDecimalPlaces(2).toString(),
             currency,
           },
           lastAcknowledgment: acknowledgment,
-          externalSideEffect: "RECORDED_ONLY",
+          externalSideEffect: existingResult.externalSideEffect === "CONNECTED_PROVIDER"
+            ? "CONNECTED_PROVIDER"
+            : "RECORDED_ONLY",
           updatedAt: now.toISOString(),
         };
 
@@ -4177,6 +4245,9 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             release,
             lastSupplierOrderReference: acknowledgment.supplierOrderReference,
             lastConfirmedDeliveryDate: acknowledgment.confirmedDeliveryDate,
+            connectedReplyCount: connectedAcknowledgmentReplies.length,
+            unreviewedConnectedReplyCount: connectedAcknowledgmentReplies.filter((reply) => reply.reviewState !== "USED_AS_ACKNOWLEDGMENT").length,
+            lastAcknowledgmentSyncAt,
             updatedAt: now.toISOString(),
           },
           updatedAt: now.toISOString(),

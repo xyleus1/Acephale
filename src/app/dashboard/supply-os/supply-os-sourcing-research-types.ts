@@ -95,7 +95,8 @@ export type ConnectedSupplierReply = {
   attachments: Array<{ name: string; mimeType: string | null; size: number | null }>;
   receivedAt: string;
   sourceUrl: string;
-  reviewState: "REVIEW_REQUIRED";
+  reviewState: "REVIEW_REQUIRED" | "USED_AS_ACKNOWLEDGMENT";
+  acknowledgmentHash?: string;
 };
 
 export type SavedProcurementCase = {
@@ -214,6 +215,9 @@ export type SavedProcurementCase = {
       };
       lastSupplierOrderReference?: string;
       lastConfirmedDeliveryDate?: string;
+      connectedReplyCount?: number;
+      unreviewedConnectedReplyCount?: number;
+      lastAcknowledgmentSyncAt?: string;
       updatedAt: string;
     };
     quoteCycle?: {
@@ -261,6 +265,7 @@ export type SavedProcurementCase = {
         releasedOn: string;
         evidenceUrl: string;
         evidenceId?: string;
+        sourceEvidenceId?: string | null;
         note: string | null;
         releaseHash: string;
         evidenceClass: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER";
@@ -538,8 +543,11 @@ export type SavedProcurementCase = {
         confirmedDeliveryDate: string;
         evidenceUrl: string;
         evidenceId?: string;
+        sourceEvidenceId?: string | null;
       };
-      externalSideEffect: "RECORDED_ONLY";
+      connectedAcknowledgmentReplies?: ConnectedSupplierReply[];
+      lastAcknowledgmentSyncAt?: string;
+      externalSideEffect: "RECORDED_ONLY" | "CONNECTED_PROVIDER";
       updatedAt: string;
     }) | null;
     approval: {

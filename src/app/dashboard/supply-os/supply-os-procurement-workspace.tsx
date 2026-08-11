@@ -460,6 +460,7 @@ export function AtlasProcurementWorkspace({
   const [purchaseOrderEmailApprovalReason, setPurchaseOrderEmailApprovalReason] = useState("The exact authorized purchase order and supplier message are ready for release review.");
   const [purchaseOrderEmailDecisionNote, setPurchaseOrderEmailDecisionNote] = useState("");
   const [purchaseOrderEmailRecoveryNote, setPurchaseOrderEmailRecoveryNote] = useState("");
+  const [selectedAcknowledgmentReplyEvidenceId, setSelectedAcknowledgmentReplyEvidenceId] = useState<string | null>(null);
   const [purchaseReleaseForm, setPurchaseReleaseForm] = useState(() => ({
     channel: "EMAIL" as "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER",
     releasedOn: "",
@@ -779,6 +780,7 @@ export function AtlasProcurementWorkspace({
       evidenceUrl: "",
       note: "",
     }));
+    setSelectedAcknowledgmentReplyEvidenceId(null);
   }, [currentCase?.purchaseAction?.id, currentCase?.purchaseAction?.result?.state, currentCase?.result?.purchaseRelease?.remainingQuantity]);
 
   useEffect(() => {
@@ -1214,6 +1216,22 @@ export function AtlasProcurementWorkspace({
     }, operation === "RESET" ? "purchase-order-email-recovery" : undefined);
   }
 
+  function checkConnectedPurchaseOrderReplies() {
+    const actionId = currentCase?.purchaseAction?.id;
+    if (!actionId) return;
+    void runCaseAction(`/api/supply-os/purchase-actions/${actionId}/connected-acknowledgments`, {});
+  }
+
+  function useConnectedAcknowledgmentReply(reply: ConnectedSupplierReply) {
+    if (currentCase) setDirtyDrafts((current) => markWorkstreamDraft(current, currentCase.id, "supplier-acknowledgment"));
+    setSelectedAcknowledgmentReplyEvidenceId(reply.evidenceId);
+    setAcknowledgmentForm((current) => ({
+      ...current,
+      acknowledgedOn: reply.receivedAt.slice(0, 10),
+      evidenceUrl: "",
+    }));
+  }
+
   function recordSupplierAcknowledgment() {
     const actionId = currentCase?.purchaseAction?.id;
     const releaseHash = currentCase?.result?.purchaseRelease?.release?.releaseHash;
@@ -1222,6 +1240,8 @@ export function AtlasProcurementWorkspace({
       ...acknowledgmentForm,
       expectedReleaseHash: releaseHash,
       acceptedQuantity: Number(acknowledgmentForm.acceptedQuantity),
+      evidenceUrl: selectedAcknowledgmentReplyEvidenceId ? null : acknowledgmentForm.evidenceUrl,
+      connectedReplyEvidenceId: selectedAcknowledgmentReplyEvidenceId,
       note: acknowledgmentForm.note || null,
     }, "supplier-acknowledgment");
   }
@@ -1261,7 +1281,7 @@ export function AtlasProcurementWorkspace({
     && Boolean(acknowledgmentForm.supplierOrderReference.trim())
     && Number(acknowledgmentForm.acceptedQuantity) > 0
     && Boolean(acknowledgmentForm.confirmedDeliveryDate)
-    && Boolean(acknowledgmentForm.evidenceUrl.trim());
+    && Boolean(selectedAcknowledgmentReplyEvidenceId || acknowledgmentForm.evidenceUrl.trim());
   const quoteRequestComplete = Number(quoteRequestForm.quantity) > 0
     && Boolean(quoteRequestForm.unitOfMeasure.trim())
     && Boolean(quoteRequestForm.needBy)
@@ -1783,14 +1803,36 @@ export function AtlasProcurementWorkspace({
                           </section>
                         ) : purchaseReleaseResult?.release && canApproveProcurement ? (
                           <section className={styles.purchaseApprovalRequest} data-draft-section="supplier-acknowledgment">
-                            <p>Record supplier acceptance received outside Derya. Partial acceptances remain open until the full authorized quantity is covered.</p>
+                            {purchaseReleaseResult.externalSideEffect === "CONNECTED_PROVIDER" ? (
+                              <>
+                                <p><strong>Connected supplier acknowledgment inbox</strong></p>
+                                <p>Sync the exact Gmail order thread. Replies are durable evidence, but the operator must still confirm quantity, supplier reference, and delivery date.</p>
+                                <button type="button" disabled={gateActionState === "saving"} onClick={checkConnectedPurchaseOrderReplies}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />} Check order thread</button>
+                                {purchaseReleaseResult.lastAcknowledgmentSyncAt ? <small>Last checked <time dateTime={purchaseReleaseResult.lastAcknowledgmentSyncAt}>{displayStoredDate(purchaseReleaseResult.lastAcknowledgmentSyncAt.slice(0, 10))}</time>.</small> : null}
+                                {(purchaseReleaseResult.connectedAcknowledgmentReplies ?? []).map((reply) => (
+                                  <section className={styles.purchaseApprovalRequest} key={reply.evidenceId}>
+                                    <p><strong>Order reply from {reply.fromName || reply.fromEmail}</strong></p>
+                                    <p>{reply.subject || "No subject"} · <time dateTime={reply.receivedAt}>{displayStoredDate(reply.receivedAt.slice(0, 10))}</time></p>
+                                    <p>{reply.excerpt || "This reply contains no plain-text body."}</p>
+                                    {reply.attachments.length ? <p>Attachments: {reply.attachments.map((attachment) => attachment.name).join(", ")}</p> : null}
+                                    <div className={styles.purchaseDecisionActions}>
+                                      <a href={evidenceHref(reply.evidenceId, reply.sourceUrl)} target="_blank" rel="noreferrer">Open connected evidence <ArrowRight size={14} /></a>
+                                      <button type="button" disabled={gateActionState === "saving" || reply.reviewState === "USED_AS_ACKNOWLEDGMENT"} onClick={() => useConnectedAcknowledgmentReply(reply)}><PackageCheck size={14} /> {reply.reviewState === "USED_AS_ACKNOWLEDGMENT" ? "Recorded" : selectedAcknowledgmentReplyEvidenceId === reply.evidenceId ? "Using this reply" : "Use as acknowledgment evidence"}</button>
+                                    </div>
+                                  </section>
+                                ))}
+                              </>
+                            ) : null}
+                            <p>Confirm the structured supplier acceptance. Partial acceptances remain open until the full authorized quantity is covered.</p>
                             <div className={styles.procurementFormGrid}>
                               <label>Acknowledged on<input type="date" value={acknowledgmentForm.acknowledgedOn} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acknowledgedOn: event.target.value }))} /></label>
                               <label>Accepted quantity<input type="number" min="0.01" step="0.01" value={acknowledgmentForm.acceptedQuantity} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acceptedQuantity: event.target.value }))} /></label>
                               <label>Unit<input readOnly value={purchaseReleaseResult?.unitOfMeasure ?? currentCase.purchaseAction?.input.order.unitOfMeasure ?? "Unknown"} /></label>
                               <label>Confirmed delivery<input type="date" value={acknowledgmentForm.confirmedDeliveryDate} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, confirmedDeliveryDate: event.target.value }))} /></label>
                               <label className={styles.procurementWideField}>Supplier order reference<input value={acknowledgmentForm.supplierOrderReference} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, supplierOrderReference: event.target.value }))} placeholder="Supplier confirmation or order reference" /></label>
-                              <label className={styles.procurementWideField}>Evidence URL<input type="url" value={acknowledgmentForm.evidenceUrl} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>
+                              {selectedAcknowledgmentReplyEvidenceId ? (
+                                <div className={styles.procurementWideField}><span>Evidence</span><p>Connected supplier reply selected. The received date is pinned to that message.</p><button type="button" onClick={() => setSelectedAcknowledgmentReplyEvidenceId(null)}>Use external evidence instead</button></div>
+                              ) : <label className={styles.procurementWideField}>Evidence URL<input type="url" value={acknowledgmentForm.evidenceUrl} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>}
                               <label className={styles.procurementWideField}>Note<textarea value={acknowledgmentForm.note} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional acceptance details or exceptions" /></label>
                             </div>
                             <button type="button" disabled={gateActionState === "saving" || !acknowledgmentFormComplete} onClick={recordSupplierAcknowledgment}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} Record supplier acknowledgment</button>

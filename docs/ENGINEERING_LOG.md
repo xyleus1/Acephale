@@ -4738,3 +4738,25 @@ Use this file for chronological implementation notes that future agents should s
   changed-file U+2014 checks.
 - Boundary: No schema, dependency, payment, booking, customs, canonical PO, or
   Logistics behavior changed.
+
+### 2026-08-10 - Capture connected supplier order acknowledgments
+
+- Branch: `supply-os-connected-order-acknowledgments`, targeting `main`.
+- Task: Close the manual inbox gap after a connected Gmail purchase order is
+  released.
+- Behavior: Supply OS syncs the exact order thread, captures matching supplier
+  replies as durable evidence, restores them in the sourcing queue, and lets an
+  operator use one reply while confirming structured acceptance terms.
+- Safety: Account, office, workspace, thread, sender, send time, purchase action,
+  and release hash are pinned. Replies never infer quantity or delivery. A
+  connected reply cannot be reused to count accepted quantity twice.
+- Fix: Connected Gmail release URLs retain a thread fragment. The legacy
+  acknowledgment validator treated them as generic public URLs and stripped the
+  fragment, which blocked every connected release from being acknowledged. The
+  validator now follows the stored evidence class.
+- Verification: Atlas contract, disposable PostgreSQL capture and review
+  lifecycle, wrong account, thread, sender, time, evidence kind, stale session,
+  cross-office access, provider failure, concurrency, idempotency, TypeScript,
+  build, copy, docs, tenant, whitespace, and U+2014 checks.
+- Boundary: No schema, dependency, automated term extraction, payment, booking,
+  customs, inventory mutation, or Logistics behavior changed.

@@ -44,7 +44,7 @@ import {
   sendPurchaseOrderEmailAction,
 } from "../src/lib/supply-os/purchase-order-communication-persistence";
 import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
-import { captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
+import { captureConnectedPurchaseOrderReplies, captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -1985,6 +1985,10 @@ async function main() {
       purchaseDraftId: clonedDraft.id,
       purchaseDraftResultHash: clonedDraft.resultHash,
     };
+    const clonedCommercial = { ...(clonedActionInput.commercial as Record<string, unknown>) };
+    delete clonedCommercial.quoteCycleTaskId;
+    delete clonedCommercial.quoteResponseHash;
+    clonedActionInput.commercial = clonedCommercial;
     const clonedActionScopeHash = jsonDigest(clonedActionInput);
     const clonedAction = await prisma.supplyExecutionTask.create({
       data: {
@@ -2091,7 +2095,7 @@ async function main() {
       reconcile: async () => ({ state: "NOT_FOUND" }),
     };
     const deliveredOrderEmail = await sendPurchaseOrderEmailAction({ context, actionId: connectedOrderApproved.action.id, provider: sentOrderProvider });
-    const deliveredOrderResult = deliveredOrderEmail.result as { state: string; evidenceId: string; releaseHash: string; providerMessageId: string };
+    const deliveredOrderResult = deliveredOrderEmail.result as { state: string; evidenceId: string; releaseHash: string; providerMessageId: string; localThreadId: string; sentAt: string; rfcMessageId: string };
     assert.equal(deliveredOrderResult.state, "SENT");
     assert.equal(deliveredOrderResult.providerMessageId, `gmail-order-${suffix}`);
     assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: deliveredOrderResult.evidenceId } })).sourceType, "CONNECTED_PROVIDER");
@@ -2104,6 +2108,170 @@ async function main() {
     assert.equal(restoredConnectedOrderCase?.purchaseOrderEmailAction?.status, "SUCCEEDED", "the queue must restore the connected order delivery receipt");
     assert.equal((restoredConnectedOrderCase?.result as { purchaseRelease: { state: string } }).purchaseRelease.state, "RELEASED");
     assert.equal((await findProcurementCaseByRelatedTaskId(context, connectedOrderApproved.action.id))?.id, clonedCase.id, "purchase order email actions must restore their exact procurement workstream");
+
+    const connectedOrderReply = await prisma.emailMessage.create({
+      data: {
+        threadId: deliveredOrderResult.localThreadId,
+        accountId: orderSenderAccount.id,
+        externalId: `<supplier-order-reply-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-order-reply-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "orders@example.com",
+        fromName: "Example supplier order desk",
+        toEmails: JSON.stringify([orderSenderAccount.email]),
+        subject: "Re: Purchase order PO-CONNECTED-001",
+        bodyText: "We accept PO-CONNECTED-001. Supplier order SO-CONNECTED-001 is scheduled for the confirmed delivery date below.",
+        attachments: JSON.stringify([{ filename: "SO-CONNECTED-001.pdf", mimeType: "application/pdf", size: 4096 }]),
+        sentAt: new Date(new Date(deliveredOrderResult.sentAt).getTime() + 60_000),
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: deliveredOrderResult.localThreadId,
+        accountId: otherSenderAccount.id,
+        externalId: `<supplier-order-wrong-account-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-order-wrong-account-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "orders@example.com",
+        toEmails: JSON.stringify([otherSenderAccount.email]),
+        subject: "Order reply on the wrong buyer account",
+        bodyText: "This must not become acknowledgment evidence.",
+        sentAt: new Date(),
+      },
+    });
+    const unrelatedOrderThread = await prisma.emailThread.create({
+      data: {
+        officeId: context.officeId,
+        subject: "A different purchase order thread",
+        participants: JSON.stringify([orderSenderAccount.email, "orders@example.com"]),
+        externalThreadId: `gmail-unrelated-order-thread-${suffix}`,
+        lastMessageAt: new Date(),
+        messageCount: 1,
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: unrelatedOrderThread.id,
+        accountId: orderSenderAccount.id,
+        externalId: `<supplier-order-wrong-thread-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-order-wrong-thread-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "orders@example.com",
+        toEmails: JSON.stringify([orderSenderAccount.email]),
+        subject: "Exact supplier on a different order thread",
+        bodyText: "This must not become acknowledgment evidence for PO-CONNECTED-001.",
+        sentAt: new Date(),
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: deliveredOrderResult.localThreadId,
+        accountId: orderSenderAccount.id,
+        externalId: `<supplier-order-pre-send-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-order-pre-send-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "orders@example.com",
+        toEmails: JSON.stringify([orderSenderAccount.email]),
+        subject: "Order message predating release",
+        bodyText: "This older message must not become acknowledgment evidence.",
+        sentAt: new Date(new Date(deliveredOrderResult.sentAt).getTime() - 60_000),
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: deliveredOrderResult.localThreadId,
+        accountId: orderSenderAccount.id,
+        externalId: `<supplier-order-unrelated-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-order-unrelated-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "unrelated@example.com",
+        toEmails: JSON.stringify([orderSenderAccount.email]),
+        subject: "Unrelated order-thread participant",
+        bodyText: "This message must not become acknowledgment evidence.",
+        sentAt: new Date(),
+      },
+    });
+    const orderReplySync = async (input: { accountId: string; officeId: string; query: string }) => {
+      assert.equal(input.accountId, orderSenderAccount.id);
+      assert.equal(input.officeId, context.officeId);
+      assert.equal(input.query, `rfc822msgid:${deliveredOrderResult.rfcMessageId}`, "order reply sync must target only the stable purchase order message ID");
+      return { ok: true as const, processed: 1, created: 1, threadsTouched: 1 };
+    };
+    await assert.rejects(() => captureConnectedPurchaseOrderReplies({
+      context,
+      purchaseActionId: clonedAction.id,
+      sync: async () => ({ ok: true, processed: 0, created: 0, threadsTouched: 0 }),
+    }), /did not return the delivered purchase order thread/i, "a silent Gmail order-thread miss must not look successful");
+    await assert.rejects(() => captureConnectedPurchaseOrderReplies({
+      context,
+      purchaseActionId: clonedAction.id,
+      sync: async () => ({ error: "Simulated Gmail provider failure." }),
+    }), /connected Gmail sync failed/i, "a Gmail provider failure must not mutate acknowledgment state");
+    const concurrentOrderReplyCaptures = await Promise.all([
+      captureConnectedPurchaseOrderReplies({ context, purchaseActionId: clonedAction.id, sync: orderReplySync }),
+      captureConnectedPurchaseOrderReplies({ context, purchaseActionId: clonedAction.id, sync: orderReplySync }),
+    ]);
+    assert.equal(concurrentOrderReplyCaptures.reduce((sum, result) => sum + result.captured, 0), 1, "concurrent order inbox checks must capture one exact reply once");
+    const orderReplyEvidence = await prisma.supplyEvidence.findFirstOrThrow({ where: { executionTaskId: clonedAction.id, kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT_REPLY_EMAIL" } });
+    assert.equal(orderReplyEvidence.sourceType, "CONNECTED_PROVIDER");
+    assert.equal(orderReplyEvidence.sourceRecordId, connectedOrderReply.gmailMessageId);
+    const orderReplyEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: clonedAction.id, eventType: "SUPPLIER_ORDER_REPLIES_CAPTURED" } });
+    const repeatedOrderReplyCapture = await captureConnectedPurchaseOrderReplies({ context, purchaseActionId: clonedAction.id, sync: orderReplySync });
+    assert.equal(repeatedOrderReplyCapture.captured, 0);
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: clonedAction.id, eventType: "SUPPLIER_ORDER_REPLIES_CAPTURED" } }), orderReplyEventCount, "repeat inbox checks must not append fake order-reply history");
+    const openConnectedAction = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
+    assert.equal((openConnectedAction.result as { state: string }).state, "RELEASED", "capturing a reply must not infer structured supplier acceptance");
+    const connectedAcknowledgment = await recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        acknowledgedOn: connectedOrderReply.sentAt.toISOString().slice(0, 10),
+        supplierOrderReference: "SO-CONNECTED-001",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: null,
+        connectedReplyEvidenceId: orderReplyEvidence.id,
+        note: "Operator confirmed the structured terms against the attached supplier order confirmation.",
+      },
+    });
+    assert.equal((connectedAcknowledgment.purchaseAction.result as { state: string }).state, "PARTIALLY_ACKNOWLEDGED");
+    const connectedAcknowledgmentRecord = connectedAcknowledgment.acknowledgment as { evidenceId: string; sourceEvidenceId: string };
+    assert.equal(connectedAcknowledgmentRecord.sourceEvidenceId, orderReplyEvidence.id);
+    const finalConnectedAcknowledgmentEvidence = await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: connectedAcknowledgmentRecord.evidenceId } });
+    assert.equal(finalConnectedAcknowledgmentEvidence.sourceType, "CONNECTED_PROVIDER", "reviewed acknowledgment must retain connected-provider lineage");
+    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        acknowledgedOn: connectedOrderReply.sentAt.toISOString().slice(0, 10),
+        supplierOrderReference: "SO-WRONG-EVIDENCE",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: null,
+        connectedReplyEvidenceId: storedQuoteResponse.evidenceId,
+      },
+    }), /connected supplier reply evidence no longer matches/i, "quote evidence must not be reused as purchase order acknowledgment evidence");
+    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        acknowledgedOn: connectedOrderReply.sentAt.toISOString().slice(0, 10),
+        supplierOrderReference: "SO-CONNECTED-001-REUSED",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: null,
+        connectedReplyEvidenceId: orderReplyEvidence.id,
+      },
+    }), /already used for an acknowledgment/i, "one connected reply must not be counted twice toward accepted quantity");
+    const restoredPartialConnectedCase = (await listProcurementCases(context)).find((entry) => entry.id === clonedCase.id);
+    assert.equal(restoredPartialConnectedCase?.purchaseAction?.result?.state, "PARTIALLY_ACKNOWLEDGED");
+    assert.equal(restoredPartialConnectedCase?.purchaseAction?.result && "connectedAcknowledgmentReplies" in restoredPartialConnectedCase.purchaseAction.result
+      ? restoredPartialConnectedCase.purchaseAction.result.connectedAcknowledgmentReplies?.length
+      : 0, 1, "the queue must restore captured order replies after partial acknowledgment");
+    assert.equal(restoredPartialConnectedCase?.result?.purchaseRelease?.unreviewedConnectedReplyCount, 0, "a used reply must not keep the queue stuck on review");
 
     const duplicateRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "DUPLICATE-ID" });
     await completeSourcingResearchRun({
@@ -2416,6 +2584,11 @@ async function main() {
       purchaseActionId: clonedAction.id,
       input: connectedOrderDraftInput,
     }), /current user|not found|cannot edit/i, "a stale privileged cookie must not prepare a connected purchase order email after demotion");
+    await assert.rejects(() => captureConnectedPurchaseOrderReplies({
+      context: stalePrivilegedContext,
+      purchaseActionId: clonedAction.id,
+      sync: orderReplySync,
+    }), /current user|not found|cannot edit/i, "a stale privileged cookie must not capture connected supplier order replies after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
@@ -2505,6 +2678,11 @@ async function main() {
       actionId: connectedOrderApproved.action.id,
       provider: uncertainOrderProvider,
     }), /not found/i, "another office must not send a connected purchase order email");
+    await assert.rejects(() => captureConnectedPurchaseOrderReplies({
+      context: foreign,
+      purchaseActionId: clonedAction.id,
+      sync: orderReplySync,
+    }), /not found|released connected Gmail purchase order/i, "another office must not capture connected supplier order replies");
     assert.equal(
       await findProcurementCaseByRelatedTaskId(foreign, connectedOrderApproved.action.id),
       null,

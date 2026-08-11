@@ -172,6 +172,7 @@ export function AtlasInventoryWorkspace({
       ?? cases[0];
     const release = procurementCase?.result?.purchaseRelease;
     if (release?.release && release.state !== "ACKNOWLEDGED" && release.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10)) return "Chase supplier acknowledgment";
+    if (release?.state !== "ACKNOWLEDGED" && release?.unreviewedConnectedReplyCount) return "Review supplier order reply";
     if (procurementCase?.result?.purchaseRelease?.state === "RELEASED") return "Record supplier acknowledgment";
     if (procurementCase?.result?.purchaseRelease) return "Review supplier acknowledgment";
     if (procurementCase?.purchaseAction) return "Review purchase action";

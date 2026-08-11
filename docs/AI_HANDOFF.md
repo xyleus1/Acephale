@@ -7877,3 +7877,33 @@ Trust boundary:
   before retry.
 - This does not create a canonical purchase order, payment, booking, customs
   filing, or Logistics handoff.
+
+## Supply OS connected supplier order acknowledgments, August 10
+
+Status:
+
+- Implemented on `supply-os-connected-order-acknowledgments`, targeting `main`.
+- No Prisma migration or new dependency is required.
+
+Operator result:
+
+- A connected-Gmail purchase order that is released or partially acknowledged
+  exposes `Check order thread` in the same sourcing workstream.
+- Supply OS captures only post-send replies from the exact supplier address in
+  the exact connected account and thread. Reply cards, attachments, evidence,
+  and the last sync time survive queue navigation.
+- `Use as acknowledgment evidence` pins the Gmail observation date. The
+  operator still enters supplier reference, accepted quantity, and confirmed
+  delivery before the existing partial or full acknowledgment transition runs.
+
+Trust boundary:
+
+- Captured text is review evidence, not structured acceptance. No model or
+  parser advances quantity or delivery state.
+- One connected reply cannot be reused for another quantity-bearing
+  acknowledgment. Partial acceptance preserves the inbox for later replies.
+- The acknowledgment validator now respects connected Gmail evidence URLs;
+  generic public-URL normalization previously made connected releases
+  impossible to acknowledge.
+- No payment, booking, customs, inventory mutation, or Logistics handoff is
+  created.
