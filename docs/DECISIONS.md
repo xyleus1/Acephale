@@ -16,6 +16,40 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-11 - Connected quote PDFs are bounded evidence sources
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Suppliers commonly put delivery, validity, MOQ, and price only in a
+  PDF quotation. Leaving those fields unknown is safe but forces buyers to
+  transcribe the most important replies. Treating an arbitrary attachment or
+  model summary as commercial truth would be worse.
+- Decision: Upgrade `extract.supplier_quote_terms` to version 2. It may retrieve
+  text PDFs only from the exact office-scoped Gmail message and attachment IDs
+  stored on the connected message record. Limit processing to
+  three PDFs, 8 MB per PDF, 25 pages per PDF, and 30,000 combined text
+  characters. Stream provider responses under an encoded-size ceiling and parse
+  each PDF in a time- and memory-limited worker. Do not accept public URLs,
+  client-provided attachment IDs, or arbitrary uploads through this capability.
+- Evidence rule: Every proposed non-null field must name one email or attachment
+  source and carry an exact excerpt found wholly inside that source. The server
+  rejects missing, mislabeled, stitched, or semantically wrong citations. Store
+  the attachment source label and extracted-text hash with proposal evidence,
+  not the full attachment text.
+- Failure rule: Network and provider retrieval failures remain failed immutable
+  attempts that can be retried. Unsupported, oversized, scanned, encrypted,
+  malformed, or truncated files produce deterministic warnings. OCR remains out
+  of scope and is never implied.
+- Compatibility: Version 1 proposals remain queryable. Version 2 creates a new
+  capability scope so an attachment-only version 1 result can be re-extracted
+  without mutating history.
+- Review boundary: PDF extraction still only prefills the operator review form.
+  It cannot record commercial terms, advance gates, approve a supplier, contact
+  anyone, issue an order, spend, or open Logistics.
+- Consequences: Buyers can resume evidence-backed quote review without manually
+  copying ordinary text PDFs, while attachment failures and unknowns remain
+  explicit.
+
 ### 2026-08-11 - Supplier quote extraction is a review proposal
 
 - Status: accepted

@@ -4869,3 +4869,24 @@ Use this file for chronological implementation notes that future agents should s
 - Boundary: No migration, dependency, automatic attachment parsing, supplier
   contact, purchase authorization, payment, inventory, booking, customs, or
   Logistics behavior changed.
+
+### 2026-08-11 - Extract connected supplier quote PDF terms
+
+- Branch: `supply-os-quote-attachments`, targeting `main`.
+- Task: Remove manual transcription for ordinary supplier quote PDFs without
+  weakening source evidence or procurement approvals.
+- Behavior: Version 2 retrieves bounded PDF content from the exact connected
+  Gmail message, proposes commercial terms with one named source and exact
+  excerpt per field, preserves version 1 proposals, and lets the operator
+  re-extract earlier attachment-only replies.
+- Safety: Office, workspace, message, account, attachment metadata, source
+  evidence, request scope, user access, and capability hashes are revalidated.
+  Arbitrary URLs, uploads, OCR claims, cross-source citations, and automatic
+  commercial progression remain blocked. Full PDF text is not copied into the
+  proposal record.
+- Verification: Attachment parser, quote normalizer, Atlas sourcing, operations
+  UI, continuous layout, TypeScript, and disposable PostgreSQL persistence
+  tests, including provider failure, immutable retry, queue restore, stale role,
+  and cross-office denial.
+- Boundary: No migration, dependency, supplier contact, purchase authorization,
+  payment, inventory, booking, customs, or Logistics behavior changed.

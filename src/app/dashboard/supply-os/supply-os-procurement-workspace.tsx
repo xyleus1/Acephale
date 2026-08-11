@@ -1970,7 +1970,7 @@ export function AtlasProcurementWorkspace({
                             {reply.attachments.length ? <p>Attachments: {reply.attachments.map((attachment) => attachment.name).join(", ")}</p> : null}
                             {reply.quoteExtraction ? (
                               <div>
-                                <p><strong>{reply.quoteExtraction.proposal.state === "PROPOSED" ? "Extracted terms need review" : "No supported plain-text terms"}</strong></p>
+                                <p><strong>{reply.quoteExtraction.proposal.state === "PROPOSED" ? "Extracted terms need review" : "No supported terms found"}</strong></p>
                                 {reply.quoteExtraction.proposal.state === "PROPOSED" ? (
                                   <dl className={styles.purchaseDraftSummary}>
                                     {QUOTE_EXTRACTION_FIELDS.map(({ key, label }) => {
@@ -1979,7 +1979,7 @@ export function AtlasProcurementWorkspace({
                                         <div key={key}>
                                           <dt>{label}</dt>
                                           <dd>{field.value ?? "Unknown"}{field.state === "CONFLICT" ? " (conflict)" : ""}</dd>
-                                          {field.evidenceText ? <p>Source excerpt: <q>{field.evidenceText}</q></p> : null}
+                                          {field.evidenceText ? <p>{field.evidenceSource?.label ? <>Source: {field.evidenceSource.label}. </> : null}Source excerpt: <q>{field.evidenceText}</q></p> : null}
                                           {field.reason ? <p>{field.reason}</p> : null}
                                         </div>
                                       );
@@ -1995,9 +1995,10 @@ export function AtlasProcurementWorkspace({
                               <button type="button" disabled={gateActionState === "saving"} onClick={() => useConnectedSupplierReply(reply)}><PackageCheck size={14} /> {selectedReplyEvidenceId === reply.evidenceId ? "Using this reply" : "Use as quote evidence"}</button>
                               {reply.quoteExtraction?.proposal.state === "PROPOSED" ? (
                                 <button type="button" disabled={gateActionState === "saving"} onClick={() => reviewExtractedSupplierTerms(reply)}><Sparkles size={14} /> Review extracted terms</button>
-                              ) : reply.quoteExtraction ? null : (
-                                <button type="button" disabled={gateActionState === "saving"} onClick={() => extractConnectedSupplierReply(reply)}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Sparkles size={14} />} Extract terms</button>
-                              )}
+                              ) : null}
+                              {canApproveProcurement && (!reply.quoteExtraction || reply.attachments.length > 0 && reply.quoteExtraction.proposal.extractorVersion === "1") ? (
+                                <button type="button" disabled={gateActionState === "saving"} onClick={() => extractConnectedSupplierReply(reply)}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Sparkles size={14} />} {reply.quoteExtraction ? "Extract attachment terms" : "Extract terms"}</button>
+                              ) : null}
                             </div>
                           </section>
                         ))}

@@ -32,6 +32,7 @@
     "test:supply-os-sourcing-persistence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-sourcing-persistence.test.ts",
     "test:supply-os-supplier-email-provider": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supplier-email-provider.test.ts",
     "test:supply-os-supplier-quote-extraction": "tsx scripts/supply-os-supplier-quote-extraction.test.ts",
+    "test:supply-os-supplier-quote-attachments": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supplier-quote-attachments.test.ts",
     "test:supply-os-csv-import": "tsx scripts/supply-os-csv-import.test.ts",
     "test:supply-os-ingestion-research": "tsx scripts/supply-os-ingestion-research.test.ts",
     "test:supply-os-persistence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-persistence.test.ts",

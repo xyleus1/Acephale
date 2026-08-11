@@ -2,6 +2,40 @@
 
 ## Latest Update
 
+### Connected supplier quote PDFs are bounded review sources
+
+- `extract.supplier_quote_terms@2` can read text PDFs attached to the exact
+  connected Gmail supplier reply. It does not accept browser URLs or arbitrary
+  files.
+- Retrieval is pinned to the office-scoped active Gmail account, provider
+  message ID, local message, and provider attachment IDs stored on that
+  connected message.
+  At most three PDFs are considered, each is capped at 8 MB, parsing is limited
+  to 25 pages, and combined attachment text is capped at 30,000 characters.
+  Provider responses are streamed under an encoded-size ceiling, and each PDF
+  is parsed in a time- and memory-limited worker.
+- Every proposed field names one source and carries an exact excerpt that must
+  occur wholly inside that email subject, email body, or attachment. Cross-source
+  stitching and mislabeled citations fail closed.
+- Scanned, encrypted, malformed, oversized, unsupported, and truncated files
+  remain visible as deterministic warnings. OCR is not claimed or simulated.
+- Attachment retrieval failures create immutable failed capability attempts and
+  retry through a new attempt. Successful proposals store attachment text hashes
+  and source labels without duplicating the full PDF text in operational output.
+- Version 1 proposals remain visible. Replies previously marked attachment-only
+  can run version 2 without losing the original proposal history.
+- The operator still reviews and records the quote manually. Attachment parsing
+  cannot advance qualification, commercial approval, supplier selection,
+  purchasing, spend, or Logistics.
+
+Verification:
+
+- `npm run test:supply-os-supplier-quote-attachments`
+- `npm run test:supply-os-supplier-quote-extraction`
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false --incremental false`
+
 ### Connected supplier replies now produce reviewable quote-term proposals
 
 - An operator can run `Extract terms` on one connected supplier reply. Supply

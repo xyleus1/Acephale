@@ -321,13 +321,20 @@ clear boundaries.
   Each new reply becomes immutable `SUPPLIER_QUOTE_REPLY_EMAIL` evidence with
   its provider message identity, message excerpt, attachments, and observation
   time. Repeated and concurrent checks are idempotent.
-- An operator may run `extract.supplier_quote_terms@1` against one captured
-  reply. The capability receives the connected email subject and body, the
-  attachment names, request unit, need-by date, and evidence hashes. Every
-  proposed non-null field must cite exact supplier text; the server rejects
-  unsupported numbers, currencies, units, references, and dates. Unit mismatch
-  and delivery after need-by remain explicit conflicts. Attachment contents are
-  not inspected in V1, so attachment-only terms remain unknown.
+- An operator may run `extract.supplier_quote_terms@2` against one captured
+  reply. The capability receives the connected email subject and body plus text
+  extracted from PDFs on the exact office-scoped Gmail message. Provider
+  attachment IDs come from the captured message, never the client. Processing
+  is bounded to three PDFs, 8 MB each, 25 pages each, and 30,000 combined text
+  characters. Provider payloads are streamed under an encoded-size ceiling;
+  each PDF runs in a time- and memory-limited worker. Scanned-image OCR is not
+  supported.
+- Every proposed non-null field must name one subject, body, or attachment
+  source and cite exact text found wholly inside that source. The server rejects
+  unsupported numbers, currencies, units, references, dates, mislabeled
+  citations, and cross-source stitching. Unit mismatch and delivery after
+  need-by remain explicit conflicts. Version 1 proposals remain visible and can
+  be superseded by a new version 2 run without mutating history.
 - Extraction attempts are immutable `SupplyCapabilityRun` records under the
   exact quote cycle. A failed or stale attempt is retained and a retry creates a
   linked attempt. A successful run is reused for identical input. Its output is

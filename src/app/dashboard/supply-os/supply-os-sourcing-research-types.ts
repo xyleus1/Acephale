@@ -105,7 +105,7 @@ export type ConnectedSupplierReply = {
     proposalEvidenceId: string | null;
     proposalHash: string | null;
     proposal: {
-      schemaVersion: 1;
+      schemaVersion: 1 | 2;
       state: "PROPOSED" | "NO_TERMS";
       extractorVersion: string;
       promptVersion: string;
@@ -115,6 +115,11 @@ export type ConnectedSupplierReply = {
           value: string | null;
           state: "EXTRACTED" | "UNKNOWN" | "CONFLICT";
           evidenceText: string | null;
+          evidenceSource?: {
+            sourceId: string;
+            kind: "EMAIL_SUBJECT" | "EMAIL_BODY" | "ATTACHMENT";
+            label: string;
+          } | null;
           reason: string | null;
         }
       >;

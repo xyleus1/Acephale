@@ -58,6 +58,7 @@ import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/l
 import { captureConnectedPurchaseOrderReplies, captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
 import { extractConnectedSupplierQuoteTerms } from "../src/lib/supply-os/supplier-quote-extraction-persistence";
 import { normalizeSupplierQuoteExtraction } from "../src/lib/supply-os/supplier-quote-extraction";
+import { SupplierQuoteAttachmentError } from "../src/lib/supply-os/supplier-quote-attachment-text";
 import { returnStaleReplacementToSourcing } from "../src/lib/supply-os/purchase-order-revision";
 
 const suffix = randomUUID().slice(0, 8);
@@ -1499,7 +1500,7 @@ async function main() {
         toEmails: JSON.stringify([senderAccount.email]),
         subject: "Re: Quote request: calibrated stereo depth cameras",
         bodyText: "Quote Q-RETRY: USD 126 per EA, MOQ 4. Delivery and validity are stated in the attached quotation.",
-        attachments: JSON.stringify([{ filename: "Q-RETRY.pdf", mimeType: "application/pdf", size: 2048 }]),
+        attachments: JSON.stringify([{ attachmentId: `gmail-attachment-${suffix}`, filename: "Q-RETRY.pdf", mimeType: "application/pdf", size: 2048 }]),
         sentAt: new Date(),
       },
     });
@@ -1578,7 +1579,60 @@ async function main() {
     assert.equal(replyEvidence.sourceType, "CONNECTED_PROVIDER");
     assert.match(String(replyEvidence.excerpt), /Quote Q-RETRY/);
     assert.match((await procurementEvidenceSource(context, replyEvidence.id)).url, /#sent\/gmail-test-thread$/, "connected evidence links must retain the Gmail thread target");
+    const legacyUnknownField = { value: null, state: "UNKNOWN", evidenceText: null, reason: "Attachment contents were not extracted." };
+    const legacyProposal = {
+      schemaVersion: 1,
+      state: "NO_TERMS",
+      extractorVersion: "1",
+      promptVersion: "supplier-quote-terms-v1",
+      model: "test-model",
+      fields: {
+        price: legacyUnknownField,
+        currency: legacyUnknownField,
+        minimumOrderQuantity: legacyUnknownField,
+        unitOfMeasure: legacyUnknownField,
+        deliveryDate: legacyUnknownField,
+        quoteReference: legacyUnknownField,
+        validUntil: legacyUnknownField,
+      },
+      warnings: ["The reply may contain quote terms only in an attachment. Attachment contents were not extracted."],
+    };
+    const legacyInput = { sourceEvidenceId: replyEvidence.id, extractorVersion: "1" };
+    const legacyOutput = { sourceEvidenceId: replyEvidence.id, proposalEvidenceId: null, proposalHash: jsonDigest(legacyProposal), proposal: legacyProposal, extractedAt: new Date().toISOString() };
+    const legacyRun = await prisma.supplyCapabilityRun.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: started.workspaceId,
+        executionTaskId: retryQuoteDraft.quoteCycle.id,
+        invokedByUserId: context.userId,
+        capabilityKey: "extract.supplier_quote_terms",
+        capabilityVersion: "1",
+        dslName: "supplier_quote_reply_review",
+        dslVersion: "1",
+        input: legacyInput,
+        inputHash: jsonDigest(legacyInput),
+        idempotencyKey: `legacy-quote-extraction-${suffix}`,
+      },
+      select: { id: true },
+    });
+    await prisma.supplyCapabilityRun.update({
+      where: { id: legacyRun.id },
+      data: { status: "RUNNING", startedAt: new Date() },
+    });
+    await prisma.supplyCapabilityRun.update({
+      where: { id: legacyRun.id },
+      data: {
+        status: "SUCCEEDED",
+        output: legacyOutput,
+        outputHash: jsonDigest(legacyOutput),
+        completedAt: new Date(),
+      },
+    });
+    const legacyExtractionCase = (await listProcurementCases(context)).find((entry) => entry.id === returnedCase.id);
+    const legacyExtractionReply = (legacyExtractionCase?.quoteCycle?.result as { connectedReplies?: Array<{ evidenceId: string; quoteExtraction?: { proposal: { extractorVersion: string } } }> } | null)?.connectedReplies?.find((reply) => reply.evidenceId === replyEvidence.id);
+    assert.equal(legacyExtractionReply?.quoteExtraction?.proposal.extractorVersion, "1", "version 1 proposals must remain visible before version 2 re-extraction");
     let extractionProviderCalls = 0;
+    let attachmentReaderCalls = 0;
     let markExtractionStarted!: () => void;
     let releaseExtraction!: () => void;
     const extractionStarted = new Promise<void>((resolve) => { markExtractionStarted = resolve; });
@@ -1587,21 +1641,30 @@ async function main() {
       context,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
       sourceEvidenceId: replyEvidence.id,
+      attachmentReader: async (input) => {
+        attachmentReaderCalls += 1;
+        assert.equal(input.accountId, senderAccount.id);
+        assert.equal(input.gmailMessageId, supplierReply.gmailMessageId);
+        assert.deepEqual(input.attachments, [{ attachmentId: `gmail-attachment-${suffix}`, name: "Q-RETRY.pdf", mimeType: "application/pdf", size: 2048 }]);
+        const text = `Quote Q-RETRY. Delivery ${quoteDeliveryDate}. Valid through ${quoteValidUntil}.`;
+        return { sources: [{ sourceId: "ATTACHMENT_1", name: "Q-RETRY.pdf", text, contentHash: jsonDigest(text) }], warnings: [] };
+      },
       extractor: async (input) => {
         extractionProviderCalls += 1;
         markExtractionStarted();
         await extractionRelease;
         assert.match(input.bodyText, /USD 126 per EA, MOQ 4/);
         assert.deepEqual(input.attachmentNames, ["Q-RETRY.pdf"]);
+        assert.equal(input.attachmentSources?.[0]?.name, "Q-RETRY.pdf");
         assert.equal(input.requestedUnitOfMeasure, "EA");
         return normalizeSupplierQuoteExtraction({
           price: { value: "126", evidenceText: "USD 126 per EA" },
           currency: { value: "USD", evidenceText: "USD 126 per EA" },
           minimumOrderQuantity: { value: "4", evidenceText: "MOQ 4" },
           unitOfMeasure: { value: "EA", evidenceText: "per EA" },
-          deliveryDate: { value: null, evidenceText: null },
+          deliveryDate: { value: quoteDeliveryDate, evidenceText: `Delivery ${quoteDeliveryDate}`, evidenceSourceId: "ATTACHMENT_1" },
           quoteReference: { value: "Q-RETRY", evidenceText: "Quote Q-RETRY" },
-          validUntil: { value: null, evidenceText: null },
+          validUntil: { value: quoteValidUntil, evidenceText: `Valid through ${quoteValidUntil}`, evidenceSourceId: "ATTACHMENT_1" },
           warnings: ["Delivery and validity are present only in the attachment."],
         }, input);
       },
@@ -1617,15 +1680,17 @@ async function main() {
     const extractionRun = await pendingExtraction;
     assert.equal(extractionRun.status, "SUCCEEDED");
     assert.equal(extractionProviderCalls, 1);
+    assert.equal(attachmentReaderCalls, 1);
     const extractionOutput = extractionRun.output as {
       sourceEvidenceId: string;
       proposalEvidenceId: string;
       proposalHash: string;
-      proposal: { fields: { price: { value: string }; deliveryDate: { state: string } } };
+      proposal: { fields: { price: { value: string }; deliveryDate: { state: string; value: string; evidenceSource: { label: string } } } };
     };
     assert.equal(extractionOutput.sourceEvidenceId, replyEvidence.id);
     assert.equal(extractionOutput.proposal.fields.price.value, "126");
-    assert.equal(extractionOutput.proposal.fields.deliveryDate.state, "UNKNOWN", "attachment-only terms must stay unknown");
+    assert.equal(extractionOutput.proposal.fields.deliveryDate.value, quoteDeliveryDate, "attachment terms must remain a review proposal");
+    assert.equal(extractionOutput.proposal.fields.deliveryDate.evidenceSource.label, "Q-RETRY.pdf");
     const extractionEvidence = await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: extractionOutput.proposalEvidenceId } });
     assert.equal(extractionEvidence.kind, "SUPPLIER_QUOTE_EXTRACTION_PROPOSAL");
     assert.equal(extractionEvidence.sourceType, "MODEL_DERIVED_PROPOSAL");
@@ -1640,12 +1705,14 @@ async function main() {
       },
     });
     assert.equal(extractionProviderCalls, 1, "identical extraction retries must reuse the completed capability run");
-    assert.equal(await prisma.supplyCapabilityRun.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms" } }), 1);
+    assert.equal(await prisma.supplyCapabilityRun.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms", capabilityVersion: "2" } }), 1);
+    assert.equal(await prisma.supplyCapabilityRun.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms" } }), 2, "version 2 must preserve the prior version 1 capability run");
     assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_EXTRACTION_PROPOSAL" } }), 1);
     assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_TERMS_EXTRACTED" } }), 1);
     const restoredExtractionCase = (await listProcurementCases(context)).find((entry) => entry.id === returnedCase.id);
-    const restoredExtractionReply = (restoredExtractionCase?.quoteCycle?.result as { connectedReplies?: Array<{ evidenceId: string; quoteExtraction?: { proposalHash: string } }> } | null)?.connectedReplies?.find((reply) => reply.evidenceId === replyEvidence.id);
+    const restoredExtractionReply = (restoredExtractionCase?.quoteCycle?.result as { connectedReplies?: Array<{ evidenceId: string; quoteExtraction?: { proposalHash: string; proposal: { extractorVersion: string } } }> } | null)?.connectedReplies?.find((reply) => reply.evidenceId === replyEvidence.id);
     assert.equal(restoredExtractionReply?.quoteExtraction?.proposalHash, extractionOutput.proposalHash, "quote extraction must survive sourcing queue reloads");
+    assert.equal(restoredExtractionReply?.quoteExtraction?.proposal.extractorVersion, "2", "the queue must prefer the current extraction while retaining version 1 history");
     const replyEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REPLIES_CAPTURED" } });
     const repeatedReplySync = await captureConnectedSupplierReplies({ context, quoteCycleId: retryQuoteDraft.quoteCycle.id, sync: replySync });
     assert.equal(repeatedReplySync.captured, 0, "repeated inbox checks must not duplicate connected replies");
@@ -1661,6 +1728,7 @@ async function main() {
         toEmails: JSON.stringify([senderAccount.email]),
         subject: "Re: Quote request follow-up",
         bodyText: "Follow-up confirming that the attached quote remains the governing offer.",
+        attachments: JSON.stringify([{ attachmentId: `gmail-follow-up-attachment-${suffix}`, filename: "Q-RETRY-REV.pdf", mimeType: "application/pdf", size: 3072 }]),
         sentAt: new Date(),
       },
     });
@@ -1677,17 +1745,24 @@ async function main() {
       context,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
       sourceEvidenceId: followUpReplyEvidence.id,
-      extractor: async () => { throw new Error("Simulated extraction provider failure."); },
-    }), /failed.*retry|retry.*manually/i, "a provider failure must remain visible and retryable");
+      attachmentReader: async () => { throw new SupplierQuoteAttachmentError("Connected attachment retrieval failed. Retry the extraction."); },
+      extractor: async () => { throw new Error("The model must not run after attachment retrieval fails."); },
+    }), /attachment retrieval failed.*retry/i, "an attachment provider failure must remain visible and retryable");
     const failedExtraction = await prisma.supplyCapabilityRun.findFirstOrThrow({
       where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms", input: { path: ["sourceEvidenceId"], equals: followUpReplyEvidence.id } },
     });
     assert.equal(failedExtraction.status, "FAILED");
     let extractionRetryCalls = 0;
+    let attachmentRetryCalls = 0;
     const retriedExtraction = await extractConnectedSupplierQuoteTerms({
       context,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
       sourceEvidenceId: followUpReplyEvidence.id,
+      attachmentReader: async (input) => {
+        attachmentRetryCalls += 1;
+        assert.equal(input.gmailMessageId, `gmail-supplier-follow-up-${suffix}`);
+        return { sources: [], warnings: ["Q-RETRY-REV.pdf contains no extractable text. Scanned-image OCR is not supported yet."] };
+      },
       extractor: async (input) => {
         extractionRetryCalls += 1;
         return normalizeSupplierQuoteExtraction({
@@ -1705,6 +1780,7 @@ async function main() {
     assert.notEqual(retriedExtraction.id, failedExtraction.id, "a failed extraction retry must create a new immutable attempt");
     assert.equal(retriedExtraction.status, "SUCCEEDED");
     assert.equal(extractionRetryCalls, 1);
+    assert.equal(attachmentRetryCalls, 1);
     assert.equal((await prisma.supplyCapabilityRun.findUniqueOrThrow({ where: { id: failedExtraction.id } })).status, "FAILED", "failed extraction history must remain immutable");
     assert.equal(await prisma.supplyCapabilityRun.count({
       where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms", input: { path: ["sourceEvidenceId"], equals: followUpReplyEvidence.id } },

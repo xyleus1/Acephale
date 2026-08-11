@@ -14,6 +14,12 @@ import {
   type SupplierQuoteExtractionProposal,
   type SupplierQuoteTermExtractor,
 } from "./supplier-quote-extraction";
+import {
+  readConnectedSupplierQuoteAttachments,
+  SupplierQuoteAttachmentError,
+  type SupplierQuoteAttachmentMetadata,
+  type SupplierQuoteAttachmentReader,
+} from "./supplier-quote-attachment-text";
 
 const QUOTE_CYCLE_TASK_TYPE = "SUPPLIER_QUOTE_CYCLE";
 const PROCUREMENT_CASE_TASK_TYPE = "PROCUREMENT_CASE";
@@ -125,11 +131,15 @@ type ExtractionSnapshot = {
   procurementCaseId: string;
   sourceEvidenceId: string;
   sourceEvidenceContentHash: string;
-  sourceUri: string;
   supplierName: string;
   subject: string | null;
   bodyText: string;
   attachmentNames: string[];
+  connectedMessage: {
+    accountId: string;
+    gmailMessageId: string;
+    attachments: SupplierQuoteAttachmentMetadata[];
+  } | null;
   receivedOn: string;
   requestHash: string;
   requestedUnitOfMeasure: string;
@@ -141,6 +151,35 @@ function attachmentNames(value: unknown) {
     const name = record(entry).name;
     return typeof name === "string" && name.trim() ? [name.trim().slice(0, 300)] : [];
   });
+}
+
+function attachmentMetadata(value: string | null): SupplierQuoteAttachmentMetadata[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.slice(0, 25).flatMap((entry) => {
+      const attachment = record(entry);
+      const name = typeof attachment.filename === "string"
+        ? attachment.filename
+        : typeof attachment.name === "string"
+          ? attachment.name
+          : null;
+      if (!name?.trim()) return [];
+      return [{
+        attachmentId: typeof attachment.attachmentId === "string" && attachment.attachmentId.trim()
+          ? attachment.attachmentId.trim().slice(0, 1_000)
+          : null,
+        name: name.trim().slice(0, 300),
+        mimeType: typeof attachment.mimeType === "string" ? attachment.mimeType.trim().slice(0, 160) : null,
+        size: typeof attachment.size === "number" && Number.isFinite(attachment.size) && attachment.size >= 0
+          ? attachment.size
+          : null,
+      }];
+    });
+  } catch {
+    return [];
+  }
 }
 
 async function loadExtractionSnapshot(args: {
@@ -185,17 +224,39 @@ async function loadExtractionSnapshot(args: {
   const payload = record(evidence.payload);
   const bodyText = typeof payload.bodyText === "string" ? payload.bodyText.slice(0, 50_000) : "";
   const subject = typeof payload.subject === "string" ? payload.subject.slice(0, 500) : null;
+  const names = attachmentNames(payload.attachments);
+  let connectedMessage: ExtractionSnapshot["connectedMessage"] = null;
+  if (names.length) {
+    const localMessageId = requiredText(payload.localMessageId, "Connected supplier reply message", 220);
+    const providerMessageId = requiredText(payload.providerMessageId, "Connected supplier provider message", 220);
+    const message = await prisma.emailMessage.findFirst({
+      where: {
+        id: localMessageId,
+        gmailMessageId: providerMessageId,
+        account: { officeId: args.context.officeId, provider: "GMAIL", isActive: true },
+      },
+      select: { accountId: true, gmailMessageId: true, attachments: true },
+    });
+    if (!message?.accountId || !message.gmailMessageId) {
+      throw new SupplyPersistenceError("The connected supplier attachment message is unavailable or its Gmail account is inactive.", "conflict");
+    }
+    connectedMessage = {
+      accountId: message.accountId,
+      gmailMessageId: message.gmailMessageId,
+      attachments: attachmentMetadata(message.attachments).filter((attachment) => names.includes(attachment.name)),
+    };
+  }
   const supplier = record(cycleInput.supplier);
   return {
     quoteCycleId: quoteCycle.id,
     procurementCaseId: quoteCycle.parentTaskId,
     sourceEvidenceId: evidence.id,
     sourceEvidenceContentHash: evidence.contentHash,
-    sourceUri: evidence.sourceUri,
     supplierName: requiredText(supplier.name, "Supplier name", 300),
     subject,
     bodyText,
-    attachmentNames: attachmentNames(payload.attachments),
+    attachmentNames: names,
+    connectedMessage,
     receivedOn: evidence.observedAt.toISOString().slice(0, 10),
     requestHash: requiredText(cycleResult.requestHash, "Quote request hash", 128),
     requestedUnitOfMeasure: requiredText(request.unitOfMeasure, "Requested unit", 20).toUpperCase(),
@@ -213,6 +274,11 @@ function runInput(snapshot: ExtractionSnapshot) {
     requestedUnitOfMeasure: snapshot.requestedUnitOfMeasure,
     needBy: snapshot.needBy,
     receivedOn: snapshot.receivedOn,
+    connectedMessage: snapshot.connectedMessage ? {
+      accountId: snapshot.connectedMessage.accountId,
+      gmailMessageId: snapshot.connectedMessage.gmailMessageId,
+      attachments: snapshot.connectedMessage.attachments,
+    } : null,
     extractorVersion: SUPPLIER_QUOTE_EXTRACTION_VERSION,
     promptVersion: SUPPLIER_QUOTE_EXTRACTION_PROMPT_VERSION,
   };
@@ -282,7 +348,7 @@ async function claimRun(args: {
         capabilityKey: SUPPLIER_QUOTE_EXTRACTION_CAPABILITY,
         capabilityVersion: SUPPLIER_QUOTE_EXTRACTION_VERSION,
         dslName: "supplier_quote_reply_review",
-        dslVersion: "1",
+        dslVersion: "2",
         input: inputJson(input),
         inputHash,
         idempotencyKey: `${scopeKey}:attempt:${existing.length + 1}`,
@@ -330,6 +396,7 @@ export async function extractConnectedSupplierQuoteTerms(args: {
   quoteCycleId: string;
   sourceEvidenceId: string;
   extractor?: SupplierQuoteTermExtractor;
+  attachmentReader?: SupplierQuoteAttachmentReader;
 }) {
   const accessContext = await currentAccessContext(args.context);
   const workspace = await sourcingSystemWorkspace(accessContext, "edit");
@@ -339,12 +406,27 @@ export async function extractConnectedSupplierQuoteTerms(args: {
   const claimed = await claimRun({ context: accessContext, workspaceId: workspace.id, snapshot });
   if (!claimed.claimed) return claimed.run;
 
+  let attachmentRead = { sources: [], warnings: [] } as Awaited<ReturnType<SupplierQuoteAttachmentReader>>;
+  if (snapshot.connectedMessage?.attachments.length) {
+    try {
+      attachmentRead = await (args.attachmentReader ?? readConnectedSupplierQuoteAttachments)(snapshot.connectedMessage);
+    } catch (error) {
+      const message = error instanceof SupplierQuoteAttachmentError
+        ? error.message
+        : "Supplier quote attachment extraction failed. Retry or review the attachment manually.";
+      await failRun(claimed.run.id, accessContext.officeId, workspace.id, message);
+      throw new SupplyPersistenceError(message, "conflict");
+    }
+  }
+
   let proposal: SupplierQuoteExtractionProposal;
   try {
     proposal = await (args.extractor ?? extractSupplierQuoteTerms)({
       subject: snapshot.subject,
       bodyText: snapshot.bodyText,
       attachmentNames: snapshot.attachmentNames,
+      attachmentSources: attachmentRead.sources,
+      attachmentWarnings: attachmentRead.warnings,
       receivedOn: snapshot.receivedOn,
       requestedUnitOfMeasure: snapshot.requestedUnitOfMeasure,
       needBy: snapshot.needBy,
@@ -357,16 +439,43 @@ export async function extractConnectedSupplierQuoteTerms(args: {
     throw new SupplyPersistenceError(message, "conflict");
   }
 
-  const proposalHash = digest({ inputHash: claimed.run.inputHash, proposal });
+  try {
+    const completionContext = await currentAccessContext(accessContext);
+    const completionWorkspace = await sourcingSystemWorkspace(completionContext, "edit");
+    if (completionWorkspace.id !== workspace.id) {
+      throw new SupplyPersistenceError("Your Supply OS workspace access changed during quote extraction.", "forbidden");
+    }
+  } catch (error) {
+    await failRun(claimed.run.id, accessContext.officeId, workspace.id, "Supply OS access changed during supplier quote extraction.");
+    if (error instanceof SupplyPersistenceError) throw error;
+    throw new SupplyPersistenceError("Your Supply OS access changed during supplier quote extraction.", "forbidden");
+  }
+
+  const attachmentSourceReferences = attachmentRead.sources.map((source) => ({
+    sourceId: source.sourceId,
+    name: source.name,
+    contentHash: source.contentHash,
+  }));
+  const proposalHash = digest({ inputHash: claimed.run.inputHash, proposal, attachmentSources: attachmentSourceReferences });
   const completion = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${snapshot.procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${snapshot.quoteCycleId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyCapabilityRun" WHERE "id" = ${claimed.run.id} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
-    const [currentCase, currentCycle, currentEvidence, currentRun] = await Promise.all([
+    const [currentCase, currentCycle, currentEvidence, currentRun, currentConnectedMessage] = await Promise.all([
       tx.supplyExecutionTask.findFirst({ where: { id: snapshot.procurementCaseId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PROCUREMENT_CASE_TASK_TYPE, status: "PLANNED" }, select: { id: true, result: true } }),
       tx.supplyExecutionTask.findFirst({ where: { id: snapshot.quoteCycleId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: QUOTE_CYCLE_TASK_TYPE, status: "RUNNING" }, select: { id: true, result: true } }),
       tx.supplyEvidence.findFirst({ where: { id: snapshot.sourceEvidenceId, officeId: accessContext.officeId, workspaceId: workspace.id, executionTaskId: snapshot.quoteCycleId, kind: REPLY_EVIDENCE_KIND }, select: { id: true, contentHash: true } }),
       tx.supplyCapabilityRun.findFirst({ where: { id: claimed.run.id, officeId: accessContext.officeId, workspaceId: workspace.id, executionTaskId: snapshot.quoteCycleId, status: "RUNNING" } }),
+      snapshot.connectedMessage
+        ? tx.emailMessage.findFirst({
+            where: {
+              accountId: snapshot.connectedMessage.accountId,
+              gmailMessageId: snapshot.connectedMessage.gmailMessageId,
+              account: { officeId: accessContext.officeId, provider: "GMAIL", isActive: true },
+            },
+            select: { attachments: true },
+          })
+        : Promise.resolve(null),
     ]);
     const currentCycleResult = record(currentCycle?.result);
     const currentReplies = Array.isArray(currentCycleResult.connectedReplies) ? currentCycleResult.connectedReplies.map((entry) => record(entry)) : [];
@@ -375,6 +484,10 @@ export async function extractConnectedSupplierQuoteTerms(args: {
       || currentEvidence?.contentHash !== snapshot.sourceEvidenceContentHash
       || currentRun?.inputHash !== claimed.run.inputHash
       || currentCycleResult.requestHash !== snapshot.requestHash
+      || (snapshot.connectedMessage && (
+        !currentConnectedMessage
+        || digest(attachmentMetadata(currentConnectedMessage.attachments)) !== digest(snapshot.connectedMessage.attachments)
+      ))
       || !currentReplies.some((reply) => reply.evidenceId === snapshot.sourceEvidenceId)) {
       await tx.supplyCapabilityRun.updateMany({
         where: { id: claimed.run.id, status: "RUNNING" },
@@ -398,8 +511,14 @@ export async function extractConnectedSupplierQuoteTerms(args: {
         sourceRecordId: snapshot.sourceEvidenceId,
         sourceVersion: SUPPLIER_QUOTE_EXTRACTION_VERSION,
         title: `Quote term proposal for ${snapshot.supplierName}`,
-        excerpt: proposal.state === "PROPOSED" ? "Commercial terms extracted for operator review." : "No supported plain-text commercial terms were found.",
-        payload: inputJson({ sourceEvidenceId: snapshot.sourceEvidenceId, inputHash: claimed.run.inputHash, proposalHash, proposal }),
+        excerpt: proposal.state === "PROPOSED" ? "Commercial terms extracted for operator review." : "No supported commercial terms were found in available connected text sources.",
+        payload: inputJson({
+          sourceEvidenceId: snapshot.sourceEvidenceId,
+          inputHash: claimed.run.inputHash,
+          proposalHash,
+          proposal,
+          attachmentSources: attachmentSourceReferences,
+        }),
         contentHash: proposalHash,
         observedAt: now,
       },
@@ -417,6 +536,7 @@ export async function extractConnectedSupplierQuoteTerms(args: {
       proposalEvidenceId: proposalEvidence.id,
       proposalHash,
       proposal,
+      attachmentSources: attachmentSourceReferences,
       extractedByUserId: accessContext.userId,
       extractedAt: now.toISOString(),
     };
@@ -434,7 +554,7 @@ export async function extractConnectedSupplierQuoteTerms(args: {
     };
     await tx.supplyExecutionTask.update({ where: { id: currentCase.id }, data: { result: inputJson(nextCaseResult), resultHash: digest(nextCaseResult) } });
     const payload = inputJson({ quoteCycleId: snapshot.quoteCycleId, sourceEvidenceId: snapshot.sourceEvidenceId, proposalEvidenceId: proposalEvidence.id, proposalHash, state: proposal.state });
-    await appendEvent({ tx, executionTaskId: snapshot.quoteCycleId, capabilityRunId: claimed.run.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, status: "RUNNING", message: proposal.state === "PROPOSED" ? "Supplier quote terms are ready for operator review." : "No supported plain-text quote terms were found.", payload });
+    await appendEvent({ tx, executionTaskId: snapshot.quoteCycleId, capabilityRunId: claimed.run.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, status: "RUNNING", message: proposal.state === "PROPOSED" ? "Supplier quote terms are ready for operator review." : "No supported quote terms were found in available connected text sources.", payload });
     await appendEvent({ tx, executionTaskId: currentCase.id, capabilityRunId: null, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, status: "PLANNED", message: proposal.state === "PROPOSED" ? "Extracted supplier quote terms require operator review." : "Supplier reply requires manual commercial review.", payload });
     return { stale: false as const, run };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
@@ -456,7 +576,6 @@ export async function listSupplierQuoteExtractionRuns(args: {
       workspaceId: args.workspaceId,
       executionTaskId: { in: args.quoteCycleIds },
       capabilityKey: SUPPLIER_QUOTE_EXTRACTION_CAPABILITY,
-      capabilityVersion: SUPPLIER_QUOTE_EXTRACTION_VERSION,
       status: "SUCCEEDED",
     },
     orderBy: [{ completedAt: "desc" }, { id: "desc" }],

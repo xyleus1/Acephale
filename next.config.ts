@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   typedRoutes: true,
   devIndicators: false,
+  outputFileTracingIncludes: {
+    "/api/supply-os/quote-cycles/*/connected-replies/*/extract": [
+      "./node_modules/pdf-parse/**/*",
+      "./node_modules/pdfjs-dist/**/*",
+      "./node_modules/@napi-rs/canvas*/**/*",
+    ],
+  },
   // Don't fail production builds on lint issues — run `npm run lint` locally to see them.
   eslint: {
     ignoreDuringBuilds: true,
@@ -47,4 +54,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
