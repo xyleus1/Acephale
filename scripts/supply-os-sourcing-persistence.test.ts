@@ -9,6 +9,7 @@ import {
   listProcurementCases,
   listProcurementCasesForResearchRuns,
   procurementEvidenceSource,
+  prepareRevisedPurchaseOrder,
   recordPurchaseOrderRelease,
   recordSupplierQuoteRelease,
   recordSupplierQuoteResponse,
@@ -1963,7 +1964,75 @@ async function main() {
         resultHash: sourceCaseTask.resultHash,
       },
     });
-    const clonedDraftInput = { ...(JSON.parse(JSON.stringify(sourceDraftTask.input)) as Record<string, unknown>), procurementCaseId: clonedCase.id };
+    const sourceCaseResult = JSON.parse(JSON.stringify(sourceCaseTask.result)) as Record<string, unknown>;
+    const sourceApprovalProjection = sourceCaseResult.approval as { id: string; scopeHash: string };
+    const sourceProcurementApproval = await prisma.supplyApproval.findUniqueOrThrow({
+      where: { id: sourceApprovalProjection.id },
+      include: { executionTask: true },
+    });
+    const clonedProcurementApprovalInput = {
+      ...(JSON.parse(JSON.stringify(sourceProcurementApproval.executionTask.input)) as Record<string, unknown>),
+      procurementCaseId: clonedCase.id,
+    };
+    const clonedProcurementApprovalScopeHash = jsonDigest(clonedProcurementApprovalInput);
+    const clonedProcurementApprovalTask = await prisma.supplyExecutionTask.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: sourceCaseTask.workspaceId,
+        createdByUserId: context.userId,
+        parentTaskId: clonedCase.id,
+        taskKey: `procurement-approval:connected-email:${suffix}`,
+        taskType: "PROCUREMENT_APPROVAL",
+        capabilityKey: "review.procurement_selection",
+        status: "PLANNED",
+        requiresApproval: true,
+        input: clonedProcurementApprovalInput,
+        inputHash: clonedProcurementApprovalScopeHash,
+        result: { state: "APPROVED" },
+        resultHash: jsonDigest({ state: "APPROVED" }),
+      },
+    });
+    const pendingClonedProcurementApproval = await prisma.supplyApproval.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: sourceCaseTask.workspaceId,
+        executionTaskId: clonedProcurementApprovalTask.id,
+        requestedByUserId: context.userId,
+        status: "PENDING",
+        requiredRole: "MANAGER",
+        scopeHash: clonedProcurementApprovalScopeHash,
+        requestReason: "Connected order fixture supplier award.",
+        requestedAt: new Date(),
+        idempotencyKey: `procurement-approval-connected-email:${suffix}`,
+      },
+    });
+    const clonedProcurementApproval = await prisma.supplyApproval.update({
+      where: { id: pendingClonedProcurementApproval.id },
+      data: {
+        status: "APPROVED",
+        decidedByUserId: managerContext.userId,
+        decisionNote: "Supplier award copied into the isolated connected-order fixture.",
+        decidedAt: new Date(),
+      },
+    });
+    await prisma.supplyExecutionTask.update({
+      where: { id: clonedProcurementApprovalTask.id },
+      data: { status: "READY" },
+    });
+    await prisma.supplyExecutionTask.update({
+      where: { id: clonedProcurementApprovalTask.id },
+      data: { status: "RUNNING", startedAt: new Date() },
+    });
+    await prisma.supplyExecutionTask.update({
+      where: { id: clonedProcurementApprovalTask.id },
+      data: { status: "SUCCEEDED", completedAt: new Date() },
+    });
+    const clonedDraftInput = {
+      ...(JSON.parse(JSON.stringify(sourceDraftTask.input)) as Record<string, unknown>),
+      procurementCaseId: clonedCase.id,
+      procurementApprovalId: clonedProcurementApproval.id,
+      procurementApprovalScopeHash: clonedProcurementApproval.scopeHash,
+    };
     const clonedDraft = await prisma.supplyExecutionTask.create({
       data: {
         officeId: context.officeId,
@@ -1987,6 +2056,7 @@ async function main() {
       purchaseDraftId: clonedDraft.id,
       purchaseDraftResultHash: clonedDraft.resultHash,
     };
+    clonedActionInput.procurementApproval = { id: clonedProcurementApproval.id, scopeHash: clonedProcurementApproval.scopeHash };
     const clonedCommercial = { ...(clonedActionInput.commercial as Record<string, unknown>) };
     delete clonedCommercial.quoteCycleTaskId;
     delete clonedCommercial.quoteResponseHash;
@@ -2042,6 +2112,15 @@ async function main() {
     await prisma.supplyExecutionTask.update({ where: { id: clonedDraft.id }, data: { status: "READY" } });
     await prisma.supplyExecutionTask.update({ where: { id: clonedAction.id }, data: { status: "READY", result: clonedAuthorizedResult, resultHash: jsonDigest(clonedAuthorizedResult) } });
     const clonedCaseResult = JSON.parse(JSON.stringify(sourceCaseTask.result)) as Record<string, unknown>;
+    clonedCaseResult.approval = {
+      id: clonedProcurementApproval.id,
+      taskId: clonedProcurementApprovalTask.id,
+      scopeHash: clonedProcurementApproval.scopeHash,
+      status: "APPROVED",
+      requestedAt: clonedProcurementApproval.requestedAt.toISOString(),
+      decidedAt: clonedProcurementApproval.decidedAt!.toISOString(),
+      decisionNote: clonedProcurementApproval.decisionNote,
+    };
     clonedCaseResult.purchasePreparation = { draftTaskId: clonedDraft.id, state: "DRAFT", revision: 1, orderHash: (sourceDraftTask.result as { orderHash: string }).orderHash };
     clonedCaseResult.purchaseAuthorization = { actionTaskId: clonedAction.id, approvalId: approvedClonedActionApproval.id, scopeHash: clonedActionScopeHash, status: "APPROVED", draftTaskId: clonedDraft.id, draftRevision: 1, decidedByUserId: secondAdmin.id, decidedAt: approvedClonedActionApproval.decidedAt!.toISOString(), decisionNote: approvedClonedActionApproval.decisionNote };
     delete clonedCaseResult.purchaseRelease;
@@ -2423,6 +2502,461 @@ async function main() {
       },
     }), /resolve the supplier order exception/i, "an order awaiting reauthorization must not accept supplier terms against the obsolete scope");
 
+    const authorizedOrder = clonedActionInput.order as {
+      quantity: string;
+      needBy: string;
+      shipTo: string;
+      incoterm: string;
+      paymentTerms: string;
+      buyerReference: string | null;
+      notes: string | null;
+    };
+    const authorizedCommercial = clonedActionInput.commercial as {
+      unitPrice: string;
+      currency: string;
+      minimumOrderQuantity: string;
+      deliveryDate: string;
+    };
+    const revisedDraftInput = {
+      expectedReleaseHash: deliveredOrderResult.releaseHash,
+      exceptionHash: termsException.exception.exceptionHash,
+      expectedRevision: 0,
+      quantity: Number(authorizedOrder.quantity),
+      needBy: authorizedOrder.needBy,
+      shipTo: authorizedOrder.shipTo,
+      incoterm: authorizedOrder.incoterm,
+      paymentTerms: "Prepaid before shipment",
+      buyerReference: "PO-CONNECTED-001-R1",
+      notes: "Supersedes the released order after supplier terms changed.",
+      unitPrice: Number(authorizedCommercial.unitPrice),
+      currency: authorizedCommercial.currency,
+      minimumOrderQuantity: Number(authorizedCommercial.minimumOrderQuantity),
+      deliveryDate: authorizedCommercial.deliveryDate,
+      quoteReference: "SUPPLIER-REVISION-001",
+      quoteValidUntil: futureDate(14),
+    };
+    await assert.rejects(() => prepareRevisedPurchaseOrder({
+      context,
+      actionId: clonedAction.id,
+      input: { ...revisedDraftInput, paymentTerms: "Net 60" },
+    }), /must match the supplier exception/i, "a replacement draft must not invent supplier-controlled terms");
+    const concurrentRevisedDrafts = await Promise.all([
+      prepareRevisedPurchaseOrder({ context, actionId: clonedAction.id, input: revisedDraftInput }),
+      prepareRevisedPurchaseOrder({ context, actionId: clonedAction.id, input: revisedDraftInput }),
+    ]);
+    const revisedDraft = concurrentRevisedDrafts[0].purchaseDraft;
+    assert.ok(revisedDraft?.resultHash);
+    assert.equal(concurrentRevisedDrafts[1].purchaseDraft?.id, revisedDraft?.id, "concurrent replacement preparation must converge on one draft");
+    assert.equal((revisedDraft?.result as { revisionContext: { replacesPurchaseActionId: string; supplierExceptionHash: string } }).revisionContext.replacesPurchaseActionId, clonedAction.id);
+    assert.equal((revisedDraft?.result as { revisionContext: { supplierExceptionHash: string } }).revisionContext.supplierExceptionHash, termsException.exception.exceptionHash);
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: clonedCase.id, eventType: "REVISED_PURCHASE_DRAFT_CREATED" } }), 1, "identical replacement retries must not append fake history");
+    const oldActionWhileDrafting = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
+    assert.equal(oldActionWhileDrafting.status, "RUNNING", "preparing a replacement must not supersede the released order before approval");
+    assert.equal((oldActionWhileDrafting.result as { release: { releaseHash: string } }).release.releaseHash, deliveredOrderResult.releaseHash, "replacement preparation must preserve the old release evidence");
+    const replacementApprovalRequest = await requestPurchaseActionApproval({
+      context,
+      caseId: clonedCase.id,
+      input: {
+        expectedDraftTaskId: revisedDraft!.id,
+        expectedDraftResultHash: revisedDraft!.resultHash,
+        expectedDraftRevision: 1,
+        reason: "Authorize the supplier-backed replacement order scope.",
+      },
+    });
+    assert.equal((replacementApprovalRequest.procurementCase.result as { purchaseRevision: { state: string } }).purchaseRevision.state, "APPROVAL_PENDING");
+    const replacementRejected = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: replacementApprovalRequest.approval.id,
+      input: { decision: "REJECT", note: "Revise the internal buyer reference before this order is authorized." },
+    });
+    assert.equal((replacementRejected.purchaseAction.result as { state: string }).state, "REJECTED");
+    assert.equal((replacementRejected.procurementCase.result as { purchaseRevision: { state: string } }).purchaseRevision.state, "REJECTED");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } })).status, "RUNNING", "rejecting a replacement must leave the released order active");
+    await assert.rejects(() => requestPurchaseActionApproval({
+      context,
+      caseId: clonedCase.id,
+      input: {
+        expectedDraftTaskId: revisedDraft!.id,
+        expectedDraftResultHash: revisedDraft!.resultHash!,
+        expectedDraftRevision: 1,
+        reason: "Retry the unchanged rejected replacement scope.",
+      },
+    }), /rejected|revised order projection changed/i, "an unchanged rejected replacement scope must not be resubmitted");
+    const recoveredRevisedDraft = await prepareRevisedPurchaseOrder({
+      context,
+      actionId: clonedAction.id,
+      input: {
+        ...revisedDraftInput,
+        expectedRevision: 1,
+        buyerReference: "PO-CONNECTED-001-R1-RECOVERED",
+        notes: "Replacement order revised after the admin decision.",
+      },
+    });
+    assert.equal((recoveredRevisedDraft.purchaseDraft?.result as { revision: number }).revision, 2);
+    const recoveredReplacementApproval = await requestPurchaseActionApproval({
+      context,
+      caseId: clonedCase.id,
+      input: {
+        expectedDraftTaskId: recoveredRevisedDraft.purchaseDraft!.id,
+        expectedDraftResultHash: recoveredRevisedDraft.purchaseDraft!.resultHash!,
+        expectedDraftRevision: 2,
+        reason: "Authorize the edited supplier-backed replacement order scope.",
+      },
+    });
+    const replacementAuthorized = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: recoveredReplacementApproval.approval.id,
+      input: { decision: "APPROVE", note: "Supplier exception evidence supports this exact revised order." },
+    });
+    assert.equal((replacementAuthorized.purchaseAction.result as { state: string }).state, "AUTHORIZED");
+    assert.equal((replacementAuthorized.procurementCase.result as { purchaseRevision: { state: string }; purchaseRelease?: unknown }).purchaseRevision.state, "AUTHORIZED");
+    const orderAwaitingReplacementRelease = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
+    const orderAwaitingReplacementResult = orderAwaitingReplacementRelease.result as {
+      state: string;
+      release: { releaseHash: string };
+      supplierOrderExceptions: Array<{ exceptionHash: string; status: string; replacementAuthorization?: { purchaseActionTaskId: string } }>;
+    };
+    assert.equal(orderAwaitingReplacementRelease.status, "RUNNING", "internal approval must not pretend the supplier has received a replacement");
+    assert.equal(orderAwaitingReplacementResult.state, "PARTIALLY_ACKNOWLEDGED");
+    assert.equal(orderAwaitingReplacementResult.release.releaseHash, deliveredOrderResult.releaseHash);
+    assert.equal(orderAwaitingReplacementResult.supplierOrderExceptions.find((entry) => entry.exceptionHash === termsException.exception.exceptionHash)?.status, "REVISION_AUTHORIZED");
+    await assert.rejects(() => recordSupplierOrderException({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        category: "DELIVERY_CHANGE",
+        observedOn: futureDate(0),
+        summary: "Supplier also proposed a later delivery date while the replacement was awaiting release.",
+        proposedDeliveryDate: futureDate(45),
+        evidenceUrl: "https://example.com/supplier-order-second-exception",
+        note: "This must not create competing unresolved exception state.",
+      },
+    }), /active replacement order/i, "a second supplier exception must be blocked while replacement authorization is active");
+    const replacementReleaseInput = {
+      expectedScopeHash: replacementAuthorized.purchaseAction.inputHash,
+      channel: "EMAIL",
+      releasedOn: futureDate(0),
+      acknowledgmentDueOn: futureDate(2),
+      purchaseOrderReference: "PO-CONNECTED-001-R1",
+      evidenceUrl: "https://example.com/purchase-orders/PO-CONNECTED-001-R1",
+      note: "Revised order released after fresh authorization.",
+    };
+    const orderWithInjectedException = {
+      ...orderAwaitingReplacementResult,
+      supplierOrderExceptions: [
+        ...orderAwaitingReplacementResult.supplierOrderExceptions,
+        { exceptionHash: `injected-open-exception-${suffix}`, status: "OPEN_REVIEW" },
+      ],
+    };
+    await prisma.supplyExecutionTask.update({
+      where: { id: clonedAction.id },
+      data: { result: orderWithInjectedException, resultHash: jsonDigest(orderWithInjectedException) },
+    });
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context: managerContext,
+      actionId: replacementAuthorized.purchaseAction.id,
+      input: replacementReleaseInput,
+    }), /no longer matches the supplier exception authorization/i, "replacement release must fail closed if another unresolved exception exists");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: replacementAuthorized.purchaseAction.id } })).status, "READY", "a blocked replacement release must roll back atomically");
+    await prisma.supplyExecutionTask.update({
+      where: { id: clonedAction.id },
+      data: { result: orderAwaitingReplacementResult, resultHash: jsonDigest(orderAwaitingReplacementResult) },
+    });
+    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        acknowledgedOn: futureDate(0),
+        supplierOrderReference: "SO-OBSOLETE-ORDER",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: "https://example.com/obsolete-order-acceptance",
+      },
+    }), (error: unknown) => error instanceof Error, "the superseded released order must reject later acceptance");
+    const concurrentReplacementReleases = await Promise.all([
+      recordPurchaseOrderRelease({ context: managerContext, actionId: replacementAuthorized.purchaseAction.id, input: replacementReleaseInput }),
+      recordPurchaseOrderRelease({ context: managerContext, actionId: replacementAuthorized.purchaseAction.id, input: replacementReleaseInput }),
+    ]);
+    const replacementRelease = concurrentReplacementReleases[0];
+    assert.equal((concurrentReplacementReleases[1].release as { releaseHash: string }).releaseHash, (replacementRelease.release as { releaseHash: string }).releaseHash, "concurrent identical revised-order releases must converge");
+    assert.notEqual((replacementRelease.release as { releaseHash: string }).releaseHash, deliveredOrderResult.releaseHash);
+    assert.equal((replacementRelease.procurementCase.result as { purchaseRevision: { state: string } }).purchaseRevision.state, "RELEASED");
+    const supersededOrder = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
+    const supersededOrderResult = supersededOrder.result as {
+      state: string;
+      release: { releaseHash: string };
+      supplierOrderExceptions: Array<{ exceptionHash: string; status: string; replacementRelease?: { releaseHash: string } }>;
+      supersededBy: { purchaseActionTaskId: string; replacementReleaseHash: string };
+    };
+    assert.equal(supersededOrder.status, "SUCCEEDED");
+    assert.equal(supersededOrderResult.state, "SUPERSEDED");
+    assert.equal(supersededOrderResult.release.releaseHash, deliveredOrderResult.releaseHash, "supersession must retain immutable release history");
+    assert.equal(supersededOrderResult.supersededBy.purchaseActionTaskId, replacementAuthorized.purchaseAction.id);
+    assert.equal(supersededOrderResult.supersededBy.replacementReleaseHash, (replacementRelease.release as { releaseHash: string }).releaseHash);
+    assert.equal(supersededOrderResult.supplierOrderExceptions.find((entry) => entry.exceptionHash === termsException.exception.exceptionHash)?.status, "REVISION_RELEASED");
+    const resumedReplacement = await findProcurementCaseByRelatedTaskId(context, clonedAction.id);
+    assert.equal(resumedReplacement?.purchaseDraft?.id, revisedDraft?.id, "reopening the superseded order must restore the replacement draft, not obsolete history");
+    assert.equal(resumedReplacement?.purchaseAction?.id, replacementAuthorized.purchaseAction.id, "reopening the superseded order must restore the replacement release action");
+    assert.equal((resumedReplacement?.result as { purchaseRevision?: { state?: string } } | null)?.purchaseRevision?.state, "RELEASED");
+
+    const connectedRevisionException = await recordSupplierOrderException({
+      context: managerContext,
+      actionId: replacementAuthorized.purchaseAction.id,
+      input: {
+        expectedReleaseHash: (replacementRelease.release as { releaseHash: string }).releaseHash,
+        category: "TERMS_CHANGE",
+        observedOn: futureDate(0),
+        summary: "Supplier requires Net 15 before dispatch for the revised order.",
+        proposedQuantity: null,
+        proposedUnitPrice: null,
+        proposedCurrency: null,
+        proposedDeliveryDate: null,
+        proposedPaymentTerms: "Net 15 before dispatch",
+        evidenceUrl: "https://example.com/purchase-orders/PO-CONNECTED-001-R2-offer",
+        note: "Second revision used to verify connected Gmail supersession.",
+      },
+    });
+    await resolveSupplierOrderException({
+      context,
+      actionId: replacementAuthorized.purchaseAction.id,
+      input: {
+        expectedReleaseHash: (replacementRelease.release as { releaseHash: string }).releaseHash,
+        exceptionHash: connectedRevisionException.exception.exceptionHash,
+        disposition: "REQUIRE_REAUTHORIZATION",
+        note: "Authorize the supplier-backed payment-term revision before another release.",
+      },
+    });
+    const firstReplacementInput = replacementAuthorized.purchaseAction.input as {
+      order: typeof authorizedOrder;
+      commercial: typeof authorizedCommercial & { quoteReference: string; quoteValidUntil: string };
+    };
+    const connectedReplacementDraftInput = {
+      expectedReleaseHash: (replacementRelease.release as { releaseHash: string }).releaseHash,
+      exceptionHash: connectedRevisionException.exception.exceptionHash,
+      expectedRevision: 0,
+      quantity: Number(firstReplacementInput.order.quantity),
+      needBy: firstReplacementInput.order.needBy,
+      shipTo: firstReplacementInput.order.shipTo,
+      incoterm: firstReplacementInput.order.incoterm,
+      paymentTerms: "Net 15 before dispatch",
+      buyerReference: "PO-CONNECTED-001-R2",
+      notes: "Second immutable replacement order.",
+      unitPrice: Number(firstReplacementInput.commercial.unitPrice),
+      currency: firstReplacementInput.commercial.currency,
+      minimumOrderQuantity: Number(firstReplacementInput.commercial.minimumOrderQuantity),
+      deliveryDate: firstReplacementInput.commercial.deliveryDate,
+      quoteReference: "SUPPLIER-REVISION-002",
+      quoteValidUntil: futureDate(14),
+    };
+    const connectedReplacementDraft = await prepareRevisedPurchaseOrder({
+      context,
+      actionId: replacementAuthorized.purchaseAction.id,
+      input: connectedReplacementDraftInput,
+    });
+    const connectedReplacementApproval = await requestPurchaseActionApproval({
+      context,
+      caseId: clonedCase.id,
+      input: {
+        expectedDraftTaskId: connectedReplacementDraft.purchaseDraft!.id,
+        expectedDraftResultHash: connectedReplacementDraft.purchaseDraft!.resultHash!,
+        expectedDraftRevision: 1,
+        reason: "Authorize the second replacement for connected delivery.",
+      },
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyApproval.update({
+        where: { id: connectedReplacementApproval.approval.id },
+        data: { requestedAt: new Date(Date.now() - 120_000), expiresAt: new Date(Date.now() - 60_000) },
+      });
+    });
+    const expiredConnectedReplacement = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: connectedReplacementApproval.approval.id,
+      input: { decision: "APPROVE", note: "The connected-delivery replacement scope is exact." },
+    });
+    assert.equal(expiredConnectedReplacement.stale, true);
+    assert.equal(expiredConnectedReplacement.purchaseAction, null);
+    assert.equal((expiredConnectedReplacement.procurementCase.result as { purchaseRevision: { state: string } }).purchaseRevision.state, "EXPIRED");
+    const recoveredConnectedReplacementDraft = await prepareRevisedPurchaseOrder({
+      context,
+      actionId: replacementAuthorized.purchaseAction.id,
+      input: {
+        ...connectedReplacementDraftInput,
+        expectedRevision: 1,
+        buyerReference: "PO-CONNECTED-001-R2-RECOVERED",
+        notes: "Recovered replacement draft after approval expiry.",
+      },
+    });
+    assert.equal((recoveredConnectedReplacementDraft.purchaseDraft?.result as { revision: number }).revision, 2);
+    const recoveredConnectedReplacementApproval = await requestPurchaseActionApproval({
+      context,
+      caseId: clonedCase.id,
+      input: {
+        expectedDraftTaskId: recoveredConnectedReplacementDraft.purchaseDraft!.id,
+        expectedDraftResultHash: recoveredConnectedReplacementDraft.purchaseDraft!.resultHash!,
+        expectedDraftRevision: 2,
+        reason: "Authorize the recovered replacement after stale approval expiry.",
+      },
+    });
+    const connectedReplacementAuthorized = await decidePurchaseActionApproval({
+      context: secondAdminContext,
+      approvalId: recoveredConnectedReplacementApproval.approval.id,
+      input: { decision: "APPROVE", note: "Recovered replacement scope is current and exact." },
+    });
+    const staleOldAction = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: replacementAuthorized.purchaseAction.id } });
+    const staleOldResult = JSON.parse(JSON.stringify(staleOldAction.result)) as { supplierOrderExceptions: Array<Record<string, unknown>> };
+    staleOldResult.supplierOrderExceptions = staleOldResult.supplierOrderExceptions.map((entry) => entry.exceptionHash === connectedRevisionException.exception.exceptionHash ? { ...entry, status: "REVISION_DRAFTED" } : entry);
+    await prisma.supplyExecutionTask.update({ where: { id: staleOldAction.id }, data: { result: staleOldResult, resultHash: jsonDigest(staleOldResult) } });
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context: managerContext,
+      actionId: connectedReplacementAuthorized.purchaseAction.id,
+      input: {
+        expectedScopeHash: connectedReplacementAuthorized.purchaseAction.inputHash,
+        channel: "EMAIL",
+        releasedOn: futureDate(0),
+        acknowledgmentDueOn: futureDate(2),
+        purchaseOrderReference: "PO-CONNECTED-001-R2-STALE",
+        evidenceUrl: "https://example.com/purchase-orders/PO-CONNECTED-001-R2-stale",
+        note: "This release must roll back because the exception authorization changed.",
+      },
+    }), /no longer matches the supplier exception authorization/i, "stale exception state must fail closed before either order is superseded");
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: connectedReplacementAuthorized.purchaseAction.id } })).status, "READY");
+    const restoredOldResult = JSON.parse(JSON.stringify(staleOldResult)) as { supplierOrderExceptions: Array<Record<string, unknown>> };
+    restoredOldResult.supplierOrderExceptions = restoredOldResult.supplierOrderExceptions.map((entry) => entry.exceptionHash === connectedRevisionException.exception.exceptionHash ? { ...entry, status: "REVISION_AUTHORIZED" } : entry);
+    await prisma.supplyExecutionTask.update({ where: { id: staleOldAction.id }, data: { result: restoredOldResult, resultHash: jsonDigest(restoredOldResult) } });
+
+    const connectedReplacementEmailDraft = await savePurchaseOrderEmailDraft({
+      context,
+      purchaseActionId: connectedReplacementAuthorized.purchaseAction.id,
+      input: {
+        expectedActionScopeHash: connectedReplacementAuthorized.purchaseAction.inputHash,
+        expectedRevision: 0,
+        senderAccountId: orderSenderAccount.id,
+        recipient: "orders@example.com",
+        subject: "Revised purchase order PO-CONNECTED-001-R2",
+        body: "Please accept revised purchase order PO-CONNECTED-001-R2 and disregard the earlier order scope.",
+        purchaseOrderReference: "PO-CONNECTED-001-R2",
+        acknowledgmentDueOn: futureDate(2),
+        note: "Connected release of the exact second replacement.",
+      },
+    });
+    const connectedReplacementEmailApproval = await requestPurchaseOrderEmailApproval({
+      context,
+      draftId: connectedReplacementEmailDraft.id,
+      input: { expectedResultHash: connectedReplacementEmailDraft.resultHash, reason: "Approve the exact replacement email." },
+    });
+    const connectedReplacementEmailAuthorized = await decidePurchaseOrderEmailApproval({
+      context: managerContext,
+      approvalId: connectedReplacementEmailApproval.approval.id,
+      input: { decision: "APPROVE", note: "Replacement sender, recipient, content, and order scope approved." },
+    });
+    let replacementProviderCalls = 0;
+    const uncertainReplacementProvider: SupplierEmailProvider = {
+      send: async () => {
+        replacementProviderCalls += 1;
+        return { state: "UNKNOWN", error: "Simulated replacement delivery timeout." };
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    const uncertainReplacementSend = await sendPurchaseOrderEmailAction({ context, actionId: connectedReplacementEmailAuthorized.action.id, provider: uncertainReplacementProvider });
+    assert.equal((uncertainReplacementSend.result as { state: string }).state, "DELIVERY_UNKNOWN");
+    const oldDuringUncertainDelivery = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: replacementAuthorized.purchaseAction.id } });
+    assert.equal(oldDuringUncertainDelivery.status, "RUNNING", "an unknown provider result must leave the prior supplier-facing order active");
+    assert.equal((oldDuringUncertainDelivery.result as { state: string }).state, "RELEASED");
+    await reconcilePurchaseOrderEmailAction({ context, actionId: connectedReplacementEmailAuthorized.action.id, provider: uncertainReplacementProvider });
+    await resetPurchaseOrderEmailForRetry({
+      context: managerContext,
+      actionId: connectedReplacementEmailAuthorized.action.id,
+      input: { confirmedNotSent: true, note: "Confirmed the replacement Message-ID is absent from Gmail Sent before retry." },
+    });
+    const sentReplacementProvider: SupplierEmailProvider = {
+      send: async (message) => {
+        replacementProviderCalls += 1;
+        return { state: "SENT", provider: "GMAIL", providerMessageId: `gmail-replacement-${suffix}`, providerThreadId: `gmail-replacement-thread-${suffix}`, sourceUrl: `https://mail.google.com/mail/u/${encodeURIComponent(message.senderEmail)}/#sent/gmail-replacement-thread-${suffix}` };
+      },
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    const sentReplacement = await sendPurchaseOrderEmailAction({ context, actionId: connectedReplacementEmailAuthorized.action.id, provider: sentReplacementProvider });
+    assert.equal((sentReplacement.result as { state: string }).state, "SENT");
+    assert.equal(replacementProviderCalls, 2, "replacement delivery may retry only after a confirmed provider miss");
+    await sendPurchaseOrderEmailAction({ context, actionId: connectedReplacementEmailAuthorized.action.id, provider: sentReplacementProvider });
+    assert.equal(replacementProviderCalls, 2, "a delivered replacement must not call Gmail again on retry");
+    const supersededFirstReplacement = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: replacementAuthorized.purchaseAction.id } });
+    assert.equal(supersededFirstReplacement.status, "SUCCEEDED");
+    assert.equal((supersededFirstReplacement.result as { state: string }).state, "SUPERSEDED");
+    assert.equal((supersededFirstReplacement.result as { supplierOrderExceptions: Array<{ exceptionHash: string; status: string }> }).supplierOrderExceptions.find((entry) => entry.exceptionHash === connectedRevisionException.exception.exceptionHash)?.status, "REVISION_RELEASED");
+    const connectedReplacementReleaseHash = (sentReplacement.result as { releaseHash: string }).releaseHash;
+    const resumedConnectedReplacement = await findProcurementCaseByRelatedTaskId(context, replacementAuthorized.purchaseAction.id);
+    assert.equal(resumedConnectedReplacement?.purchaseAction?.id, connectedReplacementAuthorized.purchaseAction.id);
+    assert.equal((resumedConnectedReplacement?.result as { purchaseRevision?: { replacementReleaseHash?: string } } | null)?.purchaseRevision?.replacementReleaseHash, connectedReplacementReleaseHash);
+
+    const supplierRejection = await recordSupplierOrderException({
+      context: managerContext,
+      actionId: connectedReplacementAuthorized.purchaseAction.id,
+      input: {
+        expectedReleaseHash: connectedReplacementReleaseHash,
+        category: "REJECTION",
+        observedOn: futureDate(0),
+        summary: "Supplier rejected the replacement order and will not accept this purchase.",
+        proposedQuantity: null,
+        proposedUnitPrice: null,
+        proposedCurrency: null,
+        proposedDeliveryDate: null,
+        proposedPaymentTerms: null,
+        evidenceUrl: "https://example.com/purchase-orders/PO-CONNECTED-001-R2-rejected",
+        note: "The buyer must choose another supplier.",
+      },
+    });
+    await assert.rejects(() => resolveSupplierOrderException({
+      context,
+      actionId: connectedReplacementAuthorized.purchaseAction.id,
+      input: {
+        expectedReleaseHash: connectedReplacementReleaseHash,
+        exceptionHash: supplierRejection.exception.exceptionHash,
+        disposition: "REQUIRE_REAUTHORIZATION",
+        note: "An invalid attempt to revise a supplier rejection.",
+      },
+    }), /must return to sourcing/i, "a supplier rejection cannot create another replacement authorization");
+    await assert.rejects(() => resolveSupplierOrderException({
+      context: managerContext,
+      actionId: connectedReplacementAuthorized.purchaseAction.id,
+      input: {
+        expectedReleaseHash: connectedReplacementReleaseHash,
+        exceptionHash: supplierRejection.exception.exceptionHash,
+        disposition: "KEEP_ORIGINAL",
+        note: "An invalid attempt to retain an order the supplier rejected.",
+      },
+    }), /must return to sourcing/i, "a supplier rejection cannot pretend the original order remains acceptable");
+    const returnedToSourcing = await resolveSupplierOrderException({
+      context: managerContext,
+      actionId: connectedReplacementAuthorized.purchaseAction.id,
+      input: {
+        expectedReleaseHash: connectedReplacementReleaseHash,
+        exceptionHash: supplierRejection.exception.exceptionHash,
+        disposition: "RETURN_TO_SOURCING",
+        note: "Supplier rejected the order, so choose another qualified source from the shortlist.",
+      },
+    });
+    assert.equal(returnedToSourcing.exception.status, "RETURNED_TO_SOURCING");
+    assert.equal((returnedToSourcing.procurementCase.result as { sourcingReturn: { state: string } }).sourcingReturn.state, "REQUIRED");
+    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: connectedReplacementAuthorized.purchaseAction.id,
+      input: {
+        expectedReleaseHash: connectedReplacementReleaseHash,
+        acknowledgedOn: futureDate(0),
+        supplierOrderReference: "SO-REJECTED-ORDER",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: "https://example.com/purchase-orders/invalid-rejection-acknowledgment",
+      },
+    }), /resolve the supplier order exception/i, "an order returned to sourcing must never accept later acknowledgment");
+    const resumedRejectedCase = await findProcurementCaseByRelatedTaskId(context, connectedReplacementAuthorized.purchaseAction.id);
+    assert.equal((resumedRejectedCase?.result as { sourcingReturn?: { state?: string } } | null)?.sourcingReturn?.state, "REQUIRED");
+
     const duplicateRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "DUPLICATE-ID" });
     await completeSourcingResearchRun({
       context,
@@ -2754,6 +3288,11 @@ async function main() {
         note: "Unauthorized stale-session disposition attempt.",
       },
     }), /admin or manager/i, "a stale privileged cookie must not resolve supplier order exceptions after demotion");
+    await assert.rejects(() => prepareRevisedPurchaseOrder({
+      context: stalePrivilegedContext,
+      actionId: clonedAction.id,
+      input: revisedDraftInput,
+    }), /current user|not found|cannot edit/i, "a stale privileged cookie must not prepare a revised purchase scope after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
@@ -2771,6 +3310,11 @@ async function main() {
         note: "Unauthorized cross-office disposition attempt.",
       },
     }), /not found/i, "another office must not resolve supplier order exceptions");
+    await assert.rejects(() => prepareRevisedPurchaseOrder({
+      context: foreign,
+      actionId: clonedAction.id,
+      input: revisedDraftInput,
+    }), /not found/i, "another office must not prepare a revised purchase scope");
     await assert.rejects(() => saveProcurementShortlist({
       context: foreign,
       researchRunId: shortlistRun.id,

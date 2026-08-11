@@ -7934,3 +7934,30 @@ Trust boundary:
   continue.
 - No payment, booking, customs, inventory mutation, or Logistics handoff is
   created.
+
+## Supply OS revised purchase authorization, August 11
+
+Status:
+
+- Implemented on `supply-os-revised-order-authorization`, targeting `main`.
+- No Prisma migration or new dependency is required.
+
+Operator result:
+
+- A revision-required supplier exception can create a separate replacement
+  order draft in the persistent sourcing workstream.
+- The replacement scope retains the prior award, supplier qualification,
+  quality plan, original release, exception evidence, and exact revised terms.
+- A fresh admin decision authorizes the replacement. Manual release evidence or
+  connected Gmail delivery then supersedes the original order atomically.
+
+Trust boundary:
+
+- Approval alone does not claim that the supplier received the replacement.
+  The original released order remains outstanding and acknowledgment-blocked
+  until the revised order is actually released.
+- The old release remains immutable history and points to the replacement
+  action and release hash after supersession.
+- Supplier rejection creates a persistent return-to-sourcing state and returns
+  the buyer to the shortlist; it cannot be retained or converted into a revised
+  order. No payment, inventory, booking, customs, or Logistics state is created.

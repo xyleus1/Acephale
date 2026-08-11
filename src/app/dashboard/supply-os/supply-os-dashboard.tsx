@@ -962,7 +962,11 @@ function CaseCommandCenter({
     setSourceMapCandidateId(null);
     setSourceMapObjectId("");
     const savedCases = procurementCases.filter((candidate) => candidate.input.researchRunId === run.id);
-    const savedCase = savedCases.find((candidate) => candidate.quoteCycle?.result?.responses.length)
+    const savedCase = savedCases.find((candidate) => candidate.result?.sourcingReturn)
+      ?? savedCases.find((candidate) => candidate.result?.purchaseRevision)
+      ?? savedCases.find((candidate) => candidate.result?.purchaseRelease?.revisionRequiredCount)
+      ?? savedCases.find((candidate) => candidate.result?.purchaseRelease?.openSupplierExceptionCount)
+      ?? savedCases.find((candidate) => candidate.quoteCycle?.result?.responses.length)
       ?? savedCases.find((candidate) => candidate.quoteCycle?.result?.state === "AWAITING_RESPONSE")
       ?? savedCases[0]
       ?? null;

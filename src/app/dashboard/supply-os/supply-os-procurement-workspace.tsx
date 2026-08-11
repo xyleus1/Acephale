@@ -291,6 +291,11 @@ function workstreamState(procurementCase: SavedProcurementCase) {
     && purchaseRelease.release
     && purchaseRelease.state !== "ACKNOWLEDGED"
     && purchaseRelease.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10);
+  if (procurementCase.result?.sourcingReturn?.state === "REQUIRED") return "Supplier rejected, choose another source";
+  if (procurementCase.result?.purchaseRevision?.state === "APPROVAL_PENDING") return "Revised order approval pending";
+  if (procurementCase.result?.purchaseRevision?.state === "REJECTED") return "Revised order needs changes";
+  if (procurementCase.result?.purchaseRevision?.state === "AUTHORIZED") return "Revised order authorized";
+  if (procurementCase.result?.purchaseRevision?.state === "DRAFT") return "Revised order draft";
   if (procurementCase.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
   if (acknowledgmentOverdue) return "Supplier response overdue";
   if (procurementCase.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") return "Partially acknowledged";
@@ -445,6 +450,14 @@ export function AtlasProcurementWorkspace({
     buyerReference: initialCase?.purchaseDraft?.result?.order.buyerReference ?? "",
     notes: initialCase?.purchaseDraft?.result?.order.notes ?? "",
   }));
+  const [replacementCommercialForm, setReplacementCommercialForm] = useState(() => ({
+    unitPrice: initialCase?.purchaseDraft?.result?.commercial.unitPrice ?? initialCase?.purchaseAction?.input.commercial.unitPrice ?? "",
+    currency: initialCase?.purchaseDraft?.result?.commercial.currency ?? initialCase?.purchaseAction?.input.commercial.currency ?? "USD",
+    minimumOrderQuantity: initialCase?.purchaseDraft?.result?.commercial.minimumOrderQuantity ?? initialCase?.purchaseAction?.input.commercial.minimumOrderQuantity ?? "",
+    deliveryDate: initialCase?.purchaseDraft?.result?.commercial.deliveryDate ?? initialCase?.purchaseAction?.input.commercial.deliveryDate ?? "",
+    quoteReference: initialCase?.purchaseDraft?.result?.commercial.quoteReference ?? initialCase?.purchaseAction?.input.commercial.quoteReference ?? "",
+    quoteValidUntil: initialCase?.purchaseDraft?.result?.commercial.quoteValidUntil ?? initialCase?.purchaseAction?.input.commercial.quoteValidUntil ?? "",
+  }));
   const [approvalReason, setApprovalReason] = useState("");
   const [approvalNote, setApprovalNote] = useState("");
   const [purchaseApprovalReason, setPurchaseApprovalReason] = useState("");
@@ -502,6 +515,7 @@ export function AtlasProcurementWorkspace({
   const options = useMemo(() => [...buildProcurementOptions(item), ...publicResearchOptions(publicResearch)], [item, publicResearch]);
   const recommended = options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
   const [phase, setPhase] = useState<ProcurementPhase>(() => {
+    if (initialCase?.result?.sourcingReturn?.state === "REQUIRED") return "compare";
     if (initialCase) return "procure";
     if (initialRun) return "compare";
     if (item) return "researching";
@@ -764,18 +778,29 @@ export function AtlasProcurementWorkspace({
 
   useEffect(() => {
     const draft = currentCase?.purchaseDraft?.result;
+    const releasedAction = currentCase?.purchaseAction;
+    const releasedResult = releasedAction?.result && "supplierOrderExceptions" in releasedAction.result ? releasedAction.result : null;
+    const revisionException = releasedResult?.supplierOrderExceptions?.find((entry) => entry.status === "REVISION_REQUIRED" || entry.status === "REVISION_DRAFTED") ?? null;
     setPurchaseForm({
-      quantity: draft?.order.quantity
+      quantity: draft?.order.quantity ?? revisionException?.proposedQuantity ?? releasedAction?.input.order.quantity
         ?? String(item ? Math.max(shortageQuantity(item), currentCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
       needBy: draft?.order.needBy
         ?? (item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? currentCase?.result?.confirmedTerms?.deliveryDate ?? "" : currentCase?.result?.confirmedTerms?.deliveryDate ?? ""),
       shipTo: draft?.order.shipTo ?? (item ? "Austin assembly plant" : ""),
       incoterm: draft?.order.incoterm ?? "DAP",
-      paymentTerms: draft?.order.paymentTerms ?? "",
+      paymentTerms: draft?.order.paymentTerms ?? revisionException?.proposedPaymentTerms ?? releasedAction?.input.order.paymentTerms ?? "",
       buyerReference: draft?.order.buyerReference ?? "",
       notes: draft?.order.notes ?? "",
     });
-  }, [currentCase?.purchaseDraft?.id, currentCase?.purchaseDraft?.result?.revision, currentCase?.result?.confirmedTerms?.deliveryDate, currentCase?.result?.confirmedTerms?.minimumOrderQuantity, item]);
+    setReplacementCommercialForm({
+      unitPrice: draft?.commercial.unitPrice ?? revisionException?.proposedUnitPrice ?? releasedAction?.input.commercial.unitPrice ?? "",
+      currency: draft?.commercial.currency ?? revisionException?.proposedCurrency ?? releasedAction?.input.commercial.currency ?? "USD",
+      minimumOrderQuantity: draft?.commercial.minimumOrderQuantity ?? releasedAction?.input.commercial.minimumOrderQuantity ?? "",
+      deliveryDate: draft?.commercial.deliveryDate ?? revisionException?.proposedDeliveryDate ?? releasedAction?.input.commercial.deliveryDate ?? "",
+      quoteReference: draft?.commercial.quoteReference ?? releasedAction?.input.commercial.quoteReference ?? "",
+      quoteValidUntil: draft?.commercial.quoteValidUntil ?? releasedAction?.input.commercial.quoteValidUntil ?? "",
+    });
+  }, [currentCase?.purchaseDraft?.id, currentCase?.purchaseDraft?.result?.revision, currentCase?.purchaseAction?.id, currentCase?.purchaseAction?.updatedAt, currentCase?.result?.confirmedTerms?.deliveryDate, currentCase?.result?.confirmedTerms?.minimumOrderQuantity, item]);
 
   useEffect(() => {
     const release = currentCase?.result?.purchaseRelease;
@@ -934,7 +959,7 @@ export function AtlasProcurementWorkspace({
     setWorkstreamSwitchError("");
     setCurrentCase(procurementCase);
     setSelectedOptionId(procurementCase.result?.selectedOption.id ?? "");
-    setPhase("procure");
+    setPhase(procurementCase.result?.sourcingReturn?.state === "REQUIRED" ? "compare" : "procure");
   }
 
   async function continueProcurement() {
@@ -1174,7 +1199,36 @@ export function AtlasProcurementWorkspace({
     }, "APPROVAL_PENDING");
   }
 
+  function saveRevisedPurchaseDraft(exception?: SupplierOrderException) {
+    const revisionContext = currentCase?.purchaseDraft?.result?.revisionContext;
+    const actionId = revisionContext?.replacesPurchaseActionId ?? currentCase?.purchaseAction?.id;
+    const exceptionHash = revisionContext?.supplierExceptionHash ?? exception?.exceptionHash;
+    const releaseHash = revisionContext?.supersededReleaseHash ?? exception?.releaseHash;
+    if (!currentCase?.result || !actionId || !exceptionHash || !releaseHash) return;
+    void runCaseAction(`/api/supply-os/purchase-actions/${actionId}/exceptions/${exceptionHash}/replacement-draft`, {
+      expectedReleaseHash: releaseHash,
+      expectedRevision: revisionContext ? currentCase.purchaseDraft?.result?.revision ?? 0 : 0,
+      quantity: Number(purchaseForm.quantity),
+      needBy: purchaseForm.needBy,
+      shipTo: purchaseForm.shipTo,
+      incoterm: purchaseForm.incoterm,
+      paymentTerms: purchaseForm.paymentTerms,
+      buyerReference: purchaseForm.buyerReference || null,
+      notes: purchaseForm.notes || null,
+      unitPrice: Number(replacementCommercialForm.unitPrice),
+      currency: replacementCommercialForm.currency,
+      minimumOrderQuantity: Number(replacementCommercialForm.minimumOrderQuantity),
+      deliveryDate: replacementCommercialForm.deliveryDate,
+      quoteReference: replacementCommercialForm.quoteReference,
+      quoteValidUntil: replacementCommercialForm.quoteValidUntil,
+    }, "replacement-order");
+  }
+
   function savePurchaseDraft() {
+    if (currentCase?.purchaseDraft?.result?.revisionContext) {
+      saveRevisedPurchaseDraft();
+      return;
+    }
     const approval = currentCase?.result?.approval;
     if (!currentCase?.result || !approval || approval.status !== "APPROVED") return;
     void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/purchase-draft`, {
@@ -1301,7 +1355,7 @@ export function AtlasProcurementWorkspace({
     }));
   }
 
-  async function resolveSupplierException(exceptionHash: string, disposition: "KEEP_ORIGINAL" | "REQUIRE_REAUTHORIZATION") {
+  async function resolveSupplierException(exceptionHash: string, disposition: "KEEP_ORIGINAL" | "REQUIRE_REAUTHORIZATION" | "RETURN_TO_SOURCING") {
     const actionId = currentCase?.purchaseAction?.id;
     const releaseHash = currentCase?.result?.purchaseRelease?.release?.releaseHash;
     if (!actionId || !releaseHash) return;
@@ -1310,7 +1364,10 @@ export function AtlasProcurementWorkspace({
       disposition,
       note: exceptionResolutionNote,
     }, "supplier-order-exception-resolution");
-    if (saved) setExceptionResolutionNote("");
+    if (saved) {
+      setExceptionResolutionNote("");
+      if (disposition === "RETURN_TO_SOURCING") onBack();
+    }
   }
 
   function recordSupplierAcknowledgment() {
@@ -1341,7 +1398,15 @@ export function AtlasProcurementWorkspace({
     && Boolean(purchaseForm.needBy)
     && Boolean(purchaseForm.shipTo.trim())
     && Boolean(purchaseForm.paymentTerms.trim());
+  const replacementCommercialComplete = Number(replacementCommercialForm.unitPrice) > 0
+    && /^[A-Za-z]{3}$/.test(replacementCommercialForm.currency)
+    && Number(replacementCommercialForm.minimumOrderQuantity) > 0
+    && Number(purchaseForm.quantity) >= Number(replacementCommercialForm.minimumOrderQuantity)
+    && Boolean(replacementCommercialForm.deliveryDate)
+    && Boolean(replacementCommercialForm.quoteReference.trim())
+    && Boolean(replacementCommercialForm.quoteValidUntil);
   const purchaseActionStatus = currentCase?.purchaseAction?.approval?.status ?? null;
+  const isReplacementDraft = Boolean(currentCase?.purchaseDraft?.result?.revisionContext);
   const purchaseReleaseResult = currentCase?.purchaseAction?.result?.state === "RELEASED"
     || currentCase?.purchaseAction?.result?.state === "PARTIALLY_ACKNOWLEDGED"
     || currentCase?.purchaseAction?.result?.state === "ACKNOWLEDGED"
@@ -1350,7 +1415,9 @@ export function AtlasProcurementWorkspace({
   const purchaseReleaseState = purchaseReleaseResult?.state ?? null;
   const supplierOrderExceptions = purchaseReleaseResult?.supplierOrderExceptions ?? [];
   const openSupplierExceptions = supplierOrderExceptions.filter((entry) => entry.status === "OPEN_REVIEW");
-  const supplierRevisionRequired = supplierOrderExceptions.some((entry) => entry.status === "REVISION_REQUIRED");
+  const supplierRevisionRequired = supplierOrderExceptions.some((entry) => entry.status === "REVISION_REQUIRED" || entry.status === "REVISION_DRAFTED");
+  const sourcingReturnRequired = currentCase?.result?.sourcingReturn?.state === "REQUIRED";
+  const purchaseRevisionState = currentCase?.result?.purchaseRevision?.state ?? null;
   const purchaseReleaseFormComplete = Boolean(purchaseReleaseForm.releasedOn)
     && Boolean(purchaseReleaseForm.acknowledgmentDueOn)
     && Boolean(purchaseReleaseForm.purchaseOrderReference.trim())
@@ -1793,9 +1860,9 @@ export function AtlasProcurementWorkspace({
                 ) : (
                   <>
                     <header>
-                      <small>{purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acceptance complete" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Supplier acceptance open" : purchaseReleaseState === "RELEASED" ? "Awaiting supplier" : purchaseActionStatus === "APPROVED" ? "Purchase action authorized" : purchaseActionStatus === "PENDING" ? "Final approval pending" : "Purchase preparation"}</small>
-                      <h4>{purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acknowledged" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Partial supplier acceptance" : purchaseReleaseState === "RELEASED" ? "Order released" : purchaseActionStatus === "APPROVED" ? "Approved to issue" : currentCase.purchaseDraft?.result ? "Order draft" : "Prepare the order"}</h4>
-                      <p>{purchaseReleaseState === "RELEASED" ? "The exact authorized order is recorded as released and remains open until supplier acknowledgment is captured." : purchaseReleaseState ? "Supplier acceptance is recorded against the frozen order scope and its evidence." : purchaseActionStatus === "APPROVED" ? "The exact supplier, quantity, price, destination, and terms are frozen under an admin approval hash." : "Supplier and quote evidence come from the approved scope. Add the order fields that were not part of sourcing approval."}</p>
+                      <small>{purchaseRevisionState === "APPROVAL_PENDING" ? "Revised order approval pending" : purchaseRevisionState === "REJECTED" ? "Revised order needs changes" : purchaseRevisionState === "AUTHORIZED" ? "Replacement authorized" : purchaseRevisionState === "DRAFT" ? "Revised order draft" : purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acceptance complete" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Supplier acceptance open" : purchaseReleaseState === "RELEASED" ? "Awaiting supplier" : purchaseActionStatus === "APPROVED" ? "Purchase action authorized" : purchaseActionStatus === "PENDING" ? "Final approval pending" : "Purchase preparation"}</small>
+                      <h4>{purchaseRevisionState === "AUTHORIZED" ? "Revised order approved" : isReplacementDraft ? "Replacement order" : purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acknowledged" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Partial supplier acceptance" : purchaseReleaseState === "RELEASED" ? "Order released" : purchaseActionStatus === "APPROVED" ? "Approved to issue" : currentCase.purchaseDraft?.result ? "Order draft" : "Prepare the order"}</h4>
+                      <p>{isReplacementDraft ? "This is a new immutable order scope linked to the supplier exception. The released order remains historical and cannot be edited." : purchaseReleaseState === "RELEASED" ? "The exact authorized order is recorded as released and remains open until supplier acknowledgment is captured." : purchaseReleaseState ? "Supplier acceptance is recorded against the frozen order scope and its evidence." : purchaseActionStatus === "APPROVED" ? "The exact supplier, quantity, price, destination, and terms are frozen under an admin approval hash." : "Supplier and quote evidence come from the approved scope. Add the order fields that were not part of sourcing approval."}</p>
                     </header>
                     {currentCase.purchaseDraft?.result ? (
                       <dl className={styles.purchaseDraftSummary}>
@@ -1917,7 +1984,7 @@ export function AtlasProcurementWorkspace({
                             ) : null}
                             {supplierOrderExceptions.map((entry) => (
                               <section className={styles.purchaseApprovalRequest} key={entry.exceptionHash}>
-                                <p><strong>{entry.category.toLowerCase().replaceAll("_", " ")}</strong> · {entry.status === "OPEN_REVIEW" ? "Review required" : entry.status === "REVISION_REQUIRED" ? "New authorization required" : "Original scope retained"}</p>
+                                <p><strong>{entry.category.toLowerCase().replaceAll("_", " ")}</strong> · {entry.status === "OPEN_REVIEW" ? "Review required" : entry.status === "REVISION_REQUIRED" ? "New authorization required" : entry.status === "REVISION_DRAFTED" ? "Revised draft ready" : entry.status === "REVISION_AUTHORIZED" ? "Revised order authorized" : entry.status === "REVISION_RELEASED" ? "Replacement released" : entry.status === "RETURNED_TO_SOURCING" ? "Returned to sourcing" : "Original scope retained"}</p>
                                 <p>{entry.summary}</p>
                                 <dl className={styles.purchaseDraftSummary}>
                                   {entry.proposedQuantity ? <div><dt>Proposed quantity</dt><dd>{entry.proposedQuantity} {purchaseReleaseResult.unitOfMeasure}</dd></div> : null}
@@ -1930,11 +1997,36 @@ export function AtlasProcurementWorkspace({
                                   <>
                                     <label data-draft-section="supplier-order-exception-resolution">Disposition note<textarea value={exceptionResolutionNote} onChange={(event) => setExceptionResolutionNote(event.target.value)} placeholder="Explain why the original order remains valid or why a new authorization is required." /></label>
                                     <div className={styles.purchaseDecisionActions}>
-                                      <button type="button" disabled={gateActionState === "saving" || exceptionResolutionNote.trim().length < 10} onClick={() => resolveSupplierException(entry.exceptionHash, "KEEP_ORIGINAL")}><Check size={14} /> Keep original authorization</button>
-                                      {canAuthorizePurchase ? <button type="button" disabled={gateActionState === "saving" || exceptionResolutionNote.trim().length < 10} onClick={() => resolveSupplierException(entry.exceptionHash, "REQUIRE_REAUTHORIZATION")}><ShieldCheck size={14} /> Require new authorization</button> : null}
+                                      {entry.category === "REJECTION"
+                                        ? <button type="button" disabled={gateActionState === "saving" || exceptionResolutionNote.trim().length < 10} onClick={() => resolveSupplierException(entry.exceptionHash, "RETURN_TO_SOURCING")}><ArrowLeft size={14} /> Return to supplier shortlist</button>
+                                        : <button type="button" disabled={gateActionState === "saving" || exceptionResolutionNote.trim().length < 10} onClick={() => resolveSupplierException(entry.exceptionHash, "KEEP_ORIGINAL")}><Check size={14} /> Keep original authorization</button>}
+                                      {canAuthorizePurchase && entry.category !== "REJECTION" ? <button type="button" disabled={gateActionState === "saving" || exceptionResolutionNote.trim().length < 10} onClick={() => resolveSupplierException(entry.exceptionHash, "REQUIRE_REAUTHORIZATION")}><ShieldCheck size={14} /> Require new authorization</button> : null}
                                     </div>
                                   </>
                                 ) : entry.resolution ? <p>{entry.resolution.note}</p> : null}
+                                {entry.status === "REVISION_REQUIRED" ? (
+                                  <section className={styles.purchaseApprovalRequest} data-draft-section="replacement-order">
+                                    <p><strong>Prepare the replacement scope</strong></p>
+                                    <p>Every supplier-controlled term must match the exception evidence. The old PO remains frozen until this replacement is approved.</p>
+                                    <div className={styles.procurementFormGrid}>
+                                      <label>Quantity<input type="number" min="0.01" step="0.01" value={purchaseForm.quantity} onChange={(event) => setPurchaseForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
+                                      <label>Unit<input readOnly value={currentCase.purchaseAction?.input.order.unitOfMeasure ?? purchaseReleaseResult.unitOfMeasure} /></label>
+                                      <label>Unit price<input type="number" min="0.0001" step="0.0001" value={replacementCommercialForm.unitPrice} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, unitPrice: event.target.value }))} /></label>
+                                      <label>Currency<input maxLength={3} value={replacementCommercialForm.currency} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></label>
+                                      <label>MOQ<input type="number" min="0.01" step="0.01" value={replacementCommercialForm.minimumOrderQuantity} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, minimumOrderQuantity: event.target.value }))} /></label>
+                                      <label>Delivery date<input type="date" value={replacementCommercialForm.deliveryDate} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, deliveryDate: event.target.value }))} /></label>
+                                      <label>Offer reference<input value={replacementCommercialForm.quoteReference} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, quoteReference: event.target.value }))} /></label>
+                                      <label>Offer valid until<input type="date" value={replacementCommercialForm.quoteValidUntil} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, quoteValidUntil: event.target.value }))} /></label>
+                                      <label>Need by<input type="date" value={purchaseForm.needBy} onChange={(event) => setPurchaseForm((current) => ({ ...current, needBy: event.target.value }))} /></label>
+                                      <label>Incoterm<select value={purchaseForm.incoterm} onChange={(event) => setPurchaseForm((current) => ({ ...current, incoterm: event.target.value as typeof current.incoterm }))}><option value="EXW">EXW</option><option value="FCA">FCA</option><option value="FOB">FOB</option><option value="CPT">CPT</option><option value="CIP">CIP</option><option value="DAP">DAP</option><option value="DDP">DDP</option></select></label>
+                                      <label className={styles.procurementWideField}>Ship to<input value={purchaseForm.shipTo} onChange={(event) => setPurchaseForm((current) => ({ ...current, shipTo: event.target.value }))} /></label>
+                                      <label>Payment terms<input value={purchaseForm.paymentTerms} onChange={(event) => setPurchaseForm((current) => ({ ...current, paymentTerms: event.target.value }))} /></label>
+                                      <label>Buyer reference<input value={purchaseForm.buyerReference} onChange={(event) => setPurchaseForm((current) => ({ ...current, buyerReference: event.target.value }))} /></label>
+                                      <label className={styles.procurementWideField}>Buyer notes<textarea value={purchaseForm.notes} onChange={(event) => setPurchaseForm((current) => ({ ...current, notes: event.target.value }))} /></label>
+                                    </div>
+                                    <button type="button" disabled={gateActionState === "saving" || !purchaseFormComplete || !replacementCommercialComplete} onClick={() => saveRevisedPurchaseDraft(entry)}><ShieldCheck size={14} /> Prepare revised order</button>
+                                  </section>
+                                ) : null}
                               </section>
                             ))}
                             <button type="button" disabled={gateActionState === "saving" || supplierRevisionRequired} onClick={() => setShowSupplierExceptionForm((current) => !current)}><TriangleAlert size={14} /> {showSupplierExceptionForm ? "Hide changed-term form" : "Supplier changed the order"}</button>
@@ -1956,7 +2048,7 @@ export function AtlasProcurementWorkspace({
                                 <button type="button" disabled={gateActionState === "saving" || !supplierExceptionFormComplete} onClick={recordSupplierException}><TriangleAlert size={14} /> Record supplier exception</button>
                               </section>
                             ) : null}
-                            {openSupplierExceptions.length || supplierRevisionRequired ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> Supplier acceptance is blocked until the exception is resolved. Changed terms require a new authorization.</p> : <><p>Confirm the structured supplier acceptance. Partial acceptances remain open until the full authorized quantity is covered.</p>
+                            {openSupplierExceptions.length || supplierRevisionRequired || sourcingReturnRequired ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> {sourcingReturnRequired ? "This supplier rejected the order. Choose another supplier before continuing." : "Supplier acceptance is blocked until the exception is resolved. Changed terms require a new authorization."}</p> : <><p>Confirm the structured supplier acceptance. Partial acceptances remain open until the full authorized quantity is covered.</p>
                             <div className={styles.procurementFormGrid}>
                               <label>Acknowledged on<input type="date" value={acknowledgmentForm.acknowledgedOn} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acknowledgedOn: event.target.value }))} /></label>
                               <label>Accepted quantity<input type="number" min="0.01" step="0.01" value={acknowledgmentForm.acceptedQuantity} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acceptedQuantity: event.target.value }))} /></label>
@@ -1976,7 +2068,15 @@ export function AtlasProcurementWorkspace({
                       </>
                     ) : (
                       <>
-                        <div className={styles.procurementFormGrid} data-draft-section="purchase-order">
+                        <div className={styles.procurementFormGrid} data-draft-section={isReplacementDraft ? "replacement-order" : "purchase-order"}>
+                          {isReplacementDraft ? <>
+                            <label>Unit price<input type="number" min="0.0001" step="0.0001" value={replacementCommercialForm.unitPrice} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, unitPrice: event.target.value }))} /></label>
+                            <label>Currency<input maxLength={3} value={replacementCommercialForm.currency} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} /></label>
+                            <label>MOQ<input type="number" min="0.01" step="0.01" value={replacementCommercialForm.minimumOrderQuantity} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, minimumOrderQuantity: event.target.value }))} /></label>
+                            <label>Delivery date<input type="date" value={replacementCommercialForm.deliveryDate} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, deliveryDate: event.target.value }))} /></label>
+                            <label>Offer reference<input value={replacementCommercialForm.quoteReference} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, quoteReference: event.target.value }))} /></label>
+                            <label>Offer valid until<input type="date" value={replacementCommercialForm.quoteValidUntil} onChange={(event) => setReplacementCommercialForm((current) => ({ ...current, quoteValidUntil: event.target.value }))} /></label>
+                          </> : null}
                           <label>Quantity<input type="number" min="0.01" step="0.01" value={purchaseForm.quantity} onChange={(event) => setPurchaseForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
                           <label>Approved unit<input readOnly value={currentCase.purchaseDraft?.result?.order.unitOfMeasure ?? currentCase.result.confirmedTerms?.unitOfMeasure ?? "Unknown"} /></label>
                           <label>Need by<input type="date" value={purchaseForm.needBy} onChange={(event) => setPurchaseForm((current) => ({ ...current, needBy: event.target.value }))} /></label>
@@ -1986,7 +2086,7 @@ export function AtlasProcurementWorkspace({
                           <label>Buyer reference<input value={purchaseForm.buyerReference} onChange={(event) => setPurchaseForm((current) => ({ ...current, buyerReference: event.target.value }))} placeholder="Optional internal reference" /></label>
                           <label className={styles.procurementWideField}>Buyer notes<textarea value={purchaseForm.notes} onChange={(event) => setPurchaseForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional receiving or packaging instructions" /></label>
                         </div>
-                        <button type="button" disabled={gateActionState === "saving" || !purchaseFormComplete} onClick={savePurchaseDraft}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {purchaseActionStatus === "PENDING" ? "Update draft and cancel pending approval" : currentCase.purchaseDraft?.result ? "Update order draft" : "Save order draft"}</button>
+                        <button type="button" disabled={gateActionState === "saving" || !purchaseFormComplete || (isReplacementDraft && !replacementCommercialComplete)} onClick={savePurchaseDraft}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {purchaseActionStatus === "PENDING" ? "Update draft and cancel pending approval" : isReplacementDraft ? "Update revised order" : currentCase.purchaseDraft?.result ? "Update order draft" : "Save order draft"}</button>
                         {purchaseActionStatus === "REJECTED" ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> This exact order scope was rejected. Revise and save the draft before requesting approval again.</p> : null}
                         {currentCase.purchaseDraft?.result && !purchaseActionStatus ? (
                           <section className={styles.purchaseApprovalRequest} data-draft-section="purchase-approval">
@@ -2010,7 +2110,7 @@ export function AtlasProcurementWorkspace({
             ) : null}
             <p><ShieldCheck size={15} /> {purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier evidence covers the full authorized quantity. Logistics handoff is next but has not been created." : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? `${purchaseReleaseResult?.remainingQuantity} ${purchaseReleaseResult?.unitOfMeasure} remains open with the supplier.` : purchaseActionStatus === "APPROVED" ? "The exact order is authorized but has not been externally executed." : currentCase?.result?.stage === "PURCHASE_READY" ? "This scope is approved for purchase preparation. No purchase order, supplier contact, booking, or spend was created." : "Qualification, commercial terms, quality plan, and approval remain required. No purchase order, supplier contact, booking, or spend was created."}</p>
             <div className={styles.procurementCaseActions}>
-              {!purchaseReleaseState ? <button type="button" onClick={() => setPhase("compare")}><ArrowLeft size={15} /> Review alternatives</button> : null}
+              {!purchaseReleaseState || sourcingReturnRequired ? <button type="button" onClick={() => setPhase("compare")}><ArrowLeft size={15} /> Review alternatives</button> : null}
               <button type="button" onClick={onBack}>Back to sourcing</button>
             </div>
           </motion.div>

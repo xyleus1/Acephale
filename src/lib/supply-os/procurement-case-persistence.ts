@@ -19,6 +19,7 @@ import {
   PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE,
   PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE,
 } from "./purchase-order-communication-persistence";
+import { finalizeReplacementSupersession } from "./purchase-order-revision";
 
 const RESEARCH_CAPABILITY = "research.supplier_candidates";
 const TASK_TYPE = "PROCUREMENT_CASE";
@@ -36,7 +37,8 @@ const PURCHASE_ACTION_REQUIRED_ROLE = "ADMIN";
 const PURCHASE_INCOTERMS = ["EXW", "FCA", "FOB", "CPT", "CIP", "DAP", "DDP"] as const;
 const PURCHASE_RELEASE_CHANNELS = ["EMAIL", "SUPPLIER_PORTAL", "EDI", "PHONE_CONFIRMED", "OTHER"] as const;
 const SUPPLIER_ORDER_EXCEPTION_CATEGORIES = ["QUANTITY_CHANGE", "PRICE_CHANGE", "DELIVERY_CHANGE", "TERMS_CHANGE", "REJECTION", "OTHER"] as const;
-const SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS = ["KEEP_ORIGINAL", "REQUIRE_REAUTHORIZATION"] as const;
+const SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS = ["KEEP_ORIGINAL", "REQUIRE_REAUTHORIZATION", "RETURN_TO_SOURCING"] as const;
+const SUPPLIER_ORDER_REVISION_PENDING_STATUSES = ["REVISION_REQUIRED", "REVISION_DRAFTED", "REVISION_AUTHORIZED"] as const;
 const SUPPLIER_RELATIONSHIPS = ["MANUFACTURER", "AUTHORIZED_DISTRIBUTOR", "INDEPENDENT_DISTRIBUTOR"] as const;
 const SUPPLIER_REJECTION_REASONS = ["IDENTITY_UNRESOLVED", "CAPABILITY_UNRESOLVED", "AUTHORIZATION_UNRESOLVED", "SOURCE_UNVERIFIABLE", "OTHER"] as const;
 
@@ -46,6 +48,16 @@ function digest(value: unknown) {
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function supplierOrderRevisionPending(value: unknown) {
+  const status = String(record(value).status);
+  return SUPPLIER_ORDER_REVISION_PENDING_STATUSES.includes(status as (typeof SUPPLIER_ORDER_REVISION_PENDING_STATUSES)[number]);
+}
+
+function supplierOrderAcceptanceBlocked(value: unknown) {
+  const status = String(record(value).status);
+  return status === "OPEN_REVIEW" || status === "RETURNED_TO_SOURCING" || supplierOrderRevisionPending(value);
 }
 
 function requiredText(value: unknown, label: string, max: number) {
@@ -403,6 +415,25 @@ export type PurchaseOrderDraftInput = {
   paymentTerms: string;
   buyerReference?: string | null;
   notes?: string | null;
+};
+
+type RevisedPurchaseOrderDraftInput = {
+  expectedReleaseHash: string;
+  exceptionHash: string;
+  expectedRevision: number;
+  quantity: number;
+  needBy: string;
+  shipTo: string;
+  incoterm: (typeof PURCHASE_INCOTERMS)[number];
+  paymentTerms: string;
+  buyerReference: string | null;
+  notes: string | null;
+  unitPrice: number;
+  currency: string;
+  minimumOrderQuantity: number;
+  deliveryDate: string;
+  quoteReference: string;
+  quoteValidUntil: string;
 };
 
 function progressionFor(selection: ProcurementSelectionInput) {
@@ -2671,6 +2702,50 @@ function normalizePurchaseOrderDraft(input: unknown): PurchaseOrderDraftInput {
   };
 }
 
+function normalizeRevisedPurchaseOrderDraft(input: unknown): RevisedPurchaseOrderDraftInput {
+  const body = record(input);
+  const quantity = positiveNumber(body.quantity, "Revised order quantity");
+  const unitPrice = positiveNumber(body.unitPrice, "Revised unit price");
+  const minimumOrderQuantity = positiveNumber(body.minimumOrderQuantity, "Revised minimum order quantity");
+  if (quantity > 1_000_000_000 || minimumOrderQuantity > 1_000_000_000) {
+    throw new SupplyPersistenceError("Revised quantity and MOQ must not exceed 1,000,000,000.", "invalid_input");
+  }
+  if (quantity < minimumOrderQuantity) {
+    throw new SupplyPersistenceError("Revised order quantity must meet the revised MOQ.", "invalid_input");
+  }
+  const incoterm = requiredText(body.incoterm, "Revised incoterm", 3).toUpperCase();
+  if (!PURCHASE_INCOTERMS.includes(incoterm as RevisedPurchaseOrderDraftInput["incoterm"])) {
+    throw new SupplyPersistenceError(`Revised incoterm must be one of: ${PURCHASE_INCOTERMS.join(", ")}.`, "invalid_input");
+  }
+  const currency = requiredText(body.currency, "Revised currency", 3).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new SupplyPersistenceError("Revised currency must be a three-letter code.", "invalid_input");
+  }
+  const needBy = requireCurrentOrFutureDate(isoDate(body.needBy, "Revised need-by date"), "Revised need-by date");
+  const deliveryDate = requireCurrentOrFutureDate(isoDate(body.deliveryDate, "Revised delivery date"), "Revised delivery date");
+  if (deliveryDate > needBy) {
+    throw new SupplyPersistenceError("Revised delivery date cannot be after the need-by date.", "invalid_input");
+  }
+  return {
+    expectedReleaseHash: requiredText(body.expectedReleaseHash, "Superseded release hash", 128),
+    exceptionHash: requiredText(body.exceptionHash, "Supplier exception hash", 128),
+    expectedRevision: nonNegativeInteger(body.expectedRevision, "Expected revised draft revision"),
+    quantity,
+    needBy,
+    shipTo: requiredText(body.shipTo, "Revised ship-to location", 500),
+    incoterm: incoterm as RevisedPurchaseOrderDraftInput["incoterm"],
+    paymentTerms: requiredText(body.paymentTerms, "Revised payment terms", 300),
+    buyerReference: optionalText(body.buyerReference, "Revised buyer reference", 160),
+    notes: optionalText(body.notes, "Revised buyer notes", 2_000),
+    unitPrice,
+    currency,
+    minimumOrderQuantity,
+    deliveryDate,
+    quoteReference: requiredText(body.quoteReference, "Revised offer reference", 300),
+    quoteValidUntil: requireCurrentOrFutureDate(isoDate(body.quoteValidUntil, "Revised offer validity date"), "Revised offer validity date"),
+  };
+}
+
 export async function savePurchaseOrderDraft(args: {
   context: SupplyAccessContext;
   caseId: string;
@@ -3100,6 +3175,72 @@ export async function requestPurchaseActionApproval(args: {
           throw new SupplyPersistenceError("The approved quality-plan date passed. Record a current quality plan before final purchase approval.", "conflict");
         }
 
+        const revisionContext = record(draftResult.revisionContext);
+        const isRevisedOrder = Object.keys(revisionContext).length > 0;
+        if (isRevisedOrder) {
+          const projectedRevision = record(current.result.purchaseRevision);
+          const replacesPurchaseActionId = requiredText(revisionContext.replacesPurchaseActionId, "Superseded purchase action ID", 220);
+          const supersededReleaseHash = requiredText(revisionContext.supersededReleaseHash, "Superseded release hash", 128);
+          const supplierExceptionHash = requiredText(revisionContext.supplierExceptionHash, "Supplier exception hash", 128);
+          const supplierExceptionEvidenceId = requiredText(revisionContext.supplierExceptionEvidenceId, "Supplier exception evidence ID", 220);
+          const replacementScopeHash = requiredText(revisionContext.replacementScopeHash, "Replacement scope hash", 128);
+          if (!["DRAFT", "APPROVAL_PENDING"].includes(String(projectedRevision.state))
+            || projectedRevision.replacementDraftTaskId !== purchaseDraft.id
+            || projectedRevision.replacementDraftRevision !== request.expectedDraftRevision
+            || projectedRevision.replacementScopeHash !== replacementScopeHash
+            || projectedRevision.replacesPurchaseActionId !== replacesPurchaseActionId
+            || projectedRevision.supersededReleaseHash !== supersededReleaseHash
+            || projectedRevision.supplierExceptionHash !== supplierExceptionHash) {
+            throw new SupplyPersistenceError("The revised order projection changed. Reload before requesting approval.", "conflict");
+          }
+          const supersededAction = await tx.supplyExecutionTask.findFirst({
+            where: {
+              id: replacesPurchaseActionId,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              taskType: PURCHASE_ACTION_TASK_TYPE,
+              capabilityKey: PURCHASE_ACTION_CAPABILITY,
+              status: "RUNNING",
+            },
+            select: { result: true },
+          });
+          const supersededResult = record(supersededAction?.result);
+          const supersededRelease = record(supersededResult.release);
+          const supplierExceptions = Array.isArray(supersededResult.supplierOrderExceptions)
+            ? supersededResult.supplierOrderExceptions.map((value) => record(value))
+            : [];
+          const targetException = supplierExceptions.find((value) => value.exceptionHash === supplierExceptionHash);
+          const replacementDraft = record(targetException?.replacementDraft);
+          if (!supersededAction
+            || !["RELEASED", "PARTIALLY_ACKNOWLEDGED"].includes(String(supersededResult.state))
+            || supersededRelease.releaseHash !== supersededReleaseHash
+            || targetException?.status !== "REVISION_DRAFTED"
+            || replacementDraft.taskId !== purchaseDraft.id
+            || replacementDraft.replacementScopeHash !== replacementScopeHash
+            || supplierExceptions.some((value) => value.status === "OPEN_REVIEW")
+            || supplierExceptions.filter(supplierOrderRevisionPending).length !== 1) {
+            throw new SupplyPersistenceError("The supplier exception no longer supports this revised order.", "conflict");
+          }
+          const exceptionEvidence = await tx.supplyEvidence.findFirst({
+            where: {
+              id: supplierExceptionEvidenceId,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              executionTaskId: replacesPurchaseActionId,
+              kind: "SUPPLIER_ORDER_EXCEPTION",
+              contentHash: supplierExceptionHash,
+              sourceUri: requiredText(commercial.quoteEvidenceUrl, "Revised offer evidence URL", 2_000),
+            },
+            select: { id: true },
+          });
+          if (!exceptionEvidence
+            || commercial.sourceKind !== "SUPPLIER_ORDER_EXCEPTION"
+            || commercial.quoteEvidenceId !== supplierExceptionEvidenceId
+            || commercial.quoteEvidenceHash !== supplierExceptionHash) {
+            throw new SupplyPersistenceError("The revised commercial terms lost their supplier exception evidence.", "conflict");
+          }
+        }
+
         const immutableInput = {
           action: "PLACE_ORDER",
           procurementCaseId: procurementCase.id,
@@ -3116,6 +3257,7 @@ export async function requestPurchaseActionApproval(args: {
           },
           sourceEvidenceReview: record(procurementInput.sourceEvidenceReview),
           qualityPlan,
+          ...(isRevisedOrder ? { revisionContext } : {}),
         };
         const scopeHash = digest(immutableInput);
         const existing = await tx.supplyExecutionTask.findFirst({
@@ -3207,6 +3349,16 @@ export async function requestPurchaseActionApproval(args: {
             draftTaskId: purchaseDraft.id,
             draftRevision: request.expectedDraftRevision,
           },
+          ...(isRevisedOrder ? {
+            purchaseRevision: {
+              ...record(current.result.purchaseRevision),
+              state: "APPROVAL_PENDING",
+              replacementPurchaseActionId: actionTask.id,
+              replacementApprovalId: approval.id,
+              replacementActionScopeHash: scopeHash,
+              updatedAt: new Date().toISOString(),
+            },
+          } : {}),
           updatedAt: new Date().toISOString(),
         };
         const updatedCase = await tx.supplyExecutionTask.update({
@@ -3278,6 +3430,7 @@ export async function decidePurchaseActionApproval(args: {
           parentTaskId: true,
           taskType: true,
           capabilityKey: true,
+          input: true,
           parentTask: { select: { id: true, parentTaskId: true } },
         },
       },
@@ -3293,12 +3446,17 @@ export async function decidePurchaseActionApproval(args: {
   const workspace = await sourcingSystemWorkspace(accessContext, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Purchase action approval was not found.", "not_found");
   const targetStatus = decision === "APPROVE" ? "APPROVED" : "REJECTED";
+  const foundRevisionContext = record(record(found.executionTask.input).revisionContext);
+  const supersededPurchaseActionId = typeof foundRevisionContext.replacesPurchaseActionId === "string" ? foundRevisionContext.replacesPurchaseActionId : null;
+  const supersededPurchaseDraftId = typeof foundRevisionContext.replacesPurchaseDraftId === "string" ? foundRevisionContext.replacesPurchaseDraftId : null;
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
     try {
       return await prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        if (supersededPurchaseDraftId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${supersededPurchaseDraftId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        if (supersededPurchaseActionId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${supersededPurchaseActionId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${found.executionTask!.id} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyApproval" WHERE "id" = ${args.approvalId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
 
@@ -3325,6 +3483,8 @@ export async function decidePurchaseActionApproval(args: {
         }
         const current = caseResult(procurementCase.result);
         const actionInput = record(approval.executionTask.input);
+        const revisionContext = record(actionInput.revisionContext);
+        const isRevisedOrder = Object.keys(revisionContext).length > 0;
         const authorization = record(current.result.purchaseAuthorization);
         if (approval.status === targetStatus && approval.decidedByUserId === args.context.userId) {
           const selectedAction = await tx.supplyExecutionTask.findUniqueOrThrow({
@@ -3346,6 +3506,61 @@ export async function decidePurchaseActionApproval(args: {
           || authorization.status !== "PENDING") {
           throw new SupplyPersistenceError("The purchase draft changed after approval was requested.", "conflict");
         }
+        let supersededAction: PurchaseActionRecord | null = null;
+        let supersededDraft: Prisma.SupplyExecutionTaskGetPayload<{ select: typeof purchaseDraftSelect }> | null = null;
+        let supersededExceptions: Record<string, unknown>[] = [];
+        let targetSupplierException: Record<string, unknown> | null = null;
+        if (isRevisedOrder) {
+          const projectedRevision = record(current.result.purchaseRevision);
+          const replacesPurchaseActionId = requiredText(revisionContext.replacesPurchaseActionId, "Superseded purchase action ID", 220);
+          const replacesPurchaseDraftId = requiredText(revisionContext.replacesPurchaseDraftId, "Superseded purchase draft ID", 220);
+          const supersededReleaseHash = requiredText(revisionContext.supersededReleaseHash, "Superseded release hash", 128);
+          const supplierExceptionHash = requiredText(revisionContext.supplierExceptionHash, "Supplier exception hash", 128);
+          const supplierExceptionEvidenceId = requiredText(revisionContext.supplierExceptionEvidenceId, "Supplier exception evidence ID", 220);
+          if (projectedRevision.state !== "APPROVAL_PENDING"
+            || projectedRevision.replacementDraftTaskId !== purchaseDraft.id
+            || projectedRevision.replacementPurchaseActionId !== approval.executionTask.id
+            || projectedRevision.replacementApprovalId !== approval.id
+            || projectedRevision.replacementActionScopeHash !== approval.scopeHash
+            || projectedRevision.replacesPurchaseActionId !== replacesPurchaseActionId
+            || projectedRevision.supersededReleaseHash !== supersededReleaseHash
+            || projectedRevision.supplierExceptionHash !== supplierExceptionHash) {
+            throw new SupplyPersistenceError("The revised order authorization no longer matches the active supplier exception.", "conflict");
+          }
+          [supersededAction, supersededDraft] = await Promise.all([
+            tx.supplyExecutionTask.findFirst({
+              where: { id: replacesPurchaseActionId, officeId: args.context.officeId, workspaceId: workspace.id, parentTaskId: replacesPurchaseDraftId, taskType: PURCHASE_ACTION_TASK_TYPE, capabilityKey: PURCHASE_ACTION_CAPABILITY, status: "RUNNING" },
+              select: purchaseActionSelect,
+            }),
+            tx.supplyExecutionTask.findFirst({
+              where: { id: replacesPurchaseDraftId, officeId: args.context.officeId, workspaceId: workspace.id, parentTaskId: procurementCase.id, taskType: PURCHASE_DRAFT_TASK_TYPE, status: "RUNNING" },
+              select: purchaseDraftSelect,
+            }),
+          ]);
+          const supersededResult = record(supersededAction?.result);
+          const supersededRelease = record(supersededResult.release);
+          supersededExceptions = Array.isArray(supersededResult.supplierOrderExceptions)
+            ? supersededResult.supplierOrderExceptions.map((value) => record(value))
+            : [];
+          targetSupplierException = supersededExceptions.find((value) => value.exceptionHash === supplierExceptionHash) ?? null;
+          const replacementDraft = record(targetSupplierException?.replacementDraft);
+          if (!supersededAction || !supersededDraft
+            || !["RELEASED", "PARTIALLY_ACKNOWLEDGED"].includes(String(supersededResult.state))
+            || supersededRelease.releaseHash !== supersededReleaseHash
+            || targetSupplierException?.status !== "REVISION_DRAFTED"
+            || targetSupplierException.evidenceId !== supplierExceptionEvidenceId
+            || replacementDraft.taskId !== purchaseDraft.id
+            || replacementDraft.replacementScopeHash !== revisionContext.replacementScopeHash
+            || supersededExceptions.some((value) => value.status === "OPEN_REVIEW")
+            || supersededExceptions.filter(supplierOrderRevisionPending).length !== 1) {
+            throw new SupplyPersistenceError("The supplier exception no longer supports this revised authorization.", "conflict");
+          }
+          const exceptionEvidence = await tx.supplyEvidence.findFirst({
+            where: { id: supplierExceptionEvidenceId, officeId: args.context.officeId, workspaceId: workspace.id, executionTaskId: replacesPurchaseActionId, kind: "SUPPLIER_ORDER_EXCEPTION", contentHash: supplierExceptionHash },
+            select: { id: true },
+          });
+          if (!exceptionEvidence) throw new SupplyPersistenceError("Supplier exception evidence is missing from the revised authorization.", "conflict");
+        }
         const commercial = record(actionInput.commercial);
         const qualityPlan = record(actionInput.qualityPlan);
         const sourceExpired = !currentSupplierQualification(actionInput.sourceEvidenceReview);
@@ -3356,6 +3571,51 @@ export async function decidePurchaseActionApproval(args: {
         if (sourceExpired || quoteExpired || deliveryExpired || qualityExpired || approvalExpired) {
           const staleGate = sourceExpired ? "SOURCE_EVIDENCE" : quoteExpired || deliveryExpired || approvalExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
           const expiredAt = new Date();
+          if (isRevisedOrder) {
+            await tx.supplyApproval.update({
+              where: { id: approval.id },
+              data: { status: "EXPIRED", decidedAt: expiredAt, decisionNote: "Revised purchase inputs expired before authorization." },
+            });
+            await tx.supplyExecutionTask.update({
+              where: { id: approval.executionTask.id },
+              data: { status: "CANCELLED", cancelledAt: expiredAt },
+            });
+            const expiredRevisionResult: Record<string, unknown> = {
+              ...current.result,
+              purchaseRevision: {
+                ...record(current.result.purchaseRevision),
+                state: "EXPIRED",
+                staleGate,
+                expiredAt: expiredAt.toISOString(),
+                updatedAt: expiredAt.toISOString(),
+              },
+              updatedAt: expiredAt.toISOString(),
+            };
+            delete expiredRevisionResult.purchaseAuthorization;
+            const updatedCase = await tx.supplyExecutionTask.update({
+              where: { id: procurementCase.id },
+              data: { result: inputJson(expiredRevisionResult), resultHash: digest(expiredRevisionResult) },
+              select: caseSelect,
+            });
+            await appendCaseEvent({
+              tx,
+              caseId: procurementCase.id,
+              officeId: args.context.officeId,
+              workspaceId: workspace.id,
+              actorUserId: args.context.userId,
+              eventType: "REVISED_PURCHASE_APPROVAL_EXPIRED",
+              status: "CANCELLED",
+              message: "The revised order approval expired. Update the replacement draft before requesting another decision.",
+              payload: inputJson({ purchaseActionId: approval.executionTask.id, approvalId: approval.id, staleGate }),
+            });
+            return {
+              procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: null },
+              purchaseDraft,
+              purchaseAction: null,
+              approval: { ...approval, status: "EXPIRED", decidedAt: expiredAt },
+              stale: true,
+            };
+          }
           await tx.supplyApproval.update({
             where: { id: approval.id },
             data: { status: "EXPIRED", decidedAt: expiredAt, decisionNote: "Approved purchase inputs expired before authorization." },
@@ -3451,6 +3711,7 @@ export async function decidePurchaseActionApproval(args: {
           decidedAt: decidedAt.toISOString(),
           decisionNote: note,
           externalSideEffect: false,
+          ...(isRevisedOrder ? { revisionContext } : {}),
         };
         const purchaseAction = await tx.supplyExecutionTask.update({
           where: { id: approval.executionTask.id },
@@ -3466,7 +3727,7 @@ export async function decidePurchaseActionApproval(args: {
           data: { status: decision === "APPROVE" ? "READY" : "PLANNED" },
           select: purchaseDraftSelect,
         });
-        const projectedCaseResult = {
+        const projectedCaseResult: Record<string, unknown> = {
           ...current.result,
           purchaseAuthorization: {
             ...authorization,
@@ -3475,8 +3736,71 @@ export async function decidePurchaseActionApproval(args: {
             decidedAt: decidedAt.toISOString(),
             decisionNote: note,
           },
+          ...(isRevisedOrder ? {
+            purchaseRevision: {
+              ...record(current.result.purchaseRevision),
+              state: decision === "APPROVE" ? "AUTHORIZED" : "REJECTED",
+              replacementPurchaseActionId: approval.executionTask.id,
+              replacementApprovalId: approval.id,
+              replacementActionScopeHash: approval.scopeHash,
+              decidedByUserId: args.context.userId,
+              decidedAt: decidedAt.toISOString(),
+              decisionNote: note,
+              updatedAt: decidedAt.toISOString(),
+            },
+          } : {}),
           updatedAt: decidedAt.toISOString(),
         };
+        if (isRevisedOrder && decision === "APPROVE") {
+          if (!supersededAction || !supersededDraft || !targetSupplierException) {
+            throw new SupplyPersistenceError("The superseded order could not be finalized.", "conflict");
+          }
+          const supplierExceptionHash = requiredText(revisionContext.supplierExceptionHash, "Supplier exception hash", 128);
+          const revisedExceptions = supersededExceptions.map((value) => value.exceptionHash === supplierExceptionHash
+            ? {
+                ...value,
+                status: "REVISION_AUTHORIZED",
+                replacementAuthorization: {
+                  purchaseDraftTaskId: purchaseDraft.id,
+                  purchaseActionTaskId: purchaseAction.id,
+                  approvalId: approval.id,
+                  scopeHash: approval.scopeHash,
+                  authorizedByUserId: args.context.userId,
+                  authorizedAt: decidedAt.toISOString(),
+                },
+              }
+            : value);
+          const pendingReplacementActionResult = {
+            ...record(supersededAction.result),
+            supplierOrderExceptions: revisedExceptions,
+            openSupplierExceptionCount: revisedExceptions.filter((value) => value.status === "OPEN_REVIEW").length,
+            revisionRequiredCount: revisedExceptions.filter(supplierOrderRevisionPending).length,
+            replacementAuthorization: {
+              purchaseDraftTaskId: purchaseDraft.id,
+              purchaseActionTaskId: purchaseAction.id,
+              approvalId: approval.id,
+              scopeHash: approval.scopeHash,
+              supplierExceptionHash,
+              authorizedAt: decidedAt.toISOString(),
+            },
+            updatedAt: decidedAt.toISOString(),
+          };
+          await tx.supplyExecutionTask.update({
+            where: { id: supersededAction.id },
+            data: { result: inputJson(pendingReplacementActionResult), resultHash: digest(pendingReplacementActionResult) },
+          });
+          await appendCaseEvent({
+            tx,
+            caseId: supersededAction.id,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            actorUserId: args.context.userId,
+            eventType: "REVISED_PURCHASE_ACTION_AUTHORIZED",
+            status: "RUNNING",
+            message: "The replacement scope is authorized. The released order remains outstanding until the revision is issued.",
+            payload: inputJson({ replacementPurchaseActionId: purchaseAction.id, approvalId: approval.id, scopeHash: approval.scopeHash, supplierExceptionHash }),
+          });
+        }
         const updatedCase = await tx.supplyExecutionTask.update({
           where: { id: procurementCase.id },
           data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
@@ -3766,6 +4090,17 @@ export async function recordPurchaseOrderRelease(args: {
           recordedByUserId: accessContext.userId,
           recordedAt: now.toISOString(),
         };
+        const supersession = await finalizeReplacementSupersession({
+          tx,
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          procurementCaseId: procurementCase.id,
+          replacementActionId: purchaseAction.id,
+          replacementActionInput: purchaseAction.input,
+          replacementScopeHash: purchaseAction.inputHash,
+          replacementReleaseHash: releaseHash,
+          releasedAt: now,
+        });
         const actionResult = {
           state: "RELEASED",
           authorization: {
@@ -3797,6 +4132,14 @@ export async function recordPurchaseOrderRelease(args: {
         const projectedCaseResult = {
           ...current.result,
           purchaseAuthorization: { ...authorization, status: "RELEASED" },
+          ...(Object.keys(record(current.result.purchaseRevision)).length ? {
+            purchaseRevision: {
+              ...record(current.result.purchaseRevision),
+              state: "RELEASED",
+              replacementReleaseHash: releaseHash,
+              updatedAt: now.toISOString(),
+            },
+          } : {}),
           purchaseRelease: {
             state: "RELEASED",
             orderedQuantity: orderedQuantity.toString(),
@@ -3835,6 +4178,19 @@ export async function recordPurchaseOrderRelease(args: {
           message: "The purchase order is awaiting supplier acknowledgment.",
           payload: inputJson({ purchaseActionId: purchaseAction.id, releaseHash, acknowledgmentDueOn: releaseInput.acknowledgmentDueOn }),
         });
+        if (supersession) {
+          await appendCaseEvent({
+            tx,
+            caseId: supersession.supersededActionId,
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            actorUserId: accessContext.userId,
+            eventType: "PURCHASE_ORDER_SUPERSEDED",
+            status: "SUCCEEDED",
+            message: "The revised order was released and superseded the earlier supplier-facing scope.",
+            payload: inputJson({ replacementPurchaseActionId: purchaseAction.id, releaseHash, supplierExceptionHash: supersession.supplierExceptionHash }),
+          });
+        }
         return {
           procurementCase: { ...updatedCase, purchaseDraft: storedDraft, purchaseAction: purchaseActionView(storedAction, approval) },
           purchaseDraft: storedDraft,
@@ -4125,7 +4481,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         const connectedReplies = Array.isArray(existingResult.connectedAcknowledgmentReplies)
           ? existingResult.connectedAcknowledgmentReplies.map((value) => record(value))
           : [];
-        if (supplierOrderExceptions.some((value) => ["OPEN_REVIEW", "REVISION_REQUIRED"].includes(String(value.status)))) {
+        if (supplierOrderExceptions.some(supplierOrderAcceptanceBlocked)) {
           throw new SupplyPersistenceError("Resolve the supplier order exception before recording acceptance against the original authorization.", "conflict");
         }
         let acknowledgmentEvidenceUrl = acknowledgmentInput.evidenceUrl;
@@ -4334,7 +4690,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             connectedReplyCount: connectedAcknowledgmentReplies.length,
             unreviewedConnectedReplyCount: connectedAcknowledgmentReplies.filter((reply) => reply.reviewState === "REVIEW_REQUIRED").length,
             openSupplierExceptionCount: supplierOrderExceptions.filter((value) => value.status === "OPEN_REVIEW").length,
-            revisionRequiredCount: supplierOrderExceptions.filter((value) => value.status === "REVISION_REQUIRED").length,
+            revisionRequiredCount: supplierOrderExceptions.filter(supplierOrderRevisionPending).length,
             lastAcknowledgmentSyncAt,
             updatedAt: now.toISOString(),
           },
@@ -4448,6 +4804,10 @@ export async function recordSupplierOrderException(args: {
         const projectedRelease = record(caseResult.purchaseRelease);
         const actionResult = record(purchaseAction.result);
         const release = record(actionResult.release);
+        const existingExceptions = Array.isArray(actionResult.supplierOrderExceptions) ? actionResult.supplierOrderExceptions.map((value) => record(value)) : [];
+        if (existingExceptions.some((value) => ["REVISION_DRAFTED", "REVISION_AUTHORIZED"].includes(String(value.status)))) {
+          throw new SupplyPersistenceError("Complete or revise the active replacement order before recording another supplier exception.", "conflict");
+        }
         if (!["RELEASED", "PARTIALLY_ACKNOWLEDGED"].includes(String(actionResult.state))
           || authorization.actionTaskId !== purchaseAction.id
           || release.releaseHash !== exceptionInput.expectedReleaseHash
@@ -4478,7 +4838,6 @@ export async function recordSupplierOrderException(args: {
           throw new SupplyPersistenceError("Proposed payment terms are unchanged from the authorized order.", "invalid_input");
         }
         const acknowledgments = Array.isArray(actionResult.acknowledgments) ? actionResult.acknowledgments.map((value) => record(value)) : [];
-        const existingExceptions = Array.isArray(actionResult.supplierOrderExceptions) ? actionResult.supplierOrderExceptions.map((value) => record(value)) : [];
         const connectedReplies = Array.isArray(actionResult.connectedAcknowledgmentReplies) ? actionResult.connectedAcknowledgmentReplies.map((value) => record(value)) : [];
         let evidenceUrl = exceptionInput.evidenceUrl;
         let evidenceType: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER" = "OPERATOR_RECORDED_EXTERNAL";
@@ -4559,7 +4918,7 @@ export async function recordSupplierOrderException(args: {
           supplierOrderExceptions,
           connectedAcknowledgmentReplies: updatedReplies,
           openSupplierExceptionCount: supplierOrderExceptions.filter((value) => value.status === "OPEN_REVIEW").length,
-          revisionRequiredCount: supplierOrderExceptions.filter((value) => value.status === "REVISION_REQUIRED").length,
+          revisionRequiredCount: supplierOrderExceptions.filter(supplierOrderRevisionPending).length,
           updatedAt: now.toISOString(),
         };
         const updatedAction = await tx.supplyExecutionTask.update({ where: { id: purchaseAction.id }, data: { result: inputJson(nextActionResult), resultHash: digest(nextActionResult) }, select: purchaseActionSelect });
@@ -4631,7 +4990,17 @@ export async function resolveSupplierOrderException(args: {
     const existingExceptions = Array.isArray(actionResult.supplierOrderExceptions) ? actionResult.supplierOrderExceptions.map((value) => record(value)) : [];
     const target = existingExceptions.find((value) => value.exceptionHash === resolutionInput.exceptionHash);
     if (!target) throw new SupplyPersistenceError("Supplier order exception was not found.", "not_found");
-    const expectedStatus = resolutionInput.disposition === "KEEP_ORIGINAL" ? "RESOLVED_KEEP_ORIGINAL" : "REVISION_REQUIRED";
+    if (target.category === "REJECTION" && resolutionInput.disposition !== "RETURN_TO_SOURCING") {
+      throw new SupplyPersistenceError("A supplier rejection must return to sourcing and cannot retain or revise the rejected order.", "conflict");
+    }
+    if (target.category !== "REJECTION" && resolutionInput.disposition === "RETURN_TO_SOURCING") {
+      throw new SupplyPersistenceError("Only a supplier rejection can return this order to sourcing.", "conflict");
+    }
+    const expectedStatus = resolutionInput.disposition === "KEEP_ORIGINAL"
+      ? "RESOLVED_KEEP_ORIGINAL"
+      : resolutionInput.disposition === "REQUIRE_REAUTHORIZATION"
+        ? "REVISION_REQUIRED"
+        : "RETURNED_TO_SOURCING";
     if (target.status !== "OPEN_REVIEW") {
       if (target.status === expectedStatus && record(target.resolution).disposition === resolutionInput.disposition) {
         return { procurementCase, purchaseDraft, purchaseAction: purchaseActionView(purchaseAction), exception: target };
@@ -4642,17 +5011,334 @@ export async function resolveSupplierOrderException(args: {
     const resolution = { disposition: resolutionInput.disposition, note: resolutionInput.note, decidedByUserId: accessContext.userId, decidedAt: now.toISOString() };
     const supplierOrderExceptions = existingExceptions.map((value) => value.exceptionHash === resolutionInput.exceptionHash ? { ...value, status: expectedStatus, resolution } : value);
     const openSupplierExceptionCount = supplierOrderExceptions.filter((value) => value.status === "OPEN_REVIEW").length;
-    const revisionRequiredCount = supplierOrderExceptions.filter((value) => value.status === "REVISION_REQUIRED").length;
+    const revisionRequiredCount = supplierOrderExceptions.filter(supplierOrderRevisionPending).length;
     const nextActionResult = { ...actionResult, supplierOrderExceptions, openSupplierExceptionCount, revisionRequiredCount, updatedAt: now.toISOString() };
     const updatedAction = await tx.supplyExecutionTask.update({ where: { id: purchaseAction.id }, data: { result: inputJson(nextActionResult), resultHash: digest(nextActionResult) }, select: purchaseActionSelect });
-    const nextCaseResult = { ...caseResult, purchaseRelease: { ...projectedRelease, openSupplierExceptionCount, revisionRequiredCount, updatedAt: now.toISOString() }, updatedAt: now.toISOString() };
+    const nextCaseResult = {
+      ...caseResult,
+      ...(resolutionInput.disposition === "RETURN_TO_SOURCING" ? {
+        sourcingReturn: {
+          state: "REQUIRED",
+          purchaseActionId: purchaseAction.id,
+          supplierExceptionHash: resolutionInput.exceptionHash,
+          reason: resolutionInput.note,
+          recordedByUserId: accessContext.userId,
+          recordedAt: now.toISOString(),
+        },
+      } : {}),
+      purchaseRelease: { ...projectedRelease, openSupplierExceptionCount, revisionRequiredCount, updatedAt: now.toISOString() },
+      updatedAt: now.toISOString(),
+    };
     const updatedCase = await tx.supplyExecutionTask.update({ where: { id: procurementCase.id }, data: { result: inputJson(nextCaseResult), resultHash: digest(nextCaseResult) }, select: caseSelect });
     const payload = inputJson({ purchaseActionId: purchaseAction.id, exceptionHash: resolutionInput.exceptionHash, resolution });
-    const eventType = resolutionInput.disposition === "KEEP_ORIGINAL" ? "SUPPLIER_ORDER_EXCEPTION_RESOLVED" : "SUPPLIER_ORDER_REAUTHORIZATION_REQUIRED";
-    const message = resolutionInput.disposition === "KEEP_ORIGINAL" ? "The original authorization remains unchanged; later supplier acceptance still needs separate evidence." : "Supplier changes require a new purchase authorization before acceptance can continue.";
+    const eventType = resolutionInput.disposition === "KEEP_ORIGINAL"
+      ? "SUPPLIER_ORDER_EXCEPTION_RESOLVED"
+      : resolutionInput.disposition === "REQUIRE_REAUTHORIZATION"
+        ? "SUPPLIER_ORDER_REAUTHORIZATION_REQUIRED"
+        : "SUPPLIER_ORDER_RETURNED_TO_SOURCING";
+    const message = resolutionInput.disposition === "KEEP_ORIGINAL"
+      ? "The original authorization remains unchanged; later supplier acceptance still needs separate evidence."
+      : resolutionInput.disposition === "REQUIRE_REAUTHORIZATION"
+        ? "Supplier changes require a new purchase authorization before acceptance can continue."
+        : "The supplier rejected the order. This workstream returned to sourcing for another supplier.";
     await appendCaseEvent({ tx, caseId: purchaseAction.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType, status: "RUNNING", message, payload });
     await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType, status: "RUNNING", message, payload });
     const resolvedException = supplierOrderExceptions.find((value) => value.exceptionHash === resolutionInput.exceptionHash)!;
     return { procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: purchaseActionView(updatedAction) }, purchaseDraft, purchaseAction: purchaseActionView(updatedAction), exception: resolvedException };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier order exception changed concurrently. Reload and retry.");
+}
+
+export async function prepareRevisedPurchaseOrder(args: {
+  context: SupplyAccessContext;
+  actionId: string;
+  input: unknown;
+}) {
+  const revisedInput = normalizeRevisedPurchaseOrderDraft(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  const found = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      id: args.actionId,
+      officeId: accessContext.officeId,
+      taskType: PURCHASE_ACTION_TASK_TYPE,
+      capabilityKey: PURCHASE_ACTION_CAPABILITY,
+    },
+    select: { workspaceId: true, parentTaskId: true, parentTask: { select: { parentTaskId: true } } },
+  });
+  const supersededDraftId = found?.parentTaskId;
+  const procurementCaseId = found?.parentTask?.parentTaskId;
+  if (!found || !supersededDraftId || !procurementCaseId) {
+    throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+  }
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+
+  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+    const [procurementCase, supersededDraft, purchaseAction] = await Promise.all([
+      tx.supplyExecutionTask.findFirst({ where: { id: procurementCaseId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: TASK_TYPE, status: "PLANNED" }, select: caseSelect }),
+      tx.supplyExecutionTask.findFirst({ where: { id: supersededDraftId, officeId: accessContext.officeId, workspaceId: workspace.id, parentTaskId: procurementCaseId, taskType: PURCHASE_DRAFT_TASK_TYPE, status: "RUNNING" }, select: purchaseDraftSelect }),
+      tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, parentTaskId: supersededDraftId, taskType: PURCHASE_ACTION_TASK_TYPE, capabilityKey: PURCHASE_ACTION_CAPABILITY, status: "RUNNING" }, select: purchaseActionSelect }),
+    ]);
+    if (!procurementCase || !supersededDraft || !purchaseAction) {
+      throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+    }
+    const current = caseResult(procurementCase.result);
+    const actionResult = record(purchaseAction.result);
+    const release = record(actionResult.release);
+    const projectedRelease = record(current.result.purchaseRelease);
+    if (!["RELEASED", "PARTIALLY_ACKNOWLEDGED"].includes(String(actionResult.state))
+      || release.releaseHash !== revisedInput.expectedReleaseHash
+      || release.releaseHash !== record(projectedRelease.release).releaseHash
+      || release.actionScopeHash !== purchaseAction.inputHash) {
+      throw new SupplyPersistenceError("Revised order does not match the active released purchase scope.", "conflict");
+    }
+    const supplierOrderExceptions = Array.isArray(actionResult.supplierOrderExceptions)
+      ? actionResult.supplierOrderExceptions.map((value) => record(value))
+      : [];
+    if (supplierOrderExceptions.some((value) => value.status === "OPEN_REVIEW")) {
+      throw new SupplyPersistenceError("Resolve every open supplier exception before preparing a revised order.", "conflict");
+    }
+    const pendingRevisions = supplierOrderExceptions.filter(supplierOrderRevisionPending);
+    const target = pendingRevisions.find((value) => value.exceptionHash === revisedInput.exceptionHash);
+    if (!target) throw new SupplyPersistenceError("Supplier exception is not awaiting revised authorization.", "conflict");
+    if (pendingRevisions.length !== 1) {
+      throw new SupplyPersistenceError("Only one supplier exception can drive a replacement order at a time.", "conflict");
+    }
+    if (target.category === "REJECTION") {
+      throw new SupplyPersistenceError("A supplier rejection cannot become a revised order. Return to the supplier shortlist instead.", "conflict");
+    }
+    const exceptionEvidenceId = requiredText(target.evidenceId, "Supplier exception evidence ID", 220);
+    const exceptionHash = requiredText(target.exceptionHash, "Supplier exception hash", 128);
+    const exceptionEvidence = await tx.supplyEvidence.findFirst({
+      where: {
+        id: exceptionEvidenceId,
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+        executionTaskId: purchaseAction.id,
+        kind: "SUPPLIER_ORDER_EXCEPTION",
+        contentHash: exceptionHash,
+      },
+      select: { id: true, sourceUri: true, sourceType: true, observedAt: true },
+    });
+    if (!exceptionEvidence?.sourceUri || !exceptionEvidence.observedAt
+      || !["OPERATOR_RECORDED_EXTERNAL", "CONNECTED_PROVIDER"].includes(exceptionEvidence.sourceType)) {
+      throw new SupplyPersistenceError("Supplier exception evidence no longer matches the released order.", "conflict");
+    }
+    const actionInput = record(purchaseAction.input);
+    const originalOrder = record(actionInput.order);
+    const originalCommercial = record(actionInput.commercial);
+    const procurementApproval = record(actionInput.procurementApproval);
+    requireCurrentSupplierQualification(
+      actionInput.sourceEvidenceReview,
+      "The supplier qualification expired. Requalify the supplier before preparing a revised order.",
+    );
+    const qualityPlan = record(actionInput.qualityPlan);
+    if (typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc()) {
+      throw new SupplyPersistenceError("The approved quality plan expired. Record a current quality plan before preparing a revised order.", "conflict");
+    }
+    const approval = await tx.supplyApproval.findFirst({
+      where: {
+        id: requiredText(procurementApproval.id, "Procurement approval ID", 220),
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+        status: "APPROVED",
+        scopeHash: requiredText(procurementApproval.scopeHash, "Procurement approval scope hash", 128),
+      },
+      include: { executionTask: true },
+    });
+    if (!approval?.executionTask
+      || approval.executionTask.parentTaskId !== procurementCase.id
+      || approval.executionTask.taskType !== APPROVAL_TASK_TYPE
+      || approval.executionTask.capabilityKey !== APPROVAL_CAPABILITY
+      || approval.executionTask.inputHash !== approval.scopeHash) {
+      throw new SupplyPersistenceError("The approved supplier award no longer matches this order.", "conflict");
+    }
+    const originalOrderQuantity = new Prisma.Decimal(requiredText(originalOrder.quantity, "Authorized order quantity", 80));
+    const originalUnitPrice = new Prisma.Decimal(requiredText(originalCommercial.unitPrice, "Authorized unit price", 80));
+    const originalMinimumOrderQuantity = new Prisma.Decimal(requiredText(originalCommercial.minimumOrderQuantity, "Authorized minimum order quantity", 80));
+    const originalCurrency = requiredText(originalCommercial.currency, "Authorized currency", 3).toUpperCase();
+    const proposedQuantity = target.proposedQuantity === null || target.proposedQuantity === undefined ? null : new Prisma.Decimal(requiredText(target.proposedQuantity, "Supplier proposed quantity", 80));
+    const proposedUnitPrice = target.proposedUnitPrice === null || target.proposedUnitPrice === undefined ? null : new Prisma.Decimal(requiredText(target.proposedUnitPrice, "Supplier proposed unit price", 80));
+    const revisedQuantity = new Prisma.Decimal(revisedInput.quantity);
+    const revisedUnitPrice = new Prisma.Decimal(revisedInput.unitPrice);
+    const revisedMinimumOrderQuantity = new Prisma.Decimal(revisedInput.minimumOrderQuantity);
+    if (proposedQuantity ? !revisedQuantity.equals(proposedQuantity) : !revisedQuantity.equals(originalOrderQuantity)) {
+      throw new SupplyPersistenceError("Revised quantity must match the supplier proposal or the original authorized quantity.", "conflict");
+    }
+    if (proposedUnitPrice
+      ? !revisedUnitPrice.equals(proposedUnitPrice) || revisedInput.currency !== target.proposedCurrency
+      : !revisedUnitPrice.equals(originalUnitPrice) || revisedInput.currency !== originalCurrency) {
+      throw new SupplyPersistenceError("Revised price and currency must match the supplier exception or the original authorization.", "conflict");
+    }
+    if (!revisedMinimumOrderQuantity.equals(originalMinimumOrderQuantity)) {
+      throw new SupplyPersistenceError("The revised MOQ is not supported by the supplier exception evidence.", "conflict");
+    }
+    const originalDeliveryDate = isoDate(originalCommercial.deliveryDate, "Authorized delivery date");
+    if (revisedInput.deliveryDate !== (target.proposedDeliveryDate ?? originalDeliveryDate)) {
+      throw new SupplyPersistenceError("Revised delivery date must match the supplier exception or the original authorization.", "conflict");
+    }
+    const originalPaymentTerms = requiredText(originalOrder.paymentTerms, "Authorized payment terms", 300);
+    if (revisedInput.paymentTerms.toLowerCase() !== String(target.proposedPaymentTerms ?? originalPaymentTerms).toLowerCase()) {
+      throw new SupplyPersistenceError("Revised payment terms must match the supplier exception or the original authorization.", "conflict");
+    }
+    const unitOfMeasure = normalizedUnitOfMeasure(originalOrder.unitOfMeasure, "Authorized unit of measure");
+    const order = {
+      quantity: revisedQuantity.toString(),
+      unitOfMeasure,
+      needBy: revisedInput.needBy,
+      shipTo: revisedInput.shipTo,
+      incoterm: revisedInput.incoterm,
+      paymentTerms: revisedInput.paymentTerms,
+      buyerReference: revisedInput.buyerReference,
+      notes: revisedInput.notes,
+    };
+    const commercial = {
+      unitPrice: revisedUnitPrice.toString(),
+      currency: revisedInput.currency,
+      minimumOrderQuantity: revisedMinimumOrderQuantity.toString(),
+      quoteReference: revisedInput.quoteReference,
+      quoteValidUntil: revisedInput.quoteValidUntil,
+      deliveryDate: revisedInput.deliveryDate,
+      quoteEvidenceUrl: exceptionEvidence.sourceUri,
+      quoteEvidenceId: exceptionEvidence.id,
+      quoteEvidenceHash: exceptionHash,
+      evidenceClass: exceptionEvidence.sourceType,
+      sourceKind: "SUPPLIER_ORDER_EXCEPTION",
+    };
+    const orderHash = digest(order);
+    const replacementScopeHash = digest({ order, commercial });
+    const revisionContext = {
+      replacesPurchaseActionId: purchaseAction.id,
+      replacesPurchaseDraftId: supersededDraft.id,
+      supersededReleaseHash: release.releaseHash,
+      supplierExceptionHash: exceptionHash,
+      supplierExceptionEvidenceId: exceptionEvidence.id,
+      supplierExceptionCategory: target.category,
+      supplierExceptionObservedOn: exceptionEvidence.observedAt.toISOString().slice(0, 10),
+      replacementScopeHash,
+    };
+    const taskKey = `purchase-revision:${procurementCase.id}:${purchaseAction.id}:${exceptionHash}`;
+    const existing = await tx.supplyExecutionTask.findFirst({
+      where: {
+        officeId: accessContext.officeId,
+        workspaceId: workspace.id,
+        parentTaskId: procurementCase.id,
+        taskKey,
+        taskType: PURCHASE_DRAFT_TASK_TYPE,
+      },
+      select: purchaseDraftSelect,
+    });
+    const existingResult = record(existing?.result);
+    const existingRevisionContext = record(existingResult.revisionContext);
+    if (existing && existing.status === "PLANNED" && existingRevisionContext.replacementScopeHash === replacementScopeHash) {
+      return { procurementCase: { ...procurementCase, purchaseDraft: existing, purchaseAction: null }, purchaseDraft: existing, purchaseAction: null, stale: false };
+    }
+    if (existing && existing.status !== "PLANNED") {
+      throw new SupplyPersistenceError("Only an active revised order draft can be edited.", "conflict");
+    }
+    const currentRevision = typeof existingResult.revision === "number" ? existingResult.revision : 0;
+    if ((existing && revisedInput.expectedRevision !== currentRevision) || (!existing && revisedInput.expectedRevision !== 0)) {
+      throw new SupplyPersistenceError("The revised order draft changed in another session. Reload before saving.", "conflict");
+    }
+    if (existing) await cancelActivePurchaseActions(tx, existing.id, accessContext.officeId, workspace.id);
+    const revision = currentRevision + 1;
+    const now = new Date();
+    const result = {
+      revision,
+      state: "DRAFT",
+      order,
+      orderHash,
+      supplier: record(actionInput.supplier),
+      commercial,
+      totals: {
+        materialSubtotal: revisedQuantity.mul(revisedUnitPrice).toDecimalPlaces(2).toString(),
+        currency: revisedInput.currency,
+      },
+      approvedProcurementScope: { approvalId: approval.id, scopeHash: approval.scopeHash },
+      revisionContext,
+      updatedAt: now.toISOString(),
+    };
+    const taskInput = {
+      procurementCaseId: procurementCase.id,
+      procurementApprovalId: approval.id,
+      procurementApprovalScopeHash: approval.scopeHash,
+      revisionContext,
+    };
+    const revisedDraft = existing
+      ? await tx.supplyExecutionTask.update({
+          where: { id: existing.id },
+          data: { result: inputJson(result), resultHash: digest(result) },
+          select: purchaseDraftSelect,
+        })
+      : await tx.supplyExecutionTask.create({
+          data: {
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            createdByUserId: accessContext.userId,
+            parentTaskId: procurementCase.id,
+            taskKey,
+            taskType: PURCHASE_DRAFT_TASK_TYPE,
+            capabilityKey: PURCHASE_DRAFT_CAPABILITY,
+            requiresApproval: false,
+            input: inputJson(taskInput),
+            inputHash: digest(taskInput),
+            result: inputJson(result),
+            resultHash: digest(result),
+            idempotencyKey: taskKey,
+          },
+          select: purchaseDraftSelect,
+        });
+    const revisedExceptions = supplierOrderExceptions.map((value) => value.exceptionHash === exceptionHash
+      ? {
+          ...value,
+          status: "REVISION_DRAFTED",
+          replacementDraft: {
+            taskId: revisedDraft.id,
+            revision,
+            orderHash,
+            replacementScopeHash,
+            draftedByUserId: accessContext.userId,
+            draftedAt: now.toISOString(),
+          },
+        }
+      : value);
+    const revisedActionResult = {
+      ...actionResult,
+      supplierOrderExceptions: revisedExceptions,
+      revisionRequiredCount: revisedExceptions.filter(supplierOrderRevisionPending).length,
+      updatedAt: now.toISOString(),
+    };
+    await tx.supplyExecutionTask.update({
+      where: { id: purchaseAction.id },
+      data: { result: inputJson(revisedActionResult), resultHash: digest(revisedActionResult) },
+    });
+    const projectedCaseResult: Record<string, unknown> = {
+      ...current.result,
+      purchasePreparation: { draftTaskId: revisedDraft.id, state: "DRAFT", revision, orderHash },
+      purchaseRevision: {
+        state: "DRAFT",
+        replacesPurchaseActionId: purchaseAction.id,
+        supersededReleaseHash: release.releaseHash,
+        supplierExceptionHash: exceptionHash,
+        supplierExceptionEvidenceId: exceptionEvidence.id,
+        replacementDraftTaskId: revisedDraft.id,
+        replacementDraftRevision: revision,
+        replacementScopeHash,
+        updatedAt: now.toISOString(),
+      },
+      updatedAt: now.toISOString(),
+    };
+    delete projectedCaseResult.purchaseAuthorization;
+    const updatedCase = await tx.supplyExecutionTask.update({
+      where: { id: procurementCase.id },
+      data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
+      select: caseSelect,
+    });
+    const payload = inputJson({ purchaseActionId: purchaseAction.id, exceptionHash, replacementDraftTaskId: revisedDraft.id, replacementScopeHash, revision });
+    await appendCaseEvent({ tx, caseId: revisedDraft.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: existing ? "REVISED_PURCHASE_DRAFT_UPDATED" : "REVISED_PURCHASE_DRAFT_CREATED", message: existing ? "The revised order draft was updated." : "A revised order draft was prepared from supplier exception evidence.", payload });
+    await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: existing ? "REVISED_PURCHASE_DRAFT_UPDATED" : "REVISED_PURCHASE_DRAFT_CREATED", message: "The supplier exception is ready for a new exact-scope purchase authorization.", payload });
+    return { procurementCase: { ...updatedCase, purchaseDraft: revisedDraft, purchaseAction: null }, purchaseDraft: revisedDraft, purchaseAction: null, stale: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Revised purchase draft changed concurrently. Reload and retry.");
 }

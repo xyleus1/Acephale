@@ -2549,3 +2549,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
   order. It marks the old scope unusable until a later workflow creates and
   approves a replacement. No payment, inventory, booking, customs, or Logistics
   state changes.
+
+### 2026-08-11 - A revised order supersedes only when it is released
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A supplier may change an already released order. Treating internal
+  approval of a replacement as proof that the supplier received it would erase
+  the real outstanding order and create a false execution state.
+- Decision: Build a separate immutable replacement draft from the supplier
+  exception, obtain a fresh exact-scope admin approval, and keep the original
+  released order outstanding. Only manual release evidence or a connected Gmail
+  delivery receipt atomically marks the original action as superseded.
+- Evidence boundary: The replacement pins the original release, exception
+  evidence, supplier qualification, commercial terms, quality plan, and prior
+  sourcing approval. Supplier-controlled changed terms must match the recorded
+  exception; missing or expired inputs block authorization or release.
+- History: The original release evidence is retained after supersession. The
+  replacement action and release hash are linked from the old action, and later
+  acknowledgments against the obsolete release are rejected.
+- Rejection: A supplier rejection cannot retain or revise the rejected order.
+  It creates a durable return-to-sourcing state and sends the buyer back to the
+  supplier shortlist.
+- Boundary: Revised-order authorization and release do not create payment,
+  inventory, booking, customs, or Logistics state.

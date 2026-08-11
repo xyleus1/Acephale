@@ -126,6 +126,11 @@ export function AtlasInventoryWorkspace({
   }
 
   function caseStage(procurementCase: SavedProcurementCase | undefined) {
+    if (procurementCase?.result?.sourcingReturn?.state === "REQUIRED") return "Supplier rejected, choose another source";
+    if (procurementCase?.result?.purchaseRevision?.state === "APPROVAL_PENDING") return "Revised order approval pending";
+    if (procurementCase?.result?.purchaseRevision?.state === "REJECTED") return "Revised order needs changes";
+    if (procurementCase?.result?.purchaseRevision?.state === "AUTHORIZED") return "Revised order authorized";
+    if (procurementCase?.result?.purchaseRevision?.state === "DRAFT") return "Revised order draft ready";
     if (procurementCase?.result?.purchaseRelease?.revisionRequiredCount) return "New order authorization required";
     if (procurementCase?.result?.purchaseRelease?.openSupplierExceptionCount) return "Supplier order exception review";
     if (procurementCase?.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
@@ -168,13 +173,20 @@ export function AtlasInventoryWorkspace({
   }
 
   function queueActionLabel(run: SavedSourcingResearchRun | undefined, cases: SavedProcurementCase[]) {
-    const procurementCase = cases.find((candidate) => candidate.result?.purchaseRelease?.revisionRequiredCount)
+    const procurementCase = cases.find((candidate) => candidate.result?.sourcingReturn)
+      ?? cases.find((candidate) => candidate.result?.purchaseRevision)
+      ?? cases.find((candidate) => candidate.result?.purchaseRelease?.revisionRequiredCount)
       ?? cases.find((candidate) => candidate.result?.purchaseRelease?.openSupplierExceptionCount)
       ?? cases.find((candidate) => candidate.result?.purchaseRelease)
       ?? cases.find((candidate) => candidate.purchaseAction)
       ?? cases.find((candidate) => candidate.purchaseDraft)
       ?? cases[0];
     const release = procurementCase?.result?.purchaseRelease;
+    if (procurementCase?.result?.sourcingReturn?.state === "REQUIRED") return "Choose another supplier";
+    if (procurementCase?.result?.purchaseRevision?.state === "APPROVAL_PENDING") return "Review revised order approval";
+    if (procurementCase?.result?.purchaseRevision?.state === "REJECTED") return "Revise replacement order";
+    if (procurementCase?.result?.purchaseRevision?.state === "AUTHORIZED") return "Issue revised order";
+    if (procurementCase?.result?.purchaseRevision?.state === "DRAFT") return "Review revised order draft";
     if (release?.revisionRequiredCount) return "Prepare revised order authorization";
     if (release?.openSupplierExceptionCount) return "Review supplier order exception";
     if (release?.release && release.state !== "ACKNOWLEDGED" && release.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10)) return "Chase supplier acknowledgment";

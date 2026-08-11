@@ -116,15 +116,48 @@ export type SupplierOrderException = {
   sourceEvidenceId?: string;
   note: string | null;
   exceptionHash: string;
-  status: "OPEN_REVIEW" | "RESOLVED_KEEP_ORIGINAL" | "REVISION_REQUIRED";
+  status: "OPEN_REVIEW" | "RESOLVED_KEEP_ORIGINAL" | "REVISION_REQUIRED" | "REVISION_DRAFTED" | "REVISION_AUTHORIZED" | "REVISION_RELEASED" | "RETURNED_TO_SOURCING";
   resolution?: {
-    disposition: "KEEP_ORIGINAL" | "REQUIRE_REAUTHORIZATION";
+    disposition: "KEEP_ORIGINAL" | "REQUIRE_REAUTHORIZATION" | "RETURN_TO_SOURCING";
     note: string;
     decidedByUserId: string;
     decidedAt: string;
   };
+  replacementDraft?: {
+    taskId: string;
+    revision: number;
+    orderHash: string;
+    replacementScopeHash: string;
+    draftedByUserId: string;
+    draftedAt: string;
+  };
+  replacementAuthorization?: {
+    purchaseDraftTaskId: string;
+    purchaseActionTaskId: string;
+    approvalId: string;
+    scopeHash: string;
+    authorizedByUserId: string;
+    authorizedAt: string;
+  };
+  replacementRelease?: {
+    purchaseActionTaskId: string;
+    scopeHash: string;
+    releaseHash: string;
+    releasedAt: string;
+  };
   recordedByUserId: string;
   recordedAt: string;
+};
+
+export type PurchaseOrderRevisionContext = {
+  replacesPurchaseActionId: string;
+  replacesPurchaseDraftId: string;
+  supersededReleaseHash: string;
+  supplierExceptionHash: string;
+  supplierExceptionEvidenceId: string;
+  supplierExceptionCategory: SupplierOrderException["category"];
+  supplierExceptionObservedOn: string;
+  replacementScopeHash: string;
 };
 
 export type SavedProcurementCase = {
@@ -249,6 +282,32 @@ export type SavedProcurementCase = {
       revisionRequiredCount?: number;
       lastAcknowledgmentSyncAt?: string;
       updatedAt: string;
+    };
+    purchaseRevision?: {
+      state: "DRAFT" | "APPROVAL_PENDING" | "REJECTED" | "AUTHORIZED" | "EXPIRED" | "RELEASED";
+      replacesPurchaseActionId: string;
+      supersededReleaseHash: string;
+      supplierExceptionHash: string;
+      supplierExceptionEvidenceId: string;
+      replacementDraftTaskId: string;
+      replacementDraftRevision: number;
+      replacementScopeHash: string;
+      replacementPurchaseActionId?: string;
+      replacementApprovalId?: string;
+      replacementActionScopeHash?: string;
+      replacementReleaseHash?: string;
+      decidedByUserId?: string;
+      decidedAt?: string;
+      decisionNote?: string | null;
+      updatedAt: string;
+    };
+    sourcingReturn?: {
+      state: "REQUIRED";
+      purchaseActionId: string;
+      supplierExceptionHash: string;
+      reason: string;
+      recordedByUserId: string;
+      recordedAt: string;
     };
     quoteCycle?: {
       taskId: string;
@@ -432,6 +491,7 @@ export type SavedProcurementCase = {
       procurementCaseId: string;
       procurementApprovalId: string;
       procurementApprovalScopeHash: string;
+      revisionContext?: PurchaseOrderRevisionContext;
     };
     resultHash: string | null;
     result: {
@@ -464,6 +524,7 @@ export type SavedProcurementCase = {
       };
       totals: { materialSubtotal: string; currency: string };
       approvedProcurementScope: { approvalId: string; scopeHash: string };
+      revisionContext?: PurchaseOrderRevisionContext;
       updatedAt: string;
     } | null;
     createdAt: string;
@@ -514,6 +575,7 @@ export type SavedProcurementCase = {
         owner: string;
         targetDate: string;
       };
+      revisionContext?: PurchaseOrderRevisionContext;
     };
     inputHash: string;
     result: ({

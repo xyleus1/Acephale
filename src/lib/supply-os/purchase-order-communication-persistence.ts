@@ -25,6 +25,7 @@ import {
   type SupplierEmailSent,
 } from "./supplier-email-provider";
 import { currentSupplierQualification, supplierQualificationValidOn } from "./supplier-qualification";
+import { finalizeReplacementSupersession } from "./purchase-order-revision";
 
 export const PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE = "PURCHASE_ORDER_EMAIL_DRAFT";
 export const PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE = "PURCHASE_ORDER_EMAIL_ACTION";
@@ -390,10 +391,28 @@ async function finalizePurchaseOrderEmail(args: { context: SupplyAccessContext; 
     if (existingEvidence && (existingEvidence.officeId !== args.context.officeId || existingEvidence.executionTaskId !== purchaseActionId || existingEvidence.sourceRecordId !== args.receipt.providerMessageId)) throw new SupplyPersistenceError("Purchase order email evidence identity conflicted with an existing record.", "conflict");
     const evidence = existingEvidence ?? await tx.supplyEvidence.create({ data: { officeId: args.context.officeId, workspaceId: args.workspaceId, executionTaskId: purchaseActionId, createdByUserId: args.context.userId, evidenceKey, kind: "PURCHASE_ORDER_RELEASE", sourceType: "CONNECTED_PROVIDER", sourceUri: args.receipt.sourceUrl, sourceRecordId: args.receipt.providerMessageId, sourceVersion: releaseHash, title: `Purchase order release ${purchaseOrderReference}`, payload: inputJson({ ...normalizedRelease, provider: args.receipt.provider, providerMessageId: args.receipt.providerMessageId, providerThreadId: args.receipt.providerThreadId, rfcMessageId: args.rfcMessageId, messageHash: digest(message) }), contentHash: releaseHash, observedAt: now }, select: { id: true } });
     const release = { ...normalizedRelease, evidenceId: evidence.id, evidenceClass: "CONNECTED_PROVIDER", provider: args.receipt.provider, providerMessageId: args.receipt.providerMessageId, providerThreadId: args.receipt.providerThreadId, rfcMessageId: args.rfcMessageId, messageHash: digest(message), releaseHash, recordedByUserId: args.context.userId, recordedAt: now.toISOString() };
+    const supersession = await finalizeReplacementSupersession({
+      tx,
+      officeId: args.context.officeId,
+      workspaceId: args.workspaceId,
+      procurementCaseId,
+      replacementActionId: purchaseActionId,
+      replacementActionInput: scope.action.input,
+      replacementScopeHash: scope.action.inputHash,
+      replacementReleaseHash: releaseHash,
+      releasedAt: now,
+    });
     const purchaseResult = { state: "RELEASED", authorization: { approvalId: scope.approval.id, scopeHash: scope.approval.scopeHash, decidedByUserId: scope.approval.decidedByUserId, decidedAt: scope.approval.decidedAt?.toISOString() ?? null }, release, orderedQuantity: orderedQuantity.toString(), acknowledgedQuantity: "0", remainingQuantity: orderedQuantity.toString(), unitOfMeasure, acknowledgments: [], totals: { acknowledgedMaterialValue: "0", currency }, externalSideEffect: "CONNECTED_PROVIDER", updatedAt: now.toISOString() };
     await tx.supplyExecutionTask.update({ where: { id: purchaseActionId }, data: { status: "RUNNING", startedAt: now, result: inputJson(purchaseResult), resultHash: digest(purchaseResult) } });
     await tx.supplyExecutionTask.update({ where: { id: purchaseDraftId }, data: { status: "RUNNING", startedAt: now } });
-    const nextCaseResult = { ...caseResult, purchaseAuthorization: { ...authorization, status: "RELEASED" }, purchaseRelease: { state: "RELEASED", orderedQuantity: orderedQuantity.toString(), acknowledgedQuantity: "0", remainingQuantity: orderedQuantity.toString(), unitOfMeasure, release, updatedAt: now.toISOString() }, updatedAt: now.toISOString() };
+    const purchaseRevision = record(caseResult.purchaseRevision);
+    const nextCaseResult = {
+      ...caseResult,
+      purchaseAuthorization: { ...authorization, status: "RELEASED" },
+      ...(Object.keys(purchaseRevision).length ? { purchaseRevision: { ...purchaseRevision, state: "RELEASED", replacementReleaseHash: releaseHash, updatedAt: now.toISOString() } } : {}),
+      purchaseRelease: { state: "RELEASED", orderedQuantity: orderedQuantity.toString(), acknowledgedQuantity: "0", remainingQuantity: orderedQuantity.toString(), unitOfMeasure, release, updatedAt: now.toISOString() },
+      updatedAt: now.toISOString(),
+    };
     await tx.supplyExecutionTask.update({ where: { id: procurementCaseId }, data: { result: inputJson(nextCaseResult), resultHash: digest(nextCaseResult) } });
     const deliveryResult = { state: "SENT", attempt: record(action.result).attempt, rfcMessageId: args.rfcMessageId, provider: args.receipt.provider, providerMessageId: args.receipt.providerMessageId, providerThreadId: args.receipt.providerThreadId, sourceUrl: args.receipt.sourceUrl, localThreadId, evidenceId: evidence.id, releaseHash, sentAt: now.toISOString() };
     if (action.status === "READY") await tx.supplyExecutionTask.update({ where: { id: action.id }, data: { status: "RUNNING", startedAt: now } });
@@ -404,6 +423,9 @@ async function finalizePurchaseOrderEmail(args: { context: SupplyAccessContext; 
     await appendEvent({ tx, taskId: action.id, officeId: args.context.officeId, workspaceId: args.workspaceId, actorUserId: args.context.userId, eventType: "PURCHASE_ORDER_EMAIL_SENT", status: "SUCCEEDED", message: "Gmail returned a purchase order delivery receipt.", payload });
     await appendEvent({ tx, taskId: purchaseActionId, officeId: args.context.officeId, workspaceId: args.workspaceId, actorUserId: args.context.userId, eventType: "PURCHASE_ORDER_RELEASED", status: "RUNNING", message: "The authorized purchase order was sent through connected Gmail.", payload });
     await appendEvent({ tx, taskId: procurementCaseId, officeId: args.context.officeId, workspaceId: args.workspaceId, actorUserId: args.context.userId, eventType: "PURCHASE_ORDER_RELEASED", status: "RUNNING", message: "The purchase order is awaiting supplier acknowledgment.", payload });
+    if (supersession) {
+      await appendEvent({ tx, taskId: supersession.supersededActionId, officeId: args.context.officeId, workspaceId: args.workspaceId, actorUserId: args.context.userId, eventType: "PURCHASE_ORDER_SUPERSEDED", status: "SUCCEEDED", message: "The revised order was sent and superseded the earlier supplier-facing scope.", payload: inputJson({ replacementPurchaseActionId: purchaseActionId, releaseHash, supplierExceptionHash: supersession.supplierExceptionHash }) });
+    }
     return sentAction;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Purchase order email delivery changed concurrently. Reconcile before retrying.");
 }

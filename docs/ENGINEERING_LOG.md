@@ -4779,3 +4779,25 @@ Use this file for chronological implementation notes that future agents should s
 - Boundary: Reauthorization is a blocking state, not a replacement order. No
   supplier message, payment, inventory mutation, booking, customs filing, or
   Logistics handoff is created.
+
+### 2026-08-11 - Authorize and release immutable replacement orders
+
+- Branch: `supply-os-revised-order-authorization`, targeting `main`.
+- Task: Complete the replacement-order lifecycle after a supplier changes an
+  already released purchase order.
+- Behavior: A revision-required exception produces a versioned replacement
+  draft and a fresh exact-scope purchase approval. Both manual release and
+  connected Gmail delivery supersede the old action only after durable release
+  evidence exists.
+- Safety: Current tenant access, original release hash, exception evidence,
+  supplier qualification, prior sourcing approval, quality plan, commercial
+  validity, replacement scope, and approval are revalidated. Repeated and
+  concurrent draft preparation converges. Obsolete-release acknowledgments are
+  blocked before and after supersession.
+- Verification: Atlas sourcing, operations UI, continuous layout, product copy,
+  TypeScript, production build, and disposable PostgreSQL lifecycle checks for
+  concurrent manual release, connected Gmail uncertainty and retry, stale
+  supersession, approval expiry recovery, queue restoration, and supplier
+  rejection return-to-sourcing.
+- Boundary: No schema, dependency, payment, inventory, booking, customs, or
+  Logistics behavior changed.
