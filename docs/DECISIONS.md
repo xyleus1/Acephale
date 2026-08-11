@@ -2491,3 +2491,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
   roles deterministically.
 - Revisit when incomplete requests need cross-user collaboration or canonical
   server-side persistence before research begins.
+
+### 2026-08-10 - Connected purchase order email has its own approval scope
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Final purchase authorization approves the exact supplier, terms,
+  quantity, and order scope. It does not approve arbitrary outbound wording or
+  prove that a supplier received an order.
+- Decision: A connected Gmail purchase order release uses a separate immutable
+  approval scope containing the authorized action hash, sender, recipient,
+  subject, body, purchase order reference, and acknowledgment due date.
+- Delivery: A Gmail receipt and the purchase release evidence are committed
+  together. An unknown provider result blocks another channel and another send
+  until reconciliation. A confirmed provider miss requires a manager recovery
+  note before one retry.
+- Alternate path: Operators may still record a manual external release when no
+  connected-email delivery is active or unresolved.
+- Boundary: This does not create a canonical purchase order, payment, booking,
+  customs filing, or Logistics handoff.

@@ -294,6 +294,10 @@ function workstreamState(procurementCase: SavedProcurementCase) {
   if (acknowledgmentOverdue) return "Supplier response overdue";
   if (procurementCase.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") return "Partially acknowledged";
   if (procurementCase.result?.purchaseRelease?.state === "RELEASED") return "Order released";
+  if (["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"].includes(procurementCase.purchaseOrderEmailAction?.result?.state ?? "")) return "Order delivery unresolved";
+  if (procurementCase.purchaseOrderEmailAction?.approval?.status === "PENDING") return "Order email approval pending";
+  if (procurementCase.purchaseOrderEmailAction?.approval?.status === "APPROVED") return "Order email approved";
+  if (procurementCase.purchaseOrderEmailDraft) return "Order email draft";
   if (procurementCase.purchaseAction?.result?.state === "AUTHORIZED" || procurementCase.purchaseAction?.approval?.status === "APPROVED") return "Purchase authorized";
   if (procurementCase.purchaseAction?.approval?.status === "PENDING") return "Purchase approval pending";
   if (procurementCase.purchaseDraft) return "Order draft ready";
@@ -444,6 +448,18 @@ export function AtlasProcurementWorkspace({
   const [approvalNote, setApprovalNote] = useState("");
   const [purchaseApprovalReason, setPurchaseApprovalReason] = useState("");
   const [purchaseDecisionNote, setPurchaseDecisionNote] = useState("");
+  const [purchaseOrderEmailForm, setPurchaseOrderEmailForm] = useState(() => ({
+    senderAccountId: initialCase?.purchaseOrderEmailDraft?.result?.message.senderAccountId ?? senderAccounts[0]?.id ?? "",
+    recipient: initialCase?.purchaseOrderEmailDraft?.result?.message.recipient ?? "",
+    subject: initialCase?.purchaseOrderEmailDraft?.result?.message.subject ?? `Purchase order: ${initialCase?.purchaseDraft?.result?.order.buyerReference || item?.name || requestText}`,
+    body: initialCase?.purchaseOrderEmailDraft?.result?.message.body ?? "",
+    purchaseOrderReference: initialCase?.purchaseOrderEmailDraft?.result?.issuance.purchaseOrderReference ?? initialCase?.purchaseDraft?.result?.order.buyerReference ?? "",
+    acknowledgmentDueOn: initialCase?.purchaseOrderEmailDraft?.result?.issuance.acknowledgmentDueOn ?? "",
+    note: initialCase?.purchaseOrderEmailDraft?.result?.issuance.note ?? "",
+  }));
+  const [purchaseOrderEmailApprovalReason, setPurchaseOrderEmailApprovalReason] = useState("The exact authorized purchase order and supplier message are ready for release review.");
+  const [purchaseOrderEmailDecisionNote, setPurchaseOrderEmailDecisionNote] = useState("");
+  const [purchaseOrderEmailRecoveryNote, setPurchaseOrderEmailRecoveryNote] = useState("");
   const [purchaseReleaseForm, setPurchaseReleaseForm] = useState(() => ({
     channel: "EMAIL" as "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER",
     releasedOn: "",
@@ -766,6 +782,41 @@ export function AtlasProcurementWorkspace({
   }, [currentCase?.purchaseAction?.id, currentCase?.purchaseAction?.result?.state, currentCase?.result?.purchaseRelease?.remainingQuantity]);
 
   useEffect(() => {
+    const stored = currentCase?.purchaseOrderEmailDraft?.result;
+    if (stored) {
+      setPurchaseOrderEmailForm({ ...stored.message, ...stored.issuance, note: stored.issuance.note ?? "" });
+      return;
+    }
+    const action = currentCase?.purchaseAction;
+    if (!action || action.result?.state !== "AUTHORIZED") return;
+    const order = action.input.order;
+    const supplier = action.input.supplier;
+    const commercial = action.input.commercial;
+    setPurchaseOrderEmailForm((current) => ({
+      ...current,
+      senderAccountId: current.senderAccountId || senderAccounts[0]?.id || "",
+      subject: `Purchase order: ${order.buyerReference || supplier.name}`,
+      purchaseOrderReference: order.buyerReference || current.purchaseOrderReference,
+      body: [
+        "Hello,",
+        "",
+        `Please accept purchase order ${order.buyerReference || "[PO reference]"} for ${order.quantity} ${order.unitOfMeasure}.`,
+        `Unit price: ${commercial.unitPrice} ${commercial.currency}`,
+        `Ship to: ${order.shipTo}`,
+        `Incoterm: ${order.incoterm}`,
+        `Payment terms: ${order.paymentTerms}`,
+        `Need by: ${order.needBy}`,
+        order.notes ? `Order notes: ${order.notes}` : null,
+        "",
+        "Please confirm acceptance, supplier order reference, and delivery date.",
+        "",
+        "Thank you,",
+        "Derya Supply Operations",
+      ].filter(Boolean).join("\n"),
+    }));
+  }, [currentCase?.purchaseAction?.id, currentCase?.purchaseAction?.inputHash, currentCase?.purchaseOrderEmailDraft?.id, senderAccounts]);
+
+  useEffect(() => {
     if (phase !== "researching" || (!item && !requestDraft)) return;
     const controller = new AbortController();
     setResearchState("running");
@@ -924,6 +975,12 @@ export function AtlasProcurementWorkspace({
         supplierEmailAction: payload.procurementCase.supplierEmailAction !== undefined
           ? payload.procurementCase.supplierEmailAction
           : currentCase.supplierEmailAction ?? null,
+        purchaseOrderEmailDraft: payload.procurementCase.purchaseOrderEmailDraft !== undefined
+          ? payload.procurementCase.purchaseOrderEmailDraft
+          : currentCase.purchaseOrderEmailDraft ?? null,
+        purchaseOrderEmailAction: payload.procurementCase.purchaseOrderEmailAction !== undefined
+          ? payload.procurementCase.purchaseOrderEmailAction
+          : currentCase.purchaseOrderEmailAction ?? null,
       };
       setCurrentCase(nextCase);
       setDirtyDrafts((current) => resolveWorkstreamDraft(current, actionCaseId, resolvedDraftSection));
@@ -1119,6 +1176,44 @@ export function AtlasProcurementWorkspace({
     }, "purchase-decision");
   }
 
+  function savePurchaseOrderEmail() {
+    const action = currentCase?.purchaseAction;
+    if (!action || action.result?.state !== "AUTHORIZED") return;
+    void runCaseAction(`/api/supply-os/purchase-actions/${action.id}/email-draft`, {
+      expectedActionScopeHash: action.inputHash,
+      expectedRevision: currentCase?.purchaseOrderEmailDraft?.result?.revision ?? 0,
+      ...purchaseOrderEmailForm,
+      note: purchaseOrderEmailForm.note || null,
+    }, "purchase-order-email-draft");
+  }
+
+  function requestPurchaseOrderEmailReview() {
+    const draft = currentCase?.purchaseOrderEmailDraft;
+    if (!draft?.resultHash) return;
+    void runCaseAction(`/api/supply-os/purchase-order-email-drafts/${draft.id}/approval`, {
+      expectedResultHash: draft.resultHash,
+      reason: purchaseOrderEmailApprovalReason,
+    }, "purchase-order-email-approval");
+  }
+
+  function decidePurchaseOrderEmail(decision: "APPROVE" | "REJECT") {
+    const approvalId = currentCase?.purchaseOrderEmailAction?.approval?.id;
+    if (!approvalId) return;
+    void runCaseAction(`/api/supply-os/purchase-order-email-approvals/${approvalId}/decision`, {
+      decision,
+      note: purchaseOrderEmailDecisionNote || null,
+    }, "purchase-order-email-decision");
+  }
+
+  function runPurchaseOrderEmailDelivery(operation: "SEND" | "RECONCILE" | "RESET") {
+    const actionId = currentCase?.purchaseOrderEmailAction?.id;
+    if (!actionId) return;
+    void runCaseAction(`/api/supply-os/purchase-order-email-actions/${actionId}/delivery`, {
+      operation,
+      ...(operation === "RESET" ? { confirmedNotSent: true, note: purchaseOrderEmailRecoveryNote } : {}),
+    }, operation === "RESET" ? "purchase-order-email-recovery" : undefined);
+  }
+
   function recordSupplierAcknowledgment() {
     const actionId = currentCase?.purchaseAction?.id;
     const releaseHash = currentCase?.result?.purchaseRelease?.release?.releaseHash;
@@ -1156,6 +1251,12 @@ export function AtlasProcurementWorkspace({
     && Boolean(purchaseReleaseForm.acknowledgmentDueOn)
     && Boolean(purchaseReleaseForm.purchaseOrderReference.trim())
     && Boolean(purchaseReleaseForm.evidenceUrl.trim());
+  const purchaseOrderEmailFormComplete = Boolean(purchaseOrderEmailForm.senderAccountId)
+    && Boolean(purchaseOrderEmailForm.recipient.trim())
+    && Boolean(purchaseOrderEmailForm.subject.trim())
+    && Boolean(purchaseOrderEmailForm.body.trim())
+    && Boolean(purchaseOrderEmailForm.purchaseOrderReference.trim())
+    && Boolean(purchaseOrderEmailForm.acknowledgmentDueOn);
   const acknowledgmentFormComplete = Boolean(acknowledgmentForm.acknowledgedOn)
     && Boolean(acknowledgmentForm.supplierOrderReference.trim())
     && Number(acknowledgmentForm.acceptedQuantity) > 0
@@ -1611,6 +1712,56 @@ export function AtlasProcurementWorkspace({
                             {purchaseReleaseResult.lastAcknowledgment ? <div><dt>Acknowledgment evidence</dt><dd><a href={evidenceHref(purchaseReleaseResult.lastAcknowledgment.evidenceId, purchaseReleaseResult.lastAcknowledgment.evidenceUrl)} target="_blank" rel="noreferrer">Open acknowledgment</a></dd></div> : null}
                           </dl>
                         ) : null}
+                        {!purchaseReleaseResult ? (
+                          <section className={styles.purchaseApprovalRequest}>
+                            <p><strong>Send through connected Gmail</strong></p>
+                            <p>The exact authorized order, sender, recipient, subject, body, PO reference, and acknowledgment date are locked into a separate send approval.</p>
+                            {senderAccounts.length ? (
+                              <div className={styles.procurementFormGrid} data-draft-section="purchase-order-email-draft">
+                                <label>From<select value={purchaseOrderEmailForm.senderAccountId} onChange={(event) => setPurchaseOrderEmailForm((current) => ({ ...current, senderAccountId: event.target.value }))}>{senderAccounts.map((account) => <option key={account.id} value={account.id}>{account.email}</option>)}</select></label>
+                                <label>Supplier email<input type="email" value={purchaseOrderEmailForm.recipient} onChange={(event) => setPurchaseOrderEmailForm((current) => ({ ...current, recipient: event.target.value }))} placeholder="orders@supplier.com" /></label>
+                                <label>PO reference<input value={purchaseOrderEmailForm.purchaseOrderReference} onChange={(event) => setPurchaseOrderEmailForm((current) => ({ ...current, purchaseOrderReference: event.target.value }))} placeholder="Buyer purchase order number" /></label>
+                                <label>Acknowledgment due<input type="date" value={purchaseOrderEmailForm.acknowledgmentDueOn} onChange={(event) => setPurchaseOrderEmailForm((current) => ({ ...current, acknowledgmentDueOn: event.target.value }))} /></label>
+                                <label className={styles.procurementWideField}>Subject<input value={purchaseOrderEmailForm.subject} onChange={(event) => setPurchaseOrderEmailForm((current) => ({ ...current, subject: event.target.value }))} /></label>
+                                <label className={styles.procurementWideField}>Message<textarea value={purchaseOrderEmailForm.body} onChange={(event) => setPurchaseOrderEmailForm((current) => ({ ...current, body: event.target.value }))} /></label>
+                                <label className={styles.procurementWideField}>Internal release note<textarea value={purchaseOrderEmailForm.note} onChange={(event) => setPurchaseOrderEmailForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional issuance context" /></label>
+                              </div>
+                            ) : <p>No connected Gmail sender is available for this office. Connect one or record another release channel below.</p>}
+                            {senderAccounts.length ? <button type="button" disabled={gateActionState === "saving" || !purchaseOrderEmailFormComplete} onClick={savePurchaseOrderEmail}><Mail size={14} /> {currentCase.purchaseOrderEmailDraft ? "Save message revision" : "Save order email draft"}</button> : null}
+                            {currentCase.purchaseOrderEmailDraft?.result && !currentCase.purchaseOrderEmailAction ? (
+                              <>
+                                <label data-draft-section="purchase-order-email-approval">Approval reason<textarea value={purchaseOrderEmailApprovalReason} onChange={(event) => setPurchaseOrderEmailApprovalReason(event.target.value)} /></label>
+                                <button type="button" disabled={gateActionState === "saving" || !purchaseOrderEmailApprovalReason.trim()} onClick={requestPurchaseOrderEmailReview}><ShieldCheck size={14} /> Request send approval</button>
+                              </>
+                            ) : null}
+                            {currentCase.purchaseOrderEmailAction?.approval?.status === "PENDING" ? (
+                              canApproveProcurement ? (
+                                <>
+                                  <label data-draft-section="purchase-order-email-decision">Decision note<textarea value={purchaseOrderEmailDecisionNote} onChange={(event) => setPurchaseOrderEmailDecisionNote(event.target.value)} placeholder="Optional approval or rejection context" /></label>
+                                  <div className={styles.purchaseDecisionActions}>
+                                    <button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseOrderEmail("APPROVE")}><Check size={14} /> Approve exact email</button>
+                                    <button type="button" disabled={gateActionState === "saving"} onClick={() => decidePurchaseOrderEmail("REJECT")}><TriangleAlert size={14} /> Reject</button>
+                                  </div>
+                                </>
+                              ) : <p>Manager approval is pending for this exact purchase order email.</p>
+                            ) : null}
+                            {currentCase.purchaseOrderEmailAction?.approval?.status === "APPROVED" && (currentCase.purchaseOrderEmailAction.status === "READY" || ["RETRY_READY", "SEND_FAILED"].includes(currentCase.purchaseOrderEmailAction.result?.state ?? "")) ? (
+                              <button type="button" disabled={gateActionState === "saving"} onClick={() => runPurchaseOrderEmailDelivery("SEND")}><ArrowRight size={14} /> {currentCase.purchaseOrderEmailAction.result?.state === "SEND_FAILED" ? "Retry rejected send" : "Send approved order"}</button>
+                            ) : null}
+                            {["SENDING", "DELIVERY_UNKNOWN"].includes(currentCase.purchaseOrderEmailAction?.result?.state ?? "") ? (
+                              <>
+                                <p>Gmail delivery is unresolved. Sending again is blocked until Derya checks the stable message ID.</p>
+                                <button type="button" disabled={gateActionState === "saving"} onClick={() => runPurchaseOrderEmailDelivery("RECONCILE")}><RefreshCw size={14} /> Check Gmail delivery</button>
+                              </>
+                            ) : null}
+                            {currentCase.purchaseOrderEmailAction?.result?.state === "NOT_FOUND_REVIEW_REQUIRED" ? (
+                              <>
+                                <p>Gmail did not find the order message. A manager must verify non-delivery before one new attempt is allowed.</p>
+                                {canApproveProcurement ? <><label data-draft-section="purchase-order-email-recovery">Recovery note<textarea value={purchaseOrderEmailRecoveryNote} onChange={(event) => setPurchaseOrderEmailRecoveryNote(event.target.value)} placeholder="Explain how non-delivery was verified." /></label><button type="button" disabled={gateActionState === "saving" || purchaseOrderEmailRecoveryNote.trim().length < 10} onClick={() => runPurchaseOrderEmailDelivery("RESET")}><RefreshCw size={14} /> Confirm non-delivery and enable retry</button></> : null}
+                              </>
+                            ) : null}
+                          </section>
+                        ) : null}
                         {purchaseReleaseState === "ACKNOWLEDGED" ? (
                           <section className={styles.purchaseApprovalRequest}>
                             <p><strong>Ready for Logistics handoff</strong></p>
@@ -1618,7 +1769,7 @@ export function AtlasProcurementWorkspace({
                           </section>
                         ) : !purchaseReleaseResult && canApproveProcurement ? (
                           <section className={styles.purchaseApprovalRequest} data-draft-section="purchase-release">
-                            <p><strong>Record the external order release</strong></p>
+                            <p><strong>Record another release channel</strong></p>
                             <p>This creates the durable awaiting-supplier checkpoint. Use the exact PO reference and evidence from the channel where the authorized order was issued.</p>
                             <div className={styles.procurementFormGrid}>
                               <label>Release channel<select value={purchaseReleaseForm.channel} onChange={(event) => setPurchaseReleaseForm((current) => ({ ...current, channel: event.target.value as typeof current.channel }))}><option value="EMAIL">Email</option><option value="SUPPLIER_PORTAL">Supplier portal</option><option value="EDI">EDI</option><option value="PHONE_CONFIRMED">Phone confirmed</option><option value="OTHER">Other</option></select></label>

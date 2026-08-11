@@ -4717,3 +4717,24 @@ Use this file for chronological implementation notes that future agents should s
   lifecycle, TypeScript, product copy, and whitespace checks.
 - Boundary: This is recorded external evidence. Derya does not send the order,
   create a canonical PO, commit spend, book freight, or open Logistics.
+
+### 2026-08-10 - Deliver authorized purchase orders through connected Gmail
+
+- Branch: `supply-os-order-delivery`, targeting `main`.
+- Task: Close the gap between final purchase authorization and durable supplier
+  delivery without treating authorization as permission to send arbitrary text.
+- Behavior: The operator drafts the exact purchase order email, obtains a
+  separate manager approval, sends through a connected office Gmail account,
+  and resumes pending, uncertain, retry-ready, sent, and released states from
+  the sourcing queue.
+- Safety: Current access, purchase scope, supplier qualification, quote
+  validity, sender account, recipient, message hash, and order timing are
+  revalidated. Unknown provider results block duplicate sends and alternate
+  release channels until reconciled. Provider receipt and release evidence are
+  persisted atomically.
+- Verification: Atlas sourcing contract, disposable PostgreSQL delivery
+  lifecycle, stale-session and cross-office rejection, provider uncertainty and
+  recovery, idempotent retry, TypeScript, build, copy, tenant, whitespace, and
+  changed-file U+2014 checks.
+- Boundary: No schema, dependency, payment, booking, customs, canonical PO, or
+  Logistics behavior changed.

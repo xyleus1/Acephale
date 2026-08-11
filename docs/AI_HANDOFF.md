@@ -7848,3 +7848,32 @@ Trust boundary:
 - Results reuse the deterministic company optimization model. Missing inputs
   stay visible. No rate, award, booking, filing, supplier commitment, or spend
   approval is implied.
+
+## Supply OS connected purchase order delivery, August 10
+
+Status:
+
+- Implemented on `supply-os-order-delivery`, targeting `main`.
+- No Prisma migration or new dependency is required.
+
+Operator result:
+
+- A finally authorized purchase action can produce an exact connected-Gmail
+  order draft with sender, supplier recipient, subject, message, purchase order
+  reference, and acknowledgment due date.
+- The message requires a separate manager approval. Operators can leave and
+  resume draft, approval, uncertain delivery, retry, sent, and released states
+  from the sourcing queue.
+- Gmail receipt evidence and the existing purchase release checkpoint are
+  persisted together. The manual external-release path remains available when
+  no connected delivery is active.
+
+Trust boundary:
+
+- Purchase authorization does not authorize arbitrary email content. The exact
+  message and authorized action scope are independently pinned and approved.
+- Unknown provider delivery blocks duplicate sending and alternate release
+  channels until reconciliation. A confirmed miss needs a manager recovery note
+  before retry.
+- This does not create a canonical purchase order, payment, booking, customs
+  filing, or Logistics handoff.

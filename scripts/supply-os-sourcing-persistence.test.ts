@@ -35,6 +35,14 @@ import {
   saveSupplierEmailDraft,
   sendSupplierEmailAction,
 } from "../src/lib/supply-os/supplier-communication-persistence";
+import {
+  decidePurchaseOrderEmailApproval,
+  reconcilePurchaseOrderEmailAction,
+  requestPurchaseOrderEmailApproval,
+  resetPurchaseOrderEmailForRetry,
+  savePurchaseOrderEmailDraft,
+  sendPurchaseOrderEmailAction,
+} from "../src/lib/supply-os/purchase-order-communication-persistence";
 import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
 import { captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
 
@@ -890,6 +898,72 @@ async function main() {
       caseId: procurementCase.id,
       input: { ...purchaseDraftInput, expectedRevision: 4, quantity: 16 },
     }), /only an active purchase draft/i, "an authorized order scope must be frozen against later draft edits");
+
+    const orderSenderAccount = await prisma.emailAccount.create({
+      data: {
+        officeId: context.officeId,
+        email: `orders-${suffix}@example.test`,
+        provider: "GMAIL",
+        accessToken: "test-only-order-token",
+      },
+    });
+    const orderEmailInput = {
+      expectedActionScopeHash: authorizedPurchase.purchaseAction.inputHash,
+      expectedRevision: 0,
+      senderAccountId: orderSenderAccount.id,
+      recipient: "orders@example.com",
+      subject: "Purchase order ATLAS-VIS-410",
+      body: "Please accept the attached authorized purchase order and confirm the delivery date.",
+      purchaseOrderReference: "ATLAS-VIS-410",
+      acknowledgmentDueOn: futureDate(3),
+      note: "Connected Gmail order release test.",
+    } as const;
+    const orderEmailDraft = await savePurchaseOrderEmailDraft({
+      context,
+      purchaseActionId: authorizedPurchase.purchaseAction.id,
+      input: orderEmailInput,
+    });
+    assert.equal(orderEmailDraft.taskType, "PURCHASE_ORDER_EMAIL_DRAFT");
+    assert.equal((orderEmailDraft.result as { revision: number }).revision, 1);
+    const orderEmailApproval = await requestPurchaseOrderEmailApproval({
+      context,
+      draftId: orderEmailDraft.id,
+      input: { expectedResultHash: orderEmailDraft.resultHash, reason: "Approve the exact authorized order email." },
+    });
+    await assert.rejects(() => decidePurchaseOrderEmailApproval({
+      context,
+      approvalId: orderEmailApproval.approval.id,
+      input: { decision: "APPROVE" },
+    }), /different eligible approver/i, "the order email requester must not self-approve when another approver is available");
+    const approvedOrderEmail = await decidePurchaseOrderEmailApproval({
+      context: managerContext,
+      approvalId: orderEmailApproval.approval.id,
+      input: { decision: "APPROVE", note: "Exact sender, recipient, order scope, and message approved." },
+    });
+    assert.equal(approvedOrderEmail.action.status, "READY");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context: managerContext,
+      actionId: authorizedPurchase.purchaseAction.id,
+      input: {
+        expectedScopeHash: authorizedPurchase.purchaseAction.inputHash,
+        channel: "EMAIL",
+        releasedOn: futureDate(0),
+        acknowledgmentDueOn: futureDate(3),
+        purchaseOrderReference: "ATLAS-VIS-410",
+        evidenceUrl: "https://example.com/manual-order-release",
+        note: null,
+      },
+    }), /connected purchase order email is pending, approved, or unresolved/i, "manual release must not race an approved connected order email");
+    const revisedOrderEmailDraft = await savePurchaseOrderEmailDraft({
+      context,
+      purchaseActionId: authorizedPurchase.purchaseAction.id,
+      input: { ...orderEmailInput, expectedRevision: 1, body: `${orderEmailInput.body}\nPlease include your supplier order reference.` },
+    });
+    assert.equal((revisedOrderEmailDraft.result as { revision: number }).revision, 2);
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: approvedOrderEmail.action.id } })).status, "CANCELLED", "changing the approved message must cancel its send action");
+    const restoredOrderEmailCase = (await listProcurementCases(context))[0];
+    assert.equal(restoredOrderEmailCase?.purchaseOrderEmailDraft?.id, revisedOrderEmailDraft.id, "the queue must restore the active purchase order email draft");
+    assert.equal(restoredOrderEmailCase?.purchaseOrderEmailAction, null, "a cancelled send action must not remain active in the queue");
 
     const weakEvidenceCase = await saveProcurementSelection({
       context,
@@ -1867,6 +1941,170 @@ async function main() {
     assert.ok(events.some((event) => event.eventType === "PROCUREMENT_APPROVED"));
     assert.ok(events.every((event) => Boolean(event.payloadHash)));
 
+    const sourceCaseTask = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: returnedCase.id } });
+    const sourceDraftTask = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: releaseDraft.purchaseDraft!.id } });
+    const sourceActionTask = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: releaseAction.purchaseAction.id } });
+    const clonedCaseInput = JSON.parse(JSON.stringify(sourceCaseTask.input)) as Record<string, unknown>;
+    const clonedCase = await prisma.supplyExecutionTask.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: sourceCaseTask.workspaceId,
+        createdByUserId: context.userId,
+        taskKey: `procurement:connected-order-email:${suffix}`,
+        taskType: "PROCUREMENT_CASE",
+        capabilityKey: sourceCaseTask.capabilityKey,
+        status: "PLANNED",
+        requiresApproval: false,
+        input: clonedCaseInput,
+        inputHash: jsonDigest(clonedCaseInput),
+        result: sourceCaseTask.result ?? undefined,
+        resultHash: sourceCaseTask.resultHash,
+      },
+    });
+    const clonedDraftInput = { ...(JSON.parse(JSON.stringify(sourceDraftTask.input)) as Record<string, unknown>), procurementCaseId: clonedCase.id };
+    const clonedDraft = await prisma.supplyExecutionTask.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: sourceCaseTask.workspaceId,
+        createdByUserId: context.userId,
+        parentTaskId: clonedCase.id,
+        taskKey: `purchase-order-draft:connected-email:${suffix}`,
+        taskType: "PURCHASE_ORDER_DRAFT",
+        capabilityKey: "draft.purchase_order",
+        status: "PLANNED",
+        requiresApproval: false,
+        input: clonedDraftInput,
+        inputHash: jsonDigest(clonedDraftInput),
+        result: sourceDraftTask.result ?? undefined,
+        resultHash: sourceDraftTask.resultHash,
+      },
+    });
+    const clonedActionInput = {
+      ...(JSON.parse(JSON.stringify(sourceActionTask.input)) as Record<string, unknown>),
+      procurementCaseId: clonedCase.id,
+      purchaseDraftId: clonedDraft.id,
+      purchaseDraftResultHash: clonedDraft.resultHash,
+    };
+    const clonedActionScopeHash = jsonDigest(clonedActionInput);
+    const clonedAction = await prisma.supplyExecutionTask.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: sourceCaseTask.workspaceId,
+        createdByUserId: context.userId,
+        parentTaskId: clonedDraft.id,
+        taskKey: `purchase-order-action:connected-email:${suffix}`,
+        taskType: "PURCHASE_ORDER_ACTION",
+        capabilityKey: "authorize.purchase_order",
+        status: "PLANNED",
+        requiresApproval: true,
+        input: clonedActionInput,
+        inputHash: clonedActionScopeHash,
+      },
+    });
+    const clonedActionApproval = await prisma.supplyApproval.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: sourceCaseTask.workspaceId,
+        executionTaskId: clonedAction.id,
+        requestedByUserId: context.userId,
+        status: "PENDING",
+        requiredRole: "ADMIN",
+        scopeHash: clonedActionScopeHash,
+        requestReason: "Connected order delivery integration fixture.",
+        requestedAt: new Date(),
+        idempotencyKey: `purchase-order-connected-email:${suffix}`,
+      },
+    });
+    const approvedClonedActionApproval = await prisma.supplyApproval.update({
+      where: { id: clonedActionApproval.id },
+      data: {
+        status: "APPROVED",
+        decidedByUserId: secondAdmin.id,
+        decidedAt: new Date(),
+        decisionNote: "Exact cloned order scope authorized for Gmail delivery verification.",
+      },
+    });
+    const clonedAuthorizedResult = {
+      state: "AUTHORIZED",
+      approvalId: clonedActionApproval.id,
+      scopeHash: clonedActionScopeHash,
+      decidedByUserId: secondAdmin.id,
+      decidedAt: approvedClonedActionApproval.decidedAt!.toISOString(),
+      decisionNote: approvedClonedActionApproval.decisionNote,
+      externalSideEffect: false,
+    };
+    await prisma.supplyExecutionTask.update({ where: { id: clonedDraft.id }, data: { status: "READY" } });
+    await prisma.supplyExecutionTask.update({ where: { id: clonedAction.id }, data: { status: "READY", result: clonedAuthorizedResult, resultHash: jsonDigest(clonedAuthorizedResult) } });
+    const clonedCaseResult = JSON.parse(JSON.stringify(sourceCaseTask.result)) as Record<string, unknown>;
+    clonedCaseResult.purchasePreparation = { draftTaskId: clonedDraft.id, state: "DRAFT", revision: 1, orderHash: (sourceDraftTask.result as { orderHash: string }).orderHash };
+    clonedCaseResult.purchaseAuthorization = { actionTaskId: clonedAction.id, approvalId: approvedClonedActionApproval.id, scopeHash: clonedActionScopeHash, status: "APPROVED", draftTaskId: clonedDraft.id, draftRevision: 1, decidedByUserId: secondAdmin.id, decidedAt: approvedClonedActionApproval.decidedAt!.toISOString(), decisionNote: approvedClonedActionApproval.decisionNote };
+    delete clonedCaseResult.purchaseRelease;
+    await prisma.supplyExecutionTask.update({ where: { id: clonedCase.id }, data: { result: clonedCaseResult, resultHash: jsonDigest(clonedCaseResult) } });
+
+    const connectedOrderDraftInput = {
+      expectedActionScopeHash: clonedActionScopeHash,
+      expectedRevision: 0,
+      senderAccountId: orderSenderAccount.id,
+      recipient: "orders@example.com",
+      subject: "Purchase order PO-CONNECTED-001",
+      body: "Please accept purchase order PO-CONNECTED-001 and confirm the supplier order reference and delivery date.",
+      purchaseOrderReference: "PO-CONNECTED-001",
+      acknowledgmentDueOn: futureDate(3),
+      note: "Release through the connected buyer mailbox.",
+    };
+    const connectedOrderDraft = await savePurchaseOrderEmailDraft({
+      context,
+      purchaseActionId: clonedAction.id,
+      input: connectedOrderDraftInput,
+    });
+    const connectedOrderApproval = await requestPurchaseOrderEmailApproval({
+      context,
+      draftId: connectedOrderDraft.id,
+      input: { expectedResultHash: connectedOrderDraft.resultHash, reason: "Approve exact connected Gmail order release." },
+    });
+    const connectedOrderApproved = await decidePurchaseOrderEmailApproval({
+      context: managerContext,
+      approvalId: connectedOrderApproval.approval.id,
+      input: { decision: "APPROVE", note: "Exact order email approved." },
+    });
+    const uncertainOrderProvider: SupplierEmailProvider = {
+      send: async () => ({ state: "UNKNOWN", error: "Simulated timeout after Gmail accepted the request." }),
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    const uncertainOrderSend = await sendPurchaseOrderEmailAction({ context, actionId: connectedOrderApproved.action.id, provider: uncertainOrderProvider });
+    assert.equal((uncertainOrderSend.result as { state: string }).state, "DELIVERY_UNKNOWN");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: { ...releaseBase, expectedScopeHash: clonedActionScopeHash, purchaseOrderReference: "PO-CONNECTED-001" },
+    }), /connected purchase order email is pending, approved, or unresolved/i, "manual release must stay blocked while connected order delivery is uncertain");
+    const notFoundOrderSend = await reconcilePurchaseOrderEmailAction({ context, actionId: connectedOrderApproved.action.id, provider: uncertainOrderProvider });
+    assert.equal((notFoundOrderSend.result as { state: string }).state, "NOT_FOUND_REVIEW_REQUIRED");
+    const retryReadyOrder = await resetPurchaseOrderEmailForRetry({
+      context: managerContext,
+      actionId: connectedOrderApproved.action.id,
+      input: { confirmedNotSent: true, note: "Verified the exact Message-ID is absent from the connected Gmail Sent folder." },
+    });
+    assert.equal((retryReadyOrder.result as { state: string }).state, "RETRY_READY");
+    const sentOrderProvider: SupplierEmailProvider = {
+      send: async (message) => ({ state: "SENT", provider: "GMAIL", providerMessageId: `gmail-order-${suffix}`, providerThreadId: `gmail-order-thread-${suffix}`, sourceUrl: `https://mail.google.com/mail/u/${encodeURIComponent(message.senderEmail)}/#sent/gmail-order-thread-${suffix}` }),
+      reconcile: async () => ({ state: "NOT_FOUND" }),
+    };
+    const deliveredOrderEmail = await sendPurchaseOrderEmailAction({ context, actionId: connectedOrderApproved.action.id, provider: sentOrderProvider });
+    const deliveredOrderResult = deliveredOrderEmail.result as { state: string; evidenceId: string; releaseHash: string; providerMessageId: string };
+    assert.equal(deliveredOrderResult.state, "SENT");
+    assert.equal(deliveredOrderResult.providerMessageId, `gmail-order-${suffix}`);
+    assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: deliveredOrderResult.evidenceId } })).sourceType, "CONNECTED_PROVIDER");
+    const deliveredPurchaseAction = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
+    assert.equal((deliveredPurchaseAction.result as { state: string }).state, "RELEASED");
+    assert.equal((deliveredPurchaseAction.result as { externalSideEffect: string }).externalSideEffect, "CONNECTED_PROVIDER");
+    const deliveredOrderRetry = await sendPurchaseOrderEmailAction({ context, actionId: connectedOrderApproved.action.id, provider: uncertainOrderProvider });
+    assert.equal((deliveredOrderRetry.result as { providerMessageId: string }).providerMessageId, `gmail-order-${suffix}`, "a lost client response must not send the purchase order twice");
+    const restoredConnectedOrderCase = (await listProcurementCases(context)).find((entry) => entry.id === clonedCase.id);
+    assert.equal(restoredConnectedOrderCase?.purchaseOrderEmailAction?.status, "SUCCEEDED", "the queue must restore the connected order delivery receipt");
+    assert.equal((restoredConnectedOrderCase?.result as { purchaseRelease: { state: string } }).purchaseRelease.state, "RELEASED");
+    assert.equal((await findProcurementCaseByRelatedTaskId(context, connectedOrderApproved.action.id))?.id, clonedCase.id, "purchase order email actions must restore their exact procurement workstream");
+
     const duplicateRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "DUPLICATE-ID" });
     await completeSourcingResearchRun({
       context,
@@ -2173,6 +2411,11 @@ async function main() {
       actionId: releaseAction.purchaseAction.id,
       input: releaseBase,
     }), /admin or manager/i, "a stale privileged cookie must not record purchase order release after demotion");
+    await assert.rejects(() => savePurchaseOrderEmailDraft({
+      context: stalePrivilegedContext,
+      purchaseActionId: clonedAction.id,
+      input: connectedOrderDraftInput,
+    }), /current user|not found|cannot edit/i, "a stale privileged cookie must not prepare a connected purchase order email after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
@@ -2257,6 +2500,16 @@ async function main() {
       actionId: releaseAction.purchaseAction.id,
       input: releaseBase,
     }), /not found/i, "another office must not record purchase order release");
+    await assert.rejects(() => sendPurchaseOrderEmailAction({
+      context: foreign,
+      actionId: connectedOrderApproved.action.id,
+      provider: uncertainOrderProvider,
+    }), /not found/i, "another office must not send a connected purchase order email");
+    assert.equal(
+      await findProcurementCaseByRelatedTaskId(foreign, connectedOrderApproved.action.id),
+      null,
+      "another office must not restore a procurement workstream from a purchase order email action",
+    );
 
     console.log("Supply OS sourcing persistence checks passed.");
   } finally {

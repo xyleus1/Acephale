@@ -335,6 +335,60 @@ export type SavedProcurementCase = {
     createdAt: string;
     updatedAt: string;
   } | null;
+  purchaseOrderEmailDraft?: {
+    id: string;
+    status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
+    resultHash: string | null;
+    result: {
+      revision: number;
+      message: SupplierEmailMessage;
+      issuance: {
+        purchaseOrderReference: string;
+        acknowledgmentDueOn: string;
+        note: string | null;
+      };
+      messageHash: string;
+      approval: { id: string; actionId: string; status: SupplierEmailApproval["status"] } | null;
+      updatedAt: string;
+    } | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  purchaseOrderEmailAction?: {
+    id: string;
+    status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
+    input: {
+      procurementCaseId: string;
+      purchaseDraftId: string;
+      purchaseActionId: string;
+      purchaseActionScopeHash: string;
+      draftId: string;
+      draftRevision: number;
+      draftMessageHash: string;
+      message: SupplierEmailMessage;
+      issuance: {
+        purchaseOrderReference: string;
+        acknowledgmentDueOn: string;
+        note: string | null;
+      };
+    };
+    inputHash: string;
+    result: {
+      state: "APPROVED" | "REJECTED" | "SENDING" | "SEND_FAILED" | "DELIVERY_UNKNOWN" | "NOT_FOUND_REVIEW_REQUIRED" | "RETRY_READY" | "SENT";
+      attempt?: number;
+      rfcMessageId?: string;
+      error?: string;
+      sourceUrl?: string;
+      evidenceId?: string;
+      releaseHash?: string;
+      sentAt?: string;
+    } | null;
+    approval: SupplierEmailApproval | null;
+    externalSystem: string | null;
+    externalRef: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   purchaseDraft?: {
     id: string;
     status: string;

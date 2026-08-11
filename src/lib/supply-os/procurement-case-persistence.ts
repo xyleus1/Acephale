@@ -14,6 +14,11 @@ import {
   SUPPLIER_EMAIL_ACTION_TASK_TYPE,
   SUPPLIER_EMAIL_DRAFT_TASK_TYPE,
 } from "./supplier-communication-persistence";
+import {
+  listPurchaseOrderCommunicationTasks,
+  PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE,
+  PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE,
+} from "./purchase-order-communication-persistence";
 
 const RESEARCH_CAPABILITY = "research.supplier_candidates";
 const TASK_TYPE = "PROCUREMENT_CASE";
@@ -587,11 +592,18 @@ async function listProcurementCasesMatching(
   for (const purchaseDraft of purchaseDrafts) {
     if (purchaseDraft.parentTaskId && !purchaseDraftByCase.has(purchaseDraft.parentTaskId)) purchaseDraftByCase.set(purchaseDraft.parentTaskId, purchaseDraft);
   }
-  const communicationTasks = await listSupplierCommunicationTasks({
-    context: accessContext,
-    workspaceId: workspace.id,
-    quoteCycleIds: quoteCycles.map((quoteCycle) => quoteCycle.id),
-  });
+  const [communicationTasks, purchaseOrderCommunicationTasks] = await Promise.all([
+    listSupplierCommunicationTasks({
+      context: accessContext,
+      workspaceId: workspace.id,
+      quoteCycleIds: quoteCycles.map((quoteCycle) => quoteCycle.id),
+    }),
+    listPurchaseOrderCommunicationTasks({
+      context: accessContext,
+      workspaceId: workspace.id,
+      purchaseDraftIds: purchaseDrafts.map((purchaseDraft) => purchaseDraft.id),
+    }),
+  ]);
   const emailDraftByQuoteCycle = new Map<string, (typeof communicationTasks)[number]>();
   const emailActionByQuoteCycle = new Map<string, (typeof communicationTasks)[number]>();
   for (const task of communicationTasks) {
@@ -600,6 +612,17 @@ async function listProcurementCasesMatching(
       ? emailDraftByQuoteCycle
       : task.taskType === SUPPLIER_EMAIL_ACTION_TASK_TYPE
         ? emailActionByQuoteCycle
+        : null;
+    if (target && !target.has(task.parentTaskId)) target.set(task.parentTaskId, task);
+  }
+  const purchaseOrderEmailDraftByPurchaseDraft = new Map<string, (typeof purchaseOrderCommunicationTasks)[number]>();
+  const purchaseOrderEmailActionByPurchaseDraft = new Map<string, (typeof purchaseOrderCommunicationTasks)[number]>();
+  for (const task of purchaseOrderCommunicationTasks) {
+    if (!task.parentTaskId) continue;
+    const target = task.taskType === PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE
+      ? purchaseOrderEmailDraftByPurchaseDraft
+      : task.taskType === PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE
+        ? purchaseOrderEmailActionByPurchaseDraft
         : null;
     if (target && !target.has(task.parentTaskId)) target.set(task.parentTaskId, task);
   }
@@ -613,6 +636,8 @@ async function listProcurementCasesMatching(
         supplierEmailAction: null,
         purchaseDraft: null,
         purchaseAction: null,
+        purchaseOrderEmailDraft: null,
+        purchaseOrderEmailAction: null,
       };
     }
     const quoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
@@ -634,9 +659,17 @@ async function listProcurementCasesMatching(
         })()
       : null;
     const activeDraft = purchaseDraftByCase.get(procurementCase.id) ?? null;
-    if (!activeDraft) return { ...procurementCase, quoteCycle, supplierEmailDraft, supplierEmailAction, purchaseDraft: null, purchaseAction: null };
+    if (!activeDraft) return { ...procurementCase, quoteCycle, supplierEmailDraft, supplierEmailAction, purchaseDraft: null, purchaseAction: null, purchaseOrderEmailDraft: null, purchaseOrderEmailAction: null };
     const { childTasks: purchaseActions, ...purchaseDraft } = activeDraft;
     const activeAction = purchaseActions[0] ?? null;
+    const purchaseOrderEmailDraft = purchaseOrderEmailDraftByPurchaseDraft.get(purchaseDraft.id) ?? null;
+    const rawPurchaseOrderEmailAction = purchaseOrderEmailActionByPurchaseDraft.get(purchaseDraft.id) ?? null;
+    const purchaseOrderEmailAction = rawPurchaseOrderEmailAction
+      ? (() => {
+          const { approvals, ...task } = rawPurchaseOrderEmailAction;
+          return { ...task, approval: approvals[0] ?? null };
+        })()
+      : null;
     return {
       ...procurementCase,
       quoteCycle,
@@ -646,6 +679,8 @@ async function listProcurementCasesMatching(
       purchaseAction: activeAction
         ? purchaseActionView(activeAction)
         : null,
+      purchaseOrderEmailDraft,
+      purchaseOrderEmailAction,
     };
   });
 }
@@ -709,6 +744,7 @@ export async function procurementEvidenceSource(context: SupplyAccessContext, ev
           "SUPPLIER_QUOTE_RELEASE",
           "SUPPLIER_QUOTE_REPLY_EMAIL",
           "SUPPLIER_QUOTE_RESPONSE",
+          "PURCHASE_ORDER_RELEASE",
           "SUPPLIER_ORDER_ACKNOWLEDGMENT",
         ],
       },
@@ -821,6 +857,24 @@ async function cancelActivePurchaseDrafts(
     if (releasedAction) {
       throw new SupplyPersistenceError("The purchase order has been released. Create a new procurement case instead of changing this external scope.", "conflict");
     }
+    const communicationActions = await tx.supplyExecutionTask.findMany({
+      where: {
+        officeId,
+        workspaceId,
+        parentTaskId: { in: caseDraftIds },
+        taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE,
+        status: { in: ["READY", "RUNNING", "BLOCKED"] },
+      },
+      select: { result: true },
+    });
+    const unresolvedCommunication = communicationActions.some((action) => [
+      "SENDING",
+      "DELIVERY_UNKNOWN",
+      "NOT_FOUND_REVIEW_REQUIRED",
+    ].includes(String(record(action.result).state)));
+    if (unresolvedCommunication) {
+      throw new SupplyPersistenceError("Purchase order email delivery is unresolved. Reconcile it before changing the sourcing scope.", "conflict");
+    }
   }
   const drafts = await tx.supplyExecutionTask.findMany({
     where: {
@@ -853,6 +907,27 @@ async function cancelActivePurchaseDrafts(
       });
       await tx.supplyExecutionTask.updateMany({
         where: { id: { in: actionIds }, officeId, workspaceId },
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      });
+    }
+    const communicationTasks = await tx.supplyExecutionTask.findMany({
+      where: {
+        officeId,
+        workspaceId,
+        parentTaskId: { in: draftIds },
+        taskType: { in: [PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE, PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE] },
+        status: { in: ["PLANNED", "BLOCKED", "READY"] },
+      },
+      select: { id: true },
+    });
+    const communicationTaskIds = communicationTasks.map((task) => task.id);
+    if (communicationTaskIds.length) {
+      await tx.supplyApproval.updateMany({
+        where: { officeId, workspaceId, executionTaskId: { in: communicationTaskIds }, status: "PENDING" },
+        data: { status: "CANCELLED", decidedAt: new Date(), decisionNote: "Purchase order scope changed." },
+      });
+      await tx.supplyExecutionTask.updateMany({
+        where: { id: { in: communicationTaskIds }, officeId, workspaceId },
         data: { status: "CANCELLED", cancelledAt: new Date() },
       });
     }
@@ -3491,6 +3566,7 @@ export async function recordPurchaseOrderRelease(args: {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
 
         const procurementCase = await tx.supplyExecutionTask.findFirst({
           where: { id: procurementCaseId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: TASK_TYPE },
@@ -3536,6 +3612,22 @@ export async function recordPurchaseOrderRelease(args: {
         });
         if (!approval || approval.scopeHash !== releaseInput.expectedScopeHash) {
           throw new SupplyPersistenceError("Purchase order release does not match the authorized order scope.", "conflict");
+        }
+        const activePurchaseOrderEmail = await tx.supplyExecutionTask.findFirst({
+          where: {
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: purchaseDraftId,
+            taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE,
+            OR: [
+              { status: { in: ["PLANNED", "READY", "RUNNING"] } },
+              { status: "BLOCKED", result: { path: ["state"], equals: "NOT_FOUND_REVIEW_REQUIRED" } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (activePurchaseOrderEmail) {
+          throw new SupplyPersistenceError("A connected purchase order email is pending, approved, or unresolved. Finish or revise that workflow before recording another channel.", "conflict");
         }
         const current = caseResult(procurementCase.result);
         const authorization = record(current.result.purchaseAuthorization);
