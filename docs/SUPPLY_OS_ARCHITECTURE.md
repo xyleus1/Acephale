@@ -365,21 +365,31 @@ clear boundaries.
   draft revision. Approval moves the action and draft to `READY`, which freezes
   the exact authorized scope. An upstream supplier or gate change cancels a
   `READY` action that has not been externally executed.
-- An admin or manager may record an externally received supplier acknowledgment
-  against the frozen action. Every entry is hashed and stores its channel,
-  release date, acknowledgment date, supplier reference, accepted quantity,
-  confirmed delivery date, evidence URL, actor, and timestamp. The release date
-  cannot predate final authorization or exceed the approved quote validity.
-- The first acknowledgment moves the action and draft to `RUNNING`. Partial
+- An admin or manager must first record the exact authorized order as released.
+  The immutable release checkpoint stores its channel, release date, buyer PO
+  reference, acknowledgment due date, evidence URL, actor, timestamp, action
+  scope hash, and deterministic release hash. Release cannot predate final
+  authorization, exceed quote validity, use expired qualification, or schedule
+  supplier follow-up after the order need-by date.
+- Release moves the action and draft to `RUNNING` and exposes a durable
+  `RELEASED` queue state. Identical or concurrent retries converge on the same
+  evidence record and event. A changed release cannot overwrite an order that
+  was already issued externally.
+- An admin or manager may then record externally received supplier
+  acknowledgment only against that release hash. Every entry stores its
+  acknowledgment date, supplier reference, accepted quantity, confirmed
+  delivery date, evidence URL, actor, and timestamp.
+- Partial
   acceptance accumulates against the exact authorized quantity. Full acceptance
   moves both records to `SUCCEEDED`. Identical retries are idempotent and an
   operator cannot accept more than the remaining quantity.
-- Once supplier acknowledgment begins, the upstream supplier and order scope
+- Once purchase-order release is recorded, the upstream supplier and order scope
   are immutable. A changed scope requires a new procurement case. This prevents
   external evidence from being silently attached to a different order.
-- Purchase preparation and acknowledgment recording do not contact the
-  supplier, create a canonical purchase order or PO number, commit spend, book
-  freight, or open a logistics record.
+- Purchase preparation, release recording, and acknowledgment recording do not
+  contact the supplier, create a canonical purchase order, commit spend, book
+  freight, or open a logistics record. The buyer PO reference is external
+  evidence, not a Derya-issued canonical PO.
 - Interactive research uses the authenticated, office-rate-limited public web
   research engine. Official and public evidence URLs are returned with
   unqualified candidates; missing commercial values remain unknown.

@@ -186,7 +186,7 @@ export type SavedProcurementCase = {
       actionTaskId: string;
       approvalId: string;
       scopeHash: string;
-      status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
+      status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "RELEASED" | "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
       draftTaskId: string;
       draftRevision: number;
       decidedByUserId?: string;
@@ -194,13 +194,26 @@ export type SavedProcurementCase = {
       decisionNote?: string | null;
     };
     purchaseRelease?: {
-      state: "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
+      state: "RELEASED" | "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
       orderedQuantity: string;
       acknowledgedQuantity: string;
       remainingQuantity: string;
       unitOfMeasure: string;
-      lastSupplierOrderReference: string;
-      lastConfirmedDeliveryDate: string;
+      release?: {
+        actionScopeHash: string;
+        channel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
+        releasedOn: string;
+        acknowledgmentDueOn: string;
+        purchaseOrderReference: string;
+        evidenceUrl: string;
+        evidenceId: string;
+        note: string | null;
+        releaseHash: string;
+        recordedByUserId: string;
+        recordedAt: string;
+      };
+      lastSupplierOrderReference?: string;
+      lastConfirmedDeliveryDate?: string;
       updatedAt: string;
     };
     quoteCycle?: {
@@ -243,7 +256,7 @@ export type SavedProcurementCase = {
         note: string | null;
       };
       requestHash: string;
-      release: {
+      release?: {
         channel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
         releasedOn: string;
         evidenceUrl: string;
@@ -423,20 +436,35 @@ export type SavedProcurementCase = {
       decisionNote: string | null;
       externalSideEffect: false;
     } | {
-      state: "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
+      state: "RELEASED" | "PARTIALLY_ACKNOWLEDGED" | "ACKNOWLEDGED";
       authorization: {
         approvalId: string;
         scopeHash: string;
         decidedByUserId: string | null;
         decidedAt: string | null;
       };
+      release: {
+        actionScopeHash: string;
+        channel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
+        releasedOn: string;
+        acknowledgmentDueOn: string;
+        purchaseOrderReference: string;
+        evidenceUrl: string;
+        evidenceId: string;
+        note: string | null;
+        releaseHash: string;
+        recordedByUserId: string;
+        recordedAt: string;
+      };
       orderedQuantity: string;
       acknowledgedQuantity: string;
       remainingQuantity: string;
       unitOfMeasure: string;
       acknowledgments: Array<{
-        channel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
+        releaseHash: string;
+        releaseChannel: "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER";
         releasedOn: string;
+        acknowledgmentDueOn: string;
         acknowledgedOn: string;
         supplierOrderReference: string;
         acceptedQuantity: string;
@@ -450,7 +478,7 @@ export type SavedProcurementCase = {
         recordedAt: string;
       }>;
       totals: { acknowledgedMaterialValue: string; currency: string };
-      lastAcknowledgment: {
+      lastAcknowledgment?: {
         supplierOrderReference: string;
         acceptedQuantity: string;
         confirmedDeliveryDate: string;

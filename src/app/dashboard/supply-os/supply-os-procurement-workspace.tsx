@@ -285,8 +285,15 @@ function selectionPayload(option: ProcurementOption) {
 }
 
 function workstreamState(procurementCase: SavedProcurementCase) {
+  const purchaseRelease = procurementCase.result?.purchaseRelease;
+  const acknowledgmentOverdue = purchaseRelease
+    && purchaseRelease.release
+    && purchaseRelease.state !== "ACKNOWLEDGED"
+    && purchaseRelease.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10);
   if (procurementCase.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
+  if (acknowledgmentOverdue) return "Supplier response overdue";
   if (procurementCase.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") return "Partially acknowledged";
+  if (procurementCase.result?.purchaseRelease?.state === "RELEASED") return "Order released";
   if (procurementCase.purchaseAction?.result?.state === "AUTHORIZED" || procurementCase.purchaseAction?.approval?.status === "APPROVED") return "Purchase authorized";
   if (procurementCase.purchaseAction?.approval?.status === "PENDING") return "Purchase approval pending";
   if (procurementCase.purchaseDraft) return "Order draft ready";
@@ -437,9 +444,15 @@ export function AtlasProcurementWorkspace({
   const [approvalNote, setApprovalNote] = useState("");
   const [purchaseApprovalReason, setPurchaseApprovalReason] = useState("");
   const [purchaseDecisionNote, setPurchaseDecisionNote] = useState("");
-  const [acknowledgmentForm, setAcknowledgmentForm] = useState(() => ({
+  const [purchaseReleaseForm, setPurchaseReleaseForm] = useState(() => ({
     channel: "EMAIL" as "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER",
     releasedOn: "",
+    acknowledgmentDueOn: "",
+    purchaseOrderReference: initialCase?.purchaseDraft?.result?.order.buyerReference ?? "",
+    evidenceUrl: "",
+    note: "",
+  }));
+  const [acknowledgmentForm, setAcknowledgmentForm] = useState(() => ({
     acknowledgedOn: "",
     supplierOrderReference: "",
     acceptedQuantity: initialCase?.result?.purchaseRelease?.remainingQuantity
@@ -734,6 +747,14 @@ export function AtlasProcurementWorkspace({
   useEffect(() => {
     const release = currentCase?.result?.purchaseRelease;
     const action = currentCase?.purchaseAction;
+    setPurchaseReleaseForm({
+      channel: release?.release?.channel ?? "EMAIL",
+      releasedOn: release?.release?.releasedOn ?? "",
+      acknowledgmentDueOn: release?.release?.acknowledgmentDueOn ?? "",
+      purchaseOrderReference: release?.release?.purchaseOrderReference ?? currentCase?.purchaseDraft?.result?.order.buyerReference ?? "",
+      evidenceUrl: release?.release?.evidenceUrl ?? "",
+      note: release?.release?.note ?? "",
+    });
     setAcknowledgmentForm((current) => ({
       ...current,
       supplierOrderReference: "",
@@ -1100,12 +1121,24 @@ export function AtlasProcurementWorkspace({
 
   function recordSupplierAcknowledgment() {
     const actionId = currentCase?.purchaseAction?.id;
-    if (!actionId) return;
+    const releaseHash = currentCase?.result?.purchaseRelease?.release?.releaseHash;
+    if (!actionId || !releaseHash) return;
     void runCaseAction(`/api/supply-os/purchase-actions/${actionId}/acknowledgments`, {
       ...acknowledgmentForm,
+      expectedReleaseHash: releaseHash,
       acceptedQuantity: Number(acknowledgmentForm.acceptedQuantity),
       note: acknowledgmentForm.note || null,
     }, "supplier-acknowledgment");
+  }
+
+  function recordPurchaseRelease() {
+    const action = currentCase?.purchaseAction;
+    if (!action) return;
+    void runCaseAction(`/api/supply-os/purchase-actions/${action.id}/release`, {
+      ...purchaseReleaseForm,
+      expectedScopeHash: action.inputHash,
+      note: purchaseReleaseForm.note || null,
+    }, "purchase-release");
   }
 
   const purchaseFormComplete = Number(purchaseForm.quantity) > 0
@@ -1113,13 +1146,17 @@ export function AtlasProcurementWorkspace({
     && Boolean(purchaseForm.shipTo.trim())
     && Boolean(purchaseForm.paymentTerms.trim());
   const purchaseActionStatus = currentCase?.purchaseAction?.approval?.status ?? null;
-  const purchaseReleaseResult = currentCase?.purchaseAction?.result?.state === "PARTIALLY_ACKNOWLEDGED"
+  const purchaseReleaseResult = currentCase?.purchaseAction?.result?.state === "RELEASED"
+    || currentCase?.purchaseAction?.result?.state === "PARTIALLY_ACKNOWLEDGED"
     || currentCase?.purchaseAction?.result?.state === "ACKNOWLEDGED"
     ? currentCase.purchaseAction.result
     : null;
   const purchaseReleaseState = purchaseReleaseResult?.state ?? null;
-  const acknowledgmentFormComplete = Boolean(acknowledgmentForm.releasedOn)
-    && Boolean(acknowledgmentForm.acknowledgedOn)
+  const purchaseReleaseFormComplete = Boolean(purchaseReleaseForm.releasedOn)
+    && Boolean(purchaseReleaseForm.acknowledgmentDueOn)
+    && Boolean(purchaseReleaseForm.purchaseOrderReference.trim())
+    && Boolean(purchaseReleaseForm.evidenceUrl.trim());
+  const acknowledgmentFormComplete = Boolean(acknowledgmentForm.acknowledgedOn)
     && Boolean(acknowledgmentForm.supplierOrderReference.trim())
     && Number(acknowledgmentForm.acceptedQuantity) > 0
     && Boolean(acknowledgmentForm.confirmedDeliveryDate)
@@ -1544,9 +1581,9 @@ export function AtlasProcurementWorkspace({
                 ) : (
                   <>
                     <header>
-                      <small>{purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acceptance complete" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Supplier acceptance open" : purchaseActionStatus === "APPROVED" ? "Purchase action authorized" : purchaseActionStatus === "PENDING" ? "Final approval pending" : "Purchase preparation"}</small>
-                      <h4>{purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acknowledged" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Partial supplier acceptance" : purchaseActionStatus === "APPROVED" ? "Approved to issue" : currentCase.purchaseDraft?.result ? "Order draft" : "Prepare the order"}</h4>
-                      <p>{purchaseReleaseState ? "Supplier acceptance is recorded against the frozen order scope and its evidence." : purchaseActionStatus === "APPROVED" ? "The exact supplier, quantity, price, destination, and terms are frozen under an admin approval hash." : "Supplier and quote evidence come from the approved scope. Add the order fields that were not part of sourcing approval."}</p>
+                      <small>{purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acceptance complete" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Supplier acceptance open" : purchaseReleaseState === "RELEASED" ? "Awaiting supplier" : purchaseActionStatus === "APPROVED" ? "Purchase action authorized" : purchaseActionStatus === "PENDING" ? "Final approval pending" : "Purchase preparation"}</small>
+                      <h4>{purchaseReleaseState === "ACKNOWLEDGED" ? "Supplier acknowledged" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Partial supplier acceptance" : purchaseReleaseState === "RELEASED" ? "Order released" : purchaseActionStatus === "APPROVED" ? "Approved to issue" : currentCase.purchaseDraft?.result ? "Order draft" : "Prepare the order"}</h4>
+                      <p>{purchaseReleaseState === "RELEASED" ? "The exact authorized order is recorded as released and remains open until supplier acknowledgment is captured." : purchaseReleaseState ? "Supplier acceptance is recorded against the frozen order scope and its evidence." : purchaseActionStatus === "APPROVED" ? "The exact supplier, quantity, price, destination, and terms are frozen under an admin approval hash." : "Supplier and quote evidence come from the approved scope. Add the order fields that were not part of sourcing approval."}</p>
                     </header>
                     {currentCase.purchaseDraft?.result ? (
                       <dl className={styles.purchaseDraftSummary}>
@@ -1560,15 +1597,18 @@ export function AtlasProcurementWorkspace({
                       <>
                         <section className={styles.purchaseAuthorizationState}>
                           <ShieldCheck size={20} />
-                          <div><strong>{purchaseReleaseState === "ACKNOWLEDGED" ? "Full quantity accepted" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Part of the order is accepted" : "Exact order scope authorized"}</strong><p>{purchaseReleaseState ? "This records an external supplier event. Derya did not send the release, create a supplier PO, pay, book freight, or open Logistics." : "No supplier connector has executed it. No PO number, message, payment, booking, or Logistics record exists yet."}</p></div>
+                          <div><strong>{purchaseReleaseState === "ACKNOWLEDGED" ? "Full quantity accepted" : purchaseReleaseState === "PARTIALLY_ACKNOWLEDGED" ? "Part of the order is accepted" : purchaseReleaseState === "RELEASED" ? "Waiting for supplier acknowledgment" : "Exact order scope authorized"}</strong><p>{purchaseReleaseState ? "Derya recorded an external supplier event and its evidence. It did not send the order, pay, book freight, or open Logistics." : "No supplier connector has executed it. No PO release, payment, booking, or Logistics record exists yet."}</p></div>
                         </section>
                         {purchaseReleaseResult ? (
                           <dl className={styles.purchaseDraftSummary}>
                             <div><dt>Ordered</dt><dd>{purchaseReleaseResult.orderedQuantity} {purchaseReleaseResult.unitOfMeasure}</dd></div>
                             <div><dt>Accepted</dt><dd>{purchaseReleaseResult.acknowledgedQuantity} {purchaseReleaseResult.unitOfMeasure}</dd></div>
                             <div><dt>Remaining</dt><dd>{purchaseReleaseResult.remainingQuantity} {purchaseReleaseResult.unitOfMeasure}</dd></div>
-                            <div><dt>Supplier reference</dt><dd>{purchaseReleaseResult.lastAcknowledgment.supplierOrderReference}</dd></div>
-                            <div><dt>Evidence</dt><dd><a href={evidenceHref(purchaseReleaseResult.lastAcknowledgment.evidenceId, purchaseReleaseResult.lastAcknowledgment.evidenceUrl)} target="_blank" rel="noreferrer">Open acknowledgment</a></dd></div>
+                            {purchaseReleaseResult.release ? <div><dt>PO reference</dt><dd>{purchaseReleaseResult.release.purchaseOrderReference}</dd></div> : <div><dt>Release record</dt><dd>Legacy combined record</dd></div>}
+                            {purchaseReleaseResult.release ? <div><dt>Acknowledgment due</dt><dd>{displayStoredDate(purchaseReleaseResult.release.acknowledgmentDueOn)}</dd></div> : null}
+                            {purchaseReleaseResult.release ? <div><dt>Release evidence</dt><dd><a href={evidenceHref(purchaseReleaseResult.release.evidenceId, purchaseReleaseResult.release.evidenceUrl)} target="_blank" rel="noreferrer">Open release</a></dd></div> : null}
+                            {purchaseReleaseResult.lastAcknowledgment ? <div><dt>Last supplier reference</dt><dd>{purchaseReleaseResult.lastAcknowledgment.supplierOrderReference}</dd></div> : null}
+                            {purchaseReleaseResult.lastAcknowledgment ? <div><dt>Acknowledgment evidence</dt><dd><a href={evidenceHref(purchaseReleaseResult.lastAcknowledgment.evidenceId, purchaseReleaseResult.lastAcknowledgment.evidenceUrl)} target="_blank" rel="noreferrer">Open acknowledgment</a></dd></div> : null}
                           </dl>
                         ) : null}
                         {purchaseReleaseState === "ACKNOWLEDGED" ? (
@@ -1576,12 +1616,24 @@ export function AtlasProcurementWorkspace({
                             <p><strong>Ready for Logistics handoff</strong></p>
                             <p>The supplier evidence covers the full authorized quantity. The Logistics handoff is the next controlled step, but it has not been created.</p>
                           </section>
-                        ) : canApproveProcurement ? (
+                        ) : !purchaseReleaseResult && canApproveProcurement ? (
+                          <section className={styles.purchaseApprovalRequest} data-draft-section="purchase-release">
+                            <p><strong>Record the external order release</strong></p>
+                            <p>This creates the durable awaiting-supplier checkpoint. Use the exact PO reference and evidence from the channel where the authorized order was issued.</p>
+                            <div className={styles.procurementFormGrid}>
+                              <label>Release channel<select value={purchaseReleaseForm.channel} onChange={(event) => setPurchaseReleaseForm((current) => ({ ...current, channel: event.target.value as typeof current.channel }))}><option value="EMAIL">Email</option><option value="SUPPLIER_PORTAL">Supplier portal</option><option value="EDI">EDI</option><option value="PHONE_CONFIRMED">Phone confirmed</option><option value="OTHER">Other</option></select></label>
+                              <label>Released on<input type="date" value={purchaseReleaseForm.releasedOn} onChange={(event) => setPurchaseReleaseForm((current) => ({ ...current, releasedOn: event.target.value }))} /></label>
+                              <label>Acknowledgment due<input type="date" value={purchaseReleaseForm.acknowledgmentDueOn} onChange={(event) => setPurchaseReleaseForm((current) => ({ ...current, acknowledgmentDueOn: event.target.value }))} /></label>
+                              <label>PO reference<input value={purchaseReleaseForm.purchaseOrderReference} onChange={(event) => setPurchaseReleaseForm((current) => ({ ...current, purchaseOrderReference: event.target.value }))} placeholder="Buyer purchase order number" /></label>
+                              <label className={styles.procurementWideField}>Release evidence URL<input type="url" value={purchaseReleaseForm.evidenceUrl} onChange={(event) => setPurchaseReleaseForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>
+                              <label className={styles.procurementWideField}>Release note<textarea value={purchaseReleaseForm.note} onChange={(event) => setPurchaseReleaseForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional channel or issuance detail" /></label>
+                            </div>
+                            <button type="button" disabled={gateActionState === "saving" || !purchaseReleaseFormComplete} onClick={recordPurchaseRelease}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} Record order release</button>
+                          </section>
+                        ) : purchaseReleaseResult?.release && canApproveProcurement ? (
                           <section className={styles.purchaseApprovalRequest} data-draft-section="supplier-acknowledgment">
                             <p>Record supplier acceptance received outside Derya. Partial acceptances remain open until the full authorized quantity is covered.</p>
                             <div className={styles.procurementFormGrid}>
-                              <label>Release channel<select value={acknowledgmentForm.channel} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, channel: event.target.value as typeof current.channel }))}><option value="EMAIL">Email</option><option value="SUPPLIER_PORTAL">Supplier portal</option><option value="EDI">EDI</option><option value="PHONE_CONFIRMED">Phone confirmed</option><option value="OTHER">Other</option></select></label>
-                              <label>Released on<input type="date" value={acknowledgmentForm.releasedOn} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, releasedOn: event.target.value }))} /></label>
                               <label>Acknowledged on<input type="date" value={acknowledgmentForm.acknowledgedOn} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acknowledgedOn: event.target.value }))} /></label>
                               <label>Accepted quantity<input type="number" min="0.01" step="0.01" value={acknowledgmentForm.acceptedQuantity} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acceptedQuantity: event.target.value }))} /></label>
                               <label>Unit<input readOnly value={purchaseReleaseResult?.unitOfMeasure ?? currentCase.purchaseAction?.input.order.unitOfMeasure ?? "Unknown"} /></label>
@@ -1592,6 +1644,8 @@ export function AtlasProcurementWorkspace({
                             </div>
                             <button type="button" disabled={gateActionState === "saving" || !acknowledgmentFormComplete} onClick={recordSupplierAcknowledgment}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} Record supplier acknowledgment</button>
                           </section>
+                        ) : purchaseReleaseResult && !purchaseReleaseResult.release ? (
+                          <p className={styles.procurementActionError}><TriangleAlert size={14} /> This legacy order combined release and acknowledgment. Review the historical evidence and create a new procurement case before recording more supplier acceptance.</p>
                         ) : <p className={styles.procurementPermissionNote}>Your role can view supplier acceptance but cannot record it.</p>}
                       </>
                     ) : (

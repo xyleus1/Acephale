@@ -9,6 +9,7 @@ import {
   listProcurementCases,
   listProcurementCasesForResearchRuns,
   procurementEvidenceSource,
+  recordPurchaseOrderRelease,
   recordSupplierQuoteRelease,
   recordSupplierQuoteResponse,
   recordPurchaseOrderAcknowledgment,
@@ -1655,9 +1656,17 @@ async function main() {
       approvalId: releaseActionRequest.approval.id,
       input: { decision: "APPROVE", note: "Exact released order scope authorized." },
     });
-    const acknowledgmentBase = {
+    const releaseBase = {
+      expectedScopeHash: releaseAction.purchaseAction.inputHash,
       channel: "EMAIL",
       releasedOn: futureDate(0),
+      acknowledgmentDueOn: futureDate(3),
+      purchaseOrderReference: "PO-ATLAS-001",
+      evidenceUrl: "https://example.com/purchase-orders/PO-ATLAS-001",
+      note: "Authorized order issued through the buyer mailbox.",
+    } as const;
+    const acknowledgmentBase = {
+      expectedReleaseHash: "not-released",
       acknowledgedOn: futureDate(0),
       supplierOrderReference: "ACK-001-A",
       acceptedQuantity: 6,
@@ -1668,29 +1677,82 @@ async function main() {
     await assert.rejects(() => recordPurchaseOrderAcknowledgment({
       context,
       actionId: releaseAction.purchaseAction.id,
-      input: { ...acknowledgmentBase, releasedOn: futureDate(1), acknowledgedOn: futureDate(1) },
-    }), /cannot be in the future/i, "future-dated supplier releases must be rejected");
-    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      input: acknowledgmentBase,
+    }), /does not match the durable purchase order release/i, "supplier acknowledgment must not skip the durable order release checkpoint");
+    await assert.rejects(() => recordPurchaseOrderRelease({
       context,
       actionId: releaseAction.purchaseAction.id,
-      input: { ...acknowledgmentBase, releasedOn: futureDate(-1) },
-    }), /cannot precede final purchase authorization/i, "supplier release evidence cannot be backdated before authorization");
+      input: { ...releaseBase, releasedOn: futureDate(1) },
+    }), /cannot be in the future/i, "future-dated purchase order releases must be rejected");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context,
+      actionId: releaseAction.purchaseAction.id,
+      input: { ...releaseBase, releasedOn: futureDate(-1) },
+    }), /cannot precede final purchase authorization/i, "purchase order release evidence cannot be backdated before authorization");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context,
+      actionId: releaseAction.purchaseAction.id,
+      input: { ...releaseBase, expectedScopeHash: "wrong-order-scope" },
+    }), /does not match the authorized order scope/i, "purchase order release must bind to the exact final approval scope");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context,
+      actionId: releaseAction.purchaseAction.id,
+      input: { ...releaseBase, acknowledgmentDueOn: futureDate(21) },
+    }), /cannot be after the authorized need-by date/i, "supplier follow-up cannot be scheduled after the order is already needed");
     await prisma.user.update({ where: { id: secondAdmin.id }, data: { isActive: false } });
-    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+    await assert.rejects(() => recordPurchaseOrderRelease({
       context: managerContext,
       actionId: releaseAction.purchaseAction.id,
-      input: acknowledgmentBase,
-    }), /active admin decision/i, "supplier release must not start from an authorization whose deciding admin is inactive");
+      input: releaseBase,
+    }), /active admin decision/i, "purchase order release must not start from an authorization whose deciding admin is inactive");
     await prisma.user.update({ where: { id: secondAdmin.id }, data: { isActive: true } });
+    const concurrentReleases = await Promise.all([
+      recordPurchaseOrderRelease({ context: managerContext, actionId: releaseAction.purchaseAction.id, input: releaseBase }),
+      recordPurchaseOrderRelease({ context: managerContext, actionId: releaseAction.purchaseAction.id, input: releaseBase }),
+    ]);
+    const recordedRelease = concurrentReleases[0];
+    const releaseRecord = recordedRelease.release as { releaseHash: string; evidenceId: string };
+    assert.equal((concurrentReleases[1].release as { releaseHash: string }).releaseHash, releaseRecord.releaseHash, "concurrent release retries must converge on one durable checkpoint");
+    assert.equal(recordedRelease.purchaseAction.status, "RUNNING");
+    assert.equal(recordedRelease.purchaseDraft.status, "RUNNING");
+    assert.equal((recordedRelease.purchaseAction.result as { state: string }).state, "RELEASED");
+    assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: releaseRecord.evidenceId } })).kind, "PURCHASE_ORDER_RELEASE");
+    const purchaseReleaseEventCount = await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: releaseAction.purchaseAction.id, eventType: "PURCHASE_ORDER_RELEASED" },
+    });
+    const purchaseReleaseEvidenceCount = await prisma.supplyEvidence.count({
+      where: { executionTaskId: releaseAction.purchaseAction.id, kind: "PURCHASE_ORDER_RELEASE" },
+    });
+    const repeatedRelease = await recordPurchaseOrderRelease({
+      context: managerContext,
+      actionId: releaseAction.purchaseAction.id,
+      input: releaseBase,
+    });
+    assert.equal((repeatedRelease.release as { releaseHash: string }).releaseHash, releaseRecord.releaseHash);
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: releaseAction.purchaseAction.id, eventType: "PURCHASE_ORDER_RELEASED" },
+    }), purchaseReleaseEventCount, "identical order-release retries must not append fake history");
+    assert.equal(await prisma.supplyEvidence.count({
+      where: { executionTaskId: releaseAction.purchaseAction.id, kind: "PURCHASE_ORDER_RELEASE" },
+    }), purchaseReleaseEvidenceCount, "identical order-release retries must not duplicate evidence");
+    const restoredReleasedCase = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    assert.equal(restoredReleasedCase?.purchaseAction?.status, "RUNNING", "the active order release must restore with its purchase action");
+    assert.equal((restoredReleasedCase?.result as { purchaseRelease?: { state: string } }).purchaseRelease?.state, "RELEASED", "the sourcing queue must preserve the awaiting-supplier state across reloads");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context,
+      actionId: releaseAction.purchaseAction.id,
+      input: { ...releaseBase, purchaseOrderReference: "PO-ATLAS-CHANGED" },
+    }), /already released/i, "a changed release cannot overwrite the externally issued order");
+    const acknowledgmentInput = { ...acknowledgmentBase, expectedReleaseHash: releaseRecord.releaseHash };
     await assert.rejects(() => recordPurchaseOrderAcknowledgment({
       context,
       actionId: releaseAction.purchaseAction.id,
-      input: { ...acknowledgmentBase, acceptedQuantity: 15 },
+      input: { ...acknowledgmentInput, acceptedQuantity: 15 },
     }), /cannot exceed the remaining 14 EA/i, "acceptance cannot exceed the immutable order quantity");
     const partialAcknowledgment = await recordPurchaseOrderAcknowledgment({
       context: managerContext,
       actionId: releaseAction.purchaseAction.id,
-      input: acknowledgmentBase,
+      input: acknowledgmentInput,
     });
     const partialResult = partialAcknowledgment.purchaseAction.result as {
       state: string;
@@ -1718,7 +1780,7 @@ async function main() {
     const repeatedAcknowledgment = await recordPurchaseOrderAcknowledgment({
       context: managerContext,
       actionId: releaseAction.purchaseAction.id,
-      input: acknowledgmentBase,
+      input: acknowledgmentInput,
     });
     assert.equal((repeatedAcknowledgment.purchaseAction.result as { acknowledgments: unknown[] }).acknowledgments.length, 1);
     assert.equal(await prisma.supplyExecutionEvent.count({
@@ -1729,8 +1791,7 @@ async function main() {
       context,
       actionId: releaseAction.purchaseAction.id,
       input: {
-        ...acknowledgmentBase,
-        channel: "SUPPLIER_PORTAL",
+        ...acknowledgmentInput,
         supplierOrderReference: "ACK-001-B",
         acceptedQuantity: 8,
         evidenceUrl: "https://example.com/acknowledgments/part-2",
@@ -1761,10 +1822,19 @@ async function main() {
     assert.equal(restoredReleaseCase?.purchaseAction?.status, "SUCCEEDED");
     assert.equal(restoredReleaseCase?.quoteCycle, null, "completed quote cycles must leave the active sourcing queue");
     assert.equal((restoredReleaseCase?.result as { purchaseRelease: { state: string } }).purchaseRelease.state, "ACKNOWLEDGED");
+    const releaseRetryAfterAcknowledgment = await recordPurchaseOrderRelease({
+      context,
+      actionId: releaseAction.purchaseAction.id,
+      input: releaseBase,
+    });
+    assert.equal((releaseRetryAfterAcknowledgment.purchaseAction.result as { state: string }).state, "ACKNOWLEDGED", "an exact lost-response retry must preserve later terminal acknowledgment state");
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: { executionTaskId: releaseAction.purchaseAction.id, eventType: "PURCHASE_ORDER_RELEASED" },
+    }), purchaseReleaseEventCount, "a release retry after acknowledgment must not append fake history");
     await assert.rejects(() => recordPurchaseOrderAcknowledgment({
       context,
       actionId: releaseAction.purchaseAction.id,
-      input: { ...acknowledgmentBase, supplierOrderReference: "ACK-001-C", acceptedQuantity: 1, evidenceUrl: "https://example.com/acknowledgments/part-3" },
+      input: { ...acknowledgmentInput, supplierOrderReference: "ACK-001-C", acceptedQuantity: 1, evidenceUrl: "https://example.com/acknowledgments/part-3" },
     }), /already fully acknowledged/i, "completed acceptance must reject extra quantity");
     await assert.rejects(() => saveProcurementSelection({
       context,
@@ -1782,7 +1852,7 @@ async function main() {
         deliveryType: "Modeled",
         quality: "Unverified",
       },
-    }), /supplier acknowledgment has started/i, "released supplier scope must remain immutable");
+    }), /purchase order has been released/i, "released supplier scope must remain immutable");
     assert.equal((await listProcurementCases(context)).length, 1);
     const events = await prisma.supplyExecutionEvent.findMany({
       where: { executionTaskId: procurementCase.id },
@@ -2098,6 +2168,11 @@ async function main() {
       actionId: releaseAction.purchaseAction.id,
       input: acknowledgmentBase,
     }), /admin or manager/i, "a stale privileged cookie must not record supplier acknowledgment after demotion");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context: stalePrivilegedContext,
+      actionId: releaseAction.purchaseAction.id,
+      input: releaseBase,
+    }), /admin or manager/i, "a stale privileged cookie must not record purchase order release after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
@@ -2177,6 +2252,11 @@ async function main() {
       actionId: releaseAction.purchaseAction.id,
       input: acknowledgmentBase,
     }), /not found/i, "another office must not record supplier acknowledgment");
+    await assert.rejects(() => recordPurchaseOrderRelease({
+      context: foreign,
+      actionId: releaseAction.purchaseAction.id,
+      input: releaseBase,
+    }), /not found/i, "another office must not record purchase order release");
 
     console.log("Supply OS sourcing persistence checks passed.");
   } finally {

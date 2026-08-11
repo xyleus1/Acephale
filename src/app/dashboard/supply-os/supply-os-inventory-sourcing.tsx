@@ -166,11 +166,17 @@ export function AtlasInventoryWorkspace({
   }
 
   function queueActionLabel(run: SavedSourcingResearchRun | undefined, cases: SavedProcurementCase[]) {
-    const procurementCase = cases[0];
-    if (cases.length > 1) return "Open quote inbox";
+    const procurementCase = cases.find((candidate) => candidate.result?.purchaseRelease)
+      ?? cases.find((candidate) => candidate.purchaseAction)
+      ?? cases.find((candidate) => candidate.purchaseDraft)
+      ?? cases[0];
+    const release = procurementCase?.result?.purchaseRelease;
+    if (release?.release && release.state !== "ACKNOWLEDGED" && release.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10)) return "Chase supplier acknowledgment";
+    if (procurementCase?.result?.purchaseRelease?.state === "RELEASED") return "Record supplier acknowledgment";
     if (procurementCase?.result?.purchaseRelease) return "Review supplier acknowledgment";
     if (procurementCase?.purchaseAction) return "Review purchase action";
     if (procurementCase?.purchaseDraft) return "Review order draft";
+    if (cases.length > 1) return "Open quote inbox";
     if (procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle) return "Review quote cycle";
     if (procurementCase?.result?.stage === "SUPPLIER_REJECTED") return "Review rejection";
     if (procurementCase) return "Continue procurement";

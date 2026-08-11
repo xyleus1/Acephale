@@ -4699,3 +4699,21 @@ Use this file for chronological implementation notes that future agents should s
   findings outside this change. No changed Supply OS file is named by the audit.
 - Boundary: No schema, dependency, purchase, spend, booking, customs, or
   Logistics behavior changed.
+
+### 2026-08-10 - Separate purchase order release from supplier acknowledgment
+
+- Branch: supply-os-procurement-next, targeting main
+- Commit: see git log
+- Task: Add the missing awaiting-supplier checkpoint between final order
+  authorization and supplier acknowledgment.
+- Behavior: The operator records the external PO release, evidence, exact action
+  scope, and acknowledgment due date. The queue resumes `RELEASED`, and supplier
+  acknowledgment must reference the release hash before partial or full
+  acceptance can be recorded.
+- Safety: Authorization, active admin decision, qualification, quote validity,
+  tenant scope, and need-by timing are rechecked. Changed releases are rejected;
+  identical and concurrent retries converge without duplicate history.
+- Verification: Atlas sourcing contract, disposable PostgreSQL sourcing
+  lifecycle, TypeScript, product copy, and whitespace checks.
+- Boundary: This is recorded external evidence. Derya does not send the order,
+  create a canonical PO, commit spend, book freight, or open Logistics.

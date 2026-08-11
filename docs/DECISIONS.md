@@ -16,6 +16,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-10 - Purchase order release is separate from supplier acknowledgment
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Combining order release and supplier acknowledgment in one form
+  erased the operational period where an issued order is waiting for supplier
+  response. The queue could not show that state, schedule follow-up, or prove
+  which exact authorized order was released.
+- Decision: Record an evidence-backed `PURCHASE_ORDER_RELEASE` against the
+  immutable purchase-action scope before accepting any supplier
+  acknowledgment. The release stores the external PO reference, channel,
+  release date, acknowledgment due date, evidence, scope hash, and deterministic
+  release hash. Acknowledgments must bind to that release hash.
+- Safety: Release rechecks authorization, qualification on the release date,
+  quote validity, active admin decision, tenant scope, and need-by timing.
+  Identical and concurrent retries converge. A changed release is rejected and
+  the sourcing scope becomes immutable as soon as release is recorded.
+- Consequences: The sourcing queue can now resume an order in `RELEASED` state
+  and show that supplier acknowledgment is due. This still records an external
+  event only. Derya does not send the PO, commit spend, or open Logistics.
+
 ### 2026-08-10 - Supplier contact revalidates qualification at release
 
 - Status: accepted

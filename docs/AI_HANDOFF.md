@@ -2,6 +2,29 @@
 
 ## Latest Update
 
+### Authorized orders now have a durable release checkpoint
+
+- Final purchase authorization no longer jumps directly to supplier
+  acknowledgment. An admin or manager records the exact externally issued order
+  with its channel, buyer PO reference, release date, acknowledgment due date,
+  evidence URL, and immutable purchase-action scope hash.
+- The queue persists and resumes `RELEASED` as a real awaiting-supplier state.
+  Supplier acknowledgment is blocked until it references the exact release
+  hash. Partial and full acknowledgment continue against the frozen quantity.
+- Release fails closed when authorization, tenant scope, active admin decision,
+  supplier qualification on the release date, quote validity, or need-by timing
+  does not match. Concurrent and lost-response retries converge without
+  duplicate evidence or events.
+- Recording release is evidence-only. Derya still does not send the order,
+  create a canonical PO, commit spend, book freight, or open Logistics.
+
+Verification:
+
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `git diff --check`
+
 ### Supplier contact now fails closed at the actual release boundary
 
 - Connected supplier email approval now pins the exact qualification review

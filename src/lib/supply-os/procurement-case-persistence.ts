@@ -424,7 +424,7 @@ function projectQualificationState(procurementCase: ProcurementCaseRecord) {
   const result = record(procurementCase.result);
   const gates = record(result.gates);
   const reviews = record(result.reviews);
-  if (record(result.purchaseRelease).state === "ACKNOWLEDGED"
+  if (["RELEASED", "PARTIALLY_ACKNOWLEDGED", "ACKNOWLEDGED"].includes(String(record(result.purchaseRelease).state))
     || result.stage === "SUPPLIER_REJECTED"
     || gates.sourceEvidence !== "EVIDENCE_COMPLETE"
     || currentSupplierQualification(reviews.sourceEvidence)) {
@@ -819,7 +819,7 @@ async function cancelActivePurchaseDrafts(
       select: { id: true },
     });
     if (releasedAction) {
-      throw new SupplyPersistenceError("Supplier acknowledgment has started. Create a new procurement case instead of changing this released scope.", "conflict");
+      throw new SupplyPersistenceError("The purchase order has been released. Create a new procurement case instead of changing this external scope.", "conflict");
     }
   }
   const drafts = await tx.supplyExecutionTask.findMany({
@@ -3432,17 +3432,314 @@ export async function decidePurchaseActionApproval(args: {
   throw new SupplyPersistenceError("Purchase authorization could not be decided.", "conflict");
 }
 
-function normalizeSupplierAcknowledgment(input: unknown) {
+function normalizePurchaseOrderRelease(input: unknown) {
   const body = record(input);
   const channel = requiredText(body.channel, "Release channel", 40).toUpperCase();
   if (!PURCHASE_RELEASE_CHANNELS.includes(channel as (typeof PURCHASE_RELEASE_CHANNELS)[number])) {
     throw new SupplyPersistenceError(`Release channel must be one of: ${PURCHASE_RELEASE_CHANNELS.join(", ")}.`, "invalid_input");
   }
   const releasedOn = requireCurrentOrPastDate(isoDate(body.releasedOn, "Release date"), "Release date");
-  const acknowledgedOn = requireCurrentOrPastDate(isoDate(body.acknowledgedOn, "Acknowledgment date"), "Acknowledgment date");
-  if (acknowledgedOn < releasedOn) {
-    throw new SupplyPersistenceError("Acknowledgment date cannot precede the release date.", "invalid_input");
+  const acknowledgmentDueOn = isoDate(body.acknowledgmentDueOn, "Acknowledgment due date");
+  if (acknowledgmentDueOn < releasedOn) {
+    throw new SupplyPersistenceError("Acknowledgment due date cannot precede the release date.", "invalid_input");
   }
+  return {
+    expectedScopeHash: requiredText(body.expectedScopeHash, "Authorized order scope hash", 128),
+    channel: channel as (typeof PURCHASE_RELEASE_CHANNELS)[number],
+    releasedOn,
+    acknowledgmentDueOn,
+    purchaseOrderReference: requiredText(body.purchaseOrderReference, "Purchase order reference", 300),
+    evidenceUrl: publicUrl(body.evidenceUrl, "Purchase order release evidence URL"),
+    note: optionalText(body.note, "Purchase order release note", 2_000),
+  };
+}
+
+export async function recordPurchaseOrderRelease(args: {
+  context: SupplyAccessContext;
+  actionId: string;
+  input: unknown;
+}) {
+  const releaseInput = normalizePurchaseOrderRelease(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  if (!["ADMIN", "MANAGER"].includes(accessContext.role)) {
+    throw new SupplyPersistenceError("Only an admin or manager can record purchase order release.", "forbidden");
+  }
+  const found = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      id: args.actionId,
+      officeId: accessContext.officeId,
+      taskType: PURCHASE_ACTION_TASK_TYPE,
+      capabilityKey: PURCHASE_ACTION_CAPABILITY,
+    },
+    select: {
+      workspaceId: true,
+      parentTaskId: true,
+      parentTask: { select: { parentTaskId: true } },
+    },
+  });
+  const purchaseDraftId = found?.parentTaskId;
+  const procurementCaseId = found?.parentTask?.parentTaskId;
+  if (!found || !purchaseDraftId || !procurementCaseId) {
+    throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
+  }
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
+
+  for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+
+        const procurementCase = await tx.supplyExecutionTask.findFirst({
+          where: { id: procurementCaseId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: TASK_TYPE },
+          select: caseSelect,
+        });
+        const purchaseDraft = await tx.supplyExecutionTask.findFirst({
+          where: {
+            id: purchaseDraftId,
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: procurementCaseId,
+            taskType: PURCHASE_DRAFT_TASK_TYPE,
+            status: { in: ["READY", "RUNNING", "SUCCEEDED"] },
+          },
+          select: purchaseDraftSelect,
+        });
+        const purchaseAction = await tx.supplyExecutionTask.findFirst({
+          where: {
+            id: args.actionId,
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            parentTaskId: purchaseDraftId,
+            taskType: PURCHASE_ACTION_TASK_TYPE,
+            capabilityKey: PURCHASE_ACTION_CAPABILITY,
+            status: { in: ["READY", "RUNNING", "SUCCEEDED"] },
+          },
+          select: purchaseActionSelect,
+        });
+        if (!procurementCase || !purchaseDraft || !purchaseAction) {
+          throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
+        }
+        const approval = await tx.supplyApproval.findFirst({
+          where: {
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            executionTaskId: purchaseAction.id,
+            status: "APPROVED",
+            scopeHash: purchaseAction.inputHash,
+            requiredRole: PURCHASE_ACTION_REQUIRED_ROLE,
+          },
+          orderBy: { requestedAt: "desc" },
+          include: { decidedBy: { select: { role: true, isActive: true } } },
+        });
+        if (!approval || approval.scopeHash !== releaseInput.expectedScopeHash) {
+          throw new SupplyPersistenceError("Purchase order release does not match the authorized order scope.", "conflict");
+        }
+        const current = caseResult(procurementCase.result);
+        const authorization = record(current.result.purchaseAuthorization);
+        if (authorization.actionTaskId !== purchaseAction.id
+          || authorization.approvalId !== approval.id
+          || authorization.scopeHash !== approval.scopeHash
+          || !["APPROVED", "RELEASED", "PARTIALLY_ACKNOWLEDGED", "ACKNOWLEDGED"].includes(String(authorization.status))) {
+          throw new SupplyPersistenceError("The procurement case no longer points to this authorized action.", "conflict");
+        }
+        const existingResult = record(purchaseAction.result);
+        const existingRelease = record(existingResult.release);
+        const normalizedRelease = {
+          actionScopeHash: purchaseAction.inputHash,
+          channel: releaseInput.channel,
+          releasedOn: releaseInput.releasedOn,
+          acknowledgmentDueOn: releaseInput.acknowledgmentDueOn,
+          purchaseOrderReference: releaseInput.purchaseOrderReference,
+          evidenceUrl: releaseInput.evidenceUrl,
+          note: releaseInput.note,
+        };
+        const releaseHash = digest(normalizedRelease);
+        if (typeof existingRelease.releaseHash === "string") {
+          if (existingRelease.releaseHash !== releaseHash) {
+            throw new SupplyPersistenceError("The purchase order was already released. Create a new procurement case for a changed order.", "conflict");
+          }
+          const existingEvidenceId = requiredText(existingRelease.evidenceId, "Stored purchase order release evidence ID", 220);
+          const existingEvidenceUrl = publicUrl(existingRelease.evidenceUrl, "Stored purchase order release evidence URL");
+          const existingEvidence = await tx.supplyEvidence.findFirst({
+            where: {
+              id: existingEvidenceId,
+              officeId: accessContext.officeId,
+              workspaceId: workspace.id,
+              executionTaskId: purchaseAction.id,
+              kind: "PURCHASE_ORDER_RELEASE",
+              sourceUri: existingEvidenceUrl,
+              contentHash: releaseHash,
+            },
+            select: { id: true },
+          });
+          if (existingRelease.actionScopeHash !== purchaseAction.inputHash || !existingEvidence) {
+            throw new SupplyPersistenceError("Stored purchase order release evidence no longer matches the authorized action.", "conflict");
+          }
+          return {
+            procurementCase: { ...procurementCase, purchaseDraft, purchaseAction: purchaseActionView(purchaseAction, approval) },
+            purchaseDraft,
+            purchaseAction: purchaseActionView(purchaseAction, approval),
+            release: existingRelease,
+          };
+        }
+        if (Array.isArray(existingResult.acknowledgments) && existingResult.acknowledgments.length) {
+          throw new SupplyPersistenceError("Supplier acknowledgment exists without a durable release record. Review the legacy order before continuing.", "conflict");
+        }
+        if (existingResult.state !== "AUTHORIZED" || purchaseAction.status !== "READY" || purchaseDraft.status !== "READY") {
+          throw new SupplyPersistenceError("The purchase action is not in an authorized release-ready state.", "conflict");
+        }
+        if (!approval.decidedBy?.isActive || approval.decidedBy.role !== PURCHASE_ACTION_REQUIRED_ROLE) {
+          throw new SupplyPersistenceError("The purchase authorization no longer has an active admin decision.", "conflict");
+        }
+        const actionInput = record(purchaseAction.input);
+        const order = record(actionInput.order);
+        const commercial = record(actionInput.commercial);
+        const quoteValidUntil = isoDate(commercial.quoteValidUntil, "Authorized quote validity date");
+        const approvalDate = approval.decidedAt?.toISOString().slice(0, 10) ?? null;
+        if (!approvalDate || releaseInput.releasedOn < approvalDate) {
+          throw new SupplyPersistenceError("Purchase order release cannot precede final purchase authorization.", "invalid_input");
+        }
+        if (releaseInput.releasedOn > quoteValidUntil) {
+          throw new SupplyPersistenceError("Purchase order release occurred after the authorized quote expired.", "conflict");
+        }
+        if (!supplierQualificationValidOn(actionInput.sourceEvidenceReview, releaseInput.releasedOn)) {
+          throw new SupplyPersistenceError("Supplier qualification was not valid on the purchase order release date.", "conflict");
+        }
+        const needBy = isoDate(order.needBy, "Authorized order need-by date");
+        if (releaseInput.acknowledgmentDueOn > needBy) {
+          throw new SupplyPersistenceError("Acknowledgment due date cannot be after the authorized need-by date.", "invalid_input");
+        }
+        let orderedQuantity: Prisma.Decimal;
+        let unitPrice: Prisma.Decimal;
+        try {
+          orderedQuantity = new Prisma.Decimal(requiredText(order.quantity, "Authorized order quantity", 80));
+          unitPrice = new Prisma.Decimal(requiredText(commercial.unitPrice, "Authorized unit price", 80));
+        } catch {
+          throw new SupplyPersistenceError("Authorized order quantity or price is invalid.", "conflict");
+        }
+        if (!orderedQuantity.isPositive() || !unitPrice.isPositive()) {
+          throw new SupplyPersistenceError("Authorized order quantity or price is invalid.", "conflict");
+        }
+        const unitOfMeasure = normalizedUnitOfMeasure(order.unitOfMeasure, "Authorized unit of measure");
+        const currency = requiredText(commercial.currency, "Authorized currency", 3).toUpperCase();
+        if (!/^[A-Z]{3}$/.test(currency)) throw new SupplyPersistenceError("Authorized currency is invalid.", "conflict");
+
+        const now = new Date();
+        const evidence = await appendExternalEvidence({
+          tx,
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          executionTaskId: purchaseAction.id,
+          actorUserId: accessContext.userId,
+          kind: "PURCHASE_ORDER_RELEASE",
+          title: `Purchase order release ${releaseInput.purchaseOrderReference}`,
+          sourceUri: releaseInput.evidenceUrl,
+          sourceRecordId: releaseInput.purchaseOrderReference,
+          observedOn: releaseInput.releasedOn,
+          contentHash: releaseHash,
+          payload: inputJson(normalizedRelease),
+        });
+        const release = {
+          ...normalizedRelease,
+          evidenceId: evidence.id,
+          releaseHash,
+          recordedByUserId: accessContext.userId,
+          recordedAt: now.toISOString(),
+        };
+        const actionResult = {
+          state: "RELEASED",
+          authorization: {
+            approvalId: approval.id,
+            scopeHash: approval.scopeHash,
+            decidedByUserId: approval.decidedByUserId,
+            decidedAt: approval.decidedAt?.toISOString() ?? null,
+          },
+          release,
+          orderedQuantity: orderedQuantity.toString(),
+          acknowledgedQuantity: "0",
+          remainingQuantity: orderedQuantity.toString(),
+          unitOfMeasure,
+          acknowledgments: [],
+          totals: { acknowledgedMaterialValue: "0", currency },
+          externalSideEffect: "RECORDED_ONLY",
+          updatedAt: now.toISOString(),
+        };
+        const storedAction = await tx.supplyExecutionTask.update({
+          where: { id: purchaseAction.id },
+          data: { status: "RUNNING", startedAt: purchaseAction.status === "READY" ? now : undefined, result: inputJson(actionResult), resultHash: digest(actionResult) },
+          select: purchaseActionSelect,
+        });
+        const storedDraft = await tx.supplyExecutionTask.update({
+          where: { id: purchaseDraft.id },
+          data: { status: "RUNNING", startedAt: purchaseDraft.status === "READY" ? now : undefined },
+          select: purchaseDraftSelect,
+        });
+        const projectedCaseResult = {
+          ...current.result,
+          purchaseAuthorization: { ...authorization, status: "RELEASED" },
+          purchaseRelease: {
+            state: "RELEASED",
+            orderedQuantity: orderedQuantity.toString(),
+            acknowledgedQuantity: "0",
+            remainingQuantity: orderedQuantity.toString(),
+            unitOfMeasure,
+            release,
+            updatedAt: now.toISOString(),
+          },
+          updatedAt: now.toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({
+          where: { id: procurementCase.id },
+          data: { result: inputJson(projectedCaseResult), resultHash: digest(projectedCaseResult) },
+          select: caseSelect,
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: purchaseAction.id,
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          actorUserId: accessContext.userId,
+          eventType: "PURCHASE_ORDER_RELEASED",
+          status: "RUNNING",
+          message: "The authorized purchase order was recorded as released to the supplier.",
+          payload: inputJson({ release, scopeHash: purchaseAction.inputHash }),
+        });
+        await appendCaseEvent({
+          tx,
+          caseId: procurementCase.id,
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          actorUserId: accessContext.userId,
+          eventType: "PURCHASE_ORDER_RELEASED",
+          status: "RUNNING",
+          message: "The purchase order is awaiting supplier acknowledgment.",
+          payload: inputJson({ purchaseActionId: purchaseAction.id, releaseHash, acknowledgmentDueOn: releaseInput.acknowledgmentDueOn }),
+        });
+        return {
+          procurementCase: { ...updatedCase, purchaseDraft: storedDraft, purchaseAction: purchaseActionView(storedAction, approval) },
+          purchaseDraft: storedDraft,
+          purchaseAction: purchaseActionView(storedAction, approval),
+          release,
+        };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || transactionAttempt === 2) {
+        if (retryableTransactionError(error)) {
+          throw new SupplyPersistenceError("Purchase order release changed concurrently. Reload and retry.", "conflict");
+        }
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Purchase order release could not be recorded.", "conflict");
+}
+
+function normalizeSupplierAcknowledgment(input: unknown) {
+  const body = record(input);
+  const acknowledgedOn = requireCurrentOrPastDate(isoDate(body.acknowledgedOn, "Acknowledgment date"), "Acknowledgment date");
   const confirmedDeliveryDate = isoDate(body.confirmedDeliveryDate, "Confirmed delivery date");
   if (confirmedDeliveryDate < acknowledgedOn) {
     throw new SupplyPersistenceError("Confirmed delivery date cannot precede the acknowledgment date.", "invalid_input");
@@ -3452,8 +3749,7 @@ function normalizeSupplierAcknowledgment(input: unknown) {
     throw new SupplyPersistenceError("Accepted quantity must not exceed 1,000,000,000.", "invalid_input");
   }
   return {
-    channel: channel as (typeof PURCHASE_RELEASE_CHANNELS)[number],
-    releasedOn,
+    expectedReleaseHash: requiredText(body.expectedReleaseHash, "Purchase order release hash", 128),
     acknowledgedOn,
     supplierOrderReference: requiredText(body.supplierOrderReference, "Supplier order reference", 300),
     acceptedQuantity,
@@ -3549,7 +3845,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         if (authorization.actionTaskId !== purchaseAction.id
           || authorization.approvalId !== approval.id
           || authorization.scopeHash !== approval.scopeHash
-          || !["APPROVED", "PARTIALLY_ACKNOWLEDGED", "ACKNOWLEDGED"].includes(String(authorization.status))) {
+          || !["APPROVED", "RELEASED", "PARTIALLY_ACKNOWLEDGED", "ACKNOWLEDGED"].includes(String(authorization.status))) {
           throw new SupplyPersistenceError("The procurement case no longer points to this authorized action.", "conflict");
         }
 
@@ -3599,16 +3895,44 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         const unitOfMeasure = normalizedUnitOfMeasure(order.unitOfMeasure, "Authorized unit of measure");
         const currency = requiredText(commercial.currency, "Authorized currency", 3).toUpperCase();
         if (!/^[A-Z]{3}$/.test(currency)) throw new SupplyPersistenceError("Authorized currency is invalid.", "conflict");
+        const existingResult = record(purchaseAction.result);
+        const release = record(existingResult.release);
+        if (typeof release.releaseHash !== "string"
+          || release.releaseHash !== acknowledgmentInput.expectedReleaseHash
+          || release.actionScopeHash !== purchaseAction.inputHash) {
+          throw new SupplyPersistenceError("Supplier acknowledgment does not match the durable purchase order release.", "conflict");
+        }
+        const releaseChannel = requiredText(release.channel, "Stored release channel", 40).toUpperCase();
+        if (!PURCHASE_RELEASE_CHANNELS.includes(releaseChannel as (typeof PURCHASE_RELEASE_CHANNELS)[number])) {
+          throw new SupplyPersistenceError("Stored purchase order release channel is invalid.", "conflict");
+        }
+        const releasedOn = isoDate(release.releasedOn, "Stored purchase order release date");
+        const acknowledgmentDueOn = isoDate(release.acknowledgmentDueOn, "Stored acknowledgment due date");
+        if (acknowledgmentInput.acknowledgedOn < releasedOn) {
+          throw new SupplyPersistenceError("Acknowledgment date cannot precede the purchase order release date.", "invalid_input");
+        }
         const quoteValidUntil = isoDate(commercial.quoteValidUntil, "Authorized quote validity date");
         const approvalDate = approval.decidedAt?.toISOString().slice(0, 10) ?? null;
-        if (!approvalDate || acknowledgmentInput.releasedOn < approvalDate) {
-          throw new SupplyPersistenceError("Supplier release cannot precede final purchase authorization.", "invalid_input");
+        if (!approvalDate || releasedOn < approvalDate || releasedOn > quoteValidUntil) {
+          throw new SupplyPersistenceError("Stored purchase order release no longer matches the final authorization and quote validity.", "conflict");
         }
-        if (acknowledgmentInput.releasedOn > quoteValidUntil) {
-          throw new SupplyPersistenceError("Supplier release occurred after the authorized quote expired.", "conflict");
+        const releaseEvidenceId = requiredText(release.evidenceId, "Purchase order release evidence ID", 220);
+        const releaseEvidenceUrl = publicUrl(release.evidenceUrl, "Purchase order release evidence URL");
+        const releaseEvidence = await tx.supplyEvidence.findFirst({
+          where: {
+            id: releaseEvidenceId,
+            officeId: args.context.officeId,
+            workspaceId: workspace.id,
+            executionTaskId: purchaseAction.id,
+            kind: "PURCHASE_ORDER_RELEASE",
+            sourceUri: releaseEvidenceUrl,
+            contentHash: release.releaseHash,
+          },
+          select: { id: true },
+        });
+        if (!releaseEvidence) {
+          throw new SupplyPersistenceError("Purchase order release evidence no longer matches the authorized action.", "conflict");
         }
-
-        const existingResult = record(purchaseAction.result);
         const acknowledgments = Array.isArray(existingResult.acknowledgments)
           ? existingResult.acknowledgments.map((value) => record(value))
           : [];
@@ -3617,8 +3941,10 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         }
         const acceptedQuantity = new Prisma.Decimal(acknowledgmentInput.acceptedQuantity);
         const normalizedAcknowledgment = {
-          channel: acknowledgmentInput.channel,
-          releasedOn: acknowledgmentInput.releasedOn,
+          releaseHash: release.releaseHash,
+          releaseChannel,
+          releasedOn,
+          acknowledgmentDueOn,
           acknowledgedOn: acknowledgmentInput.acknowledgedOn,
           supplierOrderReference: acknowledgmentInput.supplierOrderReference,
           acceptedQuantity: acceptedQuantity.toString(),
@@ -3685,6 +4011,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             decidedByUserId: approval.decidedByUserId,
             decidedAt: approval.decidedAt?.toISOString() ?? null,
           },
+          release,
           orderedQuantity: orderedQuantity.toString(),
           acknowledgedQuantity: acknowledgedQuantity.toString(),
           remainingQuantity: remainingQuantity.toString(),
@@ -3755,6 +4082,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             acknowledgedQuantity: acknowledgedQuantity.toString(),
             remainingQuantity: remainingQuantity.toString(),
             unitOfMeasure,
+            release,
             lastSupplierOrderReference: acknowledgment.supplierOrderReference,
             lastConfirmedDeliveryDate: acknowledgment.confirmedDeliveryDate,
             updatedAt: now.toISOString(),
