@@ -185,6 +185,7 @@ implementation can improve.
 | `product.map` | Resolve ERP items and product facts into a BOM identity graph. | Analysis |
 | `supplier.find` | Build an attributable component supplier longlist. | Analysis |
 | `supplier.assess` | Assess fit, capacity evidence, terms, provenance, and quote quality. | Analysis |
+| `extract.supplier_quote_terms` | Propose exact-source commercial terms from one connected supplier reply. | Analysis |
 | `compliance.assess` | Assess classification, origin, FCC, and import constraints. | Analysis |
 | `sourcing.compare` | Compare cost, supply, lead time, and compliance scenarios. | Decision |
 | `shipper.find` | Find forwarder and carrier candidates for the selected lane. | Analysis |
@@ -320,8 +321,22 @@ clear boundaries.
   Each new reply becomes immutable `SUPPLIER_QUOTE_REPLY_EMAIL` evidence with
   its provider message identity, message excerpt, attachments, and observation
   time. Repeated and concurrent checks are idempotent.
+- An operator may run `extract.supplier_quote_terms@1` against one captured
+  reply. The capability receives the connected email subject and body, the
+  attachment names, request unit, need-by date, and evidence hashes. Every
+  proposed non-null field must cite exact supplier text; the server rejects
+  unsupported numbers, currencies, units, references, and dates. Unit mismatch
+  and delivery after need-by remain explicit conflicts. Attachment contents are
+  not inspected in V1, so attachment-only terms remain unknown.
+- Extraction attempts are immutable `SupplyCapabilityRun` records under the
+  exact quote cycle. A failed or stale attempt is retained and a retry creates a
+  linked attempt. A successful run is reused for identical input. Its output is
+  append-only `SUPPLIER_QUOTE_EXTRACTION_PROPOSAL` evidence linked to the
+  original connected-provider reply. The sourcing queue restores the latest
+  successful proposal after navigation or refresh.
 - A captured reply is review input, not a commercial fact. The operator must
-  enter price, currency, MOQ, unit, delivery, quote reference, and validity.
+  review any extracted proposal, enter or correct price, currency, MOQ, unit,
+  delivery, quote reference, and validity, then explicitly record the response.
   Recording those terms against the reply creates a derived
   `SUPPLIER_QUOTE_RESPONSE` evidence row with `CONNECTED_PROVIDER` provenance.
   The reply date is pinned to the provider message date. No parser or model can

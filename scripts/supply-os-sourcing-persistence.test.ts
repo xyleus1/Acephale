@@ -56,6 +56,8 @@ import {
 } from "../src/lib/supply-os/purchase-order-followup-persistence";
 import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
 import { captureConnectedPurchaseOrderReplies, captureConnectedSupplierReplies } from "../src/lib/supply-os/supplier-reply-persistence";
+import { extractConnectedSupplierQuoteTerms } from "../src/lib/supply-os/supplier-quote-extraction-persistence";
+import { normalizeSupplierQuoteExtraction } from "../src/lib/supply-os/supplier-quote-extraction";
 import { returnStaleReplacementToSourcing } from "../src/lib/supply-os/purchase-order-revision";
 
 const suffix = randomUUID().slice(0, 8);
@@ -1576,6 +1578,74 @@ async function main() {
     assert.equal(replyEvidence.sourceType, "CONNECTED_PROVIDER");
     assert.match(String(replyEvidence.excerpt), /Quote Q-RETRY/);
     assert.match((await procurementEvidenceSource(context, replyEvidence.id)).url, /#sent\/gmail-test-thread$/, "connected evidence links must retain the Gmail thread target");
+    let extractionProviderCalls = 0;
+    let markExtractionStarted!: () => void;
+    let releaseExtraction!: () => void;
+    const extractionStarted = new Promise<void>((resolve) => { markExtractionStarted = resolve; });
+    const extractionRelease = new Promise<void>((resolve) => { releaseExtraction = resolve; });
+    const pendingExtraction = extractConnectedSupplierQuoteTerms({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sourceEvidenceId: replyEvidence.id,
+      extractor: async (input) => {
+        extractionProviderCalls += 1;
+        markExtractionStarted();
+        await extractionRelease;
+        assert.match(input.bodyText, /USD 126 per EA, MOQ 4/);
+        assert.deepEqual(input.attachmentNames, ["Q-RETRY.pdf"]);
+        assert.equal(input.requestedUnitOfMeasure, "EA");
+        return normalizeSupplierQuoteExtraction({
+          price: { value: "126", evidenceText: "USD 126 per EA" },
+          currency: { value: "USD", evidenceText: "USD 126 per EA" },
+          minimumOrderQuantity: { value: "4", evidenceText: "MOQ 4" },
+          unitOfMeasure: { value: "EA", evidenceText: "per EA" },
+          deliveryDate: { value: null, evidenceText: null },
+          quoteReference: { value: "Q-RETRY", evidenceText: "Quote Q-RETRY" },
+          validUntil: { value: null, evidenceText: null },
+          warnings: ["Delivery and validity are present only in the attachment."],
+        }, input);
+      },
+    });
+    await extractionStarted;
+    await assert.rejects(() => extractConnectedSupplierQuoteTerms({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sourceEvidenceId: replyEvidence.id,
+      extractor: async () => { throw new Error("A concurrent request must not start a second extractor."); },
+    }), /already running/i, "concurrent extraction requests must not call the provider twice");
+    releaseExtraction();
+    const extractionRun = await pendingExtraction;
+    assert.equal(extractionRun.status, "SUCCEEDED");
+    assert.equal(extractionProviderCalls, 1);
+    const extractionOutput = extractionRun.output as {
+      sourceEvidenceId: string;
+      proposalEvidenceId: string;
+      proposalHash: string;
+      proposal: { fields: { price: { value: string }; deliveryDate: { state: string } } };
+    };
+    assert.equal(extractionOutput.sourceEvidenceId, replyEvidence.id);
+    assert.equal(extractionOutput.proposal.fields.price.value, "126");
+    assert.equal(extractionOutput.proposal.fields.deliveryDate.state, "UNKNOWN", "attachment-only terms must stay unknown");
+    const extractionEvidence = await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: extractionOutput.proposalEvidenceId } });
+    assert.equal(extractionEvidence.kind, "SUPPLIER_QUOTE_EXTRACTION_PROPOSAL");
+    assert.equal(extractionEvidence.sourceType, "MODEL_DERIVED_PROPOSAL");
+    assert.equal(extractionEvidence.sourceRecordId, replyEvidence.id);
+    assert.equal(extractionEvidence.contentHash, extractionOutput.proposalHash);
+    await extractConnectedSupplierQuoteTerms({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sourceEvidenceId: replyEvidence.id,
+      extractor: async () => {
+        throw new Error("A completed extraction must not call the provider twice.");
+      },
+    });
+    assert.equal(extractionProviderCalls, 1, "identical extraction retries must reuse the completed capability run");
+    assert.equal(await prisma.supplyCapabilityRun.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms" } }), 1);
+    assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_EXTRACTION_PROPOSAL" } }), 1);
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_TERMS_EXTRACTED" } }), 1);
+    const restoredExtractionCase = (await listProcurementCases(context)).find((entry) => entry.id === returnedCase.id);
+    const restoredExtractionReply = (restoredExtractionCase?.quoteCycle?.result as { connectedReplies?: Array<{ evidenceId: string; quoteExtraction?: { proposalHash: string } }> } | null)?.connectedReplies?.find((reply) => reply.evidenceId === replyEvidence.id);
+    assert.equal(restoredExtractionReply?.quoteExtraction?.proposalHash, extractionOutput.proposalHash, "quote extraction must survive sourcing queue reloads");
     const replyEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_REPLIES_CAPTURED" } });
     const repeatedReplySync = await captureConnectedSupplierReplies({ context, quoteCycleId: retryQuoteDraft.quoteCycle.id, sync: replySync });
     assert.equal(repeatedReplySync.captured, 0, "repeated inbox checks must not duplicate connected replies");
@@ -1600,6 +1670,45 @@ async function main() {
     ]);
     assert.equal(concurrentReplySyncs.reduce((sum, result) => sum + result.captured, 0), 1, "concurrent inbox checks must capture one new reply exactly once");
     assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_REPLY_EMAIL" } }), 2);
+    const followUpReplyEvidence = await prisma.supplyEvidence.findFirstOrThrow({
+      where: { executionTaskId: retryQuoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_REPLY_EMAIL", sourceRecordId: `gmail-supplier-follow-up-${suffix}` },
+    });
+    await assert.rejects(() => extractConnectedSupplierQuoteTerms({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sourceEvidenceId: followUpReplyEvidence.id,
+      extractor: async () => { throw new Error("Simulated extraction provider failure."); },
+    }), /failed.*retry|retry.*manually/i, "a provider failure must remain visible and retryable");
+    const failedExtraction = await prisma.supplyCapabilityRun.findFirstOrThrow({
+      where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms", input: { path: ["sourceEvidenceId"], equals: followUpReplyEvidence.id } },
+    });
+    assert.equal(failedExtraction.status, "FAILED");
+    let extractionRetryCalls = 0;
+    const retriedExtraction = await extractConnectedSupplierQuoteTerms({
+      context,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sourceEvidenceId: followUpReplyEvidence.id,
+      extractor: async (input) => {
+        extractionRetryCalls += 1;
+        return normalizeSupplierQuoteExtraction({
+          price: { value: null, evidenceText: null },
+          currency: { value: null, evidenceText: null },
+          minimumOrderQuantity: { value: null, evidenceText: null },
+          unitOfMeasure: { value: null, evidenceText: null },
+          deliveryDate: { value: null, evidenceText: null },
+          quoteReference: { value: null, evidenceText: null },
+          validUntil: { value: null, evidenceText: null },
+          warnings: ["The supplier referred to the existing attachment without restating terms."],
+        }, input);
+      },
+    });
+    assert.notEqual(retriedExtraction.id, failedExtraction.id, "a failed extraction retry must create a new immutable attempt");
+    assert.equal(retriedExtraction.status, "SUCCEEDED");
+    assert.equal(extractionRetryCalls, 1);
+    assert.equal((await prisma.supplyCapabilityRun.findUniqueOrThrow({ where: { id: failedExtraction.id } })).status, "FAILED", "failed extraction history must remain immutable");
+    assert.equal(await prisma.supplyCapabilityRun.count({
+      where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms", input: { path: ["sourceEvidenceId"], equals: followUpReplyEvidence.id } },
+    }), 2, "a retry must preserve both immutable extraction attempts");
     const restoredReplyCase = (await listProcurementCases(context))[0];
     assert.equal(restoredReplyCase?.quoteCycle?.result && (restoredReplyCase.quoteCycle.result as { connectedReplies?: unknown[] }).connectedReplies?.length, 2, "captured replies must survive queue reloads");
     const connectedResponseInput = {
@@ -1920,6 +2029,7 @@ async function main() {
     };
     const pendingUncertainFollowUp = sendPurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: uncertainFollowUpProvider });
     await followUpProviderStarted;
+    assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: followUpDraft.id } })).status, "RUNNING", "an in-flight supplier follow-up must move its approved draft into execution");
     await assert.rejects(
       () => reconcilePurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: uncertainFollowUpProvider }),
       /still in progress/i,
@@ -3781,6 +3891,12 @@ async function main() {
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
       sync: replySync,
     }), /not found|cannot edit/i, "a stale privileged session must not capture connected supplier replies");
+    await assert.rejects(() => extractConnectedSupplierQuoteTerms({
+      context: stalePrivilegedContext,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sourceEvidenceId: replyEvidence.id,
+      extractor: async () => { throw new Error("The extractor must not run for a stale privileged session."); },
+    }), /current user|not found|cannot edit/i, "a stale privileged session must not extract supplier quote terms");
     await assert.rejects(() => saveProcurementSelection({
       context: restrictedContext,
       researchRunId: started.id,
@@ -3943,6 +4059,12 @@ async function main() {
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
       sync: replySync,
     }), /not found|cannot edit|delivered connected Gmail quote request/i, "another office must not capture connected supplier replies");
+    await assert.rejects(() => extractConnectedSupplierQuoteTerms({
+      context: foreign,
+      quoteCycleId: retryQuoteDraft.quoteCycle.id,
+      sourceEvidenceId: replyEvidence.id,
+      extractor: async () => { throw new Error("The extractor must not run across offices."); },
+    }), /not found|cannot edit/i, "another office must not extract supplier quote terms");
     await assert.rejects(() => procurementEvidenceSource(foreign, storedQuoteResponse.evidenceId), /not found/i, "another office must not resolve supplier evidence");
     assert.equal((await procurementEvidenceSource(context, storedQuoteResponse.evidenceId)).url, quoteResponseInput.evidenceUrl);
     const saturationTime = new Date(Date.now() + 60_000);

@@ -772,12 +772,15 @@ export async function sendPurchaseOrderFollowUpAction(args: { context: SupplyAcc
     if ((action.status === "RUNNING" && !retryableRunning) || action.status === "BLOCKED" || prior.state === "SENDING") throw new SupplyPersistenceError("Supplier follow-up delivery is unresolved or blocked. Reconcile it before another send.", "conflict");
     const approval = action.approvals[0];
     if (!["READY", "RUNNING"].includes(action.status) || !approval || approval.status !== "APPROVED" || approval.scopeHash !== action.inputHash) throw new SupplyPersistenceError("The exact supplier follow-up is not approved for delivery.", "conflict");
-    const draft = await tx.supplyExecutionTask.findFirst({ where: { id: draftId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT_TASK_TYPE }, select: { result: true } });
+    const draft = await tx.supplyExecutionTask.findFirst({ where: { id: draftId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT_TASK_TYPE }, select: { status: true, result: true } });
     if (!draft || record(draft.result).messageHash !== actionInput.draftMessageHash) throw new SupplyPersistenceError("The approved supplier follow-up draft changed.", "conflict");
     const attempt = typeof prior.attempt === "number" ? prior.attempt + 1 : 1;
     const rfcMessageId = `<purchase-followup-${action.id}-${attempt}@derya.ai>`;
     const sending = { state: "SENDING", attempt, rfcMessageId, startedAt: new Date().toISOString() };
     await tx.supplyExecutionTask.update({ where: { id: action.id }, data: { status: "RUNNING", startedAt: action.status === "READY" ? new Date() : undefined, result: inputJson(sending), resultHash: digest(sending), error: Prisma.DbNull } });
+    if (draft.status === "READY") {
+      await tx.supplyExecutionTask.update({ where: { id: draftId }, data: { status: "RUNNING", startedAt: new Date() } });
+    }
     await appendEvent({ tx, taskId: action.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: "PURCHASE_ORDER_FOLLOWUP_SEND_STARTED", status: "RUNNING", message: "Supplier follow-up delivery started.", payload: inputJson({ attempt, rfcMessageId }) });
     return { alreadySent: null, input: actionInput, rfcMessageId };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier follow-up delivery changed concurrently. Reload before sending.");

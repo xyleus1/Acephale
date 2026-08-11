@@ -16,6 +16,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-11 - Supplier quote extraction is a review proposal
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Connected supplier replies are durable evidence, but manually
+  transcribing every price, MOQ, unit, delivery date, quote reference, and
+  validity date is slow and error-prone. Treating model output as a commercial
+  fact would create a worse failure: unsupported terms could enter procurement
+  approval.
+- Decision: Add `extract.supplier_quote_terms@1` as an analysis capability for
+  one connected reply. It may propose only explicitly cited plain-text terms.
+  Every non-null field must carry an exact excerpt that the server verifies
+  against the supplier subject or body. Unsupported values remain unknown and
+  unit or need-by conflicts remain visible.
+- Persistence: Store each invocation as an immutable capability run and each
+  successful proposal as model-derived evidence linked to the original
+  connected-provider evidence. A failed attempt remains terminal; retry creates
+  a new linked attempt. A completed scope is reused idempotently.
+- Review boundary: Extraction never records a supplier quote response, advances
+  the commercial gate, selects a supplier, requests approval, contacts a
+  supplier, or commits spend. The operator must review the proposal, complete
+  missing fields, and record the structured response through the existing
+  evidence-backed workflow.
+- Limit: V1 inspects the supplier email subject and body plus attachment names.
+  It does not inspect attachment contents. Attachment-only terms remain unknown.
+- Consequences: Sourcing workstreams resume with useful proposed terms without
+  weakening evidence, tenant, approval, or external-action controls.
+
 ### 2026-08-11 - Supplier acknowledgment follow-up is a separate approved communication
 
 - Status: accepted

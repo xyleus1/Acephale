@@ -98,6 +98,30 @@ export type ConnectedSupplierReply = {
   receivedAt: string;
   sourceUrl: string;
   reviewState: "REVIEW_REQUIRED" | "USED_AS_ACKNOWLEDGMENT" | "USED_AS_ORDER_EXCEPTION";
+  quoteExtraction?: {
+    runId: string;
+    inputHash: string;
+    outputHash: string | null;
+    proposalEvidenceId: string | null;
+    proposalHash: string | null;
+    proposal: {
+      schemaVersion: 1;
+      state: "PROPOSED" | "NO_TERMS";
+      extractorVersion: string;
+      promptVersion: string;
+      fields: Record<
+        "price" | "currency" | "minimumOrderQuantity" | "unitOfMeasure" | "deliveryDate" | "quoteReference" | "validUntil",
+        {
+          value: string | null;
+          state: "EXTRACTED" | "UNKNOWN" | "CONFLICT";
+          evidenceText: string | null;
+          reason: string | null;
+        }
+      >;
+      warnings: string[];
+    };
+    extractedAt: string | null;
+  } | null;
   acknowledgmentHash?: string;
   exceptionHash?: string;
 };

@@ -2,6 +2,41 @@
 
 ## Latest Update
 
+### Connected supplier replies now produce reviewable quote-term proposals
+
+- An operator can run `Extract terms` on one connected supplier reply. Supply
+  OS proposes only price, currency, MOQ, unit, delivery date, quote reference,
+  and validity date that are supported by exact supplier text.
+- Unsupported or attachment-only values remain unknown. Unit mismatch and
+  delivery after the requested need-by date remain conflicts. Attachment names
+  are visible to the capability, but attachment contents are not parsed.
+- Every extraction is pinned to the office, workspace, quote cycle, request
+  hash, source evidence hash, requested unit, dates, capability version, and
+  prompt version. Successful output becomes append-only model-derived proposal
+  evidence linked to the connected-provider reply.
+- Completed extraction scopes are idempotent. Failed attempts remain immutable
+  and retry as new linked capability runs. The proposal survives queue reloads.
+- `Review extracted terms` only prefills the existing operator form. Extraction
+  cannot record a quote response, advance the commercial gate, select a
+  supplier, request approval, contact a supplier, or commit spend.
+- The slice also fixes the supplier follow-up draft lifecycle. An approved draft
+  now enters `RUNNING` with its delivery action before both can reach
+  `SUCCEEDED`, matching the database state machine.
+
+Verification:
+
+- `npm run test:supply-os-supplier-quote-extraction`
+- `npm run test:supply-os-atlas-sourcing`
+- disposable PostgreSQL `npm run test:supply-os-sourcing-persistence`
+- `npm run test:supply-os-supplier-email-provider`
+- `npm run test:supply-os-operations-ui`
+- `npm run test:supply-os-continuous-layout`
+- `npx tsc --noEmit --pretty false --incremental false`
+- disposable PostgreSQL production `npm run build`
+- strict tenant audit reported nine inherited findings outside this slice
+- changed-file U+2014 scan
+- `git diff --check`
+
 ### Overdue released orders now have a durable supplier follow-up
 
 - The sourcing queue no longer stops at `Supplier response overdue`. An

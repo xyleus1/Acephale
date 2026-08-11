@@ -25,6 +25,7 @@ import {
   PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE,
   PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT_TASK_TYPE,
 } from "./purchase-order-followup-persistence";
+import { listSupplierQuoteExtractionRuns } from "./supplier-quote-extraction-persistence";
 import {
   finalizeReplacementSupersession,
   returnStaleReplacementToSourcing,
@@ -656,7 +657,7 @@ async function listProcurementCasesMatching(
   for (const purchaseDraft of purchaseDrafts) {
     if (purchaseDraft.parentTaskId && !purchaseDraftByCase.has(purchaseDraft.parentTaskId)) purchaseDraftByCase.set(purchaseDraft.parentTaskId, purchaseDraft);
   }
-  const [communicationTasks, purchaseOrderCommunicationTasks, purchaseOrderFollowUpTasks] = await Promise.all([
+  const [communicationTasks, purchaseOrderCommunicationTasks, purchaseOrderFollowUpTasks, quoteExtractionRuns] = await Promise.all([
     listSupplierCommunicationTasks({
       context: accessContext,
       workspaceId: workspace.id,
@@ -672,7 +673,40 @@ async function listProcurementCasesMatching(
       workspaceId: workspace.id,
       purchaseDraftIds: purchaseDrafts.map((purchaseDraft) => purchaseDraft.id),
     }),
+    listSupplierQuoteExtractionRuns({
+      context: accessContext,
+      workspaceId: workspace.id,
+      quoteCycleIds: quoteCycles.map((quoteCycle) => quoteCycle.id),
+    }),
   ]);
+  const quoteExtractionByCycleAndEvidence = new Map<string, {
+    runId: string;
+    inputHash: string;
+    outputHash: string | null;
+    proposalEvidenceId: string | null;
+    proposalHash: string | null;
+    proposal: Record<string, unknown>;
+    extractedAt: string | null;
+  }>();
+  for (const run of quoteExtractionRuns) {
+    if (!run.executionTaskId) continue;
+    const output = record(run.output);
+    const sourceEvidenceId = typeof output.sourceEvidenceId === "string" ? output.sourceEvidenceId : null;
+    if (!sourceEvidenceId) continue;
+    const key = `${run.executionTaskId}:${sourceEvidenceId}`;
+    if (quoteExtractionByCycleAndEvidence.has(key)) continue;
+    quoteExtractionByCycleAndEvidence.set(key, {
+      runId: run.id,
+      inputHash: run.inputHash,
+      outputHash: run.outputHash,
+      proposalEvidenceId: typeof output.proposalEvidenceId === "string" ? output.proposalEvidenceId : null,
+      proposalHash: typeof output.proposalHash === "string" ? output.proposalHash : null,
+      proposal: record(output.proposal),
+      extractedAt: typeof output.extractedAt === "string"
+        ? output.extractedAt
+        : run.completedAt?.toISOString() ?? null,
+    });
+  }
   const emailDraftByQuoteCycle = new Map<string, (typeof communicationTasks)[number]>();
   const emailActionByQuoteCycle = new Map<string, (typeof communicationTasks)[number]>();
   for (const task of communicationTasks) {
@@ -722,7 +756,23 @@ async function listProcurementCasesMatching(
         purchaseOrderFollowUpAction: null,
       };
     }
-    const quoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
+    const rawQuoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
+    const quoteCycle = rawQuoteCycle && rawQuoteCycle.result
+      ? (() => {
+          const result = record(rawQuoteCycle.result);
+          const connectedReplies = Array.isArray(result.connectedReplies)
+            ? result.connectedReplies.map((entry) => {
+                const reply = record(entry);
+                const evidenceId = typeof reply.evidenceId === "string" ? reply.evidenceId : null;
+                const quoteExtraction = evidenceId
+                  ? quoteExtractionByCycleAndEvidence.get(`${rawQuoteCycle.id}:${evidenceId}`) ?? null
+                  : null;
+                return quoteExtraction ? { ...reply, quoteExtraction } : reply;
+              })
+            : [];
+          return { ...rawQuoteCycle, result: { ...result, connectedReplies } };
+        })()
+      : rawQuoteCycle;
     const supplierEmailDraft = quoteCycle ? emailDraftByQuoteCycle.get(quoteCycle.id) ?? null : null;
     const candidateSupplierEmailAction = quoteCycle ? emailActionByQuoteCycle.get(quoteCycle.id) ?? null : null;
     const rawSupplierEmailAction = candidateSupplierEmailAction

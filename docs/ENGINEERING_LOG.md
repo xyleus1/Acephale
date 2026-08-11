@@ -4840,3 +4840,32 @@ Use this file for chronological implementation notes that future agents should s
   restoration, stale sessions, and cross-office denial.
 - Boundary: No migration, dependency, payment, inventory, booking, customs, or
   Logistics behavior changed.
+
+### 2026-08-11 - Extract reviewable terms from connected supplier replies
+
+- Branch: `supply-os-quote-normalization`, targeting `main`.
+- Task: Reduce manual quote transcription without treating model output as
+  supplier truth or procurement approval.
+- Behavior: An operator can extract exact-source price, currency, MOQ, unit,
+  delivery, quote reference, and validity proposals from one connected reply,
+  inspect warnings and conflicts, prefill the manual response form, and resume
+  the proposal from the sourcing queue after navigation or refresh.
+- Persistence: The run pins tenant, quote cycle, request, source evidence,
+  requested unit, dates, capability version, and prompt version. Successful
+  output becomes append-only proposal evidence linked to the original reply.
+  Failed attempts remain immutable and retries create linked attempts.
+- Safety: Server normalization rejects unsupported citations and invalid values.
+  Attachment contents are not parsed. Extraction cannot record a response,
+  advance a commercial gate, request approval, contact a supplier, or spend.
+  Stale users and foreign offices are rejected before the extractor runs.
+- Fix: Supplier follow-up delivery now moves the approved draft from `READY` to
+  `RUNNING` before finalization. The prior direct `READY` to `SUCCEEDED`
+  transition was rejected by the database state guard.
+- Verification: Quote extraction unit coverage, Atlas sourcing contract,
+  disposable PostgreSQL persistence and retry lifecycle, supplier email
+  provider, operations UI, continuous layout, product copy, TypeScript, and
+  production build passed. Strict tenant audit retained nine findings outside
+  the changed files. Changed-file U+2014 and diff checks passed.
+- Boundary: No migration, dependency, automatic attachment parsing, supplier
+  contact, purchase authorization, payment, inventory, booking, customs, or
+  Logistics behavior changed.

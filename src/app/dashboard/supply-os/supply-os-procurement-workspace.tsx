@@ -318,6 +318,8 @@ function workstreamState(procurementCase: SavedProcurementCase) {
   if (procurementCase.purchaseDraft) return "Order draft ready";
   const cycle = procurementCase.quoteCycle?.result;
   if (cycle?.state === "RESPONSES_RECEIVED") return `${cycle.responses.length} quote ${cycle.responses.length === 1 ? "response" : "responses"}`;
+  if (cycle?.connectedReplies?.some((reply) => reply.quoteExtraction?.proposal.state === "PROPOSED")) return "Quote terms ready for review";
+  if (cycle?.connectedReplies?.length) return `${cycle.connectedReplies.length} supplier ${cycle.connectedReplies.length === 1 ? "reply" : "replies"} to review`;
   if (cycle?.state === "AWAITING_RESPONSE") return "Awaiting quote";
   if (cycle?.state === "DRAFT") return "RFQ draft";
   if (procurementCase.result?.stage === "SOURCE_EVIDENCE") return "Qualify supplier";
@@ -328,6 +330,16 @@ function workstreamState(procurementCase: SavedProcurementCase) {
   if (procurementCase.result?.stage === "PURCHASE_READY") return "Purchase ready";
   return "In review";
 }
+
+const QUOTE_EXTRACTION_FIELDS = [
+  { key: "price", label: "Unit price" },
+  { key: "currency", label: "Currency" },
+  { key: "minimumOrderQuantity", label: "MOQ" },
+  { key: "unitOfMeasure", label: "Unit" },
+  { key: "deliveryDate", label: "Delivery" },
+  { key: "quoteReference", label: "Quote reference" },
+  { key: "validUntil", label: "Valid until" },
+] as const;
 
 export function AtlasProcurementWorkspace({
   item,
@@ -1223,6 +1235,42 @@ export function AtlasProcurementWorkspace({
     }));
   }
 
+  function extractConnectedSupplierReply(reply: ConnectedSupplierReply) {
+    const cycle = currentCase?.quoteCycle;
+    if (!cycle?.result) return;
+    void runCaseAction(
+      `/api/supply-os/quote-cycles/${encodeURIComponent(cycle.id)}/connected-replies/${encodeURIComponent(reply.evidenceId)}/extract`,
+      {},
+    );
+  }
+
+  function reviewExtractedSupplierTerms(reply: ConnectedSupplierReply) {
+    const extraction = reply.quoteExtraction?.proposal;
+    const cycle = currentCase?.quoteCycle?.result;
+    if (!extraction || extraction.state !== "PROPOSED" || !cycle) return;
+    const fields = extraction.fields;
+    const extracted = (key: keyof typeof fields, includeConflict = false) => {
+      const field = fields[key];
+      return field.value && (field.state === "EXTRACTED" || includeConflict && field.state === "CONFLICT")
+        ? field.value
+        : "";
+    };
+    if (currentCase) setDirtyDrafts((current) => markWorkstreamDraft(current, currentCase.id, "commercial-response"));
+    setSelectedReplyEvidenceId(reply.evidenceId);
+    setCommercialForm({
+      receivedOn: reply.receivedAt.slice(0, 10),
+      price: extracted("price"),
+      currency: extracted("currency"),
+      minimumOrderQuantity: extracted("minimumOrderQuantity"),
+      unitOfMeasure: extracted("unitOfMeasure") || cycle.request.unitOfMeasure,
+      deliveryDate: extracted("deliveryDate", true),
+      evidenceUrl: "",
+      quoteReference: extracted("quoteReference"),
+      validUntil: extracted("validUntil"),
+      note: "",
+    });
+  }
+
   function recordQuoteResponse() {
     const cycle = currentCase?.quoteCycle;
     if (!cycle?.result) return;
@@ -1920,9 +1968,36 @@ export function AtlasProcurementWorkspace({
                             <p>{reply.subject || "No subject"} · <time dateTime={reply.receivedAt}>{displayStoredDate(reply.receivedAt.slice(0, 10))}</time></p>
                             <p>{reply.excerpt || "This reply contains no plain-text body."}</p>
                             {reply.attachments.length ? <p>Attachments: {reply.attachments.map((attachment) => attachment.name).join(", ")}</p> : null}
+                            {reply.quoteExtraction ? (
+                              <div>
+                                <p><strong>{reply.quoteExtraction.proposal.state === "PROPOSED" ? "Extracted terms need review" : "No supported plain-text terms"}</strong></p>
+                                {reply.quoteExtraction.proposal.state === "PROPOSED" ? (
+                                  <dl className={styles.purchaseDraftSummary}>
+                                    {QUOTE_EXTRACTION_FIELDS.map(({ key, label }) => {
+                                      const field = reply.quoteExtraction!.proposal.fields[key];
+                                      return (
+                                        <div key={key}>
+                                          <dt>{label}</dt>
+                                          <dd>{field.value ?? "Unknown"}{field.state === "CONFLICT" ? " (conflict)" : ""}</dd>
+                                          {field.evidenceText ? <p>Source excerpt: <q>{field.evidenceText}</q></p> : null}
+                                          {field.reason ? <p>{field.reason}</p> : null}
+                                        </div>
+                                      );
+                                    })}
+                                  </dl>
+                                ) : null}
+                                {reply.quoteExtraction.proposal.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+                                <p>These values are a proposal from the connected reply. Review every field before recording the quote.</p>
+                              </div>
+                            ) : null}
                             <div className={styles.purchaseDecisionActions}>
                               <a href={evidenceHref(reply.evidenceId, reply.sourceUrl)} target="_blank" rel="noreferrer">Open connected evidence <ArrowRight size={14} /></a>
                               <button type="button" disabled={gateActionState === "saving"} onClick={() => useConnectedSupplierReply(reply)}><PackageCheck size={14} /> {selectedReplyEvidenceId === reply.evidenceId ? "Using this reply" : "Use as quote evidence"}</button>
+                              {reply.quoteExtraction?.proposal.state === "PROPOSED" ? (
+                                <button type="button" disabled={gateActionState === "saving"} onClick={() => reviewExtractedSupplierTerms(reply)}><Sparkles size={14} /> Review extracted terms</button>
+                              ) : reply.quoteExtraction ? null : (
+                                <button type="button" disabled={gateActionState === "saving"} onClick={() => extractConnectedSupplierReply(reply)}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Sparkles size={14} />} Extract terms</button>
+                              )}
                             </div>
                           </section>
                         ))}
