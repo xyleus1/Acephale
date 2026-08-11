@@ -525,7 +525,7 @@ export async function captureConnectedPurchaseOrderReplies(args: {
     }
     const now = new Date();
     const connectedAcknowledgmentReplies = [...existingReplies, ...captured];
-    const unreviewedConnectedReplyCount = connectedAcknowledgmentReplies.filter((reply) => reply.reviewState !== "USED_AS_ACKNOWLEDGMENT").length;
+    const unreviewedConnectedReplyCount = connectedAcknowledgmentReplies.filter((reply) => reply.reviewState === "REVIEW_REQUIRED").length;
     const nextResult = {
       ...currentResult,
       connectedAcknowledgmentReplies,

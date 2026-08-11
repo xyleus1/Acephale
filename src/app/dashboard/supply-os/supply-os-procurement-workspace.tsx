@@ -43,6 +43,7 @@ import type {
   ConnectedSupplierReply,
   SavedProcurementCase,
   SavedSourcingResearchRun,
+  SupplierOrderException,
   SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 
@@ -479,6 +480,21 @@ export function AtlasProcurementWorkspace({
     evidenceUrl: "",
     note: "",
   }));
+  const [supplierExceptionForm, setSupplierExceptionForm] = useState(() => ({
+    category: "DELIVERY_CHANGE" as SupplierOrderException["category"],
+    observedOn: "",
+    summary: "",
+    proposedQuantity: "",
+    proposedUnitPrice: "",
+    proposedCurrency: initialCase?.purchaseAction?.input.commercial.currency ?? "USD",
+    proposedDeliveryDate: "",
+    proposedPaymentTerms: "",
+    evidenceUrl: "",
+    note: "",
+  }));
+  const [selectedExceptionReplyEvidenceId, setSelectedExceptionReplyEvidenceId] = useState<string | null>(null);
+  const [exceptionResolutionNote, setExceptionResolutionNote] = useState("");
+  const [showSupplierExceptionForm, setShowSupplierExceptionForm] = useState(false);
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
   const [researchState, setResearchState] = useState<"idle" | "running" | "complete" | "degraded">(
     initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : item ? "running" : "idle",
@@ -781,6 +797,21 @@ export function AtlasProcurementWorkspace({
       note: "",
     }));
     setSelectedAcknowledgmentReplyEvidenceId(null);
+    setSelectedExceptionReplyEvidenceId(null);
+    setExceptionResolutionNote("");
+    setShowSupplierExceptionForm(false);
+    setSupplierExceptionForm((current) => ({
+      ...current,
+      observedOn: "",
+      summary: "",
+      proposedQuantity: "",
+      proposedUnitPrice: "",
+      proposedCurrency: action?.input.commercial.currency ?? "USD",
+      proposedDeliveryDate: "",
+      proposedPaymentTerms: "",
+      evidenceUrl: "",
+      note: "",
+    }));
   }, [currentCase?.purchaseAction?.id, currentCase?.purchaseAction?.result?.state, currentCase?.result?.purchaseRelease?.remainingQuantity]);
 
   useEffect(() => {
@@ -938,7 +969,7 @@ export function AtlasProcurementWorkspace({
   }
 
   async function runCaseAction(path: string, body: Record<string, unknown>, resolvedDraftSection?: string) {
-    if (!currentCase?.result || gateActionState === "saving") return;
+    if (!currentCase?.result || gateActionState === "saving") return false;
     const actionCaseId = currentCase.id;
     setGateActionState("saving");
     setGateActionError("");
@@ -992,9 +1023,11 @@ export function AtlasProcurementWorkspace({
       ]);
       onProcurementCaseSaved(nextCase);
       setGateActionState("idle");
+      return true;
     } catch (error) {
       setGateActionState("error");
       setGateActionError(error instanceof Error ? error.message : "Procurement review could not be saved.");
+      return false;
     }
   }
 
@@ -1232,6 +1265,54 @@ export function AtlasProcurementWorkspace({
     }));
   }
 
+  function useConnectedOrderExceptionReply(reply: ConnectedSupplierReply) {
+    if (currentCase) setDirtyDrafts((current) => markWorkstreamDraft(current, currentCase.id, "supplier-order-exception"));
+    setSelectedExceptionReplyEvidenceId(reply.evidenceId);
+    setShowSupplierExceptionForm(true);
+    setSupplierExceptionForm((current) => ({ ...current, observedOn: reply.receivedAt.slice(0, 10), evidenceUrl: "" }));
+  }
+
+  async function recordSupplierException() {
+    const actionId = currentCase?.purchaseAction?.id;
+    const releaseHash = currentCase?.result?.purchaseRelease?.release?.releaseHash;
+    if (!actionId || !releaseHash) return;
+    const saved = await runCaseAction(`/api/supply-os/purchase-actions/${actionId}/exceptions`, {
+      ...supplierExceptionForm,
+      expectedReleaseHash: releaseHash,
+      proposedQuantity: supplierExceptionForm.proposedQuantity ? Number(supplierExceptionForm.proposedQuantity) : null,
+      proposedUnitPrice: supplierExceptionForm.proposedUnitPrice ? Number(supplierExceptionForm.proposedUnitPrice) : null,
+      evidenceUrl: selectedExceptionReplyEvidenceId ? null : supplierExceptionForm.evidenceUrl,
+      connectedReplyEvidenceId: selectedExceptionReplyEvidenceId,
+      note: supplierExceptionForm.note || null,
+    }, "supplier-order-exception");
+    if (!saved) return;
+    setSelectedExceptionReplyEvidenceId(null);
+    setShowSupplierExceptionForm(false);
+    setSupplierExceptionForm((current) => ({
+      ...current,
+      observedOn: "",
+      summary: "",
+      proposedQuantity: "",
+      proposedUnitPrice: "",
+      proposedDeliveryDate: "",
+      proposedPaymentTerms: "",
+      evidenceUrl: "",
+      note: "",
+    }));
+  }
+
+  async function resolveSupplierException(exceptionHash: string, disposition: "KEEP_ORIGINAL" | "REQUIRE_REAUTHORIZATION") {
+    const actionId = currentCase?.purchaseAction?.id;
+    const releaseHash = currentCase?.result?.purchaseRelease?.release?.releaseHash;
+    if (!actionId || !releaseHash) return;
+    const saved = await runCaseAction(`/api/supply-os/purchase-actions/${actionId}/exceptions/${exceptionHash}/resolution`, {
+      expectedReleaseHash: releaseHash,
+      disposition,
+      note: exceptionResolutionNote,
+    }, "supplier-order-exception-resolution");
+    if (saved) setExceptionResolutionNote("");
+  }
+
   function recordSupplierAcknowledgment() {
     const actionId = currentCase?.purchaseAction?.id;
     const releaseHash = currentCase?.result?.purchaseRelease?.release?.releaseHash;
@@ -1267,6 +1348,9 @@ export function AtlasProcurementWorkspace({
     ? currentCase.purchaseAction.result
     : null;
   const purchaseReleaseState = purchaseReleaseResult?.state ?? null;
+  const supplierOrderExceptions = purchaseReleaseResult?.supplierOrderExceptions ?? [];
+  const openSupplierExceptions = supplierOrderExceptions.filter((entry) => entry.status === "OPEN_REVIEW");
+  const supplierRevisionRequired = supplierOrderExceptions.some((entry) => entry.status === "REVISION_REQUIRED");
   const purchaseReleaseFormComplete = Boolean(purchaseReleaseForm.releasedOn)
     && Boolean(purchaseReleaseForm.acknowledgmentDueOn)
     && Boolean(purchaseReleaseForm.purchaseOrderReference.trim())
@@ -1282,6 +1366,13 @@ export function AtlasProcurementWorkspace({
     && Number(acknowledgmentForm.acceptedQuantity) > 0
     && Boolean(acknowledgmentForm.confirmedDeliveryDate)
     && Boolean(selectedAcknowledgmentReplyEvidenceId || acknowledgmentForm.evidenceUrl.trim());
+  const supplierExceptionFormComplete = Boolean(supplierExceptionForm.observedOn)
+    && Boolean(supplierExceptionForm.summary.trim())
+    && Boolean(selectedExceptionReplyEvidenceId || supplierExceptionForm.evidenceUrl.trim())
+    && (supplierExceptionForm.category !== "QUANTITY_CHANGE" || Number(supplierExceptionForm.proposedQuantity) > 0)
+    && (supplierExceptionForm.category !== "PRICE_CHANGE" || (Number(supplierExceptionForm.proposedUnitPrice) > 0 && /^[A-Za-z]{3}$/.test(supplierExceptionForm.proposedCurrency)))
+    && (supplierExceptionForm.category !== "DELIVERY_CHANGE" || Boolean(supplierExceptionForm.proposedDeliveryDate))
+    && (supplierExceptionForm.category !== "TERMS_CHANGE" || Boolean(supplierExceptionForm.proposedPaymentTerms.trim()));
   const quoteRequestComplete = Number(quoteRequestForm.quantity) > 0
     && Boolean(quoteRequestForm.unitOfMeasure.trim())
     && Boolean(quoteRequestForm.needBy)
@@ -1817,13 +1908,55 @@ export function AtlasProcurementWorkspace({
                                     {reply.attachments.length ? <p>Attachments: {reply.attachments.map((attachment) => attachment.name).join(", ")}</p> : null}
                                     <div className={styles.purchaseDecisionActions}>
                                       <a href={evidenceHref(reply.evidenceId, reply.sourceUrl)} target="_blank" rel="noreferrer">Open connected evidence <ArrowRight size={14} /></a>
-                                      <button type="button" disabled={gateActionState === "saving" || reply.reviewState === "USED_AS_ACKNOWLEDGMENT"} onClick={() => useConnectedAcknowledgmentReply(reply)}><PackageCheck size={14} /> {reply.reviewState === "USED_AS_ACKNOWLEDGMENT" ? "Recorded" : selectedAcknowledgmentReplyEvidenceId === reply.evidenceId ? "Using this reply" : "Use as acknowledgment evidence"}</button>
+                                      <button type="button" disabled={gateActionState === "saving" || reply.reviewState !== "REVIEW_REQUIRED"} onClick={() => useConnectedAcknowledgmentReply(reply)}><PackageCheck size={14} /> {reply.reviewState === "USED_AS_ACKNOWLEDGMENT" ? "Acceptance recorded" : reply.reviewState === "USED_AS_ORDER_EXCEPTION" ? "Exception recorded" : selectedAcknowledgmentReplyEvidenceId === reply.evidenceId ? "Using as acceptance" : "Use as acknowledgment evidence"}</button>
+                                      {reply.reviewState === "REVIEW_REQUIRED" ? <button type="button" disabled={gateActionState === "saving"} onClick={() => useConnectedOrderExceptionReply(reply)}><TriangleAlert size={14} /> {selectedExceptionReplyEvidenceId === reply.evidenceId ? "Using as exception" : "Record changed terms"}</button> : null}
                                     </div>
                                   </section>
                                 ))}
                               </>
                             ) : null}
-                            <p>Confirm the structured supplier acceptance. Partial acceptances remain open until the full authorized quantity is covered.</p>
+                            {supplierOrderExceptions.map((entry) => (
+                              <section className={styles.purchaseApprovalRequest} key={entry.exceptionHash}>
+                                <p><strong>{entry.category.toLowerCase().replaceAll("_", " ")}</strong> · {entry.status === "OPEN_REVIEW" ? "Review required" : entry.status === "REVISION_REQUIRED" ? "New authorization required" : "Original scope retained"}</p>
+                                <p>{entry.summary}</p>
+                                <dl className={styles.purchaseDraftSummary}>
+                                  {entry.proposedQuantity ? <div><dt>Proposed quantity</dt><dd>{entry.proposedQuantity} {purchaseReleaseResult.unitOfMeasure}</dd></div> : null}
+                                  {entry.proposedUnitPrice && entry.proposedCurrency ? <div><dt>Proposed price</dt><dd>{formatMoney(entry.proposedUnitPrice, entry.proposedCurrency)}</dd></div> : null}
+                                  {entry.proposedDeliveryDate ? <div><dt>Proposed delivery</dt><dd>{displayStoredDate(entry.proposedDeliveryDate)}</dd></div> : null}
+                                  {entry.proposedPaymentTerms ? <div><dt>Proposed terms</dt><dd>{entry.proposedPaymentTerms}</dd></div> : null}
+                                </dl>
+                                <a href={evidenceHref(entry.evidenceId, entry.evidenceUrl)} target="_blank" rel="noreferrer">Open exception evidence <ArrowRight size={14} /></a>
+                                {entry.status === "OPEN_REVIEW" ? (
+                                  <>
+                                    <label data-draft-section="supplier-order-exception-resolution">Disposition note<textarea value={exceptionResolutionNote} onChange={(event) => setExceptionResolutionNote(event.target.value)} placeholder="Explain why the original order remains valid or why a new authorization is required." /></label>
+                                    <div className={styles.purchaseDecisionActions}>
+                                      <button type="button" disabled={gateActionState === "saving" || exceptionResolutionNote.trim().length < 10} onClick={() => resolveSupplierException(entry.exceptionHash, "KEEP_ORIGINAL")}><Check size={14} /> Keep original authorization</button>
+                                      {canAuthorizePurchase ? <button type="button" disabled={gateActionState === "saving" || exceptionResolutionNote.trim().length < 10} onClick={() => resolveSupplierException(entry.exceptionHash, "REQUIRE_REAUTHORIZATION")}><ShieldCheck size={14} /> Require new authorization</button> : null}
+                                    </div>
+                                  </>
+                                ) : entry.resolution ? <p>{entry.resolution.note}</p> : null}
+                              </section>
+                            ))}
+                            <button type="button" disabled={gateActionState === "saving" || supplierRevisionRequired} onClick={() => setShowSupplierExceptionForm((current) => !current)}><TriangleAlert size={14} /> {showSupplierExceptionForm ? "Hide changed-term form" : "Supplier changed the order"}</button>
+                            {showSupplierExceptionForm ? (
+                              <section className={styles.purchaseApprovalRequest} data-draft-section="supplier-order-exception">
+                                <p><strong>Record changed or rejected terms</strong></p>
+                                <p>This blocks normal acceptance. It does not authorize the supplier's proposed change.</p>
+                                <div className={styles.procurementFormGrid}>
+                                  <label>Exception type<select value={supplierExceptionForm.category} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, category: event.target.value as SupplierOrderException["category"] }))}><option value="QUANTITY_CHANGE">Quantity change</option><option value="PRICE_CHANGE">Price change</option><option value="DELIVERY_CHANGE">Delivery change</option><option value="TERMS_CHANGE">Terms change</option><option value="REJECTION">Supplier rejection</option><option value="OTHER">Other</option></select></label>
+                                  <label>Observed on<input type="date" value={supplierExceptionForm.observedOn} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, observedOn: event.target.value }))} /></label>
+                                  {supplierExceptionForm.category === "QUANTITY_CHANGE" ? <label>Proposed quantity<input type="number" min="0.01" step="0.01" value={supplierExceptionForm.proposedQuantity} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, proposedQuantity: event.target.value }))} /></label> : null}
+                                  {supplierExceptionForm.category === "PRICE_CHANGE" ? <><label>Proposed unit price<input type="number" min="0.0001" step="0.0001" value={supplierExceptionForm.proposedUnitPrice} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, proposedUnitPrice: event.target.value }))} /></label><label>Currency<input maxLength={3} value={supplierExceptionForm.proposedCurrency} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, proposedCurrency: event.target.value.toUpperCase() }))} /></label></> : null}
+                                  {supplierExceptionForm.category === "DELIVERY_CHANGE" ? <label>Proposed delivery<input type="date" value={supplierExceptionForm.proposedDeliveryDate} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, proposedDeliveryDate: event.target.value }))} /></label> : null}
+                                  {supplierExceptionForm.category === "TERMS_CHANGE" ? <label className={styles.procurementWideField}>Proposed payment terms<input value={supplierExceptionForm.proposedPaymentTerms} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, proposedPaymentTerms: event.target.value }))} /></label> : null}
+                                  <label className={styles.procurementWideField}>Summary<textarea value={supplierExceptionForm.summary} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, summary: event.target.value }))} placeholder="State exactly what differs from the authorized order." /></label>
+                                  {selectedExceptionReplyEvidenceId ? <div className={styles.procurementWideField}><span>Evidence</span><p>Connected supplier reply selected.</p><button type="button" onClick={() => setSelectedExceptionReplyEvidenceId(null)}>Use external evidence instead</button></div> : <label className={styles.procurementWideField}>Evidence URL<input type="url" value={supplierExceptionForm.evidenceUrl} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>}
+                                  <label className={styles.procurementWideField}>Internal note<textarea value={supplierExceptionForm.note} onChange={(event) => setSupplierExceptionForm((current) => ({ ...current, note: event.target.value }))} /></label>
+                                </div>
+                                <button type="button" disabled={gateActionState === "saving" || !supplierExceptionFormComplete} onClick={recordSupplierException}><TriangleAlert size={14} /> Record supplier exception</button>
+                              </section>
+                            ) : null}
+                            {openSupplierExceptions.length || supplierRevisionRequired ? <p className={styles.procurementActionError}><TriangleAlert size={14} /> Supplier acceptance is blocked until the exception is resolved. Changed terms require a new authorization.</p> : <><p>Confirm the structured supplier acceptance. Partial acceptances remain open until the full authorized quantity is covered.</p>
                             <div className={styles.procurementFormGrid}>
                               <label>Acknowledged on<input type="date" value={acknowledgmentForm.acknowledgedOn} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acknowledgedOn: event.target.value }))} /></label>
                               <label>Accepted quantity<input type="number" min="0.01" step="0.01" value={acknowledgmentForm.acceptedQuantity} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, acceptedQuantity: event.target.value }))} /></label>
@@ -1835,7 +1968,7 @@ export function AtlasProcurementWorkspace({
                               ) : <label className={styles.procurementWideField}>Evidence URL<input type="url" value={acknowledgmentForm.evidenceUrl} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="https://..." /></label>}
                               <label className={styles.procurementWideField}>Note<textarea value={acknowledgmentForm.note} onChange={(event) => setAcknowledgmentForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional acceptance details or exceptions" /></label>
                             </div>
-                            <button type="button" disabled={gateActionState === "saving" || !acknowledgmentFormComplete} onClick={recordSupplierAcknowledgment}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} Record supplier acknowledgment</button>
+                            <button type="button" disabled={gateActionState === "saving" || !acknowledgmentFormComplete} onClick={recordSupplierAcknowledgment}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} Record supplier acknowledgment</button></>}
                           </section>
                         ) : purchaseReleaseResult && !purchaseReleaseResult.release ? (
                           <p className={styles.procurementActionError}><TriangleAlert size={14} /> This legacy order combined release and acknowledgment. Review the historical evidence and create a new procurement case before recording more supplier acceptance.</p>

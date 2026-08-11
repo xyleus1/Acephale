@@ -95,8 +95,36 @@ export type ConnectedSupplierReply = {
   attachments: Array<{ name: string; mimeType: string | null; size: number | null }>;
   receivedAt: string;
   sourceUrl: string;
-  reviewState: "REVIEW_REQUIRED" | "USED_AS_ACKNOWLEDGMENT";
+  reviewState: "REVIEW_REQUIRED" | "USED_AS_ACKNOWLEDGMENT" | "USED_AS_ORDER_EXCEPTION";
   acknowledgmentHash?: string;
+  exceptionHash?: string;
+};
+
+export type SupplierOrderException = {
+  releaseHash: string;
+  actionScopeHash: string;
+  category: "QUANTITY_CHANGE" | "PRICE_CHANGE" | "DELIVERY_CHANGE" | "TERMS_CHANGE" | "REJECTION" | "OTHER";
+  observedOn: string;
+  summary: string;
+  proposedQuantity: string | null;
+  proposedUnitPrice: string | null;
+  proposedCurrency: string | null;
+  proposedDeliveryDate: string | null;
+  proposedPaymentTerms: string | null;
+  evidenceUrl: string;
+  evidenceId: string;
+  sourceEvidenceId?: string;
+  note: string | null;
+  exceptionHash: string;
+  status: "OPEN_REVIEW" | "RESOLVED_KEEP_ORIGINAL" | "REVISION_REQUIRED";
+  resolution?: {
+    disposition: "KEEP_ORIGINAL" | "REQUIRE_REAUTHORIZATION";
+    note: string;
+    decidedByUserId: string;
+    decidedAt: string;
+  };
+  recordedByUserId: string;
+  recordedAt: string;
 };
 
 export type SavedProcurementCase = {
@@ -217,6 +245,8 @@ export type SavedProcurementCase = {
       lastConfirmedDeliveryDate?: string;
       connectedReplyCount?: number;
       unreviewedConnectedReplyCount?: number;
+      openSupplierExceptionCount?: number;
+      revisionRequiredCount?: number;
       lastAcknowledgmentSyncAt?: string;
       updatedAt: string;
     };
@@ -547,6 +577,9 @@ export type SavedProcurementCase = {
       };
       connectedAcknowledgmentReplies?: ConnectedSupplierReply[];
       lastAcknowledgmentSyncAt?: string;
+      supplierOrderExceptions?: SupplierOrderException[];
+      openSupplierExceptionCount?: number;
+      revisionRequiredCount?: number;
       externalSideEffect: "RECORDED_ONLY" | "CONNECTED_PROVIDER";
       updatedAt: string;
     }) | null;

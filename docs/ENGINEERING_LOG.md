@@ -4760,3 +4760,22 @@ Use this file for chronological implementation notes that future agents should s
   build, copy, docs, tenant, whitespace, and U+2014 checks.
 - Boundary: No schema, dependency, automated term extraction, payment, booking,
   customs, inventory mutation, or Logistics behavior changed.
+
+### 2026-08-10 - Route supplier counteroffers through order exceptions
+
+- Branch: `supply-os-order-exceptions`, targeting `main`.
+- Task: Prevent changed supplier terms from being recorded against an unchanged
+  purchase authorization.
+- Behavior: Operators can record quantity, price, delivery, payment-term,
+  rejection, and other exceptions from connected Gmail or external evidence.
+  The sourcing queue restores open-review and reauthorization-required states.
+- Safety: Exceptions pin the release hash and evidence. One connected reply
+  cannot support both acceptance and an exception. Open and revision-required
+  exceptions block acknowledgments. Only an admin can require new purchase
+  authorization.
+- Verification: Atlas sourcing contract, disposable PostgreSQL lifecycle,
+  concurrent idempotency, evidence reuse, stale-session and cross-office denial,
+  TypeScript, build, copy, docs, tenant, whitespace, and U+2014 checks.
+- Boundary: Reauthorization is a blocking state, not a replacement order. No
+  supplier message, payment, inventory mutation, booking, customs filing, or
+  Logistics handoff is created.

@@ -35,6 +35,8 @@ const PURCHASE_ACTION_CAPABILITY = "authorize.purchase_order";
 const PURCHASE_ACTION_REQUIRED_ROLE = "ADMIN";
 const PURCHASE_INCOTERMS = ["EXW", "FCA", "FOB", "CPT", "CIP", "DAP", "DDP"] as const;
 const PURCHASE_RELEASE_CHANNELS = ["EMAIL", "SUPPLIER_PORTAL", "EDI", "PHONE_CONFIRMED", "OTHER"] as const;
+const SUPPLIER_ORDER_EXCEPTION_CATEGORIES = ["QUANTITY_CHANGE", "PRICE_CHANGE", "DELIVERY_CHANGE", "TERMS_CHANGE", "REJECTION", "OTHER"] as const;
+const SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS = ["KEEP_ORIGINAL", "REQUIRE_REAUTHORIZATION"] as const;
 const SUPPLIER_RELATIONSHIPS = ["MANUFACTURER", "AUTHORIZED_DISTRIBUTOR", "INDEPENDENT_DISTRIBUTOR"] as const;
 const SUPPLIER_REJECTION_REASONS = ["IDENTITY_UNRESOLVED", "CAPABILITY_UNRESOLVED", "AUTHORIZATION_UNRESOLVED", "SOURCE_UNVERIFIABLE", "OTHER"] as const;
 
@@ -101,6 +103,14 @@ function isoDate(value: unknown, label: string) {
 function positiveNumber(value: unknown, label: string) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new SupplyPersistenceError(`${label} must be a positive number.`, "invalid_input");
+  }
+  return value;
+}
+
+function optionalPositiveNumber(value: unknown, label: string, maximum: number) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > maximum) {
+    throw new SupplyPersistenceError(`${label} must be a positive number no greater than ${maximum}.`, "invalid_input");
   }
   return value;
 }
@@ -178,8 +188,22 @@ function retryableTransactionError(error: unknown) {
     && (
       error.code === "P2002"
       || error.code === "P2034"
-      || (error.code === "P2010" && record(error.meta).code === "40001")
+      || (error.code === "P2010" && ["40001", "40P01"].includes(String(record(error.meta).code)))
     );
+}
+
+async function withSerializableRetry<T>(operation: () => Promise<T>, conflictMessage: string) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!retryableTransactionError(error) || attempt === 2) {
+        if (retryableTransactionError(error)) throw new SupplyPersistenceError(conflictMessage, "conflict");
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError(conflictMessage, "conflict");
 }
 
 function inputJson(value: unknown) {
@@ -3856,6 +3880,61 @@ function normalizeSupplierAcknowledgment(input: unknown) {
   };
 }
 
+function normalizeSupplierOrderException(input: unknown) {
+  const body = record(input);
+  const category = requiredText(body.category, "Supplier order exception category", 40).toUpperCase();
+  if (!SUPPLIER_ORDER_EXCEPTION_CATEGORIES.includes(category as (typeof SUPPLIER_ORDER_EXCEPTION_CATEGORIES)[number])) {
+    throw new SupplyPersistenceError(`Supplier order exception category must be one of: ${SUPPLIER_ORDER_EXCEPTION_CATEGORIES.join(", ")}.`, "invalid_input");
+  }
+  const connectedReplyEvidenceId = optionalText(body.connectedReplyEvidenceId, "Connected supplier reply evidence ID", 220);
+  const observedOn = requireCurrentOrPastDate(isoDate(body.observedOn, "Supplier exception date"), "Supplier exception date");
+  const proposedQuantity = optionalPositiveNumber(body.proposedQuantity, "Proposed quantity", 1_000_000_000);
+  const proposedUnitPrice = optionalPositiveNumber(body.proposedUnitPrice, "Proposed unit price", 1_000_000_000_000);
+  const proposedCurrency = proposedUnitPrice === null ? null : requiredText(body.proposedCurrency, "Proposed currency", 3).toUpperCase();
+  if (proposedCurrency && !/^[A-Z]{3}$/.test(proposedCurrency)) throw new SupplyPersistenceError("Proposed currency must use a three-letter code.", "invalid_input");
+  const proposedDeliveryDate = optionalText(body.proposedDeliveryDate, "Proposed delivery date", 10);
+  const normalizedDeliveryDate = proposedDeliveryDate
+    ? requireCurrentOrFutureDate(isoDate(proposedDeliveryDate, "Proposed delivery date"), "Proposed delivery date")
+    : null;
+  const proposedPaymentTerms = optionalText(body.proposedPaymentTerms, "Proposed payment terms", 500);
+  if (category === "QUANTITY_CHANGE" && proposedQuantity === null) throw new SupplyPersistenceError("A quantity change requires the supplier's proposed quantity.", "invalid_input");
+  if (category === "PRICE_CHANGE" && proposedUnitPrice === null) throw new SupplyPersistenceError("A price change requires the supplier's proposed unit price and currency.", "invalid_input");
+  if (category === "DELIVERY_CHANGE" && !normalizedDeliveryDate) throw new SupplyPersistenceError("A delivery change requires the supplier's proposed delivery date.", "invalid_input");
+  if (category === "TERMS_CHANGE" && !proposedPaymentTerms) throw new SupplyPersistenceError("A terms change requires the supplier's proposed payment terms.", "invalid_input");
+  return {
+    expectedReleaseHash: requiredText(body.expectedReleaseHash, "Purchase order release hash", 128),
+    category: category as (typeof SUPPLIER_ORDER_EXCEPTION_CATEGORIES)[number],
+    observedOn,
+    summary: requiredText(body.summary, "Supplier exception summary", 2_000),
+    proposedQuantity,
+    proposedUnitPrice,
+    proposedCurrency,
+    proposedDeliveryDate: normalizedDeliveryDate,
+    proposedPaymentTerms,
+    evidenceUrl: connectedReplyEvidenceId
+      ? optionalText(body.evidenceUrl, "Supplier exception evidence URL", 2_000)
+      : publicUrl(body.evidenceUrl, "Supplier exception evidence URL"),
+    connectedReplyEvidenceId,
+    note: optionalText(body.note, "Supplier exception note", 2_000),
+  };
+}
+
+function normalizeSupplierOrderExceptionResolution(input: unknown) {
+  const body = record(input);
+  const disposition = requiredText(body.disposition, "Supplier exception disposition", 40).toUpperCase();
+  if (!SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS.includes(disposition as (typeof SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS)[number])) {
+    throw new SupplyPersistenceError(`Supplier exception disposition must be one of: ${SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS.join(", ")}.`, "invalid_input");
+  }
+  const note = requiredText(body.note, "Supplier exception resolution note", 2_000);
+  if (note.length < 10) throw new SupplyPersistenceError("Supplier exception resolution note must explain the decision.", "invalid_input");
+  return {
+    expectedReleaseHash: requiredText(body.expectedReleaseHash, "Purchase order release hash", 128),
+    exceptionHash: requiredText(body.exceptionHash, "Supplier exception hash", 128),
+    disposition: disposition as (typeof SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS)[number],
+    note,
+  };
+}
+
 export async function recordPurchaseOrderAcknowledgment(args: {
   context: SupplyAccessContext;
   actionId: string;
@@ -4040,6 +4119,15 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         const acknowledgments = Array.isArray(existingResult.acknowledgments)
           ? existingResult.acknowledgments.map((value) => record(value))
           : [];
+        const supplierOrderExceptions = Array.isArray(existingResult.supplierOrderExceptions)
+          ? existingResult.supplierOrderExceptions.map((value) => record(value))
+          : [];
+        const connectedReplies = Array.isArray(existingResult.connectedAcknowledgmentReplies)
+          ? existingResult.connectedAcknowledgmentReplies.map((value) => record(value))
+          : [];
+        if (supplierOrderExceptions.some((value) => ["OPEN_REVIEW", "REVISION_REQUIRED"].includes(String(value.status)))) {
+          throw new SupplyPersistenceError("Resolve the supplier order exception before recording acceptance against the original authorization.", "conflict");
+        }
         let acknowledgmentEvidenceUrl = acknowledgmentInput.evidenceUrl;
         let acknowledgmentEvidenceType: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER" = "OPERATOR_RECORDED_EXTERNAL";
         let acknowledgmentSourceRecordId = acknowledgmentInput.supplierOrderReference;
@@ -4057,11 +4145,13 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             select: { id: true, sourceUri: true, sourceRecordId: true, observedAt: true, payload: true },
           });
           const connectedPayload = record(connectedEvidence?.payload);
+          const connectedReply = connectedReplies.find((value) => value.evidenceId === connectedEvidence?.id);
           if (!connectedEvidence?.sourceUri
             || !connectedEvidence.sourceRecordId
             || !connectedEvidence.observedAt
             || connectedPayload.purchaseActionId !== purchaseAction.id
-            || connectedPayload.releaseHash !== release.releaseHash) {
+            || connectedPayload.releaseHash !== release.releaseHash
+            || !["REVIEW_REQUIRED", "USED_AS_ACKNOWLEDGMENT"].includes(String(connectedReply?.reviewState))) {
             throw new SupplyPersistenceError("Connected supplier reply evidence no longer matches this released order.", "conflict");
           }
           const connectedUrl = connectedProviderUrl(connectedEvidence.sourceUri, "Connected supplier acknowledgment evidence URL");
@@ -4148,14 +4238,9 @@ export async function recordPurchaseOrderAcknowledgment(args: {
         const acknowledgedQuantity = previouslyAccepted.add(acceptedQuantity);
         const remainingQuantity = orderedQuantity.sub(acknowledgedQuantity);
         const complete = remainingQuantity.isZero();
-        const connectedAcknowledgmentReplies = Array.isArray(existingResult.connectedAcknowledgmentReplies)
-          ? existingResult.connectedAcknowledgmentReplies.map((value) => {
-              const reply = record(value);
-              return sourceEvidenceId && reply.evidenceId === sourceEvidenceId
-                ? { ...reply, reviewState: "USED_AS_ACKNOWLEDGMENT", acknowledgmentHash }
-                : reply;
-            })
-          : [];
+        const connectedAcknowledgmentReplies = connectedReplies.map((reply) => sourceEvidenceId && reply.evidenceId === sourceEvidenceId
+          ? { ...reply, reviewState: "USED_AS_ACKNOWLEDGMENT", acknowledgmentHash }
+          : reply);
         const lastAcknowledgmentSyncAt = typeof existingResult.lastAcknowledgmentSyncAt === "string"
           ? existingResult.lastAcknowledgmentSyncAt
           : null;
@@ -4173,6 +4258,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
           remainingQuantity: remainingQuantity.toString(),
           unitOfMeasure,
           acknowledgments: [...acknowledgments, acknowledgment],
+          supplierOrderExceptions,
           connectedAcknowledgmentReplies,
           lastAcknowledgmentSyncAt,
           totals: {
@@ -4246,7 +4332,9 @@ export async function recordPurchaseOrderAcknowledgment(args: {
             lastSupplierOrderReference: acknowledgment.supplierOrderReference,
             lastConfirmedDeliveryDate: acknowledgment.confirmedDeliveryDate,
             connectedReplyCount: connectedAcknowledgmentReplies.length,
-            unreviewedConnectedReplyCount: connectedAcknowledgmentReplies.filter((reply) => reply.reviewState !== "USED_AS_ACKNOWLEDGMENT").length,
+            unreviewedConnectedReplyCount: connectedAcknowledgmentReplies.filter((reply) => reply.reviewState === "REVIEW_REQUIRED").length,
+            openSupplierExceptionCount: supplierOrderExceptions.filter((value) => value.status === "OPEN_REVIEW").length,
+            revisionRequiredCount: supplierOrderExceptions.filter((value) => value.status === "REVISION_REQUIRED").length,
             lastAcknowledgmentSyncAt,
             updatedAt: now.toISOString(),
           },
@@ -4321,4 +4409,250 @@ export async function recordPurchaseOrderAcknowledgment(args: {
     }
   }
   throw new SupplyPersistenceError("Supplier acknowledgment could not be recorded.", "conflict");
+}
+
+export async function recordSupplierOrderException(args: {
+  context: SupplyAccessContext;
+  actionId: string;
+  input: unknown;
+}) {
+  const exceptionInput = normalizeSupplierOrderException(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  if (!["ADMIN", "MANAGER"].includes(accessContext.role)) {
+    throw new SupplyPersistenceError("Only an admin or manager can record a supplier order exception.", "forbidden");
+  }
+  const found = await prisma.supplyExecutionTask.findFirst({
+    where: { id: args.actionId, officeId: accessContext.officeId, taskType: PURCHASE_ACTION_TASK_TYPE, capabilityKey: PURCHASE_ACTION_CAPABILITY },
+    select: { workspaceId: true, parentTaskId: true, parentTask: { select: { parentTaskId: true } } },
+  });
+  const purchaseDraftId = found?.parentTaskId;
+  const procurementCaseId = found?.parentTask?.parentTaskId;
+  if (!found || !purchaseDraftId || !procurementCaseId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+
+  for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+        const [procurementCase, purchaseDraft, purchaseAction] = await Promise.all([
+          tx.supplyExecutionTask.findFirst({ where: { id: procurementCaseId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: TASK_TYPE, status: "PLANNED" }, select: caseSelect }),
+          tx.supplyExecutionTask.findFirst({ where: { id: purchaseDraftId, officeId: accessContext.officeId, workspaceId: workspace.id, parentTaskId: procurementCaseId, taskType: PURCHASE_DRAFT_TASK_TYPE, status: "RUNNING" }, select: purchaseDraftSelect }),
+          tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, parentTaskId: purchaseDraftId, taskType: PURCHASE_ACTION_TASK_TYPE, capabilityKey: PURCHASE_ACTION_CAPABILITY, status: "RUNNING" }, select: purchaseActionSelect }),
+        ]);
+        if (!procurementCase || !purchaseDraft || !purchaseAction) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+        const caseResult = record(procurementCase.result);
+        const authorization = record(caseResult.purchaseAuthorization);
+        const projectedRelease = record(caseResult.purchaseRelease);
+        const actionResult = record(purchaseAction.result);
+        const release = record(actionResult.release);
+        if (!["RELEASED", "PARTIALLY_ACKNOWLEDGED"].includes(String(actionResult.state))
+          || authorization.actionTaskId !== purchaseAction.id
+          || release.releaseHash !== exceptionInput.expectedReleaseHash
+          || release.releaseHash !== record(projectedRelease.release).releaseHash
+          || release.actionScopeHash !== purchaseAction.inputHash) {
+          throw new SupplyPersistenceError("Supplier exception does not match the durable released order.", "conflict");
+        }
+        const actionInput = record(purchaseAction.input);
+        const order = record(actionInput.order);
+        const commercial = record(actionInput.commercial);
+        const orderedQuantity = new Prisma.Decimal(requiredText(order.quantity, "Authorized order quantity", 80));
+        const unitPrice = new Prisma.Decimal(requiredText(commercial.unitPrice, "Authorized unit price", 80));
+        const currency = requiredText(commercial.currency, "Authorized currency", 3).toUpperCase();
+        const authorizedDeliveryDate = isoDate(commercial.deliveryDate, "Authorized delivery date");
+        const authorizedPaymentTerms = requiredText(order.paymentTerms, "Authorized payment terms", 500);
+        const proposedQuantity = exceptionInput.proposedQuantity === null ? null : new Prisma.Decimal(exceptionInput.proposedQuantity).toString();
+        const proposedUnitPrice = exceptionInput.proposedUnitPrice === null ? null : new Prisma.Decimal(exceptionInput.proposedUnitPrice).toString();
+        if (exceptionInput.category === "QUANTITY_CHANGE" && proposedQuantity === orderedQuantity.toString()) {
+          throw new SupplyPersistenceError("Proposed quantity is unchanged from the authorized order.", "invalid_input");
+        }
+        if (exceptionInput.category === "PRICE_CHANGE" && proposedUnitPrice === unitPrice.toString() && exceptionInput.proposedCurrency === currency) {
+          throw new SupplyPersistenceError("Proposed price and currency are unchanged from the authorized order.", "invalid_input");
+        }
+        if (exceptionInput.category === "DELIVERY_CHANGE" && exceptionInput.proposedDeliveryDate === authorizedDeliveryDate) {
+          throw new SupplyPersistenceError("Proposed delivery date is unchanged from the authorized order.", "invalid_input");
+        }
+        if (exceptionInput.category === "TERMS_CHANGE" && exceptionInput.proposedPaymentTerms?.toLowerCase() === authorizedPaymentTerms.toLowerCase()) {
+          throw new SupplyPersistenceError("Proposed payment terms are unchanged from the authorized order.", "invalid_input");
+        }
+        const acknowledgments = Array.isArray(actionResult.acknowledgments) ? actionResult.acknowledgments.map((value) => record(value)) : [];
+        const existingExceptions = Array.isArray(actionResult.supplierOrderExceptions) ? actionResult.supplierOrderExceptions.map((value) => record(value)) : [];
+        const connectedReplies = Array.isArray(actionResult.connectedAcknowledgmentReplies) ? actionResult.connectedAcknowledgmentReplies.map((value) => record(value)) : [];
+        let evidenceUrl = exceptionInput.evidenceUrl;
+        let evidenceType: "OPERATOR_RECORDED_EXTERNAL" | "CONNECTED_PROVIDER" = "OPERATOR_RECORDED_EXTERNAL";
+        let evidenceSourceRecordId = `supplier-exception:${exceptionInput.category}:${exceptionInput.observedOn}`;
+        let sourceEvidenceId: string | null = null;
+        if (exceptionInput.connectedReplyEvidenceId) {
+          const connectedEvidence = await tx.supplyEvidence.findFirst({
+            where: { id: exceptionInput.connectedReplyEvidenceId, officeId: accessContext.officeId, workspaceId: workspace.id, executionTaskId: purchaseAction.id, kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT_REPLY_EMAIL", sourceType: "CONNECTED_PROVIDER" },
+            select: { id: true, sourceUri: true, sourceRecordId: true, observedAt: true, payload: true },
+          });
+          const connectedPayload = record(connectedEvidence?.payload);
+          const reply = connectedReplies.find((value) => value.evidenceId === connectedEvidence?.id);
+          if (!connectedEvidence?.sourceUri || !connectedEvidence.sourceRecordId || !connectedEvidence.observedAt
+            || connectedPayload.purchaseActionId !== purchaseAction.id
+            || connectedPayload.releaseHash !== release.releaseHash
+            || !reply || !["REVIEW_REQUIRED", "USED_AS_ORDER_EXCEPTION"].includes(String(reply.reviewState))) {
+            throw new SupplyPersistenceError("Connected supplier reply evidence no longer matches this released order or was already reviewed.", "conflict");
+          }
+          if (acknowledgments.some((value) => value.sourceEvidenceId === connectedEvidence.id)) {
+            throw new SupplyPersistenceError("This connected supplier reply was already used for an order decision.", "conflict");
+          }
+          const connectedUrl = connectedProviderUrl(connectedEvidence.sourceUri, "Connected supplier exception evidence URL");
+          if (exceptionInput.evidenceUrl && connectedProviderUrl(exceptionInput.evidenceUrl, "Supplier exception evidence URL") !== connectedUrl) {
+            throw new SupplyPersistenceError("Supplier exception evidence URL does not match the selected connected reply.", "conflict");
+          }
+          if (exceptionInput.observedOn !== connectedEvidence.observedAt.toISOString().slice(0, 10)) {
+            throw new SupplyPersistenceError("Supplier exception date must match the selected connected reply.", "conflict");
+          }
+          sourceEvidenceId = connectedEvidence.id;
+          evidenceUrl = connectedUrl;
+          evidenceType = "CONNECTED_PROVIDER";
+          evidenceSourceRecordId = connectedEvidence.sourceRecordId;
+        }
+        const normalizedException = {
+          releaseHash: release.releaseHash,
+          actionScopeHash: purchaseAction.inputHash,
+          category: exceptionInput.category,
+          observedOn: exceptionInput.observedOn,
+          summary: exceptionInput.summary,
+          proposedQuantity,
+          proposedUnitPrice,
+          proposedCurrency: exceptionInput.proposedCurrency,
+          proposedDeliveryDate: exceptionInput.proposedDeliveryDate,
+          proposedPaymentTerms: exceptionInput.proposedPaymentTerms,
+          evidenceUrl: requiredText(evidenceUrl, "Supplier exception evidence URL", 2_000),
+          ...(sourceEvidenceId ? { sourceEvidenceId } : {}),
+          note: exceptionInput.note,
+        };
+        const exceptionHash = digest(normalizedException);
+        const repeated = existingExceptions.find((value) => value.exceptionHash === exceptionHash);
+        if (repeated) return { procurementCase, purchaseDraft, purchaseAction: purchaseActionView(purchaseAction), exception: repeated };
+        if (sourceEvidenceId && existingExceptions.some((value) => value.sourceEvidenceId === sourceEvidenceId)) {
+          throw new SupplyPersistenceError("This connected supplier reply was already used for a different order decision.", "conflict");
+        }
+        const now = new Date();
+        const evidence = await appendExternalEvidence({
+          tx,
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          executionTaskId: purchaseAction.id,
+          actorUserId: accessContext.userId,
+          kind: "SUPPLIER_ORDER_EXCEPTION",
+          title: `Supplier order exception: ${exceptionInput.category.toLowerCase().replaceAll("_", " ")}`,
+          sourceType: evidenceType,
+          sourceUri: normalizedException.evidenceUrl,
+          sourceRecordId: evidenceSourceRecordId,
+          observedOn: exceptionInput.observedOn,
+          contentHash: exceptionHash,
+          payload: inputJson(normalizedException),
+        });
+        const supplierException = { ...normalizedException, evidenceId: evidence.id, exceptionHash, status: "OPEN_REVIEW", recordedByUserId: accessContext.userId, recordedAt: now.toISOString() };
+        const supplierOrderExceptions = [...existingExceptions, supplierException];
+        const updatedReplies = connectedReplies.map((reply) => sourceEvidenceId && reply.evidenceId === sourceEvidenceId
+          ? { ...reply, reviewState: "USED_AS_ORDER_EXCEPTION", exceptionHash }
+          : reply);
+        const nextActionResult = {
+          ...actionResult,
+          supplierOrderExceptions,
+          connectedAcknowledgmentReplies: updatedReplies,
+          openSupplierExceptionCount: supplierOrderExceptions.filter((value) => value.status === "OPEN_REVIEW").length,
+          revisionRequiredCount: supplierOrderExceptions.filter((value) => value.status === "REVISION_REQUIRED").length,
+          updatedAt: now.toISOString(),
+        };
+        const updatedAction = await tx.supplyExecutionTask.update({ where: { id: purchaseAction.id }, data: { result: inputJson(nextActionResult), resultHash: digest(nextActionResult) }, select: purchaseActionSelect });
+        const nextCaseResult = {
+          ...caseResult,
+          purchaseRelease: {
+            ...projectedRelease,
+            openSupplierExceptionCount: nextActionResult.openSupplierExceptionCount,
+            revisionRequiredCount: nextActionResult.revisionRequiredCount,
+            unreviewedConnectedReplyCount: updatedReplies.filter((reply) => reply.reviewState === "REVIEW_REQUIRED").length,
+            updatedAt: now.toISOString(),
+          },
+          updatedAt: now.toISOString(),
+        };
+        const updatedCase = await tx.supplyExecutionTask.update({ where: { id: procurementCase.id }, data: { result: inputJson(nextCaseResult), resultHash: digest(nextCaseResult) }, select: caseSelect });
+        const payload = inputJson({ purchaseActionId: purchaseAction.id, exceptionHash, category: exceptionInput.category, evidenceId: evidence.id });
+        await appendCaseEvent({ tx, caseId: purchaseAction.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: "SUPPLIER_ORDER_EXCEPTION_RECORDED", status: "RUNNING", message: "A supplier order exception requires disposition before acceptance can continue.", payload });
+        await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType: "SUPPLIER_ORDER_EXCEPTION_RECORDED", status: "RUNNING", message: "Supplier terms differ from the authorized order.", payload });
+        return { procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: purchaseActionView(updatedAction) }, purchaseDraft, purchaseAction: purchaseActionView(updatedAction), exception: supplierException };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!retryableTransactionError(error) || transactionAttempt === 2) {
+        if (retryableTransactionError(error)) throw new SupplyPersistenceError("Supplier order exception changed concurrently. Reload and retry.", "conflict");
+        throw error;
+      }
+    }
+  }
+  throw new SupplyPersistenceError("Supplier order exception could not be recorded.", "conflict");
+}
+
+export async function resolveSupplierOrderException(args: {
+  context: SupplyAccessContext;
+  actionId: string;
+  input: unknown;
+}) {
+  const resolutionInput = normalizeSupplierOrderExceptionResolution(args.input);
+  const accessContext = await currentAccessContext(args.context);
+  if (!["ADMIN", "MANAGER"].includes(accessContext.role)) throw new SupplyPersistenceError("Only an admin or manager can resolve a supplier order exception.", "forbidden");
+  if (resolutionInput.disposition === "REQUIRE_REAUTHORIZATION" && accessContext.role !== "ADMIN") {
+    throw new SupplyPersistenceError("Only an admin can require a new purchase authorization.", "forbidden");
+  }
+  const found = await prisma.supplyExecutionTask.findFirst({
+    where: { id: args.actionId, officeId: accessContext.officeId, taskType: PURCHASE_ACTION_TASK_TYPE, capabilityKey: PURCHASE_ACTION_CAPABILITY },
+    select: { workspaceId: true, parentTaskId: true, parentTask: { select: { parentTaskId: true } } },
+  });
+  const purchaseDraftId = found?.parentTaskId;
+  const procurementCaseId = found?.parentTask?.parentTaskId;
+  if (!found || !purchaseDraftId || !procurementCaseId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+
+  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${procurementCaseId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${purchaseDraftId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${accessContext.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+    const [procurementCase, purchaseDraft, purchaseAction] = await Promise.all([
+      tx.supplyExecutionTask.findFirst({ where: { id: procurementCaseId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: TASK_TYPE, status: "PLANNED" }, select: caseSelect }),
+      tx.supplyExecutionTask.findFirst({ where: { id: purchaseDraftId, officeId: accessContext.officeId, workspaceId: workspace.id, parentTaskId: procurementCaseId, taskType: PURCHASE_DRAFT_TASK_TYPE, status: "RUNNING" }, select: purchaseDraftSelect }),
+      tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, parentTaskId: purchaseDraftId, taskType: PURCHASE_ACTION_TASK_TYPE, capabilityKey: PURCHASE_ACTION_CAPABILITY, status: "RUNNING" }, select: purchaseActionSelect }),
+    ]);
+    if (!procurementCase || !purchaseDraft || !purchaseAction) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
+    const caseResult = record(procurementCase.result);
+    const projectedRelease = record(caseResult.purchaseRelease);
+    const actionResult = record(purchaseAction.result);
+    const release = record(actionResult.release);
+    if (release.releaseHash !== resolutionInput.expectedReleaseHash || release.releaseHash !== record(projectedRelease.release).releaseHash) {
+      throw new SupplyPersistenceError("Supplier exception resolution does not match the durable released order.", "conflict");
+    }
+    const existingExceptions = Array.isArray(actionResult.supplierOrderExceptions) ? actionResult.supplierOrderExceptions.map((value) => record(value)) : [];
+    const target = existingExceptions.find((value) => value.exceptionHash === resolutionInput.exceptionHash);
+    if (!target) throw new SupplyPersistenceError("Supplier order exception was not found.", "not_found");
+    const expectedStatus = resolutionInput.disposition === "KEEP_ORIGINAL" ? "RESOLVED_KEEP_ORIGINAL" : "REVISION_REQUIRED";
+    if (target.status !== "OPEN_REVIEW") {
+      if (target.status === expectedStatus && record(target.resolution).disposition === resolutionInput.disposition) {
+        return { procurementCase, purchaseDraft, purchaseAction: purchaseActionView(purchaseAction), exception: target };
+      }
+      throw new SupplyPersistenceError("Supplier order exception already has a different disposition.", "conflict");
+    }
+    const now = new Date();
+    const resolution = { disposition: resolutionInput.disposition, note: resolutionInput.note, decidedByUserId: accessContext.userId, decidedAt: now.toISOString() };
+    const supplierOrderExceptions = existingExceptions.map((value) => value.exceptionHash === resolutionInput.exceptionHash ? { ...value, status: expectedStatus, resolution } : value);
+    const openSupplierExceptionCount = supplierOrderExceptions.filter((value) => value.status === "OPEN_REVIEW").length;
+    const revisionRequiredCount = supplierOrderExceptions.filter((value) => value.status === "REVISION_REQUIRED").length;
+    const nextActionResult = { ...actionResult, supplierOrderExceptions, openSupplierExceptionCount, revisionRequiredCount, updatedAt: now.toISOString() };
+    const updatedAction = await tx.supplyExecutionTask.update({ where: { id: purchaseAction.id }, data: { result: inputJson(nextActionResult), resultHash: digest(nextActionResult) }, select: purchaseActionSelect });
+    const nextCaseResult = { ...caseResult, purchaseRelease: { ...projectedRelease, openSupplierExceptionCount, revisionRequiredCount, updatedAt: now.toISOString() }, updatedAt: now.toISOString() };
+    const updatedCase = await tx.supplyExecutionTask.update({ where: { id: procurementCase.id }, data: { result: inputJson(nextCaseResult), resultHash: digest(nextCaseResult) }, select: caseSelect });
+    const payload = inputJson({ purchaseActionId: purchaseAction.id, exceptionHash: resolutionInput.exceptionHash, resolution });
+    const eventType = resolutionInput.disposition === "KEEP_ORIGINAL" ? "SUPPLIER_ORDER_EXCEPTION_RESOLVED" : "SUPPLIER_ORDER_REAUTHORIZATION_REQUIRED";
+    const message = resolutionInput.disposition === "KEEP_ORIGINAL" ? "The original authorization remains unchanged; later supplier acceptance still needs separate evidence." : "Supplier changes require a new purchase authorization before acceptance can continue.";
+    await appendCaseEvent({ tx, caseId: purchaseAction.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType, status: "RUNNING", message, payload });
+    await appendCaseEvent({ tx, caseId: procurementCase.id, officeId: accessContext.officeId, workspaceId: workspace.id, actorUserId: accessContext.userId, eventType, status: "RUNNING", message, payload });
+    const resolvedException = supplierOrderExceptions.find((value) => value.exceptionHash === resolutionInput.exceptionHash)!;
+    return { procurementCase: { ...updatedCase, purchaseDraft, purchaseAction: purchaseActionView(updatedAction) }, purchaseDraft, purchaseAction: purchaseActionView(updatedAction), exception: resolvedException };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier order exception changed concurrently. Reload and retry.");
 }

@@ -126,6 +126,8 @@ export function AtlasInventoryWorkspace({
   }
 
   function caseStage(procurementCase: SavedProcurementCase | undefined) {
+    if (procurementCase?.result?.purchaseRelease?.revisionRequiredCount) return "New order authorization required";
+    if (procurementCase?.result?.purchaseRelease?.openSupplierExceptionCount) return "Supplier order exception review";
     if (procurementCase?.result?.purchaseRelease?.state === "ACKNOWLEDGED") return "Supplier acknowledged";
     if (procurementCase?.result?.purchaseRelease?.state === "PARTIALLY_ACKNOWLEDGED") {
       const release = procurementCase.result.purchaseRelease;
@@ -166,11 +168,15 @@ export function AtlasInventoryWorkspace({
   }
 
   function queueActionLabel(run: SavedSourcingResearchRun | undefined, cases: SavedProcurementCase[]) {
-    const procurementCase = cases.find((candidate) => candidate.result?.purchaseRelease)
+    const procurementCase = cases.find((candidate) => candidate.result?.purchaseRelease?.revisionRequiredCount)
+      ?? cases.find((candidate) => candidate.result?.purchaseRelease?.openSupplierExceptionCount)
+      ?? cases.find((candidate) => candidate.result?.purchaseRelease)
       ?? cases.find((candidate) => candidate.purchaseAction)
       ?? cases.find((candidate) => candidate.purchaseDraft)
       ?? cases[0];
     const release = procurementCase?.result?.purchaseRelease;
+    if (release?.revisionRequiredCount) return "Prepare revised order authorization";
+    if (release?.openSupplierExceptionCount) return "Review supplier order exception";
     if (release?.release && release.state !== "ACKNOWLEDGED" && release.release.acknowledgmentDueOn < new Date().toISOString().slice(0, 10)) return "Chase supplier acknowledgment";
     if (release?.state !== "ACKNOWLEDGED" && release?.unreviewedConnectedReplyCount) return "Review supplier order reply";
     if (procurementCase?.result?.purchaseRelease?.state === "RELEASED") return "Record supplier acknowledgment";

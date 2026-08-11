@@ -13,6 +13,8 @@ import {
   recordSupplierQuoteRelease,
   recordSupplierQuoteResponse,
   recordPurchaseOrderAcknowledgment,
+  recordSupplierOrderException,
+  resolveSupplierOrderException,
   requestPurchaseActionApproval,
   requestProcurementApproval,
   reviewProcurementGate,
@@ -2273,6 +2275,154 @@ async function main() {
       : 0, 1, "the queue must restore captured order replies after partial acknowledgment");
     assert.equal(restoredPartialConnectedCase?.result?.purchaseRelease?.unreviewedConnectedReplyCount, 0, "a used reply must not keep the queue stuck on review");
 
+    const changedTermsReply = await prisma.emailMessage.create({
+      data: {
+        threadId: deliveredOrderResult.localThreadId,
+        accountId: orderSenderAccount.id,
+        externalId: `<supplier-order-exception-${suffix}@example.com>`,
+        gmailMessageId: `gmail-supplier-order-exception-${suffix}`,
+        direction: "INBOUND",
+        fromEmail: "orders@example.com",
+        fromName: "Example supplier order desk",
+        toEmails: JSON.stringify([orderSenderAccount.email]),
+        subject: "Re: Purchase order PO-CONNECTED-001 delivery change",
+        bodyText: "We can supply the remaining quantity, but delivery must move to the revised date below.",
+        attachments: JSON.stringify([]),
+        sentAt: new Date(new Date(deliveredOrderResult.sentAt).getTime() + 120_000),
+      },
+    });
+    const changedTermsCapture = await captureConnectedPurchaseOrderReplies({ context, purchaseActionId: clonedAction.id, sync: orderReplySync });
+    assert.equal(changedTermsCapture.captured, 1, "a later exact-thread supplier reply must enter review without changing the order");
+    const changedTermsEvidence = await prisma.supplyEvidence.findFirstOrThrow({
+      where: { executionTaskId: clonedAction.id, kind: "SUPPLIER_ORDER_ACKNOWLEDGMENT_REPLY_EMAIL", sourceRecordId: changedTermsReply.gmailMessageId },
+    });
+    const changedDeliveryDate = futureDate(35);
+    const connectedExceptionInput = {
+      expectedReleaseHash: deliveredOrderResult.releaseHash,
+      category: "DELIVERY_CHANGE",
+      observedOn: changedTermsReply.sentAt.toISOString().slice(0, 10),
+      summary: "Supplier moved delivery for the remaining authorized quantity.",
+      proposedDeliveryDate: changedDeliveryDate,
+      evidenceUrl: null,
+      connectedReplyEvidenceId: changedTermsEvidence.id,
+      note: "Operator recorded the supplier's changed delivery date for review.",
+    };
+    const concurrentExceptions = await Promise.all([
+      recordSupplierOrderException({ context: managerContext, actionId: clonedAction.id, input: connectedExceptionInput }),
+      recordSupplierOrderException({ context: managerContext, actionId: clonedAction.id, input: connectedExceptionInput }),
+    ]);
+    const connectedException = concurrentExceptions[0].exception as { exceptionHash: string; evidenceId: string; status: string; sourceEvidenceId: string };
+    assert.equal(concurrentExceptions[1].exception.exceptionHash, connectedException.exceptionHash, "identical concurrent exception records must converge");
+    assert.equal(connectedException.status, "OPEN_REVIEW");
+    assert.equal(connectedException.sourceEvidenceId, changedTermsEvidence.id);
+    assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: connectedException.evidenceId } })).sourceType, "CONNECTED_PROVIDER");
+    assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: clonedAction.id, kind: "SUPPLIER_ORDER_EXCEPTION", contentHash: connectedException.exceptionHash } }), 1, "concurrent exception records must create one evidence object");
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: clonedAction.id, eventType: "SUPPLIER_ORDER_EXCEPTION_RECORDED" } }), 1, "concurrent exception records must append one action event");
+    const actionWithOpenException = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: clonedAction.id } });
+    const openExceptionResult = actionWithOpenException.result as { openSupplierExceptionCount: number; connectedAcknowledgmentReplies: Array<{ evidenceId: string; reviewState: string }> };
+    assert.equal(openExceptionResult.openSupplierExceptionCount, 1);
+    assert.equal(openExceptionResult.connectedAcknowledgmentReplies.find((reply) => reply.evidenceId === changedTermsEvidence.id)?.reviewState, "USED_AS_ORDER_EXCEPTION");
+    await recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        acknowledgedOn: new Date().toISOString().slice(0, 10),
+        supplierOrderReference: "SO-BLOCKED-BY-EXCEPTION",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: "https://example.com/blocked-acceptance",
+      },
+    }).then(
+      () => assert.fail("open changed terms must block normal supplier acknowledgment"),
+      (error: unknown) => assert.match(error instanceof Error ? error.message : String(error), /resolve the supplier order exception/i),
+    );
+    const keptOriginal = await resolveSupplierOrderException({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        exceptionHash: connectedException.exceptionHash,
+        disposition: "KEEP_ORIGINAL",
+        note: "Supplier confirmed the original delivery date remains authoritative.",
+      },
+    });
+    assert.equal(keptOriginal.exception.status, "RESOLVED_KEEP_ORIGINAL");
+    const resolutionEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: clonedAction.id, eventType: "SUPPLIER_ORDER_EXCEPTION_RESOLVED" } });
+    await resolveSupplierOrderException({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        exceptionHash: connectedException.exceptionHash,
+        disposition: "KEEP_ORIGINAL",
+        note: "Supplier confirmed the original delivery date remains authoritative.",
+      },
+    });
+    assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: clonedAction.id, eventType: "SUPPLIER_ORDER_EXCEPTION_RESOLVED" } }), resolutionEventCount, "an identical resolution retry must not append fake history");
+    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        acknowledgedOn: changedTermsReply.sentAt.toISOString().slice(0, 10),
+        supplierOrderReference: "SO-EXCEPTION-EVIDENCE-REUSED",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: null,
+        connectedReplyEvidenceId: changedTermsEvidence.id,
+      },
+    }), /no longer matches this released order/i, "a reply used for an exception must never be reused as acknowledgment evidence");
+
+    const termsException = await recordSupplierOrderException({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        category: "TERMS_CHANGE",
+        observedOn: new Date().toISOString().slice(0, 10),
+        summary: "Supplier requested payment before shipment instead of the authorized terms.",
+        proposedPaymentTerms: "Prepaid before shipment",
+        evidenceUrl: "https://example.com/supplier-order-terms-change",
+        note: "Commercial change requires a new exact-scope decision.",
+      },
+    });
+    await assert.rejects(() => resolveSupplierOrderException({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        exceptionHash: termsException.exception.exceptionHash,
+        disposition: "REQUIRE_REAUTHORIZATION",
+        note: "Changed payment terms require a replacement authorization.",
+      },
+    }), /only an admin/i, "a manager must not invalidate an admin-authorized purchase scope");
+    const reauthorizationRequired = await resolveSupplierOrderException({
+      context,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        exceptionHash: termsException.exception.exceptionHash,
+        disposition: "REQUIRE_REAUTHORIZATION",
+        note: "Changed payment terms require a replacement authorization.",
+      },
+    });
+    assert.equal(reauthorizationRequired.exception.status, "REVISION_REQUIRED");
+    const caseWithRevisionRequired = (await listProcurementCases(context)).find((entry) => entry.id === clonedCase.id);
+    assert.equal(caseWithRevisionRequired?.result?.purchaseRelease?.revisionRequiredCount, 1, "the sourcing queue must restore the required reauthorization checkpoint");
+    await assert.rejects(() => recordPurchaseOrderAcknowledgment({
+      context: managerContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        acknowledgedOn: new Date().toISOString().slice(0, 10),
+        supplierOrderReference: "SO-BLOCKED-BY-REVISION",
+        acceptedQuantity: 1,
+        confirmedDeliveryDate: futureDate(5),
+        evidenceUrl: "https://example.com/revision-blocked-acceptance",
+      },
+    }), /resolve the supplier order exception/i, "an order awaiting reauthorization must not accept supplier terms against the obsolete scope");
+
     const duplicateRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "DUPLICATE-ID" });
     await completeSourcingResearchRun({
       context,
@@ -2589,12 +2739,38 @@ async function main() {
       purchaseActionId: clonedAction.id,
       sync: orderReplySync,
     }), /current user|not found|cannot edit/i, "a stale privileged cookie must not capture connected supplier order replies after demotion");
+    await assert.rejects(() => recordSupplierOrderException({
+      context: stalePrivilegedContext,
+      actionId: clonedAction.id,
+      input: connectedExceptionInput,
+    }), /admin or manager/i, "a stale privileged cookie must not record supplier order exceptions after demotion");
+    await assert.rejects(() => resolveSupplierOrderException({
+      context: stalePrivilegedContext,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        exceptionHash: termsException.exception.exceptionHash,
+        disposition: "KEEP_ORIGINAL",
+        note: "Unauthorized stale-session disposition attempt.",
+      },
+    }), /admin or manager/i, "a stale privileged cookie must not resolve supplier order exceptions after demotion");
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
     assert.equal((await listSourcingResearchPage(foreign)).runs.length, 0, "another office must not page through sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
+    await assert.rejects(() => recordSupplierOrderException({ context: foreign, actionId: clonedAction.id, input: connectedExceptionInput }), /not found/i, "another office must not record supplier order exceptions");
+    await assert.rejects(() => resolveSupplierOrderException({
+      context: foreign,
+      actionId: clonedAction.id,
+      input: {
+        expectedReleaseHash: deliveredOrderResult.releaseHash,
+        exceptionHash: termsException.exception.exceptionHash,
+        disposition: "KEEP_ORIGINAL",
+        note: "Unauthorized cross-office disposition attempt.",
+      },
+    }), /not found/i, "another office must not resolve supplier order exceptions");
     await assert.rejects(() => saveProcurementShortlist({
       context: foreign,
       researchRunId: shortlistRun.id,

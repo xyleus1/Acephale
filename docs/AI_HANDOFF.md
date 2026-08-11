@@ -7907,3 +7907,30 @@ Trust boundary:
   impossible to acknowledge.
 - No payment, booking, customs, inventory mutation, or Logistics handoff is
   created.
+
+## Supply OS supplier order exceptions, August 10
+
+Status:
+
+- Implemented on `supply-os-order-exceptions`, targeting `main`.
+- No Prisma migration or new dependency is required.
+
+Operator result:
+
+- A buyer can classify a supplier reply as changed quantity, price, delivery,
+  payment terms, rejection, or another order exception.
+- The exception and its evidence persist in the supplier workstream. The queue
+  shows review or replacement-authorization work instead of a false normal
+  acknowledgment action.
+- A manager may record that the original authorization remains authoritative.
+  An admin may require a new exact-scope purchase authorization.
+
+Trust boundary:
+
+- Open and revision-required exceptions block supplier acknowledgment. A Gmail
+  reply can support acceptance or an exception, never both.
+- Requiring new authorization does not edit or resend the old order. The next
+  slice must create a replacement order scope before supplier acceptance can
+  continue.
+- No payment, booking, customs, inventory mutation, or Logistics handoff is
+  created.

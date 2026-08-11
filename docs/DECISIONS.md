@@ -2530,3 +2530,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
   release lineage so the operator can resume and capture later replies.
 - Boundary: Email text is not automatically extracted into accepted quantity,
   delivery, payment, Logistics, or inventory state.
+
+### 2026-08-10 - Supplier counteroffers are exceptions, not acknowledgments
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A supplier reply may change quantity, price, delivery, payment terms,
+  or reject the order. Treating that reply as normal acceptance would attach new
+  commercial terms to an obsolete authorization.
+- Decision: Changed or rejected terms become durable supplier order exceptions
+  tied to the exact release hash. Open exceptions block supplier acknowledgment.
+  An operator may retain the original authorization only with a recorded reason;
+  an admin may instead require a replacement authorization.
+- Evidence boundary: Connected Gmail replies retain provider lineage and may be
+  used for either an acknowledgment or an exception, never both. Structured
+  proposed terms remain operator-confirmed rather than inferred from email text.
+- Execution boundary: Reauthorization does not mutate or resend the original
+  order. It marks the old scope unusable until a later workflow creates and
+  approves a replacement. No payment, inventory, booking, customs, or Logistics
+  state changes.
