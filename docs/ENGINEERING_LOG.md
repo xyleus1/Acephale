@@ -4960,3 +4960,13 @@ Use this file for chronological implementation notes that future agents should s
 - Preserved behavior: GUILD remains an illustrative company with its 40-part BOM. Canonical company creation remains admin-only, office-scoped, and linked to the CRM customer record.
 - Skipped: Authenticated browser verification was unavailable in the restricted runtime.
 
+### 2026-08-11 - Isolate and enrich real company workspaces
+
+- Branch: `fix/real-company-profile-enrichment`, merged by PR #138.
+- Symptom: A newly created Unilever workspace had no logo and displayed generic demo locations.
+- Root cause: Name-only creation skipped company research, and a later demo-data change routed every database workspace through the Atlas demo renderer.
+- Fix: New and existing companies run attributable profile research. Stored profiles drive the real workspace name, logo, headquarters, locations, and network model. Missing research fails visibly and can be retried.
+- Data boundary: Real-company inventory and demo sourcing history are empty. Atlas and GUILD data load only for explicit demo selections.
+- Access: Profile research requires office-scoped workspace edit access. Reads and stored evidence remain office-scoped.
+- Verification: Vercel preview and production builds passed for commit `6e913c72c0d94bc5db488a8983b812b5e5d6de76`. Source contracts cover the regression. Authenticated browser verification was unavailable.
+
