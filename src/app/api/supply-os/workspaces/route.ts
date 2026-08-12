@@ -39,13 +39,12 @@ export async function POST(request: NextRequest) {
       website: typeof body.website === "string" ? body.website : null,
     });
     let warning: string | null = null;
-    if (result.normalized.website) {
-      try {
-        const research = await researchCompany(`${result.company.name}, ${result.normalized.website}`);
-        await storeSupplyCompanyResearch({ context, workspaceId: result.workspace.id, research });
-      } catch {
-        warning = "The company was created, but its public profile could not be built. Retry with the official website later.";
-      }
+    const researchQuery = [result.company.name, result.normalized.website].filter(Boolean).join(", ");
+    try {
+      const research = await researchCompany(researchQuery);
+      await storeSupplyCompanyResearch({ context, workspaceId: result.workspace.id, research });
+    } catch {
+      warning = "The company was created, but profile research did not finish. Open the company to retry.";
     }
     return NextResponse.json(
       { workspace: result.workspace, company: result.company, created: result.created, warning },
