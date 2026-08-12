@@ -60,6 +60,7 @@ import { extractConnectedSupplierQuoteTerms } from "../src/lib/supply-os/supplie
 import { normalizeSupplierQuoteExtraction } from "../src/lib/supply-os/supplier-quote-extraction";
 import { SupplierQuoteAttachmentError } from "../src/lib/supply-os/supplier-quote-attachment-text";
 import { returnStaleReplacementToSourcing } from "../src/lib/supply-os/purchase-order-revision";
+import { supplyIntelligenceProfile } from "../src/lib/supply-os/supply-intelligence-persistence";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -130,6 +131,16 @@ async function main() {
     const quoteDeliveryDate = futureDate(20);
     const quoteValidUntil = futureDate(15);
     const qualityTargetDate = futureDate(10);
+    const qualityVerificationInput = {
+      method: "SAMPLE",
+      acceptanceCriteria: "Verify calibration, connector fit, image depth accuracy, and serial traceability.",
+      owner: "Atlas vision engineering",
+      targetDate: qualityTargetDate,
+      outcome: "PASS",
+      observedOn: futureDate(0),
+      evidenceUrl: "https://example.com/quality/atlas-vision-sample",
+      verificationNote: "Atlas vision engineering inspected the sample and recorded the passing calibration and fit results.",
+    } as const;
     const supplierQualificationInput = (expectedSelectionHash: string, note: string) => ({
       gate: "SOURCE_EVIDENCE",
       expectedSelectionHash,
@@ -163,6 +174,7 @@ async function main() {
           sourceUrls: ["https://example.com/product"],
           price: supported(125),
           currency: supported("USD"),
+          unitOfMeasure: supported("EA"),
           minimumOrderQuantity: supported(4),
           leadTimeDays: supported(14),
           status: "REVIEW_REQUIRED",
@@ -173,14 +185,144 @@ async function main() {
           sourceUrls: ["https://example.com/weak"],
           price: { ...supported(99), state: "PARTIAL" },
           currency: supported("USD"),
+          unitOfMeasure: supported("EA"),
           minimumOrderQuantity: supported(2),
           leadTimeDays: { ...supported(7), freshness: "STALE" },
           status: "UNSUPPORTED",
+        }, {
+          id: "candidate-3",
+          companyName: "Partial unit supplier",
+          website: "https://example.com/partial-unit",
+          sourceUrls: ["https://example.com/product"],
+          price: supported(88),
+          currency: supported("USD"),
+          unitOfMeasure: { ...supported("EA"), state: "PARTIAL" },
+          minimumOrderQuantity: supported(2),
+          leadTimeDays: supported(7),
+          status: "REVIEW_REQUIRED",
+        }, {
+          id: "candidate-4",
+          companyName: "Stale unit supplier",
+          website: "https://example.com/stale-unit",
+          sourceUrls: ["https://example.com/product"],
+          price: supported(77),
+          currency: supported("USD"),
+          unitOfMeasure: { ...supported("EA"), freshness: "STALE" },
+          minimumOrderQuantity: supported(2),
+          leadTimeDays: supported(7),
+          status: "REVIEW_REQUIRED",
         }],
         degraded: false,
         warnings: [],
       },
     });
+    const persistedCustomerFacts = await prisma.supplyProfileFact.findMany({
+      where: { officeId: context.officeId, workspaceId: started.workspaceId, capabilityRunId: started.id, subjectType: "CUSTOMER" },
+    });
+    assert.equal(persistedCustomerFacts.length, 1, "completed research must persist one customer sourcing-need fact");
+    assert.equal(persistedCustomerFacts[0]?.factType, "SOURCING_NEED");
+    const persistedSupplierProfiles = await prisma.supplySupplierProfile.findMany({
+      where: { officeId: context.officeId, workspaceId: started.workspaceId, lastResearchRunId: started.id },
+    });
+    assert.equal(persistedSupplierProfiles.length, 4, "completed research must persist every named supplier candidate");
+    const persistedPrices = await prisma.supplyPriceObservation.findMany({
+      where: { officeId: context.officeId, workspaceId: started.workspaceId, capabilityRunId: started.id },
+      include: { evidence: true },
+    });
+    assert.equal(persistedPrices.length, 0, "provider-supplied freshness must not create a durable current-price observation without a server-owned retrieval receipt");
+    const exaInput = {
+      ...input,
+      componentItemKey: "RM-9",
+      componentName: "RM-9 radio module",
+      manufacturer: "Acme",
+      mpn: "RM-9",
+      specification: "Acme RM-9 radio module",
+    };
+    const exaRun = await startSourcingResearchRun(context, exaInput, visibleWorkspace.id);
+    const exaSourceUrl = "https://supplier.example/catalog/rm-9";
+    const exaText = "Example Supplier lists the Acme RM-9 radio module for 42.50 USD per each.";
+    const exaSourceHash = createHash("sha256").update(exaText).digest("hex");
+    const exaRetrievedAt = new Date(Date.now() - 1_000).toISOString();
+    const exaCapture = {
+      provider: "EXA",
+      freshnessPolicy: "FORCED_LIVE",
+      searchRequestId: "search-request-persistence",
+      contentsRequestId: "contents-request-persistence",
+      searchHttpStatus: 200,
+      contentsHttpStatus: 200,
+      searchResponseHash: "a".repeat(64),
+      contentsResponseHash: "b".repeat(64),
+      retrievedAt: exaRetrievedAt,
+      records: [{
+        searchRank: 1,
+        sourceId: "source-persistence",
+        sourceUrl: exaSourceUrl,
+        sourceTitle: "RM-9 listing",
+        status: { id: exaSourceUrl, status: "success", errorTag: null, httpStatusCode: null, cacheState: null, cacheAgeHours: null },
+        publishedDate: "1999-01-01T00:00:00.000Z",
+        text: exaText,
+        highlights: [],
+        proposal: {
+          supplierName: "Example Supplier",
+          supplierRole: "DISTRIBUTOR",
+          itemIdentity: "Acme RM-9 radio module",
+          manufacturer: "Acme",
+          mpn: "RM-9",
+          priceAmount: 42.5,
+          currency: "USD",
+          unitOfMeasure: "each",
+          packageQuantity: null,
+          evidenceText: exaText,
+        },
+        sourceTextHash: exaSourceHash,
+      }],
+    } as const;
+    await completeSourcingResearchRun({
+      context,
+      runId: exaRun.id,
+      workspaceId: exaRun.workspaceId,
+      output: {
+        candidates: [{
+          id: "example-supplier-1",
+          companyName: "Example Supplier",
+          website: "https://supplier.example/",
+          roles: ["DISTRIBUTOR"],
+          sourceUrls: [exaSourceUrl],
+          productCapability: supported("Acme RM-9 radio module"),
+          price: { ...supported(42.5), sources: [{ url: exaSourceUrl, sourceType: "PUBLIC" }] },
+          currency: { ...supported("USD"), sources: [{ url: exaSourceUrl, sourceType: "PUBLIC" }] },
+          unitOfMeasure: { ...supported("each"), sources: [{ url: exaSourceUrl, sourceType: "PUBLIC" }] },
+          status: "REVIEW_REQUIRED",
+        }],
+        retrieval: exaCapture,
+        degraded: false,
+        warnings: [],
+      },
+    });
+    const exaPrices = await prisma.supplyPriceObservation.findMany({
+      where: { officeId: context.officeId, workspaceId: visibleWorkspace.id, capabilityRunId: exaRun.id },
+      include: { evidence: true },
+    });
+    assert.equal(exaPrices.length, 1, "one revalidated forced-live Exa capture must append one public listing observation");
+    assert.equal(exaPrices[0]?.observationType, "PUBLIC_LIST_PRICE");
+    assert.equal(exaPrices[0]?.evidence?.sourceType, "MANAGED_PUBLIC_RETRIEVAL");
+    assert.equal(exaPrices[0]?.observedAt.toISOString(), exaRetrievedAt, "the server-owned retrieval time must become the listing observation time");
+    const tamperedExaRun = await startSourcingResearchRun(context, { ...exaInput, componentItemKey: "RM-9-TAMPERED" }, visibleWorkspace.id);
+    await completeSourcingResearchRun({
+      context,
+      runId: tamperedExaRun.id,
+      workspaceId: tamperedExaRun.workspaceId,
+      output: {
+        candidates: [{ id: "example-supplier-tampered", companyName: "Example Supplier", website: "https://supplier.example/", roles: ["DISTRIBUTOR"], sourceUrls: [exaSourceUrl], status: "REVIEW_REQUIRED" }],
+        retrieval: { ...exaCapture, records: [{ ...exaCapture.records[0], sourceTextHash: "f".repeat(64) }] },
+        degraded: false,
+        warnings: [],
+      },
+    });
+    assert.equal(await prisma.supplyPriceObservation.count({ where: { capabilityRunId: tamperedExaRun.id } }), 0, "tampered managed capture must append no observation");
+    const persistedIntelligence = await supplyIntelligenceProfile(context, started.workspaceId);
+    assert.equal(persistedIntelligence.customer.factCount, 1);
+    assert.equal(persistedIntelligence.supplierCount, 4);
 
     await prisma.supplyCapabilityRun.update({
       where: { id: stale.id },
@@ -191,7 +333,7 @@ async function main() {
     const completed = runs.find((run) => run.id === started.id);
     assert.equal((completed?.input as typeof input).componentItemKey, "VIS-DPT-410");
     assert.equal(completed?.status, "SUCCEEDED");
-    assert.equal(((completed?.output as { candidates?: unknown[] })?.candidates ?? []).length, 2);
+    assert.equal(((completed?.output as { candidates?: unknown[] })?.candidates ?? []).length, 4);
     assert.equal(runs.find((run) => run.id === stale.id)?.status, "FAILED", "stale research must become retryable");
     const firstResearchPage = await listSourcingResearchPage(context, { limit: 1 });
     assert.equal(firstResearchPage.runs.length, 1);
@@ -247,20 +389,23 @@ async function main() {
     });
     const procurementResult = procurementCase.result as {
       stage: string;
-      selectedOption: { name: string; sourceClass: string; sourceUrl: string; price: number; currency: string; minimumOrderQuantity: number; deliveryDate: string; quality: string };
+      selectedOption: { name: string; sourceClass: string; sourceUrl: string; price: number | null; currency: string | null; minimumOrderQuantity: number | null; priceType: string; deliveryDate: string | null; deliveryType: string; quality: string };
       gates: { commercialTerms: string; purchaseApproval: string };
+      evidenceState: { commercialTerms: string };
     };
     assert.equal(procurementResult.selectedOption.name, "Example supplier", "persisted evidence must override client-authored supplier identity");
     assert.equal(procurementResult.selectedOption.sourceClass, "Official");
     assert.equal(procurementResult.selectedOption.sourceUrl, "https://example.com/");
-    assert.equal(procurementResult.selectedOption.price, 125);
-    assert.equal(procurementResult.selectedOption.currency, "USD");
-    assert.equal(procurementResult.selectedOption.minimumOrderQuantity, 4);
-    assert.notEqual(procurementResult.selectedOption.deliveryDate, "Aug 23", "sourced delivery must not trust a browser-authored date");
-    assert.match(procurementResult.selectedOption.deliveryDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(procurementResult.selectedOption.price, null, "legacy model-supplied freshness must not restore a sourced price");
+    assert.equal(procurementResult.selectedOption.currency, null);
+    assert.equal(procurementResult.selectedOption.minimumOrderQuantity, null);
+    assert.equal(procurementResult.selectedOption.priceType, "Unknown");
+    assert.equal(procurementResult.selectedOption.deliveryDate, null, "legacy model-supplied freshness must not restore sourced delivery");
+    assert.equal(procurementResult.selectedOption.deliveryType, "Unknown");
     assert.equal(procurementResult.selectedOption.quality, "Conditional");
     assert.equal(procurementResult.gates.commercialTerms, "REVIEW_REQUIRED", "web evidence is not a confirmed quote");
     assert.equal(procurementResult.gates.purchaseApproval, "BLOCKED");
+    assert.equal(procurementResult.evidenceState.commercialTerms, "REVIEW_REQUIRED");
     const selectionHash = (procurementCase.result as { selectionHash: string }).selectionHash;
     await assert.rejects(() => reviewProcurementGate({
       context,
@@ -543,10 +688,7 @@ async function main() {
       input: {
         gate: "QUALITY_PLAN",
         expectedSelectionHash: selectionHash,
-        method: "SAMPLE",
-        acceptanceCriteria: "Verify calibration, connector fit, image depth accuracy, and serial traceability.",
-        owner: "Atlas vision engineering",
-        targetDate: qualityTargetDate,
+        ...qualityVerificationInput,
       },
     }), /qualification is missing or expired/i, "qualification expiry must block quality planning");
     await prisma.supplyExecutionTask.update({
@@ -559,25 +701,46 @@ async function main() {
       input: {
         gate: "QUALITY_PLAN",
         expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
-        method: "SAMPLE",
+        ...qualityVerificationInput,
         acceptanceCriteria: "This plan is already late.",
-        owner: "Atlas vision engineering",
         targetDate: futureDate(-1),
       },
-    }), /quality target date cannot be in the past/i, "an expired quality plan must never become approval-ready");
+    }), /quality evidence validity date cannot be in the past/i, "expired quality evidence must never become approval-ready");
+    const failedQuality = await reviewProcurementGate({
+      context,
+      caseId: procurementCase.id,
+      input: {
+        gate: "QUALITY_PLAN",
+        expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
+        ...qualityVerificationInput,
+        outcome: "FAIL",
+        evidenceUrl: "https://example.com/quality/atlas-vision-sample-failed",
+        verificationNote: "The sample failed connector-fit and depth-accuracy acceptance criteria during Atlas engineering review.",
+      },
+    });
+    const failedQualityResult = failedQuality.result as { stage: string; gates: { qualityPlan: string }; qualityPlan: { evidenceId: string; outcome: string } };
+    assert.equal(failedQualityResult.stage, "QUALITY_REVIEW", "failed quality evidence must remain in the quality work queue");
+    assert.equal(failedQualityResult.gates.qualityPlan, "BLOCKED", "failed quality evidence must block supplier award progression");
+    assert.equal(failedQualityResult.qualityPlan.outcome, "FAIL");
+    assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: failedQualityResult.qualityPlan.evidenceId } })).kind, "SUPPLIER_QUALITY_VERIFICATION");
+    await assert.rejects(() => requestProcurementApproval({
+      context,
+      caseId: procurementCase.id,
+      input: { expectedSelectionHash: selectionHash, reason: "A failed sample must not reach approval." },
+    }), /quality gates must be complete/i, "a failed quality check must block award approval on the server");
     const qualityReviewed = await reviewProcurementGate({
       context,
       caseId: procurementCase.id,
       input: {
         gate: "QUALITY_PLAN",
         expectedSelectionHash: (procurementCase.result as { selectionHash: string }).selectionHash,
-        method: "SAMPLE",
-        acceptanceCriteria: "Verify calibration, connector fit, image depth accuracy, and serial traceability.",
-        owner: "Atlas vision engineering",
-        targetDate: qualityTargetDate,
+        ...qualityVerificationInput,
       },
     });
     assert.equal((qualityReviewed.result as { stage: string }).stage, "APPROVAL");
+    const passedQualityPlan = (qualityReviewed.result as { qualityPlan: { evidenceId: string; outcome: string } }).qualityPlan;
+    assert.equal(passedQualityPlan.outcome, "PASS");
+    assert.equal((await procurementEvidenceSource(context, passedQualityPlan.evidenceId)).url, qualityVerificationInput.evidenceUrl);
 
     const manager = await prisma.user.create({
       data: {
@@ -1007,6 +1170,34 @@ async function main() {
     assert.equal(weakEvidenceResult.selectedOption.deliveryType, "Unknown");
     assert.equal(weakEvidenceResult.gates.commercialTerms, "REVIEW_REQUIRED");
     assert.equal(weakEvidenceResult.gates.purchaseApproval, "BLOCKED");
+    for (const candidate of [
+      { id: "candidate-3", expectedName: "Partial unit supplier" },
+      { id: "candidate-4", expectedName: "Stale unit supplier" },
+    ]) {
+      const unsupportedUnitCase = await saveProcurementSelection({
+        context,
+        researchRunId: started.id,
+        selection: {
+          id: `public:${candidate.id}`,
+          name: candidate.expectedName,
+          sourceClass: "Official",
+          sourceUrl: "https://example.com/product",
+          price: 1,
+          currency: "USD",
+          minimumOrderQuantity: 1,
+          priceType: "Sourced",
+          deliveryDate: futureDate(7),
+          deliveryType: "Sourced",
+          quality: "Strong",
+        },
+      });
+      const unsupportedUnitResult = unsupportedUnitCase.result as {
+        selectedOption: { price: number | null; currency: string | null; priceType: string };
+      };
+      assert.equal(unsupportedUnitResult.selectedOption.price, null, `${candidate.expectedName} must not expose a sourced price`);
+      assert.equal(unsupportedUnitResult.selectedOption.currency, null, `${candidate.expectedName} must not expose a sourced currency`);
+      assert.equal(unsupportedUnitResult.selectedOption.priceType, "Unknown", `${candidate.expectedName} must remain unknown`);
+    }
     assert.equal((weakEvidenceCase.result as { quoteCycle?: unknown }).quoteCycle, undefined, "supplier changes must remove the stale quote-cycle projection");
     assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: quoteDraft.quoteCycle.id } })).status, "CANCELLED", "supplier changes must cancel the active quote cycle");
     assert.equal((await prisma.supplyApproval.findUniqueOrThrow({ where: { id: requested.approval.id } })).status, "APPROVED", "historical approval remains immutable after the case changes");
@@ -1062,6 +1253,12 @@ async function main() {
     assert.equal(updatedResult.gates.sourceEvidence, "BLOCKED");
     assert.equal(updatedResult.gates.commercialTerms, "REVIEW_REQUIRED");
     assert.equal(updatedResult.gates.purchaseApproval, "BLOCKED");
+    const selectionEventCountBeforeReplay = await prisma.supplyExecutionEvent.count({
+      where: {
+        executionTaskId: procurementCase.id,
+        eventType: { in: ["PROCUREMENT_CASE_CREATED", "SUPPLIER_SELECTION_UPDATED"] },
+      },
+    });
     const replayedCase = await saveProcurementSelection({
       context,
       researchRunId: started.id,
@@ -1080,6 +1277,12 @@ async function main() {
       },
     });
     assert.equal(replayedCase.id, updatedCase.id);
+    assert.equal(await prisma.supplyExecutionEvent.count({
+      where: {
+        executionTaskId: procurementCase.id,
+        eventType: { in: ["PROCUREMENT_CASE_CREATED", "SUPPLIER_SELECTION_UPDATED"] },
+      },
+    }), selectionEventCountBeforeReplay, "an identical supplier-selection retry must not append fake history");
     const returnedCase = await saveProcurementSelection({
       context,
       researchRunId: started.id,
@@ -1827,6 +2030,10 @@ async function main() {
       acceptanceCriteria: "Approve calibration, traceability, and connector-fit sample results.",
       owner: "Atlas quality engineering",
       targetDate: qualityTargetDate,
+      outcome: "PASS",
+      observedOn: futureDate(0),
+      evidenceUrl: "https://example.com/quality/retry-sample",
+      verificationNote: "Atlas quality engineering reviewed and accepted the retry sample evidence for this exact supplier scope.",
     } as const;
     await reviewProcurementGate({
       context,
@@ -2262,11 +2469,9 @@ async function main() {
       orderBy: { sequence: "asc" },
     });
     const selectionEvents = events.filter((event) => event.eventType === "PROCUREMENT_CASE_CREATED" || event.eventType === "SUPPLIER_SELECTION_UPDATED");
-    assert.equal(selectionEvents.length, 4, "identical retries must not append fake history while A-B-A remains valid");
+    assert.equal(selectionEvents.length, 6, "each distinct supplier change must append one event while identical retries append none");
     assert.equal(selectionEvents[0]?.eventType, "PROCUREMENT_CASE_CREATED");
-    assert.equal(selectionEvents[1]?.eventType, "SUPPLIER_SELECTION_UPDATED");
-    assert.equal(selectionEvents[2]?.eventType, "SUPPLIER_SELECTION_UPDATED");
-    assert.equal(selectionEvents[3]?.eventType, "SUPPLIER_SELECTION_UPDATED");
+    assert.ok(selectionEvents.slice(1).every((event) => event.eventType === "SUPPLIER_SELECTION_UPDATED"));
     assert.ok(events.some((event) => event.eventType === "PROCUREMENT_APPROVED"));
     assert.ok(events.every((event) => Boolean(event.payloadHash)));
 
@@ -3769,6 +3974,7 @@ async function main() {
           sourceUrls: ["https://example.com/product"],
           price: supported(125),
           currency: supported("USD"),
+          unitOfMeasure: supported("EA"),
           minimumOrderQuantity: supported(4),
           leadTimeDays: supported(14),
           status: "REVIEW_REQUIRED",
@@ -3802,10 +4008,10 @@ async function main() {
       workspaceId: shortlistRun.workspaceId,
       output: {
         candidates: [
-          { id: "shortlist-a", companyName: "Alpha Motion", website: "https://example.com/alpha", price: supported(122), currency: supported("USD"), minimumOrderQuantity: supported(4), leadTimeDays: supported(12), status: "REVIEW_REQUIRED" },
-          { id: "shortlist-b", companyName: "Bravo Controls", website: "https://example.com/bravo", price: supported(119), currency: supported("USD"), minimumOrderQuantity: supported(6), leadTimeDays: supported(15), status: "REVIEW_REQUIRED" },
-          { id: "shortlist-c", companyName: "Cobalt Systems", website: "https://example.com/cobalt", price: supported(116), currency: supported("CAD"), minimumOrderQuantity: supported(3), leadTimeDays: supported(10), status: "REVIEW_REQUIRED" },
-          { id: "shortlist-d", companyName: "Delta Robotics", website: "https://example.com/delta", price: supported(121), currency: supported("USD"), minimumOrderQuantity: supported(5), leadTimeDays: supported(11), status: "REVIEW_REQUIRED" },
+          { id: "shortlist-a", companyName: "Alpha Motion", website: "https://example.com/alpha", price: supported(122), currency: supported("USD"), unitOfMeasure: supported("EA"), minimumOrderQuantity: supported(4), leadTimeDays: supported(12), status: "REVIEW_REQUIRED" },
+          { id: "shortlist-b", companyName: "Bravo Controls", website: "https://example.com/bravo", price: supported(119), currency: supported("USD"), unitOfMeasure: supported("EA"), minimumOrderQuantity: supported(6), leadTimeDays: supported(15), status: "REVIEW_REQUIRED" },
+          { id: "shortlist-c", companyName: "Cobalt Systems", website: "https://example.com/cobalt", price: supported(116), currency: supported("CAD"), unitOfMeasure: supported("EA"), minimumOrderQuantity: supported(3), leadTimeDays: supported(10), status: "REVIEW_REQUIRED" },
+          { id: "shortlist-d", companyName: "Delta Robotics", website: "https://example.com/delta", price: supported(121), currency: supported("USD"), unitOfMeasure: supported("EA"), minimumOrderQuantity: supported(5), leadTimeDays: supported(11), status: "REVIEW_REQUIRED" },
         ],
         degraded: false,
         warnings: [],
@@ -3891,6 +4097,11 @@ async function main() {
           owner: "Quality lead",
           targetDate: qualityTargetDate,
           acceptanceCriteria: "Confirm specification and traceability documents.",
+          outcome: "PASS",
+          observedOn: futureDate(0),
+          evidenceId: `award-quality-evidence-${awardCandidate.id}`,
+          evidenceUrl: "https://example.com/quality/concurrent-award",
+          verificationNote: "Quality evidence was reviewed for the concurrent sibling-award serialization test.",
         },
         reviews: {
           sourceEvidence: {
@@ -3948,6 +4159,91 @@ async function main() {
     assert.ok(listed.some((workspace) => workspace.id === visibleWorkspace.id), "ordinary null-key workspaces must remain visible");
     assert.ok(listed.every((workspace) => !workspace.externalKey?.startsWith("system:")), "the system procurement workspace must stay out of the company directory");
 
+    const customerIntelligenceBeforeExpansion = await supplyIntelligenceProfile(context, visibleWorkspace.id);
+    const customerWorkspaceRun = await startSourcingResearchRun(context, {
+      ...input,
+      componentItemKey: "VIS-DPT-CUSTOMER-WORKSPACE",
+    }, visibleWorkspace.id);
+    await completeSourcingResearchRun({
+      context,
+      runId: customerWorkspaceRun.id,
+      workspaceId: customerWorkspaceRun.workspaceId,
+      output: {
+        candidates: [{
+          id: "customer-workspace-supplier",
+          companyName: "Customer workspace supplier",
+          website: null,
+          roles: ["MANUFACTURER"],
+          sourceUrls: ["https://example.com/product"],
+          price: supported(115),
+          currency: supported("USD"),
+          unitOfMeasure: supported("EA"),
+          minimumOrderQuantity: supported(3),
+          leadTimeDays: supported(12),
+          status: "REVIEW_REQUIRED",
+        }],
+        degraded: false,
+        warnings: [],
+      },
+    });
+    const customerWorkspaceShortlist = await saveProcurementShortlist({
+      context,
+      researchRunId: customerWorkspaceRun.id,
+      selections: [{
+        id: "public:customer-workspace-supplier",
+        name: "Untrusted client name",
+        sourceClass: "New",
+        sourceUrl: null,
+        price: null,
+        currency: null,
+        minimumOrderQuantity: null,
+        priceType: "Unknown",
+        deliveryDate: null,
+        deliveryType: "Unknown",
+        quality: "Unverified",
+      }],
+    });
+    assert.equal(customerWorkspaceShortlist[0]?.workspaceId, visibleWorkspace.id, "a customer workspace research run must create its procurement case in that workspace");
+    const customerWorkspaceCases = await listProcurementCasesForResearchRuns(
+      context,
+      [customerWorkspaceRun.id],
+      visibleWorkspace.id,
+    );
+    assert.equal(customerWorkspaceCases[0]?.id, customerWorkspaceShortlist[0]?.id, "a customer workspace must restore the procurement workstream created from its research run");
+    const customerWorkspaceRefreshRun = await startSourcingResearchRun(context, {
+      ...input,
+      componentItemKey: "VIS-DPT-CUSTOMER-WORKSPACE-REFRESH",
+    }, visibleWorkspace.id);
+    await completeSourcingResearchRun({
+      context,
+      runId: customerWorkspaceRefreshRun.id,
+      workspaceId: customerWorkspaceRefreshRun.workspaceId,
+      output: {
+        candidates: [{
+          id: "customer-workspace-supplier-refreshed",
+          companyName: "Customer workspace supplier",
+          website: "https://example.com/customer-workspace",
+          roles: ["DISTRIBUTOR"],
+          sourceUrls: ["https://example.com/product"],
+          price: supported(110),
+          currency: supported("USD"),
+          unitOfMeasure: supported("EA"),
+          minimumOrderQuantity: supported(2),
+          leadTimeDays: supported(10),
+          status: "REVIEW_REQUIRED",
+        }],
+        degraded: false,
+        warnings: [],
+      },
+    });
+    const refreshedCustomerIntelligence = await supplyIntelligenceProfile(context, visibleWorkspace.id);
+    assert.equal(refreshedCustomerIntelligence.customer.factCount, customerIntelligenceBeforeExpansion.customer.factCount + 2, "new research must expand the customer profile without replacing prior needs");
+    assert.equal(refreshedCustomerIntelligence.supplierCount, customerIntelligenceBeforeExpansion.supplierCount + 1, "website discovery must merge into the existing supplier identity");
+    const refreshedCustomerSupplier = refreshedCustomerIntelligence.suppliers.find((supplier) => supplier.companyName === "Customer workspace supplier");
+    assert.equal(refreshedCustomerSupplier?.website, "https://example.com/customer-workspace");
+    assert.deepEqual(refreshedCustomerSupplier?.roles, ["DISTRIBUTOR", "MANUFACTURER"], "supplier roles must accumulate across research runs");
+    assert.equal(refreshedCustomerSupplier?.priceObservations.length, 0, "provider price envelopes must not append price history without a revalidated managed retrieval capture");
+
     const negotiationRun = await startSourcingResearchRun(context, {
       ...input,
       componentItemKey: "VIS-DPT-NEGOTIATION",
@@ -3965,6 +4261,7 @@ async function main() {
           sourceUrls: ["https://example.com/product"],
           price: supported(140),
           currency: supported("USD"),
+          unitOfMeasure: supported("EA"),
           minimumOrderQuantity: supported(4),
           leadTimeDays: supported(16),
           status: "REVIEW_REQUIRED",
@@ -4319,9 +4616,9 @@ async function main() {
       purchaseActionId: clonedAction.id,
       sync: orderReplySync,
     }), /not found|released connected Gmail purchase order/i, "another office must not capture connected supplier order replies");
-    assert.equal(
-      await findProcurementCaseByRelatedTaskId(foreign, connectedOrderApproved.action.id),
-      null,
+    await assert.rejects(
+      () => findProcurementCaseByRelatedTaskId(foreign, connectedOrderApproved.action.id),
+      /not found/i,
       "another office must not restore a procurement workstream from a purchase order email action",
     );
 

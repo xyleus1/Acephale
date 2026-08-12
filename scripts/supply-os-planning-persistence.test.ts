@@ -64,7 +64,7 @@ async function main() {
       data: { officeId, workspaceId: workspace.id, snapshotId: snapshot.id, productItemId: product.id, revision: "1" },
     });
     await prisma.supplyBomLine.create({
-      data: { officeId, workspaceId: workspace.id, snapshotId: snapshot.id, bomVersionId: bom.id, parentItemId: product.id, componentItemId: component.id, lineNumber: 1, quantity: 1, unitOfMeasure: "EA", sourceRefs: ["bom-evidence"] },
+      data: { officeId, workspaceId: workspace.id, snapshotId: snapshot.id, bomVersionId: bom.id, parentItemId: product.id, componentItemId: component.id, lineNumber: 1, quantity: 1, unitOfMeasure: "EA", scrapRate: 0, sourceRefs: ["bom-evidence"] },
     });
     await prisma.supplyInventoryPosition.create({
       data: { officeId, workspaceId: workspace.id, snapshotId: snapshot.id, positionKey: "I1", itemId: component.id, locationId: facility.id, unitOfMeasure: "EA", quantityOnHand: 4, quantityAllocated: 0, quantityInTransit: 0, quantityOnOrder: 0, asOf: new Date("2026-08-08T00:00:00.000Z") },

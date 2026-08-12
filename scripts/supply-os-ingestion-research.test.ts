@@ -79,6 +79,7 @@ const normalized = normalizeSupplierResearch({
   now,
 });
 assert.equal(normalized.degraded, false);
+assert.deepEqual(normalized.sources, [official, publicSource], "the research result must retain every attributable source checked");
 assert.equal(normalized.candidates.length, 1);
 const candidate = normalized.candidates[0]!;
 assert.deepEqual(candidate.roles, ["MANUFACTURER"]);
@@ -239,6 +240,24 @@ assert.equal(limiter.consume("office-a", 1_001), true);
 
 async function verifyNetworkPolicy() {
   await assert.rejects(() => assertPublicResearchUrl("http://127.0.0.1/catalog"), /private address/i);
+  const publicPrice = normalizeSupplierResearch({
+    officeId: "office-a",
+    workspaceId: "workspace-a",
+    componentItemKey: "RADIO-1",
+    raw: {
+      candidates: [{
+        ...rawCandidate.candidates[0],
+        price: { value: 42, state: "SUPPORTED", confidence: 0.9, sourceUrls: [official.url], observedAt: new Date().toISOString() },
+        currency: { value: "USD", state: "SUPPORTED", confidence: 0.9, sourceUrls: [official.url], observedAt: new Date().toISOString() },
+        unitOfMeasure: { value: "EA", state: "SUPPORTED", confidence: 0.9, sourceUrls: [official.url], observedAt: new Date().toISOString() },
+      }],
+    },
+    providerSources: [official],
+    now,
+    trustClaimedObservedAt: false,
+  });
+  assert.equal(publicPrice.candidates[0]?.price.freshness, "UNKNOWN", "the model cannot declare a public price fresh");
+  assert.equal(publicPrice.candidates[0]?.price.observedAt, null, "provider timestamps cannot establish a current price");
 }
 
 verifyNetworkPolicy().then(() => {

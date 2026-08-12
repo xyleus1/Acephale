@@ -2,6 +2,43 @@
 
 ## Latest Update
 
+### Exa now creates bounded forced-live public listing receipts
+
+- `EXA_API_KEY` enables an Exa-first supplier-research path: Search finds public
+  URLs, then Contents retrieves only those URLs with `maxAgeHours: 0`. Calls go
+  only to fixed `api.exa.ai` endpoints. Search and content bodies, record text,
+  per-URL status, and the whole operation have explicit size and time ceilings.
+- Exa structured summaries are proposals, not evidence. Deterministic code
+  accepts a price only when one successful, non-cached record contains the exact
+  requested identity and one excerpt with a positive amount, ISO 4217
+  currency, explicit unit or package basis, and source URL. Cross-record and
+  cross-product stitching fail closed.
+- Public search results are identified by their source domain and carry no
+  trusted supplier role. Generated seller names, manufacturer roles, and
+  authorization claims cannot expand durable supplier identity or roles.
+- Valid captures store a server-owned retrieval time, response and source hashes,
+  an exact excerpt, and provider request IDs. Provider publication dates do not
+  control freshness. The receipt becomes managed-retrieval evidence plus an
+  append-only `PUBLIC_LIST_PRICE` observation linked to the supplier profile and
+  research run.
+- A public listing remains separate from a reviewed supplier quote. It is shown
+  with `RFQ confirmation required`, and server-side public candidate selection
+  continues to null price, currency, MOQ, and delivery before procurement.
+- When Exa is absent, the existing OpenAI web-search discovery path remains and
+  its timestamps stay untrusted. Exa failures do not fall back. Cloudflare
+  Browser Rendering is not part of this slice.
+
+Verification:
+
+- `npm run test:supply-os-exa-retrieval`
+- `npm run test:supply-os-supplier-research-failures`
+- `node --conditions=react-server --import tsx scripts/supply-os-supply-intelligence.test.ts`
+- `node --import tsx scripts/supply-os-ingestion-research.test.ts`
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- `npx tsc --noEmit --pretty false --incremental false`
+- Prisma validation and generation plus diff hygiene passed. The integrated
+  release branch must run the optimized production build before deployment.
+
 ### Supply intelligence production schema rollout is complete
 
 - Added only the four additive persistence models needed for supplier profiles,
@@ -124,6 +161,37 @@ Verification:
 - `npm run check:product-copy`
 - `npx tsc --noEmit --incremental false`
 - Production build with disposable PostgreSQL-shaped URLs
+### Customer supply profiles and supplier prices now accumulate
+
+- Selecting a shared customer workspace now scopes sourcing history, supplier
+  research, procurement cases, and the new intelligence projection to that
+  workspace. The legacy Atlas fallback remains only when no shared workspace is
+  selected.
+- Each completed research run appends a customer sourcing-need fact and merges
+  candidates into stable workspace supplier profiles. Prior capability outputs
+  remain intact, so new research expands the supplier universe without erasing
+  evidence history.
+- Public research preserves source-linked listing claims but does not create a
+  durable current-price observation. A managed connector must produce a
+  server-owned receipt binding the supplier item, amount, currency, unit, date,
+  and source before that append-only record can exist.
+- The Inventory & sourcing surface shows the customer profile count, accumulated
+  supplier universe, any previously verified price observations, exact supplier
+  links, and `RFQ required` when verified pricing is absent. The active research
+  view may separately show an explicitly unverified listing claim and its URL.
+- Benchmark-series records explicitly distinguish real-time, delayed, daily,
+  weekly, and monthly sources. No market-data connector or unlicensed exchange
+  feed is claimed in this slice.
+
+Verification:
+
+- `npm run db:generate` with disposable PostgreSQL-shaped URLs
+- `npx tsc --noEmit --pretty false --incremental false`
+- `node --conditions=react-server --import tsx scripts/supply-os-supply-intelligence.test.ts`
+- `node --import tsx scripts/supply-os-ingestion-research.test.ts`
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- Database-backed migration and sourcing persistence tests require a disposable
+  PostgreSQL server and were not available in this workspace.
 
 ### Connected supplier quote PDFs are bounded review sources
 
@@ -8221,3 +8289,118 @@ Trust boundary:
   it must be reconciled first.
 - The recovery state does not contact a supplier, commit spend, supersede the
   existing order, or create Logistics, customs, payment, or inventory state.
+### Supply sourcing release hardening after PR review
+
+- PR #132 now derives the customer workspace from the persisted research run or task across shortlist, procurement, supplier email, reply capture, and quote extraction.
+- Supplier profiles preserve Unicode identities and keep the base key stable when a website is discovered later. A different known domain receives a deterministic disambiguated key so distinct same-name suppliers do not merge. Price, currency, and unit must bind to one managed retrieval receipt before a public listing observation is stored.
+- Research completion locks the run and accepts only one active completion. Failure handling cannot rewrite a completed run.
+- Legacy plan-only quality gates now fail closed at award approval, approval decision, purchase preparation, final approval, and authorization.
+- Passed: Prisma validation, TypeScript, focused Supply OS contracts, supplier email provider checks, deployment boundary, diff hygiene, and optimized production build.
+- Database lifecycle verification remains unavailable in this managed sandbox because PostgreSQL initialization was denied before startup. Apply the migration before merging.
+
+## Supply OS research progress and retry recovery, August 11
+
+Status:
+
+- Implemented on `supply-os-quality-verification`, PR #132.
+- No Prisma migration or new dependency is required.
+
+Operator result:
+
+- Research progress now follows the actual request, public search, validation,
+  and candidate-screening lifecycle instead of advancing on presentation timers.
+- Each stage has an expandable disclosure. Returned source URLs are deduplicated,
+  labeled by source type, and linked from the open-web stage.
+- Completed research remains visible until the operator chooses Review suppliers,
+  so the source disclosures do not disappear on an automatic transition.
+- An empty or degraded research result keeps the saved request and offers Retry
+  research. Editing the request remains a separate action and is no longer the
+  only recovery path.
+
+Trust boundary:
+
+- The UI does not claim that sources were checked before the blocking provider
+  response returns. URLs appear only when attributable evidence is present.
+- Public results remain unqualified, and retrying research does not contact a
+  supplier, authorize spend, or advance procurement.
+
+Acceptance coverage:
+
+- `scripts/fixtures/guild-procurement-bom.ts` captures the supplied 40-line BOM
+  across metals, hardware, chemicals, wire, fabrication, instrumentation,
+  packaging, and documentation deliverables.
+- `npm run test:supply-os-bom-acceptance` validates that every researchable line
+  satisfies intake requirements. Item 027 intentionally remains a clarification
+  case because `As required` supplies neither quantity nor unit.
+- `npm run test:supply-os-live-research -- --ids=001,011` drives the same public
+  research provider used by the product. A deployed run requires base URL,
+  authenticated cookie, and workspace ID environment variables; a direct run
+  requires `OPENAI_API_KEY`.
+
+## Supply OS customer parts intake and research failure recovery, August 12
+
+Status:
+
+- Implemented locally on `supply-os-quality-verification` after PR #132 review.
+- Focused contracts, TypeScript, Prisma generation, and the optimized Next build
+  pass. The feature is not ready to merge until it is reconciled with current
+  main and its migration is applied safely.
+
+Operator result:
+
+- The selected customer workspace exposes a parts CSV importer to administrators
+  and managers. The importer accepts the supplied five-column procurement table,
+  including quantity cells with units and an explicit unknown quantity.
+- Published parts and BOM demand enter the sourcing queue. Known facts survive
+  intake refinement, while missing delivery location, date, unit, or quantity
+  are asked once as clarification rather than invented.
+- Research shows expandable request, discovery, validation, and screening
+  stages. Returned checked URLs remain inspectable, including pages that did not
+  become retained supplier candidates.
+- Retry starts a new provider request. Restored failed runs do not return to the
+  initial request cycle.
+
+Failure and evidence boundary:
+
+- Missing provider configuration, timeouts, upstream errors, and invalid
+  structured responses are saved as failed runs and returned as typed non-success
+  responses. They cannot become successful empty research.
+- A supplier is not suggested unless capability, public price, delivery, source,
+  currency, unit, and lead time pass the evidence checks. Missing public price
+  remains unknown and can move into the approval-gated RFQ workflow.
+- Research and import do not contact suppliers, approve spend, release an order,
+  create payment, or create Logistics state.
+
+Remaining release checks:
+
+- Rebuild the feature on remote main SHA
+  `232c026bdc7ae44eafd23f85bdff668fdd64d273` and preserve current company
+  isolation and connector behavior.
+- Apply `20260812000100_supply_intelligence_profiles` before feature runtime
+  reaches production.
+- Run the live acceptance runner with an authenticated workspace and Exa key,
+  then confirm at least one attributable forced-live listing receipt for a
+  price-suitable BOM item. The listing must remain separate from a reviewed
+  supplier quote and require RFQ confirmation.
+- Verify CSV upload, retry, URL disclosures, and mobile layout in the deployed
+  authenticated browser.
+
+### Follow-up hardening completed before reconciliation
+
+- One-file parts imports now expand the latest immutable customer snapshot. A
+  stale staged parts draft fails at publish, so concurrent uploads cannot hide
+  the winner. Full normalized snapshot imports still replace by design.
+- Fixed workspace selection fails closed and browser-local sourcing drafts are
+  workspace-scoped. Retrying a persisted failed run restores its saved facts
+  and enters research directly.
+- Public price freshness is server-owned. Provider timestamps are ignored and
+  the application does not fetch search-result pages from its own network.
+  Listing claims remain visible with source links but stay non-orderable until
+  an isolated managed retrieval connector verifies the item and complete tuple.
+- Shortlist and selection persistence also downgrade provider commercial terms,
+  including completed legacy runs whose model-supplied timestamps once appeared
+  fresh.
+- Release order remains unchanged: land the schema-only rollout, confirm the
+  production migration, remove the temporary migration hook, reconcile the
+  runtime feature onto that main, then run authenticated research and browser
+  canaries before merging runtime.

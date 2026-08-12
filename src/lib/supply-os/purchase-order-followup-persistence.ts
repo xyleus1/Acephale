@@ -2,8 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
-import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
+import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import {
   appendSupplierCommunicationEvent as appendEvent,
   currentAccessContext,
@@ -130,8 +130,7 @@ export async function listPurchaseOrderFollowUpTasks(args: {
 }) {
   if (!args.purchaseDraftIds.length) return [];
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "view");
-  if (workspace.id !== args.workspaceId) throw new SupplyPersistenceError("Supply workspace was not found.", "not_found");
+  const workspace = await requireSupplyWorkspace(accessContext, args.workspaceId, "view");
   return prisma.supplyExecutionTask.findMany({
     where: {
       officeId: accessContext.officeId,
@@ -196,7 +195,7 @@ export async function savePurchaseOrderFollowUpDraft(args: {
 }) {
   const draftInput = normalizedDraft(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.purchaseActionId, "edit", [PURCHASE_ACTION_TASK_TYPE]);
   const sender = await prisma.emailAccount.findFirst({
     where: {
       id: draftInput.senderAccountId,
@@ -349,7 +348,7 @@ export async function requestPurchaseOrderFollowUpApproval(args: {
   const expectedResultHash = requiredText(body.expectedResultHash, "Supplier follow-up draft result hash", 128);
   const reason = requiredText(body.reason, "Approval reason", 2_000);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.draftId, "edit", [PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT_TASK_TYPE]);
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const lookup = await tx.supplyExecutionTask.findFirst({
       where: { id: args.draftId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_FOLLOWUP_EMAIL_DRAFT_TASK_TYPE },
@@ -503,8 +502,7 @@ export async function decidePurchaseOrderFollowUpApproval(args: {
   if (!found?.executionTask || found.executionTask.taskType !== PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE || !found.executionTask.parentTaskId) {
     throw new SupplyPersistenceError("Supplier follow-up approval was not found.", "not_found");
   }
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
-  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Supplier follow-up approval was not found.", "not_found");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   const actionInput = record(found.executionTask.input);
   const draftId = requiredText(actionInput.draftId, "Supplier follow-up draft ID", 220);
   const purchaseActionId = requiredText(actionInput.purchaseActionId, "Purchase action ID", 220);
@@ -745,7 +743,7 @@ async function finalizePurchaseOrderFollowUp(args: {
 
 export async function sendPurchaseOrderFollowUpAction(args: { context: SupplyAccessContext; actionId: string; provider?: SupplierEmailProvider }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE]);
   const claimed = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const lookup = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE }, select: { parentTaskId: true, input: true } });
     if (!lookup?.parentTaskId) throw new SupplyPersistenceError("Supplier follow-up action was not found.", "not_found");
@@ -816,7 +814,7 @@ export async function sendPurchaseOrderFollowUpAction(args: { context: SupplyAcc
 
 export async function reconcilePurchaseOrderFollowUpAction(args: { context: SupplyAccessContext; actionId: string; provider?: SupplierEmailProvider }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE]);
   const action = await prisma.supplyExecutionTask.findFirst({
     where: {
       id: args.actionId,
@@ -860,7 +858,7 @@ export async function resetPurchaseOrderFollowUpForRetry(args: { context: Supply
   if (note.length < 10) throw new SupplyPersistenceError("Recovery note must explain how non-delivery was verified.", "invalid_input");
   const accessContext = await currentAccessContext(args.context);
   if (!["ADMIN", "MANAGER"].includes(accessContext.role)) throw new SupplyPersistenceError("Only an admin or manager can reset an uncertain supplier follow-up.", "forbidden");
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE]);
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const action = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE, status: "RUNNING" }, select: communicationTaskSelect });
     if (!action || record(action.result).state !== "NOT_FOUND_REVIEW_REQUIRED") throw new SupplyPersistenceError("A supplier follow-up awaiting non-delivery review was not found.", "conflict");

@@ -2,8 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
-import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
+import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import {
   appendSupplierCommunicationEvent as appendEvent,
   currentAccessContext,
@@ -42,8 +42,7 @@ const procurementQualificationSelect = {
 export type { SupplierCommunicationTask };
 
 export async function listSupplierSenderAccounts(context: SupplyAccessContext) {
-  const accessContext = await currentAccessContext(context);
-  await sourcingSystemWorkspace(accessContext, "view");
+  await currentAccessContext(context);
   return prisma.emailAccount.findMany({
     where: {
       officeId: context.officeId,
@@ -63,8 +62,7 @@ export async function listSupplierCommunicationTasks(args: {
 }) {
   if (!args.quoteCycleIds.length) return [];
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "view");
-  if (workspace.id !== args.workspaceId) throw new SupplyPersistenceError("Supply workspace was not found.", "not_found");
+  await requireSupplyWorkspace(accessContext, args.workspaceId, "view");
   return prisma.supplyExecutionTask.findMany({
     where: {
       officeId: args.context.officeId,
@@ -97,7 +95,7 @@ export async function saveSupplierEmailDraft(args: {
 }) {
   const draftInput = normalizeDraft(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.quoteCycleId, "edit", [QUOTE_CYCLE_TASK_TYPE]);
   const sender = await prisma.emailAccount.findFirst({
     where: {
       id: draftInput.senderAccountId,
@@ -224,7 +222,7 @@ export async function requestSupplierEmailApproval(args: { context: SupplyAccess
   const expectedResultHash = requiredText(body.expectedResultHash, "Email draft result hash", 128);
   const reason = requiredText(body.reason, "Approval reason", 2_000);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.draftId, "edit", [SUPPLIER_EMAIL_DRAFT_TASK_TYPE]);
 
   for (let retry = 0; retry < 3; retry += 1) {
     try {
@@ -372,8 +370,7 @@ export async function decideSupplierEmailApproval(args: { context: SupplyAccessC
   const note = typeof body.note === "string" && body.note.trim() ? requiredText(body.note, "Approval note", 2_000) : null;
   const found = await prisma.supplyApproval.findFirst({ where: { id: args.approvalId, officeId: args.context.officeId }, include: { executionTask: true } });
   if (!found?.executionTask || found.executionTask.taskType !== SUPPLIER_EMAIL_ACTION_TASK_TYPE || !found.executionTask.parentTaskId) throw new SupplyPersistenceError("Supplier email approval was not found.", "not_found");
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
-  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Supplier email approval was not found.", "not_found");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   const actionInput = record(found.executionTask.input);
   const draftId = requiredText(actionInput.draftId, "Supplier email draft ID", 220);
   const procurementCaseId = requiredText(actionInput.procurementCaseId, "Procurement case ID", 220);
@@ -527,7 +524,7 @@ async function finalizeSent(args: {
 
 export async function sendSupplierEmailAction(args: { context: SupplyAccessContext; actionId: string; provider?: SupplierEmailProvider }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [SUPPLIER_EMAIL_ACTION_TASK_TYPE]);
   const claimed = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const lookup = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE }, select: { parentTaskId: true, input: true } });
     if (!lookup?.parentTaskId) throw new SupplyPersistenceError("Supplier email action was not found.", "not_found");
@@ -595,7 +592,7 @@ export async function sendSupplierEmailAction(args: { context: SupplyAccessConte
 
 export async function reconcileSupplierEmailAction(args: { context: SupplyAccessContext; actionId: string; provider?: SupplierEmailProvider }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [SUPPLIER_EMAIL_ACTION_TASK_TYPE]);
   const action = await prisma.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE, status: { in: ["READY", "RUNNING", "BLOCKED"] } }, select: communicationTaskSelect });
   if (!action) throw new SupplyPersistenceError("An unresolved supplier email action was not found.", "not_found");
   const result = record(action.result);
@@ -635,7 +632,7 @@ export async function resetSupplierEmailForRetry(args: { context: SupplyAccessCo
   if (note.length < 10) throw new SupplyPersistenceError("Recovery note must explain how non-delivery was verified.", "invalid_input");
   const accessContext = await currentAccessContext(args.context);
   if (!["ADMIN", "MANAGER"].includes(accessContext.role)) throw new SupplyPersistenceError("Only an admin or manager can reset an uncertain supplier email.", "forbidden");
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [SUPPLIER_EMAIL_ACTION_TASK_TYPE]);
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const lookup = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE }, select: { parentTaskId: true, input: true } });
     if (!lookup?.parentTaskId) throw new SupplyPersistenceError("Supplier email action was not found.", "not_found");

@@ -2,7 +2,6 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { parseMarketLane } from "@/lib/market-intelligence/lane-validation";
 
-const MAX_DOCUMENT_BYTES = 1_000_000;
 const DEFAULT_EVIDENCE_FRESH_DAYS = 180;
 
 export type EvidenceSource = {
@@ -42,6 +41,7 @@ export type SupplierCandidate = {
   productCapability: EvidenceEnvelope<string>;
   price: EvidenceEnvelope<number>;
   currency: EvidenceEnvelope<string>;
+  unitOfMeasure: EvidenceEnvelope<string>;
   minimumOrderQuantity: EvidenceEnvelope<number>;
   leadTimeDays: EvidenceEnvelope<number>;
   sourceUrls: string[];
@@ -49,6 +49,13 @@ export type SupplierCandidate = {
   approvedByUserId: string | null;
   approvedAt: string | null;
   cautions: string[];
+};
+
+export type SupplierResearchResult = {
+  candidates: SupplierCandidate[];
+  sources: EvidenceSource[];
+  degraded: boolean;
+  warnings: string[];
 };
 
 export type ProviderCandidate = {
@@ -95,16 +102,17 @@ function sameDomain(left: string, right: string) {
   }
 }
 
-function validObservedAt(value: unknown) {
+function validObservedAt(value: unknown, now = new Date()) {
   if (typeof value !== "string") return null;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (Number.isNaN(date.getTime()) || date.getTime() > now.getTime() + 5 * 60_000) return null;
+  return date.toISOString();
 }
 
 export function evidenceFreshness(observedAt: string | null, now = new Date(), maxAgeDays = DEFAULT_EVIDENCE_FRESH_DAYS) {
   if (!observedAt) return "UNKNOWN" as const;
   const timestamp = new Date(observedAt).getTime();
-  if (!Number.isFinite(timestamp)) return "UNKNOWN" as const;
+  if (!Number.isFinite(timestamp) || timestamp > now.getTime() + 5 * 60_000) return "UNKNOWN" as const;
   return now.getTime() - timestamp <= maxAgeDays * 86_400_000 ? "FRESH" as const : "STALE" as const;
 }
 
@@ -123,17 +131,18 @@ function envelope<T>(args: {
   allowed: Map<string, EvidenceSource>;
   now: Date;
   maxAgeDays?: number;
+  trustClaimedObservedAt?: boolean;
 }): EvidenceEnvelope<T> {
   const raw = record(args.raw);
   const value = args.parse(raw.value);
   const sources = citedSources(raw.sourceUrls, args.allowed);
-  const observedAt = validObservedAt(raw.observedAt);
   const requestedState = text(raw.state).toUpperCase();
   let state: EvidenceEnvelope<T>["state"] = ["SUPPORTED", "PARTIAL", "INFERRED", "UNKNOWN"].includes(requestedState)
     ? requestedState as EvidenceEnvelope<T>["state"]
     : value === null ? "UNKNOWN" : "PARTIAL";
   if (state === "SUPPORTED" && !sources.length) state = "PARTIAL";
   if (value === null) state = "UNKNOWN";
+  const observedAt = args.trustClaimedObservedAt === false ? null : validObservedAt(raw.observedAt, args.now);
   const rawConfidence = typeof raw.confidence === "number" ? raw.confidence : null;
   const confidence = rawConfidence === null ? null : Math.max(0, Math.min(1, rawConfidence));
   return { value, state, confidence, sources, observedAt, freshness: evidenceFreshness(observedAt, args.now, args.maxAgeDays) };
@@ -160,7 +169,8 @@ export function normalizeSupplierResearch(args: {
   raw: unknown;
   providerSources: EvidenceSource[];
   now?: Date;
-}): { candidates: SupplierCandidate[]; degraded: boolean; warnings: string[] } {
+  trustClaimedObservedAt?: boolean;
+}): SupplierResearchResult {
   const now = args.now ?? new Date();
   const allowed = new Map(args.providerSources.flatMap((source) => {
     const url = normalizeUrl(source.url);
@@ -180,12 +190,13 @@ export function normalizeSupplierResearch(args: {
     const roles = [...new Set((Array.isArray(candidate.roles) ? candidate.roles : [])
       .map((role) => text(role).toUpperCase())
       .filter((role): role is SupplierCandidateRole => allowedRoles.includes(role as SupplierCandidateRole)))].sort();
-    const common = { allowed, now };
+    const common = { allowed, now, trustClaimedObservedAt: args.trustClaimedObservedAt };
     const country = envelope({ raw: candidate.country, parse: stringValue, ...common });
     const facility = envelope({ raw: candidate.facility, parse: stringValue, ...common });
     const productCapability = envelope({ raw: candidate.productCapability, parse: stringValue, ...common });
     const price = envelope({ raw: candidate.price, parse: numberValue, ...common, maxAgeDays: 60 });
     const currency = envelope({ raw: candidate.currency, parse: stringValue, ...common, maxAgeDays: 60 });
+    const unitOfMeasure = envelope({ raw: candidate.unitOfMeasure, parse: stringValue, ...common, maxAgeDays: 60 });
     const minimumOrderQuantity = envelope({ raw: candidate.minimumOrderQuantity, parse: numberValue, ...common, maxAgeDays: 60 });
     const leadTimeDays = envelope({ raw: candidate.leadTimeDays, parse: numberValue, ...common, maxAgeDays: 60 });
     const supported = Boolean(website && roles.length && productCapability.state === "SUPPORTED" && productCapability.sources.length);
@@ -202,6 +213,7 @@ export function normalizeSupplierResearch(args: {
       productCapability,
       price,
       currency,
+      unitOfMeasure,
       minimumOrderQuantity,
       leadTimeDays,
       sourceUrls,
@@ -213,6 +225,7 @@ export function normalizeSupplierResearch(args: {
   }).sort((left, right) => left.companyName.localeCompare(right.companyName) || left.id.localeCompare(right.id));
   return {
     candidates,
+    sources: [...allowed.values()].sort((left, right) => left.url.localeCompare(right.url)),
     degraded: allowed.size === 0 || candidates.length === 0,
     warnings: allowed.size === 0
       ? ["No attributable public sources were returned. No supplier candidates were accepted."]
@@ -315,53 +328,11 @@ export async function assertPublicResearchUrl(value: string) {
   return url;
 }
 
-async function cappedText(response: Response) {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_DOCUMENT_BYTES) throw new Error("Research response is too large.");
-  const body = await response.arrayBuffer();
-  if (body.byteLength > MAX_DOCUMENT_BYTES) throw new Error("Research response is too large.");
-  return new TextDecoder().decode(body);
-}
-
 export function rejectsLoginOrPaywall(url: string, html: string) {
   const path = new URL(url).pathname.toLowerCase();
   const sample = html.slice(0, 100_000).toLowerCase();
   return /\b(login|sign[-_]?in|subscribe|paywall|account)\b/.test(path)
     || /(?:sign in to continue|subscribe to continue|subscriber-only|create an account to read|metered paywall)/i.test(sample);
-}
-
-export async function fetchResearchDocument(args: {
-  url: string;
-  officialDomain?: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
-}) {
-  const fetchImpl = args.fetchImpl ?? fetch;
-  const official = normalizeUrl(args.officialDomain ?? args.url);
-  if (!official) throw new Error("Official domain is invalid.");
-  let current = await assertPublicResearchUrl(args.url);
-  for (let redirects = 0; redirects <= 3; redirects += 1) {
-    const response = await fetchImpl(current, {
-      redirect: "manual",
-      cache: "no-store",
-      signal: AbortSignal.timeout(args.timeoutMs ?? 8_000),
-      headers: { "user-agent": "DeryaSupplyResearch/1.0" },
-    });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get("location");
-      if (!location) throw new Error("Research redirect is missing a destination.");
-      const next = await assertPublicResearchUrl(new URL(location, current).toString());
-      if (!sameDomain(next.toString(), official)) throw new Error("Research redirect left the approved official domain.");
-      current = next;
-      continue;
-    }
-    if (!response.ok) throw new Error(`Research source returned HTTP ${response.status}.`);
-    if (!(response.headers.get("content-type") ?? "").toLowerCase().includes("text/html")) throw new Error("Research source did not return HTML.");
-    const html = await cappedText(response);
-    if (rejectsLoginOrPaywall(current.toString(), html)) throw new Error("Login and paywall sources are not accepted.");
-    return { url: current.toString(), html };
-  }
-  throw new Error("Research source redirected too many times.");
 }
 
 export class ResearchRateLimiter {

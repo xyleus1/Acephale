@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { searchComponentSuppliers } from "@/lib/supply-os/component-supplier-research";
+import {
+  searchComponentSuppliers,
+  supplierResearchError,
+} from "@/lib/supply-os/component-supplier-research";
 import { listProcurementCasesForResearchRuns } from "@/lib/supply-os/procurement-case-persistence";
 import { listSupplierSenderAccounts } from "@/lib/supply-os/supplier-communication-persistence";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { ResearchRateLimiter } from "@/lib/supply-os/research";
+import { supplyIntelligenceProfile } from "@/lib/supply-os/supply-intelligence-persistence";
 import {
-  missingSourcingFields,
-  normalizeSourcingRequestDraft,
-} from "@/lib/supply-os/sourcing-request-contract";
+  executeSupplierResearchRoute,
+  type SupplierResearchRouteResponse,
+} from "@/lib/supply-os/supplier-research-route-contract";
 import {
   completeSourcingResearchRun,
   failSourcingResearchRun,
@@ -27,14 +31,11 @@ function requiredText(value: unknown, max: number) {
   return normalized && normalized.length <= max ? normalized : null;
 }
 
-function optionalText(value: unknown, max: number) {
-  if (value === undefined || value === null || value === "") return undefined;
-  return requiredText(value, max) ?? null;
-}
-
-function optionalPositiveNumber(value: unknown) {
-  if (value === undefined || value === null) return undefined;
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+function routeResponse(response: SupplierResearchRouteResponse) {
+  return NextResponse.json(response.body, {
+    status: response.status,
+    headers: response.headers,
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -44,16 +45,22 @@ export async function GET(request: NextRequest) {
     const context = supplyAccessContext(session);
     const rawLimit = request.nextUrl.searchParams.get("limit");
     const cursor = request.nextUrl.searchParams.get("cursor") ?? undefined;
+    const workspaceId = requiredText(request.nextUrl.searchParams.get("workspaceId"), 220) ?? undefined;
     const page = await listSourcingResearchPage(context, {
       cursor,
       limit: rawLimit === null ? undefined : Number(rawLimit),
+      workspaceId,
     });
-    const cases = await listProcurementCasesForResearchRuns(context, page.runs.map((run) => run.id));
-    const senderAccounts = await listSupplierSenderAccounts(context);
+    const [cases, senderAccounts, intelligenceProfile] = await Promise.all([
+      listProcurementCasesForResearchRuns(context, page.runs.map((run) => run.id), workspaceId),
+      listSupplierSenderAccounts(context),
+      workspaceId ? supplyIntelligenceProfile(context, workspaceId) : null,
+    ]);
     return NextResponse.json({
       runs: page.runs,
       cases,
       senderAccounts,
+      intelligenceProfile,
       page: { nextCursor: page.nextCursor },
     }, {
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
@@ -66,102 +73,42 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  const componentItemKey = requiredText(body?.componentItemKey, 180);
-  const componentName = requiredText(body?.componentName, 240);
-  const manufacturer = optionalText(body?.manufacturer, 180);
-  const mpn = optionalText(body?.mpn, 180);
-  const specification = optionalText(body?.specification, 1_000);
-  const targetCountry = optionalText(body?.targetCountry, 120);
-  const requestText = optionalText(body?.requestText, 500);
-  const requestedQuantity = optionalPositiveNumber(body?.requestedQuantity);
-  const requestedUnit = optionalText(body?.requestedUnit, 40);
-  const sourceRegion = optionalText(body?.sourceRegion, 180);
-  const deliveryLocation = optionalText(body?.deliveryLocation, 240);
-  const needByDate = optionalText(body?.needByDate, 10);
-  if (
-    !componentItemKey
-    || !componentName
-    || manufacturer === null
-    || mpn === null
-    || specification === null
-    || targetCountry === null
-    || requestText === null
-    || requestedQuantity === null
-    || requestedUnit === null
-    || sourceRegion === null
-    || deliveryLocation === null
-    || needByDate === null
-  ) {
-    return NextResponse.json({ error: "A valid component request is required." }, { status: 400 });
-  }
-  const missingFields = missingSourcingFields(normalizeSourcingRequestDraft({
-    productName: componentName,
-    quantity: requestedQuantity,
-    unit: requestedUnit,
-    manufacturer,
-    partNumber: mpn,
-    specification,
-    sourceRegion,
-    deliveryLocation,
-    needByDate,
-  }));
-  if (missingFields.length) {
-    return NextResponse.json({ error: "Complete the sourcing request before supplier research." }, { status: 400 });
-  }
-  if (!limiter.consume(`${session.officeId}:${session.userId}`)) {
-    return NextResponse.json({ error: "Supplier research rate limit reached." }, { status: 429 });
-  }
-
   const context = supplyAccessContext(session);
-  const input = {
-    componentItemKey,
-    componentName,
-    manufacturer: manufacturer ?? null,
-    mpn: mpn ?? null,
-    specification: specification ?? null,
-    targetCountry: targetCountry ?? null,
-    requestText: requestText ?? componentName,
-    requestedQuantity: requestedQuantity ?? null,
-    requestedUnit: requestedUnit ?? null,
-    sourceRegion: sourceRegion ?? null,
-    deliveryLocation: deliveryLocation ?? null,
-    needByDate: needByDate ?? null,
-  };
-  const run = await startSourcingResearchRun(context, input);
-  try {
-    const result = await searchComponentSuppliers({
-      officeId: session.officeId,
-      workspaceId: run.workspaceId,
-      componentItemKey,
-      componentName,
-      manufacturer,
-      mpn,
-      specification,
-      targetCountry,
-      requestedQuantity,
-      requestedUnit,
-      sourceRegion,
-      deliveryLocation,
-      needByDate,
-    });
-    const completedRun = await completeSourcingResearchRun({
-      context,
-      runId: run.id,
-      workspaceId: run.workspaceId,
-      output: JSON.parse(JSON.stringify(result)),
-    });
-    return NextResponse.json({ result, run: completedRun }, {
-      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
-    });
-  } catch {
-    await failSourcingResearchRun({
-      context,
-      runId: run.id,
-      workspaceId: run.workspaceId,
-      message: "Supplier research did not finish.",
-    });
-    return NextResponse.json({ error: "Supplier research did not finish." }, { status: 502 });
-  }
+  const body = await request.json().catch(() => null);
+  const response = await executeSupplierResearchRoute({
+    body,
+    context,
+    dependencies: {
+      consumeRateLimit: (key) => limiter.consume(key),
+      startRun: (routeContext, input, workspaceId) => startSourcingResearchRun(routeContext as typeof context, input, workspaceId),
+      search: (input) => searchComponentSuppliers({
+        ...input,
+        manufacturer: input.manufacturer ?? undefined,
+        mpn: input.mpn ?? undefined,
+        specification: input.specification ?? undefined,
+        targetCountry: input.targetCountry ?? undefined,
+        requestedQuantity: input.requestedQuantity ?? undefined,
+        requestedUnit: input.requestedUnit ?? undefined,
+        sourceRegion: input.sourceRegion ?? undefined,
+        deliveryLocation: input.deliveryLocation ?? undefined,
+        needByDate: input.needByDate ?? undefined,
+      }),
+      supplierFailure: supplierResearchError,
+      failRun: (args) => failSourcingResearchRun({ ...args, context: args.context as typeof context }),
+      completeRun: (args) => completeSourcingResearchRun({
+        ...args,
+        context: args.context as typeof context,
+        output: args.output as Parameters<typeof completeSourcingResearchRun>[0]["output"],
+      }),
+      intelligenceProfile: (routeContext, workspaceId) => supplyIntelligenceProfile(routeContext as typeof context, workspaceId),
+      persistenceFailure: async (error) => {
+        const response = supplyErrorResponse(error);
+        return {
+          status: response.status,
+          body: await response.json() as Record<string, unknown>,
+        };
+      },
+    },
+  });
+  return routeResponse(response);
 }

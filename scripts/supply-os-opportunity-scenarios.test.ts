@@ -11,7 +11,7 @@ assert.equal(
   false,
   "Opportunities must not replace the stable map workspace",
 );
-assert.match(dashboard, /<div className=\{styles\.commandMapStage\}>[\s\S]*<SupplyOsCommandMap/);
+assert.match(dashboard, /<div[^>]*className=\{styles\.commandMapStage\}>[\s\S]*<SupplyOsCommandMap/);
 assert.match(dashboard, /scenarios: \["customer", "distribution", "supplier"\]/);
 assert.match(dashboard, /Supply, logistics, production, and network scenarios/);
 

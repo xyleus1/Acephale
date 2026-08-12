@@ -16,6 +16,38 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-12 - Exa forced-live retrieval may create public listing receipts
+
+- Status: accepted
+- Owner: product and engineering
+- Context: OpenAI web search can discover attributable supplier pages, but its
+  generated fields and dates cannot prove that one exact listing currently
+  binds an item, amount, currency, and unit. Fetching arbitrary result URLs from
+  the application origin would create an SSRF and payload-control problem.
+- Decision: When `EXA_API_KEY` is configured, supplier research uses Exa Search
+  followed by Exa Contents with `maxAgeHours: 0`. The application contacts only
+  fixed `api.exa.ai` endpoints, checks each URL status, bounds response bytes and
+  total time, and records a server-owned `retrievedAt`. A deterministic
+  validator emits a receipt only when one successful forced-live record contains
+  the requested identity, positive amount, explicit ISO 4217 currency, explicit unit
+  or package basis, and exact source excerpt.
+- Supplier identity: Public results use the source domain as the durable
+  candidate name and carry no trusted supplier role. Generated seller names or
+  roles remain proposals and cannot imply authorization.
+- Persistence: Valid receipts create independently addressable managed-retrieval
+  evidence and append-only `PUBLIC_LIST_PRICE` observations. Search or summary
+  claims without a receipt remain freshness-unknown and create no observation.
+- Procurement boundary: A public listing receipt is not a supplier quote,
+  allocation promise, lead-time commitment, approval, or orderable term. Public
+  candidate selection remains server-downgraded to unknown commercial terms and
+  routes through qualification and RFQ confirmation.
+- Fallback: OpenAI web discovery remains available only when Exa is not
+  configured. An Exa timeout, provider error, stale status, invalid response, or
+  oversized response fails closed and does not silently fall back.
+- Revisit when: Exa coverage proves inadequate on JavaScript-heavy public
+  listings and a separately sandboxed Cloudflare Browser Rendering fallback is
+  ready for the same validator.
+
 ### 2026-08-12 - Supply intelligence schema lands before its runtime
 
 - Status: accepted
@@ -56,6 +88,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: Derya exposes a versioned public ingestion or writeback API that
   needs separate OpenAPI documentation, keys, lifecycle policy, and support
   ownership.
+### 2026-08-11 - Supply intelligence accumulates as profiles, facts, and price observations
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Supplier research runs preserved their own outputs but did not build
+  a reusable supplier universe. Snapshot supplier terms were immutable ERP
+  inputs, so they could not safely represent changing catalog prices, received
+  quotes, or commodity benchmarks. The active sourcing route also defaulted to
+  one office-wide Atlas workspace, which could mix customer research.
+- Decision: Scope sourcing to the selected shared `SupplyWorkspace`. Keep
+  `Company` as canonical customer and qualified-company truth. Build the
+  customer supply profile as a projection over Company, published snapshots,
+  and append-only `SupplyProfileFact` observations. Merge researched suppliers
+  into workspace-scoped `SupplySupplierProfile` identities while retaining each
+  research run. Store public catalog prices, supplier quotes, internal buys, and
+  benchmark values as append-only `SupplyPriceObservation` records. Describe
+  commodity sources with `SupplyBenchmarkSeries`, including cadence and delay.
+- Price evidence rule: Public research may retain a source-linked listing claim,
+  but it does not create a durable current-price observation. That requires a
+  server-owned retrieval receipt binding item identity, amount, currency, unit,
+  source URL, and observation time. Missing verified prices route to the existing
+  approved RFQ workflow.
+- Consequences: Supplier and customer knowledge can expand without overwriting
+  history. Current, historical, delayed, and monthly values can be labeled
+  honestly. Real-time exchange data still requires an authorized connector and
+  appropriate market-data rights; public web research is not a substitute.
+- Revisit when: Supplier identity resolution needs cross-workspace sharing, or
+  licensed exchange feeds require entitlement-aware distribution controls.
 
 ### 2026-08-11 - Connected quote PDFs are bounded evidence sources
 
@@ -2755,3 +2815,60 @@ Use this log for durable product and engineering decisions. Do not put every imp
   step before dependent runtime ships.
 - Revisit when: Production has a dedicated migration stage outside application
   builds.
+
+### 2026-08-11 - Customer workspace sourcing owns its procurement workstream
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Supplier research can run inside a customer Supply OS workspace. Resolving later procurement, email, reply, and quote-extraction work through the legacy Atlas workspace breaks that customer-scoped flow and hides valid records.
+- Decision: Derive the workspace from the office-scoped research run or execution task, then authorize that exact workspace before every follow-on read or mutation. The legacy Atlas workspace remains only the fallback for research started without an explicit customer workspace.
+- Safety: Task and run lookup always includes `officeId`; workspace membership and edit rights still pass through `requireSupplyWorkspace`.
+
+### 2026-08-12 - Research failures and incomplete parts lists remain explicit
+
+- Status: accepted
+- Owner: product and engineering
+- Context: A provider timeout or invalid structured response was previously
+  saved as a successful research run with no candidates. Parts-list import also
+  rejected useful customer rows when delivery facts were absent. Both behaviors
+  confused an unavailable dependency or an incomplete request with valid empty
+  data.
+- Decision: Provider configuration, timeout, upstream, and schema failures use
+  typed non-success responses and persist a failed research run that can be
+  retried. A five-column customer parts list may publish item identity,
+  specification, quantity, unit, and QA requirements while absent delivery
+  location, need-by date, or open quantity remain row-level clarification facts.
+- Evidence boundary: A zero-result successful search is distinct from provider
+  failure. Rejected and retained source URLs remain visible for audit. Prices
+  count as sourced only when amount, currency, unit, observation time, and a
+  common attributable URL pass the existing evidence rule.
+- Authorization: Only administrators and managers see parts import controls.
+  Server-side workspace edit authorization remains the final enforcement point.
+- Consequences: Failed research cannot masquerade as a completed empty search,
+  incomplete customer data is not invented, and an incomplete row does not
+  block unrelated valid rows from entering the sourcing queue.
+
+### 2026-08-12 - Parts imports expand snapshots and live prices require server verification
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Publishing an items-only parts snapshot could hide the customer's
+  locations, BOM, inventory, demand, supplier terms, compliance state, and
+  product media. Model-supplied observation times could also make an old or
+  misread listing look like a current public price.
+- Decision: A one-file parts import copies the latest published snapshot into a
+  new immutable draft and overlays items by stable item key. The draft records
+  the exact published snapshot it expanded and fails at publish if that base is
+  stale. Full normalized bundle imports retain replacement semantics.
+- Price boundary: Provider output cannot declare a price current. Public listing
+  claims may be displayed with their source link, but remain freshness unknown
+  and cannot become a recommendation, benchmark, or order term. Current public
+  prices require a managed retrieval connector that binds item identity,
+  amount, ISO currency, unit, and source date without application-origin fetches.
+  Selection persistence reapplies this downgrade to completed legacy research
+  runs so old model-supplied timestamps cannot restore sourced commercial terms.
+- Isolation: Fixed customer workspaces fail closed when unavailable, and local
+  pending sourcing requests include workspace ID in their storage key.
+- Consequences: Parts uploads cannot silently erase the operational twin,
+  concurrent stale drafts cannot hide newer customer data, and unverifiable
+  listings remain labeled claims rather than becoming orderable prices.

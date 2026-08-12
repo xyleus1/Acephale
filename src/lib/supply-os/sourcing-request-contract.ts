@@ -82,6 +82,23 @@ export function normalizeSourcingRequestDraft(value: unknown): SourcingRequestDr
   };
 }
 
+export function mergeSourcingRequestDraft(
+  current: SourcingRequestDraft,
+  extracted: SourcingRequestDraft,
+): SourcingRequestDraft {
+  return {
+    productName: extracted.productName ?? current.productName,
+    quantity: extracted.quantity ?? current.quantity,
+    unit: extracted.unit ?? current.unit,
+    manufacturer: extracted.manufacturer ?? current.manufacturer,
+    partNumber: extracted.partNumber ?? current.partNumber,
+    specification: extracted.specification ?? current.specification,
+    sourceRegion: extracted.sourceRegion ?? current.sourceRegion,
+    deliveryLocation: extracted.deliveryLocation ?? current.deliveryLocation,
+    needByDate: extracted.needByDate ?? current.needByDate,
+  };
+}
+
 export function missingSourcingFields(draft: SourcingRequestDraft): SourcingRequiredField[] {
   const missing: SourcingRequiredField[] = [];
   if (!draft.productName) missing.push("productName");
@@ -91,6 +108,21 @@ export function missingSourcingFields(draft: SourcingRequestDraft): SourcingRequ
   if (!draft.deliveryLocation) missing.push("deliveryLocation");
   if (!draft.needByDate) missing.push("needByDate");
   return missing;
+}
+
+export function sourcingRequestStorageKey(args: {
+  storageScope: string;
+  dashboardId: string;
+  workspaceId?: string | null;
+}) {
+  return `derya:supply-os:${args.storageScope}:${args.dashboardId}:${args.workspaceId ?? "demo"}:sourcing-requests:v1`;
+}
+
+export function shouldLoadSourcingHistory(args: {
+  workspaceId?: string | null;
+  demoCompanyId?: string | null;
+}) {
+  return Boolean(args.workspaceId) || args.demoCompanyId !== null;
 }
 
 const FIELD_QUESTIONS: Record<SourcingRequiredField, string> = {

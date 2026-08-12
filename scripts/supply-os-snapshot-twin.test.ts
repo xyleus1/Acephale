@@ -113,7 +113,11 @@ const surface = `${adapter}\n${shell}\n${shared}\n${twin}`;
 
 assert.match(adapter, /\/api\/supply-os\/workspaces\//, "the adapter must use the existing authenticated workspace endpoint");
 assert.match(adapter, /body\.workspace\.id !== workspaceId/, "the adapter must reject a mismatched workspace response");
-assert.match(shell, /onSelectionChange={handleWorkspaceSelection}/, "the selected shared workspace must drive the twin");
+assert.match(
+  shell,
+  /workspaceId=\{workspaceSelection\?\.demoCompanyId \? null : workspaceSelection\?\.workspaceId \?\? null\}/,
+  "real company selections must drive the dashboard without passing demo IDs as workspace IDs",
+);
 assert.match(twin, /const selectedScenario = isPublishedSnapshot\s+\? null/, "published snapshots must not invent unavailable decision inputs");
 assert.match(twin, /item\.isOptional/, "optional parts must not constrain buildability");
 assert.equal(surface.includes("\u2014"), false, "the snapshot twin surface must not contain an em dash");

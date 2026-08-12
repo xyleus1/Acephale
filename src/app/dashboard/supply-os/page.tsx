@@ -32,6 +32,7 @@ export default async function SupplyOsPage({
         presentationMode={params.present === "1"}
         initialPanel={params.panel}
         canCreateCompany={currentUser.role === "ADMIN"}
+        canImportSupplyData={currentUser.role === "ADMIN" || currentUser.role === "MANAGER"}
         canApproveProcurement={currentUser.role === "ADMIN" || currentUser.role === "MANAGER"}
         canAuthorizePurchase={currentUser.role === "ADMIN"}
       />

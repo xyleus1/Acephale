@@ -42,7 +42,10 @@ import type { SupplyOsPanel } from "@/lib/supply-os/panel-routing";
 import {
   missingSourcingFields,
   normalizeSourcingRequestDraft,
+  shouldLoadSourcingHistory,
+  sourcingRequestStorageKey,
 } from "@/lib/supply-os/sourcing-request-contract";
+import { sourcingDraftFromResearchInput } from "@/lib/supply-os/sourcing-research-navigation";
 import {
   loadSupplyCases,
   removeLegacySupplyCaseStorage,
@@ -51,10 +54,16 @@ import {
 } from "./supply-os-storage";
 import {
   ATLAS_ROBOTICS_INVENTORY,
+  sourcingDeliveryLocation,
+  sourcingNeedByDate,
+  sourcingRequestQuantity,
   shortageQuantity,
+  type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import { GUILD_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
 import { SUPPLY_OS_DEMO_COMPANIES, type SupplyOsDemoCompanyId } from "@/lib/supply-os/demo-company";
+import { snapshotResponseToSourcingItems } from "@/lib/supply-os/snapshot-sourcing";
+import type { SupplyWorkspaceSnapshotResponse } from "@/lib/supply-os/snapshot-twin";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
 import { SupplyOsAutomations } from "./supply-os-automations";
 import {
@@ -66,6 +75,7 @@ import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
+  SupplyIntelligenceProfile,
   SourcingQueuePage,
   SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
@@ -487,6 +497,7 @@ export function SupplyOsDashboardWorkspace({
   workspaceName,
   presentationMode = false,
   activePanel = "materials",
+  canImportSupplyData = false,
   canApproveProcurement = false,
   canAuthorizePurchase = false,
   demoCompanyId,
@@ -497,6 +508,7 @@ export function SupplyOsDashboardWorkspace({
   workspaceName?: string | null;
   presentationMode?: boolean;
   activePanel?: SupplyOsPanel;
+  canImportSupplyData?: boolean;
   canApproveProcurement?: boolean;
   canAuthorizePurchase?: boolean;
   demoCompanyId?: SupplyOsDemoCompanyId;
@@ -636,11 +648,13 @@ export function SupplyOsDashboardWorkspace({
           <SupplyOsAutomations key={currentCase.id} company={dashboardName(currentCase)} />
         ) : (
           <CaseCommandCenter
-            key={currentCase.id}
+            key={`${currentCase.id}:${workspaceId ?? "demo"}`}
             dashboard={currentCase}
             presentationMode={presentationMode}
             activePanel={activePanel}
             storageScope={storageScope}
+            workspaceId={workspaceId}
+            canImportSupplyData={canImportSupplyData}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
             demoCompanyId={resolvedDemoCompanyId}
@@ -675,6 +689,8 @@ function CaseCommandCenter({
   presentationMode,
   activePanel,
   storageScope,
+  workspaceId,
+  canImportSupplyData,
   canApproveProcurement,
   canAuthorizePurchase,
   demoCompanyId,
@@ -683,11 +699,13 @@ function CaseCommandCenter({
   presentationMode: boolean;
   activePanel: SupplyOsPanel;
   storageScope: string;
+  workspaceId?: string | null;
+  canImportSupplyData: boolean;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
   demoCompanyId: SupplyOsDemoCompanyId | null;
 }) {
-  const inventoryItems = demoCompanyId === "guild"
+  const demoInventoryItems = demoCompanyId === "guild"
     ? GUILD_SOURCING_ITEMS
     : demoCompanyId === "atlas-robotics" ? ATLAS_ROBOTICS_INVENTORY : [];
   const companyName = demoCompanyId
@@ -707,10 +725,12 @@ function CaseCommandCenter({
   const [selection, setSelection] = useState({ panel: activePanel, objectId: initialObject?.id ?? "" });
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const [selectedInventorySku, setSelectedInventorySku] = useState(
-    inventoryItems.find((item) => shortageQuantity(item) > 0)?.sku
-      ?? inventoryItems[0]?.sku
+    demoInventoryItems.find((item) => shortageQuantity(item) > 0)?.sku
+      ?? demoInventoryItems[0]?.sku
       ?? "",
   );
+  const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<AtlasInventoryItem[]>([]);
+  const [workspaceSnapshotRevision, setWorkspaceSnapshotRevision] = useState(0);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
   const [sourceMapCandidateId, setSourceMapCandidateId] = useState<string | null>(null);
   const [sourceMapObjectId, setSourceMapObjectId] = useState("");
@@ -730,6 +750,7 @@ function CaseCommandCenter({
   const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
   const [procurementCases, setProcurementCases] = useState<SavedProcurementCase[]>([]);
   const [supplierSenderAccounts, setSupplierSenderAccounts] = useState<SupplierSenderAccount[]>([]);
+  const [intelligenceProfile, setIntelligenceProfile] = useState<SupplyIntelligenceProfile | null>(null);
   const [sourcingDataState, setSourcingDataState] = useState<"loading" | "ready" | "error">("loading");
   const [sourcingNextCursor, setSourcingNextCursor] = useState<string | null>(null);
   const [sourcingPageState, setSourcingPageState] = useState<"idle" | "loading" | "error">("idle");
@@ -737,8 +758,8 @@ function CaseCommandCenter({
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
-    () => `derya:supply-os:${storageScope}:${demoCompanyId ?? `workspace:${modelDashboard.id}`}:${modelDashboard.id}:sourcing-requests:v1`,
-    [demoCompanyId, modelDashboard.id, storageScope],
+    () => sourcingRequestStorageKey({ storageScope, dashboardId: modelDashboard.id, workspaceId }),
+    [modelDashboard.id, storageScope, workspaceId],
   );
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
@@ -753,6 +774,7 @@ function CaseCommandCenter({
     : preferredObject ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
+  const inventoryItems = workspaceId ? workspaceInventoryItems : demoInventoryItems;
   const selectedInventoryItem = inventoryItems.find((item) => item.sku === selectedInventorySku)
     ?? inventoryItems[0];
   const selectedSourceCandidate = selectedInventoryItem?.candidates.find((candidate) => candidate.id === sourceMapCandidateId)
@@ -823,6 +845,34 @@ function CaseCommandCenter({
   }, [activePanel, domain.defaultInspector]);
 
   useEffect(() => {
+    if (!workspaceId) {
+      setWorkspaceInventoryItems([]);
+      return;
+    }
+    const controller = new AbortController();
+    void fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { accept: "application/json" },
+    }).then(async (response) => {
+      const body = await response.json().catch(() => ({})) as Partial<SupplyWorkspaceSnapshotResponse> & { error?: string };
+      if (!response.ok || !body.workspace) throw new Error(body.error || "Published parts are unavailable.");
+      setWorkspaceInventoryItems(snapshotResponseToSourcingItems(body as SupplyWorkspaceSnapshotResponse));
+    }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setWorkspaceInventoryItems([]);
+    });
+    return () => controller.abort();
+  }, [workspaceId, workspaceSnapshotRevision]);
+
+  useEffect(() => {
+    if (inventoryItems.some((item) => item.sku === selectedInventorySku)) return;
+    setSelectedInventorySku(inventoryItems[0]?.sku ?? "");
+    setSourceMapCandidateId(null);
+    setSourceMapObjectId("");
+  }, [inventoryItems, selectedInventorySku]);
+
+  useEffect(() => {
     activePendingRequestIdRef.current = procurementRequest?.requestId ?? null;
   }, [procurementRequest?.requestId]);
 
@@ -878,7 +928,7 @@ function CaseCommandCenter({
   }, [procurementRequest]);
 
   useEffect(() => {
-    if (demoCompanyId === null) {
+    if (!shouldLoadSourcingHistory({ workspaceId, demoCompanyId })) {
       setResearchRuns([]);
       setProcurementCases([]);
       setSupplierSenderAccounts([]);
@@ -891,29 +941,32 @@ function CaseCommandCenter({
     setSourcingDataState("loading");
     setSourcingNextCursor(null);
     setSourcingPageState("idle");
-    void fetch("/api/supply-os/supplier-research", {
+    const params = workspaceId ? new URLSearchParams({ workspaceId }) : null;
+    void fetch(`/api/supply-os/supplier-research${params ? `?${params.toString()}` : ""}`, {
       cache: "no-store",
       signal: controller.signal,
       headers: { accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) throw new Error("Saved sourcing work is unavailable.");
-      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[]; page?: SourcingQueuePage };
+      const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[]; intelligenceProfile?: SupplyIntelligenceProfile | null; page?: SourcingQueuePage };
       setResearchRuns(payload.runs ?? []);
       setProcurementCases(payload.cases ?? []);
       setSupplierSenderAccounts(payload.senderAccounts ?? []);
+      setIntelligenceProfile(payload.intelligenceProfile ?? null);
       setSourcingNextCursor(payload.page?.nextCursor ?? null);
       setSourcingDataState("ready");
     }).catch(() => {
       if (!controller.signal.aborted) setSourcingDataState("error");
     });
     return () => controller.abort();
-  }, [demoCompanyId, sourcingLoadRevision]);
+  }, [demoCompanyId, sourcingLoadRevision, workspaceId]);
 
   async function loadOlderSourcingWork() {
     if (!sourcingNextCursor || sourcingPageState === "loading") return;
     setSourcingPageState("loading");
     try {
       const params = new URLSearchParams({ cursor: sourcingNextCursor });
+      if (workspaceId) params.set("workspaceId", workspaceId);
       const response = await fetch(`/api/supply-os/supplier-research?${params.toString()}`, {
         cache: "no-store",
         headers: { accept: "application/json" },
@@ -995,18 +1048,51 @@ function CaseCommandCenter({
     if (!item) return;
     setSourceMapCandidateId(null);
     setSourceMapObjectId("");
+    const requestedQuantity = sourcingRequestQuantity(item);
+    const needByDate = sourcingNeedByDate(item);
+    const deliveryLocation = sourcingDeliveryLocation(item);
+    const completePublishedItem = item.source === "published-snapshot"
+      && requestedQuantity !== null
+      && Boolean(needByDate)
+      && Boolean(deliveryLocation);
+    const generatedRequestText = requestText
+      ?? (item.source === "published-snapshot"
+        ? `${requestedQuantity ?? "Unknown quantity"} ${item.unitOfMeasure ?? "units"} of ${item.name}. ${item.specification}`
+        : [
+          `${item.requirementLabel ?? `${shortageQuantity(item)} ${item.requestedUnit ?? "units"}`} of ${item.name}`,
+          item.specification,
+          item.supplierDeliverable ? `Supplier QA: ${item.supplierDeliverable}` : null,
+          `Company: ${companyName}`,
+        ].filter(Boolean).join(". "));
     setProcurementRequest({
       requestId: null,
-      itemSku: item.sku,
-      requestText: requestText ?? [
-        `${item.requirementLabel ?? `${shortageQuantity(item)} ${item.requestedUnit ?? "units"}`} of ${item.name}`,
-        item.specification,
-        item.supplierDeliverable ? `Supplier QA: ${item.supplierDeliverable}` : null,
-        `Company: ${companyName}`,
-      ].filter(Boolean).join(". "),
-      initialDraft: null,
-      initialMissingFields: [],
-      initialQuestion: null,
+      itemSku: completePublishedItem || item.source !== "published-snapshot" ? item.sku : null,
+      requestText: generatedRequestText,
+      initialDraft: item.source === "published-snapshot" ? {
+        productName: item.name,
+        quantity: requestedQuantity,
+        unit: item.requestedUnit ?? item.unitOfMeasure ?? null,
+        manufacturer: item.manufacturer ?? null,
+        partNumber: item.mpn ?? null,
+        specification: item.specification,
+        sourceRegion: null,
+        deliveryLocation,
+        needByDate,
+      } : null,
+      initialMissingFields: item.source === "published-snapshot" ? missingSourcingFields({
+        productName: item.name,
+        quantity: requestedQuantity,
+        unit: item.requestedUnit ?? item.unitOfMeasure ?? null,
+        manufacturer: item.manufacturer ?? null,
+        partNumber: item.mpn ?? null,
+        specification: item.specification,
+        sourceRegion: null,
+        deliveryLocation,
+        needByDate,
+      }) : [],
+      initialQuestion: completePublishedItem || item.source !== "published-snapshot"
+        ? null
+        : "Provide the missing quantity, delivery location, or need-by date before research starts.",
     });
   }
 
@@ -1090,22 +1176,30 @@ function CaseCommandCenter({
       requestId: null,
       requestText: run.input.requestText || run.input.componentName,
       itemSku: matchedItem?.sku ?? null,
-      initialDraft: matchedItem ? null : {
-        productName: run.input.componentName,
-        quantity: run.input.requestedQuantity ?? null,
-        unit: run.input.requestedUnit ?? null,
-        manufacturer: run.input.manufacturer,
-        partNumber: run.input.mpn,
-        specification: run.input.specification,
-        sourceRegion: run.input.sourceRegion ?? null,
-        deliveryLocation: run.input.deliveryLocation ?? run.input.targetCountry,
-        needByDate: run.input.needByDate ?? null,
-      },
+      initialDraft: matchedItem ? null : sourcingDraftFromResearchInput(run.input),
       initialMissingFields: [],
       initialQuestion: null,
       savedRun: run,
       savedCase,
       savedCases,
+    });
+  }
+
+  function retrySavedResearch(run: SavedSourcingResearchRun) {
+    const matchedItem = inventoryItems.find((item) => item.sku === run.input.componentItemKey) ?? null;
+    if (matchedItem) setSelectedInventorySku(matchedItem.sku);
+    setSourceMapCandidateId(null);
+    setSourceMapObjectId("");
+    setProcurementRequest({
+      requestId: null,
+      requestText: run.input.requestText || run.input.componentName,
+      itemSku: matchedItem?.sku ?? null,
+      initialDraft: sourcingDraftFromResearchInput(run.input),
+      initialMissingFields: [],
+      initialQuestion: null,
+      savedRun: null,
+      savedCase: null,
+      savedCases: [],
     });
   }
 
@@ -1124,6 +1218,7 @@ function CaseCommandCenter({
             key={`procurement:${procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
             requestText={procurementRequest.requestText}
+            workspaceId={workspaceId}
             initialDraft={procurementRequest.initialDraft}
             initialMissingFields={procurementRequest.initialMissingFields}
             initialQuestion={procurementRequest.initialQuestion}
@@ -1133,6 +1228,7 @@ function CaseCommandCenter({
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
             senderAccounts={supplierSenderAccounts}
+            onIntelligenceUpdated={setIntelligenceProfile}
             onResearchSaved={saveResearchRun}
             onProcurementCaseSaved={saveProcurementCase}
             onRequestUpdate={procurementRequest.requestId
@@ -1142,16 +1238,21 @@ function CaseCommandCenter({
           />
         ) : activePanel === "materials" ? (
           <AtlasInventoryWorkspace
-            key={`sourcing-queue:${demoCompanyId ?? modelDashboard.id}`}
+            key={`sourcing-queue:${workspaceId ?? demoCompanyId ?? modelDashboard.id}`}
+            selectedSku={selectedInventoryItem?.sku ?? ""}
             items={inventoryItems}
             companyName={companyName}
-            selectedSku={selectedInventoryItem?.sku ?? ""}
+            workspaceId={workspaceId}
+            canImportSupplyData={canImportSupplyData}
+            onSnapshotPublished={() => setWorkspaceSnapshotRevision((revision) => revision + 1)}
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}
+            onRetryResearch={retrySavedResearch}
             pendingRequests={pendingSourcingRequests}
             onOpenPendingRequest={openPendingSourcingRequest}
             researchRuns={researchRuns}
             procurementCases={procurementCases}
+            intelligenceProfile={intelligenceProfile}
             dataState={sourcingDataState}
             hasMore={Boolean(sourcingNextCursor)}
             pageState={sourcingPageState}

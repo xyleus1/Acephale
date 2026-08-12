@@ -1,0 +1,92 @@
+name: Supply OS tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/supply-os-tests.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "prisma/**"
+      - "scripts/supply-os-*"
+      - "scripts/fixtures/**"
+      - "src/app/api/supply-os/**"
+      - "src/app/dashboard/supply-os/**"
+      - "src/lib/supply-os/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/supply-os-tests.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "prisma/**"
+      - "scripts/supply-os-*"
+      - "scripts/fixtures/**"
+      - "src/app/api/supply-os/**"
+      - "src/app/dashboard/supply-os/**"
+      - "src/lib/supply-os/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-os-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: derya_supply_os_execution_verify_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d derya_supply_os_execution_verify_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_supply_os_execution_verify_ci?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@127.0.0.1:5432/derya_supply_os_execution_verify_ci?schema=public
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Run Supply OS persistence contracts
+        run: |
+          npm run test:supply-os-persistence
+          npm run test:supply-os-sourcing-persistence
+          npm run test:supply-os-planning-persistence
+          npm run test:supply-os-execution
+
+      - name: Run deterministic sourcing regressions
+        run: |
+          npm run test:supply-os-csv-route-contract
+          npm run test:supply-os-csv-import
+          npm run test:supply-os-bom-acceptance
+          npm run test:supply-os-sourcing-projection
+          npm run test:supply-os-research-route-lifecycle
+          npm run test:supply-os-saved-research-retry
+          npm run test:supply-os-supplier-research-failures
+          npm run test:supply-os-supply-intelligence
+          npm run test:supply-os-exa-retrieval

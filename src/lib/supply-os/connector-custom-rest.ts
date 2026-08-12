@@ -397,7 +397,8 @@ function validateNormalized(normalized: NormalizedSupplyCsvBundle) {
   });
   normalized.demand.forEach((requirement, index) => {
     if (!itemKeys.has(requirement.itemKey) || (requirement.locationKey && !locationKeys.has(requirement.locationKey))) errors.push({ file: "demand", row: index + 1, severity: "error", code: "broken_reference", message: "Demand references an unknown item or location." });
-    if (requirement.quantity === null || requirement.quantity < 0) errors.push({ file: "demand", row: index + 1, severity: "error", code: "invalid_number", message: "Demand quantity must be zero or greater." });
+    const quantity = requirement.quantity === null ? Number.NaN : Number(requirement.quantity);
+    if (!Number.isFinite(quantity) || quantity < 0) errors.push({ file: "demand", row: index + 1, severity: "error", code: "invalid_number", message: "Demand quantity must be zero or greater." });
     if (!requirement.dueAt) errors.push({ file: "demand", row: index + 1, severity: "error", code: "invalid_date", message: "Demand due timestamp is required." });
   });
   normalized.supplierTerms.forEach((term, index) => {

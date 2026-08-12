@@ -40,6 +40,7 @@ export function SupplyOsOperatingShell({
   presentationMode,
   initialPanel,
   canCreateCompany,
+  canImportSupplyData,
   canApproveProcurement,
   canAuthorizePurchase,
 }: {
@@ -47,6 +48,7 @@ export function SupplyOsOperatingShell({
   presentationMode: boolean;
   initialPanel?: string;
   canCreateCompany: boolean;
+  canImportSupplyData: boolean;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
 }) {
@@ -103,7 +105,7 @@ export function SupplyOsOperatingShell({
   }, []);
 
   if (presentationMode) {
-    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
+    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} canImportSupplyData={canImportSupplyData} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
   }
 
   return (
@@ -227,6 +229,7 @@ export function SupplyOsOperatingShell({
                 workspaceName={workspaceSelection?.workspaceName ?? null}
                 presentationMode={false}
                 activePanel={activePanel}
+                canImportSupplyData={canImportSupplyData}
                 canApproveProcurement={canApproveProcurement}
                 canAuthorizePurchase={canAuthorizePurchase}
                 demoCompanyId={workspaceSelection?.demoCompanyId}

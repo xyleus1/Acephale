@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
-import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import { SUPPLIER_EMAIL_ACTION_TASK_TYPE } from "./supplier-communication-persistence";
 import { PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE } from "./purchase-order-communication-persistence";
 import { PURCHASE_ORDER_FOLLOWUP_EMAIL_ACTION_TASK_TYPE } from "./purchase-order-followup-persistence";
@@ -141,7 +141,7 @@ export async function captureConnectedSupplierReplies(args: {
   sync?: SupplierReplySync;
 }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.quoteCycleId, "edit", [QUOTE_CYCLE_TASK_TYPE]);
   const cycle = await prisma.supplyExecutionTask.findFirst({
     where: {
       id: args.quoteCycleId,
@@ -332,7 +332,7 @@ export async function captureConnectedPurchaseOrderReplies(args: {
   sync?: SupplierReplySync;
 }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.purchaseActionId, "edit", [PURCHASE_ACTION_TASK_TYPE]);
   const purchaseAction = await prisma.supplyExecutionTask.findFirst({
     where: {
       id: args.purchaseActionId,

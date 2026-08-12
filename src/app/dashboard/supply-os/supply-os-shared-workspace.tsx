@@ -15,6 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { resolveSupplyWorkspaceId } from "@/lib/supply-os/workspace-selection";
 import styles from "./supply-os-shared-workspace.module.css";
 
 const CSV_KINDS = ["locations", "items", "bom", "inventory", "demand"] as const;
@@ -49,7 +50,7 @@ type SupplyWorkspace = {
 };
 
 type ImportIssue = {
-  file: CsvKind;
+  file: CsvKind | "parts";
   row: number;
   field?: string;
   message: string;
@@ -136,15 +137,19 @@ function errorIssues(error: unknown): ImportIssue[] {
 
 export function SupplyOsSharedWorkspace({
   className,
+  workspaceId,
   onSelectionChange,
+  onPublished,
 }: {
   className?: string;
+  workspaceId?: string | null;
   onSelectionChange?: (selection: SupplyOsWorkspaceSelection) => void;
+  onPublished?: () => void;
 }) {
   const instanceId = useId();
   const createDialogRef = useRef<HTMLDialogElement>(null);
   const [workspaces, setWorkspaces] = useState<SupplyWorkspace[]>([]);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(workspaceId ?? "");
   const [workspaceState, setWorkspaceState] = useState<RequestState>("loading");
   const [workspaceError, setWorkspaceError] = useState("");
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
@@ -157,6 +162,8 @@ export function SupplyOsSharedWorkspace({
     inventory: null,
     demand: null,
   });
+  const [partsFile, setPartsFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<"parts" | "bundle">("parts");
   const [sourceName, setSourceName] = useState("");
   const [importState, setImportState] = useState<RequestState>("idle");
   const [importMessage, setImportMessage] = useState("");
@@ -169,7 +176,11 @@ export function SupplyOsSharedWorkspace({
     [selectedId, workspaces],
   );
   const latestSnapshot = selectedWorkspace?.snapshots[0] ?? null;
-  const canStage = Boolean(selectedId && files.locations && files.items && importState !== "loading");
+  const canStage = Boolean(
+    selectedId
+    && importState !== "loading"
+    && (importMode === "parts" ? partsFile : files.locations && files.items),
+  );
   const canPublish = Boolean(stagedImport && stagedImport.status === "READY" && importState !== "loading");
 
   useEffect(() => {
@@ -199,25 +210,37 @@ export function SupplyOsSharedWorkspace({
         signal,
       });
       const body = await responseBody<{ workspaces: SupplyWorkspace[] }>(response);
+      const fixedSelection = workspaceId ? resolveSupplyWorkspaceId({
+        workspaces: body.workspaces,
+        fixedWorkspaceId: workspaceId,
+      }) : null;
       setWorkspaces(body.workspaces);
-      setSelectedId((current) => {
-        const candidate = preferredId || current;
-        if (candidate && body.workspaces.some((workspace) => workspace.id === candidate)) return candidate;
-        return body.workspaces[0]?.id ?? "";
-      });
+      setSelectedId((current) => fixedSelection ?? resolveSupplyWorkspaceId({
+        workspaces: body.workspaces,
+        preferredWorkspaceId: preferredId,
+        currentWorkspaceId: current,
+      }));
       setWorkspaceState("success");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      if (workspaceId) {
+        setWorkspaces([]);
+        setSelectedId("");
+      }
       setWorkspaceError(errorMessage(error));
       setWorkspaceState("error");
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadWorkspaces(controller.signal);
+    void loadWorkspaces(controller.signal, workspaceId ?? undefined);
     return () => controller.abort();
-  }, [loadWorkspaces]);
+  }, [loadWorkspaces, workspaceId]);
+
+  useEffect(() => {
+    if (workspaceId) setSelectedId(workspaceId);
+  }, [workspaceId]);
 
   useEffect(() => {
     setStagedImport(null);
@@ -264,28 +287,45 @@ export function SupplyOsSharedWorkspace({
     setImportState("idle");
   }
 
+  function setPartsCsvFile(file: File | null) {
+    setStagedImport(null);
+    setImportMessage("");
+    setImportIssues([]);
+    if (file && file.size > MAX_FILE_BYTES) {
+      setPartsFile(null);
+      setImportState("error");
+      setImportMessage("Parts CSV must be under 2 MB.");
+      return;
+    }
+    setPartsFile(file);
+    setImportState("idle");
+  }
+
   async function stageImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedId || !files.locations || !files.items) return;
+    if (!selectedId || (importMode === "parts" ? !partsFile : !files.locations || !files.items)) return;
     setImportState("loading");
     setImportMessage("Reading local CSV files.");
     setImportIssues([]);
     setStagedImport(null);
     try {
-      const bundleBytes = CSV_KINDS.reduce((total, kind) => total + (files[kind]?.size ?? 0), 0);
+      const bundleBytes = importMode === "parts"
+        ? partsFile!.size
+        : CSV_KINDS.reduce((total, kind) => total + (files[kind]?.size ?? 0), 0);
       if (bundleBytes > MAX_BUNDLE_BYTES) {
         throw new Error("The combined CSV bundle must be under 5.5 MB.");
       }
-      const fileEntries = await Promise.all(
+      const fileEntries = importMode === "bundle" ? await Promise.all(
         CSV_KINDS.filter((kind) => files[kind]).map(async (kind) => [kind, await files[kind]!.text()] as const),
-      );
+      ) : [];
+      const partsCsv = importMode === "parts" ? await partsFile!.text() : null;
       setImportMessage("Validating and staging an office-shared draft.");
       const response = await fetch(`/api/supply-os/workspaces/${encodeURIComponent(selectedId)}/imports`, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
           sourceName: sourceName.trim() || `CSV bundle ${new Date().toISOString().slice(0, 10)}`,
-          files: Object.fromEntries(fileEntries),
+          ...(partsCsv ? { partsCsv } : { files: Object.fromEntries(fileEntries) }),
         }),
       });
       const body = await responseBody<{ importRun: StagedImport }>(response);
@@ -319,6 +359,7 @@ export function SupplyOsSharedWorkspace({
       setImportState("success");
       setImportMessage("Snapshot published. Office members now read the same version from Postgres.");
       await loadWorkspaces(undefined, selectedId);
+      onPublished?.();
     } catch (error) {
       setImportIssues(errorIssues(error));
       setImportMessage(errorMessage(error));
@@ -328,6 +369,7 @@ export function SupplyOsSharedWorkspace({
 
   function clearFiles() {
     setFiles({ locations: null, items: null, bom: null, inventory: null, demand: null });
+    setPartsFile(null);
     setSourceName("");
     setStagedImport(null);
     setImportMessage("");
@@ -342,7 +384,7 @@ export function SupplyOsSharedWorkspace({
         <div className={styles.headerIdentity}>
           <span className={styles.headerIcon}><Database size={18} aria-hidden="true" /></span>
           <div>
-            <h2 id={`${instanceId}-title`}>Workspaces</h2>
+            <h2 id={`${instanceId}-title`}>{workspaceId ? "Data import" : "Workspaces"}</h2>
           </div>
         </div>
         <div className={styles.serverStatus}>
@@ -360,16 +402,17 @@ export function SupplyOsSharedWorkspace({
         <div>
           <Database size={15} aria-hidden="true" />
           <p><strong>Shared:</strong> workspaces and published snapshots are office-scoped.</p>
+          <p><strong>Compatibility:</strong> views without a published snapshot may still use local or illustrative data.</p>
         </div>
         <div>
           <FileSpreadsheet size={15} aria-hidden="true" />
-          <p><strong>Demo:</strong> other panels may use local or illustrative data.</p>
+          <p><strong>Sourcing:</strong> published parts become rows in this workspace.</p>
         </div>
       </div>
 
       {workspaceError ? <div className={styles.errorBanner} role="alert">{workspaceError}</div> : null}
 
-      <div className={styles.workspaceBar}>
+      {!workspaceId ? <div className={styles.workspaceBar}>
         <label htmlFor={`${instanceId}-workspace`}>
           <span>Active workspace</span>
           <div className={styles.selectWrap}>
@@ -394,9 +437,9 @@ export function SupplyOsSharedWorkspace({
         }}>
           <Plus size={14} aria-hidden="true" /> New
         </button>
-      </div>
+      </div> : null}
 
-      <dialog ref={createDialogRef} className={styles.createDialog} aria-labelledby={`${instanceId}-create-title`}>
+      {!workspaceId ? <dialog ref={createDialogRef} className={styles.createDialog} aria-labelledby={`${instanceId}-create-title`}>
         <form method="dialog" onSubmit={(event) => void createWorkspace(event)}>
           <h3 id={`${instanceId}-create-title`}>New workspace</h3>
           <label htmlFor={`${instanceId}-workspace-name`}>
@@ -421,7 +464,7 @@ export function SupplyOsSharedWorkspace({
             </button>
           </div>
         </form>
-      </dialog>
+      </dialog> : null}
 
       {selectedWorkspace ? (
         <div className={styles.workspaceBody}>
@@ -462,10 +505,15 @@ export function SupplyOsSharedWorkspace({
             <header>
               <div>
                 <h3 id={`${instanceId}-import-title`}>Import</h3>
-                <p>Validated and saved as a draft.</p>
+                <p>Validate, review counts, then publish.</p>
               </div>
-              <button type="button" className={styles.clearButton} onClick={clearFiles} disabled={!CSV_KINDS.some((kind) => files[kind])}>Clear</button>
+              <button type="button" className={styles.clearButton} onClick={clearFiles} disabled={!partsFile && !CSV_KINDS.some((kind) => files[kind])}>Clear</button>
             </header>
+
+            <div className={styles.importMode} role="group" aria-label="CSV import format">
+              <button type="button" data-active={importMode === "parts"} onClick={() => { clearFiles(); setImportMode("parts"); }}>One parts CSV</button>
+              <button type="button" data-active={importMode === "bundle"} onClick={() => { clearFiles(); setImportMode("bundle"); }}>Full snapshot</button>
+            </div>
 
             <label className={styles.sourceName} htmlFor={`${instanceId}-source-name`}>
               <span>Source label <small>optional</small></span>
@@ -478,7 +526,27 @@ export function SupplyOsSharedWorkspace({
               />
             </label>
 
-            <div className={styles.fileGrid} key={fileResetKey}>
+            {importMode === "parts" ? (
+              <div className={styles.partsImport} key={`parts-${fileResetKey}`}>
+                <label className={styles.fileInput} data-selected={Boolean(partsFile)}>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    required
+                    onChange={(event) => setPartsCsvFile(event.target.files?.[0] ?? null)}
+                  />
+                  <span className={styles.fileIcon}>{partsFile ? <Check size={15} /> : <CloudUpload size={15} />}</span>
+                  <span className={styles.fileCopy}>
+                    <strong>Parts list <em>required</em></strong>
+                    <small>{partsFile ? `${partsFile.name} · ${Math.ceil(partsFile.size / 1024).toLocaleString()} KB` : "Item, description, specification, quantity, and supplier QA"}</small>
+                  </span>
+                </label>
+                <p>
+                  Required columns: item, procurement description, and quantity. Quantity can include a unit, such as 300 m total, or As req. Delivery location and need-by date can be added during clarification.
+                  {" "}<a href="/api/supply-os/templates/parts">Download template</a>
+                </p>
+              </div>
+            ) : <div className={styles.fileGrid} key={fileResetKey}>
               {CSV_KINDS.map((kind) => {
                 const meta = FILE_LABELS[kind];
                 const file = files[kind];
@@ -498,7 +566,7 @@ export function SupplyOsSharedWorkspace({
                   </label>
                 );
               })}
-            </div>
+            </div>}
 
             {importMessage ? (
               <div className={styles.importStatus} data-state={importState} role={importState === "error" ? "alert" : "status"} aria-live="polite">

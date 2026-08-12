@@ -2,8 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
-import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
+import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import {
   appendSupplierCommunicationEvent as appendEvent,
   currentAccessContext,
@@ -37,6 +37,18 @@ const PROCUREMENT_CASE_TASK_TYPE = "PROCUREMENT_CASE";
 const PURCHASE_DRAFT_TASK_TYPE = "PURCHASE_ORDER_DRAFT";
 const PURCHASE_ACTION_TASK_TYPE = "PURCHASE_ORDER_ACTION";
 const PURCHASE_ACTION_CAPABILITY = "authorize.purchase_order";
+
+function passingQualityEvidence(value: unknown) {
+  const quality = record(value);
+  return quality.outcome === "PASS"
+    && typeof quality.evidenceId === "string"
+    && quality.evidenceId.length > 0
+    && typeof quality.evidenceUrl === "string"
+    && quality.evidenceUrl.length > 0
+    && typeof quality.observedOn === "string"
+    && /^\d{4}-\d{2}-\d{2}$/.test(quality.observedOn)
+    && quality.observedOn <= todayUtc();
+}
 const EMAIL_CAPABILITY = "contact.supplier_purchase_order_email";
 const REQUIRED_ROLE = "MANAGER";
 
@@ -110,7 +122,7 @@ async function activeOrderScope(tx: Prisma.TransactionClient, args: {
   const qualityPlan = record(input.qualityPlan);
   const sourceExpired = !currentSupplierQualification(input.sourceEvidenceReview);
   const quoteExpired = isoDate(commercial.quoteValidUntil, "Authorized quote validity date") < todayUtc();
-  const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
+  const qualityExpired = !passingQualityEvidence(qualityPlan) || typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
   const staleGate: ReplacementFreshnessGate | null = sourceExpired
     ? "SOURCE_EVIDENCE"
     : quoteExpired
@@ -139,8 +151,7 @@ export async function listPurchaseOrderCommunicationTasks(args: {
 }) {
   if (!args.purchaseDraftIds.length) return [];
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "view");
-  if (workspace.id !== args.workspaceId) throw new SupplyPersistenceError("Supply workspace was not found.", "not_found");
+  const workspace = await requireSupplyWorkspace(accessContext, args.workspaceId, "view");
   return prisma.supplyExecutionTask.findMany({
     where: {
       officeId: accessContext.officeId,
@@ -161,7 +172,7 @@ export async function savePurchaseOrderEmailDraft(args: {
 }) {
   const draftInput = normalizedOrderDraft(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.purchaseActionId, "edit", [PURCHASE_ACTION_TASK_TYPE]);
   const sender = await prisma.emailAccount.findFirst({
     where: {
       id: draftInput.senderAccountId,
@@ -246,7 +257,7 @@ export async function requestPurchaseOrderEmailApproval(args: { context: SupplyA
   const expectedResultHash = requiredText(body.expectedResultHash, "Order email draft result hash", 128);
   const reason = requiredText(body.reason, "Approval reason", 2_000);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.draftId, "edit", [PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE]);
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const draftLookup = await tx.supplyExecutionTask.findFirst({ where: { id: args.draftId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_EMAIL_DRAFT_TASK_TYPE }, select: { parentTaskId: true, input: true } });
     if (!draftLookup?.parentTaskId) throw new SupplyPersistenceError("Purchase order email draft was not found.", "not_found");
@@ -310,8 +321,7 @@ export async function decidePurchaseOrderEmailApproval(args: { context: SupplyAc
   const note = optionalText(body.note, "Approval note", 2_000);
   const found = await prisma.supplyApproval.findFirst({ where: { id: args.approvalId, officeId: accessContext.officeId }, include: { executionTask: true } });
   if (!found?.executionTask || found.executionTask.taskType !== PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE || !found.executionTask.parentTaskId) throw new SupplyPersistenceError("Purchase order email approval was not found.", "not_found");
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
-  if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Purchase order email approval was not found.", "not_found");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   const actionInput = record(found.executionTask.input);
   const draftId = requiredText(actionInput.draftId, "Purchase order email draft ID", 220);
   const purchaseActionId = requiredText(actionInput.purchaseActionId, "Purchase action ID", 220);
@@ -452,7 +462,7 @@ async function finalizePurchaseOrderEmail(args: { context: SupplyAccessContext; 
 
 export async function sendPurchaseOrderEmailAction(args: { context: SupplyAccessContext; actionId: string; provider?: SupplierEmailProvider }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE]);
   const claimed = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const lookup = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE }, select: { parentTaskId: true, input: true } });
     if (!lookup?.parentTaskId) throw new SupplyPersistenceError("Purchase order email action was not found.", "not_found");
@@ -525,7 +535,7 @@ export async function sendPurchaseOrderEmailAction(args: { context: SupplyAccess
 
 export async function reconcilePurchaseOrderEmailAction(args: { context: SupplyAccessContext; actionId: string; provider?: SupplierEmailProvider }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE]);
   const action = await prisma.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE, status: { in: ["READY", "RUNNING", "BLOCKED"] } }, select: communicationTaskSelect });
   if (!action) throw new SupplyPersistenceError("An unresolved purchase order email action was not found.", "not_found");
   const result = record(action.result);
@@ -556,7 +566,7 @@ export async function resetPurchaseOrderEmailForRetry(args: { context: SupplyAcc
   if (note.length < 10) throw new SupplyPersistenceError("Recovery note must explain how non-delivery was verified.", "invalid_input");
   const accessContext = await currentAccessContext(args.context);
   if (!["ADMIN", "MANAGER"].includes(accessContext.role)) throw new SupplyPersistenceError("Only an admin or manager can reset an uncertain purchase order email.", "forbidden");
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE]);
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const action = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ORDER_EMAIL_ACTION_TASK_TYPE, status: "RUNNING" }, select: communicationTaskSelect });
     if (!action || record(action.result).state !== "NOT_FOUND_REVIEW_REQUIRED") throw new SupplyPersistenceError("A purchase order email awaiting non-delivery review was not found.", "conflict");

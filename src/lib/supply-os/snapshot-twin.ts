@@ -61,16 +61,21 @@ type ApiItem = {
   id: string;
   itemKey: string;
   sku?: string | null;
+  manufacturer?: string | null;
   mpn?: string | null;
   name: string;
+  description?: string | null;
   category?: string | null;
   itemType?: string | null;
+  unitOfMeasure?: string | null;
+  metadata?: unknown;
 };
 
 type ApiBomLine = {
   id: string;
   componentItemId: string;
   quantity: unknown;
+  unitOfMeasure?: string | null;
   isOptional?: boolean;
 };
 
@@ -92,7 +97,10 @@ type ApiInventory = {
 
 type ApiDemand = {
   itemId: string;
+  locationId?: string | null;
   quantity: unknown;
+  unitOfMeasure?: string | null;
+  dueAt?: string | null;
   status?: string | null;
 };
 

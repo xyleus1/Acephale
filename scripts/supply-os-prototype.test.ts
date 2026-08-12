@@ -9,6 +9,8 @@ const generatorPage = readFileSync(join(root, "src/app/dashboard/supply-os/new/p
 const workstreamPage = readFileSync(join(root, "src/app/dashboard/supply-os/workstreams/[workstream]/page.tsx"), "utf8");
 const dashboard = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const commandMapUi = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-command-map.tsx"), "utf8");
+const operatingShell = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-operating-shell.tsx"), "utf8");
+const companyIndex = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-company-index.tsx"), "utf8");
 const generator = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-generator.tsx"), "utf8");
 const workstreamShell = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream-shell.tsx"), "utf8");
 const storage = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-storage.ts"), "utf8");
@@ -24,10 +26,16 @@ const engagementPlan = readFileSync(join(root, "src/lib/supply-os-engagement-pla
 const operatingPlan = readFileSync(join(root, "src/lib/supply-os-operating-plan.ts"), "utf8");
 const dashboardLayout = readFileSync(join(root, "src/app/dashboard/layout.tsx"), "utf8");
 const uiSource = `${legacyPage}\n${dashboardPage}\n${generatorPage}\n${workstreamPage}\n${dashboard}\n${commandMapUi}\n${generator}\n${workstreamShell}\n${storage}\n${styles}`;
+const clientUiSource = `${dashboard}\n${commandMapUi}\n${operatingShell}\n${companyIndex}\n${generator}\n${workstreamShell}\n${storage}\n${researchClient}`;
 
-for (const forbidden of ["prisma", "use server", "#063a2d", "#0d3b2e", "\u2014", "!important"]) {
+for (const forbidden of ["use server", "#063a2d", "#0d3b2e", "\u2014", "!important"]) {
   assert.equal(uiSource.includes(forbidden), false, `Supply OS UI must not contain: ${forbidden}`);
 }
+assert.doesNotMatch(
+  clientUiSource,
+  /from ["']@\/lib\/prisma["']|\bprisma\./,
+  "client-side Supply OS modules must not access Prisma directly",
+);
 
 for (const removedCopy of [
   "Supply Command",
@@ -79,7 +87,8 @@ for (const page of [dashboardPage, generatorPage]) {
 
 assert.equal(dashboard.includes("supply-case-prompt"), false, "the dashboard page must not contain the customer generator");
 assert.equal(generator.includes("function CaseCommandCenter("), false, "the generator page must not render the command center");
-assert.match(dashboard, /href="\/dashboard\/supply-os\/new"/, "the dashboard must link to a separate customer generator page");
+assert.match(operatingShell, /<SupplyOsCompanyIndex canCreateCompany=\{canCreateCompany\} onOpenWorkspace=\{openWorkspace\} \/>/, "the dashboard must open the canonical company index");
+assert.match(companyIndex, /async function createCompany[\s\S]*fetch\("\/api\/supply-os\/workspaces", \{[\s\S]*method: "POST"/, "new companies must be created through the shared workspace API");
 assert.match(generator, /href="\/dashboard\/supply-os"/, "the generator must link back to saved customer dashboards");
 
 assert.match(generator, /requestCompanyResearch\(normalizedPrompt\)/, "the primary generator action must research the company before planning");
@@ -95,8 +104,8 @@ assert.match(storage, /previousCases[\s\S]*previousSelected[\s\S]*return false;/
 assert.match(storage, /filter\(\(item\) => !item\.archivedAt\)/, "archived dashboards must stay out of the customer browser");
 assert.match(storage, /b\.updatedAt\.localeCompare\(a\.updatedAt\)/, "saved dashboards must be newest first");
 assert.match(dashboard, /window\.addEventListener\("storage"/, "saved dashboards must refresh across browser tabs");
-assert.match(dashboard, /const latestCases = loadSupplyCases\(storageScope\)\.cases/, "coverage saves must reload current browser state");
-assert.match(dashboard, /persistSupplyCases\(storageScope, nextCases, updated\.id\)/, "coverage changes must survive reload");
+assert.match(dashboard, /const currentCase = workspaceId \? workspaceCase : browserCase;/, "shared workspaces must take precedence over browser-only demo cases");
+assert.match(dashboard, /fetch\(profileUrl, \{[\s\S]*method: "POST"/, "missing shared company profiles must use the authenticated workspace research boundary");
 assert.match(dashboard, /document\.body\.classList\.add\("supply-os-presentation"\)/, "presentation mode must remove internal demo distractions");
 assert.match(globals, /body\.supply-os-presentation \.app-shell > \.sidebar/, "presentation mode must hide the internal sidebar");
 assert.match(researchClient, /\/api\/supply-os\/company-research/, "the generator must call the dedicated research boundary");
@@ -107,9 +116,11 @@ assert.match(researchService, /assertResolvesPublicly/, "official website metada
 
 assert.match(commandMapUi, /@vis\.gl\/react-maplibre/, "the command center must use the maintained React MapLibre wrapper");
 assert.match(commandMapUi, /tiles\.openfreemap\.org\/styles\/positron/, "the command center must use a real attributed basemap");
-for (const mapPrimitive of ["<Map", "<Marker", "<Popup", "<NavigationControl", "<AttributionControl"]) {
+for (const mapPrimitive of ["<Map", "<Source", "<Layer", "<Marker", "<Popup"]) {
   assert.equal(commandMapUi.includes(mapPrimitive), true, `the map is missing ${mapPrimitive}`);
 }
+assert.match(commandMapUi, /attributionControl=\{false\}/, "the compact map must disable the built-in attribution overlay");
+assert.match(dashboard, /openstreetmap\.org\/copyright[\s\S]*carto\.com\/attributions[\s\S]*openfreemap\.org/, "the workspace must preserve visible basemap attribution");
 assert.equal(dashboard.includes("WORLD_MAP_LAND_PATHS"), false, "the checked-in handmade map must stay removed");
 assert.equal(dashboard.includes("<svg"), false, "the dashboard must not recreate map geography in SVG");
 assert.match(commandMapUi, /onMouseEnter=\{\(\) => setHoveredObject\(object\)\}/, "map objects must expose hover detail");
@@ -118,10 +129,13 @@ assert.match(commandMapUi, /getContext\("webgl2"/, "the real map must fail close
 assert.match(commandMapUi, /Map renderer unavailable/, "map failure must preserve the rest of the customer command center");
 assert.match(commandMapUi, /id=\{ROUTE_HIT_LAYER_ID\}/, "curved transport paths must expose direct map-layer hit targets");
 assert.equal(commandMapUi.includes("routePathSegment"), false, "transport paths must not create visible bottom-row hit buttons");
-assert.match(commandMapUi, /selectRoute\(route\.id\)/, "clicking route geometry must open the matching transport leg");
+assert.match(commandMapUi, /const route = commandMap\.routes\.find\(\(candidate\) => candidate\.id === routeId \|\| candidate\.segments\.some\(\(segment\) => segment\.id === routeId\)\)/, "route selection must resolve either a route or segment identifier");
+assert.match(commandMapUi, /onClick=\{\(event\) => \{[\s\S]*segmentId;[\s\S]*selectRoute\(routeId\)/, "clicking route geometry must open the matching transport leg");
 assert.match(dashboard, /aria-pressed=\{object\.id === selectedObject\?\.id\}/, "network objects must expose selection state");
-assert.match(dashboard, /<RateEnvelopeChart estimate=\{object\.rateEstimate\}/, "selected road legs must show a planning-range chart");
-assert.match(dashboard, /Routes and providers are candidates until records, quotes, and appointments are connected\./, "the map must disclose candidates and inferred routes");
+assert.match(dashboard, /object\.rateEstimate \? \([\s\S]*inspectorRatePlan[\s\S]*Planning range[\s\S]*sourceUrl/, "selected road legs must show a sourced planning range");
+assert.match(dashboard, /Supplier candidates/, "the workspace must label unqualified suppliers as candidates");
+assert.match(dashboard, /Modeled, not a live quote\./, "modeled route prices must not look live");
+assert.match(dashboard, /Live quote required/, "routes without attributable pricing must remain explicitly unpriced");
 assert.match(optimizationEngine, /Supplier clusters are inferred/, "inferred suppliers must remain explicit hypotheses");
 assert.match(optimizationEngine, /Every route shown is a planning hypothesis/, "unobserved routes must not look operational");
 
@@ -140,11 +154,7 @@ for (const selector of [".commandWorkspace", ".commandMapStage", ".routeRail", "
 }
 assert.equal(styles.includes("@media (max-width: 900px)"), true, "dashboard needs a compact command layout");
 assert.equal(styles.includes("@media (max-width: 680px)"), true, "dashboard needs a mobile command layout");
-assert.equal(
-  dashboardLayout.includes('<NavLink href="/dashboard/supply-os" icon={<Icon name="layers" />}>Supply OS</NavLink>'),
-  true,
-  "dashboard sidebar must link to Supply OS",
-);
+assert.match(dashboardLayout, /<a href="\/dashboard\/supply-os" className="topbar-brand">/, "the single-surface dashboard brand must link to Supply OS");
 
 assert.ok(caseModel.length > 1000, "the stored case model must remain intact");
 assert.ok(engagementPlan.length > 1000, "the customer engagement model must remain deterministic and explicit");

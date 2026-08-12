@@ -16,6 +16,7 @@ export type PublicResearchCandidate = {
   productCapability: PublicEvidence<string>;
   price: PublicEvidence<number>;
   currency: PublicEvidence<string>;
+  unitOfMeasure: PublicEvidence<string>;
   minimumOrderQuantity: PublicEvidence<number>;
   leadTimeDays: PublicEvidence<number>;
   sourceUrls: string[];
@@ -25,8 +26,21 @@ export type PublicResearchCandidate = {
 
 export type PublicResearchResult = {
   candidates: PublicResearchCandidate[];
+  sources?: Array<{ url: string; sourceType: "OFFICIAL" | "PUBLIC" | "QUOTE" | "AUTHORITY" }>;
   degraded: boolean;
   warnings: string[];
+  publicListingReceipts?: Array<{
+    provider: "EXA";
+    candidateId: string | null;
+    itemKey: string;
+    amount: number;
+    currency: string;
+    unitOfMeasure: string;
+    sourceUrl: string;
+    retrievedAt: string;
+    freshnessPolicy: "FORCED_LIVE";
+    receiptHash: string;
+  }>;
 };
 
 export type SavedSourcingResearchRun = {
@@ -53,6 +67,47 @@ export type SavedSourcingResearchRun = {
 
 export type SourcingQueuePage = {
   nextCursor: string | null;
+};
+
+export type SupplyIntelligenceProfile = {
+  customer: {
+    workspaceId: string;
+    workspaceName: string;
+    companyId: string | null;
+    factCount: number;
+    facts: Array<{
+      id: string;
+      factType: string;
+      value: Record<string, unknown>;
+      sourceType: string;
+      observedAt: string | null;
+      capturedAt: string;
+    }>;
+  };
+  supplierCount: number;
+  suppliers: Array<{
+    id: string;
+    supplierKey: string;
+    companyName: string;
+    website: string | null;
+    roles: string[] | null;
+    status: string;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    priceObservations: Array<{
+      id: string;
+      itemKey: string;
+      observationType: string;
+      amount: string;
+      currency: string;
+      unitOfMeasure: string;
+      minimumQuantity: string | null;
+      sourceUrl: string;
+      sourceLabel: string | null;
+      observedAt: string;
+      validUntil: string | null;
+    }>;
+  }>;
 };
 
 export type SupplierSenderAccount = {
@@ -225,7 +280,7 @@ export type SavedProcurementCase = {
     gates: {
       sourceEvidence: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED" | "BLOCKED";
       commercialTerms: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED";
-      qualityPlan: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED";
+      qualityPlan: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED" | "BLOCKED";
       purchaseApproval: "BLOCKED" | "PENDING" | "APPROVED" | "REJECTED";
     };
     evidenceState?: { commercialTerms?: "EVIDENCE_COMPLETE" | "REVIEW_REQUIRED" };
@@ -248,6 +303,11 @@ export type SavedProcurementCase = {
       acceptanceCriteria: string;
       owner: string;
       targetDate: string;
+      outcome: "PASS" | "FAIL";
+      observedOn: string;
+      evidenceUrl: string;
+      evidenceId: string;
+      verificationNote: string;
     };
     reviews?: {
       sourceEvidence?: {
@@ -265,7 +325,7 @@ export type SavedProcurementCase = {
         reviewHash: string;
       };
       commercialTerms?: { reviewedAt: string; reviewHash: string };
-      qualityPlan?: { reviewedAt: string; reviewHash: string };
+      qualityPlan?: { reviewedAt: string; reviewHash: string; evidenceId?: string; outcome?: "PASS" | "FAIL" };
     };
     approval?: {
       id: string;

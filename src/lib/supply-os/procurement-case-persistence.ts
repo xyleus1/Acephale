@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
+import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
 import {
   currentSupplierQualification,
@@ -179,6 +179,33 @@ async function currentAccessContext(context: SupplyAccessContext): Promise<Suppl
   return { ...context, role: user.role, canViewWholeOffice: user.canViewWholeOffice };
 }
 
+async function taskWorkspace(
+  context: SupplyAccessContext,
+  taskId: string,
+  mode: "view" | "edit",
+  taskTypes?: string[],
+) {
+  const task = await prisma.supplyExecutionTask.findFirst({
+    where: {
+      id: taskId,
+      officeId: context.officeId,
+      ...(taskTypes?.length ? { taskType: { in: taskTypes } } : {}),
+    },
+    select: { workspaceId: true },
+  });
+  if (!task) throw new SupplyPersistenceError("Supply workstream was not found.", "not_found");
+  return requireSupplyWorkspace(context, task.workspaceId, mode);
+}
+
+async function researchWorkspace(context: SupplyAccessContext, researchRunId: string, mode: "view" | "edit") {
+  const run = await prisma.supplyCapabilityRun.findFirst({
+    where: { id: researchRunId, officeId: context.officeId, capabilityKey: RESEARCH_CAPABILITY },
+    select: { workspaceId: true },
+  });
+  if (!run) throw new SupplyPersistenceError("Supplier research was not found.", "not_found");
+  return requireSupplyWorkspace(context, run.workspaceId, mode);
+}
+
 function caseResult(value: Prisma.JsonValue | null) {
   const result = record(value);
   const selectedOption = record(result.selectedOption);
@@ -196,6 +223,18 @@ function nextStage(gates: Record<string, unknown>) {
   if (gates.purchaseApproval === "PENDING") return "APPROVAL_PENDING";
   if (gates.purchaseApproval === "APPROVED") return "PURCHASE_READY";
   return "APPROVAL";
+}
+
+function qualityVerificationPassed(value: unknown) {
+  const verification = record(value);
+  return verification.outcome === "PASS"
+    && typeof verification.evidenceId === "string"
+    && verification.evidenceId.length > 0
+    && typeof verification.evidenceUrl === "string"
+    && verification.evidenceUrl.length > 0
+    && typeof verification.observedOn === "string"
+    && /^\d{4}-\d{2}-\d{2}$/.test(verification.observedOn)
+    && verification.observedOn <= todayUtc();
 }
 
 function requireCurrentSupplierQualification(value: unknown, message: string) {
@@ -317,43 +356,9 @@ async function appendExternalEvidence(args: {
   });
 }
 
-function sourcedNumber(value: unknown) {
-  const envelope = record(value);
-  const amount = envelope.value;
-  const sources = Array.isArray(envelope.sources) ? envelope.sources : [];
-  return envelope.state === "SUPPORTED"
-    && envelope.freshness === "FRESH"
-    && sources.length > 0
-    && typeof amount === "number"
-    && Number.isFinite(amount)
-    && amount >= 0
-    ? amount
-    : null;
-}
-
-function sourcedCurrency(value: unknown) {
-  const envelope = record(value);
-  const currency = envelope.value;
-  const sources = Array.isArray(envelope.sources) ? envelope.sources : [];
-  return envelope.state === "SUPPORTED"
-    && envelope.freshness === "FRESH"
-    && sources.length > 0
-    && typeof currency === "string"
-    && /^[A-Z]{3}$/.test(currency.toUpperCase())
-    ? currency.toUpperCase()
-    : null;
-}
-
-function dateFromLeadTime(observedAt: Date, leadTimeDays: number) {
-  const date = new Date(observedAt);
-  date.setUTCDate(date.getUTCDate() + leadTimeDays);
-  return date.toISOString().slice(0, 10);
-}
-
 function canonicalSelection(
   selection: ProcurementSelectionInput,
   researchOutput: Prisma.JsonValue | null,
-  researchObservedAt: Date,
 ) {
   const output = record(researchOutput);
   const candidates = Array.isArray(output.candidates) ? output.candidates : [];
@@ -367,10 +372,6 @@ function canonicalSelection(
     const candidate = record(raw);
     const website = typeof candidate.website === "string" ? candidate.website : null;
     const sourceUrls = Array.isArray(candidate.sourceUrls) ? candidate.sourceUrls.filter((value): value is string => typeof value === "string") : [];
-    const price = sourcedNumber(candidate.price);
-    const currency = sourcedCurrency(candidate.currency);
-    const minimumOrderQuantity = sourcedNumber(candidate.minimumOrderQuantity);
-    const leadTimeDays = sourcedNumber(candidate.leadTimeDays);
     const status = candidate.status;
     return {
       ...selection,
@@ -378,14 +379,15 @@ function canonicalSelection(
       name: typeof candidate.companyName === "string" ? candidate.companyName : selection.name,
       sourceClass: website ? "Official" as const : "New" as const,
       sourceUrl: website ?? sourceUrls[0] ?? null,
-      price,
-      currency,
-      minimumOrderQuantity,
-      priceType: price !== null && currency !== null ? "Sourced" as const : "Unknown" as const,
-      deliveryDate: leadTimeDays !== null
-        ? dateFromLeadTime(researchObservedAt, leadTimeDays)
-        : null,
-      deliveryType: leadTimeDays !== null ? "Sourced" as const : "Unknown" as const,
+      // Search-provider commercial claims have no server-owned verification
+      // receipt. This also downgrades legacy runs whose model-supplied dates
+      // previously looked fresh.
+      price: null,
+      currency: null,
+      minimumOrderQuantity: null,
+      priceType: "Unknown" as const,
+      deliveryDate: null,
+      deliveryType: "Unknown" as const,
       quality: status === "REVIEW_REQUIRED" ? "Conditional" as const : "Unverified" as const,
     };
   }
@@ -494,32 +496,52 @@ function projectQualificationState(procurementCase: ProcurementCaseRecord) {
   const result = record(procurementCase.result);
   const gates = record(result.gates);
   const reviews = record(result.reviews);
-  if (["RELEASED", "PARTIALLY_ACKNOWLEDGED", "ACKNOWLEDGED"].includes(String(record(result.purchaseRelease).state))
-    || result.stage === "SUPPLIER_REJECTED"
-    || gates.sourceEvidence !== "EVIDENCE_COMPLETE"
-    || currentSupplierQualification(reviews.sourceEvidence)) {
-    return { procurementCase, requiresRequalification: false };
+  const released = ["RELEASED", "PARTIALLY_ACKNOWLEDGED", "ACKNOWLEDGED"].includes(String(record(result.purchaseRelease).state));
+  if (released || result.stage === "SUPPLIER_REJECTED") {
+    return { procurementCase, requiresRequalification: false, requiresQualityVerification: false };
   }
-  const projectedResult: Record<string, unknown> = {
-    ...result,
-    gates: {
-      ...gates,
-      sourceEvidence: "REVIEW_REQUIRED",
-      commercialTerms: "REVIEW_REQUIRED",
-      qualityPlan: "REVIEW_REQUIRED",
-      purchaseApproval: "BLOCKED",
-    },
-    stage: "SOURCE_EVIDENCE",
-  };
-  delete projectedResult.confirmedTerms;
-  delete projectedResult.qualityPlan;
-  delete projectedResult.quoteCycle;
-  delete projectedResult.purchasePreparation;
-  delete projectedResult.purchaseAuthorization;
-  return {
-    procurementCase: { ...procurementCase, result: inputJson(projectedResult) },
-    requiresRequalification: true,
-  };
+  if (gates.sourceEvidence === "EVIDENCE_COMPLETE" && !currentSupplierQualification(reviews.sourceEvidence)) {
+    const projectedResult: Record<string, unknown> = {
+      ...result,
+      gates: {
+        ...gates,
+        sourceEvidence: "REVIEW_REQUIRED",
+        commercialTerms: "REVIEW_REQUIRED",
+        qualityPlan: "REVIEW_REQUIRED",
+        purchaseApproval: "BLOCKED",
+      },
+      stage: "SOURCE_EVIDENCE",
+    };
+    delete projectedResult.confirmedTerms;
+    delete projectedResult.qualityPlan;
+    delete projectedResult.quoteCycle;
+    delete projectedResult.purchasePreparation;
+    delete projectedResult.purchaseAuthorization;
+    return {
+      procurementCase: { ...procurementCase, result: inputJson(projectedResult) },
+      requiresRequalification: true,
+      requiresQualityVerification: false,
+    };
+  }
+  if (gates.qualityPlan === "EVIDENCE_COMPLETE" && !qualityVerificationPassed(result.qualityPlan)) {
+    const projectedReviews = { ...reviews };
+    delete projectedReviews.qualityPlan;
+    const projectedResult: Record<string, unknown> = {
+      ...result,
+      gates: { ...gates, qualityPlan: "REVIEW_REQUIRED", purchaseApproval: "BLOCKED" },
+      reviews: projectedReviews,
+      approval: null,
+      stage: "QUALITY_REVIEW",
+    };
+    delete projectedResult.purchasePreparation;
+    delete projectedResult.purchaseAuthorization;
+    return {
+      procurementCase: { ...procurementCase, result: inputJson(projectedResult) },
+      requiresRequalification: false,
+      requiresQualityVerification: true,
+    };
+  }
+  return { procurementCase, requiresRequalification: false, requiresQualityVerification: false };
 }
 
 const purchaseDraftSelect = {
@@ -579,10 +601,10 @@ function purchaseActionView(task: PurchaseActionRecord, fallbackApproval?: Purch
 
 async function listProcurementCasesMatching(
   context: SupplyAccessContext,
-  options: { caseIds?: string[]; researchRunIds?: string[]; take?: number } = {},
+  options: { caseIds?: string[]; researchRunIds?: string[]; take?: number; workspaceId?: string } = {},
 ) {
   const accessContext = await currentAccessContext(context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "view");
+  const workspace = await sourcingSystemWorkspace(accessContext, "view", options.workspaceId);
   const researchRunIds = options.researchRunIds
     ? [...new Set(options.researchRunIds.map((id) => id.trim()).filter(Boolean))]
     : null;
@@ -846,12 +868,16 @@ export async function listProcurementCases(context: SupplyAccessContext) {
 export async function listProcurementCasesForResearchRuns(
   context: SupplyAccessContext,
   researchRunIds: string[],
+  workspaceId?: string,
 ) {
-  return listProcurementCasesMatching(context, { researchRunIds });
+  return listProcurementCasesMatching(context, { researchRunIds, workspaceId });
 }
 
 export async function findProcurementCaseById(context: SupplyAccessContext, caseId: string) {
-  const cases = await listProcurementCasesMatching(context, { caseIds: [requiredText(caseId, "Procurement case ID", 220)] });
+  const id = requiredText(caseId, "Procurement case ID", 220);
+  const accessContext = await currentAccessContext(context);
+  const workspace = await taskWorkspace(accessContext, id, "view", [TASK_TYPE]);
+  const cases = await listProcurementCasesMatching(accessContext, { caseIds: [id], workspaceId: workspace.id });
   return cases[0] ?? null;
 }
 
@@ -860,7 +886,7 @@ export async function findProcurementCaseByRelatedTaskId(
   relatedTaskId: string,
 ) {
   const accessContext = await currentAccessContext(context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "view");
+  const workspace = await taskWorkspace(accessContext, requiredText(relatedTaskId, "Related procurement task ID", 220), "view");
   const task = await prisma.supplyExecutionTask.findFirst({
     where: {
       id: requiredText(relatedTaskId, "Related procurement task ID", 220),
@@ -886,7 +912,9 @@ export async function findProcurementCaseByRelatedTaskId(
 export async function procurementEvidenceSource(context: SupplyAccessContext, evidenceId: string) {
   const id = requiredText(evidenceId, "Evidence ID", 220);
   const accessContext = await currentAccessContext(context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "view");
+  const evidenceWorkspace = await prisma.supplyEvidence.findFirst({ where: { id, officeId: context.officeId }, select: { workspaceId: true } });
+  if (!evidenceWorkspace) throw new SupplyPersistenceError("Supplier evidence was not found.", "not_found");
+  const workspace = await requireSupplyWorkspace(accessContext, evidenceWorkspace.workspaceId, "view");
   const evidence = await prisma.supplyEvidence.findFirst({
     where: {
       id,
@@ -898,6 +926,7 @@ export async function procurementEvidenceSource(context: SupplyAccessContext, ev
           "SUPPLIER_QUOTE_RELEASE",
           "SUPPLIER_QUOTE_REPLY_EMAIL",
           "SUPPLIER_QUOTE_RESPONSE",
+          "SUPPLIER_QUALITY_VERIFICATION",
           "PURCHASE_ORDER_RELEASE",
           "PURCHASE_ORDER_FOLLOWUP",
           "SUPPLIER_ORDER_ACKNOWLEDGMENT_REPLY_EMAIL",
@@ -1138,7 +1167,7 @@ export async function saveProcurementShortlist(args: {
     throw new SupplyPersistenceError("A shortlist must contain 1 to 8 supplier options.", "invalid_input");
   }
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await researchWorkspace(accessContext, args.researchRunId, "edit");
   const researchRun = await prisma.supplyCapabilityRun.findFirst({
     where: {
       id: args.researchRunId,
@@ -1154,7 +1183,6 @@ export async function saveProcurementShortlist(args: {
   const canonicalSelections = args.selections.map((selection) => canonicalSelection(
     selection,
     researchRun.output,
-    researchRun.completedAt ?? researchRun.createdAt,
   ));
   const uniqueSupplierIds = new Set(canonicalSelections.map((selection) => selection.id));
   if (uniqueSupplierIds.size !== canonicalSelections.length) {
@@ -1260,7 +1288,7 @@ export async function saveProcurementSelection(args: {
   selection: ProcurementSelectionInput;
 }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await researchWorkspace(accessContext, args.researchRunId, "edit");
   const researchRun = await prisma.supplyCapabilityRun.findFirst({
     where: {
       id: args.researchRunId,
@@ -1277,7 +1305,6 @@ export async function saveProcurementSelection(args: {
   const result = progressionFor(canonicalSelection(
     args.selection,
     researchRun.output,
-    researchRun.completedAt ?? researchRun.createdAt,
   )) satisfies Prisma.InputJsonObject;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -1400,7 +1427,7 @@ export async function saveSupplierQuoteRequest(args: {
 }) {
   const requestInput = normalizeQuoteRequest(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await taskWorkspace(accessContext, args.caseId, "edit", [TASK_TYPE]);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -1665,7 +1692,7 @@ export async function recordSupplierQuoteRelease(args: {
 }) {
   const releaseInput = normalizeQuoteRelease(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await taskWorkspace(accessContext, args.quoteCycleId, "edit", [QUOTE_CYCLE_TASK_TYPE]);
   const found = await prisma.supplyExecutionTask.findFirst({
     where: { id: args.quoteCycleId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: QUOTE_CYCLE_TASK_TYPE },
     select: { parentTaskId: true },
@@ -1843,7 +1870,7 @@ export async function recordSupplierQuoteResponse(args: {
 }) {
   const responseInput = normalizeQuoteResponse(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await taskWorkspace(accessContext, args.quoteCycleId, "edit", [QUOTE_CYCLE_TASK_TYPE]);
   const found = await prisma.supplyExecutionTask.findFirst({
     where: { id: args.quoteCycleId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: QUOTE_CYCLE_TASK_TYPE },
     select: { parentTaskId: true },
@@ -2047,15 +2074,23 @@ export async function reviewProcurementGate(args: {
     if (!["SAMPLE", "PRE_SHIPMENT_INSPECTION", "DOCUMENT_REVIEW"].includes(method)) {
       throw new SupplyPersistenceError("Quality method must be sample, pre-shipment inspection, or document review.", "invalid_input");
     }
+    const outcome = requiredText(body.outcome, "Quality verification outcome", 20).toUpperCase();
+    if (!["PASS", "FAIL"].includes(outcome)) {
+      throw new SupplyPersistenceError("Quality verification outcome must be PASS or FAIL.", "invalid_input");
+    }
     qualityPlanInput = {
       method,
       acceptanceCriteria: requiredText(body.acceptanceCriteria, "Acceptance criteria", 2_000),
       owner: requiredText(body.owner, "Quality owner", 200),
-      targetDate: requireCurrentOrFutureDate(isoDate(body.targetDate, "Quality target date"), "Quality target date"),
+      targetDate: requireCurrentOrFutureDate(isoDate(body.targetDate, "Quality evidence validity date"), "Quality evidence validity date"),
+      outcome,
+      observedOn: requireCurrentOrPastDate(isoDate(body.observedOn, "Quality verification date"), "Quality verification date"),
+      evidenceUrl: publicUrl(body.evidenceUrl, "Quality evidence URL"),
+      verificationNote: requiredText(body.verificationNote, "Quality verification note", 2_000),
     };
   }
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await taskWorkspace(accessContext, args.caseId, "edit", [TASK_TYPE]);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -2292,20 +2327,37 @@ export async function reviewProcurementGate(args: {
             "Supplier qualification is missing or expired. Requalify the supplier before recording a quality plan.",
           );
           const qualityPlan = qualityPlanInput!;
+          const qualityHash = digest(qualityPlan);
+          if (record(reviews.qualityPlan).reviewHash === qualityHash) return procurementCase;
+          const qualityEvidence = await appendExternalEvidence({
+            tx,
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            executionTaskId: procurementCase.id,
+            actorUserId: accessContext.userId,
+            kind: "SUPPLIER_QUALITY_VERIFICATION",
+            title: `Quality verification for ${requiredText(current.selectedOption.name, "Supplier name", 300)}`,
+            sourceUri: qualityPlan.evidenceUrl as string,
+            sourceRecordId: requiredText(current.selectedOption.id, "Supplier ID", 300),
+            observedOn: qualityPlan.observedOn as string,
+            contentHash: qualityHash,
+            payload: inputJson(qualityPlan),
+          });
+          const evidencedQualityPlan = { ...qualityPlan, evidenceId: qualityEvidence.id };
           review = {
-            ...qualityPlan,
-            reviewedByUserId: args.context.userId,
+            ...evidencedQualityPlan,
+            reviewedByUserId: accessContext.userId,
             reviewedAt: now,
           };
-          review.reviewHash = digest(qualityPlan);
-          if (record(reviews.qualityPlan).reviewHash === review.reviewHash) return procurementCase;
+          review.reviewHash = qualityHash;
           await cancelPendingApproval(tx, procurementCase.result);
           await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
           reviews = { ...reviews, qualityPlan: review };
-          gates = { ...gates, qualityPlan: "EVIDENCE_COMPLETE", purchaseApproval: "BLOCKED" };
-          result = resetApproval({ ...result, qualityPlan }, gates);
-          eventType = "QUALITY_PLAN_RECORDED";
-          message = "Supplier quality plan was recorded.";
+          const passed = qualityPlan.outcome === "PASS";
+          gates = { ...gates, qualityPlan: passed ? "EVIDENCE_COMPLETE" : "BLOCKED", purchaseApproval: "BLOCKED" };
+          result = resetApproval({ ...result, qualityPlan: evidencedQualityPlan }, gates);
+          eventType = passed ? "SUPPLIER_QUALITY_VERIFIED" : "SUPPLIER_QUALITY_FAILED";
+          message = passed ? "Supplier quality verification passed with recorded evidence." : "Supplier quality verification failed and blocked award progression.";
         }
 
         result = {
@@ -2356,7 +2408,7 @@ export async function requestProcurementApproval(args: {
   const reason = requiredText(body.reason, "Approval reason", 2_000);
   const expectedSelectionHash = requiredText(body.expectedSelectionHash, "Selection hash", 128);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await taskWorkspace(accessContext, args.caseId, "edit", [TASK_TYPE]);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -2430,8 +2482,8 @@ export async function requestProcurementApproval(args: {
           throw new SupplyPersistenceError("The planned delivery date has passed. Confirm current commercial terms before approval.", "conflict");
         }
         const qualityPlan = record(current.result.qualityPlan);
-        if (typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc()) {
-          throw new SupplyPersistenceError("The quality review date has passed. Record a current quality plan before approval.", "conflict");
+        if (!qualityVerificationPassed(qualityPlan) || typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc()) {
+          throw new SupplyPersistenceError("Passing, current quality evidence is required before approval.", "conflict");
         }
         const immutableInput = {
           procurementCaseId: procurementCase.id,
@@ -2587,7 +2639,7 @@ export async function decideProcurementApproval(args: {
     || found.executionTask.capabilityKey !== APPROVAL_CAPABILITY || !found.executionTask.parentTaskId) {
     throw new SupplyPersistenceError("Procurement approval scope is invalid.", "conflict");
   }
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Procurement approval was not found.", "not_found");
   const targetStatus = decision === "APPROVE" ? "APPROVED" : "REJECTED";
 
@@ -2650,9 +2702,9 @@ export async function decideProcurementApproval(args: {
         } else if (typeof approvedTerms.deliveryDate !== "string" || approvedTerms.deliveryDate < todayUtc()) {
           staleGate = "COMMERCIAL_TERMS";
           staleMessage = "The planned delivery date passed before approval.";
-        } else if (typeof approvedQualityPlan.targetDate !== "string" || approvedQualityPlan.targetDate < todayUtc()) {
+        } else if (!qualityVerificationPassed(approvedQualityPlan) || typeof approvedQualityPlan.targetDate !== "string" || approvedQualityPlan.targetDate < todayUtc()) {
           staleGate = "QUALITY_PLAN";
-          staleMessage = "The quality review date passed before approval.";
+          staleMessage = "Passing quality evidence was missing or expired before approval.";
         } else if (approval.expiresAt && approval.expiresAt.getTime() <= Date.now()) {
           staleGate = "APPROVAL";
           staleMessage = "The approval request expired before a decision.";
@@ -2908,7 +2960,7 @@ export async function savePurchaseOrderDraft(args: {
 }) {
   const orderInput = normalizePurchaseOrderDraft(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await taskWorkspace(accessContext, args.caseId, "edit", [TASK_TYPE]);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -2975,9 +3027,9 @@ export async function savePurchaseOrderDraft(args: {
         } else if (typeof approvedTerms.deliveryDate !== "string" || approvedTerms.deliveryDate < todayUtc()) {
           staleGate = "COMMERCIAL_TERMS";
           staleMessage = "The approved delivery date passed before order preparation.";
-        } else if (typeof approvedQualityPlan.targetDate !== "string" || approvedQualityPlan.targetDate < todayUtc()) {
+        } else if (!qualityVerificationPassed(approvedQualityPlan) || typeof approvedQualityPlan.targetDate !== "string" || approvedQualityPlan.targetDate < todayUtc()) {
           staleGate = "QUALITY_PLAN";
-          staleMessage = "The approved quality-plan date passed before order preparation.";
+          staleMessage = "The approved quality evidence was missing or expired before order preparation.";
         }
         if (staleGate) {
           await cancelActivePurchaseDrafts(tx, procurementCase.id, args.context.officeId, workspace.id);
@@ -3242,7 +3294,7 @@ export async function requestPurchaseActionApproval(args: {
 }) {
   const request = purchaseActionRequest(args.input);
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await taskWorkspace(accessContext, args.caseId, "edit", [TASK_TYPE]);
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
     try {
@@ -3316,7 +3368,7 @@ export async function requestPurchaseActionApproval(args: {
         const procurementInput = record(procurementApproval.executionTask.input);
         const sourceExpired = !currentSupplierQualification(procurementInput.sourceEvidenceReview);
         const qualityPlan = record(procurementInput.qualityPlan);
-        const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
+        const qualityExpired = !qualityVerificationPassed(qualityPlan) || typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
         const commercial = record(draftResult.commercial);
         if (typeof commercial.quoteValidUntil !== "string" || commercial.quoteValidUntil < todayUtc()) {
           throw new SupplyPersistenceError("The approved quote expired. Confirm current commercial terms before final purchase approval.", "conflict");
@@ -3620,7 +3672,7 @@ export async function decidePurchaseActionApproval(args: {
     || found.executionTask.capabilityKey !== PURCHASE_ACTION_CAPABILITY) {
     throw new SupplyPersistenceError("Purchase action approval was not found.", "not_found");
   }
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Purchase action approval was not found.", "not_found");
   const targetStatus = decision === "APPROVE" ? "APPROVED" : "REJECTED";
   const foundRevisionContext = record(record(found.executionTask.input).revisionContext);
@@ -3743,7 +3795,7 @@ export async function decidePurchaseActionApproval(args: {
         const sourceExpired = !currentSupplierQualification(actionInput.sourceEvidenceReview);
         const quoteExpired = typeof commercial.quoteValidUntil !== "string" || commercial.quoteValidUntil < todayUtc();
         const deliveryExpired = typeof commercial.deliveryDate !== "string" || commercial.deliveryDate < todayUtc();
-        const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
+        const qualityExpired = !qualityVerificationPassed(qualityPlan) || typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
         const approvalExpired = approval.expiresAt !== null && approval.expiresAt.getTime() <= Date.now();
         if (sourceExpired || quoteExpired || deliveryExpired || qualityExpired || approvalExpired) {
           const staleGate = sourceExpired ? "SOURCE_EVIDENCE" : quoteExpired || deliveryExpired || approvalExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
@@ -4103,7 +4155,7 @@ export async function recordPurchaseOrderRelease(args: {
   if (!found || !purchaseDraftId || !procurementCaseId) {
     throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
   }
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
@@ -4244,7 +4296,7 @@ export async function recordPurchaseOrderRelease(args: {
         }
         const quoteExpired = releaseInput.releasedOn > quoteValidUntil;
         const sourceExpired = !supplierQualificationValidOn(actionInput.sourceEvidenceReview, releaseInput.releasedOn);
-        const qualityExpired = typeof qualityPlan.targetDate !== "string" || releaseInput.releasedOn > qualityPlan.targetDate;
+        const qualityExpired = !qualityVerificationPassed(qualityPlan) || typeof qualityPlan.targetDate !== "string" || releaseInput.releasedOn > qualityPlan.targetDate;
         if (quoteExpired || sourceExpired || qualityExpired) {
           if (Object.keys(revisionContext).length) {
             const staleGate = sourceExpired ? "SOURCE_EVIDENCE" : quoteExpired ? "COMMERCIAL_TERMS" : "QUALITY_PLAN";
@@ -4546,7 +4598,7 @@ export async function recordPurchaseOrderAcknowledgment(args: {
   if (!found || !purchaseDraftId || !procurementCaseId) {
     throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
   }
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Authorized purchase action was not found.", "not_found");
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
@@ -5018,7 +5070,7 @@ export async function recordSupplierOrderException(args: {
   const purchaseDraftId = found?.parentTaskId;
   const procurementCaseId = found?.parentTask?.parentTaskId;
   if (!found || !purchaseDraftId || !procurementCaseId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
 
   for (let transactionAttempt = 0; transactionAttempt < 3; transactionAttempt += 1) {
@@ -5208,7 +5260,7 @@ export async function resolveSupplierOrderException(args: {
   const purchaseDraftId = found?.parentTaskId;
   const procurementCaseId = found?.parentTask?.parentTaskId;
   if (!found || !purchaseDraftId || !procurementCaseId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
 
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
@@ -5311,7 +5363,7 @@ export async function prepareRevisedPurchaseOrder(args: {
   if (!found || !supersededDraftId || !procurementCaseId) {
     throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
   }
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await requireSupplyWorkspace(accessContext, found.workspaceId, "edit");
   if (workspace.id !== found.workspaceId) throw new SupplyPersistenceError("Released purchase action was not found.", "not_found");
 
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
@@ -5374,7 +5426,7 @@ export async function prepareRevisedPurchaseOrder(args: {
     const procurementApproval = record(actionInput.procurementApproval);
     const qualityPlan = record(actionInput.qualityPlan);
     const sourceExpired = !currentSupplierQualification(actionInput.sourceEvidenceReview);
-    const qualityExpired = typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
+    const qualityExpired = !qualityVerificationPassed(qualityPlan) || typeof qualityPlan.targetDate !== "string" || qualityPlan.targetDate < todayUtc();
     if (sourceExpired || qualityExpired) {
       const updatedCase = await returnStaleReplacementToSourcing({
         tx,

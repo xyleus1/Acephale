@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { DERYA_AI_MODEL } from "@/lib/gpt56-client";
 import {
   EMPTY_SOURCING_REQUEST_DRAFT,
+  mergeSourcingRequestDraft,
   missingSourcingFields,
   normalizeSourcingRequestDraft,
   sourcingQuestionFor,
@@ -121,7 +122,7 @@ export async function analyzeSourcingRequest(value: unknown): Promise<SourcingIn
   } catch {
     throw new SourcingIntakeError("The request details could not be read.", "invalid_response");
   }
-  const draft = normalizeSourcingRequestDraft(parsed);
+  const draft = mergeSourcingRequestDraft(currentDraft, normalizeSourcingRequestDraft(parsed));
   const missingFields = missingSourcingFields(draft);
   return {
     draft,

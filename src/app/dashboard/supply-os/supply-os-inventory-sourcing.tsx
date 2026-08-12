@@ -12,8 +12,8 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import {
-  ATLAS_ROBOTICS_INVENTORY,
-  ATLAS_SOURCING_NEED_BY,
+  sourcingNeedByDate,
+  sourcingRequestQuantity,
   shortageQuantity,
   type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
@@ -25,7 +25,9 @@ import styles from "./supply-os-logistics.module.css";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
+  SupplyIntelligenceProfile,
 } from "./supply-os-sourcing-research-types";
+import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
 
 export type PendingSourcingQueueItem = {
   id: string;
@@ -46,7 +48,7 @@ function formatCurrency(value: number) {
 }
 
 function formatNeedBy(item: AtlasInventoryItem) {
-  const value = item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku];
+  const value = sourcingNeedByDate(item);
   if (!value) return "Not set";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`));
 }
@@ -57,12 +59,18 @@ function formatResearchDate(value: string) {
 
 export function AtlasInventoryWorkspace({
   selectedSku,
+  items = [],
+  workspaceId,
+  canImportSupplyData,
+  onSnapshotPublished,
   onSelect,
   onCreateRequest,
+  onRetryResearch,
   pendingRequests,
   onOpenPendingRequest,
   researchRuns,
   procurementCases,
+  intelligenceProfile,
   dataState,
   hasMore,
   pageState,
@@ -74,16 +82,21 @@ export function AtlasInventoryWorkspace({
   sourceName,
   sourceLocation,
   onHideSourceMap,
-  items = ATLAS_ROBOTICS_INVENTORY,
   companyName = "Atlas Robotics",
 }: {
   selectedSku: string;
+  items?: AtlasInventoryItem[];
+  workspaceId?: string | null;
+  canImportSupplyData: boolean;
+  onSnapshotPublished?: () => void;
   onSelect: (sku: string) => void;
   onCreateRequest: (query: string) => void;
+  onRetryResearch: (run: SavedSourcingResearchRun) => void;
   pendingRequests: PendingSourcingQueueItem[];
   onOpenPendingRequest: (request: PendingSourcingQueueItem) => void;
   researchRuns: SavedSourcingResearchRun[];
   procurementCases: SavedProcurementCase[];
+  intelligenceProfile: SupplyIntelligenceProfile | null;
   dataState: "loading" | "ready" | "error";
   hasMore: boolean;
   pageState: "idle" | "loading" | "error";
@@ -95,12 +108,13 @@ export function AtlasInventoryWorkspace({
   sourceName?: string;
   sourceLocation?: string;
   onHideSourceMap?: () => void;
-  items?: AtlasInventoryItem[];
   companyName?: string;
 }) {
   const [query, setQuery] = useState("");
   const reduceMotion = useReducedMotion();
-  const sourcingItems = items.filter((item) => shortageQuantity(item) > 0);
+  const sourcingItems = workspaceId
+    ? items
+    : items.filter((item) => shortageQuantity(item) > 0);
   const runsById = new Map(researchRuns.map((run) => [run.id, run]));
   const casesByRunId = new Map<string, SavedProcurementCase[]>();
   for (const procurementCase of procurementCases) {
@@ -166,7 +180,7 @@ export function AtlasInventoryWorkspace({
       case "SOURCE_EVIDENCE": return "Source evidence required";
       case "SUPPLIER_REJECTED": return "Supplier rejected";
       case "COMMERCIAL_CONFIRMATION": return "Confirm commercial terms";
-      case "QUALITY_REVIEW": return "Quality plan required";
+      case "QUALITY_REVIEW": return procurementCase?.result?.qualityPlan?.outcome === "FAIL" ? "Quality verification failed" : "Quality evidence required";
       case "APPROVAL": return "Ready for approval request";
       case "APPROVAL_PENDING": return "Manager approval pending";
       case "PURCHASE_READY": return "Approved for purchase preparation";
@@ -215,6 +229,7 @@ export function AtlasInventoryWorkspace({
     if (cases.length > 1) return "Open quote inbox";
     if (procurementCase?.result?.stage === "COMMERCIAL_CONFIRMATION" && procurementCase.result.quoteCycle) return "Review quote cycle";
     if (procurementCase?.result?.stage === "SUPPLIER_REJECTED") return "Review rejection";
+    if (procurementCase?.result?.stage === "QUALITY_REVIEW") return procurementCase.result.qualityPlan?.outcome === "FAIL" ? "Review failed quality check" : "Record quality evidence";
     if (procurementCase) return "Continue procurement";
     if (run?.status === "SUCCEEDED") return "View results";
     if (run?.status === "RUNNING") return "Researching";
@@ -239,6 +254,16 @@ export function AtlasInventoryWorkspace({
       exit={reduceMotion ? undefined : { opacity: 0, x: -10 }}
       transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
     >
+      {workspaceId && canImportSupplyData ? (
+        <details className={styles.sourcingCsvImport}>
+          <summary>Import parts CSV</summary>
+          <SupplyOsSharedWorkspace
+            workspaceId={workspaceId}
+            onPublished={onSnapshotPublished}
+          />
+        </details>
+      ) : null}
+
       <form className={styles.sourcingComposer} onSubmit={submitRequest}>
         <Sparkles size={17} aria-hidden="true" />
         <label htmlFor="new-sourcing-request">
@@ -260,6 +285,43 @@ export function AtlasInventoryWorkspace({
           ? <button type="button" onClick={onRetryData}>Retry saved work</button>
           : <span>{dataState === "loading" ? "Loading saved work" : pendingRequests.length ? `${pendingRequests.length} request${pendingRequests.length === 1 ? "" : "s"} need input` : "Office-shared work"}</span>}
       </header>
+
+      {intelligenceProfile ? (
+        <section className={styles.supplyIntelligenceSummary} aria-label="Customer supply profile">
+          <header>
+            <span><small>Customer supply profile</small><strong>{intelligenceProfile.customer.workspaceName}</strong></span>
+            <dl>
+              <div><dt>Needs observed</dt><dd>{intelligenceProfile.customer.factCount}</dd></div>
+              <div><dt>Supplier universe</dt><dd>{intelligenceProfile.supplierCount}</dd></div>
+            </dl>
+          </header>
+          <div>
+            {intelligenceProfile.suppliers.slice(0, 6).map((supplier) => {
+              const price = supplier.priceObservations[0] ?? null;
+              const priceAge = price ? Date.now() - new Date(price.observedAt).getTime() : null;
+              const fresh = priceAge !== null && priceAge >= 0 && priceAge <= 60 * 86_400_000;
+              return (
+                <article key={supplier.id}>
+                  <span>
+                    <strong>{supplier.companyName}</strong>
+                    <small>{Array.isArray(supplier.roles) && supplier.roles.length ? supplier.roles.join(" / ").toLowerCase() : "Candidate supplier"}</small>
+                  </span>
+                  {price ? (
+                    <span>
+                      <strong>{Number(price.amount).toLocaleString("en-US")} {price.currency} / {price.unitOfMeasure}</strong>
+                      <small>{price.observationType === "PUBLIC_LIST_PRICE" ? fresh ? "Forced-live public listing. RFQ confirmation required" : "Historical public listing" : "Reviewed supplier price"} · {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(price.observedAt))}</small>
+                    </span>
+                  ) : <span><strong>Price unavailable</strong><small>RFQ required</small></span>}
+                  <span>
+                    {price ? <a href={price.sourceUrl} target="_blank" rel="noreferrer">Open price</a> : null}
+                    {!price && supplier.website ? <a href={supplier.website} target="_blank" rel="noreferrer">Open supplier</a> : null}
+                  </span>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {sourceMap ? (
         <motion.section
@@ -313,6 +375,7 @@ export function AtlasInventoryWorkspace({
             {sourcingItems.map((item) => {
               const run = latestRuns.get(item.sku);
               const runCases = run ? casesByRunId.get(run.id) ?? [] : [];
+              const requestedQuantity = sourcingRequestQuantity(item);
               return (
               <tr key={item.sku} data-active={item.sku === selectedSku} data-status="shortage">
                 <td>
@@ -321,7 +384,7 @@ export function AtlasInventoryWorkspace({
                     <span><small>{item.sku}</small><strong>{item.name}</strong><em>{item.specification}</em></span>
                   </button>
                 </td>
-                <td>{item.requirementLabel ?? `${shortageQuantity(item)} units`}</td>
+                <td>{item.requirementLabel ?? (requestedQuantity === null ? "Quantity unknown" : `${requestedQuantity.toLocaleString("en-US")} ${item.requestedUnit ?? item.unitOfMeasure ?? "units"}`)}</td>
                 <td>{formatNeedBy(item)}</td>
                 <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
                 <td>
@@ -338,6 +401,11 @@ export function AtlasInventoryWorkspace({
               </tr>
               );
             })}
+            {!pendingRequests.length && !sourcingItems.length && !customRuns.length && !additionalRuns.length ? (
+              <tr data-status="empty">
+                <td colSpan={5}>No sourceable parts are published. Import a parts CSV with quantity, delivery location, and need-by date.</td>
+              </tr>
+            ) : null}
             {customRuns.map((run) => {
               const runCases = casesByRunId.get(run.id) ?? [];
               return (
@@ -355,8 +423,8 @@ export function AtlasInventoryWorkspace({
                   <button
                     className={styles.sourcingQueueAction}
                     type="button"
-                    disabled={dataState !== "ready" || run.status === "RUNNING"}
-                    onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
+                    disabled={run.status === "RUNNING"}
+                    onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onRetryResearch(run)}
                   >
                     {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : queueActionLabel(run, runCases)} <ArrowRight size={13} />
                   </button>
@@ -381,8 +449,8 @@ export function AtlasInventoryWorkspace({
                     <button
                       className={styles.sourcingQueueAction}
                       type="button"
-                      disabled={dataState !== "ready" || run.status === "RUNNING"}
-                      onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onCreateRequest(run.input.requestText)}
+                      disabled={run.status === "RUNNING"}
+                      onClick={() => run.status === "SUCCEEDED" ? onOpenSavedResearch(run) : onRetryResearch(run)}
                     >
                       {dataState === "loading" ? "Loading" : dataState === "error" ? "Unavailable" : queueActionLabel(run, runCases)} <ArrowRight size={13} />
                     </button>
@@ -448,9 +516,9 @@ export function AtlasSourcingInspector({
         </section>
 
         <dl className={styles.sourcingRequestFacts}>
-          <div><dt>Requirement</dt><dd>{item.requirementLabel ?? `${shortage} units`}</dd></div>
+          <div><dt>Requirement</dt><dd>{item.requirementLabel ?? (sourcingRequestQuantity(item) === null ? "Unknown" : `${sourcingRequestQuantity(item)?.toLocaleString("en-US")} ${item.requestedUnit ?? item.unitOfMeasure ?? "units"}`)}</dd></div>
           <div><dt>Need by</dt><dd>{formatNeedBy(item)}</dd></div>
-          <div><dt>Deliver to</dt><dd>{item.deliveryLocation ?? "Not set"}</dd></div>
+          <div><dt>Deliver to</dt><dd>{item.deliveryLocation ?? "Not supplied"}</dd></div>
         </dl>
 
         <section className={styles.sourcingCandidates}>
@@ -460,7 +528,7 @@ export function AtlasSourcingInspector({
               <button type="button" onClick={() => onShowCandidateSource(selectedCandidate.id)}><MapPin size={13} /> Show source</button>
             ) : null}
           </header>
-          <div className={styles.candidateProvenance}>Demo candidates · unqualified</div>
+          <div className={styles.candidateProvenance}>{item.source === "published-snapshot" ? `Published snapshot v${item.snapshotVersion}` : "Demo candidates · unqualified"}</div>
           {!item.candidates.length ? <div className={styles.candidateProvenance}>No candidates yet. Start research to find and qualify sources.</div> : null}
           {item.candidates.map((candidate) => {
             const active = candidate.id === selectedCandidate?.id;
@@ -483,12 +551,12 @@ export function AtlasSourcingInspector({
       </div>
 
       <footer className={styles.sourcingActionFooter}>
-        <button type="button" onClick={onStartProcurement} disabled={!shortage}>
+        <button type="button" onClick={onStartProcurement} disabled={item.source !== "published-snapshot" && !shortage}>
           <PackageSearch size={15} /> Start procurement
         </button>
       </footer>
       <footer className={styles.sourcingBoundary}>
-        <TriangleAlert size={13} /> Demo request and modeled terms. Research does not contact or approve a supplier.
+        <TriangleAlert size={13} /> {item.source === "published-snapshot" ? "Published customer input. Research does not contact or approve a supplier." : "Demo request and modeled terms. Research does not contact or approve a supplier."}
       </footer>
     </motion.aside>
   );

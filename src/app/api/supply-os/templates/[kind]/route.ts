@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import {
-  SUPPLY_CSV_KINDS,
-  supplyCsvTemplate,
-  type SupplyCsvKind,
-} from "@/lib/supply-os/csv-import";
+import { resolveSupplyCsvTemplateRoute } from "@/lib/supply-os/csv-route-contract";
 
 export async function GET(
   _request: Request,
@@ -13,15 +9,12 @@ export async function GET(
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { kind } = await context.params;
-  if (!SUPPLY_CSV_KINDS.includes(kind as SupplyCsvKind)) {
-    return NextResponse.json({ error: "Unknown Supply OS CSV template." }, { status: 404 });
+  const response = resolveSupplyCsvTemplateRoute(kind);
+  if (response.kind === "json") {
+    return NextResponse.json(response.body, { status: response.status });
   }
-  return new NextResponse(supplyCsvTemplate(kind as SupplyCsvKind), {
-    headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="supply-os-${kind}.csv"`,
-      "cache-control": "private, max-age=300",
-      "x-content-type-options": "nosniff",
-    },
+  return new NextResponse(response.body, {
+    status: response.status,
+    headers: response.headers,
   });
 }

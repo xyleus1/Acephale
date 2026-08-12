@@ -1,3 +1,5 @@
+import type { SourcingRequestDraft } from "./sourcing-request-contract";
+
 export type AtlasInventoryStatus = "covered" | "watch" | "shortage";
 
 export type AtlasSourcingCandidate = {
@@ -27,8 +29,14 @@ export type AtlasInventoryItem = {
   requestedQuantity?: number;
   requestedUnit?: string;
   supplierDeliverable?: string;
+  source?: "illustrative" | "published-snapshot";
+  unitOfMeasure?: string;
+  requiredQuantity?: number | null;
   needByDate?: string | null;
   deliveryLocation?: string | null;
+  manufacturer?: string | null;
+  mpn?: string | null;
+  snapshotVersion?: number;
 };
 
 export const ATLAS_ROBOT_DEMAND = 24;
@@ -208,25 +216,45 @@ export function projectedAvailable(item: AtlasInventoryItem) {
 }
 
 export function requiredForDemand(item: AtlasInventoryItem, demand = ATLAS_ROBOT_DEMAND) {
+  if (typeof item.requestedQuantity === "number") return item.requestedQuantity;
+  if (typeof item.requiredQuantity === "number") return item.requiredQuantity;
   return item.quantityPerRobot * demand;
 }
 
 export function shortageQuantity(item: AtlasInventoryItem, demand = ATLAS_ROBOT_DEMAND) {
-  if (item.requestedQuantity !== undefined) return item.requestedQuantity;
+  if (typeof item.requestedQuantity === "number") return item.requestedQuantity;
+  if (item.requiredQuantity === null) return 0;
   return Math.max(0, requiredForDemand(item, demand) - projectedAvailable(item));
+}
+
+export function sourcingRequestQuantity(item: AtlasInventoryItem) {
+  if (typeof item.requestedQuantity === "number" && item.requestedQuantity > 0) return item.requestedQuantity;
+  const shortage = shortageQuantity(item);
+  if (shortage > 0) return shortage;
+  return typeof item.requiredQuantity === "number" && item.requiredQuantity > 0
+    ? item.requiredQuantity
+    : null;
+}
+
+export function sourcingNeedByDate(item: AtlasInventoryItem) {
+  return item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? null;
+}
+
+export function sourcingDeliveryLocation(item: AtlasInventoryItem) {
+  return item.deliveryLocation ?? (item.source === "published-snapshot" ? null : "Austin, TX, United States");
 }
 
 export function inventoryItemSourcingDraft(item: AtlasInventoryItem): SourcingRequestDraft {
   return {
     productName: item.name,
-    quantity: shortageQuantity(item),
-    unit: item.requestedUnit ?? "units",
-    manufacturer: null,
-    partNumber: null,
+    quantity: sourcingRequestQuantity(item),
+    unit: item.requestedUnit ?? item.unitOfMeasure ?? (item.source === "published-snapshot" ? null : "units"),
+    manufacturer: item.manufacturer ?? null,
+    partNumber: item.mpn ?? null,
     specification: item.specification,
     sourceRegion: null,
-    deliveryLocation: item.deliveryLocation ?? "Austin, TX, United States",
-    needByDate: item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? null,
+    deliveryLocation: sourcingDeliveryLocation(item),
+    needByDate: sourcingNeedByDate(item),
   };
 }
 
@@ -249,4 +277,3 @@ export function atlasInventorySummary() {
     demandUnits: ATLAS_ROBOT_DEMAND,
   };
 }
-import type { SourcingRequestDraft } from "./sourcing-request-contract";

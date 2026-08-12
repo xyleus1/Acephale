@@ -19,9 +19,10 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  ATLAS_SOURCING_NEED_BY,
+  sourcingDeliveryLocation,
   inventoryItemSourcingDraft,
-  shortageQuantity,
+  sourcingNeedByDate,
+  sourcingRequestQuantity,
   type AtlasInventoryItem,
   type AtlasSourcingCandidate,
 } from "@/lib/supply-os/atlas-robotics-inventory";
@@ -47,6 +48,7 @@ import type {
   SavedSourcingResearchRun,
   SupplierOrderException,
   SupplierSenderAccount,
+  SupplyIntelligenceProfile,
 } from "./supply-os-sourcing-research-types";
 
 type ProcurementPhase = "request" | "researching" | "compare" | "procure";
@@ -72,6 +74,10 @@ type ProcurementOption = {
   priceType: "Modeled" | "Sourced" | "Unknown";
   deliveryType: "Modeled" | "Sourced" | "Unknown";
   sourceUrl: string | null;
+  priceSourceUrl: string | null;
+  priceUnit: string | null;
+  publicPriceClaim: string | null;
+  publicPriceCapturedAt: string | null;
 };
 
 type SupplierQuoteResponse = NonNullable<NonNullable<SavedProcurementCase["quoteCycle"]>["result"]>["responses"][number];
@@ -135,11 +141,43 @@ const DISCOVERED_OPTIONS: Record<string, AtlasSourcingCandidate> = {
 };
 
 const RESEARCH_STEPS = [
-  { label: "Approved source library", detail: "Prior candidates and qualification notes", sourceClass: "Trusted" },
-  { label: "Producer and manufacturer sources", detail: "Official product and technical documentation", sourceClass: "Official" },
-  { label: "Distributor and trader sources", detail: "Public price, lead time, MOQ, and availability evidence", sourceClass: "Trusted" },
-  { label: "Open web discovery", detail: "New candidates held for human qualification", sourceClass: "New" },
+  { key: "scope", label: "Request scope", detail: "Product, quantity, geography, delivery, and timing", sourceClass: "Scope" },
+  { key: "web", label: "Open web discovery", detail: "Public manufacturer, producer, distributor, and trader pages", sourceClass: "Public" },
+  { key: "validation", label: "Source validation", detail: "Attribution, dates, units, and official-domain checks", sourceClass: "Evidence" },
+  { key: "screening", label: "Candidate screening", detail: "Unsupported claims remain unknown or are rejected", sourceClass: "Review" },
 ] as const;
+
+type ResearchSource = { url: string; sourceType: "OFFICIAL" | "PUBLIC" | "QUOTE" | "AUTHORITY" };
+
+function researchSources(result: PublicResearchResult | null) {
+  if (!result) return [];
+  const sources = new Map<string, ResearchSource>();
+  const remember = (source: ResearchSource) => {
+    const existing = sources.get(source.url);
+    if (!existing || source.sourceType === "OFFICIAL") sources.set(source.url, source);
+  };
+  for (const source of result.sources ?? []) remember(source);
+  for (const candidate of result.candidates) {
+    for (const url of candidate.sourceUrls) remember({ url, sourceType: "PUBLIC" });
+    if (candidate.website) {
+      const classified = result.sources?.find((source) => source.url === candidate.website);
+      remember(classified ?? { url: candidate.website, sourceType: "PUBLIC" });
+    }
+    for (const envelope of [
+      candidate.country,
+      candidate.facility,
+      candidate.productCapability,
+      candidate.price,
+      candidate.currency,
+      candidate.unitOfMeasure,
+      candidate.minimumOrderQuantity,
+      candidate.leadTimeDays,
+    ]) {
+      for (const source of envelope.sources) remember(source);
+    }
+  }
+  return [...sources.values()].sort((left, right) => left.url.localeCompare(right.url));
+}
 
 function formatCurrency(value: number, currency: string | null = "USD") {
   if (!currency || !/^[A-Z]{3}$/.test(currency)) return `${value.toLocaleString("en-US")} currency unknown`;
@@ -179,6 +217,17 @@ function isSourcedEvidence(value: { state: string; sources: unknown[]; freshness
   return value.state === "SUPPORTED" && value.sources.length > 0 && value.freshness === "FRESH";
 }
 
+function isEvidenceBackedRecommendation(option: ProcurementOption) {
+  return option.quality === "Conditional"
+    && option.priceType === "Sourced"
+    && option.deliveryType === "Sourced"
+    && Boolean(option.sourceUrl)
+    && Boolean(option.priceSourceUrl)
+    && Boolean(option.currency)
+    && Boolean(option.priceUnit)
+    && option.leadTimeDays > 0;
+}
+
 function displayStoredDate(value: string | null | undefined) {
   if (!value) return "Unknown";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -214,7 +263,7 @@ function supplierQualificationForm(procurementCase: SavedProcurementCase | null 
 
 function formatNeedBy(item: AtlasInventoryItem | null) {
   if (!item) return "Not set";
-  const value = item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku];
+  const value = sourcingNeedByDate(item);
   if (!value) return "Not set";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`));
 }
@@ -234,6 +283,10 @@ function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOp
     priceType: "Modeled",
     deliveryType: "Modeled",
     sourceUrl: null,
+    priceSourceUrl: null,
+    priceUnit: null,
+    publicPriceClaim: null,
+    publicPriceCapturedAt: null,
   }));
   const discovered = DISCOVERED_OPTIONS[item.sku];
   if (!discovered) return known;
@@ -248,13 +301,36 @@ function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOp
     priceType: "Modeled",
     deliveryType: "Modeled",
     sourceUrl: null,
+    priceSourceUrl: null,
+    priceUnit: null,
+    publicPriceClaim: null,
+    publicPriceCapturedAt: null,
   }];
 }
 
 function publicResearchOptions(result: PublicResearchResult | null): ProcurementOption[] {
   if (!result) return [];
   return result.candidates.map((candidate) => {
-    const priceSourced = isSourcedEvidence(candidate.price) && isSourcedEvidence(candidate.currency);
+    const officialWebsite = candidate.website
+      ? result.sources?.some((source) => source.url === candidate.website && source.sourceType === "OFFICIAL") ?? false
+      : false;
+    const listingReceipt = result.publicListingReceipts?.find((receipt) => receipt.candidateId === candidate.id) ?? null;
+    const priceSource = candidate.price.sources.find((source) =>
+      candidate.currency.sources.some((currencySource) => currencySource.url === source.url)
+      && candidate.unitOfMeasure.sources.some((unitSource) => unitSource.url === source.url));
+    // A managed retrieval receipt can support a listing claim, but it is still
+    // not a reviewed supplier quote or an orderable commercial term.
+    const priceSourced = false;
+    const priceClaimed = candidate.price.state === "SUPPORTED"
+      && candidate.currency.state === "SUPPORTED"
+      && candidate.unitOfMeasure.state === "SUPPORTED"
+      && Boolean(priceSource)
+      && typeof candidate.price.value === "number"
+      && candidate.price.value > 0
+      && typeof candidate.currency.value === "string"
+      && /^[A-Z]{3}$/.test(candidate.currency.value.toUpperCase())
+      && typeof candidate.unitOfMeasure.value === "string"
+      && Boolean(candidate.unitOfMeasure.value.trim());
     const deliverySourced = isSourcedEvidence(candidate.leadTimeDays);
     const moqSourced = isSourcedEvidence(candidate.minimumOrderQuantity);
     return ({
@@ -268,14 +344,20 @@ function publicResearchOptions(result: PublicResearchResult | null): Procurement
     modeledUnitCostUsd: priceSourced ? candidate.price.value ?? 0 : 0,
     currency: priceSourced ? candidate.currency.value?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null : null,
     fit: candidate.productCapability.value ?? "Product capability requires review.",
-    sourceClass: candidate.website ? "Official" : "New",
-    sourceLabel: candidate.website ? "Official supplier page" : "Public web source",
+    sourceClass: officialWebsite ? "Official" : "New",
+    sourceLabel: officialWebsite ? "Official supplier page" : "Public web source",
     quality: candidate.status === "REVIEW_REQUIRED" ? "Conditional" : "Unverified",
     qualityEvidence: candidate.cautions[0] ?? `${candidate.productCapability.state.toLowerCase()} product-capability evidence`,
     deliveryDate: researchDeliveryDate(deliverySourced ? candidate.leadTimeDays.value : null),
     priceType: priceSourced ? "Sourced" : "Unknown",
     deliveryType: deliverySourced ? "Sourced" : "Unknown",
     sourceUrl: candidate.website ?? candidate.sourceUrls[0] ?? null,
+    priceSourceUrl: priceSourced || priceClaimed ? priceSource?.url ?? null : null,
+    priceUnit: priceSourced ? candidate.unitOfMeasure.value : null,
+    publicPriceClaim: !priceSourced && priceClaimed
+      ? `${candidate.currency.value!.toUpperCase()} ${candidate.price.value!.toLocaleString()} / ${candidate.unitOfMeasure.value}`
+      : null,
+    publicPriceCapturedAt: listingReceipt?.retrievedAt ?? null,
     });
   });
 }
@@ -336,7 +418,7 @@ function workstreamState(procurementCase: SavedProcurementCase) {
   if (procurementCase.result?.stage === "SOURCE_EVIDENCE") return "Qualify supplier";
   if (procurementCase.result?.stage === "SUPPLIER_REJECTED") return "Supplier rejected";
   if (procurementCase.result?.stage === "COMMERCIAL_CONFIRMATION") return "Prepare RFQ";
-  if (procurementCase.result?.stage === "QUALITY_REVIEW") return "Quality review";
+  if (procurementCase.result?.stage === "QUALITY_REVIEW") return procurementCase.result.qualityPlan?.outcome === "FAIL" ? "Quality verification failed" : "Quality evidence required";
   if (procurementCase.result?.stage === "APPROVAL_PENDING") return "Approval pending";
   if (procurementCase.result?.stage === "PURCHASE_READY") return "Purchase ready";
   return "In review";
@@ -355,6 +437,7 @@ const QUOTE_EXTRACTION_FIELDS = [
 export function AtlasProcurementWorkspace({
   item,
   requestText,
+  workspaceId,
   initialDraft,
   initialMissingFields,
   initialQuestion,
@@ -365,12 +448,14 @@ export function AtlasProcurementWorkspace({
   canAuthorizePurchase,
   senderAccounts,
   onResearchSaved,
+  onIntelligenceUpdated,
   onProcurementCaseSaved,
   onRequestUpdate,
   onBack,
 }: {
   item: AtlasInventoryItem | null;
   requestText: string;
+  workspaceId?: string | null;
   initialDraft: SourcingRequestDraft | null;
   initialMissingFields: SourcingRequiredField[];
   initialQuestion: string | null;
@@ -381,6 +466,7 @@ export function AtlasProcurementWorkspace({
   canAuthorizePurchase: boolean;
   senderAccounts: SupplierSenderAccount[];
   onResearchSaved: (run: SavedSourcingResearchRun) => void;
+  onIntelligenceUpdated?: (profile: SupplyIntelligenceProfile) => void;
   onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
   onRequestUpdate?: (update: {
     title: string;
@@ -392,7 +478,7 @@ export function AtlasProcurementWorkspace({
   onBack: () => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const savedRunDraft = initialRun && !item ? {
+  const savedRunDraft = initialRun ? {
     productName: initialRun.input.componentName,
     quantity: initialRun.input.requestedQuantity ?? null,
     unit: initialRun.input.requestedUnit ?? null,
@@ -436,7 +522,7 @@ export function AtlasProcurementWorkspace({
     price: "",
     currency: "",
     minimumOrderQuantity: "",
-    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? "EA" : ""),
+    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? item.unitOfMeasure ?? "EA" : ""),
     deliveryDate: "",
     evidenceUrl: "",
     quoteReference: "",
@@ -445,10 +531,10 @@ export function AtlasProcurementWorkspace({
   }));
   const [quoteRequestForm, setQuoteRequestForm] = useState(() => ({
     quantity: initialCase?.quoteCycle?.result?.request.quantity
-      ?? String(item ? Math.max(shortageQuantity(item), initialCase?.result?.selectedOption.minimumOrderQuantity ?? 0) : ""),
-    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? item.requestedUnit ?? "EA" : ""),
-    needBy: initialCase?.quoteCycle?.result?.request.needBy ?? (item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? "" : ""),
-    shipTo: initialCase?.quoteCycle?.result?.request.shipTo ?? (item ? item.deliveryLocation ?? "" : ""),
+      ?? String(item ? Math.max(sourcingRequestQuantity(item) ?? 0, initialCase?.result?.selectedOption.minimumOrderQuantity ?? 0) : ""),
+    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? item.requestedUnit ?? item.unitOfMeasure ?? "EA" : ""),
+    needBy: initialCase?.quoteCycle?.result?.request.needBy ?? (item ? sourcingNeedByDate(item) ?? "" : ""),
+    shipTo: initialCase?.quoteCycle?.result?.request.shipTo ?? (item ? sourcingDeliveryLocation(item) ?? "" : ""),
     responseDue: initialCase?.quoteCycle?.result?.request.responseDue ?? "",
     requirements: initialCase?.quoteCycle?.result?.request.requirements ?? item?.specification ?? requestText,
     note: initialCase?.quoteCycle?.result?.request.note ?? "",
@@ -475,13 +561,17 @@ export function AtlasProcurementWorkspace({
     acceptanceCriteria: initialCase?.result?.qualityPlan?.acceptanceCriteria ?? "",
     owner: initialCase?.result?.qualityPlan?.owner ?? "",
     targetDate: initialCase?.result?.qualityPlan?.targetDate ?? "",
+    outcome: initialCase?.result?.qualityPlan?.outcome ?? "PASS" as "PASS" | "FAIL",
+    observedOn: initialCase?.result?.qualityPlan?.observedOn ?? new Date().toISOString().slice(0, 10),
+    evidenceUrl: initialCase?.result?.qualityPlan?.evidenceUrl ?? "",
+    verificationNote: initialCase?.result?.qualityPlan?.verificationNote ?? "",
   }));
   const [purchaseForm, setPurchaseForm] = useState(() => ({
     quantity: initialCase?.purchaseDraft?.result?.order.quantity
-      ?? String(item ? Math.max(shortageQuantity(item), initialCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
+      ?? String(item ? Math.max(sourcingRequestQuantity(item) ?? 0, initialCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
     needBy: initialCase?.purchaseDraft?.result?.order.needBy
-      ?? (item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? initialCase?.result?.confirmedTerms?.deliveryDate ?? "" : initialCase?.result?.confirmedTerms?.deliveryDate ?? ""),
-    shipTo: initialCase?.purchaseDraft?.result?.order.shipTo ?? (item ? item.deliveryLocation ?? "" : ""),
+      ?? (item ? sourcingNeedByDate(item) ?? initialCase?.result?.confirmedTerms?.deliveryDate ?? "" : initialCase?.result?.confirmedTerms?.deliveryDate ?? ""),
+    shipTo: initialCase?.purchaseDraft?.result?.order.shipTo ?? (item ? sourcingDeliveryLocation(item) ?? "" : ""),
     incoterm: initialCase?.purchaseDraft?.result?.order.incoterm ?? "DAP",
     paymentTerms: initialCase?.purchaseDraft?.result?.order.paymentTerms ?? "",
     buyerReference: initialCase?.purchaseDraft?.result?.order.buyerReference ?? "",
@@ -563,10 +653,18 @@ export function AtlasProcurementWorkspace({
   const [showSupplierExceptionForm, setShowSupplierExceptionForm] = useState(false);
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
   const [researchState, setResearchState] = useState<"idle" | "running" | "complete" | "degraded">(
-    initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : item ? "running" : "idle",
+    initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : startingDraft && startingMissingFields.length === 0 ? "running" : "idle",
   );
-  const options = useMemo(() => [...buildProcurementOptions(item), ...publicResearchOptions(publicResearch)], [item, publicResearch]);
-  const recommended = options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
+  const [researchAttempt, setResearchAttempt] = useState(0);
+  const options = useMemo(() => [
+    ...(workspaceId ? [] : buildProcurementOptions(item)),
+    ...publicResearchOptions(publicResearch),
+  ], [item, publicResearch, workspaceId]);
+  const recommended = workspaceId
+    ? options.find(isEvidenceBackedRecommendation) ?? null
+    : options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
+  const checkedResearchSources = useMemo(() => researchSources(publicResearch), [publicResearch]);
+  const officialResearchSourceCount = checkedResearchSources.filter((source) => source.sourceType === "OFFICIAL").length;
   const [phase, setPhase] = useState<ProcurementPhase>(() => {
     if (initialCase?.result?.sourcingReturn?.state === "REQUIRED") return "compare";
     if (initialCase) return "procure";
@@ -712,6 +810,24 @@ export function AtlasProcurementWorkspace({
     }
   }
 
+  function retryResearch() {
+    setCurrentRun(null);
+    setPublicResearch(null);
+    setCompletedSources(0);
+    setResearchState("idle");
+    setResearchAttempt((current) => current + 1);
+    setPhase("researching");
+    if (requestDraft) {
+      onRequestUpdateRef.current?.({
+        title: requestDraft.productName ?? requestText,
+        draft: requestDraft,
+        missingFields: [],
+        lastQuestion: null,
+        status: "Researching",
+      });
+    }
+  }
+
   useEffect(() => {
     if (item || initialIntakeStartedRef.current || initialDraft || initialRun) return;
     initialIntakeStartedRef.current = true;
@@ -744,6 +860,10 @@ export function AtlasProcurementWorkspace({
       acceptanceCriteria: result.qualityPlan?.acceptanceCriteria ?? "",
       owner: result.qualityPlan?.owner ?? "",
       targetDate: result.qualityPlan?.targetDate ?? "",
+      outcome: result.qualityPlan?.outcome ?? "PASS",
+      observedOn: result.qualityPlan?.observedOn ?? new Date().toISOString().slice(0, 10),
+      evidenceUrl: result.qualityPlan?.evidenceUrl ?? "",
+      verificationNote: result.qualityPlan?.verificationNote ?? "",
     });
     setApprovalReason("");
     setApprovalNote("");
@@ -847,10 +967,10 @@ export function AtlasProcurementWorkspace({
     const revisionException = releasedResult?.supplierOrderExceptions?.find((entry) => entry.status === "REVISION_REQUIRED" || entry.status === "REVISION_DRAFTED") ?? null;
     setPurchaseForm({
       quantity: draft?.order.quantity ?? revisionException?.proposedQuantity ?? releasedAction?.input.order.quantity
-        ?? String(item ? Math.max(shortageQuantity(item), currentCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
+        ?? String(item ? Math.max(sourcingRequestQuantity(item) ?? 0, currentCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
       needBy: draft?.order.needBy
-        ?? (item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? currentCase?.result?.confirmedTerms?.deliveryDate ?? "" : currentCase?.result?.confirmedTerms?.deliveryDate ?? ""),
-      shipTo: draft?.order.shipTo ?? (item ? item.deliveryLocation ?? "" : ""),
+        ?? (item ? sourcingNeedByDate(item) ?? currentCase?.result?.confirmedTerms?.deliveryDate ?? "" : currentCase?.result?.confirmedTerms?.deliveryDate ?? ""),
+      shipTo: draft?.order.shipTo ?? (item ? sourcingDeliveryLocation(item) ?? "" : ""),
       incoterm: draft?.order.incoterm ?? "DAP",
       paymentTerms: draft?.order.paymentTerms ?? revisionException?.proposedPaymentTerms ?? releasedAction?.input.order.paymentTerms ?? "",
       buyerReference: draft?.order.buyerReference ?? "",
@@ -989,6 +1109,7 @@ export function AtlasProcurementWorkspace({
     const controller = new AbortController();
     setResearchState("running");
     setPublicResearch(null);
+    setCompletedSources(1);
     void fetch("/api/supply-os/supplier-research", {
       method: "POST",
       cache: "no-store",
@@ -996,32 +1117,50 @@ export function AtlasProcurementWorkspace({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         componentItemKey: item?.sku ?? `request:${requestText.slice(0, 120)}`,
-        componentName: item?.name ?? requestDraft?.productName ?? requestText,
-        manufacturer: requestDraft?.manufacturer ?? undefined,
-        mpn: requestDraft?.partNumber ?? undefined,
+        componentName: requestDraft?.productName ?? item?.name ?? requestText,
+        manufacturer: requestDraft?.manufacturer ?? item?.manufacturer ?? undefined,
+        mpn: requestDraft?.partNumber ?? item?.mpn ?? undefined,
         specification: requestDraft?.specification ?? item?.specification ?? requestText,
-        targetCountry: requestDraft?.deliveryLocation?.slice(0, 120) ?? undefined,
+        targetCountry: requestDraft?.deliveryLocation?.slice(0, 120) ?? (item ? sourcingDeliveryLocation(item)?.slice(0, 120) ?? undefined : undefined),
         requestText,
-        requestedQuantity: requestDraft?.quantity ?? (item ? shortageQuantity(item) : undefined),
-        requestedUnit: requestDraft?.unit ?? item?.requestedUnit ?? undefined,
+        workspaceId: workspaceId ?? undefined,
+        requestedQuantity: requestDraft?.quantity ?? (item ? sourcingRequestQuantity(item) ?? undefined : undefined),
+        requestedUnit: requestDraft?.unit ?? (item ? item.requestedUnit ?? item.unitOfMeasure ?? undefined : undefined),
         sourceRegion: requestDraft?.sourceRegion ?? undefined,
-        deliveryLocation: requestDraft?.deliveryLocation ?? undefined,
-        needByDate: requestDraft?.needByDate ?? undefined,
+        deliveryLocation: requestDraft?.deliveryLocation ?? (item ? sourcingDeliveryLocation(item) ?? undefined : undefined),
+        needByDate: requestDraft?.needByDate ?? (item ? sourcingNeedByDate(item) ?? undefined : undefined),
       }),
     }).then(async (response) => {
-      if (!response.ok) throw new Error("Supplier research did not finish.");
-      const payload = await response.json() as { result?: PublicResearchResult; run?: SavedSourcingResearchRun };
+      const payload = await response.json().catch(() => ({})) as {
+        result?: PublicResearchResult;
+        run?: SavedSourcingResearchRun;
+        intelligenceProfile?: SupplyIntelligenceProfile;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error ?? "Supplier research did not finish.");
       const result = payload.result ?? { candidates: [], degraded: true, warnings: ["Supplier research returned no result."] };
       setPublicResearch(result);
       setResearchState(result.degraded ? "degraded" : "complete");
+      setCompletedSources(RESEARCH_STEPS.length);
       if (payload.run) {
         setCurrentRun(payload.run);
         onResearchSaved(payload.run);
+      }
+      if (payload.intelligenceProfile) onIntelligenceUpdated?.(payload.intelligenceProfile);
+      if (requestDraft && result.degraded && !result.candidates.length) {
+        onRequestUpdateRef.current?.({
+          title: requestDraft.productName ?? requestText,
+          draft: requestDraft,
+          missingFields: [],
+          lastQuestion: null,
+          status: "Research unavailable",
+        });
       }
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       setPublicResearch({ candidates: [], degraded: true, warnings: [error instanceof Error ? error.message : "Supplier research did not finish."] });
       setResearchState("degraded");
+      setCompletedSources(RESEARCH_STEPS.length);
       if (requestDraft) {
         onRequestUpdateRef.current?.({
           title: requestDraft.productName ?? requestText,
@@ -1033,25 +1172,7 @@ export function AtlasProcurementWorkspace({
       }
     });
     return () => controller.abort();
-  }, [item, onResearchSaved, phase, requestDraft, requestText]);
-
-  useEffect(() => {
-    if (phase !== "researching") return;
-    if (reduceMotion) {
-      setCompletedSources(RESEARCH_STEPS.length);
-      return;
-    }
-    const timers = RESEARCH_STEPS.map((_, index) => (
-      window.setTimeout(() => setCompletedSources(index + 1), 520 + index * 480)
-    ));
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [phase, reduceMotion]);
-
-  useEffect(() => {
-    if (phase !== "researching" || completedSources < RESEARCH_STEPS.length || researchState === "running") return;
-    const finish = window.setTimeout(() => setPhase("compare"), reduceMotion ? 120 : 240);
-    return () => window.clearTimeout(finish);
-  }, [completedSources, phase, reduceMotion, researchState]);
+  }, [item, onIntelligenceUpdated, onResearchSaved, phase, requestDraft, requestText, researchAttempt, workspaceId]);
 
   function toggleShortlist(optionId: string) {
     setSelectedOptionId(optionId);
@@ -1684,6 +1805,12 @@ export function AtlasProcurementWorkspace({
     && qualificationForm.note.trim().length >= 10
     && (qualificationForm.relationship !== "AUTHORIZED_DISTRIBUTOR" || Boolean(qualificationForm.authorizationEvidenceUrl.trim()));
   const rejectionComplete = qualificationForm.note.trim().length >= 10;
+  const qualityVerificationComplete = Boolean(qualityForm.acceptanceCriteria.trim())
+    && Boolean(qualityForm.owner.trim())
+    && Boolean(qualityForm.targetDate)
+    && Boolean(qualityForm.observedOn)
+    && Boolean(qualityForm.evidenceUrl.trim())
+    && qualityForm.verificationNote.trim().length >= 10;
 
   return (
     <motion.section
@@ -1779,21 +1906,72 @@ export function AtlasProcurementWorkspace({
             </section>
             <ol className={styles.procurementSourceLog}>
               {RESEARCH_STEPS.map((step, index) => {
-                const waitingForWeb = index === RESEARCH_STEPS.length - 1
-                  && completedSources >= RESEARCH_STEPS.length
-                  && researchState === "running";
-                const complete = completedSources > index && !waitingForWeb;
-                const active = completedSources === index || waitingForWeb;
+                const complete = completedSources > index;
+                const active = completedSources === index;
+                const detail = step.key === "scope" ? (
+                  <dl className={styles.procurementResearchScope}>
+                    <div><dt>Product</dt><dd>{item?.name ?? requestDraft?.productName ?? requestText}</dd></div>
+                    <div><dt>Quantity</dt><dd>{item ? sourcingRequestQuantity(item) === null ? "Not provided" : `${sourcingRequestQuantity(item)} ${item.unitOfMeasure ?? "units"}` : requestDraft?.quantity && requestDraft.unit ? `${requestDraft.quantity} ${requestDraft.unit}` : "Not provided"}</dd></div>
+                    <div><dt>Source region</dt><dd>{requestDraft?.sourceRegion ?? "Any region"}</dd></div>
+                    <div><dt>Deliver to</dt><dd>{item ? sourcingDeliveryLocation(item) ?? "Not provided" : requestDraft?.deliveryLocation ?? "Not provided"}</dd></div>
+                    <div><dt>Need by</dt><dd>{item ? sourcingNeedByDate(item) ?? "Not provided" : requestDraft?.needByDate ?? "Not provided"}</dd></div>
+                  </dl>
+                ) : step.key === "web" ? (
+                  <>
+                    <p>{researchState === "running"
+                      ? `Searching public pages for ${item?.name ?? requestDraft?.productName ?? requestText}.`
+                      : checkedResearchSources.length
+                        ? `${checkedResearchSources.length} attributable source${checkedResearchSources.length === 1 ? "" : "s"} returned.`
+                        : "No attributable source URLs were returned."}</p>
+                    <details className={styles.procurementResearchSources}>
+                      <summary>Sources checked ({checkedResearchSources.length})</summary>
+                      {checkedResearchSources.length ? (
+                        <ul>
+                          {checkedResearchSources.map((source) => (
+                            <li key={source.url}>
+                              <a href={source.url} target="_blank" rel="noreferrer">{source.url}</a>
+                              <span>{source.sourceType}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <p>{researchState === "running" ? "Waiting for attributable sources from public search." : "No source links survived attribution checks."}</p>}
+                    </details>
+                  </>
+                ) : step.key === "validation" ? (
+                  <p>{researchState === "running"
+                    ? "Validation starts when attributable source records return."
+                        : `${officialResearchSourceCount} official and ${checkedResearchSources.length - officialResearchSourceCount} other public source${checkedResearchSources.length - officialResearchSourceCount === 1 ? "" : "s"} passed URL attribution. A public price requires one exact forced-live record with amount, ISO currency, and unit; RFQ confirmation is still required.`}</p>
+                ) : (
+                  <>
+                    <p>{researchState === "running" ? "Candidate screening waits for source validation." : `${publicResearch?.candidates.length ?? 0} candidate${publicResearch?.candidates.length === 1 ? "" : "s"} retained for human qualification.`}</p>
+                    {publicResearch?.warnings.length ? <ul>{publicResearch.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+                  </>
+                );
                 return (
                   <li key={step.label} data-complete={complete} data-active={active}>
                     <span>{complete ? <Check size={15} /> : active ? <LoaderCircle size={15} /> : <Search size={15} />}</span>
-                    <p><strong>{step.label}</strong><small>{step.detail}</small></p>
-                    <i>{step.sourceClass}</i>
+                    <details className={styles.procurementResearchStep} open={step.key === "web" ? true : undefined}>
+                      <summary>
+                        <span><strong>{step.label}</strong><small>{step.detail}</small></span>
+                        <i>{step.sourceClass}</i>
+                      </summary>
+                      <div>{detail}</div>
+                    </details>
                   </li>
                 );
               })}
             </ol>
-            <footer><TriangleAlert size={14} /> {researchState === "running" ? "Live public web research is running. No supplier system is connected." : researchState === "complete" ? "Public results are attributable and unqualified. No supplier was contacted." : publicResearch?.warnings[0] ?? "Public research is unavailable; modeled demo options remain."}</footer>
+            <footer>
+              <span><TriangleAlert size={14} /> {researchState === "running" ? "Public web research is running. No supplier system is connected." : researchState === "complete" ? "Public results are attributable and unqualified. No supplier was contacted." : publicResearch?.warnings[0] ?? "Public research is unavailable."}</span>
+              {researchState !== "running" && publicResearch?.candidates.length ? (
+                <button type="button" onClick={() => setPhase("compare")}>Review {publicResearch.candidates.length} supplier{publicResearch.candidates.length === 1 ? "" : "s"} <ArrowRight size={14} /></button>
+              ) : researchState !== "running" ? (
+                <div>
+                  <button type="button" data-primary="true" onClick={retryResearch}><RefreshCw size={14} /> Retry research</button>
+                  <button type="button" onClick={refineRequest}>Edit request</button>
+                </div>
+              ) : null}
+            </footer>
           </motion.div>
         ) : phase === "compare" ? (
           <motion.div
@@ -1804,22 +1982,30 @@ export function AtlasProcurementWorkspace({
             exit={reduceMotion ? undefined : { opacity: 0, x: -10 }}
             transition={{ duration: 0.18 }}
           >
-            {recommended ? (
+            {options.length ? (
               <>
-                <section className={styles.procurementRecommendation}>
-                  <CheckCircle2 size={19} />
-                  <span><small>Suggested option</small><h3>{recommended.name}</h3><p>Meets the modeled need-by date with a reviewed source record. Technical and commercial approval remain required.</p></span>
-                  <strong>{formatCurrency(recommended.modeledUnitCostUsd, recommended.currency)} / unit</strong>
-                </section>
+                {recommended ? (
+                  <section className={styles.procurementRecommendation}>
+                    <CheckCircle2 size={19} />
+                    <span><small>Evidence-backed candidate</small><h3>{recommended.name}</h3><p>Product capability, price basis, and current lead time have attributable sources. Technical and commercial approval remain required.</p></span>
+                    <strong>{formatCurrency(recommended.modeledUnitCostUsd, recommended.currency)} / {recommended.priceUnit}</strong>
+                  </section>
+                ) : (
+                  <section className={styles.procurementUnknownState}>
+                    <Globe2 size={24} />
+                    <h3>{options.length} supplier candidate{options.length === 1 ? "" : "s"} need qualification</h3>
+                    <p>No candidate has a complete source-backed price, unit, product-capability, and lead-time record yet. Compare the evidence and request missing terms.</p>
+                  </section>
+                )}
                 <div className={styles.procurementOptionTableRegion}>
                   <table className={styles.procurementOptionTable}>
                     <thead><tr><th>Supplier</th><th>Source</th><th>Price</th><th>Delivery</th><th>Quality</th><th /></tr></thead>
                     <tbody>
                       {options.map((option) => (
-                        <tr key={option.id} data-selected={shortlistedOptionIds.includes(option.id)} data-recommended={option.id === recommended.id}>
-                          <td><strong>{option.name}</strong><small>{option.role} · {option.location}</small>{option.id === recommended.id ? <i>Suggested</i> : null}</td>
+                        <tr key={option.id} data-selected={shortlistedOptionIds.includes(option.id)} data-recommended={option.id === recommended?.id}>
+                          <td><strong>{option.name}</strong><small>{option.role} · {option.location}</small>{option.id === recommended?.id ? <i>Evidence backed</i> : null}</td>
                           <td><strong>{option.sourceClass}</strong><small>{option.sourceLabel}</small>{option.sourceUrl ? <a href={option.sourceUrl} target="_blank" rel="noreferrer">View source</a> : null}</td>
-                          <td><strong>{option.priceType === "Unknown" ? "Unknown" : formatCurrency(option.modeledUnitCostUsd, option.currency)}</strong><small>{option.priceType} · MOQ {option.minimumOrderQuantity || "unknown"}</small></td>
+                          <td><strong>{option.priceType === "Unknown" ? option.publicPriceClaim ?? "Unknown" : `${formatCurrency(option.modeledUnitCostUsd, option.currency)} / ${option.priceUnit ?? "unit"}`}</strong><small>{option.publicPriceCapturedAt ? `Forced-live public listing captured ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(option.publicPriceCapturedAt))}. RFQ confirmation required.` : option.publicPriceClaim ? "Public listing claim - freshness unverified" : `${option.priceType} · MOQ ${option.minimumOrderQuantity || "unknown"}`}</small>{option.priceSourceUrl ? <a href={option.priceSourceUrl} target="_blank" rel="noreferrer">{option.publicPriceClaim ? "Listing source" : "Price source"}</a> : null}</td>
                           <td><strong>{option.deliveryDate}</strong><small>{option.leadTimeDays ? `${option.leadTimeDays} days ${option.deliveryType.toLowerCase()}` : "Lead time unknown"}</small></td>
                           <td><strong>{option.quality}</strong><small>{option.qualityEvidence}</small></td>
                           <td><button type="button" aria-pressed={shortlistedOptionIds.includes(option.id)} onClick={() => toggleShortlist(option.id)}>{shortlistedOptionIds.includes(option.id) ? <Check size={14} /> : null}{shortlistedOptionIds.includes(option.id) ? "Shortlisted" : "Add"}</button></td>
@@ -1836,9 +2022,12 @@ export function AtlasProcurementWorkspace({
             ) : (
               <section className={styles.procurementUnknownState}>
                 <Globe2 size={24} />
-                <h3>Request added, terms still unknown</h3>
-                <p>The research run could not resolve a manufacturer or part number, so price, delivery, and quality remain unknown.</p>
-                <button type="button" onClick={refineRequest}>Refine request</button>
+                <h3>Research did not return usable suppliers</h3>
+                <p>{publicResearch?.warnings[0] ?? "No candidate passed source and supplier identity checks. Your request is still saved."}</p>
+                <div className={styles.procurementUnknownActions}>
+                  <button type="button" data-primary="true" onClick={retryResearch}><RefreshCw size={14} /> Retry research</button>
+                  <button type="button" onClick={refineRequest}>Edit request</button>
+                </div>
               </section>
             )}
           </motion.div>
@@ -1881,9 +2070,9 @@ export function AtlasProcurementWorkspace({
             <h3>{selectedOption?.name}</h3>
             <dl>
               <div><dt>Part</dt><dd>{item?.name ?? requestText}</dd></div>
-              <div><dt>Quantity</dt><dd>{item ? Math.max(shortageQuantity(item), selectedOption?.minimumOrderQuantity ?? 0) : "Unknown"}</dd></div>
+              <div><dt>Quantity</dt><dd>{item ? Math.max(sourcingRequestQuantity(item) ?? 0, selectedOption?.minimumOrderQuantity ?? 0) : "Unknown"}</dd></div>
               <div><dt>Source location</dt><dd>{selectedOption?.location ?? "Unknown"}</dd></div>
-              <div><dt>Destination</dt><dd>Austin, TX</dd></div>
+              <div><dt>Destination</dt><dd>{item ? sourcingDeliveryLocation(item) ?? "Unknown" : requestDraft?.deliveryLocation ?? "Unknown"}</dd></div>
               <div><dt>Modeled delivery</dt><dd>{selectedOption?.deliveryDate ?? "Unknown"}</dd></div>
               <div><dt>Need by</dt><dd>{formatNeedBy(item)}</dd></div>
             </dl>
@@ -1891,7 +2080,7 @@ export function AtlasProcurementWorkspace({
               <section className={styles.procurementGateGrid} aria-label="Procurement readiness">
                 <div><span data-status={currentCase.result.gates.sourceEvidence} /><p><strong>Supplier qualification</strong><small>{currentCase.result.stage === "SUPPLIER_REJECTED" ? "Supplier rejected" : currentCase.result.gates.sourceEvidence === "EVIDENCE_COMPLETE" ? `Qualified through ${displayStoredDate(currentCase.result.reviews?.sourceEvidence?.validUntil)}` : currentCase.result.gates.sourceEvidence === "BLOCKED" ? "Attributable evidence required" : "Identity and capability review required"}</small></p></div>
                 <div><span data-status={currentCase.result.gates.commercialTerms} /><p><strong>Commercial terms</strong><small>{currentCase.result.gates.commercialTerms === "EVIDENCE_COMPLETE" ? "Quote terms confirmed" : "Confirm price, currency, MOQ, and delivery"}</small></p></div>
-                <div><span data-status={currentCase.result.gates.qualityPlan} /><p><strong>Quality plan</strong><small>{currentCase.result.gates.qualityPlan === "EVIDENCE_COMPLETE" ? "Acceptance plan recorded" : "Sample or inspection plan required"}</small></p></div>
+                <div><span data-status={currentCase.result.gates.qualityPlan} /><p><strong>Quality verification</strong><small>{currentCase.result.gates.qualityPlan === "EVIDENCE_COMPLETE" ? `Passed through ${displayStoredDate(currentCase.result.qualityPlan?.targetDate)}` : currentCase.result.gates.qualityPlan === "BLOCKED" ? "Failed evidence blocks award" : "Sample, inspection, or document evidence required"}</small></p></div>
                 <div><span data-status={currentCase.result.gates.purchaseApproval} /><p><strong>Purchase approval</strong><small>{currentCase.result.gates.purchaseApproval === "APPROVED" ? "Approved for purchase preparation" : currentCase.result.gates.purchaseApproval === "PENDING" ? "Manager decision pending" : currentCase.result.gates.purchaseApproval === "REJECTED" ? "Revision required" : "Blocked until review gates are complete"}</small></p></div>
               </section>
             ) : null}
@@ -2110,18 +2299,23 @@ export function AtlasProcurementWorkspace({
                   </>
                 ) : currentCase.result.stage === "QUALITY_REVIEW" ? (
                   <>
-                    <header><small>Gate 3 of 4</small><h4>Define acceptance before buying</h4><p>A vague quality promise is useless. Choose the verification method and write the pass criteria.</p></header>
+                    <header><small>Gate 3 of 4</small><h4>Verify quality before buying</h4><p>A written plan is not evidence. Record the sample, inspection, or document-review result that supports this exact supplier award.</p></header>
+                    {currentCase.result.qualityPlan?.outcome === "FAIL" ? <section className={styles.purchaseAuthorizationState}><TriangleAlert size={20} /><div><strong>Quality verification failed</strong><p>This supplier cannot advance until a new passing result is recorded. <a href={evidenceHref(currentCase.result.qualityPlan.evidenceId, currentCase.result.qualityPlan.evidenceUrl)} target="_blank" rel="noreferrer">Open failed evidence</a></p></div></section> : null}
                     <div className={styles.procurementFormGrid}>
                       <label>Verification method<select value={qualityForm.method} onChange={(event) => setQualityForm((current) => ({ ...current, method: event.target.value as typeof current.method }))}><option value="SAMPLE">Sample approval</option><option value="PRE_SHIPMENT_INSPECTION">Pre-shipment inspection</option><option value="DOCUMENT_REVIEW">Document review</option></select></label>
                       <label>Owner<input value={qualityForm.owner} onChange={(event) => setQualityForm((current) => ({ ...current, owner: event.target.value }))} placeholder="Operations or engineering owner" /></label>
-                      <label>Target date<input type="date" value={qualityForm.targetDate} onChange={(event) => setQualityForm((current) => ({ ...current, targetDate: event.target.value }))} /></label>
+                      <label>Result<select value={qualityForm.outcome} onChange={(event) => setQualityForm((current) => ({ ...current, outcome: event.target.value as typeof current.outcome }))}><option value="PASS">Pass</option><option value="FAIL">Fail</option></select></label>
+                      <label>Verified on<input type="date" value={qualityForm.observedOn} onChange={(event) => setQualityForm((current) => ({ ...current, observedOn: event.target.value }))} /></label>
+                      <label>Evidence valid through<input type="date" value={qualityForm.targetDate} onChange={(event) => setQualityForm((current) => ({ ...current, targetDate: event.target.value }))} /></label>
                       <label className={styles.procurementWideField}>Acceptance criteria<textarea value={qualityForm.acceptanceCriteria} onChange={(event) => setQualityForm((current) => ({ ...current, acceptanceCriteria: event.target.value }))} placeholder="Specify measurable checks, documents, tolerances, or sample result." /></label>
+                      <label className={styles.procurementWideField}>Evidence URL<input type="url" value={qualityForm.evidenceUrl} onChange={(event) => setQualityForm((current) => ({ ...current, evidenceUrl: event.target.value }))} placeholder="Inspection report, sample record, or controlled document" /></label>
+                      <label className={styles.procurementWideField}>Verification note<textarea value={qualityForm.verificationNote} onChange={(event) => setQualityForm((current) => ({ ...current, verificationNote: event.target.value }))} placeholder="Record what was checked, the observed result, and any remaining limitation." /></label>
                     </div>
-                    <button type="button" disabled={gateActionState === "saving"} onClick={saveQualityPlan}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} Save quality plan</button>
+                    <button type="button" disabled={gateActionState === "saving" || !qualityVerificationComplete} onClick={saveQualityPlan}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : qualityForm.outcome === "PASS" ? <Check size={14} /> : <TriangleAlert size={14} />} Record quality verification</button>
                   </>
                 ) : currentCase.result.stage === "APPROVAL" ? (
                   <>
-                    <header><small>Gate 4 of 4</small><h4>Request award approval for this supplier</h4><p>The selected supplier, confirmed quote terms, evidence review, and quality plan are sealed into one immutable approval object. A sibling supplier cannot be awarded at the same time.</p></header>
+                    <header><small>Gate 4 of 4</small><h4>Request award approval for this supplier</h4><p>The selected supplier, confirmed quote terms, qualification evidence, and passing quality verification are sealed into one immutable approval object. A sibling supplier cannot be awarded at the same time.</p></header>
                     <label>Approval reason<textarea value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} placeholder="Explain why this supplier should win the sourcing request." /></label>
                     <button type="button" disabled={gateActionState === "saving"} onClick={requestApproval}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <ShieldCheck size={14} />} Request award approval</button>
                   </>

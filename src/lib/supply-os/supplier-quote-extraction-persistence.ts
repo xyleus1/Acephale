@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
-import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import {
   extractSupplierQuoteTerms,
   SUPPLIER_QUOTE_EXTRACTION_CAPABILITY,
@@ -399,7 +399,7 @@ export async function extractConnectedSupplierQuoteTerms(args: {
   attachmentReader?: SupplierQuoteAttachmentReader;
 }) {
   const accessContext = await currentAccessContext(args.context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "edit");
+  const workspace = await sourcingWorkspaceForTask(accessContext, args.quoteCycleId, "edit", [QUOTE_CYCLE_TASK_TYPE]);
   const quoteCycleId = requiredText(args.quoteCycleId, "Quote cycle ID", 220);
   const sourceEvidenceId = requiredText(args.sourceEvidenceId, "Supplier reply evidence ID", 220);
   const snapshot = await loadExtractionSnapshot({ context: accessContext, workspaceId: workspace.id, quoteCycleId, sourceEvidenceId });
@@ -441,7 +441,7 @@ export async function extractConnectedSupplierQuoteTerms(args: {
 
   try {
     const completionContext = await currentAccessContext(accessContext);
-    const completionWorkspace = await sourcingSystemWorkspace(completionContext, "edit");
+    const completionWorkspace = await sourcingWorkspaceForTask(completionContext, args.quoteCycleId, "edit", [QUOTE_CYCLE_TASK_TYPE]);
     if (completionWorkspace.id !== workspace.id) {
       throw new SupplyPersistenceError("Your Supply OS workspace access changed during quote extraction.", "forbidden");
     }

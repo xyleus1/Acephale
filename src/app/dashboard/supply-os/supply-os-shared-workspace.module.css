@@ -375,6 +375,62 @@
   font-weight: 650;
 }
 
+.importMode {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 3px;
+  border: 1px solid var(--shared-line);
+  border-radius: 10px;
+  background: var(--shared-subtle);
+}
+
+.importMode button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--shared-soft);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.importMode button[data-active="true"] {
+  color: var(--shared-ink);
+  background: var(--shared-panel);
+}
+
+.partsImport {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(260px, 1fr);
+  align-items: stretch;
+  margin-top: 10px;
+  border-top: 1px solid var(--shared-line);
+  border-left: 1px solid var(--shared-line);
+}
+
+.partsImport > .fileInput {
+  min-height: 84px;
+}
+
+.partsImport > p {
+  margin: 0;
+  padding: 14px;
+  border-right: 1px solid var(--shared-line);
+  border-bottom: 1px solid var(--shared-line);
+  color: var(--shared-soft);
+  background: var(--shared-subtle);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.partsImport a {
+  color: var(--shared-navy);
+  font-weight: 650;
+}
+
 .sourceName small {
   color: var(--shared-muted);
   font-weight: 450;
@@ -748,6 +804,10 @@
 
   .fileGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .partsImport {
+    grid-template-columns: 1fr;
   }
 
   .stagedReview {

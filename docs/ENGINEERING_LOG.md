@@ -4919,7 +4919,6 @@ Use this file for chronological implementation notes that future agents should s
 - Boundary: No migration, dependency, supplier contact, purchase authorization,
   payment, inventory, booking, customs, or Logistics behavior changed.
 
-
 ### 2026-08-11 - Preserve inventory sourcing intake context
 
 - Branch: main
@@ -5000,3 +4999,137 @@ Use this file for chronological implementation notes that future agents should s
   TypeScript, production build, whitespace, conflict-marker, changed-file
   scope, and U+2014 checks.
 - Follow-up: Land the separately verified supply intelligence runtime.
+
+### 2026-08-11 - Accumulate customer and supplier supply intelligence
+
+- Branch: `supply-os-quality-verification`, based on `main` plus the committed
+  quality-verification slice.
+- Task: Persist an expanding customer supply profile, reusable supplier
+  universe, source-linked public prices, and benchmark metadata without mixing
+  customer workspaces or overwriting prior research.
+- Behavior: Selected shared workspaces now scope sourcing. Completed research
+  appends customer need facts and merges stable supplier profiles. Provider
+  listing claims remain linked to their source in the research result but do not
+  become durable current-price observations without a server-owned retrieval
+  receipt. Inventory & sourcing displays the accumulated suppliers and links.
+- Safety: All new records carry office and workspace scope. Database triggers
+  guard cross-tenant references. Profile facts and prices are append-only.
+  Missing units, dates, shared source URLs, or public prices remain unknown and
+  route to human-approved RFQ work.
+- Verification: Prisma validate and generation, TypeScript, the new supply
+  intelligence contract, supplier research trust contract, Atlas sourcing UI
+  contract, changed-file U+2014 scan, and diff checks.
+- Failed/skipped checks: Database-backed migration and sourcing persistence
+  tests could not run because no disposable local PostgreSQL server was
+  available. The normal `tsx` wrapper also hit sandbox IPC restrictions, so the
+  equivalent Node `--import tsx` test path was used.
+- Follow-up: Add an entitlement-aware benchmark connector. Use World Bank Pink
+  Sheet for free monthly context and a licensed LME or CME feed when the product
+  actually requires delayed or real-time exchange pricing.
+### 2026-08-11 - Close Supply OS sourcing release blockers
+
+- Branch: `supply-os-quality-verification`, PR #132.
+- Fixed customer-workspace research, shortlist, procurement, Gmail, reply, and quote-extraction resolution by deriving the authorized workspace from the research run or task.
+- Made research completion single-writer, failure transitions conditional on active status, future evidence dates invalid, Unicode supplier identity stable, public price tuples source-consistent, and legacy quality gates fail closed on every approval and order mutation.
+- Verification passed: Prisma validation, TypeScript, Atlas sourcing, supply-intelligence, supplier-email provider, deployment boundary, diff checks, forbidden-character scan, and optimized Next.js production build with 64 generated static pages.
+- A disposable local PostgreSQL cluster could not initialize because the managed sandbox denied the server shared-memory call. No production database command ran.
+
+### 2026-08-11 - Fix supplier research progress and retry loop
+
+- Branch: `supply-os-quality-verification`, PR #132.
+- Root cause: the research screen advanced four source categories with local
+  timers while the server performed one blocking public-web request. An empty
+  provider result was then presented as an incomplete request with only a
+  Refine request action, trapping the operator in the intake flow.
+- Fix: replace simulated categories with actual lifecycle stages, disclose the
+  live request scope and returned attributable source URLs, and separate Retry
+  research from Edit request after an empty result. Remove automatic comparison
+  navigation so returned sources remain inspectable.
+- Verification: TypeScript, Atlas sourcing contract, operations UI contract,
+  product-copy policy, changed-file U+2014 scan, and diff hygiene passed.
+- Limitation: the in-app browser was not connected, so preview click-through and
+  responsive visual verification remain required after deployment.
+- Added a 40-line procurement acceptance catalog plus contract and live-provider
+  runners. The catalog contract passes. Live research is currently blocked
+  locally because neither an OpenAI key nor an authenticated deployed session is
+  available in this workspace.
+
+### 2026-08-12 - Make supplier research retryable and accept customer parts CSV
+
+- Branch: `supply-os-quality-verification`, PR #132.
+- Root causes: provider failures collapsed into successful empty results, retry
+  did not change any effect dependency, saved failed runs re-entered intake,
+  published parts did not feed sourcing, and the staged CSV workspace was not
+  mounted in the selected company workflow.
+- Behavior: provider failures now return typed status codes and persist FAILED;
+  retry issues a new research attempt; saved inputs restore directly; exact
+  checked URLs remain visible under expandable research stages; only qualified
+  evidence-backed options can be suggested.
+- CSV: the one-file importer accepts the founder's five-column BOM shape,
+  parses quantities such as `4 blanks` and `300 m total`, preserves `As req.` as
+  unknown, publishes available item facts, and routes missing delivery facts to
+  clarification. Published direct demand and exploded BOM demand become
+  customer-workspace sourcing rows.
+- Authorization: import controls are shown only to administrators and managers;
+  API edit authorization remains unchanged.
+- Verification: CSV, 40-line BOM, Atlas sourcing, ingestion trust, provider
+  failures, snapshot twin, operations UI, continuous layout, product copy,
+  deployment boundary, TypeScript, Prisma generation, and optimized Next build
+  passed. The standard `npm run build` wrapper hit the sandbox `tsx` IPC
+  restriction, so its already-passed prebuild contract and the production build
+  were run directly.
+- Remaining release work: reconcile onto remote main, apply the supply
+  intelligence migration through the controlled production migration path, run
+  authenticated live research, and complete browser and deployment canaries.
+
+### 2026-08-12 - Harden parts expansion, workspace isolation, and price freshness
+
+- Fixed embedded workspace selection so an inaccessible fixed workspace cannot
+  fall back to another customer's first available workspace.
+- Scoped locally saved sourcing requests by workspace and restored the saved
+  structured draft when retrying a failed research run.
+- Changed one-file parts publishing from an items-only replacement to an
+  immutable expansion of the latest published snapshot. The expansion retains
+  locations, item metadata, BOM revisions and lines, inventory, demand,
+  purchase-order metadata, supplier terms, FCC profiles, media, and source
+  references. Item type and existing SKU do not get replaced by adapter
+  defaults.
+- Added a per-workspace advisory lock for import creation and publishing. Parts
+  drafts pin their base snapshot and reject stale publication after another
+  snapshot wins the race.
+- Removed trust in provider-supplied observation time and disabled automatic
+  application-origin fetching for public prices. Claimed listing values remain
+  visible with their source, but freshness stays unknown and procurement treats
+  the price as null until a managed retrieval connector verifies item identity,
+  amount, ISO currency, unit, and source date.
+- Applied the same downgrade inside server-side shortlist and selection
+  canonicalization. Legacy completed runs cannot regain sourced price, currency,
+  MOQ, or delivery terms when a buyer saves a candidate.
+- Extended the immutable snapshot-copy transaction to 45 seconds inside the
+  route's 60-second budget. Prisma's five-second default was too short for an
+  accumulated customer twin even when a parts file contained only 40 rows.
+- Focused CSV, 40-line BOM, research trust, provider failure, TypeScript,
+  Prisma, diff, and optimized production-build checks pass locally. Database
+  lifecycle coverage remains blocked because the managed sandbox cannot reach
+  a disposable PostgreSQL server.
+
+### 2026-08-12 - Add Exa forced-live supplier listing receipts
+
+- Added a no-dependency Exa adapter that uses fixed Search and Contents API
+  endpoints, retrieves only URLs from the current search, forces live contents,
+  checks per-URL status, and caps search bytes, content bytes, record text, each
+  request, and the total operation.
+- Added deterministic one-record evidence validation. Exact requested identity,
+  positive amount, ISO 4217 currency, unit or package basis, and one exact excerpt
+  must coexist. Wrong MPNs, cross-product values, cross-record stitching,
+  missing terms, cached status, invalid JSON, and oversized responses fail
+  closed.
+- Public result profiles use the listing hostname and no trusted supplier role;
+  generated seller names and manufacturer/distributor roles stay untrusted.
+- Valid receipts create managed public-retrieval evidence and append-only public
+  listing price observations. The server still removes all public candidate
+  commercial terms from procurement selection, so the receipt cannot become a
+  quote or order authority.
+- Exa is preferred only when configured. Existing OpenAI discovery remains the
+  unconfigured fallback and cannot supply freshness. Cloudflare remains out of
+  scope.

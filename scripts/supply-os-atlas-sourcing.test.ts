@@ -14,15 +14,22 @@ import { hasDirtyWorkstream, markWorkstreamDraft, resolveWorkstreamDraft } from 
 import {
   missingSourcingFields,
   normalizeSourcingRequestDraft,
+  sourcingRequestStorageKey,
   sourcingQuestionFor,
 } from "../src/lib/supply-os/sourcing-request-contract";
 
 const root = process.cwd();
+assert.notEqual(
+  sourcingRequestStorageKey({ storageScope: "office:user", dashboardId: "case", workspaceId: "customer-a" }),
+  sourcingRequestStorageKey({ storageScope: "office:user", dashboardId: "case", workspaceId: "customer-b" }),
+  "pending sourcing requests must not cross customer workspaces",
+);
 const nextConfig = readFileSync(resolve(root, "next.config.ts"), "utf8");
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const workbench = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx"), "utf8");
 const procurement = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
 const researchRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier-research/route.ts"), "utf8");
+const researchRouteContract = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-route-contract.ts"), "utf8");
 const supplierResearch = readFileSync(resolve(root, "src/lib/supply-os/component-supplier-research.ts"), "utf8");
 const intakeRoute = readFileSync(resolve(root, "src/app/api/supply-os/sourcing-request/route.ts"), "utf8");
 const procurementCasesRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/route.ts"), "utf8");
@@ -179,6 +186,11 @@ assert.match(workbench, /<th>Action<\/th>/);
 assert.match(workbench, /Start research/);
 assert.match(workbench, /View results/);
 assert.match(workbench, /Retry research/);
+assert.doesNotMatch(workbench, /disabled=\{!query\.trim\(\) \|\| dataState !== "ready"\}/, "history loading failure must not disable a new request");
+assert.doesNotMatch(workbench, /disabled=\{dataState !== "ready" \|\| run/, "history loading failure must not disable a row action");
+assert.match(workbench, /run\.status === "SUCCEEDED" \? onOpenSavedResearch\(run\) : onRetryResearch\(run\)/, "failed saved research must retry its stored request without re-entering intake");
+assert.match(dashboard, /function retrySavedResearch\([\s\S]*savedRun: null,[\s\S]*savedCases: \[\]/, "retrying saved research must clear the failed run before remounting research");
+assert.doesNotMatch(workbench, /run\.status === "SUCCEEDED" \? onOpenSavedResearch\(run\) : onCreateRequest\(run\.input\.requestText\)/);
 assert.match(workbench, /Continue procurement/);
 assert.match(workbench, /Open quote inbox/);
 assert.match(workbench, /supplier workstream/);
@@ -205,10 +217,20 @@ assert.match(workbench, /Office-shared work/);
 assert.doesNotMatch(workbench, /<th>Next step<\/th>/);
 assert.doesNotMatch(workbench, /<th>On hand<\/th>|<th>Allocated<\/th>|<th>Inbound<\/th>|<th>Projected<\/th>/);
 assert.doesNotMatch(workbench, /inventoryRailList/);
-assert.match(procurement, /Approved source library/);
-assert.match(procurement, /Producer and manufacturer sources/);
-assert.match(procurement, /Distributor and trader sources/);
+assert.doesNotMatch(procurement, /Producer and manufacturer sources|Distributor and trader sources/);
+assert.match(procurement, /Request scope/);
 assert.match(procurement, /Open web discovery/);
+assert.match(procurement, /Source validation/);
+assert.match(procurement, /Candidate screening/);
+assert.match(procurement, /Sources checked/);
+assert.match(procurement, />\{source\.url\}<\/a>/, "source disclosure must show the exact page URL");
+assert.match(procurement, /for \(const source of result\.sources \?\? \[\]\) remember\(source\)/, "the disclosure must include all provider-attributed sites, not only sources attached to retained candidates");
+assert.doesNotMatch(procurement, /520 \+ index \* 480/);
+assert.doesNotMatch(procurement, /setTimeout\(\(\) => setPhase\("compare"\)/);
+assert.match(procurement, /Review \{publicResearch\.candidates\.length\} supplier/);
+assert.match(procurement, /options\.find\(isEvidenceBackedRecommendation\) \?\? null/, "live workspaces must not recommend the first unqualified result");
+assert.match(procurement, /No candidate has a complete source-backed price, unit, product-capability, and lead-time record yet/);
+assert.doesNotMatch(procurement, /Meets the modeled need-by date with a reviewed source record/);
 assert.match(procurement, /Price<\/th><th>Delivery<\/th><th>Quality/);
 assert.match(procurement, /Create .*workstream/);
 assert.match(procurement, /Competitive quote inbox/);
@@ -222,7 +244,7 @@ assert.match(procurement, /selectedResponseHash: quoteCycleProjection\.selectedR
 assert.match(procurement, /Procurement brief/);
 assert.match(procurement, /Supplier qualification/);
 assert.match(procurement, /Commercial terms/);
-assert.match(procurement, /Quality plan/);
+assert.match(procurement, /Quality verification/);
 assert.match(procurement, /Purchase approval/);
 assert.match(procurement, /Identity evidence URL/);
 assert.match(procurement, /Component capability URL/);
@@ -257,7 +279,13 @@ assert.doesNotMatch(procurement, /price: String\(initialCase\?\.result\?\.select
 assert.doesNotMatch(procurement, /evidenceUrl: initialCase\?\.result\?\.selectedOption\.sourceUrl/, "supplier homepages must not prefill quote-response evidence");
 assert.match(procurement, /It does not contact the supplier/);
 assert.match(procurement, /Use this only when the request was sent through a supplier portal/);
-assert.match(procurement, /Save quality plan/);
+assert.match(procurement, /Record quality verification/);
+assert.match(procurement, /A written plan is not evidence/);
+assert.match(procurement, /Quality verification failed/);
+assert.match(procurement, /Evidence URL/);
+assert.match(procurementPersistence, /SUPPLIER_QUALITY_VERIFICATION/);
+assert.match(procurementPersistence, /SUPPLIER_QUALITY_VERIFIED/);
+assert.match(procurementPersistence, /SUPPLIER_QUALITY_FAILED/);
 assert.match(procurement, /Request award approval/);
 assert.match(procurement, /Approve scope/);
 assert.match(procurement, /Save order draft/);
@@ -289,15 +317,18 @@ assert.match(procurement, /remain internal/i);
 assert.match(procurement, /\/api\/supply-os\/procurement-cases/);
 assert.match(procurement, /\/api\/supply-os\/supplier-research/);
 assert.match(procurement, /\/api\/supply-os\/sourcing-request/);
-assert.match(procurement, /inventoryItemSourcingDraft\(item\)/);
+assert.match(procurement, /inventoryItemSourcingDraft\(item\)/, "selected items must enter the same completeness gate as free-form requests");
 assert.match(procurement, /currentDraft: requestDraft/);
 assert.match(procurement, /Continue to research/);
 assert.match(procurement, /else beginResearch\(\)/);
+assert.match(procurement, /const refinedMissingFields = requestDraft \? missingSourcingFields\(requestDraft\) : \[\]/);
 assert.match(procurement, /Sourcing request clarification/);
 assert.match(procurement, /Web research starts only after the required facts are present/);
-assert.match(procurement, /onClick=\{refineRequest\}>Refine request/);
-assert.doesNotMatch(procurement, /onClick=\{onBack\}>Refine request/);
-assert.match(procurement, /Live public web research is running/);
+assert.match(procurement, /function retryResearch\(\)/);
+assert.match(procurement, /onClick=\{retryResearch\}>[\s\S]*Retry research/);
+assert.match(procurement, /onClick=\{refineRequest\}>Edit request/);
+assert.doesNotMatch(procurement, /Request added, terms still unknown/);
+assert.match(procurement, /Public web research is running/);
 assert.match(procurement, /View source/);
 assert.match(procurement, /Modeled[\s\S]*Sourced[\s\S]*Unknown/);
 assert.match(procurement, /No purchase order, supplier contact, booking, or spend was created/);
@@ -305,13 +336,17 @@ assert.match(researchRoute, /getSession/);
 assert.match(researchRoute, /export async function GET/);
 assert.match(researchRoute, /ResearchRateLimiter/);
 assert.match(researchRoute, /searchComponentSuppliers/);
+assert.match(procurement, /Public listing claim - freshness unverified/, "listing prices may be shown without becoming sourced terms");
+assert.match(procurement, /publicPriceClaim/, "unverified listing prices must stay separate from orderable price fields");
+assert.match(procurement, /source\.sourceType === "OFFICIAL"/, "only an explicitly classified source may receive an official label");
+assert.doesNotMatch(procurement, /candidate\.website \? "Official"/, "a marketplace or trader listing must not become official merely because it has a URL");
 assert.match(researchRoute, /startSourcingResearchRun/);
 assert.match(researchRoute, /completeSourcingResearchRun/);
 assert.match(researchRoute, /listProcurementCasesForResearchRuns/);
 assert.match(researchRoute, /listSourcingResearchPage/);
 assert.match(researchRoute, /nextCursor/);
-assert.match(researchRoute, /const missingFields = missingSourcingFields/);
-assert.doesNotMatch(researchRoute, /componentItemKey\.startsWith\("request:"\)/, "saved inventory items must not bypass request completeness checks");
+assert.match(researchRouteContract, /const missingFields = missingSourcingFields/);
+assert.doesNotMatch(researchRouteContract, /componentItemKey\.startsWith\("request:"\)/, "saved inventory items must not bypass request completeness checks");
 assert.match(supplierResearch, /requestKind: openRequest \? "OPEN_REQUEST" : "CATALOG_COMPONENT"/);
 assert.match(supplierResearch, /PRODUCER/);
 assert.match(supplierResearch, /EXPORTER/);
@@ -414,6 +449,12 @@ assert.match(procurementPersistence, /SupplyExecutionEvent|supplyExecutionEvent/
 assert.match(procurementPersistence, /officeId: args\.context\.officeId/);
 assert.match(procurementPersistence, /purchaseApproval = "BLOCKED"/);
 assert.match(procurementPersistence, /canonicalSelection/);
+assert.match(
+  procurementPersistence,
+  /function canonicalSelection[\s\S]*price: null,[\s\S]*currency: null,[\s\S]*minimumOrderQuantity: null,[\s\S]*priceType: "Unknown" as const,[\s\S]*deliveryDate: null,[\s\S]*deliveryType: "Unknown" as const/,
+  "saving a provider candidate must downgrade commercial claims, including legacy runs with model-supplied fresh dates",
+);
+assert.doesNotMatch(procurementPersistence, /function commonPriceEvidence|function sourcedNumber|function sourcedCurrency/);
 assert.match(procurementPersistence, /selectionHash/);
 assert.match(procurementPersistence, /requiresApproval: false/);
 assert.match(procurementPersistence, /taskType: APPROVAL_TASK_TYPE/);
