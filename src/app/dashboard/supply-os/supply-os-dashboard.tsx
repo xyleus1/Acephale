@@ -27,7 +27,9 @@ import {
   generateSupplyCase,
   SAMPLE_SUPPLY_CASE_PROMPT,
   type SupplyCaseDashboard,
+  type SupplyCompanyResearch,
 } from "@/lib/supply-os-case-model";
+import { parseSupplyCompanyResearch } from "@/lib/supply-os/company-profile";
 import {
   buildSupplyCommandMap,
   type SupplyCommandMap,
@@ -481,23 +483,37 @@ function illustrativeNetworkCase() {
 
 export function SupplyOsDashboardWorkspace({
   storageScope,
+  workspaceId,
+  workspaceName,
   presentationMode = false,
   activePanel = "materials",
   canApproveProcurement = false,
   canAuthorizePurchase = false,
-  demoCompanyId = "atlas-robotics",
+  demoCompanyId,
+  onWorkspaceProfile,
 }: {
   storageScope: string;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
   presentationMode?: boolean;
   activePanel?: SupplyOsPanel;
   canApproveProcurement?: boolean;
   canAuthorizePurchase?: boolean;
   demoCompanyId?: SupplyOsDemoCompanyId;
+  onWorkspaceProfile?: (profile: {
+    companyName: string;
+    logoUrl: string | null;
+    facilityLabel: string | null;
+    locationCount: number;
+  }) => void;
 }) {
   const keys = useMemo(() => supplyCaseStorageKeys(storageScope), [storageScope]);
   const [savedCases, setSavedCases] = useState<SupplyCaseDashboard[]>([]);
   const [activeCase, setActiveCase] = useState<SupplyCaseDashboard | null>(null);
   const [storageReady, setStorageReady] = useState(false);
+  const [workspaceResearch, setWorkspaceResearch] = useState<SupplyCompanyResearch | null>(null);
+  const [profileState, setProfileState] = useState<"idle" | "loading" | "researching" | "ready" | "error">("idle");
+  const [profileRevision, setProfileRevision] = useState(0);
 
   useEffect(() => {
     function hydrate() {
@@ -523,6 +539,57 @@ export function SupplyOsDashboardWorkspace({
   }, [keys.cases, keys.selected, storageScope]);
 
   useEffect(() => {
+    if (!workspaceId) {
+      setWorkspaceResearch(null);
+      setProfileState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const profileUrl = `/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/company-profile`;
+    setWorkspaceResearch(null);
+    setProfileState("loading");
+
+    void (async () => {
+      const getResponse = await fetch(profileUrl, {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+        signal: controller.signal,
+      });
+      const getBody = await getResponse.json().catch(() => ({})) as { research?: unknown };
+      if (!getResponse.ok) throw new Error("Company profile could not be loaded.");
+      let research = parseSupplyCompanyResearch(getBody.research);
+
+      if (!research) {
+        setProfileState("researching");
+        const researchResponse = await fetch(profileUrl, {
+          method: "POST",
+          headers: { accept: "application/json" },
+          signal: controller.signal,
+        });
+        const researchBody = await researchResponse.json().catch(() => ({})) as { research?: unknown };
+        if (!researchResponse.ok) throw new Error("Company profile research did not finish.");
+        research = parseSupplyCompanyResearch(researchBody.research);
+      }
+      if (!research) throw new Error("Company profile research returned no attributable profile.");
+
+      setWorkspaceResearch(research);
+      onWorkspaceProfile?.({
+        companyName: research.company.name.value,
+        logoUrl: research.company.logoUrl,
+        facilityLabel: research.company.headquarters?.value ?? research.company.locations[0]?.value ?? null,
+        locationCount: research.company.locations.length,
+      });
+      setProfileState("ready");
+    })().catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setWorkspaceResearch(null);
+      setProfileState("error");
+    });
+
+    return () => controller.abort();
+  }, [onWorkspaceProfile, profileRevision, workspaceId]);
+
+  useEffect(() => {
     if (!presentationMode) return;
     const agentDockWasOpen = document.documentElement.classList.contains("agent-dock-open");
     document.documentElement.classList.remove("agent-dock-open");
@@ -534,14 +601,36 @@ export function SupplyOsDashboardWorkspace({
   }, [presentationMode]);
 
   const visibleCases = useMemo(() => visibleSupplyCases(savedCases), [savedCases]);
-  const currentCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
+  const workspaceCase = useMemo(() => {
+    if (!workspaceId || !workspaceName || profileState !== "ready" || !workspaceResearch) return null;
+    return generateSupplyCase(
+      workspaceResearch.query || `Company: ${workspaceName}`,
+      new Date(workspaceResearch.researchedAt),
+      "full_operation",
+      workspaceResearch,
+    );
+  }, [profileState, workspaceId, workspaceName, workspaceResearch]);
+  const browserCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
     ? activeCase
     : visibleCases[0] ?? null;
+  const currentCase = workspaceId ? workspaceCase : browserCase;
+  const resolvedDemoCompanyId = workspaceId ? null : demoCompanyId ?? "atlas-robotics";
 
   return (
     <div className={`${styles.workspace} ${styles.commandWorkspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>
-      {!storageReady ? (
-        <CommandState title="Loading customer network" detail="Opening saved customer data from this browser." />
+      {!storageReady || (workspaceId && ["loading", "researching"].includes(profileState)) ? (
+        <CommandState
+          title={profileState === "researching" ? "Researching company profile" : "Loading customer network"}
+          detail={profileState === "researching"
+            ? "Checking the official website and attributable public sources."
+            : workspaceId ? "Opening the shared company profile." : "Opening saved customer data from this browser."}
+        />
+      ) : workspaceId && profileState === "error" ? (
+        <CommandState
+          title="Company profile unavailable"
+          detail="No demo locations or inventory were substituted. Retry the public research."
+          action={<button type="button" onClick={() => setProfileRevision((revision) => revision + 1)}>Retry profile</button>}
+        />
       ) : currentCase ? (
         activePanel === "automations" ? (
           <SupplyOsAutomations key={currentCase.id} company={dashboardName(currentCase)} />
@@ -554,7 +643,7 @@ export function SupplyOsDashboardWorkspace({
             storageScope={storageScope}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
-            demoCompanyId={demoCompanyId}
+            demoCompanyId={resolvedDemoCompanyId}
           />
         )
       ) : null}
@@ -596,10 +685,14 @@ function CaseCommandCenter({
   storageScope: string;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
-  demoCompanyId: SupplyOsDemoCompanyId;
+  demoCompanyId: SupplyOsDemoCompanyId | null;
 }) {
-  const inventoryItems = demoCompanyId === "guild" ? GUILD_SOURCING_ITEMS : ATLAS_ROBOTICS_INVENTORY;
-  const demoCompany = SUPPLY_OS_DEMO_COMPANIES[demoCompanyId];
+  const inventoryItems = demoCompanyId === "guild"
+    ? GUILD_SOURCING_ITEMS
+    : demoCompanyId === "atlas-robotics" ? ATLAS_ROBOTICS_INVENTORY : [];
+  const companyName = demoCompanyId
+    ? SUPPLY_OS_DEMO_COMPANIES[demoCompanyId].name
+    : dashboardName(dashboard);
   const modelDashboard = useMemo(() => {
     const name = dashboardName(dashboard);
     return name === dashboard.companyName ? dashboard : { ...dashboard, companyName: name };
@@ -644,7 +737,7 @@ function CaseCommandCenter({
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
-    () => `derya:supply-os:${storageScope}:${demoCompanyId}:${modelDashboard.id}:sourcing-requests:v1`,
+    () => `derya:supply-os:${storageScope}:${demoCompanyId ?? `workspace:${modelDashboard.id}`}:${modelDashboard.id}:sourcing-requests:v1`,
     [demoCompanyId, modelDashboard.id, storageScope],
   );
   const domainObjects = useMemo(
@@ -785,6 +878,15 @@ function CaseCommandCenter({
   }, [procurementRequest]);
 
   useEffect(() => {
+    if (demoCompanyId === null) {
+      setResearchRuns([]);
+      setProcurementCases([]);
+      setSupplierSenderAccounts([]);
+      setSourcingNextCursor(null);
+      setSourcingPageState("idle");
+      setSourcingDataState("ready");
+      return;
+    }
     const controller = new AbortController();
     setSourcingDataState("loading");
     setSourcingNextCursor(null);
@@ -805,7 +907,7 @@ function CaseCommandCenter({
       if (!controller.signal.aborted) setSourcingDataState("error");
     });
     return () => controller.abort();
-  }, [sourcingLoadRevision]);
+  }, [demoCompanyId, sourcingLoadRevision]);
 
   async function loadOlderSourcingWork() {
     if (!sourcingNextCursor || sourcingPageState === "loading") return;
@@ -900,7 +1002,7 @@ function CaseCommandCenter({
         `${item.requirementLabel ?? `${shortageQuantity(item)} ${item.requestedUnit ?? "units"}`} of ${item.name}`,
         item.specification,
         item.supplierDeliverable ? `Supplier QA: ${item.supplierDeliverable}` : null,
-        `Company: ${demoCompany.name}`,
+        `Company: ${companyName}`,
       ].filter(Boolean).join(". "),
       initialDraft: null,
       initialMissingFields: [],
@@ -1040,9 +1142,9 @@ function CaseCommandCenter({
           />
         ) : activePanel === "materials" ? (
           <AtlasInventoryWorkspace
-            key={`sourcing-queue:${demoCompanyId}`}
+            key={`sourcing-queue:${demoCompanyId ?? modelDashboard.id}`}
             items={inventoryItems}
-            companyName={demoCompany.name}
+            companyName={companyName}
             selectedSku={selectedInventoryItem?.sku ?? ""}
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}

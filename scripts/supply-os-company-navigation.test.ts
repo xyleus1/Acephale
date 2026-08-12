@@ -11,6 +11,8 @@ const guildItems = readFileSync(resolve(root, "src/lib/supply-os/guild-sourcing-
 const shellStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.module.css"), "utf8");
 const workspaceRoute = readFileSync(resolve(root, "src/app/api/supply-os/workspaces/route.ts"), "utf8");
 const customerWorkspace = readFileSync(resolve(root, "src/lib/supply-os/customer-workspace.ts"), "utf8");
+const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
+const profileRoute = readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/company-profile/route.ts"), "utf8");
 
 assert.match(shell, /className=\{styles\.operatingSidebar\}/, "left domain sidebar must remain persistent");
 assert.match(shell, /const \[companyIndexOpen, setCompanyIndexOpen\] = useState\(true\)/, "company list must be the clean entry state");
@@ -43,5 +45,15 @@ assert.match(workspaceRoute, /storeSupplyCompanyResearch/, "company creation mus
 assert.match(customerWorkspace, /id: context\.userId, officeId: context\.officeId, isActive: true/, "company creation must reject stale signed sessions");
 assert.match(customerWorkspace, /crmCategory: "customer"/, "new Supply OS companies must be canonical customer records");
 assert.match(customerWorkspace, /companyId: company\.id/, "new Supply OS workspaces must link to the canonical company");
+assert.match(workspaceRoute, /const researchQuery = \[result\.company\.name, result\.normalized\.website\]/, "name-only company creation must still start public research");
+assert.doesNotMatch(workspaceRoute, /if \(result\.normalized\.website\)/, "profile research must not depend on a supplied website");
+assert.match(profileRoute, /export async function POST/, "existing companies need a profile research retry endpoint");
+assert.match(profileRoute, /requireSupplyWorkspace\(access, workspaceId, "edit"\)/, "profile research must enforce workspace edit access");
+assert.match(profileRoute, /researchCompany\(researchQuery\)/, "profile retries must use the attributable company research service");
+assert.match(dashboard, /const currentCase = workspaceId \? workspaceCase : browserCase/, "real workspaces must never render an unrelated browser demo case");
+assert.match(dashboard, /demoCompanyId === "atlas-robotics" \? ATLAS_ROBOTICS_INVENTORY : \[\]/, "real companies must start with empty inventory");
+assert.match(dashboard, /method: "POST"/, "a missing stored profile must trigger public research");
+assert.doesNotMatch(shell, /demoCompanyId=\{workspaceSelection\?\.demoCompanyId \?\? "atlas-robotics"\}/, "real workspaces must not default to Atlas");
+assert.doesNotMatch(shell, /workspaceSelection \? "Published locations" : "Austin"/, "real workspaces must not display generic location copy");
 
 console.log("Supply OS company navigation contract passed.");

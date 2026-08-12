@@ -54,16 +54,25 @@ export function SupplyOsOperatingShell({
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
+  const [workspaceProfile, setWorkspaceProfile] = useState<{
+    companyName: string;
+    logoUrl: string | null;
+    facilityLabel: string | null;
+    locationCount: number;
+  } | null>(null);
   const panelNavRef = useRef<HTMLElement>(null);
   const openWorkspace = useCallback((selection: SupplyOsWorkspaceSelection) => {
     setWorkspaceSelection(selection);
+    setWorkspaceProfile(null);
     setCompanyIndexOpen(false);
   }, []);
   const demoCompany = workspaceSelection?.demoCompanyId
     ? SUPPLY_OS_DEMO_COMPANIES[workspaceSelection.demoCompanyId]
     : SUPPLY_OS_DEMO_COMPANY;
-  const companyName = workspaceSelection?.workspaceName ?? demoCompany.name;
-  const companyLogoUrl = workspaceSelection ? workspaceSelection.logoUrl : demoCompany.logoUrl;
+  const isDemoWorkspace = Boolean(workspaceSelection?.demoCompanyId);
+  const companyName = workspaceProfile?.companyName ?? workspaceSelection?.workspaceName ?? demoCompany.name;
+  const companyLogoUrl = workspaceProfile?.logoUrl
+    ?? (workspaceSelection ? workspaceSelection.logoUrl : demoCompany.logoUrl);
   const companyInitials = useMemo(
     () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
     [companyName],
@@ -181,8 +190,26 @@ export function SupplyOsOperatingShell({
             </div>
             <div className={styles.workspaceControls}>
               <dl>
-                <div><dt>Facility</dt><dd>{workspaceSelection ? "Published locations" : "Austin"}</dd></div>
-                <div><dt>Data</dt><dd>{workspaceSelection?.snapshotVersion ? `Snapshot v${workspaceSelection.snapshotVersion}` : "Demo"}</dd></div>
+                <div>
+                  <dt>Facility</dt>
+                  <dd>
+                    {companyIndexOpen
+                      ? "None selected"
+                      : isDemoWorkspace
+                        ? "Demo network"
+                        : workspaceProfile?.facilityLabel ?? "No verified location"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Data</dt>
+                  <dd>
+                    {isDemoWorkspace
+                      ? "Demo"
+                      : workspaceSelection?.snapshotVersion
+                        ? `Snapshot v${workspaceSelection.snapshotVersion}`
+                        : workspaceProfile ? "Company profile" : "No inventory"}
+                  </dd>
+                </div>
               </dl>
               <motion.button type="button" onClick={() => setCompanyIndexOpen(true)} whileTap={{ scale: 0.98 }} disabled={companyIndexOpen}>
                 <ArrowLeft size={15} /> Companies
@@ -196,11 +223,14 @@ export function SupplyOsOperatingShell({
             ) : (
               <SupplyOsDashboardWorkspace
                 storageScope={storageScope}
+                workspaceId={workspaceSelection?.demoCompanyId ? null : workspaceSelection?.workspaceId ?? null}
+                workspaceName={workspaceSelection?.workspaceName ?? null}
                 presentationMode={false}
                 activePanel={activePanel}
                 canApproveProcurement={canApproveProcurement}
                 canAuthorizePurchase={canAuthorizePurchase}
-                demoCompanyId={workspaceSelection?.demoCompanyId ?? "atlas-robotics"}
+                demoCompanyId={workspaceSelection?.demoCompanyId}
+                onWorkspaceProfile={setWorkspaceProfile}
               />
             )}
           </div>
