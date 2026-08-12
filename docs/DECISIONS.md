@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-11 - Public integrations page documents the connector contract
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Clients need one URL they can send to technical teams, while the
+  authenticated product needs one durable place to configure and monitor each
+  company connection.
+- Decision: Publish `/integrations` as a public technical handoff page and keep
+  connection setup under `/dashboard/settings/integrations`. Put Settings in
+  the separated lower rail instead of adding a seventh operating domain. The
+  public page documents the current read-only pull contract and its approval
+  boundaries. It does not present itself as a public Derya write API.
+- Rationale: A stable client URL shortens integration discovery without mixing
+  client documentation into the operator workflow or overstating unfinished
+  writeback capabilities.
+- Consequences: Client teams can review data, authentication, pagination, and
+  setup requirements without an account. Only authenticated admins can change
+  connector state. Deployment is required before the public URL exists.
+- Revisit when: Derya exposes a versioned public ingestion or writeback API that
+  needs separate OpenAPI documentation, keys, lifecycle policy, and support
+  ownership.
+
 ### 2026-08-11 - Connected quote PDFs are bounded evidence sources
 
 - Status: accepted

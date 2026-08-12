@@ -40,7 +40,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 88px minmax(0, 1fr);
+  grid-template-rows: 88px minmax(0, 1fr) auto;
   padding: 0 20px 28px;
   border-right: 1px solid var(--os-line);
   color: var(--os-soft);
@@ -179,6 +179,36 @@
   background: var(--os-subtle);
 }
 
+.sidebarUtilityArea {
+  padding: 16px 0 0;
+  border-top: 1px solid var(--os-line);
+}
+
+.sidebarUtility {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-radius: 12px;
+  color: var(--os-soft);
+  text-decoration: none;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.sidebarUtility:hover {
+  color: var(--os-ink);
+  background: var(--os-subtle);
+}
+
+.sidebarUtility span {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (min-width: 901px) {
   .shell[data-sidebar-collapsed="true"] {
     grid-template-columns: 84px minmax(0, 1fr);
@@ -237,6 +267,20 @@
 
   .shell[data-sidebar-collapsed="true"] .activeRail {
     left: -5px;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .sidebarUtility {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .sidebarUtility span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
 }
@@ -462,7 +506,8 @@
   .operatingSidebar {
     z-index: 20;
     display: grid;
-    grid-template-columns: 112px minmax(0, 1fr);
+    grid-template-columns: 112px minmax(0, 1fr) 50px;
+    grid-template-rows: 1fr;
     gap: 4px;
     padding: 7px 8px;
     overflow: hidden;
@@ -496,6 +541,27 @@
     gap: 4px;
     overflow-x: auto;
     padding: 0;
+  }
+
+  .sidebarUtilityArea {
+    padding: 0;
+    border-top: 0;
+  }
+
+  .sidebarUtility {
+    width: 50px;
+    height: 50px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebarUtility span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .panelNav button {
@@ -562,7 +628,7 @@
 
 @media (max-width: 520px) {
   .operatingSidebar {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
   }
 
   .sidebarHeader {
@@ -581,6 +647,10 @@
   .panelNav button {
     padding-right: 4px;
     padding-left: 4px;
+  }
+
+  .sidebarUtility {
+    width: 44px;
   }
 }
 

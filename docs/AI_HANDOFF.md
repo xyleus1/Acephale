@@ -2,6 +2,35 @@
 
 ## Latest Update
 
+### Client integrations now have internal settings and a public handoff page
+
+- Added a lower-rail Settings link to the authenticated Supply OS navigation.
+  It opens `/dashboard/settings/integrations`, where an admin can select a
+  company workspace, configure the OAuth REST connector, test it, enable or
+  disable hourly sync, run a manual sync, and inspect health timestamps.
+- Added the public `/integrations` page for client technical handoff. It states
+  the supported data scope, OAuth and response-envelope requirements, sync flow,
+  client checklist, tenant controls, and the read-only boundary.
+- Added `/dashboard/settings` as a redirect to the Integrations settings page.
+  Existing channel settings remain available as a separate Settings tab.
+- The public page documents the client connection contract. It is not a public
+  write API and it does not expose connector credentials or client data.
+- Connector runs normalize client records into immutable office-and-workspace
+  scoped snapshots. A failed run keeps the prior published snapshot.
+
+Verification:
+
+- `npm run test:supply-os-connectors`
+- `npm run test:integrations-surface`
+- `npx tsc --noEmit --incremental false`
+- Production build with disposable PostgreSQL-shaped URLs
+- `git diff --check` and changed-file U+2014 scan
+
+Caveat:
+
+- `https://derya.ai/integrations` will not exist until the branch is merged,
+  the connector migration is applied, and the production deployment completes.
+
 ### Inventory sourcing intake now preserves structured request context
 
 - Inventory and GUILD BOM rows seed the procurement workspace with product, quantity, unit, specification, destination, and need-by date.

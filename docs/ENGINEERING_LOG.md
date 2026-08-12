@@ -4929,3 +4929,23 @@ Use this file for chronological implementation notes that future agents should s
 - Failed/skipped checks: Authenticated browser verification was unavailable in the restricted runtime.
 - Caveats: Supplier research still requires configured production provider credentials.
 - Follow-up: Monitor the live deployment and verify the Guild item flow with an authenticated session.
+
+### 2026-08-11 - Add client connector and client-facing integration surfaces
+
+- Branch: `agent/client-integrations`, targeting `main`.
+- Task: Add a reusable read-only OAuth REST connector, a visible lower-rail
+  Settings destination, a company-scoped Integrations settings screen, and a
+  public technical page at `/integrations`.
+- Behavior: Admins can configure, test, enable, disable, and manually sync one
+  connector per company workspace. Hourly sync publishes validated immutable
+  snapshots and retains the prior snapshot on failure.
+- Public handoff: The client page documents data resources, OAuth, cursor
+  pagination, response envelopes, controls, and the setup checklist. It does
+  not claim a Derya write API.
+- Safety: Connector records contain only a deployment secret reference.
+  Credentials remain server-side. Connector reads and writes preserve
+  `officeId` and workspace scope. External actions remain approval-gated.
+- Verification: connector contract, integrations surface contract, TypeScript,
+  production build, diff checks, and changed-file U+2014 checks.
+- Boundary: No live client sandbox, OAuth endpoint, credential, supplier,
+  logistics provider, booking, filing, order, or spend action was used.

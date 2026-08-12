@@ -167,70 +167,117 @@ export async function createSupplyWorkspace(
   });
 }
 
-function sourceHash(normalized: NormalizedSupplyCsvBundle) {
-  const { issues: _issues, ...canonical } = normalized;
+export function normalizedSupplySourceHash(normalized: NormalizedSupplyCsvBundle) {
+  const { issues: _issues, ...withoutIssues } = normalized;
+  const sorted = <T>(rows: T[]) => [...rows].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  const canonical = {
+    ...withoutIssues,
+    locations: sorted(withoutIssues.locations),
+    items: sorted(withoutIssues.items),
+    bom: sorted(withoutIssues.bom),
+    inventory: sorted(withoutIssues.inventory),
+    demand: sorted(withoutIssues.demand),
+    purchaseOrders: sorted(withoutIssues.purchaseOrders),
+    supplierTerms: sorted(withoutIssues.supplierTerms),
+    complianceRecords: sorted(withoutIssues.complianceRecords),
+  };
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
-async function persistNormalizedSnapshot(args: {
-  context: SupplyAccessContext;
+export async function stageNormalizedSupplySnapshot(args: {
+  officeId: string;
   workspaceId: string;
+  createdByUserId?: string | null;
   sourceName: string;
+  adapter: string;
+  adapterVersion?: string | null;
+  connectorInstallationId?: string | null;
+  idempotencyNamespace: string;
+  inputCursor?: Prisma.InputJsonValue | null;
+  outputCursor?: Prisma.InputJsonValue | null;
+  traceId?: string | null;
   hash: string;
   normalized: NormalizedSupplyCsvBundle;
 }) {
-  const { context, workspaceId, sourceName, hash, normalized } = args;
-  const idempotencyKey = `csv:${workspaceId}:${hash}`;
+  const {
+    officeId,
+    workspaceId,
+    createdByUserId,
+    sourceName,
+    adapter,
+    adapterVersion,
+    connectorInstallationId,
+    idempotencyNamespace,
+    inputCursor,
+    outputCursor,
+    traceId,
+    hash,
+    normalized,
+  } = args;
+  const idempotencyKey = `${idempotencyNamespace}:${workspaceId}:${hash}`;
+  const recordCounts = {
+    locations: normalized.locations.length,
+    items: normalized.items.length,
+    bom: normalized.bom.length,
+    inventory: normalized.inventory.length,
+    demand: normalized.demand.length,
+    purchaseOrders: normalized.purchaseOrders.length,
+    supplierTerms: normalized.supplierTerms.length,
+    complianceRecords: normalized.complianceRecords.length,
+  };
+  const sourceRef = {
+    source: adapter,
+    sourceName,
+    ...(connectorInstallationId ? { connectorInstallationId } : {}),
+    ...(traceId ? { traceId } : {}),
+  };
   const existing = await prisma.supplyImportRun.findFirst({
-    where: { officeId: context.officeId, idempotencyKey },
+    where: { officeId, idempotencyKey },
     include: { snapshot: true },
   });
   if (existing) return existing;
 
   return prisma.$transaction(async (tx) => {
     const aggregate = await tx.supplySnapshot.aggregate({
-      where: { officeId: context.officeId, workspaceId },
+      where: { officeId, workspaceId },
       _max: { version: true },
     });
     const version = (aggregate._max.version ?? 0) + 1;
     const importRun = await tx.supplyImportRun.create({
       data: {
-        officeId: context.officeId,
+        officeId,
         workspaceId,
-        createdByUserId: context.userId,
-        adapter: "CSV",
+        connectorInstallationId: connectorInstallationId ?? null,
+        createdByUserId: createdByUserId ?? null,
+        adapter,
+        adapterVersion: adapterVersion ?? null,
         status: "READY",
         sourceName,
         sourceHash: hash,
         idempotencyKey,
         startedAt: new Date(),
-        validation: {
-          schemaVersion: 1,
-          counts: {
-            locations: normalized.locations.length,
-            items: normalized.items.length,
-            bom: normalized.bom.length,
-            inventory: normalized.inventory.length,
-            demand: normalized.demand.length,
-            purchaseOrders: normalized.purchaseOrders.length,
-            supplierTerms: normalized.supplierTerms.length,
-            complianceRecords: normalized.complianceRecords.length,
-          },
-        },
+        validation: { schemaVersion: normalized.schemaVersion, counts: recordCounts },
+        inputCursor: inputCursor ?? undefined,
+        outputCursor: outputCursor ?? undefined,
+        recordCounts,
+        traceId: traceId ?? null,
       },
     });
     const snapshot = await tx.supplySnapshot.create({
       data: {
-        officeId: context.officeId,
+        officeId,
         workspaceId,
         importRunId: importRun.id,
-        createdByUserId: context.userId,
+        createdByUserId: createdByUserId ?? null,
         version,
         status: "DRAFT",
         sourceHash: hash,
         metadata: {
           sourceName,
-          adapter: "CSV",
+          adapter,
+          adapterVersion: adapterVersion ?? null,
+          connectorInstallationId: connectorInstallationId ?? null,
+          traceId: traceId ?? null,
           normalizedSchemaVersion: normalized.schemaVersion,
           purchaseOrders: normalized.purchaseOrders,
           supplierTerms: normalized.supplierTerms,
@@ -243,7 +290,7 @@ async function persistNormalizedSnapshot(args: {
     for (const location of normalized.locations) {
       const created = await tx.supplyLocation.create({
         data: {
-          officeId: context.officeId,
+          officeId,
           workspaceId,
           snapshotId: snapshot.id,
           locationKey: location.locationKey,
@@ -257,7 +304,7 @@ async function persistNormalizedSnapshot(args: {
           countryCode: location.countryCode,
           latitude: location.latitude,
           longitude: location.longitude,
-          sourceRefs: [{ source: "CSV", sourceName }],
+          sourceRefs: [sourceRef],
         },
       });
       locationIds.set(location.locationKey, created.id);
@@ -267,7 +314,7 @@ async function persistNormalizedSnapshot(args: {
     for (const item of normalized.items) {
       const created = await tx.supplyItem.create({
         data: {
-          officeId: context.officeId,
+          officeId,
           workspaceId,
           snapshotId: snapshot.id,
           itemKey: item.itemKey,
@@ -285,7 +332,7 @@ async function persistNormalizedSnapshot(args: {
             approvedAliases: item.approvedAliases,
             complianceTags: item.complianceTags,
           },
-          sourceRefs: [{ source: "CSV", sourceName }],
+          sourceRefs: [sourceRef],
         },
       });
       itemIds.set(item.itemKey, created.id);
@@ -302,13 +349,13 @@ async function persistNormalizedSnapshot(args: {
       if (!productItemId) continue;
       const bomVersion = await tx.supplyBomVersion.create({
         data: {
-          officeId: context.officeId,
+          officeId,
           workspaceId,
           snapshotId: snapshot.id,
           productItemId,
           revision: "1",
-          sourceSystem: "CSV",
-          sourceRefs: [{ source: "CSV", sourceName }],
+          sourceSystem: adapter,
+          sourceRefs: [sourceRef],
         },
       });
       for (const [index, line] of lines.entries()) {
@@ -317,7 +364,7 @@ async function persistNormalizedSnapshot(args: {
         if (!componentItemId) continue;
         await tx.supplyBomLine.create({
           data: {
-            officeId: context.officeId,
+            officeId,
             workspaceId,
             snapshotId: snapshot.id,
             bomVersionId: bomVersion.id,
@@ -329,7 +376,7 @@ async function persistNormalizedSnapshot(args: {
             scrapRate: line.scrapRate,
             isOptional: line.isOptional,
             alternativeGroup: line.alternativeGroup,
-            sourceRefs: [{ source: "CSV", sourceName }],
+            sourceRefs: [sourceRef],
           },
         });
       }
@@ -341,7 +388,7 @@ async function persistNormalizedSnapshot(args: {
       if (!itemId || !locationId) continue;
       await tx.supplyInventoryPosition.create({
         data: {
-          officeId: context.officeId,
+          officeId,
           workspaceId,
           snapshotId: snapshot.id,
           positionKey: position.positionKey,
@@ -354,7 +401,7 @@ async function persistNormalizedSnapshot(args: {
           quantityInTransit: position.quantityInTransit,
           quantityOnOrder: position.quantityOnOrder,
           asOf: new Date(position.asOf),
-          sourceRefs: [{ source: "CSV", sourceName }],
+          sourceRefs: [sourceRef],
         },
       });
     }
@@ -365,7 +412,7 @@ async function persistNormalizedSnapshot(args: {
       if (!itemId) continue;
       await tx.supplyDemand.create({
         data: {
-          officeId: context.officeId,
+          officeId,
           workspaceId,
           snapshotId: snapshot.id,
           demandKey: demand.demandKey,
@@ -377,7 +424,35 @@ async function persistNormalizedSnapshot(args: {
           unitOfMeasure: demand.unitOfMeasure,
           dueAt: new Date(demand.dueAt),
           priority: demand.priority ?? undefined,
-          sourceRefs: [{ source: "CSV", sourceName }],
+          sourceRefs: [sourceRef],
+        },
+      });
+    }
+
+    for (const term of normalized.supplierTerms) {
+      const itemId = itemIds.get(term.itemKey);
+      if (!itemId) continue;
+      const facilityId = term.facility ? locationIds.get(term.facility) : undefined;
+      await tx.supplySupplierTerm.create({
+        data: {
+          officeId,
+          workspaceId,
+          snapshotId: snapshot.id,
+          termKey: term.termKey,
+          itemId,
+          facilityId,
+          supplierKey: term.supplierName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || term.termKey,
+          supplierName: term.supplierName,
+          isCurrent: term.isCurrent ?? false,
+          unitOfMeasure: normalized.items.find((item) => item.itemKey === term.itemKey)?.unitOfMeasure ?? "EA",
+          currency: term.currency ?? null,
+          unitPrice: term.price,
+          leadTimeMinDays: term.leadTimeDays,
+          leadTimeMaxDays: term.leadTimeDays,
+          availableQuantity: term.availableQuantity ?? null,
+          availableAt: term.availableAt ? new Date(term.availableAt) : null,
+          evidenceRefs: term.evidenceUrl ? [{ sourceUri: term.evidenceUrl, observedAt: term.observedAt ?? null }] : undefined,
+          sourceRefs: [sourceRef],
         },
       });
     }
@@ -411,11 +486,14 @@ export async function stageSupplyCsvImport(
   if (!normalized.locations.length || !normalized.items.length) {
     throw new SupplyPersistenceError("Locations and items CSV files are required.", "invalid_input");
   }
-  const hash = sourceHash(normalized);
-  return persistNormalizedSnapshot({
-    context,
+  const hash = normalizedSupplySourceHash(normalized);
+  return stageNormalizedSupplySnapshot({
+    officeId: context.officeId,
     workspaceId,
+    createdByUserId: context.userId,
     sourceName: input.sourceName?.trim() || "Supply OS CSV import",
+    adapter: "CSV",
+    idempotencyNamespace: "csv",
     hash,
     normalized,
   });
@@ -428,6 +506,15 @@ export async function publishSupplyImport(context: SupplyAccessContext, importRu
   });
   if (!importRun?.snapshot) throw new SupplyPersistenceError("Supply import not found.", "not_found");
   await requireSupplyWorkspace(context, importRun.workspaceId, "edit");
+  return publishSupplyImportForOffice(context.officeId, importRunId);
+}
+
+export async function publishSupplyImportForOffice(officeId: string, importRunId: string) {
+  const importRun = await prisma.supplyImportRun.findFirst({
+    where: { id: importRunId, officeId },
+    include: { snapshot: true },
+  });
+  if (!importRun?.snapshot) throw new SupplyPersistenceError("Supply import not found.", "not_found");
   if (importRun.status === "PUBLISHED" && importRun.snapshot.status === "PUBLISHED") return importRun;
   if (importRun.status !== "READY" || importRun.snapshot.status !== "DRAFT") {
     throw new SupplyPersistenceError("Only a validated draft import can be published.", "conflict");
@@ -446,7 +533,7 @@ export async function publishSupplyImport(context: SupplyAccessContext, importRu
     });
     await tx.supplyApproval.updateMany({
       where: {
-        officeId: context.officeId,
+        officeId,
         workspaceId: importRun.workspaceId,
         status: "PENDING",
         OR: [

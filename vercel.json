@@ -24,6 +24,10 @@
     {
       "path": "/api/cron/pentest-demo",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/supply-os-connectors",
+      "schedule": "10 * * * *"
     }
   ]
 }

@@ -139,6 +139,7 @@ model Office {
   customerPortalActions     CustomerPortalAction[]
   supplyWorkspaces          SupplyWorkspace[]
   supplyWorkspaceMembers    SupplyWorkspaceMember[]
+  connectorInstallations    ConnectorInstallation[]
   supplyImportRuns          SupplyImportRun[]
   supplySnapshots           SupplySnapshot[]
   supplyLocations           SupplyLocation[]
@@ -219,6 +220,7 @@ model User {
   assignedInquiries     Inquiry[]          @relation("InquiryAssignee")
   supplyWorkspacesCreated SupplyWorkspace[]       @relation("SupplyWorkspaceCreatedBy")
   supplyWorkspaceMembers  SupplyWorkspaceMember[]
+  connectorInstallationsCreated ConnectorInstallation[] @relation("ConnectorInstallationCreatedBy")
   supplyImportRunsCreated SupplyImportRun[]       @relation("SupplyImportRunCreatedBy")
   supplySnapshotsCreated  SupplySnapshot[]        @relation("SupplySnapshotCreatedBy")
   supplyAliasesApproved   SupplyItemAlias[]       @relation("SupplyItemAliasApprovedBy")
@@ -1952,6 +1954,7 @@ model SupplyWorkspace {
   approvals           SupplyApproval[]
   executionTasks      SupplyExecutionTask[]
   executionEvents     SupplyExecutionEvent[]
+  connectorInstallations ConnectorInstallation[]
 
   @@unique([officeId, externalKey])
   @@index([officeId, status, updatedAt])
@@ -1980,20 +1983,66 @@ model SupplyWorkspaceMember {
   @@index([officeId, workspaceId, isActive])
 }
 
+// One server-side connection to a client system. Credentials are never stored
+// here. secretRef identifies a deployment-environment secret containing the
+// OAuth client credentials.
+model ConnectorInstallation {
+  id               String   @id @default(cuid())
+  officeId         String
+  workspaceId      String
+  createdByUserId  String?
+  adapterKey       String
+  adapterVersion   String
+  displayName      String
+  baseUrl          String
+  authType         String   @default("OAUTH_CLIENT_CREDENTIALS")
+  secretRef        String
+  config           Json
+  scheduleMinutes  Int      @default(60)
+  status           String   @default("DISABLED")
+  currentCursor    Json?
+  lastTraceId      String?
+  lastErrorCode    String?
+  lastErrorMessage String?
+  lastTestedAt     DateTime?
+  lastStartedAt    DateTime?
+  lastSucceededAt  DateTime?
+  lastFailedAt     DateTime?
+  nextSyncAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  office     Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace  SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy  User?           @relation("ConnectorInstallationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  importRuns SupplyImportRun[]
+
+  @@unique([workspaceId, adapterKey])
+  @@index([officeId, status, nextSyncAt])
+  @@index([officeId, workspaceId, updatedAt])
+}
+
 // One connector execution. A successful run may publish exactly one immutable
 // snapshot. Raw files remain outside this table and are referenced by hash.
 model SupplyImportRun {
   id              String  @id @default(cuid())
   officeId        String
   workspaceId     String
+  connectorInstallationId String?
   createdByUserId String?
   adapter         String  @default("CSV")
+  adapterVersion  String?
   status          String  @default("DRAFT") // DRAFT / VALIDATING / READY / PUBLISHED / FAILED / CANCELLED
   sourceName      String?
   sourceHash      String?
   idempotencyKey  String?
   mapping         Json?
   validation      Json?
+  inputCursor     Json?
+  outputCursor    Json?
+  recordCounts    Json?
+  traceId         String?
+  errorCode       String?
   lastError       String?
 
   startedAt   DateTime?
@@ -2004,11 +2053,14 @@ model SupplyImportRun {
 
   office    Office          @relation(fields: [officeId], references: [id], onDelete: Cascade)
   workspace SupplyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectorInstallation ConnectorInstallation? @relation(fields: [connectorInstallationId], references: [id], onDelete: SetNull)
   createdBy User?           @relation("SupplyImportRunCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   snapshot  SupplySnapshot?
 
   @@unique([officeId, idempotencyKey])
   @@index([officeId, workspaceId, status, createdAt])
+  @@index([connectorInstallationId, createdAt])
+  @@index([traceId])
 }
 
 // Snapshot rows and every snapshot-owned child are mutable only while DRAFT.

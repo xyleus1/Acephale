@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
 } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -152,6 +153,17 @@ export function SupplyOsOperatingShell({
               );
             })}
           </nav>
+          <div className={styles.sidebarUtilityArea}>
+            <a
+              className={styles.sidebarUtility}
+              href="/dashboard/settings/integrations"
+              aria-label="Settings"
+              title="Settings"
+            >
+              <Settings size={18} aria-hidden="true" />
+              <span>Settings</span>
+            </a>
+          </div>
         </motion.aside>
 
         <section className={styles.workspace}>

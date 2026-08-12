@@ -125,6 +125,9 @@ export type SupplySupplierTermInput = {
   currency?: string;
   minimumOrderQuantity: number | null;
   leadTimeDays: number | null;
+  isCurrent?: boolean;
+  availableQuantity?: number | null;
+  availableAt?: string;
   evidenceUrl?: string;
   observedAt?: string;
 };
