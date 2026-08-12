@@ -4949,3 +4949,14 @@ Use this file for chronological implementation notes that future agents should s
   production build, diff checks, and changed-file U+2014 checks.
 - Boundary: No live client sandbox, OAuth endpoint, credential, supplier,
   logistics provider, booking, filing, order, or spend action was used.
+
+### 2026-08-11 - Restore Supply OS company creation in production
+
+- Branch: `fix/supply-os-schema-company-create`, merged by PR #135.
+- Root cause: Production code queried Supply OS persistence tables introduced by the 2026-08-08 migrations, but Vercel had never run `prisma migrate deploy` against the production database.
+- Fix: A production-only recovery build applied pending migrations before the application build. The company creation form again accepts the official website and both inputs start empty.
+- Safety: The migration set is additive, preview builds skipped the database mutation, and Vercel published only after migration and application build both succeeded.
+- Verification: Recovery commit `2a76dbfbb24d398b63ad2fb79c382af7da7d1697` and subsequent connector commit `067d6f534686fd27100927e7fee540652f19ef5b` both deployed successfully with the migration hook. The one-time hook was then removed.
+- Preserved behavior: GUILD remains an illustrative company with its 40-part BOM. Canonical company creation remains admin-only, office-scoped, and linked to the CRM customer record.
+- Skipped: Authenticated browser verification was unavailable in the restricted runtime.
+
