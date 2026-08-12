@@ -2,7 +2,7 @@
 
 import { ArrowRight, Building2, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { SUPPLY_OS_DEMO_COMPANY } from "@/lib/supply-os/demo-company";
+import { SUPPLY_OS_DEMO_COMPANIES } from "@/lib/supply-os/demo-company";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import styles from "./supply-os-company-index.module.css";
 
@@ -49,7 +49,6 @@ export function SupplyOsCompanyIndex({
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
-  const [newCompanyWebsite, setNewCompanyWebsite] = useState("");
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -79,9 +78,9 @@ export function SupplyOsCompanyIndex({
       const response = await fetch("/api/supply-os/workspaces", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ name, website: newCompanyWebsite.trim() || null }),
+        body: JSON.stringify({ name }),
       });
-      const body = await response.json().catch(() => ({})) as { workspace?: { id: string }; error?: string; warning?: string | null };
+      const body = await response.json().catch(() => ({})) as { workspace?: { id: string }; error?: string };
       if (!response.ok || !body.workspace) throw new Error(body.error || "Company could not be created.");
       const listResponse = await fetch("/api/supply-os/workspaces", { cache: "no-store", headers: { accept: "application/json" } });
       const listBody = await listResponse.json().catch(() => ({})) as { workspaces?: Workspace[]; error?: string };
@@ -89,12 +88,10 @@ export function SupplyOsCompanyIndex({
       const next = listBody.workspaces ?? [];
       setWorkspaces(next);
       setNewCompanyName("");
-      setNewCompanyWebsite("");
       setCreateOpen(false);
       setState("ready");
       const created = next.find((workspace) => workspace.id === body.workspace?.id);
-      if (body.warning) setError(body.warning);
-      else if (created) onOpenWorkspace(selectionFor(created));
+      if (created) onOpenWorkspace(selectionFor(created));
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Company could not be created.");
     } finally {
@@ -105,7 +102,7 @@ export function SupplyOsCompanyIndex({
   return (
     <section className={styles.index} aria-label="Companies">
       <header>
-        <span>{workspaces.length + 1} {workspaces.length ? "companies" : "company"}</span>
+        <span>{workspaces.length + 2} companies</span>
         <div className={styles.headerActions}>
           <button type="button" onClick={() => void load()} aria-label="Refresh companies" disabled={state === "loading"}>
             <RefreshCw size={15} />
@@ -127,20 +124,11 @@ export function SupplyOsCompanyIndex({
             minLength={2}
             maxLength={160}
             autoFocus
-            placeholder="GUILD"
+            placeholder="Atlas Robotics"
             onChange={(event) => setNewCompanyName(event.target.value)}
           />
-          <label htmlFor="supply-os-new-company-website">Website</label>
-          <input
-            id="supply-os-new-company-website"
-            value={newCompanyWebsite}
-            maxLength={500}
-            inputMode="url"
-            placeholder="guildai.co"
-            onChange={(event) => setNewCompanyWebsite(event.target.value)}
-          />
           <button type="submit" disabled={creating || newCompanyName.trim().length < 2}>
-            {creating ? <LoaderCircle className={styles.spin} size={15} /> : <Plus size={15} />} {creating ? "Building" : "Create"}
+            {creating ? <LoaderCircle className={styles.spin} size={15} /> : <Plus size={15} />} Create
           </button>
         </form>
       ) : null}
@@ -148,16 +136,30 @@ export function SupplyOsCompanyIndex({
       {error ? <div className={styles.error} role="alert">{error}</div> : null}
 
       <div className={styles.rows} aria-live="polite">
-        <button type="button" className={styles.companyRow} onClick={() => onOpenWorkspace(null)}>
-          <span className={styles.companyMark} aria-hidden="true">
-            AR
-            <img src={SUPPLY_OS_DEMO_COMPANY.logoUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />
-          </span>
-          <span className={styles.companyIdentity}><strong>{SUPPLY_OS_DEMO_COMPANY.name}</strong><small>Illustrative operating workspace</small></span>
-          <span className={styles.companyFacts}><b>3 facilities</b><small>Demo data</small></span>
-          <span className={styles.companyFacts}><b>5 network points</b><small>Supply and logistics</small></span>
-          <ArrowRight size={16} />
-        </button>
+        {Object.values(SUPPLY_OS_DEMO_COMPANIES).map((company) => (
+          <button
+            key={company.id}
+            type="button"
+            className={styles.companyRow}
+            onClick={() => onOpenWorkspace({
+              workspaceId: `demo:${company.id}`,
+              workspaceName: company.name,
+              snapshotId: null,
+              snapshotVersion: null,
+              logoUrl: company.logoUrl,
+              demoCompanyId: company.id,
+            })}
+          >
+            <span className={styles.companyMark} aria-hidden="true">
+              {company.name.slice(0, 2)}
+              <img src={company.logoUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} />
+            </span>
+            <span className={styles.companyIdentity}><strong>{company.name}</strong><small>{company.summary}</small></span>
+            <span className={styles.companyFacts}><b>{company.primaryFact}</b><small>Demo data</small></span>
+            <span className={styles.companyFacts}><b>{company.secondaryFact}</b><small>{new URL(company.logoSourceUrl).hostname}</small></span>
+            <ArrowRight size={16} />
+          </button>
+        ))}
 
         {workspaces.map((workspace) => {
           const snapshot = workspace.snapshots[0] ?? null;

@@ -65,6 +65,14 @@ const purchaseOrderFollowUpApprovalRoute = readFileSync(resolve(root, "src/app/a
 const purchaseOrderFollowUpDecisionRoute = readFileSync(resolve(root, "src/app/api/supply-os/purchase-order-follow-up-email-approvals/[approvalId]/decision/route.ts"), "utf8");
 const purchaseOrderFollowUpDeliveryRoute = readFileSync(resolve(root, "src/app/api/supply-os/purchase-order-follow-up-email-actions/[actionId]/delivery/route.ts"), "utf8");
 const connectedOrderAcknowledgmentsRoute = readFileSync(resolve(root, "src/app/api/supply-os/purchase-actions/[actionId]/connected-acknowledgments/route.ts"), "utf8");
+const composerSource = workbench.slice(
+  workbench.indexOf('<form className={styles.sourcingComposer}'),
+  workbench.indexOf('<header className={styles.sourcingQueueHeader}'),
+);
+const illustrativeRowsSource = workbench.slice(
+  workbench.indexOf('{sourcingItems.map((item) =>'),
+  workbench.indexOf('{customRuns.map((run) =>'),
+);
 
 assert.ok(ATLAS_ROBOTICS_INVENTORY.length >= 10, "the Atlas fixture should resemble a useful robotics component inventory");
 assert.equal(new Set(ATLAS_ROBOTICS_INVENTORY.map((item) => item.sku)).size, ATLAS_ROBOTICS_INVENTORY.length, "inventory SKUs must be unique");
@@ -153,6 +161,10 @@ assert.match(workbench, /Show source/);
 assert.match(workbench, /Hide map/);
 assert.match(workbench, /New sourcing request/);
 assert.match(workbench, /Sourcing queue/);
+assert.match(composerSource, /disabled=\{!query\.trim\(\)\}/);
+assert.doesNotMatch(composerSource, /dataState/, "saved-work loading errors must not disable a new sourcing request");
+assert.match(illustrativeRowsSource, /disabled=\{run\?\.status === "RUNNING"\}/);
+assert.doesNotMatch(illustrativeRowsSource, /dataState/, "saved-work loading errors must not disable illustrative research");
 assert.match(workbench, /pendingRequests\.map/);
 assert.match(workbench, /Clarification needed/);
 assert.match(workbench, /Start procurement/);

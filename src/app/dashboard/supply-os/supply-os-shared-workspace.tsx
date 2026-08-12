@@ -82,6 +82,7 @@ export type SupplyOsWorkspaceSelection = {
   snapshotId: string | null;
   snapshotVersion: number | null;
   logoUrl: string | null;
+  demoCompanyId?: "atlas-robotics" | "guild";
 } | null;
 
 const FILE_LABELS: Record<CsvKind, { label: string; hint: string; required: boolean }> = {

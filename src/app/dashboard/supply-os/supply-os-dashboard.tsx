@@ -26,10 +26,8 @@ import {
 import {
   generateSupplyCase,
   SAMPLE_SUPPLY_CASE_PROMPT,
-  type SupplyCompanyResearch,
   type SupplyCaseDashboard,
 } from "@/lib/supply-os-case-model";
-import { parseSupplyCompanyResearch } from "@/lib/supply-os/company-profile";
 import {
   buildSupplyCommandMap,
   type SupplyCommandMap,
@@ -53,6 +51,8 @@ import {
   ATLAS_ROBOTICS_INVENTORY,
   shortageQuantity,
 } from "@/lib/supply-os/atlas-robotics-inventory";
+import { GUILD_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
+import { SUPPLY_OS_DEMO_COMPANIES, type SupplyOsDemoCompanyId } from "@/lib/supply-os/demo-company";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
 import { SupplyOsAutomations } from "./supply-os-automations";
 import {
@@ -481,27 +481,23 @@ function illustrativeNetworkCase() {
 
 export function SupplyOsDashboardWorkspace({
   storageScope,
-  workspaceId,
-  workspaceName,
   presentationMode = false,
   activePanel = "materials",
   canApproveProcurement = false,
   canAuthorizePurchase = false,
+  demoCompanyId = "atlas-robotics",
 }: {
   storageScope: string;
-  workspaceId?: string | null;
-  workspaceName?: string | null;
   presentationMode?: boolean;
   activePanel?: SupplyOsPanel;
   canApproveProcurement?: boolean;
   canAuthorizePurchase?: boolean;
+  demoCompanyId?: SupplyOsDemoCompanyId;
 }) {
   const keys = useMemo(() => supplyCaseStorageKeys(storageScope), [storageScope]);
   const [savedCases, setSavedCases] = useState<SupplyCaseDashboard[]>([]);
   const [activeCase, setActiveCase] = useState<SupplyCaseDashboard | null>(null);
   const [storageReady, setStorageReady] = useState(false);
-  const [workspaceResearch, setWorkspaceResearch] = useState<SupplyCompanyResearch | null>(null);
-  const [profileState, setProfileState] = useState<"idle" | "loading" | "ready">("idle");
 
   useEffect(() => {
     function hydrate() {
@@ -527,37 +523,6 @@ export function SupplyOsDashboardWorkspace({
   }, [keys.cases, keys.selected, storageScope]);
 
   useEffect(() => {
-    if (!workspaceId) {
-      setWorkspaceResearch(null);
-      setProfileState("idle");
-      return;
-    }
-    const controller = new AbortController();
-    setWorkspaceResearch(null);
-    setProfileState("loading");
-    void fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/company-profile`, {
-      cache: "no-store",
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({})) as { research?: unknown };
-        if (!response.ok) throw new Error("Company profile could not be loaded.");
-        return parseSupplyCompanyResearch(body.research);
-      })
-      .then((research) => {
-        setWorkspaceResearch(research);
-        setProfileState("ready");
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setWorkspaceResearch(null);
-        setProfileState("ready");
-      });
-    return () => controller.abort();
-  }, [workspaceId]);
-
-  useEffect(() => {
     if (!presentationMode) return;
     const agentDockWasOpen = document.documentElement.classList.contains("agent-dock-open");
     document.documentElement.classList.remove("agent-dock-open");
@@ -569,24 +534,14 @@ export function SupplyOsDashboardWorkspace({
   }, [presentationMode]);
 
   const visibleCases = useMemo(() => visibleSupplyCases(savedCases), [savedCases]);
-  const workspaceCase = useMemo(() => {
-    if (!workspaceId || !workspaceName || profileState !== "ready") return null;
-    const prompt = workspaceResearch?.query || `Company: ${workspaceName}`;
-    const researchedAt = workspaceResearch ? new Date(workspaceResearch.researchedAt) : new Date();
-    return generateSupplyCase(prompt, researchedAt, "full_operation", workspaceResearch ?? undefined);
-  }, [profileState, workspaceId, workspaceName, workspaceResearch]);
-  const browserCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
+  const currentCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
     ? activeCase
     : visibleCases[0] ?? null;
-  const currentCase = workspaceId ? workspaceCase : browserCase;
 
   return (
     <div className={`${styles.workspace} ${styles.commandWorkspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>
-      {!storageReady || (workspaceId && profileState === "loading") ? (
-        <CommandState
-          title="Loading customer network"
-          detail={workspaceId ? "Opening the shared company profile." : "Opening saved customer data from this browser."}
-        />
+      {!storageReady ? (
+        <CommandState title="Loading customer network" detail="Opening saved customer data from this browser." />
       ) : currentCase ? (
         activePanel === "automations" ? (
           <SupplyOsAutomations key={currentCase.id} company={dashboardName(currentCase)} />
@@ -599,6 +554,7 @@ export function SupplyOsDashboardWorkspace({
             storageScope={storageScope}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
+            demoCompanyId={demoCompanyId}
           />
         )
       ) : null}
@@ -632,6 +588,7 @@ function CaseCommandCenter({
   storageScope,
   canApproveProcurement,
   canAuthorizePurchase,
+  demoCompanyId,
 }: {
   dashboard: SupplyCaseDashboard;
   presentationMode: boolean;
@@ -639,7 +596,10 @@ function CaseCommandCenter({
   storageScope: string;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
+  demoCompanyId: SupplyOsDemoCompanyId;
 }) {
+  const inventoryItems = demoCompanyId === "guild" ? GUILD_SOURCING_ITEMS : ATLAS_ROBOTICS_INVENTORY;
+  const demoCompany = SUPPLY_OS_DEMO_COMPANIES[demoCompanyId];
   const modelDashboard = useMemo(() => {
     const name = dashboardName(dashboard);
     return name === dashboard.companyName ? dashboard : { ...dashboard, companyName: name };
@@ -654,8 +614,8 @@ function CaseCommandCenter({
   const [selection, setSelection] = useState({ panel: activePanel, objectId: initialObject?.id ?? "" });
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const [selectedInventorySku, setSelectedInventorySku] = useState(
-    ATLAS_ROBOTICS_INVENTORY.find((item) => shortageQuantity(item) > 0)?.sku
-      ?? ATLAS_ROBOTICS_INVENTORY[0]?.sku
+    inventoryItems.find((item) => shortageQuantity(item) > 0)?.sku
+      ?? inventoryItems[0]?.sku
       ?? "",
   );
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
@@ -684,8 +644,8 @@ function CaseCommandCenter({
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
-    () => `derya:supply-os:${storageScope}:${modelDashboard.id}:sourcing-requests:v1`,
-    [modelDashboard.id, storageScope],
+    () => `derya:supply-os:${storageScope}:${demoCompanyId}:${modelDashboard.id}:sourcing-requests:v1`,
+    [demoCompanyId, modelDashboard.id, storageScope],
   );
   const domainObjects = useMemo(
     () => commandMap.objects.filter((object) => domain.objectKinds.includes(object.kind)),
@@ -700,15 +660,15 @@ function CaseCommandCenter({
     : preferredObject ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
-  const selectedInventoryItem = ATLAS_ROBOTICS_INVENTORY.find((item) => item.sku === selectedInventorySku)
-    ?? ATLAS_ROBOTICS_INVENTORY[0];
+  const selectedInventoryItem = inventoryItems.find((item) => item.sku === selectedInventorySku)
+    ?? inventoryItems[0];
   const selectedSourceCandidate = selectedInventoryItem?.candidates.find((candidate) => candidate.id === sourceMapCandidateId)
     ?? null;
   const sourceMapContext = useMemo(() => {
     if (!selectedInventoryItem || !selectedSourceCandidate) return null;
     const factory = commandMap.objects.find((object) => object.kind === "factory") ?? null;
     const supplier: SupplyCommandObject = {
-      id: `atlas-source:${selectedSourceCandidate.id}`,
+      id: `demo-source:${selectedSourceCandidate.id}`,
       kind: "supplier",
       label: selectedSourceCandidate.name,
       location: selectedSourceCandidate.location,
@@ -728,8 +688,8 @@ function CaseCommandCenter({
     };
     const objects = factory ? [supplier, factory] : [supplier];
     const routes: SupplyCommandRoute[] = factory ? [{
-      id: `atlas-source-route:${selectedSourceCandidate.id}`,
-      edgeId: `atlas-source-edge:${selectedSourceCandidate.id}`,
+      id: `demo-source-route:${selectedSourceCandidate.id}`,
+      edgeId: `demo-source-edge:${selectedSourceCandidate.id}`,
       from: supplier.coordinates,
       to: factory.coordinates,
       fromLabel: supplier.label,
@@ -743,7 +703,7 @@ function CaseCommandCenter({
       priority: null,
       rateEstimate: null,
       segments: [{
-        id: `atlas-source-segment:${selectedSourceCandidate.id}`,
+        id: `demo-source-segment:${selectedSourceCandidate.id}`,
         sequence: 1,
         mode: supplier.location.includes("USA") || /, (CA|IL|TX)$/.test(supplier.location) ? "road" : "ocean",
         label: "Modeled source route",
@@ -761,7 +721,7 @@ function CaseCommandCenter({
     ?? sourceMapContext?.supplier
     ?? null;
   const procurementItem = procurementRequest?.itemSku
-    ? ATLAS_ROBOTICS_INVENTORY.find((item) => item.sku === procurementRequest.itemSku) ?? null
+    ? inventoryItems.find((item) => item.sku === procurementRequest.itemSku) ?? null
     : null;
   const reduceMotion = useReducedMotion();
 
@@ -926,7 +886,7 @@ function CaseCommandCenter({
   function showCandidateSource(candidateId: string) {
     setSelectedCandidateIds((current) => ({ ...current, [selectedInventoryItem.sku]: candidateId }));
     setSourceMapCandidateId(candidateId);
-    setSourceMapObjectId(`atlas-source:${candidateId}`);
+    setSourceMapObjectId(`demo-source:${candidateId}`);
   }
 
   function startProcurement(item: typeof selectedInventoryItem, requestText?: string) {
@@ -936,7 +896,12 @@ function CaseCommandCenter({
     setProcurementRequest({
       requestId: null,
       itemSku: item.sku,
-      requestText: requestText ?? `${shortageQuantity(item)} units of ${item.name} for the next Atlas production run`,
+      requestText: requestText ?? [
+        `${item.requirementLabel ?? `${shortageQuantity(item)} ${item.requestedUnit ?? "units"}`} of ${item.name}`,
+        item.specification,
+        item.supplierDeliverable ? `Supplier QA: ${item.supplierDeliverable}` : null,
+        `Company: ${demoCompany.name}`,
+      ].filter(Boolean).join(". "),
       initialDraft: null,
       initialMissingFields: [],
       initialQuestion: null,
@@ -945,7 +910,7 @@ function CaseCommandCenter({
 
   function createProcurementRequest(requestText: string) {
     const normalized = requestText.toLowerCase();
-    const matchedItem = ATLAS_ROBOTICS_INVENTORY.find((item) => (
+    const matchedItem = inventoryItems.find((item) => (
       normalized.includes(item.sku.toLowerCase())
       || normalized.includes(item.name.toLowerCase())
     )) ?? null;
@@ -1006,7 +971,7 @@ function CaseCommandCenter({
   }
 
   function openSavedResearch(run: SavedSourcingResearchRun) {
-    const matchedItem = ATLAS_ROBOTICS_INVENTORY.find((item) => item.sku === run.input.componentItemKey) ?? null;
+    const matchedItem = inventoryItems.find((item) => item.sku === run.input.componentItemKey) ?? null;
     if (matchedItem) setSelectedInventorySku(matchedItem.sku);
     setSourceMapCandidateId(null);
     setSourceMapObjectId("");
@@ -1075,7 +1040,9 @@ function CaseCommandCenter({
           />
         ) : activePanel === "materials" ? (
           <AtlasInventoryWorkspace
-            key="sourcing-queue"
+            key={`sourcing-queue:${demoCompanyId}`}
+            items={inventoryItems}
+            companyName={demoCompany.name}
             selectedSku={selectedInventoryItem?.sku ?? ""}
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}

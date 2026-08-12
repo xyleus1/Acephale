@@ -23,6 +23,12 @@ export type AtlasInventoryItem = {
   location: string;
   targetStock: number;
   candidates: AtlasSourcingCandidate[];
+  requirementLabel?: string;
+  requestedQuantity?: number;
+  requestedUnit?: string;
+  supplierDeliverable?: string;
+  needByDate?: string | null;
+  deliveryLocation?: string | null;
 };
 
 export const ATLAS_ROBOT_DEMAND = 24;
@@ -206,6 +212,7 @@ export function requiredForDemand(item: AtlasInventoryItem, demand = ATLAS_ROBOT
 }
 
 export function shortageQuantity(item: AtlasInventoryItem, demand = ATLAS_ROBOT_DEMAND) {
+  if (item.requestedQuantity !== undefined) return item.requestedQuantity;
   return Math.max(0, requiredForDemand(item, demand) - projectedAvailable(item));
 }
 

@@ -212,7 +212,7 @@ function supplierQualificationForm(procurementCase: SavedProcurementCase | null 
 
 function formatNeedBy(item: AtlasInventoryItem | null) {
   if (!item) return "Not set";
-  const value = ATLAS_SOURCING_NEED_BY[item.sku];
+  const value = item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku];
   if (!value) return "Not set";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`));
 }
@@ -441,9 +441,9 @@ export function AtlasProcurementWorkspace({
   const [quoteRequestForm, setQuoteRequestForm] = useState(() => ({
     quantity: initialCase?.quoteCycle?.result?.request.quantity
       ?? String(item ? Math.max(shortageQuantity(item), initialCase?.result?.selectedOption.minimumOrderQuantity ?? 0) : ""),
-    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? "EA" : ""),
-    needBy: initialCase?.quoteCycle?.result?.request.needBy ?? (item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? "" : ""),
-    shipTo: initialCase?.quoteCycle?.result?.request.shipTo ?? (item ? "Austin assembly plant" : ""),
+    unitOfMeasure: initialCase?.quoteCycle?.result?.request.unitOfMeasure ?? (item ? item.requestedUnit ?? "EA" : ""),
+    needBy: initialCase?.quoteCycle?.result?.request.needBy ?? (item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? "" : ""),
+    shipTo: initialCase?.quoteCycle?.result?.request.shipTo ?? (item ? item.deliveryLocation ?? "" : ""),
     responseDue: initialCase?.quoteCycle?.result?.request.responseDue ?? "",
     requirements: initialCase?.quoteCycle?.result?.request.requirements ?? item?.specification ?? requestText,
     note: initialCase?.quoteCycle?.result?.request.note ?? "",
@@ -475,8 +475,8 @@ export function AtlasProcurementWorkspace({
     quantity: initialCase?.purchaseDraft?.result?.order.quantity
       ?? String(item ? Math.max(shortageQuantity(item), initialCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
     needBy: initialCase?.purchaseDraft?.result?.order.needBy
-      ?? (item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? initialCase?.result?.confirmedTerms?.deliveryDate ?? "" : initialCase?.result?.confirmedTerms?.deliveryDate ?? ""),
-    shipTo: initialCase?.purchaseDraft?.result?.order.shipTo ?? (item ? "Austin assembly plant" : ""),
+      ?? (item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? initialCase?.result?.confirmedTerms?.deliveryDate ?? "" : initialCase?.result?.confirmedTerms?.deliveryDate ?? ""),
+    shipTo: initialCase?.purchaseDraft?.result?.order.shipTo ?? (item ? item.deliveryLocation ?? "" : ""),
     incoterm: initialCase?.purchaseDraft?.result?.order.incoterm ?? "DAP",
     paymentTerms: initialCase?.purchaseDraft?.result?.order.paymentTerms ?? "",
     buyerReference: initialCase?.purchaseDraft?.result?.order.buyerReference ?? "",
@@ -834,8 +834,8 @@ export function AtlasProcurementWorkspace({
       quantity: draft?.order.quantity ?? revisionException?.proposedQuantity ?? releasedAction?.input.order.quantity
         ?? String(item ? Math.max(shortageQuantity(item), currentCase?.result?.confirmedTerms?.minimumOrderQuantity ?? 0) : ""),
       needBy: draft?.order.needBy
-        ?? (item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? currentCase?.result?.confirmedTerms?.deliveryDate ?? "" : currentCase?.result?.confirmedTerms?.deliveryDate ?? ""),
-      shipTo: draft?.order.shipTo ?? (item ? "Austin assembly plant" : ""),
+        ?? (item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? currentCase?.result?.confirmedTerms?.deliveryDate ?? "" : currentCase?.result?.confirmedTerms?.deliveryDate ?? ""),
+      shipTo: draft?.order.shipTo ?? (item ? item.deliveryLocation ?? "" : ""),
       incoterm: draft?.order.incoterm ?? "DAP",
       paymentTerms: draft?.order.paymentTerms ?? revisionException?.proposedPaymentTerms ?? releasedAction?.input.order.paymentTerms ?? "",
       buyerReference: draft?.order.buyerReference ?? "",
@@ -988,10 +988,10 @@ export function AtlasProcurementWorkspace({
         targetCountry: item ? "United States" : requestDraft?.deliveryLocation?.slice(0, 120) ?? undefined,
         requestText,
         requestedQuantity: item ? shortageQuantity(item) : requestDraft?.quantity ?? undefined,
-        requestedUnit: item ? "units" : requestDraft?.unit ?? undefined,
+        requestedUnit: item ? item.requestedUnit ?? "units" : requestDraft?.unit ?? undefined,
         sourceRegion: requestDraft?.sourceRegion ?? undefined,
-        deliveryLocation: item ? "Austin, TX, United States" : requestDraft?.deliveryLocation ?? undefined,
-        needByDate: item ? ATLAS_SOURCING_NEED_BY[item.sku] ?? undefined : requestDraft?.needByDate ?? undefined,
+        deliveryLocation: item ? item.deliveryLocation ?? undefined : requestDraft?.deliveryLocation ?? undefined,
+        needByDate: item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? undefined : requestDraft?.needByDate ?? undefined,
       }),
     }).then(async (response) => {
       if (!response.ok) throw new Error("Supplier research did not finish.");
