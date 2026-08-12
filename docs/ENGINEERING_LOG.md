@@ -4970,3 +4970,21 @@ Use this file for chronological implementation notes that future agents should s
 - Access: Profile research requires office-scoped workspace edit access. Reads and stored evidence remain office-scoped.
 - Verification: Vercel preview and production builds passed for commit `6e913c72c0d94bc5db488a8983b812b5e5d6de76`. Source contracts cover the regression. Authenticated browser verification was unavailable.
 
+### 2026-08-12 - Stage supply intelligence schema before runtime
+
+- Branch: `rollout/supply-intelligence-schema`, targeting `main`.
+- Commit: see git log.
+- Task: Land the additive supply intelligence schema without shipping runtime
+  code that would query tables missing from production.
+- Files changed: Prisma schema, one transactional migration, the temporary
+  production migration build hook, deployment boundary coverage, and release
+  documentation.
+- Safety: Preview builds skip database mutation. Production migration deploy and
+  status must succeed before the application build. The connector cron remains
+  configured. Tenant-scope, reference-scope, value, and append-only guards are
+  created in the same transaction as the tables.
+- Verification: Prisma validation and generation, deployment boundary,
+  TypeScript, production build, whitespace, changed-file scope, and U+2014 scan.
+- Caveat: The temporary migration hook is intentionally not permanent.
+- Follow-up: Confirm the production migration, remove the hook immediately,
+  then merge the supply intelligence runtime.

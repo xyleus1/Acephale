@@ -2,6 +2,34 @@
 
 ## Latest Update
 
+### Supply intelligence production schema rollout is isolated
+
+- Added only the four additive persistence models needed for supplier profiles,
+  profile facts, benchmark series, and source-backed price observations.
+- Added migration `20260812000100_supply_intelligence_profiles` with explicit
+  transaction, lock timeout, statement timeout, tenant-scope triggers, domain
+  checks, and append-only guards.
+- Added a temporary production-only Vercel build hook that runs migration deploy
+  and status before the normal build. Preview builds do not mutate the database,
+  and the existing Supply OS connector cron remains intact.
+- No supply intelligence runtime code is included in this rollout. That feature
+  must not merge until production confirms this migration is applied.
+
+Verification:
+
+- `npx prisma validate`
+- `npm run db:generate`
+- `node --import tsx scripts/supply-os-deployment-boundary.test.ts`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `npm run build`
+- `git diff --check` and changed-file U+2014 scan
+
+Follow-up:
+
+- Deploy this schema-only release, confirm production migration status, then
+  immediately remove the temporary Vercel migration hook before merging the
+  supply intelligence runtime.
+
 ### Real company workspaces now use sourced company profiles
 
 - New company creation runs attributable company research whether or not the operator supplies a website.

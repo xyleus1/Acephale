@@ -8,6 +8,7 @@ const requiredFiles = [
   "src/app/dashboard/supply-os/supply-os-operating-shell.tsx",
   "src/lib/supply-os/legacy-route-map.ts",
   "public/supply-os/demo/vector3dhd-amr.jpg",
+  "prisma/migrations/20260812000100_supply_intelligence_profiles/migration.sql",
 ];
 
 for (const file of requiredFiles) {
@@ -16,6 +17,39 @@ for (const file of requiredFiles) {
 
 const page = readFileSync(join(root, "src/app/dashboard/supply-os/page.tsx"), "utf8");
 const middleware = readFileSync(join(root, "src/middleware.ts"), "utf8");
+const migration = readFileSync(
+  join(root, "prisma/migrations/20260812000100_supply_intelligence_profiles/migration.sql"),
+  "utf8",
+);
+const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8")) as {
+  buildCommand?: string;
+  crons?: Array<{ path?: string; schedule?: string }>;
+};
+
 assert.match(page, /SupplyOsOperatingShell/, "Supply OS route must render the operating shell");
 assert.match(middleware, /\/dashboard\/supply-os/, "Dashboard routing must retain the Supply OS destination");
+assert.equal(
+  vercel.buildCommand,
+  'if [ "$VERCEL_ENV" = "production" ]; then npx prisma migrate deploy && npx prisma migrate status; fi && npm run build',
+  "the schema rollout must deploy and verify pending production migrations before publishing the app",
+);
+assert.deepEqual(
+  vercel.crons?.find((cron) => cron.path === "/api/cron/supply-os-connectors"),
+  { path: "/api/cron/supply-os-connectors", schedule: "10 * * * *" },
+  "the schema rollout must preserve the Supply OS connector cron",
+);
+assert.match(
+  migration,
+  /^BEGIN;\nSET LOCAL lock_timeout = '5s';\nSET LOCAL statement_timeout = '120s';/,
+  "the additive schema migration must set bounded production locks inside a transaction",
+);
+assert.match(migration, /CREATE TABLE "SupplySupplierProfile"/);
+assert.match(migration, /CREATE TABLE "SupplyProfileFact"/);
+assert.match(migration, /CREATE TABLE "SupplyBenchmarkSeries"/);
+assert.match(migration, /CREATE TABLE "SupplyPriceObservation"/);
+assert.match(
+  migration,
+  /CREATE TRIGGER "SupplyProfileFact_append_only_guard"[\s\S]*CREATE TRIGGER "SupplyPriceObservation_append_only_guard"[\s\S]*COMMIT;\s*$/,
+  "profile facts and price observations must be append-only before the migration commits",
+);
 console.log("Supply OS deployment boundary passed.");

@@ -151,6 +151,10 @@ model Office {
   supplyDemands             SupplyDemand[]
   supplyMediaAssets         SupplyMediaAsset[]
   supplySupplierTerms       SupplySupplierTerm[]
+  supplySupplierProfiles    SupplySupplierProfile[]
+  supplyProfileFacts        SupplyProfileFact[]
+  supplyBenchmarkSeries     SupplyBenchmarkSeries[]
+  supplyPriceObservations   SupplyPriceObservation[]
   supplyEquivalenceRules    SupplyEquivalenceRule[]
   supplyFccProfiles         SupplyFccProfile[]
   supplyPlanningResults     SupplyPlanningResult[]
@@ -227,6 +231,7 @@ model User {
   supplyEquivalenceRulesApproved SupplyEquivalenceRule[] @relation("SupplyEquivalenceRuleApprovedBy")
   supplyPlanningResultsCreated   SupplyPlanningResult[]  @relation("SupplyPlanningResultCreatedBy")
   supplyEvidenceCreated    SupplyEvidence[]        @relation("SupplyEvidenceCreatedBy")
+  supplyProfileFactsCreated SupplyProfileFact[]     @relation("SupplyProfileFactCreatedBy")
   supplyCapabilityRuns     SupplyCapabilityRun[]   @relation("SupplyCapabilityRunInvokedBy")
   supplyDecisionsCreated   SupplyDecision[]        @relation("SupplyDecisionCreatedBy")
   supplyApprovalsRequested SupplyApproval[]        @relation("SupplyApprovalRequestedBy")
@@ -292,6 +297,7 @@ model Company {
   customerPortalMemberships CustomerPortalMembership[]
   customerPortalActions     CustomerPortalAction[]
   supplyWorkspaces           SupplyWorkspace[]
+  supplySupplierProfiles     SupplySupplierProfile[]
 
   @@unique([officeId, name])
   @@index([officeId, status])
@@ -1941,6 +1947,10 @@ model SupplyWorkspace {
   demands     SupplyDemand[]
   mediaAssets SupplyMediaAsset[]
   supplierTerms    SupplySupplierTerm[]
+  supplierProfiles SupplySupplierProfile[]
+  profileFacts SupplyProfileFact[]
+  benchmarkSeries SupplyBenchmarkSeries[]
+  priceObservations SupplyPriceObservation[]
   equivalenceRules SupplyEquivalenceRule[]
   fccProfiles      SupplyFccProfile[]
   planningResults  SupplyPlanningResult[]
@@ -2367,6 +2377,138 @@ model SupplySupplierTerm {
   @@index([snapshotId, facilityId])
 }
 
+// A stable supplier identity accumulates across research and quote runs. It is
+// a candidate until human qualification links it to canonical Company truth.
+model SupplySupplierProfile {
+  id                String  @id @default(cuid())
+  officeId          String
+  workspaceId       String
+  linkedCompanyId   String?
+  lastResearchRunId String?
+  supplierKey       String
+  normalizedName    String
+  companyName       String
+  website           String?
+  websiteDomain     String?
+  roles             Json?
+  status            String  @default("CANDIDATE") // CANDIDATE / QUALIFIED / REJECTED / ARCHIVED
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  office            Office                    @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace         SupplyWorkspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  linkedCompany     Company?                  @relation(fields: [linkedCompanyId], references: [id], onDelete: SetNull)
+  lastResearchRun   SupplyCapabilityRun?      @relation("SupplySupplierLastResearchRun", fields: [lastResearchRunId], references: [id], onDelete: SetNull)
+  priceObservations SupplyPriceObservation[]
+
+  @@unique([workspaceId, supplierKey])
+  @@index([officeId, workspaceId, status, lastSeenAt])
+  @@index([officeId, websiteDomain])
+  @@index([linkedCompanyId])
+  @@index([lastResearchRunId])
+}
+
+// Profile facts are append-only observations. The current customer profile is
+// a projection over Company, the latest SupplySnapshot, and these facts.
+model SupplyProfileFact {
+  id              String   @id @default(cuid())
+  officeId        String
+  workspaceId     String
+  capabilityRunId String?
+  evidenceId      String?
+  createdByUserId String?
+  subjectType     String // CUSTOMER / SUPPLIER / ITEM
+  subjectRef      String
+  factType        String
+  value           Json
+  sourceType      String
+  sourceUri       String?
+  contentHash     String
+  observedAt      DateTime?
+  capturedAt      DateTime @default(now())
+
+  office        Office               @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace     SupplyWorkspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  capabilityRun SupplyCapabilityRun? @relation(fields: [capabilityRunId], references: [id], onDelete: SetNull)
+  evidence      SupplyEvidence?      @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+  createdBy     User?                @relation("SupplyProfileFactCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, contentHash])
+  @@index([officeId, workspaceId, subjectType, subjectRef, capturedAt])
+  @@index([capabilityRunId])
+  @@index([evidenceId])
+}
+
+// Cadence and delay prevent monthly indices and delayed settlements from being
+// mislabeled as live quotes.
+model SupplyBenchmarkSeries {
+  id            String  @id @default(cuid())
+  officeId      String
+  workspaceId   String
+  seriesKey     String
+  label         String
+  materialKey   String
+  provider      String
+  sourceUrl     String
+  cadence       String // REAL_TIME / DELAYED / DAILY / WEEKLY / MONTHLY
+  delayMinutes  Int?
+  currency      String?
+  unitOfMeasure String?
+  status        String @default("ACTIVE") // ACTIVE / PAUSED / RETIRED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office       Office                   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace    SupplyWorkspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  observations SupplyPriceObservation[]
+
+  @@unique([workspaceId, seriesKey])
+  @@index([officeId, workspaceId, materialKey, status])
+}
+
+// Price observations are append-only evidence. The latest usable value is a
+// query result, never a mutable field that erases prior catalog pages or quotes.
+model SupplyPriceObservation {
+  id                String   @id @default(cuid())
+  officeId          String
+  workspaceId       String
+  supplierProfileId String?
+  benchmarkSeriesId String?
+  capabilityRunId   String?
+  evidenceId        String?
+  itemKey           String
+  observationType   String // PUBLIC_LIST_PRICE / SUPPLIER_QUOTE / INTERNAL_PURCHASE / BENCHMARK_INDEX
+  amount            Decimal  @db.Decimal(20, 6)
+  currency          String
+  unitOfMeasure     String
+  minimumQuantity   Decimal? @db.Decimal(20, 6)
+  availableQuantity Decimal? @db.Decimal(20, 6)
+  sourceUrl         String
+  sourceLabel       String?
+  contentHash       String
+  observedAt        DateTime
+  validUntil        DateTime?
+  capturedAt        DateTime @default(now())
+
+  office          Office                 @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  workspace       SupplyWorkspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  supplierProfile SupplySupplierProfile? @relation(fields: [supplierProfileId], references: [id], onDelete: SetNull)
+  benchmarkSeries SupplyBenchmarkSeries? @relation(fields: [benchmarkSeriesId], references: [id], onDelete: SetNull)
+  capabilityRun   SupplyCapabilityRun?   @relation(fields: [capabilityRunId], references: [id], onDelete: SetNull)
+  evidence        SupplyEvidence?        @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, contentHash])
+  @@index([officeId, workspaceId, itemKey, observedAt])
+  @@index([supplierProfileId, itemKey, observedAt])
+  @@index([benchmarkSeriesId, observedAt])
+  @@index([capabilityRunId])
+  @@index([evidenceId])
+}
+
 // Equivalence rules are explicit, approved workspace records. The engine only
 // applies APPROVED rules and hashes their exact contents into its input.
 model SupplyEquivalenceRule {
@@ -2524,6 +2666,8 @@ model SupplyEvidence {
   createdBy     User?                    @relation("SupplyEvidenceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   decisionLinks SupplyDecisionEvidence[]
   scenarioLinks SupplyScenarioEvidence[]
+  profileFacts SupplyProfileFact[]
+  priceObservations SupplyPriceObservation[]
 
   @@unique([workspaceId, evidenceKey])
   @@index([officeId, workspaceId, kind, capturedAt])
@@ -2570,6 +2714,9 @@ model SupplyCapabilityRun {
   parentRun          SupplyCapabilityRun?       @relation("SupplyCapabilityRunParent", fields: [parentRunId], references: [id], onDelete: Restrict)
   childRuns          SupplyCapabilityRun[]      @relation("SupplyCapabilityRunParent")
   evidence           SupplyEvidence[]
+  supplierProfilesLastSeen SupplySupplierProfile[] @relation("SupplySupplierLastResearchRun")
+  profileFacts       SupplyProfileFact[]
+  priceObservations  SupplyPriceObservation[]
   decisionsCreated   SupplyDecision[]
   scenariosCreated   SupplyScenario[]
   comparisonsCreated SupplyScenarioComparison[]

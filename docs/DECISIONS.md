@@ -16,6 +16,25 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-12 - Supply intelligence schema lands before its runtime
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The supplier profile, customer fact, benchmark, and price history
+  runtime cannot safely deploy while production lacks its four additive tables.
+- Decision: Ship the additive schema and migration separately from feature
+  runtime. The rollout migration is transactional, uses bounded lock and
+  statement timeouts, and retains tenant-scope and append-only guards. Vercel
+  runs `prisma migrate deploy` and `prisma migrate status` only for production,
+  before the normal application build.
+- Rationale: Schema-first rollout removes the missing-table failure window and
+  keeps preview builds from mutating the production database.
+- Consequences: Feature runtime remains blocked until production reports the
+  migration applied. The temporary Vercel migration hook must be removed in a
+  follow-up immediately after the successful production deployment.
+- Revisit when: Production migration orchestration moves out of the Vercel
+  build into a dedicated, observable release stage.
+
 ### 2026-08-11 - Public integrations page documents the connector contract
 
 - Status: accepted
