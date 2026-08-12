@@ -216,6 +216,20 @@ export function shortageQuantity(item: AtlasInventoryItem, demand = ATLAS_ROBOT_
   return Math.max(0, requiredForDemand(item, demand) - projectedAvailable(item));
 }
 
+export function inventoryItemSourcingDraft(item: AtlasInventoryItem): SourcingRequestDraft {
+  return {
+    productName: item.name,
+    quantity: shortageQuantity(item),
+    unit: item.requestedUnit ?? "units",
+    manufacturer: null,
+    partNumber: null,
+    specification: item.specification,
+    sourceRegion: null,
+    deliveryLocation: item.deliveryLocation ?? "Austin, TX, United States",
+    needByDate: item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? null,
+  };
+}
+
 export function inventoryStatus(item: AtlasInventoryItem): AtlasInventoryStatus {
   const shortage = shortageQuantity(item);
   if (shortage > 0) return "shortage";
@@ -235,3 +249,4 @@ export function atlasInventorySummary() {
     demandUnits: ATLAS_ROBOT_DEMAND,
   };
 }
+import type { SourcingRequestDraft } from "./sourcing-request-contract";

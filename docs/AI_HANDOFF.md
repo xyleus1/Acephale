@@ -2,6 +2,19 @@
 
 ## Latest Update
 
+### Inventory sourcing intake now preserves structured request context
+
+- Inventory and GUILD BOM rows seed the procurement workspace with product, quantity, unit, specification, destination, and need-by date.
+- The chat API receives that structured draft instead of a null request, so revisions update the actual request instead of restarting generic intake.
+- Complete requests expose a deterministic Continue to research action. Supplier research rejects incomplete inventory requests server-side instead of silently bypassing validation.
+
+Verification:
+
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- `node --import tsx scripts/supply-os-company-navigation.test.ts`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `npm run build`
+
 ### Company creation builds a canonical customer workspace
 
 - The Companies index accepts a company name and official website.

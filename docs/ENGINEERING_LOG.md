@@ -4918,3 +4918,14 @@ Use this file for chronological implementation notes that future agents should s
   response rejection, concurrent retry, immutable history, and queue restore.
 - Boundary: No migration, dependency, supplier contact, purchase authorization,
   payment, inventory, booking, customs, or Logistics behavior changed.
+
+
+### 2026-08-11 - Preserve inventory sourcing intake context
+
+- Branch: main
+- Task: Fix the procurement chat path that discarded inventory request facts and returned generic intake prompts.
+- Files changed: inventory draft builder, GUILD BOM defaults, procurement workspace, supplier research validation, sourcing regression test.
+- Verification: Atlas sourcing regression, company navigation regression, TypeScript, docs freshness, and production build passed.
+- Failed/skipped checks: Authenticated browser verification was unavailable in the restricted runtime.
+- Caveats: Supplier research still requires configured production provider credentials.
+- Follow-up: Monitor the live deployment and verify the Guild item flow with an authenticated session.

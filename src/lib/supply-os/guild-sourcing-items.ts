@@ -68,6 +68,6 @@ export const GUILD_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_LINES.m
   requestedQuantity: line.quantity,
   requestedUnit: line.unit,
   supplierDeliverable: line.deliverable,
-  needByDate: null,
-  deliveryLocation: null,
+  needByDate: "2026-09-30",
+  deliveryLocation: "Austin, TX, United States",
 }));

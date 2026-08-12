@@ -4,9 +4,11 @@ import { resolve } from "node:path";
 import {
   ATLAS_ROBOTICS_INVENTORY,
   atlasInventorySummary,
+  inventoryItemSourcingDraft,
   projectedAvailable,
   shortageQuantity,
 } from "../src/lib/supply-os/atlas-robotics-inventory";
+import { GUILD_SOURCING_ITEMS } from "../src/lib/supply-os/guild-sourcing-items";
 import { displayedSupplierQuote, supplierQuoteSignals } from "../src/lib/supply-os/quote-comparison";
 import { hasDirtyWorkstream, markWorkstreamDraft, resolveWorkstreamDraft } from "../src/lib/supply-os/workstream-drafts";
 import {
@@ -76,6 +78,11 @@ const illustrativeRowsSource = workbench.slice(
 
 assert.ok(ATLAS_ROBOTICS_INVENTORY.length >= 10, "the Atlas fixture should resemble a useful robotics component inventory");
 assert.equal(new Set(ATLAS_ROBOTICS_INVENTORY.map((item) => item.sku)).size, ATLAS_ROBOTICS_INVENTORY.length, "inventory SKUs must be unique");
+const guildDraft = inventoryItemSourcingDraft(GUILD_SOURCING_ITEMS[24]);
+assert.deepEqual(missingSourcingFields(guildDraft), [], "a Guild BOM row must retain enough request context to enter research");
+assert.equal(guildDraft.productName, "Printed circuit board carrier");
+assert.equal(guildDraft.quantity, 6);
+assert.equal(guildDraft.unit, "carriers");
 assert.ok(ATLAS_ROBOTICS_INVENTORY.every((item) => item.quantityPerRobot > 0 && item.onHand >= 0 && item.allocated >= 0 && item.confirmedInbound >= 0));
 assert.ok(ATLAS_ROBOTICS_INVENTORY.every((item) => projectedAvailable(item) >= 0));
 
@@ -282,6 +289,10 @@ assert.match(procurement, /remain internal/i);
 assert.match(procurement, /\/api\/supply-os\/procurement-cases/);
 assert.match(procurement, /\/api\/supply-os\/supplier-research/);
 assert.match(procurement, /\/api\/supply-os\/sourcing-request/);
+assert.match(procurement, /inventoryItemSourcingDraft\(item\)/);
+assert.match(procurement, /currentDraft: requestDraft/);
+assert.match(procurement, /Continue to research/);
+assert.match(procurement, /else beginResearch\(\)/);
 assert.match(procurement, /Sourcing request clarification/);
 assert.match(procurement, /Web research starts only after the required facts are present/);
 assert.match(procurement, /onClick=\{refineRequest\}>Refine request/);
@@ -299,7 +310,8 @@ assert.match(researchRoute, /completeSourcingResearchRun/);
 assert.match(researchRoute, /listProcurementCasesForResearchRuns/);
 assert.match(researchRoute, /listSourcingResearchPage/);
 assert.match(researchRoute, /nextCursor/);
-assert.match(researchRoute, /Complete the sourcing request before supplier research/);
+assert.match(researchRoute, /const missingFields = missingSourcingFields/);
+assert.doesNotMatch(researchRoute, /componentItemKey\.startsWith\("request:"\)/, "saved inventory items must not bypass request completeness checks");
 assert.match(supplierResearch, /requestKind: openRequest \? "OPEN_REQUEST" : "CATALOG_COMPONENT"/);
 assert.match(supplierResearch, /PRODUCER/);
 assert.match(supplierResearch, /EXPORTER/);

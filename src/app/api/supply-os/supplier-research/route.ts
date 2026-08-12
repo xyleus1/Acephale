@@ -96,21 +96,19 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json({ error: "A valid component request is required." }, { status: 400 });
   }
-  if (componentItemKey.startsWith("request:")) {
-    const missingFields = missingSourcingFields(normalizeSourcingRequestDraft({
-      productName: componentName,
-      quantity: requestedQuantity,
-      unit: requestedUnit,
-      manufacturer,
-      partNumber: mpn,
-      specification,
-      sourceRegion,
-      deliveryLocation,
-      needByDate,
-    }));
-    if (missingFields.length) {
-      return NextResponse.json({ error: "Complete the sourcing request before supplier research." }, { status: 400 });
-    }
+  const missingFields = missingSourcingFields(normalizeSourcingRequestDraft({
+    productName: componentName,
+    quantity: requestedQuantity,
+    unit: requestedUnit,
+    manufacturer,
+    partNumber: mpn,
+    specification,
+    sourceRegion,
+    deliveryLocation,
+    needByDate,
+  }));
+  if (missingFields.length) {
+    return NextResponse.json({ error: "Complete the sourcing request before supplier research." }, { status: 400 });
   }
   if (!limiter.consume(`${session.officeId}:${session.userId}`)) {
     return NextResponse.json({ error: "Supplier research rate limit reached." }, { status: 429 });

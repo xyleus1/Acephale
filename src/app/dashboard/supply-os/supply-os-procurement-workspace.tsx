@@ -20,16 +20,18 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ATLAS_SOURCING_NEED_BY,
+  inventoryItemSourcingDraft,
   shortageQuantity,
   type AtlasInventoryItem,
   type AtlasSourcingCandidate,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import { displayedSupplierQuote, supplierQuoteSignals } from "@/lib/supply-os/quote-comparison";
-import type {
-  SourcingConversationMessage,
-  SourcingIntakeResult,
-  SourcingRequestDraft,
-  SourcingRequiredField,
+import {
+  missingSourcingFields,
+  type SourcingConversationMessage,
+  type SourcingIntakeResult,
+  type SourcingRequestDraft,
+  type SourcingRequiredField,
 } from "@/lib/supply-os/sourcing-request-contract";
 import {
   hasDirtyWorkstream,
@@ -401,11 +403,14 @@ export function AtlasProcurementWorkspace({
     deliveryLocation: initialRun.input.deliveryLocation ?? initialRun.input.targetCountry,
     needByDate: initialRun.input.needByDate ?? null,
   } satisfies SourcingRequestDraft : null;
-  const startingDraft = initialDraft ?? savedRunDraft;
+  const startingDraft = initialDraft ?? savedRunDraft ?? (item ? inventoryItemSourcingDraft(item) : null);
+  const startingMissingFields = initialMissingFields.length
+    ? initialMissingFields
+    : startingDraft ? missingSourcingFields(startingDraft) : [];
   const [currentRun, setCurrentRun] = useState<SavedSourcingResearchRun | null>(initialRun ?? null);
   const [requestDraft, setRequestDraft] = useState<SourcingRequestDraft | null>(startingDraft);
-  const [missingFields, setMissingFields] = useState<SourcingRequiredField[]>(initialMissingFields);
-  const [messages, setMessages] = useState<SourcingConversationMessage[]>(() => item ? [] : [
+  const [missingFields, setMissingFields] = useState<SourcingRequiredField[]>(startingMissingFields);
+  const [messages, setMessages] = useState<SourcingConversationMessage[]>(() => [
     { role: "operator", body: requestText },
     ...(initialQuestion ? [{ role: "derya", body: initialQuestion } as const] : []),
   ]);
@@ -566,8 +571,7 @@ export function AtlasProcurementWorkspace({
     if (initialCase?.result?.sourcingReturn?.state === "REQUIRED") return "compare";
     if (initialCase) return "procure";
     if (initialRun) return "compare";
-    if (item) return "researching";
-    return startingDraft && initialMissingFields.length === 0 && !initialQuestion ? "researching" : "request";
+    return startingDraft && startingMissingFields.length === 0 && !initialQuestion ? "researching" : "request";
   });
   const [completedSources, setCompletedSources] = useState(initialRun ? RESEARCH_STEPS.length : 0);
   const [selectedOptionId, setSelectedOptionId] = useState(initialCase?.result?.selectedOption.id ?? recommended?.id ?? "");
@@ -618,6 +622,15 @@ export function AtlasProcurementWorkspace({
   }, [onRequestUpdate]);
 
   useEffect(() => () => intakeControllerRef.current?.abort(), []);
+
+  function beginResearch() {
+    if (!requestDraft || missingSourcingFields(requestDraft).length) return;
+    setCurrentRun(null);
+    setPublicResearch(null);
+    setCompletedSources(0);
+    setResearchState("idle");
+    setPhase("researching");
+  }
 
   async function submitIntake(message: string, initial = false) {
     const normalized = message.trim();
@@ -676,13 +689,15 @@ export function AtlasProcurementWorkspace({
 
   function answerClarification(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void submitIntake(answer);
+    if (answer.trim()) void submitIntake(answer);
+    else beginResearch();
   }
 
   function refineRequest() {
     const prompt = "Tell me what to change before I run supplier research again.";
+    const refinedMissingFields = requestDraft ? missingSourcingFields(requestDraft) : [];
     setMessages((current) => [...current, { role: "derya", body: prompt }]);
-    setMissingFields([]);
+    setMissingFields(refinedMissingFields);
     setIntakeError("");
     setIntakeState("idle");
     setPhase("request");
@@ -690,7 +705,7 @@ export function AtlasProcurementWorkspace({
       onRequestUpdateRef.current?.({
         title: requestDraft.productName ?? requestText,
         draft: requestDraft,
-        missingFields: [],
+        missingFields: refinedMissingFields,
         lastQuestion: prompt,
         status: "Clarification needed",
       });
@@ -984,14 +999,14 @@ export function AtlasProcurementWorkspace({
         componentName: item?.name ?? requestDraft?.productName ?? requestText,
         manufacturer: requestDraft?.manufacturer ?? undefined,
         mpn: requestDraft?.partNumber ?? undefined,
-        specification: item?.specification ?? requestDraft?.specification ?? requestText,
-        targetCountry: item ? "United States" : requestDraft?.deliveryLocation?.slice(0, 120) ?? undefined,
+        specification: requestDraft?.specification ?? item?.specification ?? requestText,
+        targetCountry: requestDraft?.deliveryLocation?.slice(0, 120) ?? undefined,
         requestText,
-        requestedQuantity: item ? shortageQuantity(item) : requestDraft?.quantity ?? undefined,
-        requestedUnit: item ? item.requestedUnit ?? "units" : requestDraft?.unit ?? undefined,
+        requestedQuantity: requestDraft?.quantity ?? (item ? shortageQuantity(item) : undefined),
+        requestedUnit: requestDraft?.unit ?? item?.requestedUnit ?? undefined,
         sourceRegion: requestDraft?.sourceRegion ?? undefined,
-        deliveryLocation: item ? item.deliveryLocation ?? undefined : requestDraft?.deliveryLocation ?? undefined,
-        needByDate: item ? item.needByDate ?? ATLAS_SOURCING_NEED_BY[item.sku] ?? undefined : requestDraft?.needByDate ?? undefined,
+        deliveryLocation: requestDraft?.deliveryLocation ?? undefined,
+        needByDate: requestDraft?.needByDate ?? undefined,
       }),
     }).then(async (response) => {
       if (!response.ok) throw new Error("Supplier research did not finish.");
@@ -1735,9 +1750,14 @@ export function AtlasProcurementWorkspace({
                   rows={3}
                   placeholder={missingFields.length ? "Provide the missing details" : "Describe what should change"}
                 />
-                <button type="submit" disabled={!answer.trim() || intakeState === "running"}>
-                  {intakeState === "running" ? <LoaderCircle size={15} className={styles.spin} /> : <Send size={15} />}
-                  Send answer
+                <button
+                  type="submit"
+                  disabled={intakeState === "running" || (!answer.trim() && (!requestDraft || missingFields.length > 0))}
+                >
+                  {intakeState === "running"
+                    ? <LoaderCircle size={15} className={styles.spin} />
+                    : answer.trim() ? <Send size={15} /> : <Search size={15} />}
+                  {answer.trim() ? "Send answer" : "Continue to research"}
                 </button>
               </form>
             </section>
