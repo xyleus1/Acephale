@@ -12,6 +12,8 @@ assert.equal(normalizeCustomerWebsite("http://localhost:3000"), null);
 assert.equal(normalizeCustomerWebsite("http://127.0.0.1:3000"), null);
 assert.equal(normalizeCustomerWebsite("http://192.168.1.2"), null);
 assert.equal(normalizeCustomerWebsite("https://user:pass@guildai.co"), null);
+assert.equal(normalizeCustomerWebsite("fcc.gov"), "https://fcc.gov/");
+assert.equal(normalizeCustomerWebsite("fdic.gov"), "https://fdic.gov/");
 assert.equal(customerDomain("https://www.guildai.co/"), "guildai.co");
 
 const researchedAt = "2026-08-11T18:00:00.000Z";

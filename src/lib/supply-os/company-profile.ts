@@ -55,10 +55,12 @@ export function normalizeCustomerWebsite(value: string | null | undefined) {
       || (ipv4[0] === 192 && ipv4[1] === 168)
     ));
     const normalizedHost = host.replace(/^\[|\]$/g, "");
-    const privateIpv6 = normalizedHost === "::1"
+    const privateIpv6 = normalizedHost.includes(":") && (
+      normalizedHost === "::1"
       || normalizedHost.startsWith("fc")
       || normalizedHost.startsWith("fd")
-      || normalizedHost.startsWith("fe80:");
+      || normalizedHost.startsWith("fe80:")
+    );
     if (
       !["http:", "https:"].includes(url.protocol)
       || url.username
