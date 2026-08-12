@@ -128,6 +128,27 @@ async function main() {
   assert.equal((success.body.run as { status?: string }).status, "SUCCEEDED");
   assert.equal((success.body.intelligenceProfile as { supplierCount?: number }).supplierCount, 1);
 
+  const degradedDiscoveryFixture = dependencies({
+    search: async () => ({
+      candidates: [{ id: "candidate-1", companyName: "supplier.example", status: "UNSUPPORTED" }],
+      sources: [{ url: "https://supplier.example/item-001", sourceType: "PUBLIC" }],
+      degraded: true,
+      warnings: ["Live page verification timed out. Public supplier pages from discovery were retained."],
+      retrieval: { stage: "SEARCH_ONLY", failureCode: "PROVIDER_TIMEOUT" },
+      publicListingReceipts: [],
+    }),
+  });
+  const degradedDiscovery = await executeSupplierResearchRoute({
+    body: completeBody,
+    context,
+    dependencies: degradedDiscoveryFixture.value,
+  });
+  assert.equal(degradedDiscovery.status, 200, "attributable search discovery must survive a later enrichment timeout");
+  assert.equal((degradedDiscovery.body.result as { degraded?: boolean }).degraded, true);
+  assert.equal((degradedDiscovery.body.run as { status?: string }).status, "SUCCEEDED", "degraded discovery is a saved partial result, not a completed evidence result");
+  assert.equal(degradedDiscoveryFixture.calls.completed.length, 1);
+  assert.equal(degradedDiscoveryFixture.calls.failed.length, 0);
+
   const intelligenceFailure = dependencies({
     intelligenceProfile: async () => {
       throw new Error("profile read failed");

@@ -652,6 +652,7 @@ export function AtlasProcurementWorkspace({
   const [exceptionResolutionNote, setExceptionResolutionNote] = useState("");
   const [showSupplierExceptionForm, setShowSupplierExceptionForm] = useState(false);
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
+  const [researchError, setResearchError] = useState<string | null>(null);
   const [researchState, setResearchState] = useState<"idle" | "running" | "complete" | "degraded">(
     initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : startingDraft && startingMissingFields.length === 0 ? "running" : "idle",
   );
@@ -725,6 +726,7 @@ export function AtlasProcurementWorkspace({
     if (!requestDraft || missingSourcingFields(requestDraft).length) return;
     setCurrentRun(null);
     setPublicResearch(null);
+    setResearchError(null);
     setCompletedSources(0);
     setResearchState("idle");
     setPhase("researching");
@@ -771,6 +773,7 @@ export function AtlasProcurementWorkspace({
       if (result.readyForResearch) {
         setCurrentRun(null);
         setPublicResearch(null);
+        setResearchError(null);
         setCompletedSources(0);
         setResearchState("idle");
         setPhase("researching");
@@ -813,6 +816,7 @@ export function AtlasProcurementWorkspace({
   function retryResearch() {
     setCurrentRun(null);
     setPublicResearch(null);
+    setResearchError(null);
     setCompletedSources(0);
     setResearchState("idle");
     setResearchAttempt((current) => current + 1);
@@ -1109,6 +1113,7 @@ export function AtlasProcurementWorkspace({
     const controller = new AbortController();
     setResearchState("running");
     setPublicResearch(null);
+    setResearchError(null);
     setCompletedSources(1);
     void fetch("/api/supply-os/supplier-research", {
       method: "POST",
@@ -1140,6 +1145,7 @@ export function AtlasProcurementWorkspace({
       if (!response.ok) throw new Error(payload.error ?? "Supplier research did not finish.");
       const result = payload.result ?? { candidates: [], degraded: true, warnings: ["Supplier research returned no result."] };
       setPublicResearch(result);
+      setResearchError(null);
       setResearchState(result.degraded ? "degraded" : "complete");
       setCompletedSources(RESEARCH_STEPS.length);
       if (payload.run) {
@@ -1158,9 +1164,10 @@ export function AtlasProcurementWorkspace({
       }
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
-      setPublicResearch({ candidates: [], degraded: true, warnings: [error instanceof Error ? error.message : "Supplier research did not finish."] });
+      setPublicResearch(null);
+      setResearchError(error instanceof Error ? error.message : "Supplier research did not finish.");
       setResearchState("degraded");
-      setCompletedSources(RESEARCH_STEPS.length);
+      setCompletedSources(1);
       if (requestDraft) {
         onRequestUpdateRef.current?.({
           title: requestDraft.productName ?? requestText,
@@ -1902,12 +1909,13 @@ export function AtlasProcurementWorkspace({
               <span className={styles.procurementResearchIcon}><Sparkles size={20} /></span>
               <small>Researching</small>
               <h3>{requestText}</h3>
-              <p>Checking trusted records first, then official catalogs and new public sources.</p>
+              <p>Searching public supplier pages, then validating source attribution and exact commercial claims.</p>
             </section>
             <ol className={styles.procurementSourceLog}>
               {RESEARCH_STEPS.map((step, index) => {
                 const complete = completedSources > index;
-                const active = completedSources === index;
+                const failed = Boolean(researchError) && step.key === "web";
+                const active = !researchError && completedSources === index;
                 const detail = step.key === "scope" ? (
                   <dl className={styles.procurementResearchScope}>
                     <div><dt>Product</dt><dd>{item?.name ?? requestDraft?.productName ?? requestText}</dd></div>
@@ -1920,6 +1928,8 @@ export function AtlasProcurementWorkspace({
                   <>
                     <p>{researchState === "running"
                       ? `Searching public pages for ${item?.name ?? requestDraft?.productName ?? requestText}.`
+                      : researchError
+                        ? "No source records were returned to this screen."
                       : checkedResearchSources.length
                         ? `${checkedResearchSources.length} attributable source${checkedResearchSources.length === 1 ? "" : "s"} returned.`
                         : "No attributable source URLs were returned."}</p>
@@ -1934,22 +1944,32 @@ export function AtlasProcurementWorkspace({
                             </li>
                           ))}
                         </ul>
-                      ) : <p>{researchState === "running" ? "Waiting for attributable sources from public search." : "No source links survived attribution checks."}</p>}
+                      ) : <p>{researchState === "running"
+                        ? "Waiting for attributable sources from public search."
+                        : researchError
+                          ? "This screen received no source records to attribute."
+                          : "No source links survived attribution checks."}</p>}
                     </details>
                   </>
                 ) : step.key === "validation" ? (
                   <p>{researchState === "running"
                     ? "Validation starts when attributable source records return."
+                    : researchError
+                      ? "No validation result was returned to this screen."
                         : `${officialResearchSourceCount} official and ${checkedResearchSources.length - officialResearchSourceCount} other public source${checkedResearchSources.length - officialResearchSourceCount === 1 ? "" : "s"} passed URL attribution. A public price requires one exact forced-live record with amount, ISO currency, and unit; RFQ confirmation is still required.`}</p>
                 ) : (
                   <>
-                    <p>{researchState === "running" ? "Candidate screening waits for source validation." : `${publicResearch?.candidates.length ?? 0} candidate${publicResearch?.candidates.length === 1 ? "" : "s"} retained for human qualification.`}</p>
-                    {publicResearch?.warnings.length ? <ul>{publicResearch.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+                    <p>{researchState === "running"
+                      ? "Candidate screening waits for source validation."
+                      : researchError
+                        ? "No candidate-screening result was returned to this screen."
+                        : `${publicResearch?.candidates.length ?? 0} candidate${publicResearch?.candidates.length === 1 ? "" : "s"} retained for human qualification.`}</p>
+                    {!researchError && publicResearch?.warnings.length ? <ul>{publicResearch.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
                   </>
                 );
                 return (
                   <li key={step.label} data-complete={complete} data-active={active}>
-                    <span>{complete ? <Check size={15} /> : active ? <LoaderCircle size={15} /> : <Search size={15} />}</span>
+                    <span>{complete ? <Check size={15} /> : failed ? <TriangleAlert size={15} /> : active ? <LoaderCircle size={15} /> : <Search size={15} />}</span>
                     <details className={styles.procurementResearchStep} open={step.key === "web" ? true : undefined}>
                       <summary>
                         <span><strong>{step.label}</strong><small>{step.detail}</small></span>
@@ -1962,7 +1982,13 @@ export function AtlasProcurementWorkspace({
               })}
             </ol>
             <footer>
-              <span><TriangleAlert size={14} /> {researchState === "running" ? "Public web research is running. No supplier system is connected." : researchState === "complete" ? "Public results are attributable and unqualified. No supplier was contacted." : publicResearch?.warnings[0] ?? "Public research is unavailable."}</span>
+              <span><TriangleAlert size={14} /> {researchState === "running"
+                ? "Public web research is running. No supplier system is connected."
+                : researchState === "complete"
+                  ? "Public results are attributable and unqualified. No supplier was contacted."
+                  : researchError
+                    ?? (publicResearch?.candidates.length ? "Public supplier pages were retained with verification gaps. No supplier was contacted." : publicResearch?.warnings[0])
+                    ?? "Public research is unavailable."}</span>
               {researchState !== "running" && publicResearch?.candidates.length ? (
                 <button type="button" onClick={() => setPhase("compare")}>Review {publicResearch.candidates.length} supplier{publicResearch.candidates.length === 1 ? "" : "s"} <ArrowRight size={14} /></button>
               ) : researchState !== "running" ? (

@@ -5133,3 +5133,31 @@ Use this file for chronological implementation notes that future agents should s
 - Exa is preferred only when configured. Existing OpenAI discovery remains the
   unconfigured fallback and cannot supply freshness. Cloudflare remains out of
   scope.
+
+### 2026-08-12 - Retain Exa discovery when live page verification times out
+
+- Traced the GUILD item 001 screen to a request-level timeout, not a legitimate
+  zero-result search. The browser had converted the typed 504 into an empty
+  result and then derived false attribution and candidate counts from it.
+- Preserved Exa Search URLs when the later Contents request times out. Returned
+  candidates are public, degraded, unsupported, and commercially empty. No role,
+  capability, price, availability, receipt, or price observation is inferred.
+- Parsed the search-only retrieval as a distinct managed stage so persistence
+  keeps the Exa trust guard while deterministic receipt validation returns none.
+- Kept Search timeout and non-timeout Exa failures fail-closed. No silent
+  provider fallback was added.
+- Replaced the unconfigured-Exa OpenAI fallback's two 22-second attempts with
+  one 60-second attempt, no SDK retries, and an external abort signal that also
+  bounds response-body parsing.
+- Focused discovery queries on part identity, specification, and supplier type.
+  Removed fulfillment and pricing prose that reduced supplier-search relevance,
+  while retaining concise certificate and traceability requirements.
+- Separated `researchError` from `publicResearch` in the procurement screen.
+  Failed stages are no longer shown as completed, validation and screening are
+  reported as not returned, and the provider error appears once.
+- Added a regression for the exact GUILD aluminum request plus UI contract
+  assertions. Exa retrieval, supplier failure, route lifecycle, research
+  progress, Atlas sourcing, TypeScript, optimized production build, and diff
+  checks pass.
+- Live acceptance was not run because provider keys and an authenticated
+  deployment session are absent from this environment.

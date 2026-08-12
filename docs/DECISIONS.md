@@ -42,8 +42,15 @@ Use this log for durable product and engineering decisions. Do not put every imp
   candidate selection remains server-downgraded to unknown commercial terms and
   routes through qualification and RFQ confirmation.
 - Fallback: OpenAI web discovery remains available only when Exa is not
-  configured. An Exa timeout, provider error, stale status, invalid response, or
-  oversized response fails closed and does not silently fall back.
+  configured. An Exa search timeout, provider error, invalid response, or
+  oversized response fails closed and does not silently fall back. If Search
+  returned attributable public URLs but the later Contents request times out,
+  retain those URLs only as degraded discovery candidates. Their supplier role,
+  product fit, price, currency, unit, availability, and lead time remain unknown,
+  and the search-only capture cannot create a listing receipt or price
+  observation. The unconfigured Exa fallback uses one 60-second OpenAI web
+  search attempt with no automatic retry. An external abort signal bounds both
+  response headers and body parsing inside the route budget.
 - Revisit when: Exa coverage proves inadequate on JavaScript-heavy public
   listings and a separately sandboxed Cloudflare Browser Rendering fallback is
   ready for the same validator.
@@ -2839,9 +2846,12 @@ Use this log for durable product and engineering decisions. Do not put every imp
   specification, quantity, unit, and QA requirements while absent delivery
   location, need-by date, or open quantity remain row-level clarification facts.
 - Evidence boundary: A zero-result successful search is distinct from provider
-  failure. Rejected and retained source URLs remain visible for audit. Prices
-  count as sourced only when amount, currency, unit, observation time, and a
-  common attributable URL pass the existing evidence rule.
+  failure. A successful provider Search followed by an enrichment timeout is a
+  degraded discovery result, not a completed evidence result and not a total
+  provider failure. Its public URLs remain visible for audit while all supplier
+  qualification and commercial fields remain unknown. Prices count as sourced
+  only when amount, currency, unit, observation time, and a common attributable
+  URL pass the existing evidence rule.
 - Authorization: Only administrators and managers see parts import controls.
   Server-side workspace edit authorization remains the final enforcement point.
 - Consequences: Failed research cannot masquerade as a completed empty search,

@@ -8404,3 +8404,58 @@ Remaining release checks:
   production migration, remove the temporary migration hook, reconcile the
   runtime feature onto that main, then run authenticated research and browser
   canaries before merging runtime.
+
+## Supplier discovery survives Exa Contents timeout, August 12
+
+Status:
+
+- Implemented on `fix/supplier-research-resilience`, based on the live research
+  branch at `86b3a81`.
+- Not deployed. This environment has neither `EXA_API_KEY` nor an authenticated
+  deployment session, so live provider acceptance remains required.
+
+Root cause and behavior:
+
+- Exa Search could return public supplier URLs, then the single forced-live
+  Contents request could exceed its 24-second client budget. The adapter threw
+  away the Search URLs, the route returned 504, and the browser manufactured an
+  empty research result. The screen then falsely reported zero attributed
+  sources and rendered the timeout twice.
+- A Contents timeout now returns the already discovered URLs as degraded public
+  candidates. Supplier role, product fit, price, currency, unit, MOQ,
+  availability, and lead time remain unknown. Search-only captures cannot
+  produce a public listing receipt or price observation. The saved run is a
+  successful degraded discovery run, not a completed evidence result.
+- A Search timeout still returns the typed provider error because no
+  attributable URL exists. Other Exa provider, size, and validation failures
+  still fail closed.
+- The browser now keeps provider errors separate from research results, marks
+  discovery as failed, says no validation or screening result was returned, and
+  renders the error once. The screen no longer claims trusted-record or catalog
+  checks that the route does not perform.
+- Discovery queries prioritize the technical identity and supplier types. They
+  omit quantity, delivery, and generic price language while retaining concise
+  supplier QA requirements from the GUILD aluminum request.
+- When Exa is not configured, OpenAI web search now gets one bounded 60-second
+  attempt instead of two 22-second attempts. The outer abort signal also covers
+  response-body parsing, and automatic SDK retries are disabled.
+
+Verification:
+
+- The Exa regression uses GUILD item 001 and proves that two attributable public
+  supplier pages survive a mocked whole-Contents timeout with every commercial
+  field unverified.
+- `npm run test:supply-os-exa-retrieval`
+- `npm run test:supply-os-supplier-research-failures`
+- `npm run test:supply-os-research-route-lifecycle`
+- `node --import tsx scripts/supply-os-research-progress.test.ts`
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- `tsc --noEmit -p tsconfig.json`
+- Optimized Next production build from a disposable clean-tree copy
+
+Release check:
+
+- Confirm whether `EXA_API_KEY` is present in the target deployment, deploy this
+  branch, then run `npm run test:supply-os-live-research -- --ids=001` with the
+  authenticated workspace variables. Do not call the fix complete in production
+  until that run returns attributable URLs.

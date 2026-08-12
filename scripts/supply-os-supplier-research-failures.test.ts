@@ -33,10 +33,14 @@ assert.deepEqual(
 
 const timeout = supplierResearchError(new OpenAI.APIConnectionTimeoutError());
 assert.equal(timeout.code, "PROVIDER_TIMEOUT");
+assert.equal(supplierResearchError(new OpenAI.APIUserAbortError()).code, "PROVIDER_TIMEOUT");
+assert.equal(supplierResearchError(new DOMException("The operation was aborted", "AbortError")).code, "PROVIDER_TIMEOUT");
 assert.equal(supplierResearchError(new Error("secret upstream detail")).code, "PROVIDER_FAILURE");
 assert.doesNotMatch(supplierResearchError(new Error("secret upstream detail")).message, /secret/i);
 
-assert.match(service, /timeout: 22_000, maxRetries: 1/);
+assert.match(service, /const OPENAI_RESEARCH_TIMEOUT_MS = 60_000/);
+assert.match(service, /timeout: OPENAI_RESEARCH_TIMEOUT_MS,[\s\S]*maxRetries: 0/);
+assert.match(service, /signal: AbortSignal\.timeout\(OPENAI_RESEARCH_TIMEOUT_MS\)/, "the outer abort must cover response-body parsing as well as time to first byte");
 assert.match(service, /store: false/);
 assert.doesNotMatch(service, /researchObservedAt/);
 assert.match(service, /trustClaimedObservedAt: false/);
@@ -59,6 +63,42 @@ assert.match(persistence, /\{ maxWait: 5_000, timeout: 45_000 \}/, "research kno
 assert.match(persistence, /pg_advisory_xact_lock\(hashtextextended\(\$\{`supply-research:/, "supplier profile expansion must serialize per workspace");
 
 async function main() {
+  const slowBodyClient = new OpenAI({
+    apiKey: "fixture-key",
+    timeout: 1_000,
+    maxRetries: 0,
+    fetch: async (_request, init) => {
+      const signal = init?.signal;
+      assert.ok(signal, "the SDK must forward the request signal to fetch");
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const delayedBody = setTimeout(() => {
+            controller.enqueue(new TextEncoder().encode("{}"));
+            controller.close();
+          }, 250);
+          signal.addEventListener("abort", () => {
+            clearTimeout(delayedBody);
+            controller.error(new DOMException("Response body aborted", "AbortError"));
+          }, { once: true });
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  await assert.rejects(
+    () => slowBodyClient.responses.create(
+      { model: "fixture-model", input: "fixture input" },
+      { signal: AbortSignal.timeout(25) },
+    ),
+    (error: unknown) => error instanceof DOMException
+      && error.name === "AbortError"
+      && supplierResearchError(error).code === "PROVIDER_TIMEOUT",
+    "an external timeout during OpenAI response-body parsing must remain a provider timeout",
+  );
+
   const priorKey = process.env.OPENAI_API_KEY;
   const priorExaKey = process.env.EXA_API_KEY;
   delete process.env.OPENAI_API_KEY;

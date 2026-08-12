@@ -86,9 +86,10 @@ export type ExaRetrievedRecord = {
   sourceTextHash: string;
 };
 
-export type ExaRetrievalCapture = {
+type ExaCompletedRetrievalCapture = {
   provider: "EXA";
   freshnessPolicy: "FORCED_LIVE";
+  stage?: "CONTENTS_COMPLETE";
   searchRequestId: string;
   contentsRequestId: string;
   searchHttpStatus: number;
@@ -98,6 +99,23 @@ export type ExaRetrievalCapture = {
   retrievedAt: string;
   records: ExaRetrievedRecord[];
 };
+
+type ExaSearchOnlyRetrievalCapture = {
+  provider: "EXA";
+  freshnessPolicy: "FORCED_LIVE";
+  stage: "SEARCH_ONLY";
+  searchRequestId: string;
+  contentsRequestId: null;
+  searchHttpStatus: number;
+  contentsHttpStatus: null;
+  searchResponseHash: string;
+  contentsResponseHash: null;
+  retrievedAt: string;
+  records: ExaRetrievedRecord[];
+  failureCode: ExaResearchFailureCode;
+};
+
+export type ExaRetrievalCapture = ExaCompletedRetrievalCapture | ExaSearchOnlyRetrievalCapture;
 
 export type PublicListingReceipt = {
   provider: "EXA";
@@ -525,6 +543,7 @@ export function validateExaPublicListingReceipts(
   input: ExaSupplierResearchInput,
   capture: ExaRetrievalCapture,
 ) {
+  if (capture.stage === "SEARCH_ONLY") return [];
   if (
     capture.provider !== "EXA"
     || capture.freshnessPolicy !== "FORCED_LIVE"
@@ -603,15 +622,11 @@ export function parseStoredExaRetrievalCapture(value: unknown): ExaRetrievalCapt
   const raw = record(value);
   if (raw.provider !== "EXA" || raw.freshnessPolicy !== "FORCED_LIVE") return null;
   const searchRequestId = text(raw.searchRequestId, 220);
-  const contentsRequestId = text(raw.contentsRequestId, 220);
   const searchHttpStatus = typeof raw.searchHttpStatus === "number" && Number.isInteger(raw.searchHttpStatus) ? raw.searchHttpStatus : null;
-  const contentsHttpStatus = typeof raw.contentsHttpStatus === "number" && Number.isInteger(raw.contentsHttpStatus) ? raw.contentsHttpStatus : null;
   const searchResponseHash = text(raw.searchResponseHash, 64);
-  const contentsResponseHash = text(raw.contentsResponseHash, 64);
   const retrievedAt = text(raw.retrievedAt, 40);
   if (
-    !searchRequestId || !contentsRequestId || searchHttpStatus === null || contentsHttpStatus === null
-    || !/^[a-f0-9]{64}$/.test(searchResponseHash) || !/^[a-f0-9]{64}$/.test(contentsResponseHash)
+    !searchRequestId || searchHttpStatus === null || !/^[a-f0-9]{64}$/.test(searchResponseHash)
     || !plausibleServerRetrievedAt(retrievedAt) || !Array.isArray(raw.records) || raw.records.length > MAX_RESULTS
   ) return null;
   const records: ExaRetrievedRecord[] = [];
@@ -640,6 +655,34 @@ export function parseStoredExaRetrievalCapture(value: unknown): ExaRetrievalCapt
     records.push({ searchRank, sourceId, sourceUrl, sourceTitle, status, publishedDate, text: sourceText, highlights, proposal, sourceTextHash });
   }
   if (new Set(records.map((candidate) => candidate.sourceUrl)).size !== records.length) return null;
+  if (raw.stage === "SEARCH_ONLY") {
+    const failureCode = text(raw.failureCode, 80);
+    if (
+      raw.contentsRequestId !== null || raw.contentsHttpStatus !== null || raw.contentsResponseHash !== null
+      || failureCode !== "PROVIDER_TIMEOUT"
+      || records.some((source) => source.status !== null || source.text || source.highlights.length || source.proposal !== null)
+    ) return null;
+    return {
+      provider: "EXA",
+      freshnessPolicy: "FORCED_LIVE",
+      stage: "SEARCH_ONLY",
+      searchRequestId,
+      contentsRequestId: null,
+      searchHttpStatus,
+      contentsHttpStatus: null,
+      searchResponseHash,
+      contentsResponseHash: null,
+      retrievedAt,
+      records,
+      failureCode,
+    };
+  }
+  const contentsRequestId = text(raw.contentsRequestId, 220);
+  const contentsHttpStatus = typeof raw.contentsHttpStatus === "number" && Number.isInteger(raw.contentsHttpStatus) ? raw.contentsHttpStatus : null;
+  const contentsResponseHash = text(raw.contentsResponseHash, 64);
+  if (
+    !contentsRequestId || contentsHttpStatus === null || !/^[a-f0-9]{64}$/.test(contentsResponseHash)
+  ) return null;
   return {
     provider: "EXA",
     freshnessPolicy: "FORCED_LIVE",
@@ -788,16 +831,18 @@ async function exaRequest(args: {
 }
 
 function searchQuery(input: ExaSupplierResearchInput) {
+  const discoverySpecification = text(input.specification, 1_000)
+    .replace(/\.\s*Supplier deliverable:\s*/i, ". Required QA: ")
+    .trim();
   return text([
-    input.manufacturer,
     input.mpn,
+    input.manufacturer,
+    discoverySpecification,
     input.componentName,
-    input.specification,
-    input.requestedQuantity ? `quantity ${input.requestedQuantity}` : null,
-    input.requestedUnit,
-    input.sourceRegion ? `source ${input.sourceRegion}` : null,
-    input.deliveryLocation ? `deliver ${input.deliveryLocation}` : null,
-    "supplier distributor manufacturer current price currency unit package",
+    input.sourceRegion && input.sourceRegion.toLowerCase() !== "any region"
+      ? `source region ${input.sourceRegion}`
+      : null,
+    "supplier manufacturer distributor service center stockist cut to size",
   ].filter(Boolean).join(" "), 1_200);
 }
 
@@ -872,6 +917,93 @@ function buildRawCandidates(
   });
 }
 
+type SelectedSearchResult = {
+  result: JsonRecord;
+  index: number;
+  url: string;
+  id: string;
+};
+
+function retainSearchDiscovery(args: {
+  input: ExaSupplierResearchInput;
+  searchRequestId: string;
+  searchHttpStatus: number;
+  searchResponseHash: string;
+  selectedResults: SelectedSearchResult[];
+  failure: ExaResearchError;
+  retrievedAt: string;
+}): ExaSupplierResearchResult {
+  const records = args.selectedResults.map((source) => ({
+    searchRank: source.index + 1,
+    sourceId: source.id,
+    sourceUrl: source.url,
+    sourceTitle: text(source.result.title, 500) || null,
+    status: null,
+    publishedDate: text(source.result.publishedDate, 80) || null,
+    text: "",
+    highlights: [],
+    proposal: null,
+    sourceTextHash: hash(""),
+  } satisfies ExaRetrievedRecord));
+  const capture: ExaSearchOnlyRetrievalCapture = {
+    provider: "EXA",
+    freshnessPolicy: "FORCED_LIVE",
+    stage: "SEARCH_ONLY",
+    searchRequestId: args.searchRequestId,
+    contentsRequestId: null,
+    searchHttpStatus: args.searchHttpStatus,
+    contentsHttpStatus: null,
+    searchResponseHash: args.searchResponseHash,
+    contentsResponseHash: null,
+    retrievedAt: args.retrievedAt,
+    records,
+    failureCode: args.failure.code,
+  };
+  const raw = {
+    candidates: records.map((source) => ({
+      id: source.sourceId,
+      companyName: resultCompanyName(source.sourceUrl),
+      website: new URL(source.sourceUrl).origin,
+      roles: [],
+      country: unknownEnvelope(),
+      facility: unknownEnvelope(),
+      productCapability: unknownEnvelope(),
+      price: unknownEnvelope(),
+      currency: unknownEnvelope(),
+      unitOfMeasure: unknownEnvelope(),
+      minimumOrderQuantity: unknownEnvelope(),
+      leadTimeDays: unknownEnvelope(),
+      sourceUrls: [source.sourceUrl],
+      cautions: ["Public search found this page, but product fit, supplier role, price, and availability still require verification."],
+    })),
+    warnings: [],
+  };
+  const sources: EvidenceSource[] = records.map((source) => ({
+    url: source.sourceUrl,
+    title: source.sourceTitle ?? undefined,
+    sourceType: "PUBLIC",
+  }));
+  const normalized = normalizeSupplierResearch({
+    officeId: args.input.officeId,
+    workspaceId: args.input.workspaceId,
+    componentItemKey: args.input.componentItemKey,
+    raw,
+    providerSources: sources,
+    now: new Date(args.retrievedAt),
+    trustClaimedObservedAt: false,
+  });
+  const warning = args.failure.code === "PROVIDER_TIMEOUT"
+    ? "Live page verification timed out. Public supplier pages from discovery were retained, but product fit, price, and availability remain unverified."
+    : "Live page verification failed. Public supplier pages from discovery were retained, but product fit, price, and availability remain unverified.";
+  return {
+    ...normalized,
+    degraded: true,
+    warnings: [...normalized.warnings, warning],
+    retrieval: capture,
+    publicListingReceipts: [],
+  };
+}
+
 export async function searchExaComponentSuppliers(
   input: ExaSupplierResearchInput,
   dependencies: ExaDependencies,
@@ -891,7 +1023,7 @@ export async function searchExaComponentSuppliers(
   const searchBody = record(search.value);
   const searchRequestId = text(searchBody.requestId, 220);
   const searchResults = Array.isArray(searchBody.results) ? searchBody.results.map(record) : [];
-  const selectedResults = searchResults.flatMap((result, index) => {
+  const selectedResults: SelectedSearchResult[] = searchResults.flatMap((result, index) => {
     const url = publicUrl(result.url);
     const id = text(result.id, 2_000) || url;
     return url && id ? [{ result, index, url, id }] : [];
@@ -904,25 +1036,39 @@ export async function searchExaComponentSuppliers(
     input.specification ? `specification ${input.specification}` : null,
     "current price with explicit ISO currency and exact unit or package basis",
   ].filter(Boolean).join(". "), 1_200);
-  const contents = await exaRequest({
-    url: EXA_CONTENTS_URL,
-    apiKey: dependencies.apiKey,
-    fetchImpl,
-    timeoutMs: CONTENTS_TIMEOUT_MS,
-    maxBytes: MAX_CONTENTS_RESPONSE_BYTES,
-    deadlineAt,
-    body: {
-      urls: selectedResults.map((result) => result.url),
-      text: { maxCharacters: MAX_RECORD_TEXT, verbosity: "standard", includeSections: ["header", "body", "metadata"] },
-      highlights: { query: highlightQuery, maxCharacters: MAX_RECORD_HIGHLIGHTS },
-      summary: {
-        query: `${highlightQuery}. Return null for every value not printed by this exact page. evidenceText must be one verbatim excerpt that contains the exact item identity, amount, ISO currency code, and unit or package basis.`,
-        schema: OFFER_SCHEMA,
+  let contents: Awaited<ReturnType<typeof exaRequest>>;
+  try {
+    contents = await exaRequest({
+      url: EXA_CONTENTS_URL,
+      apiKey: dependencies.apiKey,
+      fetchImpl,
+      timeoutMs: CONTENTS_TIMEOUT_MS,
+      maxBytes: MAX_CONTENTS_RESPONSE_BYTES,
+      deadlineAt,
+      body: {
+        urls: selectedResults.map((result) => result.url),
+        text: { maxCharacters: MAX_RECORD_TEXT, verbosity: "standard", includeSections: ["header", "body", "metadata"] },
+        highlights: { query: highlightQuery, maxCharacters: MAX_RECORD_HIGHLIGHTS },
+        summary: {
+          query: `${highlightQuery}. Return null for every value not printed by this exact page. evidenceText must be one verbatim excerpt that contains the exact item identity, amount, ISO currency code, and unit or package basis.`,
+          schema: OFFER_SCHEMA,
+        },
+        maxAgeHours: 0,
+        livecrawlTimeout: 15_000,
       },
-      maxAgeHours: 0,
-      livecrawlTimeout: 15_000,
-    },
-  });
+    });
+  } catch (error) {
+    if (!(error instanceof ExaResearchError) || error.code !== "PROVIDER_TIMEOUT") throw error;
+    return retainSearchDiscovery({
+      input,
+      searchRequestId,
+      searchHttpStatus: search.status,
+      searchResponseHash: search.responseHash,
+      selectedResults,
+      failure: error,
+      retrievedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
+    });
+  }
   const contentsBody = record(contents.value);
   const contentsRequestId = text(contentsBody.requestId, 220);
   const contentResults = Array.isArray(contentsBody.results) ? contentsBody.results.map(record) : [];

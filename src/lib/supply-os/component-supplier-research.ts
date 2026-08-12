@@ -10,6 +10,7 @@ import {
 } from "./exa-supplier-research";
 
 const MAX_SOURCES = 40;
+const OPENAI_RESEARCH_TIMEOUT_MS = 60_000;
 
 export type SupplierResearchFailureCode =
   | "MISSING_CONFIGURATION"
@@ -42,7 +43,13 @@ export class SupplierResearchError extends Error {
 export function supplierResearchError(error: unknown) {
   if (error instanceof SupplierResearchError) return error;
   if (error instanceof ExaResearchError) return new SupplierResearchError(error.code);
-  if (error instanceof OpenAI.APIConnectionTimeoutError) return new SupplierResearchError("PROVIDER_TIMEOUT");
+  if (
+    error instanceof OpenAI.APIConnectionTimeoutError
+    || error instanceof OpenAI.APIUserAbortError
+    || (error instanceof DOMException && error.name === "AbortError")
+  ) {
+    return new SupplierResearchError("PROVIDER_TIMEOUT");
+  }
   return new SupplierResearchError("PROVIDER_FAILURE");
 }
 
@@ -187,9 +194,14 @@ export async function searchComponentSuppliers(input: ComponentSupplierResearchI
   if (!process.env.OPENAI_API_KEY) {
     throw new SupplierResearchError("MISSING_CONFIGURATION");
   }
-  // The request is read-only and store is disabled, so one SDK retry is safe.
-  // A 22 second attempt keeps both attempts inside the hosted function budget.
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 22_000, maxRetries: 1 });
+  // Model-backed web search regularly needs more than 22 seconds. One bounded
+  // attempt leaves enough route budget for persistence without retrying the
+  // same expensive request after a client-side cutoff.
+  const client = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: OPENAI_RESEARCH_TIMEOUT_MS,
+    maxRetries: 0,
+  });
   const openRequest = input.componentItemKey.startsWith("request:");
   let response: Awaited<ReturnType<typeof client.responses.create>>;
   try {
@@ -234,7 +246,7 @@ export async function searchComponentSuppliers(input: ComponentSupplierResearchI
         needByDate: input.needByDate ?? null,
       }),
       store: false,
-    });
+    }, { signal: AbortSignal.timeout(OPENAI_RESEARCH_TIMEOUT_MS) });
   } catch (error) {
     throw supplierResearchError(error);
   }
