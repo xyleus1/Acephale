@@ -4890,3 +4890,22 @@ Use this file for chronological implementation notes that future agents should s
   and cross-office denial.
 - Boundary: No migration, dependency, supplier contact, purchase authorization,
   payment, inventory, booking, customs, or Logistics behavior changed.
+
+### 2026-08-11 - Add persistent supplier quote negotiation rounds
+
+- Branch: `supply-os-quote-negotiation`, targeting `main`.
+- Task: Let buyers counter a supplier quote without editing or losing the prior
+  RFQ, response, or evidence history.
+- Behavior: `Request revised quote` opens the existing inline RFQ editor with a
+  response-specific counter-request. Saving closes the prior round as immutable
+  history and creates one resumable draft round. The sourcing queue restores
+  the active round and its negotiation history after navigation or refresh.
+- Safety: The server requires a current qualification, exact supplier selection,
+  active released cycle, recorded response hash, changed request, and optimistic
+  revision. Parent-first locks, serializable retries, and stable task identity
+  make concurrent retries converge without duplicate RFQs.
+- Verification: Atlas sourcing, operations UI, continuous layout, TypeScript,
+  diff checks, and disposable PostgreSQL lifecycle coverage including invalid
+  response rejection, concurrent retry, immutable history, and queue restore.
+- Boundary: No migration, dependency, supplier contact, purchase authorization,
+  payment, inventory, booking, customs, or Logistics behavior changed.

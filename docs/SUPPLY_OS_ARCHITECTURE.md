@@ -348,8 +348,13 @@ clear boundaries.
   `SUPPLIER_QUOTE_RESPONSE` evidence row with `CONNECTED_PROVIDER` provenance.
   The reply date is pinned to the provider message date. No parser or model can
   silently advance the commercial gate.
-- A released quote cycle stays `RUNNING` while supplier responses are appended and
-  closes only when the selected quote reaches full supplier order acknowledgment.
+- A released quote cycle stays `RUNNING` while supplier responses are appended.
+  The operator may either select one response for commercial review or open a
+  revised quote round from that exact response. A revised round closes the prior
+  task as immutable `REVISION_REQUESTED` history, creates one new `PLANNED`
+  cycle, and preserves the prior request, release, responses, and evidence.
+  Otherwise, the selected cycle closes when its quote reaches full supplier
+  order acknowledgment.
   Every response stores exact decimal price and MOQ, unit, delivery, validity,
   reference, evidence URL, operator, timestamp, and hash. The commercial gate
   accepts only a response loaded from that office-scoped task by its hash. It

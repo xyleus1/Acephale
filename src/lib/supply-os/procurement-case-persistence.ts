@@ -619,7 +619,7 @@ async function listProcurementCasesMatching(
         workspaceId: workspace.id,
         parentTaskId: { in: caseIds },
         taskType: QUOTE_CYCLE_TASK_TYPE,
-        status: { in: ["PLANNED", "RUNNING"] },
+        status: { in: ["PLANNED", "RUNNING", "SUCCEEDED"] },
       },
       orderBy: { updatedAt: "desc" },
       select: purchaseDraftSelect,
@@ -651,7 +651,14 @@ async function listProcurementCasesMatching(
   ]);
   const quoteCycleByCase = new Map<string, (typeof quoteCycles)[number]>();
   for (const quoteCycle of quoteCycles) {
-    if (quoteCycle.parentTaskId && !quoteCycleByCase.has(quoteCycle.parentTaskId)) quoteCycleByCase.set(quoteCycle.parentTaskId, quoteCycle);
+    if (quoteCycle.status !== "SUCCEEDED" && quoteCycle.parentTaskId && !quoteCycleByCase.has(quoteCycle.parentTaskId)) quoteCycleByCase.set(quoteCycle.parentTaskId, quoteCycle);
+  }
+  const quoteHistoryByCase = new Map<string, Array<(typeof quoteCycles)[number]>>();
+  for (const quoteCycle of quoteCycles) {
+    if (quoteCycle.status !== "SUCCEEDED" || record(quoteCycle.result).state !== "REVISION_REQUESTED" || !quoteCycle.parentTaskId) continue;
+    const history = quoteHistoryByCase.get(quoteCycle.parentTaskId) ?? [];
+    history.push(quoteCycle);
+    quoteHistoryByCase.set(quoteCycle.parentTaskId, history);
   }
   const purchaseDraftByCase = new Map<string, (typeof purchaseDrafts)[number]>();
   for (const purchaseDraft of purchaseDrafts) {
@@ -661,7 +668,7 @@ async function listProcurementCasesMatching(
     listSupplierCommunicationTasks({
       context: accessContext,
       workspaceId: workspace.id,
-      quoteCycleIds: quoteCycles.map((quoteCycle) => quoteCycle.id),
+      quoteCycleIds: quoteCycles.filter((quoteCycle) => quoteCycle.status !== "SUCCEEDED").map((quoteCycle) => quoteCycle.id),
     }),
     listPurchaseOrderCommunicationTasks({
       context: accessContext,
@@ -676,7 +683,7 @@ async function listProcurementCasesMatching(
     listSupplierQuoteExtractionRuns({
       context: accessContext,
       workspaceId: workspace.id,
-      quoteCycleIds: quoteCycles.map((quoteCycle) => quoteCycle.id),
+      quoteCycleIds: quoteCycles.filter((quoteCycle) => quoteCycle.status !== "SUCCEEDED").map((quoteCycle) => quoteCycle.id),
     }),
   ]);
   const quoteExtractionByCycleAndEvidence = new Map<string, {
@@ -746,6 +753,7 @@ async function listProcurementCasesMatching(
       return {
         ...procurementCase,
         quoteCycle: null,
+        quoteHistory: [],
         supplierEmailDraft: null,
         supplierEmailAction: null,
         purchaseDraft: null,
@@ -757,6 +765,7 @@ async function listProcurementCasesMatching(
       };
     }
     const rawQuoteCycle = quoteCycleByCase.get(procurementCase.id) ?? null;
+    const quoteHistory = quoteHistoryByCase.get(procurementCase.id) ?? [];
     const quoteCycle = rawQuoteCycle && rawQuoteCycle.result
       ? (() => {
           const result = record(rawQuoteCycle.result);
@@ -791,7 +800,7 @@ async function listProcurementCasesMatching(
         })()
       : null;
     const activeDraft = purchaseDraftByCase.get(procurementCase.id) ?? null;
-    if (!activeDraft) return { ...procurementCase, quoteCycle, supplierEmailDraft, supplierEmailAction, purchaseDraft: null, purchaseAction: null, purchaseOrderEmailDraft: null, purchaseOrderEmailAction: null, purchaseOrderFollowUpDraft: null, purchaseOrderFollowUpAction: null };
+    if (!activeDraft) return { ...procurementCase, quoteCycle, quoteHistory, supplierEmailDraft, supplierEmailAction, purchaseDraft: null, purchaseAction: null, purchaseOrderEmailDraft: null, purchaseOrderEmailAction: null, purchaseOrderFollowUpDraft: null, purchaseOrderFollowUpAction: null };
     const { childTasks: purchaseActions, ...purchaseDraft } = activeDraft;
     const activeAction = purchaseActions[0] ?? null;
     const purchaseOrderEmailDraft = purchaseOrderEmailDraftByPurchaseDraft.get(purchaseDraft.id) ?? null;
@@ -815,6 +824,7 @@ async function listProcurementCasesMatching(
     return {
       ...procurementCase,
       quoteCycle,
+      quoteHistory,
       supplierEmailDraft,
       supplierEmailAction,
       purchaseDraft,
@@ -1365,6 +1375,7 @@ function normalizeQuoteRequest(input: unknown) {
   return {
     expectedSelectionHash: requiredText(body.expectedSelectionHash, "Selection hash", 128),
     expectedRevision: nonNegativeInteger(body.expectedRevision, "Expected quote-request revision"),
+    revisionFromResponseHash: optionalText(body.revisionFromResponseHash, "Supplier response hash", 128),
     quantity,
     unitOfMeasure: normalizedUnitOfMeasure(body.unitOfMeasure),
     needBy,
@@ -1423,9 +1434,6 @@ export async function saveSupplierQuoteRequest(args: {
           orderBy: { updatedAt: "desc" },
           select: purchaseDraftSelect,
         });
-        if (existing?.status === "RUNNING") {
-          throw new SupplyPersistenceError("The supplier quote request is already released and cannot be edited.", "conflict");
-        }
         const existingResult = record(existing?.result);
         const request = {
           quantity: new Prisma.Decimal(requestInput.quantity).toString(),
@@ -1437,15 +1445,33 @@ export async function saveSupplierQuoteRequest(args: {
           note: requestInput.note,
         };
         const requestHash = digest(request);
-        if (existing && existingResult.requestHash === requestHash) {
+        const existingRevisionSource = record(record(existing?.input).revises).responseHash;
+        if (existing?.status === "PLANNED" && requestInput.revisionFromResponseHash && existingRevisionSource !== requestInput.revisionFromResponseHash) {
+          throw new SupplyPersistenceError("Another supplier response already owns the active revised quote round.", "conflict");
+        }
+        if (existing?.status === "PLANNED" && existingResult.requestHash === requestHash) {
           return { procurementCase: quoteCycleCaseView(procurementCase, existing), quoteCycle: existing };
+        }
+        const revisionSource = existing?.status === "RUNNING"
+          ? Array.isArray(existingResult.responses)
+            ? existingResult.responses.map(record).find((response) => response.responseHash === requestInput.revisionFromResponseHash)
+            : undefined
+          : undefined;
+        if (existing?.status === "RUNNING" && !requestInput.revisionFromResponseHash) {
+          throw new SupplyPersistenceError("The supplier quote request is already released and immutable. Start a revised quote round from a recorded supplier response.", "conflict");
+        }
+        if (existing?.status === "RUNNING" && !revisionSource) {
+          throw new SupplyPersistenceError("The supplier response selected for revision was not found in the active quote round.", "conflict");
+        }
+        if (existing?.status === "RUNNING" && existingResult.requestHash === requestHash) {
+          throw new SupplyPersistenceError("A revised quote request must change the supplier request.", "invalid_input");
         }
         const currentRevision = typeof existingResult.revision === "number" ? existingResult.revision : 0;
         if (requestInput.expectedRevision !== currentRevision) {
           throw new SupplyPersistenceError("The quote request changed in another session. Reload before saving.", "conflict");
         }
         const now = new Date();
-        if (existing) {
+        if (existing?.status === "PLANNED") {
           await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "parentTaskId" = ${existing.id} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} ORDER BY "id" FOR UPDATE`);
           const emailActions = await tx.supplyExecutionTask.findMany({
             where: {
@@ -1485,6 +1511,11 @@ export async function saveSupplierQuoteRequest(args: {
             name: requiredText(current.selectedOption.name, "Supplier name", 300),
             sourceUrl: typeof current.selectedOption.sourceUrl === "string" ? current.selectedOption.sourceUrl : null,
           },
+          revises: existing?.status === "RUNNING" ? {
+            quoteCycleId: existing.id,
+            responseHash: requestInput.revisionFromResponseHash,
+            quoteReference: typeof revisionSource?.quoteReference === "string" ? revisionSource.quoteReference : null,
+          } : null,
         };
         const result = {
           state: "DRAFT",
@@ -1497,7 +1528,7 @@ export async function saveSupplierQuoteRequest(args: {
           externalSideEffect: false,
           updatedAt: now.toISOString(),
         };
-        const priorCycles = existing ? 0 : await tx.supplyExecutionTask.count({
+        const priorCycles = existing?.status === "PLANNED" ? 0 : await tx.supplyExecutionTask.count({
           where: {
             officeId: args.context.officeId,
             workspaceId: workspace.id,
@@ -1505,7 +1536,7 @@ export async function saveSupplierQuoteRequest(args: {
             taskType: QUOTE_CYCLE_TASK_TYPE,
           },
         });
-        const quoteCycle = existing
+        const quoteCycle = existing?.status === "PLANNED"
           ? await tx.supplyExecutionTask.update({
               where: { id: existing.id },
               data: { result: inputJson(result), resultHash: digest(result) },
@@ -1528,6 +1559,40 @@ export async function saveSupplierQuoteRequest(args: {
               },
               select: purchaseDraftSelect,
             });
+        if (existing?.status === "RUNNING") {
+          const completedResult = {
+            ...existingResult,
+            state: "REVISION_REQUESTED",
+            revisionRequest: {
+              nextQuoteCycleId: quoteCycle.id,
+              responseHash: requestInput.revisionFromResponseHash,
+              requestHash,
+              requestedAt: now.toISOString(),
+              requestedByUserId: accessContext.userId,
+            },
+            updatedAt: now.toISOString(),
+          };
+          await tx.supplyExecutionTask.update({
+            where: { id: existing.id },
+            data: {
+              status: "SUCCEEDED",
+              completedAt: now,
+              result: inputJson(completedResult),
+              resultHash: digest(completedResult),
+            },
+          });
+          await appendCaseEvent({
+            tx,
+            caseId: existing.id,
+            officeId: accessContext.officeId,
+            workspaceId: workspace.id,
+            actorUserId: accessContext.userId,
+            eventType: "SUPPLIER_QUOTE_REVISION_REQUESTED",
+            status: "SUCCEEDED",
+            message: "A supplier response was carried into a new quote negotiation round.",
+            payload: inputJson({ nextQuoteCycleId: quoteCycle.id, responseHash: requestInput.revisionFromResponseHash, requestHash }),
+          });
+        }
         const projected = {
           ...current.result,
           quoteCycle: {
@@ -1552,8 +1617,8 @@ export async function saveSupplierQuoteRequest(args: {
           officeId: args.context.officeId,
           workspaceId: workspace.id,
           actorUserId: args.context.userId,
-          eventType: existing ? "SUPPLIER_QUOTE_REQUEST_UPDATED" : "SUPPLIER_QUOTE_REQUEST_DRAFTED",
-          message: existing ? "Supplier quote request draft was updated." : "Supplier quote request draft was created.",
+          eventType: existing?.status === "PLANNED" ? "SUPPLIER_QUOTE_REQUEST_UPDATED" : requestInput.revisionFromResponseHash ? "SUPPLIER_QUOTE_REVISION_DRAFTED" : "SUPPLIER_QUOTE_REQUEST_DRAFTED",
+          message: existing?.status === "PLANNED" ? "Supplier quote request draft was updated." : requestInput.revisionFromResponseHash ? "A revised supplier quote request draft was created." : "Supplier quote request draft was created.",
           payload: eventPayload,
         });
         await appendCaseEvent({
@@ -1562,8 +1627,8 @@ export async function saveSupplierQuoteRequest(args: {
           officeId: args.context.officeId,
           workspaceId: workspace.id,
           actorUserId: args.context.userId,
-          eventType: existing ? "SUPPLIER_QUOTE_REQUEST_UPDATED" : "SUPPLIER_QUOTE_REQUEST_DRAFTED",
-          message: "Supplier quote request is saved as an internal draft.",
+          eventType: existing?.status === "PLANNED" ? "SUPPLIER_QUOTE_REQUEST_UPDATED" : requestInput.revisionFromResponseHash ? "SUPPLIER_QUOTE_REVISION_DRAFTED" : "SUPPLIER_QUOTE_REQUEST_DRAFTED",
+          message: requestInput.revisionFromResponseHash ? "A revised supplier quote request is saved as an internal draft." : "Supplier quote request is saved as an internal draft.",
           payload: eventPayload,
         });
         return { procurementCase: quoteCycleCaseView(updatedCase, quoteCycle), quoteCycle };

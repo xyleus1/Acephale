@@ -268,6 +268,21 @@ Use this log for durable product and engineering decisions. Do not put every imp
   Supplier changes cancel the active quote cycle, while quote revisions remain
   available for audit and resume.
 
+### 2026-08-11 - Supplier negotiation uses immutable quote rounds
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Appending multiple supplier responses to one released RFQ records
+  revised quotes, but it does not record that the buyer changed the request.
+  Editing the released request would erase the commercial sequence.
+- Decision: `Request revised quote` starts from one stored response hash. The
+  prior cycle becomes terminal `REVISION_REQUESTED` history and a new internal
+  draft inherits the supplier and operating scope with buyer-edited counter
+  requirements. Concurrent retries converge on the same new round.
+- Boundary: Creating the new round does not contact the supplier. The new draft
+  must pass the existing connected-Gmail approval and delivery flow or receive
+  separately recorded external release evidence.
+
 ### 2026-08-10 - Supplier acknowledgment is recorded evidence, not a claimed connector send
 
 - Status: accepted

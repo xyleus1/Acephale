@@ -72,6 +72,8 @@ type ProcurementOption = {
   sourceUrl: string | null;
 };
 
+type SupplierQuoteResponse = NonNullable<NonNullable<SavedProcurementCase["quoteCycle"]>["result"]>["responses"][number];
+
 const DISCOVERED_OPTIONS: Record<string, AtlasSourcingCandidate> = {
   "SEN-LDR-220": {
     id: "tristate-safety-automation",
@@ -185,6 +187,13 @@ function qualificationValidUntilDefault() {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() + 90);
   return date.toISOString().slice(0, 10);
+}
+
+function revisedQuoteResponseDue(needBy: string) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + 3);
+  const suggested = date.toISOString().slice(0, 10);
+  return needBy && needBy < suggested ? needBy : suggested;
 }
 
 function supplierQualificationForm(procurementCase: SavedProcurementCase | null | undefined) {
@@ -439,6 +448,7 @@ export function AtlasProcurementWorkspace({
     requirements: initialCase?.quoteCycle?.result?.request.requirements ?? item?.specification ?? requestText,
     note: initialCase?.quoteCycle?.result?.request.note ?? "",
   }));
+  const [revisionFromResponseHash, setRevisionFromResponseHash] = useState<string | null>(null);
   const [quoteReleaseForm, setQuoteReleaseForm] = useState(() => ({
     channel: initialCase?.quoteCycle?.result?.release?.channel ?? "EMAIL" as "EMAIL" | "SUPPLIER_PORTAL" | "EDI" | "PHONE_CONFIRMED" | "OTHER",
     releasedOn: initialCase?.quoteCycle?.result?.release?.releasedOn ?? "",
@@ -731,6 +741,7 @@ export function AtlasProcurementWorkspace({
   useEffect(() => {
     const cycle = currentCase?.quoteCycle?.result;
     if (!cycle) return;
+    setRevisionFromResponseHash(null);
     setQuoteRequestForm({
       quantity: cycle.request.quantity,
       unitOfMeasure: cycle.request.unitOfMeasure,
@@ -1157,11 +1168,12 @@ export function AtlasProcurementWorkspace({
     }, currentCase.result.stage === "SUPPLIER_REJECTED" ? "SUPPLIER_REJECTED" : "SOURCE_EVIDENCE");
   }
 
-  function saveQuoteRequest() {
+  async function saveQuoteRequest() {
     if (!currentCase?.result) return;
-    void runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/quote-cycle`, {
+    const saved = await runCaseAction(`/api/supply-os/procurement-cases/${currentCase.id}/quote-cycle`, {
       expectedSelectionHash: currentCase.result.selectionHash,
       expectedRevision: currentCase.quoteCycle?.result?.revision ?? 0,
+      revisionFromResponseHash,
       quantity: Number(quoteRequestForm.quantity),
       unitOfMeasure: quoteRequestForm.unitOfMeasure,
       needBy: quoteRequestForm.needBy,
@@ -1170,6 +1182,21 @@ export function AtlasProcurementWorkspace({
       requirements: quoteRequestForm.requirements,
       note: quoteRequestForm.note || null,
     }, "quote-request");
+    if (saved) setRevisionFromResponseHash(null);
+  }
+
+  function startQuoteRevision(response: SupplierQuoteResponse) {
+    const cycle = currentCase?.quoteCycle?.result;
+    if (!cycle) return;
+    setRevisionFromResponseHash(response.responseHash);
+    setQuoteRequestForm({
+      ...cycle.request,
+      note: `Negotiation round based on supplier quote ${response.quoteReference}.`,
+      responseDue: revisedQuoteResponseDue(cycle.request.needBy),
+      requirements: `${cycle.request.requirements}\n\nRevision request for ${response.quoteReference}: improve price, delivery, MOQ, or commercial terms and return a complete updated quote.`,
+    });
+    setDirtyDrafts((current) => currentCase ? markWorkstreamDraft(current, currentCase.id, "quote-request") : current);
+    requestAnimationFrame(() => document.getElementById("supplier-quote-request")?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" }));
   }
 
   function recordQuoteRelease() {
@@ -1872,9 +1899,10 @@ export function AtlasProcurementWorkspace({
                 ) : currentCase.result.stage === "COMMERCIAL_CONFIRMATION" ? (
                   <>
                     <header><small>Gate 2 of 4</small><h4>Run the supplier quote cycle</h4><p>Prepare the request, record how it was sent outside Derya, then select a sourced supplier response.</p></header>
-                    {!currentCase.quoteCycle || currentCase.quoteCycle.status === "PLANNED" ? (
-                      <section className={styles.purchaseApprovalRequest} data-draft-section="quote-request">
-                        <p><strong>{currentCase.quoteCycle ? `Quote request revision ${currentCase.quoteCycle.result?.revision}` : "Quote request"}</strong></p>
+                    {!currentCase.quoteCycle || currentCase.quoteCycle.status === "PLANNED" || revisionFromResponseHash ? (
+                      <section id="supplier-quote-request" className={styles.purchaseApprovalRequest} data-draft-section="quote-request">
+                        <p><strong>{revisionFromResponseHash ? `Prepare negotiation round ${(currentCase.quoteCycle?.result?.revision ?? 0) + 1}` : currentCase.quoteCycle ? `Quote request revision ${currentCase.quoteCycle.result?.revision}` : "Quote request"}</strong></p>
+                        {revisionFromResponseHash ? <p>The prior request and supplier response stay immutable. Edit the counter-request below, then save it as a new internal round.</p> : null}
                         <div className={styles.procurementFormGrid}>
                           <label>Quantity<input type="number" min="0.01" step="0.01" value={quoteRequestForm.quantity} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, quantity: event.target.value }))} /></label>
                           <label>Unit<input maxLength={20} value={quoteRequestForm.unitOfMeasure} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, unitOfMeasure: event.target.value.toUpperCase() }))} placeholder="EA" /></label>
@@ -1884,8 +1912,23 @@ export function AtlasProcurementWorkspace({
                           <label className={styles.procurementWideField}>Requirements<textarea value={quoteRequestForm.requirements} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, requirements: event.target.value }))} placeholder="Specification, certification, packaging, and delivery requirements" /></label>
                           <label className={styles.procurementWideField}>Internal note<textarea value={quoteRequestForm.note} onChange={(event) => setQuoteRequestForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional buyer context" /></label>
                         </div>
-                        <button type="button" disabled={gateActionState === "saving" || !quoteRequestComplete} onClick={saveQuoteRequest}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {currentCase.quoteCycle ? "Update quote request" : "Save quote request"}</button>
+                        <div className={styles.procurementDecisionActions}>
+                          <button type="button" disabled={gateActionState === "saving" || !quoteRequestComplete} onClick={saveQuoteRequest}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <PackageCheck size={14} />} {revisionFromResponseHash ? "Save revised request" : currentCase.quoteCycle ? "Update quote request" : "Save quote request"}</button>
+                          {revisionFromResponseHash ? <button type="button" disabled={gateActionState === "saving"} onClick={() => setRevisionFromResponseHash(null)}>Cancel revision</button> : null}
+                        </div>
                         <p>This is an internal draft. It does not contact the supplier.</p>
+                      </section>
+                    ) : null}
+                    {currentCase.quoteHistory?.length ? (
+                      <section className={styles.purchaseApprovalRequest}>
+                        <p><strong>Negotiation history</strong></p>
+                        <p>Earlier rounds are closed and immutable. Their requests and captured supplier quotes remain in the evidence trail.</p>
+                        <dl className={styles.purchaseDraftSummary}>
+                          {currentCase.quoteHistory.map((round) => {
+                            const countered = round.result?.responses.find((response) => response.responseHash === round.result?.revisionRequest?.responseHash);
+                            return <div key={round.id}><dt>Round {round.result?.revision ?? "Unknown"}</dt><dd>{countered ? `${countered.quoteReference}, ${formatMoney(countered.price, countered.currency)}, delivery ${displayStoredDate(countered.deliveryDate)}` : "Closed for revision"}</dd></div>;
+                          })}
+                        </dl>
                       </section>
                     ) : null}
                     {currentCase.quoteCycle?.status === "PLANNED" && currentCase.quoteCycle.result ? (
@@ -2011,7 +2054,10 @@ export function AtlasProcurementWorkspace({
                               <div><dt>Delivery</dt><dd>{response.deliveryDate}</dd></div>
                             </dl>
                             <p>Received {response.receivedOn}, valid through {response.validUntil}. <a href={evidenceHref(response.evidenceId, response.evidenceUrl)} target="_blank" rel="noreferrer">Open captured evidence</a></p>
-                            <button type="button" disabled={gateActionState === "saving"} onClick={() => confirmCommercialTerms(response.responseHash)}><Check size={14} /> Use quote</button>
+                            <div className={styles.procurementDecisionActions}>
+                              <button type="button" disabled={gateActionState === "saving"} onClick={() => confirmCommercialTerms(response.responseHash)}><Check size={14} /> Use quote</button>
+                              <button type="button" disabled={gateActionState === "saving"} onClick={() => startQuoteRevision(response)}><RefreshCw size={14} /> Request revised quote</button>
+                            </div>
                           </section>
                         ))}
                         <section className={styles.purchaseApprovalRequest} data-draft-section="commercial-response">

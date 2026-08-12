@@ -382,7 +382,7 @@ export type SavedProcurementCase = {
   } | null;
   quoteCycle?: {
     id: string;
-    status: "PLANNED" | "RUNNING" | "CANCELLED";
+    status: "PLANNED" | "RUNNING" | "SUCCEEDED" | "CANCELLED";
     taskKey: string;
     taskType: "SUPPLIER_QUOTE_CYCLE";
     capabilityKey: "record.supplier_quote_cycle";
@@ -444,6 +444,40 @@ export type SavedProcurementCase = {
     createdAt: string;
     updatedAt: string;
   } | null;
+  quoteHistory?: Array<{
+    id: string;
+    status: "SUCCEEDED";
+    result: {
+      state: "REVISION_REQUESTED";
+      revision: number;
+      request: {
+        quantity: string;
+        unitOfMeasure: string;
+        needBy: string;
+        shipTo: string;
+        responseDue: string;
+        requirements: string;
+        note: string | null;
+      };
+      release?: { releasedOn: string } | null;
+      responses: Array<{
+        price: string;
+        currency: string;
+        deliveryDate: string;
+        quoteReference: string;
+        responseHash: string;
+      }>;
+      revisionRequest?: {
+        nextQuoteCycleId: string;
+        responseHash: string;
+        requestHash: string;
+        requestedAt: string;
+      };
+      updatedAt: string;
+    } | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
   supplierEmailDraft?: {
     id: string;
     status: "PLANNED" | "BLOCKED" | "READY" | "RUNNING" | "SUCCEEDED" | "CANCELLED";

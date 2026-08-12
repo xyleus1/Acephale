@@ -3948,6 +3948,101 @@ async function main() {
     assert.ok(listed.some((workspace) => workspace.id === visibleWorkspace.id), "ordinary null-key workspaces must remain visible");
     assert.ok(listed.every((workspace) => !workspace.externalKey?.startsWith("system:")), "the system procurement workspace must stay out of the company directory");
 
+    const negotiationRun = await startSourcingResearchRun(context, {
+      ...input,
+      componentItemKey: "VIS-DPT-NEGOTIATION",
+      componentName: "Stereo depth camera negotiation",
+    });
+    await completeSourcingResearchRun({
+      context,
+      runId: negotiationRun.id,
+      workspaceId: negotiationRun.workspaceId,
+      output: {
+        candidates: [{
+          id: "negotiation-supplier",
+          companyName: "Negotiation supplier",
+          website: "https://example.com/",
+          sourceUrls: ["https://example.com/product"],
+          price: supported(140),
+          currency: supported("USD"),
+          minimumOrderQuantity: supported(4),
+          leadTimeDays: supported(16),
+          status: "REVIEW_REQUIRED",
+        }],
+        degraded: false,
+        warnings: [],
+      },
+    });
+    const negotiationCase = await saveProcurementSelection({
+      context,
+      researchRunId: negotiationRun.id,
+      selection: {
+        id: "public:negotiation-supplier",
+        name: "Negotiation supplier",
+        sourceClass: "Official",
+        sourceUrl: "https://example.com/",
+        price: 140,
+        currency: "USD",
+        minimumOrderQuantity: 4,
+        priceType: "Sourced",
+        deliveryDate: quoteDeliveryDate,
+        deliveryType: "Sourced",
+        quality: "Conditional",
+      },
+    });
+    const negotiationSelectionHash = (negotiationCase.result as { selectionHash: string }).selectionHash;
+    await reviewProcurementGate({
+      context,
+      caseId: negotiationCase.id,
+      input: supplierQualificationInput(negotiationSelectionHash, "Qualified supplier for persistent negotiation-round regression coverage."),
+    });
+    const negotiationDraft = await saveSupplierQuoteRequest({
+      context,
+      caseId: negotiationCase.id,
+      input: { ...quoteRequestInput, expectedSelectionHash: negotiationSelectionHash },
+    });
+    const negotiationRequestHash = (negotiationDraft.quoteCycle.result as { requestHash: string }).requestHash;
+    await recordSupplierQuoteRelease({
+      context,
+      quoteCycleId: negotiationDraft.quoteCycle.id,
+      input: { ...quoteReleaseInput, expectedRequestHash: negotiationRequestHash, evidenceUrl: "https://example.com/negotiation/request/1" },
+    });
+    const negotiationResponse = await recordSupplierQuoteResponse({
+      context,
+      quoteCycleId: negotiationDraft.quoteCycle.id,
+      input: { ...quoteResponseInput, expectedRequestHash: negotiationRequestHash, price: 140, quoteReference: "Q-NEG-1", evidenceUrl: "https://example.com/negotiation/quote/1" },
+    });
+    const negotiationResponseHash = (negotiationResponse.response as { responseHash: string }).responseHash;
+    await assert.rejects(() => saveSupplierQuoteRequest({
+      context,
+      caseId: negotiationCase.id,
+      input: { ...quoteRequestInput, expectedSelectionHash: negotiationSelectionHash, expectedRevision: 1, revisionFromResponseHash: "missing-response", requirements: "Counter request with better commercial terms." },
+    }), /response selected for revision was not found/i, "a negotiation round must start from a recorded supplier response");
+    const revisedRequestInput = {
+      ...quoteRequestInput,
+      expectedSelectionHash: negotiationSelectionHash,
+      expectedRevision: 1,
+      revisionFromResponseHash: negotiationResponseHash,
+      responseDue: futureDate(4),
+      requirements: "Revise Q-NEG-1 with a lower unit price, MOQ no greater than four, and confirmed delivery to Austin.",
+      note: "Counter request after the first supplier response.",
+    };
+    const concurrentRevisionDrafts = await Promise.all([
+      saveSupplierQuoteRequest({ context, caseId: negotiationCase.id, input: revisedRequestInput }),
+      saveSupplierQuoteRequest({ context, caseId: negotiationCase.id, input: revisedRequestInput }),
+    ]);
+    assert.equal(concurrentRevisionDrafts[0].quoteCycle.id, concurrentRevisionDrafts[1].quoteCycle.id, "concurrent revised-quote retries must converge on one new round");
+    const revisedQuoteCycle = concurrentRevisionDrafts[0].quoteCycle;
+    assert.equal(revisedQuoteCycle.status, "PLANNED");
+    assert.equal((revisedQuoteCycle.result as { revision: number }).revision, 2);
+    const closedNegotiationCycle = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: negotiationDraft.quoteCycle.id } });
+    assert.equal(closedNegotiationCycle.status, "SUCCEEDED", "the prior quote round must close without being overwritten");
+    assert.equal((closedNegotiationCycle.result as { state: string }).state, "REVISION_REQUESTED");
+    const restoredNegotiationCase = (await listProcurementCasesForResearchRuns(context, [negotiationRun.id]))[0];
+    assert.equal(restoredNegotiationCase?.quoteCycle?.id, revisedQuoteCycle.id, "the sourcing queue must resume the active negotiation round");
+    assert.equal(restoredNegotiationCase?.quoteHistory?.[0]?.id, negotiationDraft.quoteCycle.id, "the sourcing queue must retain the closed quote round as negotiation history");
+    assert.equal((restoredNegotiationCase?.quoteHistory?.[0]?.result as { responses: unknown[] }).responses.length, 1, "prior supplier responses must remain visible after a counter-request");
+
     const restrictedUser = await prisma.user.create({
       data: {
         officeId: context.officeId,

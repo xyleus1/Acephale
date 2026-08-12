@@ -305,6 +305,19 @@ Verification:
 - Full supplier order acknowledgment closes the exact quote cycle used by the
   authorized purchase action, so completed sourcing work does not remain active.
 
+### Supplier quote negotiation rounds are persistent
+
+- Every recorded supplier response now offers `Use quote` or `Request revised
+  quote` in the same sourcing workstream.
+- A counter-request creates a new internal RFQ draft. The prior released round
+  becomes immutable history with its request, release, responses, evidence, and
+  the exact response hash that triggered negotiation.
+- Queue reloads restore the active round plus compact negotiation history.
+  Identical and concurrent counter-request retries converge on one new task.
+- Saving a revised request does not contact the supplier. Existing email draft,
+  approval, send, delivery reconciliation, and external-release controls apply
+  independently to the new round.
+
 Verification:
 
 - `npm run test:supply-os-atlas-sourcing`
