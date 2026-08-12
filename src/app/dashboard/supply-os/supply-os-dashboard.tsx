@@ -26,8 +26,10 @@ import {
 import {
   generateSupplyCase,
   SAMPLE_SUPPLY_CASE_PROMPT,
+  type SupplyCompanyResearch,
   type SupplyCaseDashboard,
 } from "@/lib/supply-os-case-model";
+import { parseSupplyCompanyResearch } from "@/lib/supply-os/company-profile";
 import {
   buildSupplyCommandMap,
   type SupplyCommandMap,
@@ -479,12 +481,16 @@ function illustrativeNetworkCase() {
 
 export function SupplyOsDashboardWorkspace({
   storageScope,
+  workspaceId,
+  workspaceName,
   presentationMode = false,
   activePanel = "materials",
   canApproveProcurement = false,
   canAuthorizePurchase = false,
 }: {
   storageScope: string;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
   presentationMode?: boolean;
   activePanel?: SupplyOsPanel;
   canApproveProcurement?: boolean;
@@ -494,6 +500,8 @@ export function SupplyOsDashboardWorkspace({
   const [savedCases, setSavedCases] = useState<SupplyCaseDashboard[]>([]);
   const [activeCase, setActiveCase] = useState<SupplyCaseDashboard | null>(null);
   const [storageReady, setStorageReady] = useState(false);
+  const [workspaceResearch, setWorkspaceResearch] = useState<SupplyCompanyResearch | null>(null);
+  const [profileState, setProfileState] = useState<"idle" | "loading" | "ready">("idle");
 
   useEffect(() => {
     function hydrate() {
@@ -519,6 +527,37 @@ export function SupplyOsDashboardWorkspace({
   }, [keys.cases, keys.selected, storageScope]);
 
   useEffect(() => {
+    if (!workspaceId) {
+      setWorkspaceResearch(null);
+      setProfileState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    setWorkspaceResearch(null);
+    setProfileState("loading");
+    void fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/company-profile`, {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({})) as { research?: unknown };
+        if (!response.ok) throw new Error("Company profile could not be loaded.");
+        return parseSupplyCompanyResearch(body.research);
+      })
+      .then((research) => {
+        setWorkspaceResearch(research);
+        setProfileState("ready");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setWorkspaceResearch(null);
+        setProfileState("ready");
+      });
+    return () => controller.abort();
+  }, [workspaceId]);
+
+  useEffect(() => {
     if (!presentationMode) return;
     const agentDockWasOpen = document.documentElement.classList.contains("agent-dock-open");
     document.documentElement.classList.remove("agent-dock-open");
@@ -530,14 +569,24 @@ export function SupplyOsDashboardWorkspace({
   }, [presentationMode]);
 
   const visibleCases = useMemo(() => visibleSupplyCases(savedCases), [savedCases]);
-  const currentCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
+  const workspaceCase = useMemo(() => {
+    if (!workspaceId || !workspaceName || profileState !== "ready") return null;
+    const prompt = workspaceResearch?.query || `Company: ${workspaceName}`;
+    const researchedAt = workspaceResearch ? new Date(workspaceResearch.researchedAt) : new Date();
+    return generateSupplyCase(prompt, researchedAt, "full_operation", workspaceResearch ?? undefined);
+  }, [profileState, workspaceId, workspaceName, workspaceResearch]);
+  const browserCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
     ? activeCase
     : visibleCases[0] ?? null;
+  const currentCase = workspaceId ? workspaceCase : browserCase;
 
   return (
     <div className={`${styles.workspace} ${styles.commandWorkspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>
-      {!storageReady ? (
-        <CommandState title="Loading customer network" detail="Opening saved customer data from this browser." />
+      {!storageReady || (workspaceId && profileState === "loading") ? (
+        <CommandState
+          title="Loading customer network"
+          detail={workspaceId ? "Opening the shared company profile." : "Opening saved customer data from this browser."}
+        />
       ) : currentCase ? (
         activePanel === "automations" ? (
           <SupplyOsAutomations key={currentCase.id} company={dashboardName(currentCase)} />

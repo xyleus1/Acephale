@@ -90,7 +90,7 @@ export function SupplyOsOperatingShell({
   }, []);
 
   if (presentationMode) {
-    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
+    return <SupplyOsDashboardWorkspace storageScope={storageScope} workspaceId={workspaceSelection?.workspaceId ?? null} workspaceName={workspaceSelection?.workspaceName ?? null} presentationMode activePanel={activePanel} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
   }
 
   return (
@@ -181,6 +181,8 @@ export function SupplyOsOperatingShell({
             ) : (
               <SupplyOsDashboardWorkspace
                 storageScope={storageScope}
+                workspaceId={workspaceSelection?.workspaceId ?? null}
+                workspaceName={workspaceSelection?.workspaceName ?? null}
                 presentationMode={false}
                 activePanel={activePanel}
                 canApproveProcurement={canApproveProcurement}

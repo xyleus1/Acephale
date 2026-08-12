@@ -17,6 +17,15 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-11 - Make company creation canonical and evidence-backed
+
+- Branch: `agent/guild-company-create`, targeting `main`.
+- Task: Repair the Companies create path and make a newly added company a CRM customer with a linked Supply OS workspace and attributable public profile.
+- Behavior: The form accepts name and website, validates the current database administrator, creates or reuses canonical office-scoped records, stores researched evidence, and loads the selected company's own profile.
+- Safety: Tenant scope stays on every company, workspace, membership, evidence, and media operation. Research failure does not roll back the canonical customer record.
+- Verification: company-create, company-navigation, company-research, product-copy, TypeScript, production build, whitespace, and changed-file U+2014 checks.
+- Boundary: GUILD public positioning comes from its official website. Suppliers, BOM, inventory, demand, facilities, rates, customs treatment, and approvals remain unconfirmed until customer data is connected.
+
 ### 2026-08-10 - Add controlled connected-Gmail supplier quote release
 
 - Branch: supply-os-supplier-communication, targeting main

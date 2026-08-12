@@ -65,7 +65,7 @@
 
 .createRow {
   display: grid;
-  grid-template-columns: 120px minmax(220px, 1fr) auto;
+  grid-template-columns: 92px minmax(180px, 0.8fr) 58px minmax(220px, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 18px 24px;

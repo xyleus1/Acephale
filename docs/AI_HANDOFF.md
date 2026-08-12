@@ -2,6 +2,24 @@
 
 ## Latest Update
 
+### Company creation builds a canonical customer workspace
+
+- The Companies index accepts a company name and official website.
+- Create links or creates the office-scoped CRM Company, marks it as an active customer, and creates or reuses its linked Supply OS workspace.
+- Creation validates the current database user instead of trusting a long-lived cookie role.
+- The official website profile and same-domain logo are stored as attributable Supply OS evidence when research succeeds.
+- A selected database workspace loads its own company profile and cannot silently render the Atlas Robotics browser demo.
+- GUILD uses https://www.guildai.co/ as its official website. Supplier identity, BOM quantities, operating locations, lanes, rates, customs treatment, and approvals stay unknown until customer data is connected.
+
+Verification:
+
+- `npm run test:supply-os-company-create`
+- `npm run test:supply-os-company-navigation`
+- `npm run test:supply-os-company-research`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --incremental false`
+- Production build with disposable PostgreSQL-shaped URLs
+
 ### Connected supplier quote PDFs are bounded review sources
 
 - `extract.supplier_quote_terms@2` can read text PDFs attached to the exact
