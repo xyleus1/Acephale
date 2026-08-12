@@ -878,6 +878,15 @@ function CaseCommandCenter({
   }, [procurementRequest]);
 
   useEffect(() => {
+    if (demoCompanyId === null) {
+      setResearchRuns([]);
+      setProcurementCases([]);
+      setSupplierSenderAccounts([]);
+      setSourcingNextCursor(null);
+      setSourcingPageState("idle");
+      setSourcingDataState("ready");
+      return;
+    }
     const controller = new AbortController();
     setSourcingDataState("loading");
     setSourcingNextCursor(null);
@@ -898,7 +907,7 @@ function CaseCommandCenter({
       if (!controller.signal.aborted) setSourcingDataState("error");
     });
     return () => controller.abort();
-  }, [sourcingLoadRevision]);
+  }, [demoCompanyId, sourcingLoadRevision]);
 
   async function loadOlderSourcingWork() {
     if (!sourcingNextCursor || sourcingPageState === "loading") return;
