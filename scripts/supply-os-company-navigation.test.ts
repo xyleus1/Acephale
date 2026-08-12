@@ -10,6 +10,7 @@ const demoCompany = readFileSync(resolve(root, "src/lib/supply-os/demo-company.t
 const guildItems = readFileSync(resolve(root, "src/lib/supply-os/guild-sourcing-items.ts"), "utf8");
 const shellStyles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.module.css"), "utf8");
 const workspaceRoute = readFileSync(resolve(root, "src/app/api/supply-os/workspaces/route.ts"), "utf8");
+const customerWorkspace = readFileSync(resolve(root, "src/lib/supply-os/customer-workspace.ts"), "utf8");
 
 assert.match(shell, /className=\{styles\.operatingSidebar\}/, "left domain sidebar must remain persistent");
 assert.match(shell, /const \[companyIndexOpen, setCompanyIndexOpen\] = useState\(true\)/, "company list must be the clean entry state");
@@ -29,10 +30,18 @@ assert.match(demoCompany, /Defense manufacturing contractor/);
 assert.match(demoCompany, /Aerospace precision metals/);
 assert.match(index, /"New company"/, "admins need an inline company creation action");
 assert.match(index, /className=\{styles\.createRow\}/, "company creation must stay inline");
+assert.match(index, /supply-os-new-company-website/, "company creation must accept the official website used to build its profile");
+assert.match(index, /website: newCompanyWebsite\.trim\(\) \|\| null/, "company creation must send the official website to the server");
+assert.doesNotMatch(index, /placeholder=/, "new company fields must start genuinely blank");
 assert.doesNotMatch(index, /<dialog|role="dialog"|aria-modal/, "company selection and creation must not use popups");
 assert.match(page, /where: \{ id: session\.userId, officeId: session\.officeId, isActive: true \}/, "page permissions must use the current database user, not a stale cookie role");
 assert.match(page, /canCreateCompany=\{currentUser\.role === "ADMIN"\}/, "company creation must be limited to current admins in the UI");
 assert.match(page, /canApproveProcurement=\{currentUser\.role === "ADMIN" \|\| currentUser\.role === "MANAGER"\}/, "procurement decisions must be limited to current managers and admins in the UI");
-assert.match(workspaceRoute, /session\.role !== "ADMIN"/, "company creation must be limited to admins on the server");
+assert.match(customerWorkspace, /user\.role !== "ADMIN"/, "company creation must be limited to current admins on the server");
+assert.match(workspaceRoute, /createSupplyCustomerWorkspace/, "company creation must link the CRM customer and Supply OS workspace");
+assert.match(workspaceRoute, /storeSupplyCompanyResearch/, "company creation must persist attributable public research");
+assert.match(customerWorkspace, /id: context\.userId, officeId: context\.officeId, isActive: true/, "company creation must reject stale signed sessions");
+assert.match(customerWorkspace, /crmCategory: "customer"/, "new Supply OS companies must be canonical customer records");
+assert.match(customerWorkspace, /companyId: company\.id/, "new Supply OS workspaces must link to the canonical company");
 
 console.log("Supply OS company navigation contract passed.");

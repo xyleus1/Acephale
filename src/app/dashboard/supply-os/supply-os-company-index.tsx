@@ -49,6 +49,7 @@ export function SupplyOsCompanyIndex({
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
+  const [newCompanyWebsite, setNewCompanyWebsite] = useState("");
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -78,9 +79,13 @@ export function SupplyOsCompanyIndex({
       const response = await fetch("/api/supply-os/workspaces", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, website: newCompanyWebsite.trim() || null }),
       });
-      const body = await response.json().catch(() => ({})) as { workspace?: { id: string }; error?: string };
+      const body = await response.json().catch(() => ({})) as {
+        workspace?: { id: string };
+        error?: string;
+        warning?: string | null;
+      };
       if (!response.ok || !body.workspace) throw new Error(body.error || "Company could not be created.");
       const listResponse = await fetch("/api/supply-os/workspaces", { cache: "no-store", headers: { accept: "application/json" } });
       const listBody = await listResponse.json().catch(() => ({})) as { workspaces?: Workspace[]; error?: string };
@@ -88,10 +93,12 @@ export function SupplyOsCompanyIndex({
       const next = listBody.workspaces ?? [];
       setWorkspaces(next);
       setNewCompanyName("");
+      setNewCompanyWebsite("");
       setCreateOpen(false);
       setState("ready");
       const created = next.find((workspace) => workspace.id === body.workspace?.id);
-      if (created) onOpenWorkspace(selectionFor(created));
+      if (body.warning) setError(body.warning);
+      else if (created) onOpenWorkspace(selectionFor(created));
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Company could not be created.");
     } finally {
@@ -124,11 +131,18 @@ export function SupplyOsCompanyIndex({
             minLength={2}
             maxLength={160}
             autoFocus
-            placeholder="Atlas Robotics"
             onChange={(event) => setNewCompanyName(event.target.value)}
           />
+          <label htmlFor="supply-os-new-company-website">Website</label>
+          <input
+            id="supply-os-new-company-website"
+            value={newCompanyWebsite}
+            maxLength={500}
+            inputMode="url"
+            onChange={(event) => setNewCompanyWebsite(event.target.value)}
+          />
           <button type="submit" disabled={creating || newCompanyName.trim().length < 2}>
-            {creating ? <LoaderCircle className={styles.spin} size={15} /> : <Plus size={15} />} Create
+            {creating ? <LoaderCircle className={styles.spin} size={15} /> : <Plus size={15} />} {creating ? "Building" : "Create"}
           </button>
         </form>
       ) : null}
