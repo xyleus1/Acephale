@@ -2,6 +2,23 @@
 
 ## Latest Update
 
+### Real company workspaces now use sourced company profiles
+
+- New company creation runs attributable company research whether or not the operator supplies a website.
+- Opening an older company without stored research triggers the same bounded profile research and stores the resulting profile and same-domain logo.
+- Real workspaces render the researched company name, headquarters, locations, products, and evidence. They no longer fall back to the Atlas browser case or generic Austin location copy.
+- Real-company inventory and demo sourcing history start empty. Atlas and GUILD fixtures load only from their explicit demo rows.
+- Missing or failed research shows a retry state without substituting demo facts.
+- Unilever verification used official Unilever sources. The official UK head office is listed at 100 Victoria Embankment in London, and Unilever describes a presence across 190 markets.
+
+Verification:
+
+- `npm run build` passed in the Vercel preview and production deployment for PR #138.
+- Production commit `6e913c72c0d94bc5db488a8983b812b5e5d6de76` deployed successfully.
+- `scripts/supply-os-company-navigation.test.ts` guards name-only research, profile retry access, real-workspace routing, empty inventory, and removal of generic location fallback.
+- Changed-file U+2014 scan passed.
+- Authenticated browser verification was unavailable in the restricted runtime.
+
 ### Supply OS company creation is restored in production
 
 - Root cause: Supply OS persistence migrations were merged into application code but were not applied to the production database. Workspace and supplier-research reads therefore returned HTTP 500.
