@@ -4988,3 +4988,15 @@ Use this file for chronological implementation notes that future agents should s
 - Caveat: The temporary migration hook is intentionally not permanent.
 - Follow-up: Confirm the production migration, remove the hook immediately,
   then merge the supply intelligence runtime.
+
+### 2026-08-12 - Remove the completed supply intelligence migration hook
+
+- Branch: `rollout/supply-intelligence-schema`, targeting `main`.
+- Production result: PR #140 merged and Vercel succeeded at commit
+  `a361ea38bd017c418c37f1ddcc1f5a093a9225da` after migration deploy and status.
+- Change: Removed the one-time production build hook. Routine Vercel builds no
+  longer run database migrations, while every existing cron remains configured.
+- Verification: Deployment boundary, Prisma validation and generation,
+  TypeScript, production build, whitespace, conflict-marker, changed-file
+  scope, and U+2014 checks.
+- Follow-up: Land the separately verified supply intelligence runtime.

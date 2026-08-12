@@ -1,5 +1,4 @@
 {
-  "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy && npx prisma migrate status; fi && npm run build",
   "crons": [
     {
       "path": "/api/cron/risk-scan",

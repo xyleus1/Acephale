@@ -28,11 +28,7 @@ const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8")) as {
 
 assert.match(page, /SupplyOsOperatingShell/, "Supply OS route must render the operating shell");
 assert.match(middleware, /\/dashboard\/supply-os/, "Dashboard routing must retain the Supply OS destination");
-assert.equal(
-  vercel.buildCommand,
-  'if [ "$VERCEL_ENV" = "production" ]; then npx prisma migrate deploy && npx prisma migrate status; fi && npm run build',
-  "the schema rollout must deploy and verify pending production migrations before publishing the app",
-);
+assert.equal(vercel.buildCommand, undefined, "routine application builds must not run database migrations");
 assert.deepEqual(
   vercel.crons?.find((cron) => cron.path === "/api/cron/supply-os-connectors"),
   { path: "/api/cron/supply-os-connectors", schedule: "10 * * * *" },

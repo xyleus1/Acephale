@@ -2,18 +2,22 @@
 
 ## Latest Update
 
-### Supply intelligence production schema rollout is isolated
+### Supply intelligence production schema rollout is complete
 
 - Added only the four additive persistence models needed for supplier profiles,
   profile facts, benchmark series, and source-backed price observations.
 - Added migration `20260812000100_supply_intelligence_profiles` with explicit
   transaction, lock timeout, statement timeout, tenant-scope triggers, domain
   checks, and append-only guards.
-- Added a temporary production-only Vercel build hook that runs migration deploy
-  and status before the normal build. Preview builds do not mutate the database,
-  and the existing Supply OS connector cron remains intact.
-- No supply intelligence runtime code is included in this rollout. That feature
-  must not merge until production confirms this migration is applied.
+- PR #140 merged and the production Vercel deployment succeeded at commit
+  `a361ea38bd017c418c37f1ddcc1f5a093a9225da`, including migration deploy and
+  migration status before the application build.
+- Removed the one-time production migration hook after that confirmation.
+  Routine Vercel builds no longer run database migrations, and the existing
+  Supply OS connector cron remains intact.
+- No supply intelligence runtime code was included in the schema rollout. The
+  production schema prerequisite is now cleared for the separately verified
+  runtime release.
 
 Verification:
 
@@ -26,9 +30,7 @@ Verification:
 
 Follow-up:
 
-- Deploy this schema-only release, confirm production migration status, then
-  immediately remove the temporary Vercel migration hook before merging the
-  supply intelligence runtime.
+- Land this cleanup before the separately verified supply intelligence runtime.
 
 ### Real company workspaces now use sourced company profiles
 

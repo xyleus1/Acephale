@@ -2738,3 +2738,20 @@ Use this log for durable product and engineering decisions. Do not put every imp
   is immutable and cannot absorb refreshed commercial terms.
 - Boundary: Recovery does not supersede the original order, contact another
   supplier, create a purchase order, commit spend, or open Logistics.
+
+### 2026-08-12 - Routine application builds do not run database migrations
+
+- Status: accepted
+- Owner: product and engineering
+- Context: PR #140 applied and verified the additive supply intelligence
+  migration during the successful production Vercel deployment at commit
+  `a361ea38bd017c418c37f1ddcc1f5a093a9225da`.
+- Decision: Remove the one-time Vercel migration build hook now that the schema
+  prerequisite is satisfied. Routine preview and production builds run the
+  normal application build and preserve the existing connector cron.
+- Rationale: A release-specific recovery hook is not durable migration
+  orchestration and should not mutate the database on every production build.
+- Consequences: Future migrations need their own explicit, observable rollout
+  step before dependent runtime ships.
+- Revisit when: Production has a dedicated migration stage outside application
+  builds.
