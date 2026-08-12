@@ -993,7 +993,7 @@ function CaseCommandCenter({
         `${item.requirementLabel ?? `${shortageQuantity(item)} ${item.requestedUnit ?? "units"}`} of ${item.name}`,
         item.specification,
         item.supplierDeliverable ? `Supplier QA: ${item.supplierDeliverable}` : null,
-        `Company: ${demoCompany.name}`,
+        `Company: ${companyName}`,
       ].filter(Boolean).join(". "),
       initialDraft: null,
       initialMissingFields: [],
