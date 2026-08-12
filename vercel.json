@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/market-intelligence",
-      "schedule": "0 11 * * * *"
+      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/google-sheets/sync",
