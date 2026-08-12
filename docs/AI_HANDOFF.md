@@ -2,6 +2,22 @@
 
 ## Latest Update
 
+### Supply OS company creation is restored in production
+
+- Root cause: Supply OS persistence migrations were merged into application code but were not applied to the production database. Workspace and supplier-research reads therefore returned HTTP 500.
+- Recovery: PR #135 ran the pending Prisma migrations before the production build, restored the optional company website input, and removed all example placeholders from the creation form.
+- The GUILD demo company and its 40-part sourcing fixture remain available. They are demo rows, not default values in the new-company form.
+- Company creation remains admin-only and office-scoped. It creates or reuses the canonical CRM customer and linked Supply OS workspace.
+- The temporary production migration build command was removed after the recovery deployment and the subsequent connector migration deployment both succeeded.
+
+Verification:
+
+- Vercel preview for PR #135 succeeded.
+- Vercel production deployment for recovery commit `2a76dbfbb24d398b63ad2fb79c382af7da7d1697` succeeded after `prisma migrate deploy` and `npm run build`.
+- Vercel production deployment for connector commit `067d6f534686fd27100927e7fee540652f19ef5b` also succeeded with the recovery hook before cleanup.
+- `scripts/supply-os-company-navigation.test.ts` rejects placeholders and verifies website forwarding plus canonical customer-workspace creation.
+- Authenticated browser verification was unavailable in the restricted runtime.
+
 ### Client integrations now have internal settings and a public handoff page
 
 - Added a lower-rail Settings link to the authenticated Supply OS navigation.
