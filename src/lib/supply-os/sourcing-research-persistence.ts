@@ -15,7 +15,12 @@ const ATLAS_DEMO_WORKSPACE = { externalKey: "system:atlas-procurement", name: "A
 const GUILD_DEMO_WORKSPACE = { externalKey: "system:guild-procurement", name: "GUILD procurement" } as const;
 export const SOURCING_RESEARCH_CAPABILITY_KEY = "research.supplier_candidates";
 const CAPABILITY_KEY = SOURCING_RESEARCH_CAPABILITY_KEY;
+const CAPABILITY_VERSION = "1";
+const PROVIDER_RUN_DSL_VERSION = "2";
 const PROVIDER_RUN_DSL_NAMES = ["interactive_supplier_research", "queued_supplier_research_child"] as const;
+const CAMPAIGN_CAPABILITY_KEY = "research.supplier_campaign";
+const CAMPAIGN_DSL_NAME = "guild_continuous_supplier_research";
+const CAMPAIGN_CAPABILITY_VERSION = "3";
 const RUN_STALE_AFTER_MS = 5 * 60 * 1_000;
 const OFFICE_DAILY_PROVIDER_CALL_CAP = 72;
 
@@ -596,17 +601,40 @@ export async function listQueuedSourcingResearchRuns(limit: number): Promise<Que
       },
     });
     if (callsStartedToday >= OFFICE_DAILY_PROVIDER_CALL_CAP) continue;
-    candidates.push(...await prisma.supplyCapabilityRun.findMany({
-      where: {
-        officeId: office.id,
-        capabilityKey: CAPABILITY_KEY,
-        dslName: { in: [...PROVIDER_RUN_DSL_NAMES] },
-        status: "QUEUED",
-      },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: boundedLimit,
-      select: { id: true, officeId: true, workspaceId: true, createdAt: true },
-    }));
+    candidates.push(...await prisma.$queryRaw<Array<QueuedSourcingResearchRunReference & { createdAt: Date }>>`
+      SELECT child."id", child."officeId", child."workspaceId", child."createdAt"
+      FROM "SupplyCapabilityRun" child
+      WHERE child."officeId" = ${office.id}
+        AND child."capabilityKey" = ${CAPABILITY_KEY}
+        AND child."capabilityVersion" = ${CAPABILITY_VERSION}
+        AND child."dslVersion" = ${PROVIDER_RUN_DSL_VERSION}
+        AND child."status" = 'QUEUED'
+        AND (
+          (
+            child."dslName" = 'interactive_supplier_research'
+            AND child."parentRunId" IS NULL
+          )
+          OR (
+            child."dslName" = 'queued_supplier_research_child'
+            AND child."input"->>'requiredProvider' IN ('EXA', 'OPENAI')
+            AND EXISTS (
+              SELECT 1
+              FROM "SupplyCapabilityRun" parent
+              WHERE parent."id" = child."parentRunId"
+                AND parent."officeId" = child."officeId"
+                AND parent."workspaceId" = child."workspaceId"
+                AND parent."capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
+                AND parent."capabilityVersion" = ${CAMPAIGN_CAPABILITY_VERSION}
+                AND parent."dslName" = ${CAMPAIGN_DSL_NAME}
+                AND parent."dslVersion" = ${CAMPAIGN_CAPABILITY_VERSION}
+                AND parent."status" = 'RUNNING'
+                AND parent."input"->>'requiredProvider' = child."input"->>'requiredProvider'
+            )
+          )
+        )
+      ORDER BY child."createdAt" ASC, child."id" ASC
+      LIMIT ${boundedLimit}
+    `);
   }
   return candidates
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id))
@@ -660,6 +688,178 @@ export async function claimSourcingResearchRun(
     const quotaNow = (await tx.$queryRaw<Array<{ now: Date }>>`
       SELECT clock_timestamp() AS "now"
     `)[0]?.now ?? new Date();
+    type QueueMetadata = {
+      id: string;
+      invokedByUserId: string | null;
+      capabilityVersion: string;
+      dslName: string | null;
+      dslVersion: string;
+      parentRunId: string | null;
+      requiredProvider: string | null;
+    };
+    const [discovered] = await tx.$queryRaw<Array<QueueMetadata>>`
+      SELECT "id", "invokedByUserId", "capabilityVersion", "dslName", "dslVersion", "parentRunId", "input"->>'requiredProvider' AS "requiredProvider"
+      FROM "SupplyCapabilityRun"
+      WHERE "id" = ${reference.id}
+        AND "officeId" = ${reference.officeId}
+        AND "workspaceId" = ${reference.workspaceId}
+        AND "capabilityKey" = ${CAPABILITY_KEY}
+        AND "status" = 'QUEUED'
+    `;
+    if (!discovered) return "unavailable" as const;
+    let lockedQueue: QueueMetadata;
+    if (discovered.dslName === "queued_supplier_research_child") {
+      type CampaignParentMetadata = {
+        id: string;
+        capabilityKey: string;
+        capabilityVersion: string;
+        dslName: string;
+        dslVersion: string;
+        status: string;
+        requiredProvider: string | null;
+      };
+      // Campaign reconciliation and supersession own locks in parent-then-child
+      // order. Discover without a lock, then use the same order here so a
+      // worker claim cannot deadlock a terminal parent transition.
+      const [parent] = discovered.parentRunId ? await tx.$queryRaw<Array<CampaignParentMetadata>>`
+        SELECT
+          "id",
+          "capabilityKey",
+          "capabilityVersion",
+          "dslName",
+          "dslVersion",
+          "status",
+          "input"->>'requiredProvider' AS "requiredProvider"
+        FROM "SupplyCapabilityRun"
+        WHERE "id" = ${discovered.parentRunId}
+          AND "officeId" = ${reference.officeId}
+          AND "workspaceId" = ${reference.workspaceId}
+        FOR UPDATE
+      ` : [];
+      const [queued] = await tx.$queryRaw<Array<QueueMetadata>>`
+        SELECT "id", "invokedByUserId", "capabilityVersion", "dslName", "dslVersion", "parentRunId", "input"->>'requiredProvider' AS "requiredProvider"
+        FROM "SupplyCapabilityRun"
+        WHERE "id" = ${reference.id}
+          AND "officeId" = ${reference.officeId}
+          AND "workspaceId" = ${reference.workspaceId}
+          AND "capabilityKey" = ${CAPABILITY_KEY}
+          AND "status" = 'QUEUED'
+        FOR UPDATE
+      `;
+      if (!queued
+        || queued.dslName !== discovered.dslName
+        || queued.invokedByUserId !== discovered.invokedByUserId
+        || queued.capabilityVersion !== discovered.capabilityVersion
+        || queued.dslVersion !== discovered.dslVersion
+        || queued.parentRunId !== discovered.parentRunId
+        || queued.requiredProvider !== discovered.requiredProvider) {
+        return "unavailable" as const;
+      }
+      lockedQueue = queued;
+      const requiredProvider = queued.requiredProvider === "EXA" || queued.requiredProvider === "OPENAI"
+        ? queued.requiredProvider
+        : null;
+      const parentIsCurrent = Boolean(parent
+        && queued.capabilityVersion === CAPABILITY_VERSION
+        && queued.dslVersion === PROVIDER_RUN_DSL_VERSION
+        && parent.capabilityKey === CAMPAIGN_CAPABILITY_KEY
+        && parent.capabilityVersion === CAMPAIGN_CAPABILITY_VERSION
+        && parent.dslName === CAMPAIGN_DSL_NAME
+        && parent.dslVersion === CAMPAIGN_CAPABILITY_VERSION
+        && parent.status === "RUNNING"
+        && parent.requiredProvider === requiredProvider
+        && requiredProvider);
+      if (!parentIsCurrent) {
+        const cancelled = await tx.supplyCapabilityRun.updateMany({
+          where: {
+            id: reference.id,
+            officeId: reference.officeId,
+            workspaceId: reference.workspaceId,
+            capabilityKey: CAPABILITY_KEY,
+            dslName: "queued_supplier_research_child",
+            parentRunId: queued.parentRunId,
+            status: "QUEUED",
+          },
+          data: {
+            status: "CANCELLED",
+            error: { message: "CAMPAIGN_SCOPE_SUPERSEDED: Supplier research campaign is no longer running." },
+            cancelledAt: quotaNow,
+          },
+        });
+        return cancelled.count === 1 ? "cancelled" as const : "unavailable" as const;
+      }
+    } else if (discovered.dslName === "interactive_supplier_research" && discovered.parentRunId === null) {
+      const [queued] = await tx.$queryRaw<Array<QueueMetadata>>`
+        SELECT "id", "invokedByUserId", "capabilityVersion", "dslName", "dslVersion", "parentRunId", "input"->>'requiredProvider' AS "requiredProvider"
+        FROM "SupplyCapabilityRun"
+        WHERE "id" = ${reference.id}
+          AND "officeId" = ${reference.officeId}
+          AND "workspaceId" = ${reference.workspaceId}
+          AND "capabilityKey" = ${CAPABILITY_KEY}
+          AND "capabilityVersion" = ${CAPABILITY_VERSION}
+          AND "dslName" = 'interactive_supplier_research'
+          AND "dslVersion" = ${PROVIDER_RUN_DSL_VERSION}
+          AND "parentRunId" IS NULL
+          AND "status" = 'QUEUED'
+        FOR UPDATE
+      `;
+      if (!queued) return "unavailable" as const;
+      lockedQueue = queued;
+    } else {
+      return "unavailable" as const;
+    }
+    const invokedBy = lockedQueue.invokedByUserId ? await tx.user.findFirst({
+      where: {
+        id: lockedQueue.invokedByUserId,
+        officeId: reference.officeId,
+        isActive: true,
+      },
+      select: { id: true, role: true, canViewWholeOffice: true },
+    }) : null;
+    const workspace = invokedBy ? await tx.supplyWorkspace.findFirst({
+      where: {
+        id: reference.workspaceId,
+        officeId: reference.officeId,
+        status: "ACTIVE",
+      },
+      select: {
+        members: {
+          where: {
+            officeId: reference.officeId,
+            userId: invokedBy.id,
+            isActive: true,
+          },
+          select: { role: true },
+          take: 1,
+        },
+      },
+    }) : null;
+    const hasOfficeWideEditAccess = Boolean(invokedBy
+      && invokedBy.role !== "EMPLOYEE"
+      && (invokedBy.canViewWholeOffice || invokedBy.role === "ADMIN" || invokedBy.role === "MANAGER"));
+    const memberRole = workspace?.members[0]?.role;
+    const hasMemberEditAccess = Boolean(invokedBy
+      && invokedBy.role !== "EMPLOYEE"
+      && memberRole
+      && ["OWNER", "EDITOR"].includes(memberRole));
+    if (!workspace || (!hasOfficeWideEditAccess && !hasMemberEditAccess)) {
+      const cancelled = await tx.supplyCapabilityRun.updateMany({
+        where: {
+          id: reference.id,
+          officeId: reference.officeId,
+          workspaceId: reference.workspaceId,
+          capabilityKey: CAPABILITY_KEY,
+          invokedByUserId: lockedQueue.invokedByUserId,
+          status: "QUEUED",
+        },
+        data: {
+          status: "CANCELLED",
+          error: { message: "ACCESS_REVOKED: Supplier research requester can no longer edit this workspace." },
+          cancelledAt: quotaNow,
+        },
+      });
+      return cancelled.count === 1 ? "cancelled" as const : "unavailable" as const;
+    }
     const dayStart = new Date(Date.UTC(quotaNow.getUTCFullYear(), quotaNow.getUTCMonth(), quotaNow.getUTCDate()));
     const callsStartedToday = await tx.supplyCapabilityRun.count({
       where: {
@@ -669,7 +869,7 @@ export async function claimSourcingResearchRun(
         startedAt: { gte: dayStart },
       },
     });
-    if (callsStartedToday >= OFFICE_DAILY_PROVIDER_CALL_CAP) return false;
+    if (callsStartedToday >= OFFICE_DAILY_PROVIDER_CALL_CAP) return "unavailable" as const;
     const updated = await tx.supplyCapabilityRun.updateMany({
       where: {
         id: reference.id,
@@ -684,9 +884,9 @@ export async function claimSourcingResearchRun(
         error: Prisma.DbNull,
       },
     });
-    return updated.count === 1;
+    return updated.count === 1 ? "claimed" as const : "unavailable" as const;
   }, { maxWait: 5_000, timeout: 15_000 });
-  if (!claimed) return { state: "unavailable" };
+  if (claimed !== "claimed") return { state: "unavailable" };
   const run = await prisma.supplyCapabilityRun.findFirst({
     where: {
       id: reference.id,

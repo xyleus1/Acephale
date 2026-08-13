@@ -2953,3 +2953,32 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Consequences: Parts uploads cannot silently erase the operational twin,
   concurrent stale drafts cannot hide newer customer data, and unverifiable
   listings remain labeled claims rather than becoming orderable prices.
+
+### 2026-08-13 - OpenAI supplier discovery requires independent page receipts
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The GUILD campaign was pinned to Exa forced-live retrieval, but the
+  deployed environment could have OpenAI web search configured without Exa.
+  Treating an OpenAI citation or structured model claim as validated supplier
+  evidence would weaken the receipt boundary and still leave the campaign with
+  zero legitimate leads.
+- Decision: Choose Exa when it is configured, otherwise choose OpenAI, and pin
+  that exact provider in the immutable campaign and child inputs. Never switch
+  providers after a timeout, authentication failure, rate limit, or other
+  runtime error. OpenAI citations are discovery only. The server independently
+  retrieves each proposed public page through a pinned public IP connection,
+  rejects redirects, private or reserved addresses, login and paywall pages,
+  encoded or oversized responses, and unsupported content types, then applies
+  deterministic company, role, and requested-capability checks to exact page
+  excerpts.
+- Evidence boundary: Both providers produce versioned, server-rebuilt supplier
+  lead receipts. Sources remain PUBLIC. Price, stock, MOQ, lead time, location,
+  certification, and availability remain unknown unless a separate trusted
+  workflow proves them. The OpenAI page retriever does not establish price
+  freshness and cannot create quote or order authority.
+- Campaign lifecycle: Provider choice is part of campaign scope version 3.
+  Superseded queued children are cancelled, and worker list and claim paths
+  require the exact parent campaign to remain RUNNING with the same provider
+  pin. Source URLs and sanitized warnings remain visible even when no lead
+  passes receipt validation.

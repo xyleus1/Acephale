@@ -42,6 +42,7 @@
     "test:supply-os-continuous-sourcing-acceptance": "node --import tsx scripts/supply-os-continuous-sourcing-acceptance.ts",
     "test:supply-os-saved-research-retry": "node --import tsx scripts/supply-os-saved-research-retry.test.ts",
     "test:supply-os-exa-retrieval": "node --import tsx scripts/supply-os-exa-retrieval.test.ts",
+    "test:supply-os-openai-retrieval": "node --import tsx scripts/supply-os-openai-retrieval.test.ts",
     "test:supply-os-sourcing-persistence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-sourcing-persistence.test.ts",
     "test:supply-os-supply-intelligence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supply-intelligence.test.ts",
     "test:supply-os-supplier-email-provider": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-supplier-email-provider.test.ts",

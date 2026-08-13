@@ -18,6 +18,7 @@ import {
   type ClaimSourcingResearchRunResult,
   type QueuedSourcingResearchRunReference,
 } from "./sourcing-research-persistence";
+import type { SupplierResearchProvider } from "./supplier-research-campaign";
 
 type SupplierResearchWorkerResult =
   | { state: "succeeded"; runId: string }
@@ -34,7 +35,7 @@ export type SupplierResearchWorkerDependencies = {
     queryVariant?: SupplierResearchQueryVariant;
     queryCycle?: number;
     excludeDomains?: string[];
-    requiredProvider?: "EXA";
+    requiredProvider?: SupplierResearchProvider;
   }) => Promise<unknown>;
   completeRun: typeof completeSourcingResearchRun;
   failRun: typeof failSourcingResearchRun;
@@ -87,9 +88,16 @@ function trustedExploration(input: Prisma.JsonValue) {
   };
 }
 
-function trustedRequiredProvider(input: Prisma.JsonValue) {
+function trustedRequiredProvider(input: Prisma.JsonValue): SupplierResearchProvider | undefined {
   if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
-  return (input as Prisma.JsonObject).requiredProvider === "EXA" ? "EXA" as const : undefined;
+  const provider = (input as Prisma.JsonObject).requiredProvider;
+  return provider === "EXA" || provider === "OPENAI" ? provider : undefined;
+}
+
+function hasCampaignMetadata(input: Prisma.JsonValue) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const row = input as Prisma.JsonObject;
+  return row.campaignId !== undefined || row.campaignKey !== undefined || row.campaignItemKey !== undefined;
 }
 
 async function persistFailure(args: {
@@ -129,11 +137,20 @@ export async function runSourcingResearchWorker(
     });
   }
 
+  const requiredProvider = trustedRequiredProvider(claimed.run.input);
+  if (hasCampaignMetadata(claimed.run.input) && !requiredProvider) {
+    return persistFailure({
+      claimed,
+      code: "INVALID_REQUEST",
+      message: "Campaign supplier research requires a pinned provider.",
+      dependencies,
+    });
+  }
+
   let output: unknown;
   try {
     const queryVariant = trustedQueryVariant(claimed.run.input);
     const exploration = trustedExploration(claimed.run.input);
-    const requiredProvider = trustedRequiredProvider(claimed.run.input);
     output = await dependencies.search({
       ...parsed.input,
       officeId: claimed.run.officeId,

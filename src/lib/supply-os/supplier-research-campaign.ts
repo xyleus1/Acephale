@@ -4,9 +4,9 @@ import { Prisma } from "@prisma/client";
 import type { EvidenceSource, SupplierCandidate, SupplierResearchResult } from "./research";
 import type { SupplyAccessContext } from "./persistence";
 import {
-  parseStoredExaRetrievalCapture,
-  validateExaPublicSupplierLeadReceipts,
-  type ExaSupplierResearchInput,
+  parseStoredSupplierResearchRetrievalCapture,
+  validatePublicSupplierLeadReceipts,
+  type SupplierLeadValidationInput,
 } from "./exa-supplier-research";
 import {
   GUILD_SOURCING_LINES,
@@ -35,7 +35,7 @@ const RESEARCH_CAPABILITY_KEY = "research.supplier_candidates";
 const CAMPAIGN_DSL_NAME = "guild_continuous_supplier_research";
 const ATTEMPT_DSL_NAME = "queued_supplier_research_child";
 const AGGREGATE_DSL_NAME = "guild_supplier_research_aggregate";
-const CAMPAIGN_SCOPE_VERSION = 2;
+const CAMPAIGN_SCOPE_VERSION = 3;
 const CAMPAIGN_RECONCILIATION_LEASE_MS = 2 * 60_000;
 const RETRYABLE_FAILURE_CODES = new Set([
   "PROVIDER_TIMEOUT",
@@ -49,6 +49,24 @@ const RETRYABLE_FAILURE_CODES = new Set([
 const OPERATOR_BLOCKING_FAILURE_CODES = new Set(["MISSING_CONFIGURATION", "PROVIDER_AUTHENTICATION_FAILED", "ACCESS_REVOKED"]);
 
 type JsonRecord = Record<string, unknown>;
+
+export type SupplierResearchProvider = "EXA" | "OPENAI";
+
+export function configuredSupplierResearchProvider(
+  environment: { EXA_API_KEY?: string; OPENAI_API_KEY?: string } = {
+    EXA_API_KEY: process.env.EXA_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  },
+): SupplierResearchProvider | null {
+  if (environment.EXA_API_KEY?.trim()) return "EXA";
+  if (environment.OPENAI_API_KEY?.trim()) return "OPENAI";
+  return null;
+}
+
+export function supplierResearchProviderFromInput(value: unknown): SupplierResearchProvider | null {
+  const provider = record(value).requiredProvider;
+  return provider === "EXA" || provider === "OPENAI" ? provider : null;
+}
 
 export type SupplierResearchCampaignRequest = {
   campaignKey?: typeof GUILD_SUPPLIER_CAMPAIGN_KEY;
@@ -98,6 +116,7 @@ export type SupplierResearchAggregateInput = {
   campaignAttemptCount: number;
   campaignTerminalAttemptCount: number;
   campaignAttemptWatermark: string;
+  requiredProvider: SupplierResearchProvider;
 };
 
 export type SupplierResearchCampaignItemState =
@@ -235,10 +254,11 @@ export function shouldPersistGuildSupplierResearchAggregate(args: {
   return args.latestOutputHash !== args.incomingOutputHash;
 }
 
-function guildSupplierResearchCampaignScope() {
+function guildSupplierResearchCampaignScope(requiredProvider: SupplierResearchProvider) {
   return {
     scopeVersion: CAMPAIGN_SCOPE_VERSION,
     campaignKey: GUILD_SUPPLIER_CAMPAIGN_KEY,
+    requiredProvider,
     targetMinimum: GUILD_SUPPLIER_CAMPAIGN_TARGET_MINIMUM,
     retainedMaximum: GUILD_SUPPLIER_CAMPAIGN_RETAINED_MAXIMUM,
     needByDate: GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE,
@@ -257,27 +277,40 @@ function guildSupplierResearchCampaignScope() {
   };
 }
 
-export function guildSupplierResearchCampaignRevision() {
-  return digest(guildSupplierResearchCampaignScope()).slice(0, 24);
+export function guildSupplierResearchCampaignRevision(requiredProvider: SupplierResearchProvider = "EXA") {
+  return digest(guildSupplierResearchCampaignScope(requiredProvider)).slice(0, 24);
 }
 
-export function guildSupplierResearchCampaignIdempotencyKey() {
-  return `supplier-campaign:${GUILD_SUPPLIER_CAMPAIGN_KEY}:${guildSupplierResearchCampaignRevision()}`;
+export function guildSupplierResearchCampaignIdempotencyKey(requiredProvider: SupplierResearchProvider = "EXA") {
+  return `supplier-campaign:${GUILD_SUPPLIER_CAMPAIGN_KEY}:${guildSupplierResearchCampaignRevision(requiredProvider)}`;
 }
 
-export function guildSupplierResearchCampaignGenerationKey(generation: number) {
+export function guildSupplierResearchCampaignGenerationKey(
+  generation: number,
+  requiredProvider: SupplierResearchProvider = "EXA",
+) {
   return generation > 1
-    ? `${guildSupplierResearchCampaignIdempotencyKey()}:generation:${generation}`
-    : guildSupplierResearchCampaignIdempotencyKey();
+    ? `${guildSupplierResearchCampaignIdempotencyKey(requiredProvider)}:generation:${generation}`
+    : guildSupplierResearchCampaignIdempotencyKey(requiredProvider);
 }
 
-export function campaignGenerationFromIdempotencyKey(value: string | null | undefined) {
+export function campaignGenerationFromIdempotencyKey(
+  value: string | null | undefined,
+  requiredProvider: SupplierResearchProvider = "EXA",
+) {
   if (!value) return null;
-  const base = guildSupplierResearchCampaignIdempotencyKey();
+  const base = guildSupplierResearchCampaignIdempotencyKey(requiredProvider);
   if (value === base) return 1;
   const match = value.match(new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:generation:(\\d+)$`));
   const generation = match ? Number(match[1]) : Number.NaN;
   return Number.isSafeInteger(generation) && generation >= 2 ? generation : null;
+}
+
+function campaignIdentity(value: { input: unknown; idempotencyKey: string | null }) {
+  const requiredProvider = supplierResearchProviderFromInput(value.input);
+  if (!requiredProvider) return null;
+  const generation = campaignGenerationFromIdempotencyKey(value.idempotencyKey, requiredProvider);
+  return generation === null ? null : { requiredProvider, generation };
 }
 
 export function guildSupplierResearchCampaignScopeExpired(now = new Date()) {
@@ -363,11 +396,19 @@ export function aggregateGuildSupplierResearchLine(
     .filter((value) => campaignItemKey(value) === line.sku && value.status === "SUCCEEDED")
     .sort((left, right) => (asDate(left.createdAt)?.getTime() ?? 0) - (asDate(right.createdAt)?.getTime() ?? 0) || left.id.localeCompare(right.id))) {
     const output = record(attempt.output);
-    const capture = parseStoredExaRetrievalCapture(output.retrieval);
     const attemptInput = record(attempt.input);
-    if (!capture || capture.stage === "SEARCH_ONLY") continue;
-    const validatedReceipts = validateExaPublicSupplierLeadReceipts(
-      attemptInput as unknown as ExaSupplierResearchInput,
+    for (const sourceValue of Array.isArray(output.sources) ? output.sources : []) {
+      const source = evidenceSource(sourceValue);
+      if (source) sourceByUrl.set(source.url, { ...source, sourceType: "PUBLIC" });
+    }
+    for (const warning of Array.isArray(output.warnings) ? output.warnings : []) {
+      if (typeof warning === "string" && warning.trim()) warnings.add(warning.trim().slice(0, 500));
+    }
+    const capture = parseStoredSupplierResearchRetrievalCapture(output.retrieval);
+    const requiredProvider = supplierResearchProviderFromInput(attemptInput);
+    if (!capture || capture.stage === "SEARCH_ONLY" || !requiredProvider || capture.provider !== requiredProvider) continue;
+    const validatedReceipts = validatePublicSupplierLeadReceipts(
+      attemptInput as unknown as SupplierLeadValidationInput,
       capture,
     );
     const validatedReceiptByCandidateId = new Map(validatedReceipts.flatMap((receipt) => {
@@ -376,17 +417,12 @@ export function aggregateGuildSupplierResearchLine(
             candidate.receiptHash === receipt.receiptHash
             && candidate.sourceUrl === receipt.sourceUrl
             && candidate.itemKey === receipt.itemKey
+            && candidate.provider === receipt.provider
+            && candidate.freshnessPolicy === receipt.freshnessPolicy
           ))
         : null;
       return stored && typeof stored.candidateId === "string" ? [[stored.candidateId, receipt] as const] : [];
     }));
-    for (const sourceValue of Array.isArray(output.sources) ? output.sources : []) {
-      const source = evidenceSource(sourceValue);
-      if (source) sourceByUrl.set(source.url, { ...source, sourceType: "PUBLIC" });
-    }
-    for (const warning of Array.isArray(output.warnings) ? output.warnings : []) {
-      if (typeof warning === "string" && warning.trim()) warnings.add(warning.trim().slice(0, 500));
-    }
     for (const candidateValue of Array.isArray(output.candidates) ? output.candidates : []) {
       const raw = record(candidateValue);
       if (
@@ -465,11 +501,7 @@ export function aggregateGuildSupplierResearchLine(
   const retained = choices
     .sort((left, right) => right.score - left.score || left.domain.localeCompare(right.domain))
     .slice(0, GUILD_SUPPLIER_CAMPAIGN_RETAINED_MAXIMUM);
-  const selectedUrls = new Set(retained.flatMap((choice) => choice.candidate.sourceUrls));
-  const sources = [...selectedUrls].flatMap((url) => {
-    const source = sourceByUrl.get(url);
-    return source ? [source] : [];
-  });
+  const sources = [...sourceByUrl.values()];
   const candidates = retained.map((choice) => choice.candidate);
   return {
     candidates,
@@ -526,6 +558,7 @@ export function guildSupplierResearchAttemptInput(args: {
   line: GuildSourcingLine;
   campaignId: string;
   attemptNumber: number;
+  requiredProvider: SupplierResearchProvider;
   excludeDomains?: string[];
 }) {
   const queryVariant = GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS[(args.attemptNumber - 1) % GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length];
@@ -553,13 +586,14 @@ export function guildSupplierResearchAttemptInput(args: {
     queryVariantIndex: (args.attemptNumber - 1) % GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length,
     queryCycle: Math.min(2, Math.floor((args.attemptNumber - 1) / GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length)),
     excludeDomains,
-    requiredProvider: "EXA",
+    requiredProvider: args.requiredProvider,
     attemptNumber: args.attemptNumber,
   } satisfies Prisma.InputJsonObject;
 }
 
 export function planGuildSupplierResearchQueue(args: {
   campaignId: string;
+  requiredProvider: SupplierResearchProvider;
   attempts: SupplierResearchCampaignAttempt[];
   aggregates?: PersistedAggregate[];
   now?: Date;
@@ -600,6 +634,7 @@ export function planGuildSupplierResearchQueue(args: {
       line,
       campaignId: args.campaignId,
       attemptNumber,
+      requiredProvider: args.requiredProvider,
       excludeDomains: persistedOutput.candidates.flatMap((candidate) => {
         const domain = supplierCandidateDomain(candidate);
         return domain ? [domain] : [];
@@ -649,6 +684,7 @@ function aggregateAttemptWatermark(
 function aggregateInput(
   line: GuildSourcingLine,
   campaignId: string,
+  requiredProvider: SupplierResearchProvider,
   attemptWatermark: ReturnType<typeof aggregateAttemptWatermark>,
 ): SupplierResearchAggregateInput {
   if (line.quantity === null || line.unit === null) throw new Error("A supplier-searchable GUILD line requires quantity and unit.");
@@ -672,6 +708,7 @@ function aggregateInput(
     campaignAttemptCount: attemptWatermark.attemptCount,
     campaignTerminalAttemptCount: attemptWatermark.terminalAttemptCount,
     campaignAttemptWatermark: attemptWatermark.watermark,
+    requiredProvider,
   };
 }
 
@@ -842,7 +879,7 @@ export function projectGuildSupplierResearchCampaign(args: {
 }
 
 type CampaignDatabaseState = {
-  campaign: { id: string; workspaceId: string; status: string; updatedAt: Date };
+  campaign: { id: string; workspaceId: string; status: string; updatedAt: Date; input: unknown };
   campaignAncestryIds: string[];
   attempts: SupplierResearchCampaignAttempt[];
   aggregates: PersistedAggregate[];
@@ -1103,6 +1140,21 @@ async function transitionCampaignWithReconciliationLease(args: {
     `;
     if (!campaign || campaign.status !== "RUNNING" || !hasReconciliationLease(campaign.output, args.token)) return false;
     if (args.status === "SUCCEEDED" && !args.output) throw new Error("Completed supplier research campaign requires output.");
+    await tx.supplyCapabilityRun.updateMany({
+      where: {
+        officeId: args.context.officeId,
+        workspaceId: args.campaign.workspaceId,
+        parentRunId: campaign.id,
+        capabilityKey: RESEARCH_CAPABILITY_KEY,
+        dslName: ATTEMPT_DSL_NAME,
+        status: "QUEUED",
+      },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: args.now,
+        error: { message: "CAMPAIGN_TERMINAL: Supplier research attempt was cancelled when its campaign ended." },
+      },
+    });
     await tx.supplyCapabilityRun.update({
       where: { id: campaign.id },
       data: args.status === "SUCCEEDED"
@@ -1131,6 +1183,8 @@ async function persistChangedAggregates(args: {
   reconciliationToken: string;
 }) {
   const { prisma } = await import("@/lib/prisma");
+  const requiredProvider = supplierResearchProviderFromInput(args.state.campaign.input);
+  if (!requiredProvider) throw new Error("Supplier research campaign has no pinned provider.");
   const current = latestAggregatesByItem(args.state.aggregates);
   for (const line of GUILD_SOURCING_LINES) {
     if (line.classification !== "SUPPLIER_SEARCH") continue;
@@ -1139,7 +1193,7 @@ async function persistChangedAggregates(args: {
     const output = aggregateGuildSupplierResearchLine(line, args.state.attempts);
     const outputHash = digest(output);
     const attemptWatermark = aggregateAttemptWatermark(line, args.state.attempts);
-    const input = aggregateInput(line, args.state.campaign.id, attemptWatermark);
+    const input = aggregateInput(line, args.state.campaign.id, requiredProvider, attemptWatermark);
     const inputHash = digest(input);
     const idempotencyKey = `guild:${args.state.campaign.id}:${line.sku}:aggregate:${attemptWatermark.watermark.slice(0, 16)}:${outputHash.slice(0, 16)}`;
     await prisma.$transaction(async (tx) => {
@@ -1155,7 +1209,7 @@ async function persistChangedAggregates(args: {
       `;
       if (!parent || parent.status !== "RUNNING" || !hasReconciliationLease(parent.output, args.reconciliationToken)) return;
       await tx.$queryRaw<Array<{ advisoryLock: string }>>`
-        SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-aggregate:${args.context.officeId}:${args.state.campaign.workspaceId}:${guildSupplierResearchCampaignRevision()}:${line.sku}`}, 0))::text AS "advisoryLock"
+        SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-aggregate:${args.context.officeId}:${args.state.campaign.workspaceId}:${guildSupplierResearchCampaignRevision(requiredProvider)}:${line.sku}`}, 0))::text AS "advisoryLock"
       `;
       const [latest] = await tx.$queryRaw<Array<{ input: unknown; outputHash: string | null }>>`
         SELECT "input", "outputHash"
@@ -1228,6 +1282,8 @@ async function reconcileCampaign(args: {
   allowTerminalRetry?: boolean;
 }) {
   const { prisma } = await import("@/lib/prisma");
+  const requiredProvider = supplierResearchProviderFromInput(args.campaign.input);
+  if (!requiredProvider) throw new Error("Supplier research campaign has no pinned provider.");
   const persistence = await import("./sourcing-research-persistence") as unknown as {
     enqueueSourcingResearchCampaignBatch: (args: {
       context: SupplyAccessContext;
@@ -1251,7 +1307,7 @@ async function reconcileCampaign(args: {
         capabilityKey: CAMPAIGN_CAPABILITY_KEY,
         dslName: CAMPAIGN_DSL_NAME,
       },
-      select: { id: true, workspaceId: true, status: true, updatedAt: true },
+      select: { id: true, workspaceId: true, status: true, updatedAt: true, input: true },
     });
     if (!current) throw new Error("Supplier research campaign was not found during reconciliation.");
     const state = await loadCampaignDatabaseState({ campaign: current, officeId: args.context.officeId, now: args.now });
@@ -1292,6 +1348,7 @@ async function reconcileCampaign(args: {
     state = await loadCampaignDatabaseState({ campaign: args.campaign, officeId: args.context.officeId, now: args.now });
     const plan = planGuildSupplierResearchQueue({
       campaignId: args.campaign.id,
+      requiredProvider,
       attempts: state.attempts,
       aggregates: state.aggregates,
       now: args.now,
@@ -1324,6 +1381,7 @@ async function reconcileCampaign(args: {
     if (projected.state === "COMPLETE") {
       const output = {
         campaignKey: GUILD_SUPPLIER_CAMPAIGN_KEY,
+        requiredProvider,
         completedLines: projected.completedLines,
         leadCount: projected.leadCount,
         aggregateRunIds: projected.items.flatMap((item) => item.aggregateRunId ? [item.aggregateRunId] : []),
@@ -1389,11 +1447,12 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
   context: SupplyAccessContext;
   now?: Date;
 }): Promise<SupplierResearchCampaignResponse> {
-  if (!process.env.EXA_API_KEY) {
+  const configuredProvider = configuredSupplierResearchProvider();
+  if (!configuredProvider) {
     const { SupplyConnectorError } = await import("./connector-contract");
     throw new SupplyConnectorError(
       "CONNECTOR_DISABLED",
-      "Bulk supplier research requires the public-page validation provider.",
+      "Bulk supplier research requires an EXA or OpenAI public-page validation provider.",
     );
   }
   const { prisma } = await import("@/lib/prisma");
@@ -1406,30 +1465,48 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
     );
   }
   const workspace = await campaignWorkspace(args.context);
-  const input = guildSupplierResearchCampaignScope() satisfies Prisma.InputJsonObject;
   const selected = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ advisoryLock: string }>>`
-      SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-campaign-generation:${args.context.officeId}:${workspace.id}:${guildSupplierResearchCampaignRevision()}`}, 0))::text AS "advisoryLock"
+      SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-campaign-generation:${args.context.officeId}:${workspace.id}:${GUILD_SUPPLIER_CAMPAIGN_KEY}`}, 0))::text AS "advisoryLock"
     `;
-    const campaignRows = await tx.supplyCapabilityRun.findMany({
-      where: {
-        officeId: args.context.officeId,
-        workspaceId: workspace.id,
-        capabilityKey: CAMPAIGN_CAPABILITY_KEY,
-        dslName: CAMPAIGN_DSL_NAME,
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: { id: true, officeId: true, workspaceId: true, capabilityKey: true, dslName: true, status: true, updatedAt: true, idempotencyKey: true },
+    await tx.$queryRaw<Array<{ advisoryLock: string }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-office-provider-budget:${args.context.officeId}`}, 0))::text AS "advisoryLock"
+    `;
+    const campaignRows = await tx.$queryRaw<Array<{
+      id: string;
+      officeId: string;
+      workspaceId: string;
+      capabilityKey: string;
+      dslName: string | null;
+      status: string;
+      updatedAt: Date;
+      idempotencyKey: string | null;
+      input: unknown;
+    }>>`
+      SELECT "id", "officeId", "workspaceId", "capabilityKey", "dslName", "status", "updatedAt", "idempotencyKey", "input"
+      FROM "SupplyCapabilityRun"
+      WHERE "officeId" = ${args.context.officeId}
+        AND "workspaceId" = ${workspace.id}
+        AND "capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
+        AND "dslName" = ${CAMPAIGN_DSL_NAME}
+      ORDER BY "createdAt" DESC, "id" DESC
+      FOR UPDATE
+    `;
+    const validRows = campaignRows.flatMap((campaign) => {
+      const identity = campaignIdentity(campaign);
+      return identity ? [{ campaign, ...identity }] : [];
     });
-    const currentScopeRows = campaignRows
-      .map((campaign) => ({ campaign, generation: campaignGenerationFromIdempotencyKey(campaign.idempotencyKey) }))
-      .filter((entry): entry is { campaign: typeof campaignRows[number]; generation: number } => entry.generation !== null)
-      .sort((left, right) => right.generation - left.generation);
-    const latest = currentScopeRows[0]?.campaign ?? null;
-    if (latest && ["QUEUED", "RUNNING", "SUCCEEDED"].includes(latest.status)) {
-      return { campaign: latest, generation: currentScopeRows[0].generation, reused: true };
+    const reusable = validRows.find((entry) => ["QUEUED", "RUNNING", "SUCCEEDED"].includes(entry.campaign.status)) ?? null;
+    if (reusable) {
+      return {
+        campaign: reusable.campaign,
+        generation: reusable.generation,
+        requiredProvider: reusable.requiredProvider,
+        reused: true,
+      };
     }
-    const generation = (currentScopeRows[0]?.generation ?? 0) + 1;
+    const providerRows = validRows.filter((entry) => entry.requiredProvider === configuredProvider);
+    const generation = Math.max(0, ...providerRows.map((entry) => entry.generation)) + 1;
     if (generation > GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS) {
       const { SupplyPersistenceError } = await import("./persistence");
       throw new SupplyPersistenceError(
@@ -1437,6 +1514,42 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
         "conflict",
       );
     }
+    for (const superseded of campaignRows) {
+      await tx.supplyCapabilityRun.updateMany({
+        where: {
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          parentRunId: superseded.id,
+          capabilityKey: RESEARCH_CAPABILITY_KEY,
+          dslName: ATTEMPT_DSL_NAME,
+          status: "QUEUED",
+        },
+        data: {
+          status: "CANCELLED",
+          cancelledAt: now,
+          error: { message: "CAMPAIGN_SCOPE_SUPERSEDED: Supplier research attempt belongs to a superseded campaign scope." },
+        },
+      });
+      if (!["QUEUED", "RUNNING"].includes(superseded.status)) continue;
+      await tx.supplyCapabilityRun.update({
+        where: { id: superseded.id },
+        data: superseded.status === "QUEUED"
+          ? {
+              status: "CANCELLED",
+              cancelledAt: now,
+              error: { message: "CAMPAIGN_SCOPE_SUPERSEDED: Supplier research campaign scope was replaced." },
+            }
+          : {
+              status: "FAILED",
+              output: Prisma.DbNull,
+              failedAt: now,
+              error: { message: "CAMPAIGN_SCOPE_SUPERSEDED: Supplier research campaign scope was replaced." },
+            },
+        select: { id: true },
+      });
+    }
+    const input = guildSupplierResearchCampaignScope(configuredProvider) satisfies Prisma.InputJsonObject;
+    const latest = providerRows[0]?.campaign ?? null;
     const queued = await tx.supplyCapabilityRun.create({
       data: {
         officeId: args.context.officeId,
@@ -1449,21 +1562,31 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
         dslVersion: String(CAMPAIGN_SCOPE_VERSION),
         input,
         inputHash: digest(input),
-        idempotencyKey: guildSupplierResearchCampaignGenerationKey(generation),
+        idempotencyKey: guildSupplierResearchCampaignGenerationKey(generation, configuredProvider),
       },
       select: { id: true },
     });
     const campaign = await tx.supplyCapabilityRun.update({
       where: { id: queued.id },
       data: { status: "RUNNING", startedAt: now },
-      select: { id: true, officeId: true, workspaceId: true, capabilityKey: true, dslName: true, status: true, updatedAt: true, idempotencyKey: true },
+      select: { id: true, officeId: true, workspaceId: true, capabilityKey: true, dslName: true, status: true, updatedAt: true, idempotencyKey: true, input: true },
     });
-    return { campaign, generation, reused: false };
+    return { campaign, generation, requiredProvider: configuredProvider, reused: false };
   }, { maxWait: 5_000, timeout: 15_000 });
   const campaign = selected.campaign;
   if (campaign.status === "SUCCEEDED") {
     const state = await loadCampaignDatabaseState({ campaign, officeId: args.context.officeId, now });
     return { campaign: projectGuildSupplierResearchCampaign({ ...state, now }), queued: 0, reused: true };
+  }
+  const selectedProviderConfigured = selected.requiredProvider === "EXA"
+    ? Boolean(process.env.EXA_API_KEY?.trim())
+    : Boolean(process.env.OPENAI_API_KEY?.trim());
+  if (!selectedProviderConfigured) {
+    const { SupplyConnectorError } = await import("./connector-contract");
+    throw new SupplyConnectorError(
+      "CONNECTOR_DISABLED",
+      `The active supplier research campaign is pinned to ${selected.requiredProvider}, but that provider is not configured.`,
+    );
   }
   const result = await reconcileCampaign({
     context: args.context,
@@ -1490,12 +1613,13 @@ export async function pollGuildSupplierResearchCampaign(args: {
       dslName: CAMPAIGN_DSL_NAME,
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true, workspaceId: true, status: true, updatedAt: true, officeId: true, capabilityKey: true, idempotencyKey: true },
+    select: { id: true, workspaceId: true, status: true, updatedAt: true, officeId: true, capabilityKey: true, idempotencyKey: true, input: true },
   });
   const campaign = campaignRows
-    .map((row) => ({ row, generation: campaignGenerationFromIdempotencyKey(row.idempotencyKey) }))
-    .filter((entry): entry is { row: typeof campaignRows[number]; generation: number } => entry.generation !== null)
-    .sort((left, right) => right.generation - left.generation)[0]?.row ?? null;
+    .flatMap((row) => {
+      const identity = campaignIdentity(row);
+      return identity ? [{ row, ...identity }] : [];
+    })[0]?.row ?? null;
   if (!campaign || campaign.officeId !== args.context.officeId || campaign.capabilityKey !== CAMPAIGN_CAPABILITY_KEY) return null;
   const state = await loadCampaignDatabaseState({ campaign, officeId: args.context.officeId, now });
   return projectGuildSupplierResearchCampaign({ ...state, now });
@@ -1521,6 +1645,21 @@ async function failCampaignWithoutActiveReconciliation(args: {
     if (!campaign || campaign.status !== "RUNNING") return false;
     const leaseExpiresAt = asDate(reconciliationLease(campaign.output)?.expiresAt);
     if (leaseExpiresAt && leaseExpiresAt.getTime() > args.now.getTime()) return false;
+    await tx.supplyCapabilityRun.updateMany({
+      where: {
+        officeId: args.campaign.officeId,
+        workspaceId: args.campaign.workspaceId,
+        parentRunId: campaign.id,
+        capabilityKey: RESEARCH_CAPABILITY_KEY,
+        dslName: ATTEMPT_DSL_NAME,
+        status: "QUEUED",
+      },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: args.now,
+        error: { message: "CAMPAIGN_SCOPE_SUPERSEDED: Supplier research attempt belongs to an inactive campaign." },
+      },
+    });
     await tx.supplyCapabilityRun.update({
       where: { id: campaign.id },
       data: {
@@ -1560,6 +1699,7 @@ export async function advanceSupplierResearchCampaigns(options: { limit?: number
       status: true,
       updatedAt: true,
       idempotencyKey: true,
+      input: true,
       invokedBy: {
         select: { id: true, officeId: true, role: true, canViewWholeOffice: true, isActive: true },
       },
@@ -1569,7 +1709,7 @@ export async function advanceSupplierResearchCampaigns(options: { limit?: number
   let completed = 0;
   let failed = 0;
   for (const campaign of campaigns) {
-    if (campaignGenerationFromIdempotencyKey(campaign.idempotencyKey) === null) {
+    if (!campaignIdentity(campaign)) {
       const transitioned = await failCampaignWithoutActiveReconciliation({
         campaign,
         now,

@@ -26,10 +26,13 @@ import {
 } from "../src/lib/supply-os/procurement-case-persistence";
 import {
   completeSourcingResearchRun,
+  claimSourcingResearchRun,
+  enqueueSourcingResearchRun,
   failStaleRunningSourcingResearchRuns,
   getSourcingResearchRun,
   listSourcingResearchPage,
   listSourcingResearchRuns,
+  listQueuedSourcingResearchRuns,
   startSourcingResearchRun,
 } from "../src/lib/supply-os/sourcing-research-persistence";
 import {
@@ -63,6 +66,10 @@ import { normalizeSupplierQuoteExtraction } from "../src/lib/supply-os/supplier-
 import { SupplierQuoteAttachmentError } from "../src/lib/supply-os/supplier-quote-attachment-text";
 import { returnStaleReplacementToSourcing } from "../src/lib/supply-os/purchase-order-revision";
 import { supplyIntelligenceProfile } from "../src/lib/supply-os/supply-intelligence-persistence";
+import {
+  validatePublicSupplierLeadReceipts,
+  type OpenAiRetrievalCapture,
+} from "../src/lib/supply-os/exa-supplier-research";
 import {
   GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS,
   guildSupplierResearchCampaignIdempotencyKey,
@@ -109,6 +116,7 @@ async function main() {
   try {
     const context = await makeContext("owner");
     officeId = context.officeId;
+    let supersededCampaignChildId = "";
     const priorExaApiKey = process.env.EXA_API_KEY;
     try {
       process.env.EXA_API_KEY = "supplier-campaign-trigger-contract";
@@ -117,12 +125,75 @@ async function main() {
         where: { id: firstCampaign.campaign.id },
         select: { id: true, status: true, idempotencyKey: true },
       });
+      const firstCampaignChild = await prisma.supplyCapabilityRun.findFirstOrThrow({
+        where: {
+          officeId: context.officeId,
+          workspaceId: firstCampaign.campaign.workspaceId,
+          parentRunId: firstCampaignRow.id,
+          capabilityKey: "research.supplier_candidates",
+          dslName: "queued_supplier_research_child",
+          status: "QUEUED",
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, officeId: true, workspaceId: true },
+      });
+      supersededCampaignChildId = firstCampaignChild.id;
       assert.equal(firstCampaignRow.status, "RUNNING", "campaign parent must pass QUEUED to RUNNING through the database state guard");
       assert.equal(firstCampaignRow.idempotencyKey, guildSupplierResearchCampaignIdempotencyKey());
+      const mismatchedProviderInput = {
+        componentItemKey: "request:guild-provider-mismatch",
+        componentName: "Provider mismatch fixture",
+        requiredProvider: "OPENAI",
+      } as const;
+      const mismatchedProviderChild = await prisma.supplyCapabilityRun.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: firstCampaign.campaign.workspaceId,
+          invokedByUserId: context.userId,
+          parentRunId: firstCampaignRow.id,
+          capabilityKey: "research.supplier_candidates",
+          capabilityVersion: "1",
+          dslName: "queued_supplier_research_child",
+          dslVersion: "2",
+          input: mismatchedProviderInput,
+          inputHash: jsonDigest(mismatchedProviderInput),
+          idempotencyKey: `supplier-provider-mismatch-${suffix}`,
+        },
+        select: { id: true, officeId: true, workspaceId: true },
+      });
+      assert.equal(
+        (await listQueuedSourcingResearchRuns(10)).some((run) => run.id === mismatchedProviderChild.id),
+        false,
+        "a campaign child whose provider pin differs from its parent must never enter the worker queue",
+      );
+      assert.deepEqual(await claimSourcingResearchRun(mismatchedProviderChild), { state: "unavailable" });
+      assert.equal(
+        (await prisma.supplyCapabilityRun.findUniqueOrThrow({ where: { id: mismatchedProviderChild.id }, select: { status: true } })).status,
+        "CANCELLED",
+        "claim must cancel a provider-mismatched campaign child before any provider call",
+      );
       await prisma.supplyCapabilityRun.update({
         where: { id: firstCampaignRow.id },
         data: { status: "FAILED", error: { message: "PROVIDER_AUTHENTICATION_FAILED: Test retry boundary." }, failedAt: new Date("2026-08-12T12:01:00.000Z") },
       });
+      assert.equal(
+        (await listQueuedSourcingResearchRuns(10)).some((run) => run.id === firstCampaignChild.id),
+        false,
+        "a queued child of a terminal campaign must never be advertised to a worker",
+      );
+      assert.deepEqual(
+        await claimSourcingResearchRun(firstCampaignChild),
+        { state: "unavailable" },
+        "claim must recheck the campaign parent under lock before provider work starts",
+      );
+      const cancelledCampaignChild = await prisma.supplyCapabilityRun.findUniqueOrThrow({
+        where: { id: firstCampaignChild.id },
+        select: { status: true, startedAt: true, cancelledAt: true, error: true },
+      });
+      assert.equal(cancelledCampaignChild.status, "CANCELLED", "an orphaned queued campaign child must terminalize through the legal QUEUED to CANCELLED transition");
+      assert.equal(cancelledCampaignChild.startedAt, null, "a cancelled queued child must not consume provider-call quota");
+      assert.ok(cancelledCampaignChild.cancelledAt);
+      assert.match(String((cancelledCampaignChild.error as { message?: unknown } | null)?.message ?? ""), /CAMPAIGN_SCOPE_SUPERSEDED/);
       const retriedCampaign = await startOrResumeGuildSupplierResearchCampaign({ context, now: new Date("2026-08-12T12:02:00.000Z") });
       const retriedCampaignRow = await prisma.supplyCapabilityRun.findUniqueOrThrow({
         where: { id: retriedCampaign.campaign.id },
@@ -180,6 +251,7 @@ async function main() {
       if (priorExaApiKey === undefined) delete process.env.EXA_API_KEY;
       else process.env.EXA_API_KEY = priorExaApiKey;
     }
+    assert.ok(supersededCampaignChildId, "the superseded campaign child fixture must execute");
     const visibleWorkspace = await createSupplyWorkspace(context, { name: "Visible robotics workspace" });
     const input = {
       componentItemKey: "VIS-DPT-410",
@@ -190,6 +262,90 @@ async function main() {
       targetCountry: "United States",
       requestText: "Find four stereo depth cameras",
     };
+    const revocableUser = await prisma.user.create({
+      data: {
+        officeId: context.officeId,
+        email: `sourcing-revocable-${suffix}@example.test`,
+        passwordHash: "verification-only",
+        fullName: "Revocable sourcing operator",
+        role: "SALES",
+        canViewWholeOffice: false,
+      },
+    });
+    await prisma.supplyWorkspaceMember.create({
+      data: {
+        officeId: context.officeId,
+        workspaceId: visibleWorkspace.id,
+        userId: revocableUser.id,
+        role: "EDITOR",
+      },
+    });
+    const revocableContext = {
+      officeId: context.officeId,
+      userId: revocableUser.id,
+      role: revocableUser.role,
+      canViewWholeOffice: false,
+    } satisfies SupplyAccessContext;
+    const providerStartsBeforeRevocation = await prisma.supplyCapabilityRun.count({
+      where: {
+        officeId: context.officeId,
+        capabilityKey: "research.supplier_candidates",
+        dslName: { in: ["interactive_supplier_research", "queued_supplier_research_child"] },
+        startedAt: { not: null },
+      },
+    });
+    const deactivatedUserRun = await enqueueSourcingResearchRun({
+      context: revocableContext,
+      workspaceId: visibleWorkspace.id,
+      input: { ...input, componentItemKey: "ACCESS-REVOKED-USER" },
+      idempotencyKey: `access-revoked-user-${suffix}`,
+    });
+    await prisma.user.update({ where: { id: revocableUser.id }, data: { isActive: false } });
+    assert.deepEqual(await claimSourcingResearchRun({
+      id: deactivatedUserRun.run.id,
+      officeId: context.officeId,
+      workspaceId: visibleWorkspace.id,
+    }), { state: "unavailable" });
+    const cancelledDeactivatedUserRun = await prisma.supplyCapabilityRun.findUniqueOrThrow({
+      where: { id: deactivatedUserRun.run.id },
+      select: { status: true, startedAt: true, cancelledAt: true, error: true },
+    });
+    assert.equal(cancelledDeactivatedUserRun.status, "CANCELLED");
+    assert.equal(cancelledDeactivatedUserRun.startedAt, null, "an inactive requester must consume no provider-call budget");
+    assert.ok(cancelledDeactivatedUserRun.cancelledAt);
+    assert.match(String((cancelledDeactivatedUserRun.error as { message?: unknown } | null)?.message ?? ""), /ACCESS_REVOKED/);
+    await prisma.user.update({ where: { id: revocableUser.id }, data: { isActive: true } });
+    const revokedWorkspaceRun = await enqueueSourcingResearchRun({
+      context: revocableContext,
+      workspaceId: visibleWorkspace.id,
+      input: { ...input, componentItemKey: "ACCESS-REVOKED-WORKSPACE" },
+      idempotencyKey: `access-revoked-workspace-${suffix}`,
+    });
+    await prisma.supplyWorkspaceMember.update({
+      where: { workspaceId_userId: { workspaceId: visibleWorkspace.id, userId: revocableUser.id } },
+      data: { isActive: false },
+    });
+    assert.deepEqual(await claimSourcingResearchRun({
+      id: revokedWorkspaceRun.run.id,
+      officeId: context.officeId,
+      workspaceId: visibleWorkspace.id,
+    }), { state: "unavailable" });
+    const cancelledRevokedWorkspaceRun = await prisma.supplyCapabilityRun.findUniqueOrThrow({
+      where: { id: revokedWorkspaceRun.run.id },
+      select: { status: true, startedAt: true, cancelledAt: true, error: true },
+    });
+    assert.equal(cancelledRevokedWorkspaceRun.status, "CANCELLED");
+    assert.equal(cancelledRevokedWorkspaceRun.startedAt, null, "a requester without workspace edit access must consume no provider-call budget");
+    assert.ok(cancelledRevokedWorkspaceRun.cancelledAt);
+    assert.match(String((cancelledRevokedWorkspaceRun.error as { message?: unknown } | null)?.message ?? ""), /ACCESS_REVOKED/);
+    assert.equal(await prisma.supplyCapabilityRun.count({
+      where: {
+        officeId: context.officeId,
+        capabilityKey: "research.supplier_candidates",
+        dslName: { in: ["interactive_supplier_research", "queued_supplier_research_child"] },
+        startedAt: { not: null },
+      },
+    }), providerStartsBeforeRevocation, "access-revoked queue entries must not consume the office provider budget");
     const started = await startSourcingResearchRun(context, input);
     const stale = await startSourcingResearchRun(context, { ...input, componentItemKey: "STALE-1" });
     const tiedResearchTime = new Date(Date.now() - 60_000);
@@ -398,6 +554,135 @@ async function main() {
       },
     });
     assert.equal(await prisma.supplyPriceObservation.count({ where: { capabilityRunId: tamperedExaRun.id } }), 0, "tampered managed capture must append no observation");
+    const openAiInput = {
+      ...exaInput,
+      componentItemKey: "RM-9-OPENAI",
+    };
+    const openAiRun = await startSourcingResearchRun(context, openAiInput, visibleWorkspace.id);
+    const openAiSourceUrl = "https://examplesupplier.example/catalog/rm-9";
+    const companyIdentityEvidence = "Example Supplier operates the examplesupplier.example company website.";
+    const supplierRoleEvidence = "Example Supplier is a distributor of industrial radio modules.";
+    const productCapabilityEvidence = "Example Supplier distributes and supplies the Acme RM-9 radio module.";
+    const openAiText = [companyIdentityEvidence, supplierRoleEvidence, productCapabilityEvidence].join(" ");
+    const openAiRecord: OpenAiRetrievalCapture["records"][number] = {
+      searchRank: 1,
+      sourceId: "openai-source-persistence",
+      sourceUrl: openAiSourceUrl,
+      sourceTitle: "Example Supplier RM-9 distribution",
+      status: {
+        id: openAiSourceUrl,
+        status: "success",
+        errorTag: null,
+        httpStatusCode: 200,
+        cacheState: null,
+        cacheAgeHours: null,
+      },
+      publishedDate: null,
+      text: openAiText,
+      highlights: [],
+      proposal: {
+        supplierName: "Example Supplier",
+        supplierRole: "DISTRIBUTOR",
+        companyIdentityEvidence,
+        supplierRoleEvidence,
+        productCapabilityEvidence,
+        itemIdentity: "Acme RM-9 radio module",
+        manufacturer: "Acme",
+        mpn: "RM-9",
+        priceAmount: null,
+        currency: null,
+        unitOfMeasure: null,
+        packageQuantity: null,
+        evidenceText: null,
+      },
+      sourceTextHash: createHash("sha256").update(openAiText).digest("hex"),
+    };
+    const openAiCapture: OpenAiRetrievalCapture = {
+      provider: "OPENAI",
+      freshnessPolicy: "SERVER_RETRIEVED",
+      stage: "CONTENTS_COMPLETE",
+      searchRequestId: "openai-response-persistence",
+      contentsRequestId: "server-retrieval-persistence",
+      searchHttpStatus: 200,
+      contentsHttpStatus: 200,
+      searchResponseHash: jsonDigest({ responseId: "openai-response-persistence", sourceUrl: openAiSourceUrl }),
+      contentsResponseHash: jsonDigest([openAiRecord]),
+      retrievedAt: new Date(Date.now() - 1_000).toISOString(),
+      records: [openAiRecord],
+    };
+    const [openAiReceipt] = validatePublicSupplierLeadReceipts({
+      ...openAiInput,
+      officeId: context.officeId,
+      workspaceId: visibleWorkspace.id,
+    }, openAiCapture);
+    assert.ok(openAiReceipt, "a server-retrieved OpenAI capture must produce a bound supplier lead receipt");
+    await completeSourcingResearchRun({
+      context,
+      runId: openAiRun.id,
+      workspaceId: openAiRun.workspaceId,
+      output: {
+        candidates: [{
+          id: "openai-example-1",
+          companyName: "Example Supplier",
+          website: "https://examplesupplier.example/",
+          roles: ["DISTRIBUTOR"],
+          sourceUrls: [openAiSourceUrl],
+          productCapability: {
+            ...supported("Acme RM-9 radio module"),
+            sources: [{ url: openAiSourceUrl, sourceType: "PUBLIC" }],
+          },
+          status: "REVIEW_REQUIRED",
+        }],
+        retrieval: openAiCapture,
+        publicSupplierLeadReceipts: [{ ...openAiReceipt, candidateId: "openai-example-1" }],
+        degraded: false,
+        warnings: [],
+      },
+    });
+    const openAiProfiles = await prisma.supplySupplierProfile.findMany({
+      where: {
+        officeId: context.officeId,
+        workspaceId: visibleWorkspace.id,
+        lastResearchRunId: openAiRun.id,
+      },
+    });
+    assert.equal(openAiProfiles.length, 1, "a matching rebuilt OpenAI receipt must permit exactly one durable supplier profile");
+    assert.deepEqual(openAiProfiles[0]?.roles, ["DISTRIBUTOR"]);
+    assert.equal(await prisma.supplyPriceObservation.count({ where: { capabilityRunId: openAiRun.id } }), 0, "OpenAI supplier identity evidence must not become an unverified list-price observation");
+    const detachedOpenAiRun = await startSourcingResearchRun(context, { ...openAiInput, componentItemKey: "RM-9-OPENAI-DETACHED" }, visibleWorkspace.id);
+    await completeSourcingResearchRun({
+      context,
+      runId: detachedOpenAiRun.id,
+      workspaceId: detachedOpenAiRun.workspaceId,
+      output: {
+        candidates: [{
+          id: "openai-detached-1",
+          companyName: "Example Supplier",
+          website: "https://examplesupplier.example/",
+          roles: ["DISTRIBUTOR"],
+          sourceUrls: [openAiSourceUrl],
+          productCapability: {
+            ...supported("Acme RM-9 radio module"),
+            sources: [{ url: openAiSourceUrl, sourceType: "PUBLIC" }],
+          },
+          status: "REVIEW_REQUIRED",
+        }],
+        retrieval: openAiCapture,
+        publicSupplierLeadReceipts: [{
+          ...openAiReceipt,
+          candidateId: "openai-detached-1",
+          itemKey: "RM-9-OPENAI-DETACHED",
+          receiptHash: "0".repeat(64),
+        }],
+        degraded: false,
+        warnings: [],
+      },
+    });
+    assert.equal(
+      await prisma.supplySupplierProfile.count({ where: { lastResearchRunId: detachedOpenAiRun.id } }),
+      0,
+      "a detached or tampered OpenAI receipt must not create or update a durable supplier profile",
+    );
     const persistedIntelligence = await supplyIntelligenceProfile(context, started.workspaceId);
     assert.equal(persistedIntelligence.customer.factCount, 1);
     assert.equal(persistedIntelligence.supplierCount, 0, "unvalidated model candidates must not become durable supplier profiles");

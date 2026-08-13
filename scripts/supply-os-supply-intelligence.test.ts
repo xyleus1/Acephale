@@ -49,9 +49,11 @@ assert.match(sourcingRoute, /listProcurementCasesForResearchRuns\(context, page\
 assert.match(procurement, /researchWorkspace\(accessContext, args\.researchRunId, "edit"\)/);
 assert.match(procurement, /!qualityVerificationPassed\(qualityPlan\)/);
 assert.match(procurement, /!qualityVerificationPassed\(approvedQualityPlan\)/);
-assert.match(intelligencePersistence, /parseStoredExaRetrievalCapture/);
+assert.match(intelligencePersistence, /parseStoredSupplierResearchRetrievalCapture/);
 assert.match(intelligencePersistence, /validateExaPublicListingReceipts/);
-assert.match(intelligencePersistence, /validateExaPublicSupplierLeadReceipts/);
+assert.match(intelligencePersistence, /validatePublicSupplierLeadReceipts/);
+assert.match(intelligencePersistence, /stored\.provider === receipt\.provider/);
+assert.match(intelligencePersistence, /stored\.freshnessPolicy === receipt\.freshnessPolicy/);
 assert.match(intelligencePersistence, /if \(!leadReceipt && !listingReceipts\.length\) continue;/, "unsupported search-only rows must not become durable supplier profiles");
 assert.match(intelligencePersistence, /const roles = leadReceipt \? \[leadReceipt\.role\] : \[\];/, "only a server-rebuilt lead receipt may add a durable supplier role");
 assert.match(intelligencePersistence, /observationType: "PUBLIC_LIST_PRICE"/);

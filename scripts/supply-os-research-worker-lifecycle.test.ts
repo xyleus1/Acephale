@@ -108,7 +108,7 @@ async function main() {
     "untrusted stored query variants must not reach a provider",
   );
 
-  const arbitraryProviderFixture = dependencies({
+  const openAiProviderFixture = dependencies({
     claimRun: async () => ({
       state: "claimed" as const,
       run: {
@@ -118,8 +118,37 @@ async function main() {
       },
     }),
   });
-  await runSourcingResearchWorker(reference, arbitraryProviderFixture.value);
-  assert.equal(arbitraryProviderFixture.calls.searches[0]?.requiredProvider, undefined, "unknown provider requirements must fail closed at the worker boundary");
+  await runSourcingResearchWorker(reference, openAiProviderFixture.value);
+  assert.equal(openAiProviderFixture.calls.searches[0]?.requiredProvider, "OPENAI", "the worker must preserve an immutable OpenAI campaign provider pin");
+
+  const arbitraryProviderFixture = dependencies({
+    claimRun: async () => ({
+      state: "claimed" as const,
+      run: {
+        ...reference,
+        input: { ...storedInput, requiredProvider: "OTHER" },
+        context,
+      },
+    }),
+  });
+  const arbitraryProvider = await runSourcingResearchWorker(reference, arbitraryProviderFixture.value);
+  assert.deepEqual(arbitraryProvider, { state: "failed", runId: "run-1", code: "INVALID_REQUEST" });
+  assert.equal(arbitraryProviderFixture.calls.searches.length, 0, "an untrusted campaign provider must never reach provider routing");
+  assert.equal(arbitraryProviderFixture.calls.failed[0]?.message, "INVALID_REQUEST: Campaign supplier research requires a pinned provider.");
+
+  const missingProviderFixture = dependencies({
+    claimRun: async () => ({
+      state: "claimed" as const,
+      run: {
+        ...reference,
+        input: { ...storedInput, requiredProvider: undefined },
+        context,
+      },
+    }),
+  });
+  const missingProvider = await runSourcingResearchWorker(reference, missingProviderFixture.value);
+  assert.deepEqual(missingProvider, { state: "failed", runId: "run-1", code: "INVALID_REQUEST" });
+  assert.equal(missingProviderFixture.calls.searches.length, 0, "a campaign child without a provider pin must fail before search");
 
   const hostileExplorationFixture = dependencies({
     claimRun: async () => ({

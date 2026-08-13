@@ -4,10 +4,10 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
-  parseStoredExaRetrievalCapture,
+  parseStoredSupplierResearchRetrievalCapture,
   validateExaPublicListingReceipts,
-  validateExaPublicSupplierLeadReceipts,
-  type ExaSupplierResearchInput,
+  validatePublicSupplierLeadReceipts,
+  type SupplierLeadValidationInput,
 } from "./exa-supplier-research";
 import { requireSupplyWorkspace, type SupplyAccessContext } from "./persistence";
 
@@ -107,8 +107,8 @@ export async function recordSupplyResearchKnowledge(args: {
   });
 
   const candidates = Array.isArray(record(args.output).candidates) ? record(args.output).candidates as unknown[] : [];
-  const retrieval = parseStoredExaRetrievalCapture(record(args.output).retrieval);
-  const receiptInput: ExaSupplierResearchInput = {
+  const retrieval = parseStoredSupplierResearchRetrievalCapture(record(args.output).retrieval);
+  const receiptInput: SupplierLeadValidationInput = {
     officeId: args.context.officeId,
     workspaceId: args.workspaceId,
     componentItemKey: customerFactValue.componentItemKey,
@@ -124,8 +124,12 @@ export async function recordSupplyResearchKnowledge(args: {
   };
   // Never trust the detached receipt array in stored output. Rebuild receipts
   // from the exact run input and bounded raw retrieval capture at persistence.
-  const publicListingReceipts = retrieval ? validateExaPublicListingReceipts(receiptInput, retrieval) : [];
-  const publicSupplierLeadReceipts = retrieval ? validateExaPublicSupplierLeadReceipts(receiptInput, retrieval) : [];
+  const publicListingReceipts = retrieval?.provider === "EXA"
+    ? validateExaPublicListingReceipts(receiptInput, retrieval)
+    : [];
+  const publicSupplierLeadReceipts = retrieval
+    ? validatePublicSupplierLeadReceipts(receiptInput, retrieval)
+    : [];
   const storedLeadReceipts = Array.isArray(record(args.output).publicSupplierLeadReceipts)
     ? record(args.output).publicSupplierLeadReceipts as unknown[]
     : [];
@@ -143,6 +147,8 @@ export async function recordSupplyResearchKnowledge(args: {
     const leadReceipt = candidate.status === "REVIEW_REQUIRED" ? publicSupplierLeadReceipts.find((receipt) => storedLeadReceipts.some((storedValue) => {
       const stored = record(storedValue);
       return stored.candidateId === candidateId
+        && stored.provider === receipt.provider
+        && stored.freshnessPolicy === receipt.freshnessPolicy
         && stored.receiptHash === receipt.receiptHash
         && stored.sourceUrl === receipt.sourceUrl
         && stored.itemKey === receipt.itemKey;

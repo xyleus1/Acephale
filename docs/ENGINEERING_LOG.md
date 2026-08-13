@@ -5223,3 +5223,24 @@ Use this file for chronological implementation notes that future agents should s
   workspace ID, or provider credentials were available. Before release, run the
   single deployed acceptance, then the bounded campaign acceptance and monitor
   cron queue progress until it terminates.
+
+### 2026-08-13 - Repair GUILD supplier campaign startup without weakening evidence
+
+- Root cause: the bulk campaign required `EXA_API_KEY` before creating its
+  workspace, while the UI rendered any missing workspace as active preparation.
+  The existing OpenAI path exposed citations but could not create deterministic
+  supplier lead receipts, so simply removing the Exa gate would have spent calls
+  and retained zero leads.
+- Implemented a terminal unavailable UI state with a safe campaign retry.
+- Added exact EXA or OPENAI provider pinning to campaign scope, queued children,
+  worker parsing, and provider routing. Runtime provider failures never trigger
+  a silent switch.
+- Added bounded OpenAI web discovery followed by independently pinned public-page
+  retrieval and the existing deterministic supplier lead validation rules.
+  Rebuilt receipts are consumed by campaign aggregation and durable supply
+  intelligence, while all evidence remains PUBLIC and commercial fields stay
+  unknown.
+- Added parent-state and provider checks to queue listing and atomic claim so
+  superseded work cannot spend provider quota after a scope revision.
+- Registered the OpenAI retrieval regression in package scripts and the Supply
+  OS GitHub Actions workflow.

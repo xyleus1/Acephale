@@ -154,6 +154,9 @@ export function AtlasInventoryWorkspace({
   const currentRunIds = new Set([...latestRuns.values()].map((run) => run.id));
   const additionalRuns = visibleResearchRuns.filter((run) => !currentRunIds.has(run.id));
   const campaignItems = new Map((researchCampaign?.items ?? []).map((item) => [item.componentItemKey, item]));
+  const retryUnavailableCampaign = !researchWorkspaceReady && researchCampaignState === "error"
+    ? onRetryResearchCampaign
+    : undefined;
 
   function resultState(run: SavedSourcingResearchRun | undefined) {
     if (!run) return "Not researched";
@@ -297,7 +300,7 @@ export function AtlasInventoryWorkspace({
             placeholder="Describe the part, quantity, specification, and need-by date"
           />
         </label>
-        <button type="submit" aria-label="Research sourcing request" disabled={!query.trim() || !researchWorkspaceReady}><span>{researchWorkspaceReady ? "Research" : "Preparing workspace"}</span><ArrowRight size={15} /></button>
+        <button type="submit" aria-label="Research sourcing request" disabled={!query.trim() || !researchWorkspaceReady}><span>{researchWorkspaceReady ? "Research" : researchCampaignState === "error" ? "Research unavailable" : "Preparing workspace"}</span><ArrowRight size={15} /></button>
       </form>
 
       <header className={styles.sourcingQueueHeader}>
@@ -315,7 +318,7 @@ export function AtlasInventoryWorkspace({
               <small>Bulk supplier research</small>
               <strong>{researchCampaign
                 ? `${researchCampaign.totals.targetMet} of ${researchCampaign.totals.supplierSearchable} sourceable lines covered`
-                : "Starting 38 sourceable lines"}</strong>
+                : researchCampaignState === "error" ? "Supplier research unavailable" : "Starting 38 sourceable lines"}</strong>
             </span>
           </span>
           {researchCampaign ? (
@@ -406,7 +409,17 @@ export function AtlasInventoryWorkspace({
               return (
                 <tr key={request.id} data-status="watch">
                   <td>
-                    <button type="button" disabled={!researchWorkspaceReady} onClick={() => onOpenPendingRequest(request)}>
+                    <button
+                      type="button"
+                      disabled={!researchWorkspaceReady && !retryUnavailableCampaign}
+                      onClick={() => {
+                        if (retryUnavailableCampaign) {
+                          retryUnavailableCampaign();
+                          return;
+                        }
+                        onOpenPendingRequest(request);
+                      }}
+                    >
                       <span className={styles.inventoryStatusDot} />
                       <span>
                         <small>{`NEW-${String(index + 1).padStart(3, "0")}`}</small>
@@ -418,7 +431,22 @@ export function AtlasInventoryWorkspace({
                   <td>{draft?.quantity && draft.unit ? `${draft.quantity.toLocaleString("en-US")} ${draft.unit}` : "Not set"}</td>
                   <td>{draft?.needByDate ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${draft.needByDate}T12:00:00Z`)) : "Not set"}</td>
                   <td>{request.status}</td>
-                  <td><button type="button" className={styles.sourcingQueueAction} disabled={!researchWorkspaceReady} onClick={() => onOpenPendingRequest(request)}>{researchWorkspaceReady ? "Continue" : "Preparing workspace"} <ArrowRight size={13} /></button></td>
+                  <td>
+                    <button
+                      type="button"
+                      className={styles.sourcingQueueAction}
+                      disabled={!researchWorkspaceReady && !retryUnavailableCampaign}
+                      onClick={() => {
+                        if (retryUnavailableCampaign) {
+                          retryUnavailableCampaign();
+                          return;
+                        }
+                        onOpenPendingRequest(request);
+                      }}
+                    >
+                      {retryUnavailableCampaign ? "Retry research" : researchWorkspaceReady ? "Continue" : "Preparing workspace"} <ArrowRight size={13} />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -442,23 +470,32 @@ export function AtlasInventoryWorkspace({
                 <td>{item.requirementLabel ?? (requestedQuantity === null ? "Quantity unknown" : `${requestedQuantity.toLocaleString("en-US")} ${item.requestedUnit ?? item.unitOfMeasure ?? "units"}`)}</td>
                 <td>{formatNeedBy(item)}</td>
                 <td>{workstreamSummary(runCases)
-                  ?? (campaignItem?.leadCount
-                    ? `${campaignItem.leadCount} source-backed candidate${campaignItem.leadCount === 1 ? "" : "s"}${campaignItem.state === "COMPLETE" ? "" : ", researching"}`
-                    : campaignItem?.state === "CLARIFICATION_REQUIRED"
-                      ? "Clarification required"
-                      : campaignRequirementOnly
-                        ? "Award requirement"
-                        : campaignInProgress
-                          ? "Background research"
-                          : resultState(run))}</td>
+                  ?? (retryUnavailableCampaign
+                    ? "Research unavailable"
+                    : campaignItem?.leadCount
+                      ? `${campaignItem.leadCount} source-backed candidate${campaignItem.leadCount === 1 ? "" : "s"}${campaignItem.state === "COMPLETE" ? "" : ", researching"}`
+                      : campaignItem?.state === "CLARIFICATION_REQUIRED"
+                        ? "Clarification required"
+                        : campaignRequirementOnly
+                          ? "Award requirement"
+                          : campaignInProgress
+                            ? "Background research"
+                            : resultState(run))}</td>
                 <td>
                   <button
                     className={styles.sourcingQueueAction}
                     type="button"
-                    disabled={campaignInProgress || campaignRequirementOnly || !researchWorkspaceReady}
-                    onClick={() => run && run.status !== "FAILED" ? onOpenSavedResearch(run) : onStartItemResearch(item)}
+                    disabled={!retryUnavailableCampaign && (campaignInProgress || campaignRequirementOnly || !researchWorkspaceReady)}
+                    onClick={() => {
+                      if (retryUnavailableCampaign) {
+                        retryUnavailableCampaign();
+                        return;
+                      }
+                      if (run && run.status !== "FAILED") onOpenSavedResearch(run);
+                      else onStartItemResearch(item);
+                    }}
                   >
-                    {campaignRequirementOnly ? "Applied to awards" : !researchWorkspaceReady ? "Preparing workspace" : campaignInProgress ? "Campaign running" : queueActionLabel(run, runCases)}
+                    {retryUnavailableCampaign ? "Retry research" : campaignRequirementOnly ? "Applied to awards" : !researchWorkspaceReady ? "Preparing workspace" : campaignInProgress ? "Campaign running" : queueActionLabel(run, runCases)}
                     <ArrowRight size={13} />
                   </button>
                 </td>

@@ -32,6 +32,7 @@ const researchRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier
 const researchRouteContract = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-route-contract.ts"), "utf8");
 const supplierResearchWorker = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-worker.ts"), "utf8");
 const supplierResearch = readFileSync(resolve(root, "src/lib/supply-os/component-supplier-research.ts"), "utf8");
+const openAiSupplierResearch = readFileSync(resolve(root, "src/lib/supply-os/openai-supplier-research.ts"), "utf8");
 const intakeRoute = readFileSync(resolve(root, "src/app/api/supply-os/sourcing-request/route.ts"), "utf8");
 const procurementCasesRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/route.ts"), "utf8");
 const procurementReviewRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/[caseId]/review/route.ts"), "utf8");
@@ -226,8 +227,18 @@ assert.match(workbench, /Office-shared work/);
 assert.match(workbench, /Source-backed candidates/);
 assert.match(workbench, /source-backed candidate.*unqualified/);
 assert.match(workbench, /researchCampaignError \?\? "Supplier research stopped/, "terminal campaign errors must be rendered instead of replaced by a generic status failure");
+assert.match(workbench, /researchCampaignState === "error" \? "Supplier research unavailable" : "Starting 38 sourceable lines"/, "terminal startup failure must not keep the campaign heading in a loading state");
 assert.match(workbench, /researchWorkspaceReady/, "GUILD manual research must wait for its dedicated workspace");
 assert.match(workbench, /if \(!researchWorkspaceReady\) return;/, "form submission must fail closed until the GUILD workspace is ready");
+assert.match(
+  workbench,
+  /const retryUnavailableCampaign = !researchWorkspaceReady && researchCampaignState === "error"[\s\S]*?onRetryResearchCampaign/,
+  "a terminal campaign startup failure must stop presenting the unresolved workspace as active preparation",
+);
+assert.match(illustrativeRowsSource, /retryUnavailableCampaign\s*\?\s*"Research unavailable"/, "failed campaign rows must render a terminal source state");
+assert.match(illustrativeRowsSource, /retryUnavailableCampaign\s*\?\s*"Retry research"/, "every failed campaign row must expose the existing campaign retry action");
+assert.match(illustrativeRowsSource, /disabled=\{!retryUnavailableCampaign &&/, "failed campaign row retries must remain enabled");
+assert.match(illustrativeRowsSource, /if \(retryUnavailableCampaign\) \{[\s\S]*?retryUnavailableCampaign\(\);[\s\S]*?return;/, "failed row actions must retry the campaign instead of falling through to an unscoped manual research request");
 assert.doesNotMatch(workbench, /<th>Next step<\/th>/);
 assert.doesNotMatch(workbench, /<th>On hand<\/th>|<th>Allocated<\/th>|<th>Inbound<\/th>|<th>Projected<\/th>/);
 assert.doesNotMatch(workbench, /inventoryRailList/);
@@ -374,10 +385,10 @@ assert.match(researchRoute, /listSourcingResearchPage/);
 assert.match(researchRoute, /nextCursor/);
 assert.match(researchRouteContract, /const missingFields = missingSourcingFields/);
 assert.doesNotMatch(researchRouteContract, /componentItemKey\.startsWith\("request:"\)/, "saved inventory items must not bypass request completeness checks");
-assert.match(supplierResearch, /requestKind: openRequest \? "OPEN_REQUEST" : "CATALOG_COMPONENT"/);
-assert.match(supplierResearch, /PRODUCER/);
-assert.match(supplierResearch, /EXPORTER/);
-assert.match(supplierResearch, /TRADER/);
+assert.match(openAiSupplierResearch, /requestKind: openRequest \? "OPEN_REQUEST" : "CATALOG_COMPONENT"/);
+assert.match(openAiSupplierResearch, /PRODUCER/);
+assert.match(openAiSupplierResearch, /EXPORTER/);
+assert.match(openAiSupplierResearch, /TRADER/);
 assert.match(researchRoute, /cache-control/);
 assert.doesNotMatch(researchRoute, /body\?\.officeId|body\["officeId"\]/);
 assert.match(intakeRoute, /getSession/);

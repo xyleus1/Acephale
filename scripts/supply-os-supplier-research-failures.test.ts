@@ -4,12 +4,14 @@ import { resolve } from "node:path";
 import OpenAI from "openai";
 import {
   searchComponentSuppliers,
+  selectSupplierResearchProvider,
   SupplierResearchError,
   supplierResearchError,
 } from "../src/lib/supply-os/component-supplier-research";
 
 const root = process.cwd();
 const service = readFileSync(resolve(root, "src/lib/supply-os/component-supplier-research.ts"), "utf8");
+const openAiResearch = readFileSync(resolve(root, "src/lib/supply-os/openai-supplier-research.ts"), "utf8");
 const route = readFileSync(resolve(root, "src/app/api/supply-os/supplier-research/route.ts"), "utf8");
 const routeContract = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-route-contract.ts"), "utf8");
 const worker = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-worker.ts"), "utf8");
@@ -38,19 +40,31 @@ const timeout = supplierResearchError(new OpenAI.APIConnectionTimeoutError());
 assert.equal(timeout.code, "PROVIDER_TIMEOUT");
 assert.equal(supplierResearchError(new OpenAI.APIUserAbortError()).code, "PROVIDER_TIMEOUT");
 assert.equal(supplierResearchError(new DOMException("The operation was aborted", "AbortError")).code, "PROVIDER_TIMEOUT");
+assert.equal(supplierResearchError(new OpenAI.AuthenticationError(401, {}, "bad key", new Headers())).code, "PROVIDER_AUTHENTICATION_FAILED");
+assert.equal(supplierResearchError(new OpenAI.PermissionDeniedError(403, {}, "forbidden", new Headers())).code, "PROVIDER_AUTHENTICATION_FAILED");
+assert.equal(supplierResearchError(new OpenAI.RateLimitError(429, {}, "limited", new Headers())).code, "PROVIDER_RATE_LIMITED");
 assert.equal(supplierResearchError(new Error("secret upstream detail")).code, "PROVIDER_FAILURE");
 assert.doesNotMatch(supplierResearchError(new Error("secret upstream detail")).message, /secret/i);
+assert.equal(selectSupplierResearchProvider("EXA", { EXA_API_KEY: "exa", OPENAI_API_KEY: "openai" }), "EXA");
+assert.equal(selectSupplierResearchProvider("OPENAI", { EXA_API_KEY: "exa", OPENAI_API_KEY: "openai" }), "OPENAI");
+assert.equal(selectSupplierResearchProvider("EXA", { OPENAI_API_KEY: "openai" }), null, "an EXA pin must not cross-provider fail over");
+assert.equal(selectSupplierResearchProvider("OPENAI", { EXA_API_KEY: "exa" }), null, "an OPENAI pin must not cross-provider fail over");
+assert.equal(selectSupplierResearchProvider(undefined, { EXA_API_KEY: "exa", OPENAI_API_KEY: "openai" }), "EXA");
+assert.equal(selectSupplierResearchProvider(undefined, { OPENAI_API_KEY: "openai" }), "OPENAI");
+assert.equal(selectSupplierResearchProvider("hostile-provider", { OPENAI_API_KEY: "openai" }), null);
 
-assert.match(service, /const OPENAI_RESEARCH_TIMEOUT_MS = 60_000/);
-assert.match(service, /timeout: OPENAI_RESEARCH_TIMEOUT_MS,[\s\S]*maxRetries: 0/);
-assert.match(service, /signal: AbortSignal\.timeout\(OPENAI_RESEARCH_TIMEOUT_MS\)/, "the outer abort must cover response-body parsing as well as time to first byte");
-assert.match(service, /store: false/);
+assert.match(openAiResearch, /const OPENAI_RESEARCH_TIMEOUT_MS = 60_000/);
+assert.match(openAiResearch, /timeout: OPENAI_RESEARCH_TIMEOUT_MS,[\s\S]*maxRetries: 0/);
+assert.match(openAiResearch, /AbortSignal\.timeout\(OPENAI_RESEARCH_TIMEOUT_MS\)/, "the outer abort must cover response-body parsing as well as time to first byte");
+assert.match(openAiResearch, /store: false/);
+assert.match(openAiResearch, /max_tool_calls: 1/);
 assert.doesNotMatch(service, /researchObservedAt/);
-assert.match(service, /trustClaimedObservedAt: false/);
+assert.match(openAiResearch, /trustClaimedObservedAt: false/);
 assert.match(service, /process\.env\.EXA_API_KEY/);
 assert.match(service, /searchExaComponentSuppliers/);
+assert.match(service, /searchOpenAiComponentSuppliers/);
 assert.doesNotMatch(service, /verifyCurrentSupplierPrices/);
-assert.match(service, /const actionUrl = publicUrl\(action\.url\)/);
+assert.match(service, /selectedProvider = selectSupplierResearchProvider\(input\.requiredProvider\)/);
 assert.match(route, /executeSupplierResearchRoute/);
 assert.match(route, /after\([\s\S]*runSourcingResearchWorker/);
 assert.match(routeContract, /status: 202/);

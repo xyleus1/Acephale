@@ -8502,3 +8502,30 @@ Remaining release checks:
   production migration, remove the temporary migration hook, reconcile the
   runtime feature onto that main, then run authenticated research and browser
   canaries before merging runtime.
+
+### 2026-08-13 - GUILD campaign provider fallback and terminal setup state
+
+- Production symptom: GUILD showed every row as `Preparing workspace` while the
+  campaign API returned `Bulk supplier research requires the public-page
+  validation provider.` The campaign rejected missing Exa configuration before
+  provisioning the GUILD workspace, and the UI confused that terminal error
+  with active setup.
+- UI correction: A failed campaign start with no workspace now shows `Supplier
+  research unavailable` and `Research unavailable`. Every GUILD row offers the
+  campaign retry and cannot fall through to the Atlas manual-research workspace.
+- Provider correction: The campaign chooses Exa when configured and otherwise
+  uses the existing OpenAI key. The chosen provider is immutable per campaign
+  generation and child attempt. There is no runtime cross-provider failover.
+- OpenAI evidence: Web search source URLs and native citations are proposals,
+  not proof. The server retrieves cited pages with public-address pinning and
+  strict byte, time, redirect, encoding, content-type, login, and paywall
+  limits. Only exact page-backed company identity, supplier role, and requested
+  capability excerpts create a PUBLIC supplier lead receipt and a
+  `REVIEW_REQUIRED` candidate. Commercial fields remain unknown.
+- Persistence and campaign safety: Campaign aggregation and supply intelligence
+  rebuild both Exa and OpenAI receipts from immutable captures. Search-only
+  sources remain visible with zero admitted leads. Superseded campaign children
+  cannot be listed or claimed by workers.
+- Verification includes the new `test:supply-os-openai-retrieval` contract plus
+  provider-selection, worker pinning, mixed-provider campaign aggregation,
+  source-only evidence retention, and database cutover assertions.

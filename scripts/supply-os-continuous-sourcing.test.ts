@@ -14,6 +14,7 @@ import {
   SUPPLIER_RESEARCH_OFFICE_DAILY_ATTEMPT_CAP,
   aggregateGuildSupplierResearchLine,
   campaignRetryDelayMs,
+  configuredSupplierResearchProvider,
   guildSupplierResearchAttemptInput,
   guildSupplierResearchCampaignIdempotencyKey,
   guildSupplierResearchCampaignGenerationKey,
@@ -27,8 +28,9 @@ import {
   type SupplierResearchCampaignAttempt,
 } from "../src/lib/supply-os/supplier-research-campaign";
 import {
-  validateExaPublicSupplierLeadReceipts,
-  type ExaRetrievalCapture,
+  parseStoredSupplierResearchRetrievalCapture,
+  validatePublicSupplierLeadReceipts,
+  type SupplierResearchRetrievalCapture,
 } from "../src/lib/supply-os/exa-supplier-research";
 
 const root = process.cwd();
@@ -53,13 +55,18 @@ assert.equal(GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE, 9);
 assert.equal(GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS, 12);
 assert.ok(GUILD_SUPPLIER_CAMPAIGN_DAILY_ATTEMPT_CAP < SUPPLIER_RESEARCH_OFFICE_DAILY_ATTEMPT_CAP);
 assert.deepEqual(GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS, ["exact-identity", "official-catalog", "capability-qa"]);
-assert.match(guildSupplierResearchCampaignRevision(), /^[a-f0-9]{24}$/);
-assert.equal(guildSupplierResearchCampaignIdempotencyKey(), `supplier-campaign:guild-procurement:${guildSupplierResearchCampaignRevision()}`);
-assert.equal(guildSupplierResearchCampaignGenerationKey(1), guildSupplierResearchCampaignIdempotencyKey());
-assert.equal(guildSupplierResearchCampaignGenerationKey(2), `${guildSupplierResearchCampaignIdempotencyKey()}:generation:2`);
-assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(2)), 2);
-assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS)), GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS);
-assert.equal(campaignGenerationFromIdempotencyKey("supplier-campaign:guild-procurement:obsolete"), null);
+assert.equal(configuredSupplierResearchProvider({ EXA_API_KEY: "exa", OPENAI_API_KEY: "openai" }), "EXA");
+assert.equal(configuredSupplierResearchProvider({ OPENAI_API_KEY: "openai" }), "OPENAI");
+assert.equal(configuredSupplierResearchProvider({}), null);
+assert.match(guildSupplierResearchCampaignRevision("EXA"), /^[a-f0-9]{24}$/);
+assert.notEqual(guildSupplierResearchCampaignRevision("EXA"), guildSupplierResearchCampaignRevision("OPENAI"), "provider choice is part of the immutable campaign scope");
+assert.equal(guildSupplierResearchCampaignIdempotencyKey("EXA"), `supplier-campaign:guild-procurement:${guildSupplierResearchCampaignRevision("EXA")}`);
+assert.equal(guildSupplierResearchCampaignGenerationKey(1, "OPENAI"), guildSupplierResearchCampaignIdempotencyKey("OPENAI"));
+assert.equal(guildSupplierResearchCampaignGenerationKey(2, "EXA"), `${guildSupplierResearchCampaignIdempotencyKey("EXA")}:generation:2`);
+assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(2, "OPENAI"), "OPENAI"), 2);
+assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS, "EXA"), "EXA"), GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS);
+assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(2, "OPENAI"), "EXA"), null, "one provider scope cannot be resumed as another provider");
+assert.equal(campaignGenerationFromIdempotencyKey("supplier-campaign:guild-procurement:obsolete", "EXA"), null);
 assert.equal(guildSupplierResearchCampaignScopeExpired(new Date("2026-08-12T12:00:00.000Z")), false);
 assert.equal(guildSupplierResearchCampaignScopeExpired(new Date("2026-10-01T00:00:00.000Z")), true);
 
@@ -106,9 +113,11 @@ function trustedAttempt(args: {
   id: string;
   line: (typeof GUILD_SOURCING_LINES)[number];
   domains: string[];
+  provider?: "EXA" | "OPENAI";
   createdAt?: string;
 }) {
-  const input = guildSupplierResearchAttemptInput({ line: args.line, campaignId: "campaign-a", attemptNumber: 1 });
+  const provider = args.provider ?? "EXA";
+  const input = guildSupplierResearchAttemptInput({ line: args.line, campaignId: "campaign-a", attemptNumber: 1, requiredProvider: provider });
   const retrievedAt = new Date(Date.now() - 60_000).toISOString();
   const records = args.domains.map((rawDomain, index) => {
     const domain = rawDomain.replace(/^www\./, "");
@@ -155,19 +164,20 @@ function trustedAttempt(args: {
     };
   });
   const retrieval = {
-    provider: "EXA",
-    freshnessPolicy: "FORCED_LIVE",
+    provider,
+    freshnessPolicy: provider === "EXA" ? "FORCED_LIVE" : "SERVER_RETRIEVED",
     searchRequestId: `search-${args.id}`,
     contentsRequestId: `contents-${args.id}`,
     searchHttpStatus: 200,
     contentsHttpStatus: 200,
     searchResponseHash: hash(`search-${args.id}`),
-    contentsResponseHash: hash(`contents-${args.id}`),
+    contentsResponseHash: provider === "OPENAI" ? hash(JSON.stringify(records)) : hash(`contents-${args.id}`),
     retrievedAt,
     records,
-  } satisfies ExaRetrievalCapture;
-  const receipts = validateExaPublicSupplierLeadReceipts(input, retrieval);
+  } as SupplierResearchRetrievalCapture;
+  const receipts = validatePublicSupplierLeadReceipts(input, retrieval);
   assert.equal(receipts.length, args.domains.length, `test fixture for ${args.line.sku} must pass production receipt validation`);
+  assert.ok(parseStoredSupplierResearchRetrievalCapture(retrieval), `test fixture for ${args.line.sku} must survive stored capture parsing`);
   const candidates = receipts.map((receipt, index) => ({
     id: `raw-${args.id}-${index}`,
     officeId: "office-a",
@@ -236,6 +246,24 @@ assert.ok(aggregate.candidates.every((value) => value.componentItemKey === "GUIL
 assert.ok(aggregate.candidates.every((value) => value.officeId === "office-a" && value.workspaceId === "workspace-a"));
 assert.ok(aggregate.sources.every((source) => source.sourceType === "PUBLIC"), "Exa retrieval evidence cannot be promoted to OFFICIAL by child output");
 assert.equal(new Set(aggregate.candidates.map((value) => value.id)).size, aggregate.candidates.length, "aggregate candidate identifiers are canonical and unique");
+const openAiAggregate = aggregateGuildSupplierResearchLine(firstLine, [trustedAttempt({
+  id: "attempt-openai",
+  line: firstLine,
+  provider: "OPENAI",
+  domains: ["openai-validated.example"],
+})]);
+assert.equal(openAiAggregate.candidates.length, 1, "campaign aggregation accepts a provider-neutral durable OpenAI receipt");
+assert.equal(openAiAggregate.sources[0]?.sourceType, "PUBLIC");
+const mismatchedProviderAttempt = structuredClone(trustedAttempt({
+  id: "attempt-provider-mismatch",
+  line: firstLine,
+  provider: "OPENAI",
+  domains: ["provider-mismatch.example"],
+})) as SupplierResearchCampaignAttempt;
+(mismatchedProviderAttempt.input as Record<string, unknown>).requiredProvider = "EXA";
+const mismatchedProviderAggregate = aggregateGuildSupplierResearchLine(firstLine, [mismatchedProviderAttempt]);
+assert.equal(mismatchedProviderAggregate.candidates.length, 0, "a receipt from a different provider cannot cross an immutable campaign pin");
+assert.equal(mismatchedProviderAggregate.sources.length, 1, "provider mismatch rejects the lead without erasing attributable public evidence");
 
 const forgedNoReceipt = attempt({
   id: "forged-no-receipt",
@@ -247,6 +275,21 @@ const forgedNoReceipt = attempt({
   },
 });
 assert.equal(aggregateGuildSupplierResearchLine(firstLine, [forgedNoReceipt]).candidates.length, 0, "candidate-shaped output without a validated receipt is rejected");
+const evidenceWithoutValidLead = aggregateGuildSupplierResearchLine(firstLine, [attempt({
+  id: "evidence-without-valid-lead",
+  input: { componentItemKey: "request:guild-001", campaignItemKey: "GUILD-001", requiredProvider: "OPENAI" },
+  output: {
+    candidates: [],
+    sources: [{ url: "https://discovery.example/catalog", sourceType: "OFFICIAL" }],
+    degraded: true,
+    warnings: ["Public pages were found, but no supplier lead passed evidence validation."],
+    retrieval: { provider: "OPENAI", freshnessPolicy: "SERVER_RETRIEVED", stage: "SEARCH_ONLY" },
+    publicSupplierLeadReceipts: [],
+  },
+})]);
+assert.equal(evidenceWithoutValidLead.candidates.length, 0);
+assert.deepEqual(evidenceWithoutValidLead.sources, [{ url: "https://discovery.example/catalog", sourceType: "PUBLIC" }], "zero valid leads must not erase attributable discovery sources");
+assert.deepEqual(evidenceWithoutValidLead.warnings, ["Public pages were found, but no supplier lead passed evidence validation."], "zero valid leads must retain sanitized provider warnings");
 const forgedReceipt = structuredClone(aggregationAttempts[0]) as SupplierResearchCampaignAttempt;
 const forgedOutput = forgedReceipt.output as { publicSupplierLeadReceipts: Array<{ receiptHash: string }> };
 forgedOutput.publicSupplierLeadReceipts[0].receiptHash = "0".repeat(64);
@@ -255,6 +298,7 @@ assert.equal(aggregateGuildSupplierResearchLine(firstLine, [forgedReceipt]).cand
 const now = new Date("2026-08-12T12:00:00.000Z");
 const initialPlan = planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [],
   now,
   campaignAttemptsRemaining: 48,
@@ -265,9 +309,19 @@ assert.ok(initialPlan.every((work) => work.attemptNumber === 1), "every searchab
 assert.equal(initialPlan[0].input.queryVariant, "exact-identity");
 assert.equal(initialPlan[0].input.campaignItemKey, "GUILD-001");
 assert.equal(initialPlan[0].input.requiredProvider, "EXA", "campaign attempts must never fall back to an unvalidated provider");
+const openAiPlan = planGuildSupplierResearchQueue({
+  campaignId: "campaign-openai",
+  requiredProvider: "OPENAI",
+  attempts: [],
+  now,
+  campaignAttemptsRemaining: 1,
+  officeAttemptsRemaining: 1,
+});
+assert.equal(openAiPlan[0].input.requiredProvider, "OPENAI", "the selected fallback provider is pinned into the immutable child input");
 
 const everyInitialLine = planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [],
   now,
   campaignAttemptsRemaining: 48,
@@ -278,6 +332,7 @@ assert.equal(everyInitialLine.length, 38);
 assert.ok(!everyInitialLine.some((work) => ["GUILD-027", "GUILD-039"].includes(work.itemKey)));
 assert.equal(planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [],
   now,
   campaignAttemptsRemaining: 0,
@@ -286,6 +341,7 @@ assert.equal(planGuildSupplierResearchQueue({
 
 const activePlan = planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [attempt({ id: "queued-1", itemKey: "GUILD-001", status: "QUEUED" })],
   now,
   campaignAttemptsRemaining: 2,
@@ -303,6 +359,7 @@ const oldFailure = attempt({
 });
 const backoffPlan = planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [oldFailure],
   now,
   campaignAttemptsRemaining: 48,
@@ -375,6 +432,7 @@ const authFailure = attempt({
 });
 assert.ok(!planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [authFailure],
   now,
   campaignAttemptsRemaining: 48,
@@ -396,6 +454,7 @@ const accessRevoked = attempt({
 });
 assert.equal(planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [accessRevoked],
   now,
   campaignAttemptsRemaining: 48,
@@ -404,6 +463,7 @@ assert.equal(planGuildSupplierResearchQueue({
 }).some((work) => work.itemKey === "GUILD-001"), false, "access revocation blocks unattended retry");
 assert.equal(planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [accessRevoked],
   now,
   campaignAttemptsRemaining: 48,
@@ -418,13 +478,14 @@ const nineAttempts = Array.from({ length: 9 }, (_, index) => attempt({
 }));
 assert.equal(planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: nineAttempts,
   now,
   campaignAttemptsRemaining: 48,
   officeAttemptsRemaining: 72,
   batchSize: 38,
 }).some((work) => work.itemKey === "GUILD-001"), false, "a line stops after the bounded nine-attempt search matrix");
-const fourthAttempt = guildSupplierResearchAttemptInput({ line: firstLine, campaignId: "campaign-a", attemptNumber: 4, excludeDomains: ["acme.example"] });
+const fourthAttempt = guildSupplierResearchAttemptInput({ line: firstLine, campaignId: "campaign-a", attemptNumber: 4, requiredProvider: "EXA", excludeDomains: ["acme.example"] });
 assert.equal(fourthAttempt.queryCycle, 1);
 assert.equal(fourthAttempt.queryVariant, "exact-identity");
 assert.deepEqual(fourthAttempt.excludeDomains, ["acme.example"]);
@@ -470,6 +531,7 @@ const completeAggregates = GUILD_SOURCING_LINES.filter((line) => line.classifica
     campaignAttemptCount: 1,
     campaignTerminalAttemptCount: 1,
     campaignAttemptWatermark: `fixture-${line.sku}`,
+    requiredProvider: "EXA" as const,
   },
   output: aggregateFixture(line, index),
   error: null,
@@ -494,6 +556,7 @@ assert.equal(status.items.find((item) => item.componentItemKey === "GUILD-027")?
 assert.equal(status.items.find((item) => item.componentItemKey === "GUILD-039")?.state, "REQUIREMENT_ONLY");
 assert.equal(planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
+  requiredProvider: "EXA",
   attempts: [],
   aggregates: completeAggregates,
   now,
@@ -528,6 +591,7 @@ const aggregateRunStatus = projectGuildSupplierResearchCampaign({
       campaignAttemptCount: 1,
       campaignTerminalAttemptCount: 1,
       campaignAttemptWatermark: "fixture-GUILD-001",
+      requiredProvider: "EXA",
     },
     output: aggregateFixture(firstLine, 0),
     error: null,
@@ -592,6 +656,7 @@ assert.match(persistenceSource, /dslName: parentRunId \? "queued_supplier_resear
 assert.match(persistenceSource, /if \(mode === "view"\)/);
 assert.match(persistenceSource, /findGuildSourcingSystemWorkspace/);
 assert.match(persistenceSource, /supplier-research-office-provider-budget:/);
+assert.match(campaignSource, /supplier-research-office-provider-budget:/, "campaign cutover shares the office claim lock before cancelling queued children");
 assert.match(persistenceSource, /clock_timestamp\(\)/, "the hard daily spend bound derives its UTC day after acquiring the office-stable lock");
 assert.match(persistenceSource, /reconciliationToken/);
 assert.match(campaignSource, /FOR UPDATE/);

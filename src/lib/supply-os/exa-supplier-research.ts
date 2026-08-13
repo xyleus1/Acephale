@@ -58,6 +58,8 @@ export type ExaSupplierResearchInput = {
   excludeDomains?: string[];
 };
 
+export type SupplierLeadValidationInput = ExaSupplierResearchInput;
+
 type JsonRecord = Record<string, unknown>;
 
 export type ExaSourceStatus = {
@@ -98,6 +100,12 @@ export type ExaRetrievedRecord = {
   sourceTextHash: string;
 };
 
+export type OpenAiSupplierLeadProposal = ExaOfferProposal;
+
+export type OpenAiRetrievedRecord = Omit<ExaRetrievedRecord, "status"> & {
+  status: ExaSourceStatus;
+};
+
 type ExaCompletedRetrievalCapture = {
   provider: "EXA";
   freshnessPolicy: "FORCED_LIVE";
@@ -129,6 +137,22 @@ type ExaSearchOnlyRetrievalCapture = {
 
 export type ExaRetrievalCapture = ExaCompletedRetrievalCapture | ExaSearchOnlyRetrievalCapture;
 
+export type OpenAiRetrievalCapture = {
+  provider: "OPENAI";
+  freshnessPolicy: "SERVER_RETRIEVED";
+  stage?: "CONTENTS_COMPLETE";
+  searchRequestId: string;
+  contentsRequestId: string;
+  searchHttpStatus: number;
+  contentsHttpStatus: number;
+  searchResponseHash: string;
+  contentsResponseHash: string;
+  retrievedAt: string;
+  records: OpenAiRetrievedRecord[];
+};
+
+export type SupplierResearchRetrievalCapture = ExaRetrievalCapture | OpenAiRetrievalCapture;
+
 export type PublicListingReceipt = {
   provider: "EXA";
   candidateId: string | null;
@@ -152,8 +176,7 @@ export type PublicListingReceipt = {
   receiptHash: string;
 };
 
-export type PublicSupplierLeadReceipt = {
-  provider: "EXA";
+type PublicSupplierLeadReceiptFields = {
   candidateId: string | null;
   itemKey: string;
   companyName: string;
@@ -170,9 +193,20 @@ export type PublicSupplierLeadReceipt = {
   contentsRequestId: string;
   contentsResponseHash: string;
   retrievedAt: string;
-  freshnessPolicy: "FORCED_LIVE";
   receiptHash: string;
 };
+
+export type ExaPublicSupplierLeadReceipt = PublicSupplierLeadReceiptFields & {
+  provider: "EXA";
+  freshnessPolicy: "FORCED_LIVE";
+};
+
+export type OpenAiPublicSupplierLeadReceipt = PublicSupplierLeadReceiptFields & {
+  provider: "OPENAI";
+  freshnessPolicy: "SERVER_RETRIEVED";
+};
+
+export type PublicSupplierLeadReceipt = ExaPublicSupplierLeadReceipt | OpenAiPublicSupplierLeadReceipt;
 
 export type ExaSupplierResearchResult = SupplierResearchResult & {
   retrieval: ExaRetrievalCapture;
@@ -789,14 +823,16 @@ export function publicSupplierLeadReceiptHash(receipt: Omit<PublicSupplierLeadRe
   return hash(JSON.stringify(supplierLeadReceiptBase(receipt)));
 }
 
-export function validateExaPublicSupplierLeadReceipts(
-  input: ExaSupplierResearchInput,
-  capture: ExaRetrievalCapture,
+export function validatePublicSupplierLeadReceipts(
+  input: SupplierLeadValidationInput,
+  capture: SupplierResearchRetrievalCapture,
 ) {
   if (capture.stage === "SEARCH_ONLY") return [];
   if (
-    capture.provider !== "EXA"
-    || capture.freshnessPolicy !== "FORCED_LIVE"
+    !(
+      (capture.provider === "EXA" && capture.freshnessPolicy === "FORCED_LIVE")
+      || (capture.provider === "OPENAI" && capture.freshnessPolicy === "SERVER_RETRIEVED")
+    )
     || capture.searchHttpStatus < 200 || capture.searchHttpStatus >= 300
     || capture.contentsHttpStatus < 200 || capture.contentsHttpStatus >= 300
     || !/^[a-f0-9]{64}$/.test(capture.searchResponseHash)
@@ -833,8 +869,7 @@ export function validateExaPublicSupplierLeadReceipts(
       || !explicitRoleEvidence(supplierRoleExcerpt, role)
       || !sourceSupportsRequestedCapability(input, itemIdentity, productCapabilityExcerpt)
     ) continue;
-    const base: Omit<PublicSupplierLeadReceipt, "candidateId" | "receiptHash"> = {
-      provider: "EXA",
+    const common = {
       itemKey: input.componentItemKey,
       companyName,
       website: new URL(sourceUrl).origin,
@@ -850,11 +885,33 @@ export function validateExaPublicSupplierLeadReceipts(
       contentsRequestId: capture.contentsRequestId,
       contentsResponseHash: capture.contentsResponseHash,
       retrievedAt: capture.retrievedAt,
-      freshnessPolicy: "FORCED_LIVE",
     };
-    receipts.push({ ...base, candidateId: null, receiptHash: publicSupplierLeadReceiptHash(base) });
+    if (capture.provider === "EXA") {
+      const base: Omit<ExaPublicSupplierLeadReceipt, "candidateId" | "receiptHash"> = {
+        provider: "EXA",
+        ...common,
+        freshnessPolicy: "FORCED_LIVE",
+      };
+      receipts.push({ ...base, candidateId: null, receiptHash: publicSupplierLeadReceiptHash(base) });
+    } else {
+      const base: Omit<OpenAiPublicSupplierLeadReceipt, "candidateId" | "receiptHash"> = {
+        provider: "OPENAI",
+        ...common,
+        freshnessPolicy: "SERVER_RETRIEVED",
+      };
+      receipts.push({ ...base, candidateId: null, receiptHash: publicSupplierLeadReceiptHash(base) });
+    }
   }
   return receipts;
+}
+
+export function validateExaPublicSupplierLeadReceipts(
+  input: ExaSupplierResearchInput,
+  capture: ExaRetrievalCapture,
+) {
+  return validatePublicSupplierLeadReceipts(input, capture).filter(
+    (receipt): receipt is ExaPublicSupplierLeadReceipt => receipt.provider === "EXA",
+  );
 }
 
 export function validateExaPublicListingReceipts(
@@ -1013,6 +1070,87 @@ export function parseStoredExaRetrievalCapture(value: unknown): ExaRetrievalCapt
     retrievedAt,
     records,
   };
+}
+
+export function parseStoredOpenAiRetrievalCapture(value: unknown): OpenAiRetrievalCapture | null {
+  const raw = record(value);
+  if (
+    raw.provider !== "OPENAI"
+    || raw.freshnessPolicy !== "SERVER_RETRIEVED"
+    || (raw.stage !== undefined && raw.stage !== "CONTENTS_COMPLETE")
+  ) return null;
+  const searchRequestId = text(raw.searchRequestId, 220);
+  const contentsRequestId = text(raw.contentsRequestId, 220);
+  const searchHttpStatus = typeof raw.searchHttpStatus === "number" && Number.isInteger(raw.searchHttpStatus)
+    ? raw.searchHttpStatus
+    : null;
+  const contentsHttpStatus = typeof raw.contentsHttpStatus === "number" && Number.isInteger(raw.contentsHttpStatus)
+    ? raw.contentsHttpStatus
+    : null;
+  const searchResponseHash = text(raw.searchResponseHash, 64);
+  const contentsResponseHash = text(raw.contentsResponseHash, 64);
+  const retrievedAt = text(raw.retrievedAt, 40);
+  if (
+    !searchRequestId || !contentsRequestId
+    || searchHttpStatus === null || searchHttpStatus < 200 || searchHttpStatus >= 300
+    || contentsHttpStatus === null || contentsHttpStatus < 200 || contentsHttpStatus >= 300
+    || !/^[a-f0-9]{64}$/.test(searchResponseHash)
+    || !/^[a-f0-9]{64}$/.test(contentsResponseHash)
+    || !plausibleServerRetrievedAt(retrievedAt)
+    || !Array.isArray(raw.records) || raw.records.length > MAX_RESULTS
+  ) return null;
+  const records: OpenAiRetrievedRecord[] = [];
+  for (const valueRecord of raw.records) {
+    const source = record(valueRecord);
+    const searchRank = typeof source.searchRank === "number" && Number.isInteger(source.searchRank) && source.searchRank >= 1 && source.searchRank <= MAX_RESULTS
+      ? source.searchRank
+      : null;
+    const sourceId = text(source.sourceId, 2_000);
+    const sourceUrl = publicUrl(source.sourceUrl);
+    const sourceTitle = text(source.sourceTitle, 500) || null;
+    const status = parseStatus(source.status);
+    const publishedDate = text(source.publishedDate, 80) || null;
+    const sourceText = typeof source.text === "string" && source.text.length <= MAX_RECORD_TEXT ? source.text : null;
+    const highlights = Array.isArray(source.highlights)
+      ? source.highlights.flatMap((entry) => typeof entry === "string" ? [entry] : []).slice(0, 12)
+      : [];
+    const proposal = source.proposal === null ? null : parseProposal(source.proposal);
+    const sourceTextHash = text(source.sourceTextHash, 64);
+    if (
+      searchRank === null || !sourceId || !sourceUrl || !status || sourceText === null
+      || !sameUrl(status.id, sourceUrl)
+      || highlights.join("\n").length > MAX_RECORD_HIGHLIGHTS
+      || !/^[a-f0-9]{64}$/.test(sourceTextHash)
+      || hash([sourceText, ...highlights].join("\n")) !== sourceTextHash
+    ) return null;
+    records.push({ searchRank, sourceId, sourceUrl, sourceTitle, status, publishedDate, text: sourceText, highlights, proposal, sourceTextHash });
+  }
+  if (new Set(records.map((candidate) => candidate.sourceUrl)).size !== records.length) return null;
+  // OpenAI page retrieval is server-owned, so its batch hash is defined over
+  // this canonical record shape and can be revalidated after JSONB storage.
+  // Exa keeps its legacy raw-provider response hash, which is not derivable
+  // from the normalized records and therefore remains on the legacy path.
+  if (hash(JSON.stringify(records)) !== contentsResponseHash) return null;
+  return {
+    provider: "OPENAI",
+    freshnessPolicy: "SERVER_RETRIEVED",
+    ...(raw.stage === "CONTENTS_COMPLETE" ? { stage: "CONTENTS_COMPLETE" as const } : {}),
+    searchRequestId,
+    contentsRequestId,
+    searchHttpStatus,
+    contentsHttpStatus,
+    searchResponseHash,
+    contentsResponseHash,
+    retrievedAt,
+    records,
+  };
+}
+
+export function parseStoredSupplierResearchRetrievalCapture(value: unknown): SupplierResearchRetrievalCapture | null {
+  const provider = record(value).provider;
+  if (provider === "EXA") return parseStoredExaRetrievalCapture(value);
+  if (provider === "OPENAI") return parseStoredOpenAiRetrievalCapture(value);
+  return null;
 }
 
 export function parseStoredPublicListingReceipt(value: unknown) {

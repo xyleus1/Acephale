@@ -95,3 +95,4 @@ jobs:
           npm run test:supply-os-supplier-research-failures
           npm run test:supply-os-supply-intelligence
           npm run test:supply-os-exa-retrieval
+          npm run test:supply-os-openai-retrieval

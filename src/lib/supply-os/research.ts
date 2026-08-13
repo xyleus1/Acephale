@@ -85,7 +85,7 @@ export type SupplierResearchQueryInput = {
   queryVariant?: string;
   queryCycle?: number;
   excludeDomains?: string[];
-  requiredProvider?: "EXA";
+  requiredProvider?: "EXA" | "OPENAI";
 };
 
 export type SupplierResearchQueryVariant = {

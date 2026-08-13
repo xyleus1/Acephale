@@ -5,13 +5,17 @@ import { resolve } from "node:path";
 import {
   ExaResearchError,
   parseStoredExaRetrievalCapture,
+  parseStoredSupplierResearchRetrievalCapture,
   parseStoredPublicListingReceipt,
   searchExaComponentSuppliers,
   validateExaPublicListingReceipts,
+  validateExaPublicSupplierLeadReceipts,
+  validatePublicSupplierLeadReceipts,
   type ExaOfferProposal,
   type ExaRetrievalCapture,
   type ExaSourceStatus,
   type ExaSupplierResearchInput,
+  type OpenAiRetrievalCapture,
 } from "../src/lib/supply-os/exa-supplier-research";
 
 const procurementWorkspace = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
@@ -101,6 +105,95 @@ function sourceRecord(args: {
     sourceTextHash: digest(sourceText),
   };
 }
+
+const leadIdentityEvidence = "Example Supplier operates the supplier.example company website.";
+const leadRoleEvidence = "Example Supplier is a distributor of industrial radio modules.";
+const leadCapabilityEvidence = "Example Supplier distributes and supplies the Acme RM-9 radio module.";
+const leadText = [leadIdentityEvidence, leadRoleEvidence, leadCapabilityEvidence].join(" ");
+const leadSourceUrl = "https://examplesupplier.example/catalog/rm-9";
+const leadProposal: ExaOfferProposal = {
+  supplierName: "Example Supplier",
+  supplierRole: "DISTRIBUTOR",
+  companyIdentityEvidence: leadIdentityEvidence,
+  supplierRoleEvidence: leadRoleEvidence,
+  productCapabilityEvidence: leadCapabilityEvidence,
+  itemIdentity: "Acme RM-9 radio module",
+  manufacturer: "Acme",
+  mpn: "RM-9",
+  priceAmount: null,
+  currency: null,
+  unitOfMeasure: null,
+  packageQuantity: null,
+  evidenceText: null,
+};
+const openAiRecords: OpenAiRetrievalCapture["records"] = [{
+    searchRank: 1,
+    sourceId: "openai-source-1",
+    sourceUrl: leadSourceUrl,
+    sourceTitle: "Example Supplier RM-9 capability",
+    status: status({ id: leadSourceUrl, httpStatusCode: 200 }),
+    publishedDate: null,
+    text: leadText,
+    highlights: [],
+    proposal: leadProposal,
+    sourceTextHash: digest(leadText),
+  }];
+const openAiCapture: OpenAiRetrievalCapture = {
+  provider: "OPENAI",
+  freshnessPolicy: "SERVER_RETRIEVED",
+  searchRequestId: "response-openai-1",
+  contentsRequestId: "server-retrieval-1",
+  searchHttpStatus: 200,
+  contentsHttpStatus: 200,
+  searchResponseHash: "c".repeat(64),
+  contentsResponseHash: digest(JSON.stringify(openAiRecords)),
+  retrievedAt,
+  records: openAiRecords,
+};
+const parsedOpenAiCapture = parseStoredSupplierResearchRetrievalCapture(openAiCapture);
+assert.equal(parsedOpenAiCapture?.provider, "OPENAI", "a bounded server-retrieved OpenAI capture must survive stored-output parsing");
+const openAiLeadReceipts = parsedOpenAiCapture ? validatePublicSupplierLeadReceipts(input, parsedOpenAiCapture) : [];
+assert.equal(openAiLeadReceipts.length, 1, "one independently retrieved OpenAI source must emit one deterministic supplier lead receipt");
+assert.equal(openAiLeadReceipts[0]?.provider, "OPENAI");
+assert.equal(openAiLeadReceipts[0]?.freshnessPolicy, "SERVER_RETRIEVED");
+assert.equal(openAiLeadReceipts[0]?.sourceUrl, leadSourceUrl);
+assert.equal(parseStoredSupplierResearchRetrievalCapture({
+  ...openAiCapture,
+  records: [{ ...openAiCapture.records[0], sourceTextHash: "0".repeat(64) }],
+}), null, "a stored OpenAI capture with a detached source hash must fail closed");
+assert.equal(parseStoredSupplierResearchRetrievalCapture({
+  ...openAiCapture,
+  records: [{ ...openAiCapture.records[0], sourceTitle: "Tampered title" }],
+}), null, "a stored OpenAI capture with a detached batch hash must fail closed");
+assert.equal(parseStoredSupplierResearchRetrievalCapture({
+  ...openAiCapture,
+  freshnessPolicy: "FORCED_LIVE",
+}), null, "provider and retrieval policy cannot be mixed across capture formats");
+
+const exaLeadCapture = capture([sourceRecord({ url: leadSourceUrl, sourceText: leadText, proposal: leadProposal })]);
+const exaLeadReceipt = validateExaPublicSupplierLeadReceipts(input, exaLeadCapture)[0];
+assert.ok(exaLeadReceipt, "the legacy Exa lead fixture must still validate");
+const legacyExaReceiptHash = digest(JSON.stringify({
+  provider: "EXA",
+  itemKey: exaLeadReceipt.itemKey,
+  companyName: exaLeadReceipt.companyName,
+  website: exaLeadReceipt.website,
+  role: exaLeadReceipt.role,
+  productCapability: exaLeadReceipt.productCapability,
+  sourceUrl: exaLeadReceipt.sourceUrl,
+  sourceTitle: exaLeadReceipt.sourceTitle,
+  companyIdentityExcerpt: exaLeadReceipt.companyIdentityExcerpt,
+  supplierRoleExcerpt: exaLeadReceipt.supplierRoleExcerpt,
+  productCapabilityExcerpt: exaLeadReceipt.productCapabilityExcerpt,
+  sourceTextHash: exaLeadReceipt.sourceTextHash,
+  searchRequestId: exaLeadReceipt.searchRequestId,
+  contentsRequestId: exaLeadReceipt.contentsRequestId,
+  contentsResponseHash: exaLeadReceipt.contentsResponseHash,
+  retrievedAt: exaLeadReceipt.retrievedAt,
+  freshnessPolicy: "FORCED_LIVE",
+}));
+assert.equal(exaLeadReceipt.receiptHash, legacyExaReceiptHash, "the provider-neutral validator must preserve the Exa v1 receipt hash byte order");
+assert.equal(validatePublicSupplierLeadReceipts(input, exaLeadCapture)[0]?.receiptHash, exaLeadReceipt.receiptHash);
 
 const success = validateExaPublicListingReceipts(input, capture([sourceRecord()]));
 assert.equal(success.length, 1, "one exact forced-live record should emit one receipt");
