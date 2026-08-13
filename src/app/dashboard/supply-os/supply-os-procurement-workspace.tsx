@@ -145,8 +145,8 @@ const DISCOVERED_OPTIONS: Record<string, AtlasSourcingCandidate> = {
 
 const RESEARCH_STEPS = [
   { key: "scope", label: "Request scope", detail: "Product, quantity, geography, delivery, and timing", sourceClass: "Scope" },
-  { key: "web", label: "Open web discovery", detail: "Public manufacturer, producer, distributor, and trader pages", sourceClass: "Public" },
-  { key: "validation", label: "Source validation", detail: "Attribution, dates, units, and official-domain checks", sourceClass: "Evidence" },
+  { key: "web", label: "Open web discovery", detail: "Attributable URLs returned by public search", sourceClass: "Public" },
+  { key: "validation", label: "Source validation", detail: "Independent page retrieval, supplier identity, product capability, dates, and units", sourceClass: "Evidence" },
   { key: "screening", label: "Candidate screening", detail: "Unsupported claims remain unknown or are rejected", sourceClass: "Review" },
 ] as const;
 
@@ -682,6 +682,7 @@ export function AtlasProcurementWorkspace({
   const [showSupplierExceptionForm, setShowSupplierExceptionForm] = useState(false);
   const initialRunStatus = initialRun?.status.toUpperCase() ?? null;
   const initialRunSucceeded = initialRunStatus === "SUCCEEDED";
+  const initialRunHasCandidates = initialRunSucceeded && Boolean(initialRun?.output?.candidates.length);
   const initialRunActive = initialRunStatus === "QUEUED" || initialRunStatus === "RUNNING";
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRunSucceeded ? initialRun?.output ?? null : null);
   const [researchError, setResearchError] = useState<string | null>(
@@ -707,11 +708,10 @@ export function AtlasProcurementWorkspace({
     ? options.find(isEvidenceBackedRecommendation) ?? null
     : options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
   const checkedResearchSources = useMemo(() => researchSources(publicResearch), [publicResearch]);
-  const officialResearchSourceCount = checkedResearchSources.filter((source) => source.sourceType === "OFFICIAL").length;
   const [phase, setPhase] = useState<ProcurementPhase>(() => {
     if (initialCase?.result?.sourcingReturn?.state === "REQUIRED") return "compare";
     if (initialCase) return "procure";
-    if (initialRunSucceeded) return "compare";
+    if (initialRunHasCandidates) return "compare";
     if (initialRun) return "researching";
     return startingDraft && startingMissingFields.length === 0 && !initialQuestion ? "researching" : "request";
   });
@@ -1896,6 +1896,26 @@ export function AtlasProcurementWorkspace({
     && qualificationForm.note.trim().length >= 10
     && (qualificationForm.relationship !== "AUTHORIZED_DISTRIBUTOR" || Boolean(qualificationForm.authorizationEvidenceUrl.trim()));
   const rejectionComplete = qualificationForm.note.trim().length >= 10;
+  const researchOutcomeLabel = researchState === "running"
+    ? "Researching"
+    : researchState === "background"
+      ? "Background research"
+      : publicResearch
+        ? "Research complete"
+        : researchError
+          ? "Research stopped"
+          : "Research";
+  const researchOutcomeDetail = researchState === "running"
+    ? "Searching public supplier pages, then validating source attribution and exact commercial claims."
+    : researchState === "background"
+      ? "Public supplier research continues as a saved background job."
+      : publicResearch?.candidates.length
+        ? "Public supplier research finished. Retained leads still require human qualification."
+        : publicResearch
+          ? "Public supplier research finished. No supplier lead passed independent page and evidence validation."
+          : researchError
+            ? "Public supplier research stopped before a validated result was returned."
+            : "Public supplier research has not started.";
   const qualityVerificationComplete = Boolean(qualityForm.acceptanceCriteria.trim())
     && Boolean(qualityForm.owner.trim())
     && Boolean(qualityForm.targetDate)
@@ -1991,9 +2011,9 @@ export function AtlasProcurementWorkspace({
           >
             <section className={styles.procurementResearchLead}>
               <span className={styles.procurementResearchIcon}><Sparkles size={20} /></span>
-              <small>Researching</small>
+              <small>{researchOutcomeLabel}</small>
               <h3>{requestText}</h3>
-              <p>Searching public supplier pages, then validating source attribution and exact commercial claims.</p>
+              <p>{researchOutcomeDetail}</p>
             </section>
             <ol className={styles.procurementSourceLog}>
               {RESEARCH_STEPS.map((step, index) => {
@@ -2015,12 +2035,12 @@ export function AtlasProcurementWorkspace({
                       : researchState === "background"
                         ? "Research continues as a saved background job. Resume checking for the latest result."
                       : researchError
-                        ? "No source records were returned to this screen."
+                        ? "No discovery URLs were returned to this screen."
                       : checkedResearchSources.length
-                        ? `${checkedResearchSources.length} attributable source${checkedResearchSources.length === 1 ? "" : "s"} returned.`
-                        : "No attributable source URLs were returned."}</p>
+                        ? `${checkedResearchSources.length} attributable discovery URL${checkedResearchSources.length === 1 ? "" : "s"} returned. These URLs have not all been independently retrieved or validated.`
+                        : "No attributable discovery URLs were returned."}</p>
                     <details className={styles.procurementResearchSources}>
-                      <summary>Sources checked ({checkedResearchSources.length})</summary>
+                      <summary>Discovery URLs ({checkedResearchSources.length})</summary>
                       {checkedResearchSources.length ? (
                         <ul>
                           {checkedResearchSources.map((source) => (
@@ -2031,22 +2051,22 @@ export function AtlasProcurementWorkspace({
                           ))}
                         </ul>
                       ) : <p>{researchState === "running"
-                        ? "Waiting for attributable sources from public search."
+                        ? "Waiting for attributable discovery URLs from public search."
                         : researchState === "background"
-                          ? "No attributable source has been saved yet. The background job is still active."
+                          ? "No attributable discovery URL has been saved yet. The background job is still active."
                         : researchError
-                          ? "This screen received no source records to attribute."
-                          : "No source links survived attribution checks."}</p>}
+                          ? "This screen received no discovery URLs to attribute."
+                          : "No discovery URL survived attribution checks."}</p>}
                     </details>
                   </>
                 ) : step.key === "validation" ? (
                   <p>{researchState === "running"
-                    ? "Validation starts when attributable source records return."
+                    ? "Eligible discovery URLs are independently retrieved before supplier validation."
                     : researchState === "background"
-                      ? "Validation will be saved with the background result."
+                      ? "Independent page and evidence validation will be saved with the background result."
                     : researchError
                       ? "No validation result was returned to this screen."
-                        : `${officialResearchSourceCount} official and ${checkedResearchSources.length - officialResearchSourceCount} other public source${checkedResearchSources.length - officialResearchSourceCount === 1 ? "" : "s"} passed URL attribution. A public price requires one exact forced-live record with amount, ISO currency, and unit; RFQ confirmation is still required.`}</p>
+                      : `${checkedResearchSources.length} attributable discovery URL${checkedResearchSources.length === 1 ? "" : "s"} returned by public search. ${publicResearch?.candidates.length ?? 0} supplier lead${publicResearch?.candidates.length === 1 ? "" : "s"} passed independent page, identity, and product-capability validation. Discovery URLs alone are not validated suppliers. A public price requires one exact forced-live record with amount, ISO currency, and unit; RFQ confirmation is still required.`}</p>
                 ) : (
                   <>
                     <p>{researchState === "running"
@@ -2078,11 +2098,14 @@ export function AtlasProcurementWorkspace({
                 ? "Public web research is running. No supplier system is connected."
                 : researchState === "background"
                   ? "Research continues in the background. Leaving this page will not cancel it."
-                : researchState === "complete"
+                : researchState === "complete" && publicResearch?.candidates.length
                   ? "Public results are attributable and unqualified. No supplier was contacted."
                   : researchError
-                    ?? (publicResearch?.candidates.length ? "Public supplier pages were retained with verification gaps. No supplier was contacted." : publicResearch?.warnings[0])
-                    ?? "Public research is unavailable."}</span>
+                    ?? (publicResearch?.candidates.length
+                      ? "Public supplier pages were retained with verification gaps. No supplier was contacted."
+                      : publicResearch
+                        ? "Research complete. No supplier lead passed independent page and evidence validation."
+                        : "Public research is unavailable.")}</span>
               {researchState === "background" ? (
                 <div>
                   <button type="button" data-primary="true" onClick={resumeResearchPolling}><RefreshCw size={14} /> Resume checking</button>

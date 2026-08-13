@@ -663,6 +663,16 @@ function explicitRoleEvidence(value: string, role: SupplierCandidateRole) {
     && !/\b(?:does not|do not|is not|are not|never|no longer|not currently)\b.{0,60}\b(?:manufactur|distribut|produc|process|export|trad|service|inspect|metrology|laborator)\w*\b/i.test(value);
 }
 
+function explicitMaterialRoleEvidence(value: string, role: SupplierCandidateRole) {
+  if (explicitRoleEvidence(value, role)) return true;
+  if (/\b(?:does not|do not|is not|are not|never|no longer|not currently)\b.{0,60}\b(?:stockist|service center)\b/i.test(value)) {
+    return false;
+  }
+  if (role === "DISTRIBUTOR") return /\b(?:metal\s+)?(?:stockist|service center)\b/i.test(value);
+  if (role === "PROCESSOR") return /\b(?:metal\s+)?service center\b/i.test(value);
+  return false;
+}
+
 function containsAnyIdentityTerm(value: string, terms: string[]) {
   return terms.some((term) => containsIdentityTerm(value, term));
 }
@@ -680,6 +690,16 @@ const MATERIAL_FORM_TERMS = [
 const MATERIAL_GRADE_TERMS = [
   "6061-t6", "6061-t651", "5052-h32", "a2", "304", "g10", "fr-4", "fr4",
 ] as const;
+const MATERIAL_GRADE_LABELS: Record<(typeof MATERIAL_GRADE_TERMS)[number], string> = {
+  "6061-t6": "6061-T6",
+  "6061-t651": "6061-T651",
+  "5052-h32": "5052-H32",
+  a2: "A2",
+  "304": "304",
+  g10: "G10",
+  "fr-4": "FR-4",
+  fr4: "FR-4",
+};
 const CUSTOM_PROCESS_TERMS = [
   "machining", "machined", "cnc", "fabrication", "fabricator", "build to print", "laser etched", "engraving", "anodizing", "printed circuit board",
 ] as const;
@@ -705,40 +725,88 @@ const GENERIC_QUALIFIER_ALTERNATIVES = [
   ["torque seal", "witness"],
 ] as const;
 
-function sourceSupportsRequestedCapability(
+function containsMaterialGrade(value: string, grade: (typeof MATERIAL_GRADE_TERMS)[number]) {
+  const normalizedGrade = grade.replace(/[^a-z0-9]+/g, "");
+  const words = identityWords(value).map((word) => word.replace(/[^a-z0-9]+/g, ""));
+  if (words.includes(normalizedGrade)) return true;
+  const alloyTemper = normalizedGrade.match(/^(\d{4})([th]\d+)$/);
+  if (!alloyTemper) return words.includes(normalizedGrade === "fr4" ? "fr4" : normalizedGrade);
+  const [, alloy, temper] = alloyTemper;
+  const alloyIndexes = words.flatMap((word, index) => (
+    word === alloy || word === `al${alloy}` ? [index] : []
+  ));
+  const temperIndexes = words.flatMap((word, index) => word === temper ? [index] : []);
+  return alloyIndexes.some((alloyIndex) => temperIndexes.some((temperIndex) => {
+    const first = Math.min(alloyIndex, temperIndex);
+    const last = Math.max(alloyIndex, temperIndex);
+    if (last - first > 6) return false;
+    return !words.slice(first + 1, last).some((word) => /^\d{4}$/.test(word) && word !== alloy);
+  }));
+}
+
+function requestedMaterialMatch(requested: string, capabilityExcerpt: string) {
+  const materials = requestedTerms(requested, MATERIAL_TERMS);
+  if (!materials.length) return null;
+  if (materials.includes("stainless")) {
+    return containsIdentityTerm(capabilityExcerpt, "stainless") ? "stainless steel" : null;
+  }
+  if (materials.includes("aluminum") || materials.includes("aluminium")) {
+    return containsIdentityTerm(capabilityExcerpt, "aluminum") || containsIdentityTerm(capabilityExcerpt, "aluminium")
+      ? "aluminum"
+      : null;
+  }
+  const material = materials.find((term) => containsIdentityTerm(capabilityExcerpt, term));
+  if (!material) return null;
+  if (material === "fr4") return "FR-4";
+  if (material === "fr-4") return "FR-4";
+  if (material === "g10") return "G10";
+  return material;
+}
+
+function materialStockCapability(requested: string, capabilityExcerpt: string) {
+  const material = requestedMaterialMatch(requested, capabilityExcerpt);
+  const requestedForms = requestedTerms(requested, MATERIAL_FORM_TERMS);
+  const form = requestedForms.find((term) => containsIdentityTerm(capabilityExcerpt, term));
+  const requestedGrades = MATERIAL_GRADE_TERMS.filter((grade) => containsMaterialGrade(requested, grade));
+  const grade = requestedGrades.find((candidate) => containsMaterialGrade(capabilityExcerpt, candidate));
+  if (!material || !form || (requestedGrades.length > 0 && !grade)) return null;
+  const parts = [grade ? MATERIAL_GRADE_LABELS[grade] : null, material, form];
+  const seen = new Set<string>();
+  return parts.filter((part): part is string => {
+    if (!part) return false;
+    const normalized = normalizedIdentity(part);
+    if (seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  }).join(" ");
+}
+
+function supportedProductCapability(
   input: ExaSupplierResearchInput,
   itemIdentity: string,
   capabilityExcerpt: string,
 ) {
-  if (!containsIdentityPhrase(capabilityExcerpt, itemIdentity)) return false;
   if (/\b(?:does not|do not|never|no longer|not currently)\b.{0,60}\b(?:manufactur|distribut|suppl|stock|offer|provid|fabricat|machin|process|assembl|calibrat|inspect|sell)\w*\b/i.test(capabilityExcerpt)) {
-    return false;
-  }
-  if (!/\b(?:manufactur|distribut|suppl|stock|offer|provid|fabricat|machin|process|assembl|calibrat|inspect|metrology|measur|test(?:ing)? laborator|sell|lists?|specializ|service center|produc|export|trad)\w*\b/i.test(capabilityExcerpt)) {
-    return false;
+    return null;
   }
   const productSpecification = (input.specification ?? "").split(/\.\s*Supplier (?:QA|deliverable):/i)[0] ?? "";
   const requested = `${input.componentName} ${input.manufacturer ?? ""} ${input.mpn ?? ""} ${productSpecification}`;
-  if (input.manufacturer && !containsPhrase(itemIdentity, input.manufacturer)) return false;
-  if (input.mpn && !containsPhrase(itemIdentity, input.mpn)) return false;
   const { plan } = selectedSupplierResearchQueryVariant(input);
+  if (plan.profile === "MATERIAL_STOCK") return materialStockCapability(requested, capabilityExcerpt);
+  if (!containsIdentityPhrase(capabilityExcerpt, itemIdentity)) return null;
+  if (!/\b(?:manufactur|distribut|suppl|stock|offer|provid|fabricat|machin|process|assembl|calibrat|inspect|metrology|measur|test(?:ing)? laborator|sell|lists?|specializ|service center|produc|export|trad)\w*\b/i.test(capabilityExcerpt)) {
+    return null;
+  }
+  if (input.manufacturer && !containsPhrase(itemIdentity, input.manufacturer)) return null;
+  if (input.mpn && !containsPhrase(itemIdentity, input.mpn)) return null;
   if (plan.profile === "BRANDED_COTS") {
     const brandTerms = requestedTerms(requested, ["3m", "scotch-weld", "dowsil"]);
     const identifiers = (requested.toLowerCase().match(/\b(?:[a-z]+\d+[a-z0-9.-]*|\d+[a-z]+[a-z0-9.-]*|\d{4,})\b/g) ?? [])
       .filter((term) => !/^(?:600v|2026)$/.test(term));
     return (!brandTerms.length || brandTerms.every((term) => containsIdentityTerm(capabilityExcerpt, term)))
-      && (!identifiers.length || identifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term)));
-  }
-  if (plan.profile === "MATERIAL_STOCK") {
-    const materials = requestedTerms(requested, MATERIAL_TERMS);
-    const forms = requestedTerms(requested, MATERIAL_FORM_TERMS);
-    const grades = requestedTerms(requested, MATERIAL_GRADE_TERMS);
-    const dimensions = requested.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:mm|in|inch|inches)\b/g) ?? [];
-    return materials.length > 0 && forms.length > 0
-      && containsAnyIdentityTerm(itemIdentity, materials)
-      && containsAnyIdentityTerm(itemIdentity, forms)
-      && (!grades.length || containsAnyIdentityTerm(capabilityExcerpt, grades))
-      && (!dimensions.length || dimensions.some((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension)));
+      && (!identifiers.length || identifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term)))
+      ? itemIdentity
+      : null;
   }
   if (plan.profile === "CUSTOM_FABRICATION") {
     const processes = requestedTerms(requested, CUSTOM_PROCESS_TERMS);
@@ -749,7 +817,9 @@ function sourceSupportsRequestedCapability(
       && processes.every((term) => containsIdentityTerm(capabilityExcerpt, term))
       && (!materials.length || containsAnyIdentityTerm(capabilityExcerpt, materials))
       && grades.every((term) => containsIdentityTerm(capabilityExcerpt, term))
-      && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension));
+      && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension))
+      ? itemIdentity
+      : null;
   }
   if (plan.profile === "CALIBRATED_INSTRUMENT") {
     const instruments = requestedTerms(requested, [
@@ -766,19 +836,25 @@ function sourceSupportsRequestedCapability(
       && containsAnyIdentityTerm(itemIdentity, instruments)
       && requiredQualifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term))
       && (mountingAlternatives.length < 2 || mountingAlternatives.some((term) => containsIdentityTerm(capabilityExcerpt, term)))
-      && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension));
+      && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension))
+      ? itemIdentity
+      : null;
   }
   if (plan.profile === "ASSEMBLY_SERVICE") {
     return /\b(?:wire|cable|data acquisition)?\s*harness\b/i.test(itemIdentity)
-      && /\b(?:assembl|build to print|continuity test|pin to pin)\w*\b/i.test(capabilityExcerpt);
+      && /\b(?:assembl|build to print|continuity test|pin to pin)\w*\b/i.test(capabilityExcerpt)
+      ? itemIdentity
+      : null;
   }
   if (plan.profile === "PACKAGING") {
     const products = requestedTerms(`${input.componentName} ${productSpecification}`, ["packaging", "foam", "antistatic bag", "humidity indicator", "shipping case"]);
-    return products.length > 0 && products.every((term) => containsIdentityTerm(capabilityExcerpt, term));
+    return products.length > 0 && products.every((term) => containsIdentityTerm(capabilityExcerpt, term)) ? itemIdentity : null;
   }
   if (plan.profile === "INSPECTION_SERVICE") {
     return /\b(?:first article|inspection|metrology|measurement|dimensional)\b/i.test(itemIdentity)
-      && /\b(?:inspect|metrology|measure|as9102|report)\w*\b/i.test(capabilityExcerpt);
+      && /\b(?:inspect|metrology|measure|as9102|report)\w*\b/i.test(capabilityExcerpt)
+      ? itemIdentity
+      : null;
   }
   const requestedProduct = `${input.componentName} ${input.manufacturer ?? ""} ${input.mpn ?? ""} ${productSpecification}`;
   const productTerms = requestedTerms(requestedProduct, GENERIC_PRODUCT_TERMS);
@@ -794,7 +870,9 @@ function sourceSupportsRequestedCapability(
     && qualifiers.length > 0
     && requiredQualifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term))
     && requestedAlternativeGroups.every((group) => group.some((term) => containsIdentityTerm(capabilityExcerpt, term)))
-    && requestedDimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension));
+    && requestedDimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension))
+    ? itemIdentity
+    : null;
 }
 
 function supplierLeadReceiptBase(receipt: Omit<PublicSupplierLeadReceipt, "candidateId" | "receiptHash">) {
@@ -840,6 +918,8 @@ export function validatePublicSupplierLeadReceipts(
     || !plausibleServerRetrievedAt(capture.retrievedAt)
   ) return [];
   const receipts: PublicSupplierLeadReceipt[] = [];
+  const { plan } = selectedSupplierResearchQueryVariant(input);
+  const materialStockRequest = plan.profile === "MATERIAL_STOCK";
   for (const source of capture.records) {
     if (!source.proposal || !successfulFreshStatus(source.status, source.sourceUrl)) continue;
     const sourceUrl = publicUrl(source.sourceUrl);
@@ -859,22 +939,27 @@ export function validatePublicSupplierLeadReceipts(
     const companyIdentityExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.companyIdentityEvidence, 1_000));
     const supplierRoleExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.supplierRoleEvidence, 1_000));
     const productCapabilityExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.productCapabilityEvidence, 1_000));
+    const productCapability = productCapabilityExcerpt
+      ? supportedProductCapability(input, itemIdentity, productCapabilityExcerpt)
+      : null;
     if (
       !companyIdentityExcerpt
       || !supplierRoleExcerpt
       || !productCapabilityExcerpt
+      || !productCapability
       || !containsPhrase(companyIdentityExcerpt, companyName)
-      || !containsPhrase(supplierRoleExcerpt, companyName)
-      || !containsPhrase(productCapabilityExcerpt, companyName)
-      || !explicitRoleEvidence(supplierRoleExcerpt, role)
-      || !sourceSupportsRequestedCapability(input, itemIdentity, productCapabilityExcerpt)
+      || (!materialStockRequest && !containsPhrase(supplierRoleExcerpt, companyName))
+      || (!materialStockRequest && !containsPhrase(productCapabilityExcerpt, companyName))
+      || !(materialStockRequest
+        ? explicitMaterialRoleEvidence(supplierRoleExcerpt, role)
+        : explicitRoleEvidence(supplierRoleExcerpt, role))
     ) continue;
     const common = {
       itemKey: input.componentItemKey,
       companyName,
       website: new URL(sourceUrl).origin,
       role,
-      productCapability: itemIdentity,
+      productCapability,
       sourceUrl,
       sourceTitle: source.sourceTitle,
       companyIdentityExcerpt,

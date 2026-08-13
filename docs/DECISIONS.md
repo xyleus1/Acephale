@@ -2982,3 +2982,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
   require the exact parent campaign to remain RUNNING with the same provider
   pin. Source URLs and sanitized warnings remain visible even when no lead
   passes receipt validation.
+
+### 2026-08-13 - Supplier capability is distinct from exact orderability
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Material-stock research rejected legitimate suppliers unless one
+  public page repeated the requested thickness, finish, cutting, and QA terms
+  in the exact request syntax. That treated an RFQ lead as if it were already
+  an orderable listing and eliminated real 6061-T6 sheet distributors.
+- Decision: A material-stock supplier lead must have independently retrieved,
+  same-page evidence for the supplier identity, an allowed supplier role, the
+  requested base material, form, and alloy or temper when one is specified.
+  Exact thickness, finish, cut size, stock, price, lead time, and documentation
+  remain unknown unless separately proven and must be confirmed through the
+  human-reviewed RFQ workflow.
+- Evidence boundary: Store only the deterministic capability core supported by
+  the page, such as `6061-T6 aluminum sheet`. Do not copy unsupported request
+  qualifiers from a model proposal into the supported capability. Generic
+  aluminum-sheet pages still fail when they do not prove the requested grade
+  and temper.
+- Discovery boundary: Search-returned URLs are discovery records, not checked
+  supplier pages. Known tracking parameters may be removed for URL binding,
+  but genuine query parameters remain part of the source identity. The UI must
+  report discovery, retrieval, validation, and retained leads as separate
+  stages.

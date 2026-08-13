@@ -286,6 +286,7 @@ const COMMON_MULTI_LABEL_SUFFIXES = new Set([
 const COMPANY_LEGAL_SUFFIXES = new Set([
   "co", "company", "corp", "corporation", "gmbh", "inc", "incorporated", "llc", "ltd", "limited", "plc", "sa",
 ]);
+const COMPANY_CONNECTOR_WORDS = new Set(["and", "of", "the"]);
 const GENERIC_COMPANY_DOMAIN_LABELS = new Set([
   "distribution", "distributor", "global", "group", "industrial", "industries", "manufacturer", "manufacturing",
   "solutions", "supplier", "supplies", "supply", "systems", "technologies", "technology",
@@ -305,11 +306,18 @@ export function supplierCompanyMatchesDomain(companyName: string, sourceUrl: str
   const domainLabel = organizationDomainLabel(sourceUrl);
   if (domainLabel.length < 4 || GENERIC_COMPANY_DOMAIN_LABELS.has(domainLabel)) return false;
   const companyTokens = text(companyName, 180).toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => (
-    token.length >= 2 && !COMPANY_LEGAL_SUFFIXES.has(token)
+    token.length >= 2 && !COMPANY_LEGAL_SUFFIXES.has(token) && !COMPANY_CONNECTOR_WORDS.has(token)
   )) ?? [];
   if (!companyTokens.length) return false;
-  const joined = companyTokens.join("");
-  return joined === domainLabel || companyTokens.some((token) => token.length >= 4 && token === domainLabel);
+  const companyDomainLabels = new Set<string>();
+  let leadingPrefix = "";
+  for (const token of companyTokens) {
+    leadingPrefix += token;
+    if (leadingPrefix.length >= 4) companyDomainLabels.add(leadingPrefix);
+  }
+  const firstTokenWithTailInitials = `${companyTokens[0]}${companyTokens.slice(1).map((token) => token[0]).join("")}`;
+  if (firstTokenWithTailInitials.length >= 4) companyDomainLabels.add(firstTokenWithTailInitials);
+  return companyDomainLabels.has(domainLabel);
 }
 
 function normalizeUrl(value: unknown) {
