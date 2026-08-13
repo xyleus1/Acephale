@@ -2,6 +2,102 @@
 
 ## Latest Update
 
+### Supplier research now survives the browser and request lifetime
+
+- Supplier research POST requests no longer wait for public discovery to
+  finish. The route validates and rate-limits the request, creates or reuses an
+  identical active `SupplyCapabilityRun`, and returns HTTP 202 with
+  `{ run, reused, pollUrl }` plus `cache-control: no-store`.
+- The exact-run GET is read-only and remains office and workspace scoped. The
+  procurement screen polls that run, renders its saved terminal result, and
+  moves a still-active run to an explicit background state after three minutes.
+  Leaving the page does not cancel the durable job.
+- Next.js `after()` starts work quickly when the request host remains alive. It
+  is only a latency optimization. The protected supplier-research cron advances
+  campaigns, claims at most two queued runs, and reconciles campaign state so a
+  redeploy or terminated request cannot strand queued work.
+- Claims atomically move one run from QUEUED to RUNNING. Duplicate workers skip
+  an already claimed run. Only stale RUNNING work is failed by recovery;
+  untouched QUEUED work is never mistaken for a timed-out provider call.
+- Worker failures are stored with stable failure codes and sanitized messages.
+  Terminal success or failure stays on the same run record for polling and
+  later inspection.
+- Campaign parents and aggregate artifacts follow the database provenance
+  state machine from QUEUED to RUNNING before reaching a terminal state. A
+  manual retry creates a linked immutable campaign generation and carries
+  forward validated predecessor aggregates instead of rewriting history or
+  paying to rediscover completed lines. Twelve manual generations are allowed;
+  another retry fails visibly and requires a reviewed scope instead of growing
+  an ancestry chain until recovery becomes impossible.
+- Reconciliation holds an expiring token on the RUNNING campaign parent.
+  Aggregate writes, child enqueue, lease release, and terminal transitions
+  verify that token under the parent row lock. Attempt watermarks prevent stale
+  generations from replacing newer evidence, while current receipt validation
+  can reduce an invalid prior aggregate from three leads to two or zero.
+- The fixed GUILD campaign is resumable and bounded. It searches 38 of the 40
+  lines, keeps GUILD-027 in clarification because quantity and unit are missing,
+  and treats GUILD-039 as an award documentation requirement instead of a
+  supplier search. Work is queued in batches of six with retry backoff, a
+  48-attempt daily campaign cap, and a 72-attempt daily office cap.
+- Campaign reservation and worker claim share one stable office quota lock and
+  derive the UTC day from the database clock after acquiring it. A request
+  waiting across midnight cannot escape or be charged to the wrong daily cap.
+- A campaign line completes only with three to five distinct, attributable
+  `REVIEW_REQUIRED` supplier leads. Each retained lead must have one public
+  source supporting its identity and product capability. Campaign aggregate
+  runs preserve the accepted candidates and evidence; no lead becomes an
+  approved supplier, quote, order, or outbound contact.
+- Campaign child work is pinned to Exa forced-live validation. If that provider
+  is unavailable or unauthenticated, the line blocks visibly rather than
+  silently falling back to discovery that cannot produce a validated lead.
+
+Verification completed during integration:
+
+- `npm run test:supply-os-bom-acceptance`
+- `npm run test:supply-os-research-worker-lifecycle`
+- `npm run test:supply-os-supplier-research-polling`
+- `npm run test:supply-os-supplier-leads`
+- `npm run test:supply-os-atlas-sourcing`
+- `npm run test:supply-os-continuous-sourcing`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `npm run build` with the prebuild contract run separately through the Node
+  loader because this sandbox blocks the `tsx` CLI IPC socket
+
+Release verification still required:
+
+- Run the PostgreSQL-backed Supply OS persistence contracts in CI; no local
+  PostgreSQL service was available in this sandbox.
+- Run `npm run test:supply-os-live-research` against the deployed authenticated
+  app with explicit base URL, cookie, and workspace ID.
+- Run `npm run test:supply-os-continuous-sourcing-acceptance` against the
+  deployed authenticated app. It is intentionally bounded but may span daily
+  attempt windows. It was not run locally because deployment credentials were
+  not available.
+
+### Supplier research keeps discovery evidence when Exa content validation times out
+
+- Exa supplier research no longer erases successful search results when the
+  subsequent forced-live Contents request reaches its deadline.
+- Forced-live content validation is bounded to the first three ranked public
+  results. Search can still return up to six attributable source URLs.
+- If content validation times out, the run completes as degraded with the
+  discovered URLs and source-domain candidates. Roles, product capability,
+  price, currency, MOQ, lead time, and listing receipts remain unknown.
+- Search failures still fail the run because no attributable source exists.
+  Other invalid, oversized, or provider-failure responses still fail closed.
+- Retry remains available, and no supplier contact, qualification, approval,
+  purchase action, or Logistics state is created by the degraded result.
+
+Verification:
+
+- `npm run test:supply-os-exa-retrieval`
+- `npm run test:supply-os-supplier-research-failures`
+- `npm run test:supply-os-research-route-lifecycle`
+- `node --conditions=react-server --import tsx scripts/supply-os-supply-intelligence.test.ts`
+- `node --import tsx scripts/supply-os-ingestion-research.test.ts`
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- `npx tsc --noEmit --pretty false --incremental false`
+
 ### Exa now creates bounded forced-live public listing receipts
 
 - `EXA_API_KEY` enables an Exa-first supplier-research path: Search finds public
@@ -25,8 +121,10 @@
   with `RFQ confirmation required`, and server-side public candidate selection
   continues to null price, currency, MOQ, and delivery before procurement.
 - When Exa is absent, the existing OpenAI web-search discovery path remains and
-  its timestamps stay untrusted. Exa failures do not fall back. Cloudflare
-  Browser Rendering is not part of this slice.
+  its timestamps stay untrusted. Exa does not fall back to another provider.
+  A Contents timeout after successful Exa Search retains only the search URLs
+  as degraded, unvalidated evidence. Cloudflare Browser Rendering is not part
+  of this slice.
 
 Verification:
 
@@ -8404,58 +8502,3 @@ Remaining release checks:
   production migration, remove the temporary migration hook, reconcile the
   runtime feature onto that main, then run authenticated research and browser
   canaries before merging runtime.
-
-## Supplier discovery survives Exa Contents timeout, August 12
-
-Status:
-
-- Implemented on `fix/supplier-research-resilience`, based on the live research
-  branch at `86b3a81`.
-- Not deployed. This environment has neither `EXA_API_KEY` nor an authenticated
-  deployment session, so live provider acceptance remains required.
-
-Root cause and behavior:
-
-- Exa Search could return public supplier URLs, then the single forced-live
-  Contents request could exceed its 24-second client budget. The adapter threw
-  away the Search URLs, the route returned 504, and the browser manufactured an
-  empty research result. The screen then falsely reported zero attributed
-  sources and rendered the timeout twice.
-- A Contents timeout now returns the already discovered URLs as degraded public
-  candidates. Supplier role, product fit, price, currency, unit, MOQ,
-  availability, and lead time remain unknown. Search-only captures cannot
-  produce a public listing receipt or price observation. The saved run is a
-  successful degraded discovery run, not a completed evidence result.
-- A Search timeout still returns the typed provider error because no
-  attributable URL exists. Other Exa provider, size, and validation failures
-  still fail closed.
-- The browser now keeps provider errors separate from research results, marks
-  discovery as failed, says no validation or screening result was returned, and
-  renders the error once. The screen no longer claims trusted-record or catalog
-  checks that the route does not perform.
-- Discovery queries prioritize the technical identity and supplier types. They
-  omit quantity, delivery, and generic price language while retaining concise
-  supplier QA requirements from the GUILD aluminum request.
-- When Exa is not configured, OpenAI web search now gets one bounded 60-second
-  attempt instead of two 22-second attempts. The outer abort signal also covers
-  response-body parsing, and automatic SDK retries are disabled.
-
-Verification:
-
-- The Exa regression uses GUILD item 001 and proves that two attributable public
-  supplier pages survive a mocked whole-Contents timeout with every commercial
-  field unverified.
-- `npm run test:supply-os-exa-retrieval`
-- `npm run test:supply-os-supplier-research-failures`
-- `npm run test:supply-os-research-route-lifecycle`
-- `node --import tsx scripts/supply-os-research-progress.test.ts`
-- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
-- `tsc --noEmit -p tsconfig.json`
-- Optimized Next production build from a disposable clean-tree copy
-
-Release check:
-
-- Confirm whether `EXA_API_KEY` is present in the target deployment, deploy this
-  branch, then run `npm run test:supply-os-live-research -- --ids=001` with the
-  authenticated workspace variables. Do not call the fix complete in production
-  until that run returns attributable URLs.

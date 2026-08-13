@@ -77,6 +77,7 @@ import type {
   SavedSourcingResearchRun,
   SupplyIntelligenceProfile,
   SourcingQueuePage,
+  SupplierResearchCampaign,
   SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 import styles from "./supply-os-logistics.module.css";
@@ -85,6 +86,24 @@ function storedText(value: unknown, maxLength: number) {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\s+/g, " ").trim().slice(0, maxLength);
   return normalized || null;
+}
+
+function visibleSourcingRun(run: SavedSourcingResearchRun) {
+  const input = run.input as SavedSourcingResearchRun["input"] & {
+    campaignId?: string;
+    campaignArtifactKind?: string;
+  };
+  return !input.campaignId || input.campaignArtifactKind === "AGGREGATE";
+}
+
+function campaignFailureMessage(campaign: SupplierResearchCampaign) {
+  const terminalMessage = storedText(campaign.errorMessage ?? campaign.error?.message, 500);
+  if (terminalMessage) return terminalMessage;
+  const configurationBlocker = campaign.items.find((item) => item.lastErrorCode === "MISSING_CONFIGURATION")?.blocker;
+  if (configurationBlocker) return configurationBlocker;
+  return campaign.state === "NEEDS_REVIEW"
+    ? "Research variants were exhausted for one or more lines. Saved source-backed candidates remain available for review."
+    : "Supplier research stopped. Saved source-backed candidates remain available for review.";
 }
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
@@ -755,6 +774,11 @@ function CaseCommandCenter({
   const [sourcingNextCursor, setSourcingNextCursor] = useState<string | null>(null);
   const [sourcingPageState, setSourcingPageState] = useState<"idle" | "loading" | "error">("idle");
   const [sourcingLoadRevision, setSourcingLoadRevision] = useState(0);
+  const [supplierResearchCampaign, setSupplierResearchCampaign] = useState<SupplierResearchCampaign | null>(null);
+  const [supplierResearchCampaignState, setSupplierResearchCampaignState] = useState<"idle" | "running" | "complete" | "error">("idle");
+  const [supplierResearchCampaignError, setSupplierResearchCampaignError] = useState<string | null>(null);
+  const [supplierResearchCampaignRevision, setSupplierResearchCampaignRevision] = useState(0);
+  const supplierResearchCampaignRetryRef = useRef(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
@@ -775,6 +799,12 @@ function CaseCommandCenter({
   const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
   const inventoryItems = workspaceId ? workspaceInventoryItems : demoInventoryItems;
+  const sourcingWorkspaceId = workspaceId
+    ?? (demoCompanyId === "guild" ? supplierResearchCampaign?.workspaceId ?? null : null);
+  const campaignAggregateRunIdsKey = useMemo(() => supplierResearchCampaign?.items
+    .flatMap((item) => item.aggregateRunId ? [item.aggregateRunId] : [])
+    .sort()
+    .join(",") ?? "", [supplierResearchCampaign]);
   const selectedInventoryItem = inventoryItems.find((item) => item.sku === selectedInventorySku)
     ?? inventoryItems[0];
   const selectedSourceCandidate = selectedInventoryItem?.candidates.find((candidate) => candidate.id === sourceMapCandidateId)
@@ -928,10 +958,24 @@ function CaseCommandCenter({
   }, [procurementRequest]);
 
   useEffect(() => {
-    if (!shouldLoadSourcingHistory({ workspaceId, demoCompanyId })) {
+    if (demoCompanyId === "guild" && !sourcingWorkspaceId) {
       setResearchRuns([]);
       setProcurementCases([]);
       setSupplierSenderAccounts([]);
+      setIntelligenceProfile(null);
+      setSourcingNextCursor(null);
+      setSourcingPageState("idle");
+      setSourcingDataState("ready");
+      return;
+    }
+    if (!shouldLoadSourcingHistory({
+      workspaceId: sourcingWorkspaceId,
+      demoCompanyId: demoCompanyId === "guild" ? null : demoCompanyId,
+    })) {
+      setResearchRuns([]);
+      setProcurementCases([]);
+      setSupplierSenderAccounts([]);
+      setIntelligenceProfile(null);
       setSourcingNextCursor(null);
       setSourcingPageState("idle");
       setSourcingDataState("ready");
@@ -941,7 +985,7 @@ function CaseCommandCenter({
     setSourcingDataState("loading");
     setSourcingNextCursor(null);
     setSourcingPageState("idle");
-    const params = workspaceId ? new URLSearchParams({ workspaceId }) : null;
+    const params = sourcingWorkspaceId ? new URLSearchParams({ workspaceId: sourcingWorkspaceId }) : null;
     void fetch(`/api/supply-os/supplier-research${params ? `?${params.toString()}` : ""}`, {
       cache: "no-store",
       signal: controller.signal,
@@ -949,7 +993,7 @@ function CaseCommandCenter({
     }).then(async (response) => {
       if (!response.ok) throw new Error("Saved sourcing work is unavailable.");
       const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[]; intelligenceProfile?: SupplyIntelligenceProfile | null; page?: SourcingQueuePage };
-      setResearchRuns(payload.runs ?? []);
+      setResearchRuns((payload.runs ?? []).filter(visibleSourcingRun));
       setProcurementCases(payload.cases ?? []);
       setSupplierSenderAccounts(payload.senderAccounts ?? []);
       setIntelligenceProfile(payload.intelligenceProfile ?? null);
@@ -959,14 +1003,130 @@ function CaseCommandCenter({
       if (!controller.signal.aborted) setSourcingDataState("error");
     });
     return () => controller.abort();
-  }, [demoCompanyId, sourcingLoadRevision, workspaceId]);
+  }, [demoCompanyId, sourcingLoadRevision, sourcingWorkspaceId]);
+
+  useEffect(() => {
+    if (demoCompanyId !== "guild") {
+      setSupplierResearchCampaign(null);
+      setSupplierResearchCampaignState("idle");
+      setSupplierResearchCampaignError(null);
+      return;
+    }
+    if (activePanel !== "materials") return;
+    const controller = new AbortController();
+    setSupplierResearchCampaignState("running");
+    setSupplierResearchCampaignError(null);
+    const explicitRetry = supplierResearchCampaignRevision > supplierResearchCampaignRetryRef.current;
+    supplierResearchCampaignRetryRef.current = supplierResearchCampaignRevision;
+
+    function acceptCampaign(campaign: SupplierResearchCampaign) {
+      setSupplierResearchCampaign(campaign);
+      const aggregateRuns = campaign.items.flatMap((item) => item.aggregateRun ? [item.aggregateRun] : []);
+      if (aggregateRuns.length) {
+        setResearchRuns((current) => [
+          ...aggregateRuns,
+          ...current.filter((run) => !aggregateRuns.some((aggregate) => aggregate.id === run.id)),
+        ]);
+      }
+      if (campaign.state === "COMPLETE") {
+        setSupplierResearchCampaignState("complete");
+        setSupplierResearchCampaignError(null);
+      } else if (["FAILED", "NEEDS_REVIEW"].includes(campaign.state)) {
+        setSupplierResearchCampaignState("error");
+        setSupplierResearchCampaignError(campaignFailureMessage(campaign));
+      } else {
+        setSupplierResearchCampaignState("running");
+        setSupplierResearchCampaignError(null);
+      }
+    }
+
+    async function readCampaign() {
+      const params = new URLSearchParams({ campaignKey: "guild-procurement" });
+      const response = await fetch(`/api/supply-os/supplier-research/campaigns?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { accept: "application/json" },
+      });
+      const payload = await response.json().catch(() => ({})) as { campaign?: SupplierResearchCampaign | null; error?: string };
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(storedText(payload.error, 500) ?? "Bulk supplier research status is unavailable.");
+      return payload.campaign ?? null;
+    }
+
+    async function startCampaign() {
+      const response = await fetch("/api/supply-os/supplier-research/campaigns", {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ campaignKey: "guild-procurement" }),
+      });
+      const payload = await response.json().catch(() => ({})) as { campaign?: SupplierResearchCampaign; error?: string };
+      if (!response.ok || !payload.campaign) {
+        throw new Error(storedText(payload.error, 500) ?? "Bulk supplier research could not be started.");
+      }
+      return payload.campaign;
+    }
+
+    async function runCampaign() {
+      try {
+        const savedCampaign = await readCampaign();
+        let campaign = !savedCampaign || explicitRetry
+          ? await startCampaign()
+          : savedCampaign;
+        acceptCampaign(campaign);
+        while (!controller.signal.aborted && !["COMPLETE", "FAILED", "NEEDS_REVIEW"].includes(campaign.state)) {
+          const delay = Math.min(60_000, Math.max(2_500, campaign.retryAfterMs || 5_000));
+          await new Promise((resolve) => window.setTimeout(resolve, delay));
+          if (controller.signal.aborted) return;
+          const polledCampaign = await readCampaign();
+          if (!polledCampaign) throw new Error("Bulk supplier research status is unavailable.");
+          campaign = polledCampaign;
+          acceptCampaign(campaign);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setSupplierResearchCampaignState("error");
+          setSupplierResearchCampaignError(error instanceof Error
+            ? storedText(error.message, 500) ?? "Bulk supplier research is unavailable."
+            : "Bulk supplier research is unavailable.");
+        }
+      }
+    }
+
+    void runCampaign();
+    return () => controller.abort();
+  }, [activePanel, demoCompanyId, supplierResearchCampaignRevision]);
+
+  useEffect(() => {
+    if (demoCompanyId !== "guild" || !sourcingWorkspaceId || !campaignAggregateRunIdsKey) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ workspaceId: sourcingWorkspaceId });
+    for (const runId of campaignAggregateRunIdsKey.split(",")) params.append("includeRunId", runId);
+    void fetch(`/api/supply-os/supplier-research?${params.toString()}`, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { accept: "application/json" },
+    }).then(async (response) => {
+      if (!response.ok) throw new Error("Saved procurement work is unavailable.");
+      const payload = await response.json() as { cases?: SavedProcurementCase[] };
+      setProcurementCases((current) => {
+        const byId = new Map(current.map((procurementCase) => [procurementCase.id, procurementCase]));
+        for (const procurementCase of payload.cases ?? []) byId.set(procurementCase.id, procurementCase);
+        return [...byId.values()];
+      });
+    }).catch(() => {
+      if (!controller.signal.aborted) setSourcingPageState("error");
+    });
+    return () => controller.abort();
+  }, [campaignAggregateRunIdsKey, demoCompanyId, sourcingWorkspaceId]);
 
   async function loadOlderSourcingWork() {
     if (!sourcingNextCursor || sourcingPageState === "loading") return;
     setSourcingPageState("loading");
     try {
       const params = new URLSearchParams({ cursor: sourcingNextCursor });
-      if (workspaceId) params.set("workspaceId", workspaceId);
+      if (sourcingWorkspaceId) params.set("workspaceId", sourcingWorkspaceId);
       const response = await fetch(`/api/supply-os/supplier-research?${params.toString()}`, {
         cache: "no-store",
         headers: { accept: "application/json" },
@@ -975,7 +1135,7 @@ function CaseCommandCenter({
       const payload = await response.json() as { runs?: SavedSourcingResearchRun[]; cases?: SavedProcurementCase[]; senderAccounts?: SupplierSenderAccount[]; page?: SourcingQueuePage };
       setResearchRuns((current) => {
         const currentIds = new Set(current.map((run) => run.id));
-        return [...current, ...(payload.runs ?? []).filter((run) => !currentIds.has(run.id))];
+        return [...current, ...(payload.runs ?? []).filter((run) => visibleSourcingRun(run) && !currentIds.has(run.id))];
       });
       setProcurementCases((current) => {
         const currentIds = new Set(current.map((procurementCase) => procurementCase.id));
@@ -1218,7 +1378,7 @@ function CaseCommandCenter({
             key={`procurement:${procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
             requestText={procurementRequest.requestText}
-            workspaceId={workspaceId}
+            workspaceId={sourcingWorkspaceId}
             initialDraft={procurementRequest.initialDraft}
             initialMissingFields={procurementRequest.initialMissingFields}
             initialQuestion={procurementRequest.initialQuestion}
@@ -1228,7 +1388,6 @@ function CaseCommandCenter({
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
             senderAccounts={supplierSenderAccounts}
-            onIntelligenceUpdated={setIntelligenceProfile}
             onResearchSaved={saveResearchRun}
             onProcurementCaseSaved={saveProcurementCase}
             onRequestUpdate={procurementRequest.requestId
@@ -1238,12 +1397,12 @@ function CaseCommandCenter({
           />
         ) : activePanel === "materials" ? (
           <AtlasInventoryWorkspace
-            key={`sourcing-queue:${workspaceId ?? demoCompanyId ?? modelDashboard.id}`}
+            key={`sourcing-queue:${sourcingWorkspaceId ?? demoCompanyId ?? modelDashboard.id}`}
             selectedSku={selectedInventoryItem?.sku ?? ""}
             items={inventoryItems}
             companyName={companyName}
-            workspaceId={workspaceId}
-            canImportSupplyData={canImportSupplyData}
+            workspaceId={sourcingWorkspaceId}
+            canImportSupplyData={canImportSupplyData && demoCompanyId !== "guild"}
             onSnapshotPublished={() => setWorkspaceSnapshotRevision((revision) => revision + 1)}
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}
@@ -1253,6 +1412,11 @@ function CaseCommandCenter({
             researchRuns={researchRuns}
             procurementCases={procurementCases}
             intelligenceProfile={intelligenceProfile}
+            researchCampaign={demoCompanyId === "guild" ? supplierResearchCampaign : null}
+            researchCampaignState={demoCompanyId === "guild" ? supplierResearchCampaignState : "idle"}
+            researchCampaignError={demoCompanyId === "guild" ? supplierResearchCampaignError : null}
+            onRetryResearchCampaign={() => setSupplierResearchCampaignRevision((revision) => revision + 1)}
+            researchWorkspaceReady={demoCompanyId !== "guild" || Boolean(sourcingWorkspaceId)}
             dataState={sourcingDataState}
             hasMore={Boolean(sourcingNextCursor)}
             pageState={sourcingPageState}
@@ -1371,6 +1535,7 @@ function CaseCommandCenter({
             }}
             onShowCandidateSource={showCandidateSource}
             onStartProcurement={() => startProcurement(selectedInventoryItem)}
+            canStartProcurement={demoCompanyId !== "guild" || Boolean(sourcingWorkspaceId)}
           />
         ) : activePanel !== "materials" && selectedObject ? (
           <CommandInspector

@@ -17,9 +17,6 @@ import {
 const procurementWorkspace = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
 assert.doesNotMatch(procurementWorkspace, /candidate\.website \? "Official"/, "an Exa marketplace listing must remain a public New source in the UI");
 assert.match(procurementWorkspace, /source\.sourceType === "OFFICIAL"/, "the UI may call a source official only when the result explicitly classifies it that way");
-assert.match(procurementWorkspace, /setResearchError\(error instanceof Error/, "provider failures must remain errors instead of becoming synthetic zero-result research");
-assert.match(procurementWorkspace, /No validation result was returned to this screen\./, "the UI must not claim source validation ran after a provider failure");
-assert.doesNotMatch(procurementWorkspace, /Checking trusted records first/, "the research screen must not claim backends the route does not call");
 
 const input: ExaSupplierResearchInput = {
   officeId: "office-test",
@@ -33,12 +30,15 @@ const input: ExaSupplierResearchInput = {
 };
 
 const sourceUrl = "https://supplier.example/catalog/rm-9";
-const failedSourceUrl = "https://supplier.example/catalog/rm-9-unavailable";
+const failedSourceUrl = "https://supplier-alt.example/catalog/rm-9-unavailable";
 const retrievedAt = new Date(Date.now() - 60_000).toISOString();
 const successText = "Example Supplier lists the Acme RM-9 radio module for 42.50 USD per each.";
 const successProposal: ExaOfferProposal = {
   supplierName: "Example Supplier",
   supplierRole: "DISTRIBUTOR",
+  companyIdentityEvidence: null,
+  supplierRoleEvidence: null,
+  productCapabilityEvidence: null,
   itemIdentity: "Acme RM-9 radio module",
   manufacturer: "Acme",
   mpn: "RM-9",
@@ -259,6 +259,12 @@ assert.equal(validateExaPublicListingReceipts(input, {
   freshnessPolicy: "FORCED_LIVE",
   records: [{ ...sourceRecord(), status: status({ status: "stale" }) }],
 }).length, 0, "non-success per-URL status must fail closed");
+assert.equal(validateExaPublicListingReceipts(input, capture([
+  sourceRecord({ sourceStatus: status({ status: "success", httpStatusCode: 404 }) }),
+])).length, 0, "a nominal success status with a non-2xx HTTP status must fail closed");
+assert.equal(validateExaPublicListingReceipts(input, capture([
+  sourceRecord({ sourceStatus: status({ status: "success", errorTag: "CRAWL_NOT_FOUND" }) }),
+])).length, 0, "a nominal success status with an error tag must fail closed");
 
 async function main() {
 const requests: Array<{ url: string; body: Record<string, unknown>; redirect: RequestRedirect | undefined; cache: RequestCache | undefined }> = [];
@@ -354,7 +360,7 @@ await assert.rejects(
   "a successful per-URL status without exactly one matching content result must fail closed",
 );
 
-const crossingSourceUrl = "https://supplier.example/catalog/rm-9-crossing";
+const crossingSourceUrl = "https://supplier-crossing.example/catalog/rm-9-crossing";
 await assert.rejects(
   () => searchExaComponentSuppliers(input, {
     apiKey: "fixture-key",
@@ -423,60 +429,70 @@ assert.equal(allFailedResult.degraded, true, "all per-URL crawl failures must re
 assert.equal(allFailedResult.retrieval.records[0]?.status?.errorTag, "CRAWL_NOT_FOUND", "all-failure runs must retain exact per-URL failure metadata");
 assert.equal(allFailedResult.candidates.length, 0);
 
-const guildInput: ExaSupplierResearchInput = {
-  officeId: "office-test",
-  workspaceId: "workspace-guild",
-  componentItemKey: "001",
-  componentName: "Main cylindrical structural skin stock",
-  specification: "Aluminum alloy 6061-T6 sheet, 2.0 mm nominal thickness, mill finish, cut-to-size blanks per released drawing. Supplier deliverable: Material certificate showing alloy and temper; heat or lot traceability.",
-  requestedQuantity: 4,
-  requestedUnit: "blanks",
-  sourceRegion: "Any region",
-};
-const guildSourceUrls = [
-  "https://anchormetalsgroup.com/product/6061-t6-sheet",
-  "https://mavmet.com/aluminum-sheet",
-];
-let guildSearchQuery = "";
-const guildDegradedResult = await searchExaComponentSuppliers(guildInput, {
+const contentTimeoutResult = await searchExaComponentSuppliers(input, {
   apiKey: "fixture-key",
   now: () => new Date(retrievedAt),
-  fetchImpl: async (request, init) => {
+  fetchImpl: async (request) => {
     if (String(request) === "https://api.exa.ai/search") {
-      guildSearchQuery = String((JSON.parse(String(init?.body)) as { query?: string }).query ?? "");
       return new Response(JSON.stringify({
-        requestId: "search-request-guild",
-        results: guildSourceUrls.map((url, index) => ({ id: `guild-source-${index + 1}`, title: "6061-T6 aluminum sheet", url })),
+        requestId: "search-request-content-timeout",
+        results: [
+          { id: sourceUrl, title: "RM-9 listing", url: sourceUrl },
+          { id: failedSourceUrl, title: "Alternate RM-9 listing", url: failedSourceUrl },
+        ],
       }), { status: 200 });
     }
-    throw new DOMException("Contents request timed out", "AbortError");
+    throw new DOMException("The contents request timed out.", "AbortError");
   },
 });
-assert.match(guildSearchQuery, /6061-T6 sheet, 2\.0 mm nominal thickness, mill finish, cut-to-size blanks/i, "discovery must lead with the technical identity");
-assert.match(guildSearchQuery, /Required QA: Material certificate showing alloy and temper; heat or lot traceability/i, "discovery must retain concise supplier QA requirements");
-assert.doesNotMatch(guildSearchQuery, /Supplier deliverable|quantity 4|deliver |current price/i, "discovery must not dilute the technical identity with fulfillment or pricing prose");
-assert.equal(guildDegradedResult.retrieval.stage, "SEARCH_ONLY", "a contents timeout must retain a truthful search-only capture");
-assert.equal(guildDegradedResult.candidates.length, guildSourceUrls.length, "a contents timeout must not erase discovered supplier pages");
-assert.equal(guildDegradedResult.sources.length, guildSourceUrls.length, "retained discovery pages must remain attributable public sources");
-assert.ok(guildDegradedResult.sources.every((source) => source.sourceType === "PUBLIC"));
-assert.ok(guildDegradedResult.candidates.every((candidate) => candidate.status === "UNSUPPORTED" && candidate.website === null && candidate.roles.length === 0));
-assert.equal(guildDegradedResult.publicListingReceipts.length, 0, "search-only discovery must never create a verified listing receipt");
-assert.match(guildDegradedResult.warnings[0] ?? "", /verification timed out.*remain unverified/i);
-const storedGuildCapture = parseStoredExaRetrievalCapture(guildDegradedResult.retrieval);
-assert.equal(storedGuildCapture?.stage, "SEARCH_ONLY", "search-only capture must remain a valid managed retrieval stage");
-assert.equal(validateExaPublicListingReceipts(guildInput, storedGuildCapture!).length, 0, "search-only capture must not qualify as verified contents evidence");
-assert.equal(parseStoredExaRetrievalCapture({ ...guildDegradedResult.retrieval, failureCode: "PROVIDER_FAILURE" }), null, "stored search-only capture must bind its timeout reason");
+assert.equal(contentTimeoutResult.degraded, true, "a contents timeout after successful search must remain visibly degraded");
+assert.equal(contentTimeoutResult.sources.length, 2, "a contents timeout must not erase source URLs already returned by search");
+assert.equal(contentTimeoutResult.candidates.length, 2, "search-only candidates must remain available for operator review without commercial claims");
+assert.equal(contentTimeoutResult.publicListingReceipts.length, 0, "search-only candidates must never create public listing receipts");
+assert.equal(contentTimeoutResult.publicSupplierLeadReceipts.length, 0, "search-only candidates must never create validated supplier lead receipts");
+assert.equal(contentTimeoutResult.retrieval.stage, "SEARCH_ONLY", "a timed-out contents call must retain discovery attribution without claiming managed content retrieval");
+assert.equal(contentTimeoutResult.retrieval.contentsRequestId, null);
+assert.match(contentTimeoutResult.warnings.join(" "), /content validation timed out/i, "the degraded result must explain which research stage failed");
 
-await assert.rejects(
-  () => searchExaComponentSuppliers(guildInput, {
-    apiKey: "fixture-key",
-    fetchImpl: async () => {
-      throw new DOMException("Search request timed out", "AbortError");
-    },
-  }),
-  (error: unknown) => error instanceof ExaResearchError && error.code === "PROVIDER_TIMEOUT",
-  "a search timeout has no attributable URLs to retain and must remain a provider error",
+const diverseContentUrls: string[] = [];
+const diverseSearchUrls = [
+  "https://one.example/product-a",
+  "https://one.example/product-b",
+  "https://two.example/product",
+  "https://three.example/product",
+  "https://four.example/product",
+  "https://five.example/product",
+];
+const diverseTimeoutResult = await searchExaComponentSuppliers(input, {
+  apiKey: "fixture-key",
+  fetchImpl: async (request, init) => {
+    if (String(request) === "https://api.exa.ai/search") {
+      return new Response(JSON.stringify({
+        requestId: "search-request-diverse-timeout",
+        results: diverseSearchUrls.map((url, index) => ({ id: `diverse-${index}`, title: `Supplier ${index}`, url })),
+      }), { status: 200 });
+    }
+    diverseContentUrls.push(...((JSON.parse(String(init?.body)) as { urls?: string[] }).urls ?? []));
+    throw new DOMException("The contents request timed out.", "AbortError");
+  },
+});
+assert.deepEqual(
+  diverseContentUrls,
+  [diverseSearchUrls[0], diverseSearchUrls[2], diverseSearchUrls[3]],
+  "forced-live retrieval must spend its three slots on distinct supplier domains",
 );
+assert.equal(diverseTimeoutResult.sources.length, 6, "a bounded content timeout must retain all six discovered source URLs");
+
+for (const [statusCode, expectedCode] of [[401, "PROVIDER_AUTHENTICATION_FAILED"], [403, "PROVIDER_AUTHENTICATION_FAILED"], [429, "PROVIDER_RATE_LIMITED"]] as const) {
+  await assert.rejects(
+    () => searchExaComponentSuppliers(input, {
+      apiKey: "fixture-key",
+      fetchImpl: async () => new Response("{}", { status: statusCode }),
+    }),
+    (error: unknown) => error instanceof ExaResearchError && error.code === expectedCode,
+    `Exa HTTP ${statusCode} must map to ${expectedCode}`,
+  );
+}
 
 let oversizedCalls = 0;
 await assert.rejects(

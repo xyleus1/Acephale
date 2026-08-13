@@ -12,12 +12,13 @@ const root = process.cwd();
 const service = readFileSync(resolve(root, "src/lib/supply-os/component-supplier-research.ts"), "utf8");
 const route = readFileSync(resolve(root, "src/app/api/supply-os/supplier-research/route.ts"), "utf8");
 const routeContract = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-route-contract.ts"), "utf8");
+const worker = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-worker.ts"), "utf8");
 const legacyWorkspaceRoute = resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/supplier-research/route.ts");
 const procurement = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
 const persistence = readFileSync(resolve(root, "src/lib/supply-os/sourcing-research-persistence.ts"), "utf8");
 
 assert.deepEqual(
-  ["MISSING_CONFIGURATION", "PROVIDER_TIMEOUT", "PROVIDER_FAILURE", "PROVIDER_RESPONSE_TOO_LARGE", "INVALID_STRUCTURED_RESPONSE"]
+  ["MISSING_CONFIGURATION", "PROVIDER_TIMEOUT", "PROVIDER_AUTHENTICATION_FAILED", "PROVIDER_RATE_LIMITED", "PROVIDER_FAILURE", "PROVIDER_RESPONSE_TOO_LARGE", "INVALID_STRUCTURED_RESPONSE"]
     .map((code) => {
       const failure = new SupplierResearchError(code as ConstructorParameters<typeof SupplierResearchError>[0]);
       return [failure.code, failure.status, failure.message];
@@ -25,6 +26,8 @@ assert.deepEqual(
   [
     ["MISSING_CONFIGURATION", 503, "Public supplier research is not configured."],
     ["PROVIDER_TIMEOUT", 504, "Public supplier research timed out."],
+    ["PROVIDER_AUTHENTICATION_FAILED", 503, "Public supplier research credentials were rejected."],
+    ["PROVIDER_RATE_LIMITED", 429, "Public supplier research is temporarily rate limited."],
     ["PROVIDER_FAILURE", 502, "Public supplier research provider failed."],
     ["PROVIDER_RESPONSE_TOO_LARGE", 502, "Public supplier research returned too much data."],
     ["INVALID_STRUCTURED_RESPONSE", 502, "Public supplier research returned an invalid response."],
@@ -49,8 +52,10 @@ assert.match(service, /searchExaComponentSuppliers/);
 assert.doesNotMatch(service, /verifyCurrentSupplierPrices/);
 assert.match(service, /const actionUrl = publicUrl\(action\.url\)/);
 assert.match(route, /executeSupplierResearchRoute/);
-assert.match(routeContract, /failRun\([\s\S]*failure\.code/);
-assert.match(routeContract, /status: failure\.status/);
+assert.match(route, /after\([\s\S]*runSourcingResearchWorker/);
+assert.match(routeContract, /status: 202/);
+assert.match(worker, /supplierFailure\(error\)/);
+assert.match(worker, /failRun\([\s\S]*failure\.code/);
 assert.equal(
   existsSync(legacyWorkspaceRoute),
   false,

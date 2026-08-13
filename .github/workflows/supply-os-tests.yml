@@ -86,6 +86,11 @@ jobs:
           npm run test:supply-os-bom-acceptance
           npm run test:supply-os-sourcing-projection
           npm run test:supply-os-research-route-lifecycle
+          npm run test:supply-os-research-worker-lifecycle
+          npm run test:supply-os-supplier-research-polling
+          npm run test:supply-os-supplier-leads
+          npm run test:supply-os-continuous-sourcing
+          npm run test:supply-os-atlas-sourcing
           npm run test:supply-os-saved-research-retry
           npm run test:supply-os-supplier-research-failures
           npm run test:supply-os-supply-intelligence

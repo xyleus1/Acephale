@@ -5134,30 +5134,92 @@ Use this file for chronological implementation notes that future agents should s
   unconfigured fallback and cannot supply freshness. Cloudflare remains out of
   scope.
 
-### 2026-08-12 - Retain Exa discovery when live page verification times out
+### 2026-08-12 - Preserve Exa discovery after content timeout
 
-- Traced the GUILD item 001 screen to a request-level timeout, not a legitimate
-  zero-result search. The browser had converted the typed 504 into an empty
-  result and then derived false attribution and candidate counts from it.
-- Preserved Exa Search URLs when the later Contents request times out. Returned
-  candidates are public, degraded, unsupported, and commercially empty. No role,
-  capability, price, availability, receipt, or price observation is inferred.
-- Parsed the search-only retrieval as a distinct managed stage so persistence
-  keeps the Exa trust guard while deterministic receipt validation returns none.
-- Kept Search timeout and non-timeout Exa failures fail-closed. No silent
-  provider fallback was added.
-- Replaced the unconfigured-Exa OpenAI fallback's two 22-second attempts with
-  one 60-second attempt, no SDK retries, and an external abort signal that also
-  bounds response-body parsing.
-- Focused discovery queries on part identity, specification, and supplier type.
-  Removed fulfillment and pricing prose that reduced supplier-search relevance,
-  while retaining concise certificate and traceability requirements.
-- Separated `researchError` from `publicResearch` in the procurement screen.
-  Failed stages are no longer shown as completed, validation and screening are
-  reported as not returned, and the provider error appears once.
-- Added a regression for the exact GUILD aluminum request plus UI contract
-  assertions. Exa retrieval, supplier failure, route lifecycle, research
-  progress, Atlas sourcing, TypeScript, optimized production build, and diff
-  checks pass.
-- Live acceptance was not run because provider keys and an authenticated
-  deployment session are absent from this environment.
+- Branch: `fix/supplier-research-timeout`, based on the latest reconciled Supply
+  OS research branch.
+- Root cause: Exa Search returned attributable URLs, then one forced-live
+  Contents request for every result timed out. The adapter threw away the
+  Search response, failed the persisted run, and returned zero source records.
+- Fix: force-live content validation now covers the first three ranked results.
+  A request-level Contents timeout returns all Search URLs as degraded,
+  unsupported candidates with every commercial field unknown.
+- Safety: Search-only results cannot create managed retrieval receipts, public
+  price observations, trusted supplier roles, qualification, approval, or
+  external actions.
+- Regression: the Exa contract now simulates successful Search followed by a
+  Contents timeout and proves that two source URLs survive while zero listing
+  receipts are created.
+- Verification: Exa retrieval, supplier-failure, route-lifecycle, supply
+  intelligence, ingestion/research, and Atlas sourcing contracts pass. Prisma
+  generation and TypeScript pass. Direct `tsx` CLI runs were blocked by sandbox
+  IPC permissions, so the same scripts passed through `node --import tsx`.
+- Follow-up: run authenticated production research for the GUILD equipment-deck
+  plate request and confirm the screen shows retained sources even if content
+  validation times out.
+
+### 2026-08-12 - Move supplier research to durable queued work
+
+- Branch: `codex/supplier-campaign-local`, integration worktree targeting the
+  current main branch.
+- Root cause: the supplier-research POST owned the provider call. The host could
+  terminate that request while the client remained in a local running state,
+  leaving the operator with zero sources and no durable progress to resume.
+- Runtime: the route now returns HTTP 202 after persisting or reusing the run.
+  The exact-run GET polls the durable record. `after()` provides a fast start;
+  the protected cron advances campaigns, runs at most two workers, then
+  reconciles campaign state. Claims are atomic, queued work is not stale-failed,
+  and worker failures are sanitized before persistence.
+- UI: the procurement workspace polls QUEUED and RUNNING status, renders saved
+  terminal output, and moves long work to a clear background state after three
+  minutes without cancelling it.
+- Campaign: the existing run table also stores the fixed GUILD parent, child
+  attempts, and aggregate results without a schema change. Thirty-eight lines
+  search for three to five distinct attributable leads. GUILD-027 remains a
+  quantity and unit clarification. GUILD-039 is an award documentation
+  requirement. Batches, retry backoff, attempt ceilings, and daily campaign and
+  office caps prevent perpetual HTTP and unbounded provider work.
+- Provenance and retry: parents and aggregate artifacts now use the enforced
+  QUEUED to RUNNING to terminal transitions. Retrying a failed campaign creates
+  a linked immutable generation, and reconciliation reads validated aggregate
+  and attempt history across that bounded lineage. Aggregate artifacts are not
+  charged as provider calls. Manual retry is capped at twelve generations and
+  ancestry reads reject overflow instead of silently truncating it.
+- Concurrency hardening: an expiring token on the RUNNING parent fences every
+  aggregate write, child enqueue, lease release, and terminal transition under
+  a parent row lock. Aggregate revisions carry attempt watermarks across retry
+  generations. Older work cannot overwrite newer evidence, while current
+  receipt validation can persist a smaller or empty corrected aggregate.
+- Quota hardening: campaign reservation and provider claim share an
+  office-stable advisory lock. The UTC quota day and persisted timestamps are
+  derived from `clock_timestamp()` after that lock is acquired, closing the
+  midnight rollover race in the 72-call daily office bound.
+- Provider and evidence boundary: campaign child work requires Exa forced-live
+  validation, so a configuration change cannot silently switch it to the
+  source-only OpenAI path. Generic product or material pages must also support
+  distinguishing request qualifiers, including requested material grade and a
+  critical dimension when present, before they count toward the lead target.
+- Acceptance: the single-run deployed check now requires an explicit base URL,
+  authenticated cookie, and workspace ID, expects HTTP 202, and polls the exact
+  run to a terminal state. The new campaign check resumes the fixed campaign and
+  requires 38 completed searchable lines with three to five attributable
+  `REVIEW_REQUIRED` candidates in each aggregate run plus the explicit 027 and
+  039 states.
+- CI registration: worker lifecycle, client polling, retained supplier lead,
+  deterministic continuous campaign, and Atlas sourcing tests now run in the
+  Supply OS workflow. Server-only lifecycle execution uses the React server
+  condition. Atlas uses `node --import tsx` to avoid the restricted `tsx` IPC
+  path.
+- Focused checks passed: `test:supply-os-bom-acceptance`,
+  `test:supply-os-research-worker-lifecycle`,
+  `test:supply-os-supplier-research-polling`,
+  `test:supply-os-supplier-leads`, and `test:supply-os-atlas-sourcing`.
+- Integration checks passed: deterministic continuous campaign, supplier lead,
+  route lifecycle, worker lifecycle, polling, Atlas, BOM, Exa retrieval,
+  sourcing projection, ingestion trust, product copy, TypeScript, and the
+  production build. PostgreSQL-backed persistence remains delegated to CI
+  because this sandbox has no database service.
+- Live checks were not run because no deployed authenticated base URL, cookie,
+  workspace ID, or provider credentials were available. Before release, run the
+  single deployed acceptance, then the bounded campaign acceptance and monitor
+  cron queue progress until it terminates.

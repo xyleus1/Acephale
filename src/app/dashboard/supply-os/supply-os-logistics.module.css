@@ -1087,6 +1087,73 @@
   background: var(--panel-subtle);
 }
 
+.sourcingCampaignSummary {
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(240px, 1.4fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--panel-subtle);
+}
+
+.sourcingCampaignSummary > span,
+.sourcingCampaignSummary > span > span,
+.sourcingCampaignSummary dl div {
+  display: grid;
+  gap: 3px;
+}
+
+.sourcingCampaignSummary > span {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--navy);
+}
+
+.sourcingCampaignSummary small,
+.sourcingCampaignSummary dt {
+  color: var(--ink-muted);
+  font: 500 9px/1.25 "IBM Plex Mono", monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.sourcingCampaignSummary strong,
+.sourcingCampaignSummary dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.sourcingCampaignSummary dl {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 18px;
+  margin: 0;
+}
+
+.sourcingCampaignSummary p {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.sourcingCampaignSummary button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+}
+
 .supplyIntelligenceSummary {
   display: grid;
   gap: 0;
@@ -4364,6 +4431,20 @@
 
   .sourcingQueueHeader {
     padding: 0 14px;
+  }
+
+  .sourcingCampaignSummary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 16px;
+    padding: 12px 14px;
+  }
+
+  .sourcingCampaignSummary p {
+    grid-column: 1 / -1;
+  }
+
+  .sourcingCampaignSummary dl {
+    gap: 12px;
   }
 
   .supplyIntelligenceSummary > header {

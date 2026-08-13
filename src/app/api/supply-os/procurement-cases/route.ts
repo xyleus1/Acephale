@@ -47,7 +47,7 @@ function selection(value: unknown): ProcurementSelectionInput | null {
   const id = text(row.id, 220);
   const name = text(row.name, 220);
   if (!id || !name || sourceUrl === undefined || price === undefined || currency === undefined || deliveryDate === undefined || minimumOrderQuantity === undefined) return null;
-  if (!(["Official", "Trusted", "New"] as const).includes(sourceClass as never)) return null;
+  if (!(["Official", "Public", "Trusted", "New"] as const).includes(sourceClass as never)) return null;
   if (!(["Modeled", "Sourced", "Unknown"] as const).includes(priceType as never)) return null;
   if (!(["Modeled", "Sourced", "Unknown"] as const).includes(deliveryType as never)) return null;
   if (!(["Strong", "Conditional", "Unverified"] as const).includes(quality as never)) return null;

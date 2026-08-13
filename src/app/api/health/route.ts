@@ -29,6 +29,10 @@ export async function GET(req: NextRequest) {
     AUTH_SECRET: !!process.env.AUTH_SECRET,
     DATABASE_URL: !!process.env.DATABASE_URL,
     OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+    EXA_API_KEY: !!process.env.EXA_API_KEY,
+    SUPPLIER_RESEARCH_PROVIDER: process.env.EXA_API_KEY
+      ? "EXA"
+      : process.env.OPENAI_API_KEY ? "OPENAI" : "NONE",
     GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI: normalizeGoogleRedirectUri(process.env.GOOGLE_REDIRECT_URI) ?? "unset",

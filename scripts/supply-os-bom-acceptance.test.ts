@@ -2,11 +2,23 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mergeSourcingRequestDraft, missingSourcingFields, normalizeSourcingRequestDraft } from "../src/lib/supply-os/sourcing-request-contract";
 import { adaptSupplyPartsCsv, normalizeSupplyCsvBundle } from "../src/lib/supply-os/csv-import";
+import { GUILD_SOURCING_LINES } from "../src/lib/supply-os/guild-sourcing-items";
 import { GUILD_PROCUREMENT_BOM, REPRESENTATIVE_LIVE_RESEARCH_IDS } from "./fixtures/guild-procurement-bom";
 
 assert.equal(GUILD_PROCUREMENT_BOM.length, 40, "the acceptance catalog must retain all 40 BOM lines");
 assert.deepEqual(GUILD_PROCUREMENT_BOM.map((item) => item.id), Array.from({ length: 40 }, (_, index) => String(index + 1).padStart(3, "0")));
 assert.equal(new Set(GUILD_PROCUREMENT_BOM.map((item) => item.id)).size, 40);
+assert.equal(GUILD_PROCUREMENT_BOM.filter((item) => item.expectedOutcome === "RESEARCHABLE").length, 38);
+assert.deepEqual(GUILD_PROCUREMENT_BOM.filter((item) => item.expectedOutcome === "CLARIFICATION_REQUIRED").map((item) => item.id), ["027"]);
+assert.deepEqual(GUILD_PROCUREMENT_BOM.filter((item) => item.expectedOutcome === "REQUIREMENT_ONLY").map((item) => item.id), ["039"]);
+assert.deepEqual(
+  GUILD_PROCUREMENT_BOM.map((item) => [item.id, item.expectedOutcome]),
+  GUILD_SOURCING_LINES.map((line) => [
+    line.item,
+    line.classification === "SUPPLIER_SEARCH" ? "RESEARCHABLE" : line.classification,
+  ]),
+  "the customer acceptance fixture and campaign scheduler must classify the same 40 lines",
+);
 
 const csvCell = (value: string) => /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 const suppliedShape = [
@@ -64,12 +76,18 @@ for (const item of GUILD_PROCUREMENT_BOM) {
     deliveryLocation: "Austin, TX, United States",
     needByDate: "2026-10-15",
   }));
-  if (item.expectedOutcome === "RESEARCHABLE") {
-    assert.deepEqual(missing, [], `${item.id} should enter supplier research without clarification`);
+  if (item.expectedOutcome === "RESEARCHABLE" || item.expectedOutcome === "REQUIREMENT_ONLY") {
+    assert.deepEqual(missing, [], `${item.id} should retain complete request facts without clarification`);
   } else {
     assert.ok(missing.includes("quantity") && missing.includes("unit"), `${item.id} must ask for quantity and unit before research`);
   }
 }
+
+assert.equal(
+  GUILD_PROCUREMENT_BOM.find((item) => item.id === "039")?.expectedOutcome,
+  "REQUIREMENT_ONLY",
+  "supplier documentation is an award requirement, not a separate supplier search",
+);
 
 for (const id of REPRESENTATIVE_LIVE_RESEARCH_IDS) {
   const item = GUILD_PROCUREMENT_BOM.find((candidate) => candidate.id === id);
@@ -78,6 +96,9 @@ for (const id of REPRESENTATIVE_LIVE_RESEARCH_IDS) {
 
 const liveRunnerSource = readFileSync(new URL("./supply-os-live-research-acceptance.ts", import.meta.url), "utf8");
 assert.match(liveRunnerSource, /hasAttributableListingClaim/);
+assert.match(liveRunnerSource, /response\.status, 202/);
+assert.match(liveRunnerSource, /pollUrl/);
+assert.match(liveRunnerSource, /requiredEnvironment\("SUPPLY_OS_ACCEPTANCE_WORKSPACE_ID"\)/);
 assert.match(liveRunnerSource, /attributable unverified listing claim with price, currency, unit, and one common source/);
 assert.match(liveRunnerSource, /candidate\.price\.freshness !== "UNKNOWN"/);
 

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   parseStoredExaRetrievalCapture,
   validateExaPublicListingReceipts,
+  validateExaPublicSupplierLeadReceipts,
   type ExaSupplierResearchInput,
 } from "./exa-supplier-research";
 import { requireSupplyWorkspace, type SupplyAccessContext } from "./persistence";
@@ -124,19 +125,50 @@ export async function recordSupplyResearchKnowledge(args: {
   // Never trust the detached receipt array in stored output. Rebuild receipts
   // from the exact run input and bounded raw retrieval capture at persistence.
   const publicListingReceipts = retrieval ? validateExaPublicListingReceipts(receiptInput, retrieval) : [];
+  const publicSupplierLeadReceipts = retrieval ? validateExaPublicSupplierLeadReceipts(receiptInput, retrieval) : [];
+  const storedLeadReceipts = Array.isArray(record(args.output).publicSupplierLeadReceipts)
+    ? record(args.output).publicSupplierLeadReceipts as unknown[]
+    : [];
   for (const candidateValue of candidates) {
     const candidate = record(candidateValue);
     const name = text(candidate.companyName, 180);
     if (!name) continue;
+    const candidateId = text(candidate.id, 220);
+    const candidateSourceUrls = Array.isArray(candidate.sourceUrls)
+      ? candidate.sourceUrls.map(url).filter((value): value is string => Boolean(value))
+      : [];
+    const candidateRoles = Array.isArray(candidate.roles) ? candidate.roles.map((role) => text(role, 40)).filter(Boolean) : [];
+    const capability = record(candidate.productCapability);
+    const capabilitySources = Array.isArray(capability.sources) ? capability.sources.map(record) : [];
+    const leadReceipt = candidate.status === "REVIEW_REQUIRED" ? publicSupplierLeadReceipts.find((receipt) => storedLeadReceipts.some((storedValue) => {
+      const stored = record(storedValue);
+      return stored.candidateId === candidateId
+        && stored.receiptHash === receipt.receiptHash
+        && stored.sourceUrl === receipt.sourceUrl
+        && stored.itemKey === receipt.itemKey;
+    }) && candidateSourceUrls.includes(receipt.sourceUrl)
+      && normalizedName(receipt.companyName) === normalizedName(name)
+      && websiteDomain(candidate.website) === websiteDomain(receipt.website)
+      && candidateRoles.includes(receipt.role)
+      && capability.state === "SUPPORTED"
+      && text(capability.value, 1_000) === receipt.productCapability
+      && capabilitySources.some((source) => source.url === receipt.sourceUrl)) : undefined;
+    const listingReceipts = publicListingReceipts.filter((receipt) => (
+      receipt.itemKey === customerFactValue.componentItemKey
+      && candidateSourceUrls.includes(receipt.sourceUrl)
+      && candidates.filter((otherValue) => {
+        const other = record(otherValue);
+        return Array.isArray(other.sourceUrls) && other.sourceUrls.some((source) => source === receipt.sourceUrl);
+      }).length === 1
+    ));
+    if (!leadReceipt && !listingReceipts.length) continue;
     const baseKey = supplySupplierKey(candidate);
     if (!baseKey) continue;
     const website = url(candidate.website);
     const incomingDomain = websiteDomain(website);
-    // Managed public retrieval does not prove supplier roles. Do not let a
-    // summary-proposed manufacturer/distributor label become durable profile state.
-    const roles = retrieval
-      ? []
-      : Array.isArray(candidate.roles) ? candidate.roles.map((role) => text(role, 40)).filter(Boolean).sort() : [];
+    // Only a server-rebuilt supplier lead receipt may expand durable roles.
+    // Search-only and detached model claims never enter the supplier universe.
+    const roles = leadReceipt ? [leadReceipt.role] : [];
     const baseProfile = await args.tx.supplySupplierProfile.findUnique({
       where: { workspaceId_supplierKey: { workspaceId: args.workspaceId, supplierKey: baseKey } },
       select: { website: true, websiteDomain: true, roles: true },
@@ -209,18 +241,7 @@ export async function recordSupplyResearchKnowledge(args: {
       skipDuplicates: true,
     });
 
-    const candidateSourceUrls = Array.isArray(candidate.sourceUrls)
-      ? candidate.sourceUrls.map(url).filter((value): value is string => Boolean(value))
-      : [];
-    const receipts = publicListingReceipts.filter((receipt) => (
-      receipt.itemKey === customerFactValue.componentItemKey
-      && candidateSourceUrls.includes(receipt.sourceUrl)
-      && candidates.filter((otherValue) => {
-        const other = record(otherValue);
-        return Array.isArray(other.sourceUrls) && other.sourceUrls.some((source) => source === receipt.sourceUrl);
-      }).length === 1
-    ));
-    for (const receipt of receipts) {
+    for (const receipt of listingReceipts) {
       const evidenceKey = `managed-public-listing:${receipt.receiptHash}`;
       const existingEvidence = await args.tx.supplyEvidence.findUnique({
         where: { workspaceId_evidenceKey: { workspaceId: args.workspaceId, evidenceKey } },

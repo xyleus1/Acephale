@@ -11,23 +11,34 @@ import {
 } from "./persistence";
 import { recordSupplyResearchKnowledge } from "./supply-intelligence-persistence";
 
-const DEMO_WORKSPACE_KEY = "system:atlas-procurement";
-const CAPABILITY_KEY = "research.supplier_candidates";
+const ATLAS_DEMO_WORKSPACE = { externalKey: "system:atlas-procurement", name: "Atlas Robotics procurement" } as const;
+const GUILD_DEMO_WORKSPACE = { externalKey: "system:guild-procurement", name: "GUILD procurement" } as const;
+export const SOURCING_RESEARCH_CAPABILITY_KEY = "research.supplier_candidates";
+const CAPABILITY_KEY = SOURCING_RESEARCH_CAPABILITY_KEY;
+const PROVIDER_RUN_DSL_NAMES = ["interactive_supplier_research", "queued_supplier_research_child"] as const;
+const RUN_STALE_AFTER_MS = 5 * 60 * 1_000;
+const OFFICE_DAILY_PROVIDER_CALL_CAP = 72;
 
 function digest(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-export async function sourcingSystemWorkspace(context: SupplyAccessContext, mode: "view" | "edit", workspaceId?: string) {
+async function demoSourcingWorkspace(
+  context: SupplyAccessContext,
+  mode: "view" | "edit",
+  demo: typeof ATLAS_DEMO_WORKSPACE | typeof GUILD_DEMO_WORKSPACE,
+) {
   const accessContext = await currentSupplyAccessContext(context);
-  if (workspaceId) return requireSupplyWorkspace(accessContext, workspaceId, mode);
   const existing = await prisma.supplyWorkspace.findUnique({
-    where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: DEMO_WORKSPACE_KEY } },
+    where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: demo.externalKey } },
     select: { id: true },
   });
   if (existing) {
     await requireSupplyWorkspace(accessContext, existing.id, mode);
     return existing;
+  }
+  if (mode === "view") {
+    throw new SupplyPersistenceError("Supply workspace not found.", "not_found");
   }
   if (accessContext.role === "EMPLOYEE") {
     throw new SupplyPersistenceError("You cannot create the procurement workspace.", "forbidden");
@@ -35,13 +46,13 @@ export async function sourcingSystemWorkspace(context: SupplyAccessContext, mode
   let workspace: { id: string };
   try {
     workspace = await prisma.supplyWorkspace.upsert({
-      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: DEMO_WORKSPACE_KEY } },
+      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: demo.externalKey } },
       update: { status: "ACTIVE" },
       create: {
         officeId: accessContext.officeId,
         createdByUserId: accessContext.userId,
-        externalKey: DEMO_WORKSPACE_KEY,
-        name: "Atlas Robotics procurement",
+        externalKey: demo.externalKey,
+        name: demo.name,
         members: {
           create: {
             officeId: accessContext.officeId,
@@ -55,12 +66,49 @@ export async function sourcingSystemWorkspace(context: SupplyAccessContext, mode
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
     workspace = await prisma.supplyWorkspace.findUniqueOrThrow({
-      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: DEMO_WORKSPACE_KEY } },
+      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: demo.externalKey } },
       select: { id: true },
     });
   }
   await requireSupplyWorkspace(accessContext, workspace.id, mode);
   return workspace;
+}
+
+export async function sourcingSystemWorkspace(context: SupplyAccessContext, mode: "view" | "edit", workspaceId?: string) {
+  const accessContext = await currentSupplyAccessContext(context);
+  if (workspaceId) return requireSupplyWorkspace(accessContext, workspaceId, mode);
+  return demoSourcingWorkspace(accessContext, mode, ATLAS_DEMO_WORKSPACE);
+}
+
+export async function guildSourcingSystemWorkspace(context: SupplyAccessContext, mode: "view" | "edit") {
+  return demoSourcingWorkspace(context, mode, GUILD_DEMO_WORKSPACE);
+}
+
+async function findDemoSourcingWorkspace(
+  context: SupplyAccessContext,
+  demo: typeof ATLAS_DEMO_WORKSPACE | typeof GUILD_DEMO_WORKSPACE,
+) {
+  const accessContext = await currentSupplyAccessContext(context);
+  const workspace = await prisma.supplyWorkspace.findUnique({
+    where: {
+      officeId_externalKey: {
+        officeId: accessContext.officeId,
+        externalKey: demo.externalKey,
+      },
+    },
+    select: { id: true },
+  });
+  if (!workspace) return null;
+  await requireSupplyWorkspace(accessContext, workspace.id, "view");
+  return workspace;
+}
+
+export async function findSourcingSystemWorkspace(context: SupplyAccessContext) {
+  return findDemoSourcingWorkspace(context, ATLAS_DEMO_WORKSPACE);
+}
+
+export async function findGuildSourcingSystemWorkspace(context: SupplyAccessContext) {
+  return findDemoSourcingWorkspace(context, GUILD_DEMO_WORKSPACE);
 }
 
 export async function sourcingWorkspaceForTask(
@@ -84,11 +132,16 @@ export async function sourcingWorkspaceForTask(
 
 export type PersistedSourcingResearchRun = {
   id: string;
+  workspaceId: string;
   status: string;
   input: Prisma.JsonValue;
   output: Prisma.JsonValue | null;
+  error: Prisma.JsonValue | null;
+  startedAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
   completedAt: Date | null;
+  failedAt: Date | null;
 };
 
 export type SourcingResearchPage = {
@@ -130,32 +183,16 @@ function pageSize(value: number | undefined) {
   return value;
 }
 
-async function markAbandonedResearchFailed(context: SupplyAccessContext, workspaceId: string) {
-  const staleBefore = new Date(Date.now() - 5 * 60 * 1_000);
-  await prisma.supplyCapabilityRun.updateMany({
-    where: {
-      officeId: context.officeId,
-      workspaceId,
-      capabilityKey: CAPABILITY_KEY,
-      status: { in: ["QUEUED", "RUNNING"] },
-      updatedAt: { lt: staleBefore },
-    },
-    data: {
-      status: "FAILED",
-      error: { message: "Supplier research stopped before completion." },
-      failedAt: new Date(),
-    },
-  });
-}
-
 export async function listSourcingResearchPage(
   context: SupplyAccessContext,
   options: { cursor?: string; limit?: number; workspaceId?: string } = {},
 ): Promise<SourcingResearchPage> {
-  const workspace = await sourcingSystemWorkspace(context, "view", options.workspaceId);
-  await markAbandonedResearchFailed(context, workspace.id);
+  const workspace = options.workspaceId
+    ? await sourcingSystemWorkspace(context, "view", options.workspaceId)
+    : await findSourcingSystemWorkspace(context);
   const cursor = decodeResearchCursor(options.cursor);
   const limit = pageSize(options.limit);
+  if (!workspace) return { runs: [], nextCursor: null };
   const where = {
     officeId: context.officeId,
     workspaceId: workspace.id,
@@ -169,11 +206,16 @@ export async function listSourcingResearchPage(
   } satisfies Prisma.SupplyCapabilityRunWhereInput;
   const select = {
     id: true,
+    workspaceId: true,
     status: true,
     input: true,
     output: true,
+    error: true,
+    startedAt: true,
     createdAt: true,
+    updatedAt: true,
     completedAt: true,
+    failedAt: true,
   } satisfies Prisma.SupplyCapabilityRunSelect;
   const rows = await prisma.supplyCapabilityRun.findMany({
     where,
@@ -197,7 +239,8 @@ export async function listSourcingResearchRuns(context: SupplyAccessContext, inc
   const recent = [...firstPage.runs, ...(secondPage?.runs ?? [])];
   const missingIds = [...new Set(includeRunIds)].filter((id) => !recent.some((run) => run.id === id));
   if (!missingIds.length) return recent;
-  const workspace = await sourcingSystemWorkspace(context, "view");
+  const workspace = await findSourcingSystemWorkspace(context);
+  if (!workspace) return recent;
   const where = {
     officeId: context.officeId,
     workspaceId: workspace.id,
@@ -205,17 +248,522 @@ export async function listSourcingResearchRuns(context: SupplyAccessContext, inc
   } satisfies Prisma.SupplyCapabilityRunWhereInput;
   const select = {
     id: true,
+    workspaceId: true,
     status: true,
     input: true,
     output: true,
+    error: true,
+    startedAt: true,
     createdAt: true,
+    updatedAt: true,
     completedAt: true,
+    failedAt: true,
   } satisfies Prisma.SupplyCapabilityRunSelect;
   const linked = await prisma.supplyCapabilityRun.findMany({
     where: { ...where, id: { in: missingIds } },
     select,
   });
   return [...recent, ...linked].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+}
+
+const persistedRunSelect = {
+  id: true,
+  workspaceId: true,
+  status: true,
+  input: true,
+  output: true,
+  error: true,
+  startedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+  failedAt: true,
+} satisfies Prisma.SupplyCapabilityRunSelect;
+
+function optionalIdempotencyKey(value: string | null | undefined) {
+  if (value === undefined || value === null) return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized || normalized.length > 220) {
+    throw new SupplyPersistenceError("Supplier research idempotency key is invalid.", "invalid_input");
+  }
+  return normalized;
+}
+
+export async function enqueueSourcingResearchRun(args: {
+  context: SupplyAccessContext;
+  input: Prisma.InputJsonValue;
+  workspaceId?: string;
+  parentRunId?: string | null;
+  idempotencyKey?: string | null;
+}): Promise<{ run: PersistedSourcingResearchRun; reused: boolean }> {
+  const workspace = await sourcingSystemWorkspace(args.context, "edit", args.workspaceId);
+  const inputHash = digest(args.input);
+  const parentRunId = args.parentRunId ?? null;
+  const idempotencyKey = optionalIdempotencyKey(args.idempotencyKey);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ advisoryLock: string }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`supply-research-enqueue:${args.context.officeId}:${workspace.id}:${inputHash}`}, 0))::text AS "advisoryLock"
+    `;
+    if (idempotencyKey) {
+      await tx.$queryRaw<Array<{ advisoryLock: string }>>`
+        SELECT pg_advisory_xact_lock(hashtextextended(${`supply-research-idempotency:${args.context.officeId}:${workspace.id}:${idempotencyKey}`}, 0))::text AS "advisoryLock"
+      `;
+    }
+
+    if (parentRunId) {
+      const parent = await tx.supplyCapabilityRun.findFirst({
+        where: { id: parentRunId, officeId: args.context.officeId, workspaceId: workspace.id },
+        select: { id: true },
+      });
+      if (!parent) throw new SupplyPersistenceError("Supplier research parent run was not found.", "invalid_input");
+    }
+
+    if (idempotencyKey) {
+      const idempotent = await tx.supplyCapabilityRun.findFirst({
+        where: {
+          officeId: args.context.officeId,
+          workspaceId: workspace.id,
+          idempotencyKey,
+        },
+        select: { ...persistedRunSelect, capabilityKey: true, inputHash: true, parentRunId: true },
+      });
+      if (idempotent) {
+        if (
+          idempotent.capabilityKey !== CAPABILITY_KEY
+          || idempotent.inputHash !== inputHash
+          || idempotent.parentRunId !== parentRunId
+        ) {
+          throw new SupplyPersistenceError("Supplier research idempotency key was already used for another request.", "conflict");
+        }
+        const {
+          capabilityKey: _capabilityKey,
+          inputHash: _inputHash,
+          parentRunId: _parentRunId,
+          ...run
+        } = idempotent;
+        return { run, reused: true };
+      }
+    }
+
+    const active = await tx.supplyCapabilityRun.findFirst({
+      where: {
+        officeId: args.context.officeId,
+        workspaceId: workspace.id,
+        parentRunId,
+        capabilityKey: CAPABILITY_KEY,
+        inputHash,
+        status: { in: ["QUEUED", "RUNNING"] },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: persistedRunSelect,
+    });
+    if (active) return { run: active, reused: true };
+
+    const run = await tx.supplyCapabilityRun.create({
+      data: {
+        officeId: args.context.officeId,
+        workspaceId: workspace.id,
+        invokedByUserId: args.context.userId,
+        parentRunId,
+        capabilityKey: CAPABILITY_KEY,
+        capabilityVersion: "1",
+        dslName: parentRunId ? "queued_supplier_research_child" : "interactive_supplier_research",
+        dslVersion: "2",
+        input: args.input,
+        inputHash,
+        idempotencyKey,
+      },
+      select: persistedRunSelect,
+    });
+    return { run, reused: false };
+  }, { maxWait: 5_000, timeout: 15_000 });
+}
+
+export type SourcingResearchCampaignBatchWork = {
+  input: Prisma.InputJsonValue;
+  idempotencyKey: string;
+};
+
+export async function enqueueSourcingResearchCampaignBatch(args: {
+  context: SupplyAccessContext;
+  workspaceId: string;
+  parentRunId: string;
+  reconciliationToken: string;
+  work: SourcingResearchCampaignBatchWork[];
+  campaignDailyCap: number;
+  officeDailyCap: number;
+  maxActive: number;
+  now?: Date;
+}) {
+  const accessContext = await currentSupplyAccessContext(args.context);
+  const workspace = await requireSupplyWorkspace(accessContext, args.workspaceId, "edit");
+  const campaignDailyCap = Math.max(0, Math.trunc(args.campaignDailyCap));
+  const officeDailyCap = Math.max(0, Math.trunc(args.officeDailyCap));
+  const maxActive = Math.max(0, Math.trunc(args.maxActive));
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ advisoryLock: string }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-office-provider-budget:${accessContext.officeId}`}, 0))::text AS "advisoryLock"
+    `;
+    const quotaNow = args.now ?? (await tx.$queryRaw<Array<{ now: Date }>>`
+      SELECT clock_timestamp() AS "now"
+    `)[0]?.now ?? new Date();
+    const dayStart = new Date(Date.UTC(quotaNow.getUTCFullYear(), quotaNow.getUTCMonth(), quotaNow.getUTCDate()));
+    await tx.$queryRaw<Array<{ advisoryLock: string }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-campaign:${accessContext.officeId}:${args.parentRunId}`}, 0))::text AS "advisoryLock"
+    `;
+
+    const [parent] = await tx.$queryRaw<Array<{ id: string; parentRunId: string | null; status: string; output: unknown }>>`
+      SELECT "id", "parentRunId", "status", "output"
+      FROM "SupplyCapabilityRun"
+      WHERE "id" = ${args.parentRunId}
+        AND "officeId" = ${accessContext.officeId}
+        AND "workspaceId" = ${workspace.id}
+        AND "capabilityKey" = 'research.supplier_campaign'
+      FOR UPDATE
+    `;
+    const lease = parent?.output && typeof parent.output === "object" && !Array.isArray(parent.output)
+      ? (parent.output as Record<string, unknown>).reconciliationLease
+      : null;
+    const leaseToken = lease && typeof lease === "object" && !Array.isArray(lease)
+      ? (lease as Record<string, unknown>).token
+      : null;
+    if (!parent || parent.status !== "RUNNING" || leaseToken !== args.reconciliationToken) {
+      throw new SupplyPersistenceError("Running supplier research campaign was not found.", "conflict");
+    }
+    const campaignAncestryIds = [parent.id];
+    let ancestorId = parent.parentRunId;
+    while (ancestorId && campaignAncestryIds.length < 50) {
+      const ancestor = await tx.supplyCapabilityRun.findFirst({
+        where: {
+          id: ancestorId,
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          capabilityKey: "research.supplier_campaign",
+        },
+        select: { id: true, parentRunId: true },
+      });
+      if (!ancestor || campaignAncestryIds.includes(ancestor.id)) {
+        throw new SupplyPersistenceError("Supplier research campaign ancestry is invalid.", "conflict");
+      }
+      campaignAncestryIds.push(ancestor.id);
+      ancestorId = ancestor.parentRunId;
+    }
+    if (ancestorId) {
+      throw new SupplyPersistenceError("Supplier research campaign ancestry is too deep.", "conflict");
+    }
+
+    const [campaignAttemptsUsed, officeAttemptsUsed, activeAttempts] = await Promise.all([
+      tx.supplyCapabilityRun.count({
+        where: {
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          parentRunId: { in: campaignAncestryIds },
+          capabilityKey: CAPABILITY_KEY,
+          dslName: "queued_supplier_research_child",
+          createdAt: { gte: dayStart },
+        },
+      }),
+      tx.supplyCapabilityRun.count({
+        where: {
+          officeId: accessContext.officeId,
+          capabilityKey: CAPABILITY_KEY,
+          dslName: { in: [...PROVIDER_RUN_DSL_NAMES] },
+          createdAt: { gte: dayStart },
+        },
+      }),
+      tx.supplyCapabilityRun.count({
+        where: {
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          parentRunId: args.parentRunId,
+          capabilityKey: CAPABILITY_KEY,
+          dslName: "queued_supplier_research_child",
+          status: { in: ["QUEUED", "RUNNING"] },
+        },
+      }),
+    ]);
+
+    let campaignRemaining = Math.max(0, campaignDailyCap - campaignAttemptsUsed);
+    let officeRemaining = Math.max(0, officeDailyCap - officeAttemptsUsed);
+    let activeRemaining = Math.max(0, maxActive - activeAttempts);
+    let queued = 0;
+    let reused = 0;
+
+    for (const item of args.work) {
+      const idempotencyKey = optionalIdempotencyKey(item.idempotencyKey);
+      if (!idempotencyKey) {
+        throw new SupplyPersistenceError("Campaign supplier research requires an idempotency key.", "invalid_input");
+      }
+      const inputHash = digest(item.input);
+      const existing = await tx.supplyCapabilityRun.findFirst({
+        where: {
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          idempotencyKey,
+        },
+        select: { capabilityKey: true, inputHash: true, parentRunId: true },
+      });
+      if (existing) {
+        if (
+          existing.capabilityKey !== CAPABILITY_KEY
+          || existing.inputHash !== inputHash
+          || existing.parentRunId !== args.parentRunId
+        ) {
+          throw new SupplyPersistenceError("Supplier research idempotency key was already used for another request.", "conflict");
+        }
+        reused += 1;
+        continue;
+      }
+      if (campaignRemaining < 1 || officeRemaining < 1 || activeRemaining < 1) break;
+
+      await tx.supplyCapabilityRun.create({
+        data: {
+          officeId: accessContext.officeId,
+          workspaceId: workspace.id,
+          invokedByUserId: accessContext.userId,
+          parentRunId: args.parentRunId,
+          capabilityKey: CAPABILITY_KEY,
+          capabilityVersion: "1",
+          dslName: "queued_supplier_research_child",
+          dslVersion: "2",
+          input: item.input,
+          inputHash,
+          idempotencyKey,
+          createdAt: quotaNow,
+        },
+        select: { id: true },
+      });
+      queued += 1;
+      campaignRemaining -= 1;
+      officeRemaining -= 1;
+      activeRemaining -= 1;
+    }
+
+    return {
+      queued,
+      reused,
+      campaignAttemptsUsed: campaignAttemptsUsed + queued,
+      officeAttemptsUsed: officeAttemptsUsed + queued,
+    };
+  }, { maxWait: 5_000, timeout: 20_000 });
+}
+
+export async function getSourcingResearchRun(
+  context: SupplyAccessContext,
+  runId: string,
+  workspaceId?: string,
+): Promise<PersistedSourcingResearchRun> {
+  const accessContext = await currentSupplyAccessContext(context);
+  const scopedWorkspaceId = workspaceId ?? (await prisma.supplyCapabilityRun.findFirst({
+    where: { id: runId, officeId: accessContext.officeId, capabilityKey: CAPABILITY_KEY },
+    select: { workspaceId: true },
+  }))?.workspaceId;
+  if (!scopedWorkspaceId) throw new SupplyPersistenceError("Supplier research run was not found.", "not_found");
+  await requireSupplyWorkspace(accessContext, scopedWorkspaceId, "view");
+  const run = await prisma.supplyCapabilityRun.findFirst({
+    where: {
+      id: runId,
+      officeId: accessContext.officeId,
+      workspaceId: scopedWorkspaceId,
+      capabilityKey: CAPABILITY_KEY,
+    },
+    select: persistedRunSelect,
+  });
+  if (!run) throw new SupplyPersistenceError("Supplier research run was not found.", "not_found");
+  return run;
+}
+
+export type QueuedSourcingResearchRunReference = {
+  id: string;
+  officeId: string;
+  workspaceId: string;
+};
+
+export async function listQueuedSourcingResearchRuns(limit: number): Promise<QueuedSourcingResearchRunReference[]> {
+  const boundedLimit = Math.min(10, Math.max(1, Math.trunc(limit)));
+  const now = new Date();
+  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const offices = await prisma.office.findMany({ orderBy: { id: "asc" }, select: { id: true } });
+  const candidates: Array<QueuedSourcingResearchRunReference & { createdAt: Date }> = [];
+  for (const office of offices) {
+    const callsStartedToday = await prisma.supplyCapabilityRun.count({
+      where: {
+        officeId: office.id,
+        capabilityKey: CAPABILITY_KEY,
+        dslName: { in: [...PROVIDER_RUN_DSL_NAMES] },
+        startedAt: { gte: dayStart },
+      },
+    });
+    if (callsStartedToday >= OFFICE_DAILY_PROVIDER_CALL_CAP) continue;
+    candidates.push(...await prisma.supplyCapabilityRun.findMany({
+      where: {
+        officeId: office.id,
+        capabilityKey: CAPABILITY_KEY,
+        dslName: { in: [...PROVIDER_RUN_DSL_NAMES] },
+        status: "QUEUED",
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: boundedLimit,
+      select: { id: true, officeId: true, workspaceId: true, createdAt: true },
+    }));
+  }
+  return candidates
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id))
+    .slice(0, boundedLimit)
+    .map(({ createdAt: _createdAt, ...reference }) => reference);
+}
+
+export type ClaimedSourcingResearchRun = QueuedSourcingResearchRunReference & {
+  input: Prisma.JsonValue;
+  context: SupplyAccessContext;
+};
+
+export type ClaimSourcingResearchRunResult =
+  | { state: "claimed"; run: ClaimedSourcingResearchRun }
+  | { state: "unavailable" }
+  | { state: "failed" };
+
+function sanitizedFailureMessage(message: string) {
+  const normalized = message
+    .replace(/\u2014/g, "-")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (normalized || "Supplier research failed.").slice(0, 300);
+}
+
+async function failClaimedSourcingResearchRun(args: QueuedSourcingResearchRunReference & { message: string }) {
+  return prisma.supplyCapabilityRun.updateMany({
+    where: {
+      id: args.id,
+      officeId: args.officeId,
+      workspaceId: args.workspaceId,
+      capabilityKey: CAPABILITY_KEY,
+      status: "RUNNING",
+    },
+    data: {
+      status: "FAILED",
+      error: { message: sanitizedFailureMessage(args.message) },
+      failedAt: new Date(),
+    },
+  });
+}
+
+export async function claimSourcingResearchRun(
+  reference: QueuedSourcingResearchRunReference,
+): Promise<ClaimSourcingResearchRunResult> {
+  const claimed = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ advisoryLock: string }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-office-provider-budget:${reference.officeId}`}, 0))::text AS "advisoryLock"
+    `;
+    const quotaNow = (await tx.$queryRaw<Array<{ now: Date }>>`
+      SELECT clock_timestamp() AS "now"
+    `)[0]?.now ?? new Date();
+    const dayStart = new Date(Date.UTC(quotaNow.getUTCFullYear(), quotaNow.getUTCMonth(), quotaNow.getUTCDate()));
+    const callsStartedToday = await tx.supplyCapabilityRun.count({
+      where: {
+        officeId: reference.officeId,
+        capabilityKey: CAPABILITY_KEY,
+        dslName: { in: [...PROVIDER_RUN_DSL_NAMES] },
+        startedAt: { gte: dayStart },
+      },
+    });
+    if (callsStartedToday >= OFFICE_DAILY_PROVIDER_CALL_CAP) return false;
+    const updated = await tx.supplyCapabilityRun.updateMany({
+      where: {
+        id: reference.id,
+        officeId: reference.officeId,
+        workspaceId: reference.workspaceId,
+        capabilityKey: CAPABILITY_KEY,
+        status: "QUEUED",
+      },
+      data: {
+        status: "RUNNING",
+        startedAt: quotaNow,
+        error: Prisma.DbNull,
+      },
+    });
+    return updated.count === 1;
+  }, { maxWait: 5_000, timeout: 15_000 });
+  if (!claimed) return { state: "unavailable" };
+  const run = await prisma.supplyCapabilityRun.findFirst({
+    where: {
+      id: reference.id,
+      officeId: reference.officeId,
+      workspaceId: reference.workspaceId,
+      capabilityKey: CAPABILITY_KEY,
+      status: "RUNNING",
+    },
+    select: {
+      id: true,
+      officeId: true,
+      workspaceId: true,
+      input: true,
+      invokedBy: {
+        select: { id: true, officeId: true, role: true, canViewWholeOffice: true, isActive: true },
+      },
+    },
+  });
+  if (!run) return { state: "unavailable" };
+  if (!run.invokedBy || !run.invokedBy.isActive || run.invokedBy.officeId !== run.officeId) {
+    await failClaimedSourcingResearchRun({
+      ...reference,
+      message: "ACCESS_REVOKED: Supplier research requester no longer has access.",
+    });
+    return { state: "failed" };
+  }
+  const context = {
+    officeId: run.officeId,
+    userId: run.invokedBy.id,
+    role: run.invokedBy.role,
+    canViewWholeOffice: run.invokedBy.canViewWholeOffice,
+  } satisfies SupplyAccessContext;
+  try {
+    await requireSupplyWorkspace(context, run.workspaceId, "edit");
+  } catch (error) {
+    if (error instanceof SupplyPersistenceError && ["forbidden", "not_found"].includes(error.code)) {
+      await failClaimedSourcingResearchRun({
+        ...reference,
+        message: "ACCESS_REVOKED: Supplier research requester can no longer edit this workspace.",
+      });
+      return { state: "failed" };
+    }
+    throw error;
+  }
+  return {
+    state: "claimed",
+    run: {
+      id: run.id,
+      officeId: run.officeId,
+      workspaceId: run.workspaceId,
+      input: run.input,
+      context,
+    },
+  };
+}
+
+export async function failStaleRunningSourcingResearchRuns() {
+  const offices = await prisma.office.findMany({ select: { id: true } });
+  const staleBefore = new Date(Date.now() - RUN_STALE_AFTER_MS);
+  let count = 0;
+  for (const office of offices) {
+    const failed = await prisma.supplyCapabilityRun.updateMany({
+      where: {
+        officeId: office.id,
+        capabilityKey: CAPABILITY_KEY,
+        status: "RUNNING",
+        updatedAt: { lt: staleBefore },
+      },
+      data: {
+        status: "FAILED",
+        error: { message: "WORKER_INTERRUPTED: Supplier research stopped before completion." },
+        failedAt: new Date(),
+      },
+    });
+    count += failed.count;
+  }
+  return { count };
 }
 
 export async function startSourcingResearchRun(
@@ -309,18 +857,10 @@ export async function failSourcingResearchRun(args: {
   message: string;
 }) {
   await requireSupplyWorkspace(args.context, args.workspaceId, "edit");
-  await prisma.supplyCapabilityRun.updateMany({
-    where: {
-      id: args.runId,
-      officeId: args.context.officeId,
-      workspaceId: args.workspaceId,
-      capabilityKey: CAPABILITY_KEY,
-      status: { in: ["QUEUED", "RUNNING"] },
-    },
-    data: {
-      status: "FAILED",
-      error: { message: args.message.slice(0, 300) },
-      failedAt: new Date(),
-    },
+  await failClaimedSourcingResearchRun({
+    id: args.runId,
+    officeId: args.context.officeId,
+    workspaceId: args.workspaceId,
+    message: args.message,
   });
 }

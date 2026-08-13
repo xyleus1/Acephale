@@ -35,26 +35,14 @@ export type SupplierResearchRouteResponse = {
 
 export type SupplierResearchRouteDependencies = {
   consumeRateLimit: (key: string) => boolean;
-  startRun: (
-    context: SupplierResearchRouteContext,
-    input: SupplierResearchRouteInput,
-    workspaceId: string | undefined,
-  ) => Promise<{ id: string; workspaceId: string }>;
-  search: (input: SupplierResearchRouteInput & { officeId: string; workspaceId: string }) => Promise<unknown>;
-  supplierFailure: (error: unknown) => { code: string; message: string; status: number };
-  failRun: (args: {
+  enqueueRun: (args: {
     context: SupplierResearchRouteContext;
-    runId: string;
-    workspaceId: string;
-    message: string;
-  }) => Promise<unknown>;
-  completeRun: (args: {
-    context: SupplierResearchRouteContext;
-    runId: string;
-    workspaceId: string;
-    output: unknown;
-  }) => Promise<unknown>;
-  intelligenceProfile: (context: SupplierResearchRouteContext, workspaceId: string) => Promise<unknown>;
+    input: SupplierResearchRouteInput;
+    workspaceId: string | undefined;
+  }) => Promise<{
+    run: { id: string; workspaceId: string; status: string };
+    reused: boolean;
+  }>;
   persistenceFailure: (error: unknown) => Promise<SupplierResearchRouteResponse> | SupplierResearchRouteResponse;
 };
 
@@ -168,55 +156,21 @@ export async function executeSupplierResearchRoute(args: {
     return { status: 429, body: { error: "Supplier research rate limit reached." } };
   }
 
-  let run: { id: string; workspaceId: string };
   try {
-    run = await dependencies.startRun(context, parsed.input, parsed.workspaceId);
-  } catch (error) {
-    return await dependencies.persistenceFailure(error);
-  }
-
-  let result: unknown;
-  try {
-    result = await dependencies.search({
-      ...parsed.input,
-      officeId: context.officeId,
-      workspaceId: run.workspaceId,
-    });
-  } catch (error) {
-    const failure = dependencies.supplierFailure(error);
-    try {
-      await dependencies.failRun({
-        context,
-        runId: run.id,
-        workspaceId: run.workspaceId,
-        message: `${failure.code}: ${failure.message}`,
-      });
-    } catch (persistenceError) {
-      return await dependencies.persistenceFailure(persistenceError);
-    }
-    return {
-      status: failure.status,
-      body: { error: failure.message, code: failure.code },
-      headers: NO_STORE_HEADERS,
-    };
-  }
-
-  try {
-    const completedRun = await dependencies.completeRun({
+    const queued = await dependencies.enqueueRun({
       context,
-      runId: run.id,
-      workspaceId: run.workspaceId,
-      output: JSON.parse(JSON.stringify(result)),
+      input: parsed.input,
+      workspaceId: parsed.workspaceId,
     });
-    let intelligenceProfile: unknown = null;
-    try {
-      intelligenceProfile = await dependencies.intelligenceProfile(context, run.workspaceId);
-    } catch {
-      intelligenceProfile = null;
-    }
+    const pollParams = new URLSearchParams({ runId: queued.run.id });
+    if (parsed.workspaceId) pollParams.set("workspaceId", parsed.workspaceId);
     return {
-      status: 200,
-      body: { result, run: completedRun, intelligenceProfile },
+      status: 202,
+      body: {
+        run: queued.run,
+        reused: queued.reused,
+        pollUrl: `/api/supply-os/supplier-research?${pollParams.toString()}`,
+      },
       headers: NO_STORE_HEADERS,
     };
   } catch (error) {

@@ -1,23 +1,19 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import {
-  searchComponentSuppliers,
-  supplierResearchError,
-} from "@/lib/supply-os/component-supplier-research";
 import { listProcurementCasesForResearchRuns } from "@/lib/supply-os/procurement-case-persistence";
 import { listSupplierSenderAccounts } from "@/lib/supply-os/supplier-communication-persistence";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import { ResearchRateLimiter } from "@/lib/supply-os/research";
 import { supplyIntelligenceProfile } from "@/lib/supply-os/supply-intelligence-persistence";
+import { runSourcingResearchWorker } from "@/lib/supply-os/supplier-research-worker";
 import {
   executeSupplierResearchRoute,
   type SupplierResearchRouteResponse,
 } from "@/lib/supply-os/supplier-research-route-contract";
 import {
-  completeSourcingResearchRun,
-  failSourcingResearchRun,
+  enqueueSourcingResearchRun,
+  getSourcingResearchRun,
   listSourcingResearchPage,
-  startSourcingResearchRun,
 } from "@/lib/supply-os/sourcing-research-persistence";
 
 export const runtime = "nodejs";
@@ -43,9 +39,33 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const context = supplyAccessContext(session);
+    const rawRunId = request.nextUrl.searchParams.get("runId");
+    const rawIncludeRunIds = request.nextUrl.searchParams.getAll("includeRunId");
+    const workspaceId = requiredText(request.nextUrl.searchParams.get("workspaceId"), 220) ?? undefined;
+    if (rawRunId !== null) {
+      const runId = requiredText(rawRunId, 220);
+      if (!runId) return NextResponse.json({ error: "A valid supplier research run is required." }, { status: 400 });
+      const run = await getSourcingResearchRun(context, runId, workspaceId);
+      return NextResponse.json({ run }, {
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+      });
+    }
+    if (rawIncludeRunIds.length) {
+      if (rawIncludeRunIds.length > 40) {
+        return NextResponse.json({ error: "Valid workspace-scoped research run IDs are required." }, { status: 400 });
+      }
+      const parsedRunIds = rawIncludeRunIds.map((value) => requiredText(value, 220));
+      if (parsedRunIds.some((value) => !value) || !workspaceId) {
+        return NextResponse.json({ error: "Valid workspace-scoped research run IDs are required." }, { status: 400 });
+      }
+      const includeRunIds = [...new Set(parsedRunIds as string[])];
+      const cases = await listProcurementCasesForResearchRuns(context, includeRunIds, workspaceId);
+      return NextResponse.json({ runs: [], cases, senderAccounts: [], intelligenceProfile: null, page: { nextCursor: null } }, {
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+      });
+    }
     const rawLimit = request.nextUrl.searchParams.get("limit");
     const cursor = request.nextUrl.searchParams.get("cursor") ?? undefined;
-    const workspaceId = requiredText(request.nextUrl.searchParams.get("workspaceId"), 220) ?? undefined;
     const page = await listSourcingResearchPage(context, {
       cursor,
       limit: rawLimit === null ? undefined : Number(rawLimit),
@@ -80,27 +100,11 @@ export async function POST(request: NextRequest) {
     context,
     dependencies: {
       consumeRateLimit: (key) => limiter.consume(key),
-      startRun: (routeContext, input, workspaceId) => startSourcingResearchRun(routeContext as typeof context, input, workspaceId),
-      search: (input) => searchComponentSuppliers({
-        ...input,
-        manufacturer: input.manufacturer ?? undefined,
-        mpn: input.mpn ?? undefined,
-        specification: input.specification ?? undefined,
-        targetCountry: input.targetCountry ?? undefined,
-        requestedQuantity: input.requestedQuantity ?? undefined,
-        requestedUnit: input.requestedUnit ?? undefined,
-        sourceRegion: input.sourceRegion ?? undefined,
-        deliveryLocation: input.deliveryLocation ?? undefined,
-        needByDate: input.needByDate ?? undefined,
+      enqueueRun: ({ context: routeContext, input, workspaceId }) => enqueueSourcingResearchRun({
+        context: routeContext as typeof context,
+        input,
+        workspaceId,
       }),
-      supplierFailure: supplierResearchError,
-      failRun: (args) => failSourcingResearchRun({ ...args, context: args.context as typeof context }),
-      completeRun: (args) => completeSourcingResearchRun({
-        ...args,
-        context: args.context as typeof context,
-        output: args.output as Parameters<typeof completeSourcingResearchRun>[0]["output"],
-      }),
-      intelligenceProfile: (routeContext, workspaceId) => supplyIntelligenceProfile(routeContext as typeof context, workspaceId),
       persistenceFailure: async (error) => {
         const response = supplyErrorResponse(error);
         return {
@@ -110,5 +114,17 @@ export async function POST(request: NextRequest) {
       },
     },
   });
+  if (response.status === 202) {
+    const run = response.body.run as { id?: unknown; workspaceId?: unknown } | undefined;
+    if (typeof run?.id === "string" && typeof run.workspaceId === "string") {
+      after(async () => {
+        await runSourcingResearchWorker({
+          id: run.id as string,
+          officeId: context.officeId,
+          workspaceId: run.workspaceId as string,
+        }).catch(() => undefined);
+      });
+    }
+  }
   return routeResponse(response);
 }

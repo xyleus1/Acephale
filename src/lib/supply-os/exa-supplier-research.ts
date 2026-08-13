@@ -2,13 +2,17 @@ import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import {
   normalizeSupplierResearch,
+  selectedSupplierResearchQueryVariant,
+  supplierCompanyMatchesDomain,
   type EvidenceSource,
+  type SupplierCandidateRole,
   type SupplierResearchResult,
 } from "./research";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
 const EXA_CONTENTS_URL = "https://api.exa.ai/contents";
 const MAX_RESULTS = 6;
+const MAX_CONTENT_RESULTS = 3;
 const MAX_SEARCH_RESPONSE_BYTES = 512_000;
 const MAX_CONTENTS_RESPONSE_BYTES = 1_000_000;
 const MAX_RECORD_TEXT = 12_000;
@@ -19,6 +23,8 @@ const TOTAL_TIMEOUT_MS = 45_000;
 
 export type ExaResearchFailureCode =
   | "PROVIDER_TIMEOUT"
+  | "PROVIDER_AUTHENTICATION_FAILED"
+  | "PROVIDER_RATE_LIMITED"
   | "PROVIDER_FAILURE"
   | "PROVIDER_RESPONSE_TOO_LARGE"
   | "INVALID_STRUCTURED_RESPONSE";
@@ -47,6 +53,9 @@ export type ExaSupplierResearchInput = {
   sourceRegion?: string;
   deliveryLocation?: string;
   needByDate?: string;
+  queryVariant?: string;
+  queryCycle?: number;
+  excludeDomains?: string[];
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -63,6 +72,9 @@ export type ExaSourceStatus = {
 export type ExaOfferProposal = {
   supplierName: string | null;
   supplierRole: string | null;
+  companyIdentityEvidence: string | null;
+  supplierRoleEvidence: string | null;
+  productCapabilityEvidence: string | null;
   itemIdentity: string | null;
   manufacturer: string | null;
   mpn: string | null;
@@ -140,9 +152,32 @@ export type PublicListingReceipt = {
   receiptHash: string;
 };
 
+export type PublicSupplierLeadReceipt = {
+  provider: "EXA";
+  candidateId: string | null;
+  itemKey: string;
+  companyName: string;
+  website: string;
+  role: SupplierCandidateRole;
+  productCapability: string;
+  sourceUrl: string;
+  sourceTitle: string | null;
+  companyIdentityExcerpt: string;
+  supplierRoleExcerpt: string;
+  productCapabilityExcerpt: string;
+  sourceTextHash: string;
+  searchRequestId: string;
+  contentsRequestId: string;
+  contentsResponseHash: string;
+  retrievedAt: string;
+  freshnessPolicy: "FORCED_LIVE";
+  receiptHash: string;
+};
+
 export type ExaSupplierResearchResult = SupplierResearchResult & {
   retrieval: ExaRetrievalCapture;
   publicListingReceipts: PublicListingReceipt[];
+  publicSupplierLeadReceipts: PublicSupplierLeadReceipt[];
 };
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -299,6 +334,9 @@ function parseProposal(value: unknown): ExaOfferProposal | null {
   return {
     supplierName: nullableText(raw.supplierName, 180),
     supplierRole: nullableText(raw.supplierRole, 40),
+    companyIdentityEvidence: sourceClaim(raw.companyIdentityEvidence, 1_000) || null,
+    supplierRoleEvidence: sourceClaim(raw.supplierRoleEvidence, 1_000) || null,
+    productCapabilityEvidence: sourceClaim(raw.productCapabilityEvidence, 1_000) || null,
     itemIdentity: nullableText(raw.itemIdentity, 500),
     manufacturer: nullableText(raw.manufacturer, 180),
     mpn: nullableText(raw.mpn, 180),
@@ -403,7 +441,20 @@ function containsDimensionPhrase(haystack: string, needle: string) {
 }
 
 function containsIdentityTerm(haystack: string, term: string) {
-  return /\d|[.-]/.test(term) ? containsDimensionPhrase(haystack, term) : containsWord(haystack, term);
+  if (/\d|\./.test(term)) return containsDimensionPhrase(haystack, term);
+  const singular = (word: string) => {
+    if (/[^s]ies$/u.test(word)) return `${word.slice(0, -3)}y`;
+    if (/(?:sses|shes|ches|xes|zes)$/u.test(word)) return word.slice(0, -2);
+    return /[^s]s$/u.test(word) ? word.slice(0, -1) : word;
+  };
+  const sourceWords = identityWords(haystack).map(singular);
+  const termWords = identityWords(term).map(singular);
+  if (!termWords.length || termWords.length > sourceWords.length) return false;
+  return sourceWords.some((_, index) => termWords.every((word, offset) => sourceWords[index + offset] === word));
+}
+
+function containsIdentityPhrase(haystack: string, phrase: string) {
+  return containsIdentityTerm(haystack, phrase);
 }
 
 function containsAmount(source: string, amount: number) {
@@ -502,6 +553,8 @@ function boundPriceTupleWindow(source: string, amount: number, currency: string,
 function successfulFreshStatus(status: ExaSourceStatus | null, sourceUrl?: string) {
   if (!status || status.status !== "success") return false;
   if (sourceUrl && !sameUrl(status.id, sourceUrl)) return false;
+  if (status.errorTag) return false;
+  if (status.httpStatusCode !== null && (status.httpStatusCode < 200 || status.httpStatusCode >= 300)) return false;
   if (status.cacheAgeHours !== null && status.cacheAgeHours > 0) return false;
   if (status.cacheState && /cache|stale/.test(status.cacheState)) return false;
   return true;
@@ -537,6 +590,271 @@ function receiptBase(receipt: Omit<PublicListingReceipt, "candidateId" | "receip
 
 export function publicListingReceiptHash(receipt: Omit<PublicListingReceipt, "candidateId" | "receiptHash">) {
   return hash(JSON.stringify(receiptBase(receipt)));
+}
+
+const SUPPLIER_ROLES = new Set<SupplierCandidateRole>([
+  "MANUFACTURER",
+  "DISTRIBUTOR",
+  "PRODUCER",
+  "PROCESSOR",
+  "EXPORTER",
+  "TRADER",
+  "SERVICE_PROVIDER",
+]);
+
+function supplierRole(value: unknown): SupplierCandidateRole | null {
+  const role = text(value, 40).toUpperCase() as SupplierCandidateRole;
+  return SUPPLIER_ROLES.has(role) ? role : null;
+}
+
+function roleAllowedForInput(input: ExaSupplierResearchInput, role: SupplierCandidateRole) {
+  return input.componentItemKey.startsWith("request:")
+    || input.componentItemKey.startsWith("GUILD-")
+    || role === "MANUFACTURER"
+    || role === "DISTRIBUTOR";
+}
+
+const ROLE_EVIDENCE_PATTERNS: Record<SupplierCandidateRole, RegExp> = {
+  MANUFACTURER: /\b(?:manufacturer|manufacturing company|contract manufacturing|manufactures?)\b/i,
+  DISTRIBUTOR: /\b(?:distributor|distribution company|distributes?)\b/i,
+  PRODUCER: /\b(?:producer|produces?)\b/i,
+  PROCESSOR: /\b(?:processor|processing company|material processing|processes?)\b/i,
+  EXPORTER: /\b(?:exporter|exports?)\b/i,
+  TRADER: /\b(?:trader|trading company|trades?)\b/i,
+  SERVICE_PROVIDER: /\b(?:service provider|inspection service|inspection company|inspection laboratory|metrology lab(?:oratory)?|testing laboratory|calibration laboratory)\b/i,
+};
+
+function explicitRoleEvidence(value: string, role: SupplierCandidateRole) {
+  return ROLE_EVIDENCE_PATTERNS[role].test(value)
+    && !/\b(?:does not|do not|is not|are not|never|no longer|not currently)\b.{0,60}\b(?:manufactur|distribut|produc|process|export|trad|service|inspect|metrology|laborator)\w*\b/i.test(value);
+}
+
+function containsAnyIdentityTerm(value: string, terms: string[]) {
+  return terms.some((term) => containsIdentityTerm(value, term));
+}
+
+function requestedTerms(value: string, vocabulary: readonly string[]) {
+  return vocabulary.filter((term) => containsIdentityTerm(value, term));
+}
+
+const MATERIAL_TERMS = [
+  "aluminum", "aluminium", "stainless", "steel", "g10", "fr-4", "fr4", "glass epoxy", "nylon", "peek", "silicone", "epdm", "polyethylene",
+] as const;
+const MATERIAL_FORM_TERMS = [
+  "sheet", "plate", "angle", "extrusion", "laminate", "bar stock", "machining stock", "blank", "foam",
+] as const;
+const MATERIAL_GRADE_TERMS = [
+  "6061-t6", "6061-t651", "5052-h32", "a2", "304", "g10", "fr-4", "fr4",
+] as const;
+const CUSTOM_PROCESS_TERMS = [
+  "machining", "machined", "cnc", "fabrication", "fabricator", "build to print", "laser etched", "engraving", "anodizing", "printed circuit board",
+] as const;
+const GENERIC_PRODUCT_TERMS = [
+  "isolator", "mount", "fastener", "screw", "washer", "locknut", "nut", "threaded insert", "epoxy", "adhesive", "solvent", "isopropyl alcohol", "primer", "topcoat",
+  "wire", "cable", "sleeve", "sleeving", "heat shrink", "connector", "standoff", "insert", "strap", "edge trim", "thermal pad", "lacquer", "cap", "plug",
+] as const;
+const GENERIC_QUALIFIER_TERMS = [
+  "vibration", "silicone", "elastomer", "stainless", "304", "a2", "socket head", "m3", "m4", "m5", "passivated",
+  "flat", "prevailing torque", "helical thread", "high purity", "99 percent", "electronics grade", "corrosion resistant",
+  "epoxy", "aluminum compatible", "polyurethane", "matte", "22 awg", "18 awg", "stranded copper", "etfe", "600 v",
+  "2 conductor", "twisted", "shielded", "fluoropolymer", "printable", "identification", "thermal transfer", "braided",
+  "expandable", "dual wall", "adhesive lined", "3:1", "circular", "multipole", "metallic shell", "positive locking",
+  "8 to 12 contacts", "nylon", "peek", "10 to 25 mm", "tinned copper", "grounding", "ring terminal", "epdm",
+  "electrically insulating", "1 to 2 mm", "torque seal", "witness", "antistatic", "dust cover",
+  "polyolefin",
+] as const;
+const GENERIC_QUALIFIER_ALTERNATIVES = [
+  ["a2", "304"],
+  ["fluoropolymer", "polyolefin"],
+  ["nylon", "peek"],
+  ["silicone", "epdm"],
+  ["torque seal", "witness"],
+] as const;
+
+function sourceSupportsRequestedCapability(
+  input: ExaSupplierResearchInput,
+  itemIdentity: string,
+  capabilityExcerpt: string,
+) {
+  if (!containsIdentityPhrase(capabilityExcerpt, itemIdentity)) return false;
+  if (/\b(?:does not|do not|never|no longer|not currently)\b.{0,60}\b(?:manufactur|distribut|suppl|stock|offer|provid|fabricat|machin|process|assembl|calibrat|inspect|sell)\w*\b/i.test(capabilityExcerpt)) {
+    return false;
+  }
+  if (!/\b(?:manufactur|distribut|suppl|stock|offer|provid|fabricat|machin|process|assembl|calibrat|inspect|metrology|measur|test(?:ing)? laborator|sell|lists?|specializ|service center|produc|export|trad)\w*\b/i.test(capabilityExcerpt)) {
+    return false;
+  }
+  const productSpecification = (input.specification ?? "").split(/\.\s*Supplier (?:QA|deliverable):/i)[0] ?? "";
+  const requested = `${input.componentName} ${input.manufacturer ?? ""} ${input.mpn ?? ""} ${productSpecification}`;
+  if (input.manufacturer && !containsPhrase(itemIdentity, input.manufacturer)) return false;
+  if (input.mpn && !containsPhrase(itemIdentity, input.mpn)) return false;
+  const { plan } = selectedSupplierResearchQueryVariant(input);
+  if (plan.profile === "BRANDED_COTS") {
+    const brandTerms = requestedTerms(requested, ["3m", "scotch-weld", "dowsil"]);
+    const identifiers = (requested.toLowerCase().match(/\b(?:[a-z]+\d+[a-z0-9.-]*|\d+[a-z]+[a-z0-9.-]*|\d{4,})\b/g) ?? [])
+      .filter((term) => !/^(?:600v|2026)$/.test(term));
+    return (!brandTerms.length || brandTerms.every((term) => containsIdentityTerm(capabilityExcerpt, term)))
+      && (!identifiers.length || identifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term)));
+  }
+  if (plan.profile === "MATERIAL_STOCK") {
+    const materials = requestedTerms(requested, MATERIAL_TERMS);
+    const forms = requestedTerms(requested, MATERIAL_FORM_TERMS);
+    const grades = requestedTerms(requested, MATERIAL_GRADE_TERMS);
+    const dimensions = requested.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:mm|in|inch|inches)\b/g) ?? [];
+    return materials.length > 0 && forms.length > 0
+      && containsAnyIdentityTerm(itemIdentity, materials)
+      && containsAnyIdentityTerm(itemIdentity, forms)
+      && (!grades.length || containsAnyIdentityTerm(capabilityExcerpt, grades))
+      && (!dimensions.length || dimensions.some((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension)));
+  }
+  if (plan.profile === "CUSTOM_FABRICATION") {
+    const processes = requestedTerms(requested, CUSTOM_PROCESS_TERMS);
+    const materials = requestedTerms(requested, MATERIAL_TERMS);
+    const grades = requestedTerms(requested, MATERIAL_GRADE_TERMS);
+    const dimensions = requested.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:mm|in|inch|inches)\b/g) ?? [];
+    return processes.length > 0
+      && processes.every((term) => containsIdentityTerm(capabilityExcerpt, term))
+      && (!materials.length || containsAnyIdentityTerm(capabilityExcerpt, materials))
+      && grades.every((term) => containsIdentityTerm(capabilityExcerpt, term))
+      && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension));
+  }
+  if (plan.profile === "CALIBRATED_INSTRUMENT") {
+    const instruments = requestedTerms(requested, [
+      "pt100", "rtd", "resistance temperature detector", "strain gauge", "accelerometer",
+    ]);
+    const instrumentRequest = `${input.componentName} ${productSpecification}`;
+    const qualifiers = requestedTerms(instrumentRequest, [
+      "3-wire", "adhesive", "surface mount", "aluminum compatible", "triaxial", "low voltage",
+    ]);
+    const dimensions = instrumentRequest.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:ohm|v|mv|hz|khz)\b/g) ?? [];
+    const mountingAlternatives = ["adhesive", "surface mount"].filter((term) => qualifiers.includes(term));
+    const requiredQualifiers = qualifiers.filter((term) => !mountingAlternatives.includes(term));
+    return instruments.length > 0
+      && containsAnyIdentityTerm(itemIdentity, instruments)
+      && requiredQualifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term))
+      && (mountingAlternatives.length < 2 || mountingAlternatives.some((term) => containsIdentityTerm(capabilityExcerpt, term)))
+      && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension));
+  }
+  if (plan.profile === "ASSEMBLY_SERVICE") {
+    return /\b(?:wire|cable|data acquisition)?\s*harness\b/i.test(itemIdentity)
+      && /\b(?:assembl|build to print|continuity test|pin to pin)\w*\b/i.test(capabilityExcerpt);
+  }
+  if (plan.profile === "PACKAGING") {
+    const products = requestedTerms(`${input.componentName} ${productSpecification}`, ["packaging", "foam", "antistatic bag", "humidity indicator", "shipping case"]);
+    return products.length > 0 && products.every((term) => containsIdentityTerm(capabilityExcerpt, term));
+  }
+  if (plan.profile === "INSPECTION_SERVICE") {
+    return /\b(?:first article|inspection|metrology|measurement|dimensional)\b/i.test(itemIdentity)
+      && /\b(?:inspect|metrology|measure|as9102|report)\w*\b/i.test(capabilityExcerpt);
+  }
+  const requestedProduct = `${input.componentName} ${input.manufacturer ?? ""} ${input.mpn ?? ""} ${productSpecification}`;
+  const productTerms = requestedTerms(requestedProduct, GENERIC_PRODUCT_TERMS);
+  const qualifiers = requestedTerms(requestedProduct, GENERIC_QUALIFIER_TERMS);
+  const requestedAlternativeGroups = GENERIC_QUALIFIER_ALTERNATIVES
+    .map((group) => group.filter((term) => qualifiers.includes(term)))
+    .filter((group) => group.length > 1);
+  const alternativeTerms = new Set<string>(requestedAlternativeGroups.flat());
+  const requiredQualifiers = qualifiers.filter((term) => !alternativeTerms.has(term));
+  const requestedDimensions = requestedProduct.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:awg|v|mm|in|inch|inches|percent|%)\b/g) ?? [];
+  return productTerms.length > 0
+    && containsAnyIdentityTerm(itemIdentity, productTerms)
+    && qualifiers.length > 0
+    && requiredQualifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term))
+    && requestedAlternativeGroups.every((group) => group.some((term) => containsIdentityTerm(capabilityExcerpt, term)))
+    && requestedDimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension));
+}
+
+function supplierLeadReceiptBase(receipt: Omit<PublicSupplierLeadReceipt, "candidateId" | "receiptHash">) {
+  return {
+    provider: receipt.provider,
+    itemKey: receipt.itemKey,
+    companyName: receipt.companyName,
+    website: receipt.website,
+    role: receipt.role,
+    productCapability: receipt.productCapability,
+    sourceUrl: receipt.sourceUrl,
+    sourceTitle: receipt.sourceTitle,
+    companyIdentityExcerpt: receipt.companyIdentityExcerpt,
+    supplierRoleExcerpt: receipt.supplierRoleExcerpt,
+    productCapabilityExcerpt: receipt.productCapabilityExcerpt,
+    sourceTextHash: receipt.sourceTextHash,
+    searchRequestId: receipt.searchRequestId,
+    contentsRequestId: receipt.contentsRequestId,
+    contentsResponseHash: receipt.contentsResponseHash,
+    retrievedAt: receipt.retrievedAt,
+    freshnessPolicy: receipt.freshnessPolicy,
+  };
+}
+
+export function publicSupplierLeadReceiptHash(receipt: Omit<PublicSupplierLeadReceipt, "candidateId" | "receiptHash">) {
+  return hash(JSON.stringify(supplierLeadReceiptBase(receipt)));
+}
+
+export function validateExaPublicSupplierLeadReceipts(
+  input: ExaSupplierResearchInput,
+  capture: ExaRetrievalCapture,
+) {
+  if (capture.stage === "SEARCH_ONLY") return [];
+  if (
+    capture.provider !== "EXA"
+    || capture.freshnessPolicy !== "FORCED_LIVE"
+    || capture.searchHttpStatus < 200 || capture.searchHttpStatus >= 300
+    || capture.contentsHttpStatus < 200 || capture.contentsHttpStatus >= 300
+    || !/^[a-f0-9]{64}$/.test(capture.searchResponseHash)
+    || !/^[a-f0-9]{64}$/.test(capture.contentsResponseHash)
+    || !plausibleServerRetrievedAt(capture.retrievedAt)
+  ) return [];
+  const receipts: PublicSupplierLeadReceipt[] = [];
+  for (const source of capture.records) {
+    if (!source.proposal || !successfulFreshStatus(source.status, source.sourceUrl)) continue;
+    const sourceUrl = publicUrl(source.sourceUrl);
+    const companyName = text(source.proposal.supplierName, 180);
+    const role = supplierRole(source.proposal.supplierRole);
+    const itemIdentity = text(source.proposal.itemIdentity, 500);
+    const sourceBody = [source.text, ...source.highlights].filter(Boolean).join("\n");
+    if (
+      !sourceUrl
+      || !companyName
+      || !role
+      || !itemIdentity
+      || !roleAllowedForInput(input, role)
+      || !supplierCompanyMatchesDomain(companyName, sourceUrl)
+      || source.sourceTextHash !== hash(sourceBody)
+    ) continue;
+    const companyIdentityExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.companyIdentityEvidence, 1_000));
+    const supplierRoleExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.supplierRoleEvidence, 1_000));
+    const productCapabilityExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.productCapabilityEvidence, 1_000));
+    if (
+      !companyIdentityExcerpt
+      || !supplierRoleExcerpt
+      || !productCapabilityExcerpt
+      || !containsPhrase(companyIdentityExcerpt, companyName)
+      || !containsPhrase(supplierRoleExcerpt, companyName)
+      || !containsPhrase(productCapabilityExcerpt, companyName)
+      || !explicitRoleEvidence(supplierRoleExcerpt, role)
+      || !sourceSupportsRequestedCapability(input, itemIdentity, productCapabilityExcerpt)
+    ) continue;
+    const base: Omit<PublicSupplierLeadReceipt, "candidateId" | "receiptHash"> = {
+      provider: "EXA",
+      itemKey: input.componentItemKey,
+      companyName,
+      website: new URL(sourceUrl).origin,
+      role,
+      productCapability: itemIdentity,
+      sourceUrl,
+      sourceTitle: source.sourceTitle,
+      companyIdentityExcerpt,
+      supplierRoleExcerpt,
+      productCapabilityExcerpt,
+      sourceTextHash: source.sourceTextHash,
+      searchRequestId: capture.searchRequestId,
+      contentsRequestId: capture.contentsRequestId,
+      contentsResponseHash: capture.contentsResponseHash,
+      retrievedAt: capture.retrievedAt,
+      freshnessPolicy: "FORCED_LIVE",
+    };
+    receipts.push({ ...base, candidateId: null, receiptHash: publicSupplierLeadReceiptHash(base) });
+  }
+  return receipts;
 }
 
 export function validateExaPublicListingReceipts(
@@ -816,7 +1134,13 @@ async function exaRequest(args: {
       cache: "no-store",
       redirect: "error",
     });
-    if (!response.ok) throw new ExaResearchError("PROVIDER_FAILURE");
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new ExaResearchError("PROVIDER_AUTHENTICATION_FAILED");
+      }
+      if (response.status === 429) throw new ExaResearchError("PROVIDER_RATE_LIMITED");
+      throw new ExaResearchError("PROVIDER_FAILURE");
+    }
     const parsed = await readBoundedJson(response, args.maxBytes);
     return { ...parsed, status: response.status };
   } catch (error) {
@@ -830,32 +1154,20 @@ async function exaRequest(args: {
   }
 }
 
-function searchQuery(input: ExaSupplierResearchInput) {
-  const discoverySpecification = text(input.specification, 1_000)
-    .replace(/\.\s*Supplier deliverable:\s*/i, ". Required QA: ")
-    .trim();
-  return text([
-    input.mpn,
-    input.manufacturer,
-    discoverySpecification,
-    input.componentName,
-    input.sourceRegion && input.sourceRegion.toLowerCase() !== "any region"
-      ? `source region ${input.sourceRegion}`
-      : null,
-    "supplier manufacturer distributor service center stockist cut to size",
-  ].filter(Boolean).join(" "), 1_200);
-}
-
 const OFFER_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
-    "supplierName", "supplierRole", "itemIdentity", "manufacturer", "mpn", "priceAmount",
+    "supplierName", "supplierRole", "companyIdentityEvidence", "supplierRoleEvidence",
+    "productCapabilityEvidence", "itemIdentity", "manufacturer", "mpn", "priceAmount",
     "currency", "unitOfMeasure", "packageQuantity", "evidenceText",
   ],
   properties: {
     supplierName: { type: ["string", "null"] },
     supplierRole: { type: ["string", "null"] },
+    companyIdentityEvidence: { type: ["string", "null"] },
+    supplierRoleEvidence: { type: ["string", "null"] },
+    productCapabilityEvidence: { type: ["string", "null"] },
     itemIdentity: { type: ["string", "null"] },
     manufacturer: { type: ["string", "null"] },
     mpn: { type: ["string", "null"] },
@@ -883,35 +1195,39 @@ function supportedEnvelope(value: unknown, sourceUrl: string) {
 
 function buildRawCandidates(
   capture: ExaRetrievalCapture,
-  receipts: PublicListingReceipt[],
+  listingReceipts: PublicListingReceipt[],
+  leadReceipts: PublicSupplierLeadReceipt[],
 ) {
   return capture.records.flatMap((source) => {
     if (!successfulFreshStatus(source.status, source.sourceUrl)) return [];
     const proposal = source.proposal;
-    const companyName = resultCompanyName(source.sourceUrl);
-    const receipt = receipts.find((candidate) => candidate.sourceUrl === source.sourceUrl) ?? null;
+    const leadReceipt = leadReceipts.find((candidate) => candidate.sourceUrl === source.sourceUrl) ?? null;
+    const listingReceipt = listingReceipts.find((candidate) => candidate.sourceUrl === source.sourceUrl) ?? null;
+    const companyName = leadReceipt?.companyName ?? resultCompanyName(source.sourceUrl);
     return [{
       id: source.sourceId,
       companyName,
-      website: new URL(source.sourceUrl).origin,
-      // Exa summaries can propose a role, but a public listing does not prove
-      // manufacturer or distributor status. Keep durable roles empty.
-      roles: [],
+      website: leadReceipt?.website ?? new URL(source.sourceUrl).origin,
+      roles: leadReceipt ? [leadReceipt.role] : [],
       country: unknownEnvelope(),
       facility: unknownEnvelope(),
-      productCapability: receipt
-        ? supportedEnvelope(receipt.itemIdentity, source.sourceUrl)
+      productCapability: leadReceipt
+        ? supportedEnvelope(leadReceipt.productCapability, source.sourceUrl)
+        : listingReceipt
+          ? supportedEnvelope(listingReceipt.itemIdentity, source.sourceUrl)
         : proposal?.itemIdentity
           ? { value: proposal.itemIdentity, state: "PARTIAL", confidence: null, sourceUrls: [source.sourceUrl], observedAt: null }
           : unknownEnvelope(),
-      price: receipt ? supportedEnvelope(receipt.amount, source.sourceUrl) : unknownEnvelope(),
-      currency: receipt ? supportedEnvelope(receipt.currency, source.sourceUrl) : unknownEnvelope(),
-      unitOfMeasure: receipt ? supportedEnvelope(receipt.unitOfMeasure, source.sourceUrl) : unknownEnvelope(),
+      price: listingReceipt ? supportedEnvelope(listingReceipt.amount, source.sourceUrl) : unknownEnvelope(),
+      currency: listingReceipt ? supportedEnvelope(listingReceipt.currency, source.sourceUrl) : unknownEnvelope(),
+      unitOfMeasure: listingReceipt ? supportedEnvelope(listingReceipt.unitOfMeasure, source.sourceUrl) : unknownEnvelope(),
       minimumOrderQuantity: unknownEnvelope(),
       leadTimeDays: unknownEnvelope(),
       sourceUrls: [source.sourceUrl],
-      cautions: receipt
-        ? ["Forced-live public listing capture. Supplier qualification and RFQ confirmation remain required."]
+      cautions: leadReceipt
+        ? ["Forced-live public supplier evidence. Operator qualification and RFQ confirmation remain required."]
+        : listingReceipt
+          ? ["Forced-live public listing capture. Supplier identity, role, qualification, and RFQ confirmation remain required."]
         : ["No exact forced-live price tuple survived evidence validation."],
     }];
   });
@@ -993,7 +1309,7 @@ function retainSearchDiscovery(args: {
     trustClaimedObservedAt: false,
   });
   const warning = args.failure.code === "PROVIDER_TIMEOUT"
-    ? "Live page verification timed out. Public supplier pages from discovery were retained, but product fit, price, and availability remain unverified."
+    ? "Live content validation timed out. Public supplier pages from discovery were retained, but company identity, supplier role, product fit, price, and availability remain unverified."
     : "Live page verification failed. Public supplier pages from discovery were retained, but product fit, price, and availability remain unverified.";
   return {
     ...normalized,
@@ -1001,6 +1317,7 @@ function retainSearchDiscovery(args: {
     warnings: [...normalized.warnings, warning],
     retrieval: capture,
     publicListingReceipts: [],
+    publicSupplierLeadReceipts: [],
   };
 }
 
@@ -1010,7 +1327,9 @@ export async function searchExaComponentSuppliers(
 ): Promise<ExaSupplierResearchResult> {
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const deadlineAt = Date.now() + TOTAL_TIMEOUT_MS;
-  const query = searchQuery(input);
+  const querySelection = selectedSupplierResearchQueryVariant(input);
+  if (!querySelection.selected) throw new ExaResearchError("INVALID_STRUCTURED_RESPONSE");
+  const query = querySelection.selected.query;
   const search = await exaRequest({
     url: EXA_SEARCH_URL,
     apiKey: dependencies.apiKey,
@@ -1029,6 +1348,13 @@ export async function searchExaComponentSuppliers(
     return url && id ? [{ result, index, url, id }] : [];
   }).filter((candidate, index, candidates) => candidates.findIndex((other) => other.url === candidate.url) === index).slice(0, MAX_RESULTS);
   if (!searchRequestId || !selectedResults.length) throw new ExaResearchError("INVALID_STRUCTURED_RESPONSE");
+  const contentResultsToRetrieve = selectedResults.filter((candidate, index, candidates) => {
+    const hostname = new URL(candidate.url).hostname.replace(/^www\./, "").toLowerCase();
+    return candidates.findIndex((other) => {
+      const otherHostname = new URL(other.url).hostname.replace(/^www\./, "").toLowerCase();
+      return hostname === otherHostname || hostname.endsWith(`.${otherHostname}`) || otherHostname.endsWith(`.${hostname}`);
+    }) === index;
+  }).slice(0, MAX_CONTENT_RESULTS);
   const highlightQuery = text([
     `Exact requested item: ${input.componentName}`,
     input.manufacturer ? `manufacturer ${input.manufacturer}` : null,
@@ -1046,11 +1372,11 @@ export async function searchExaComponentSuppliers(
       maxBytes: MAX_CONTENTS_RESPONSE_BYTES,
       deadlineAt,
       body: {
-        urls: selectedResults.map((result) => result.url),
+        urls: contentResultsToRetrieve.map((result) => result.url),
         text: { maxCharacters: MAX_RECORD_TEXT, verbosity: "standard", includeSections: ["header", "body", "metadata"] },
         highlights: { query: highlightQuery, maxCharacters: MAX_RECORD_HIGHLIGHTS },
         summary: {
-          query: `${highlightQuery}. Return null for every value not printed by this exact page. evidenceText must be one verbatim excerpt that contains the exact item identity, amount, ISO currency code, and unit or package basis.`,
+          query: `${highlightQuery}. Return null for every value not printed by this exact page. companyIdentityEvidence must be one verbatim excerpt that names the company operating this source domain. supplierRoleEvidence must be one verbatim excerpt that explicitly states the company role. productCapabilityEvidence must be one verbatim excerpt that states this company supplies, manufactures, distributes, processes, fabricates, assembles, calibrates, or inspects the requested item or capability. evidenceText must be one verbatim excerpt that contains the exact item identity, amount, ISO currency code, and unit or package basis.`,
           schema: OFFER_SCHEMA,
         },
         maxAgeHours: 0,
@@ -1073,11 +1399,11 @@ export async function searchExaComponentSuppliers(
   const contentsRequestId = text(contentsBody.requestId, 220);
   const contentResults = Array.isArray(contentsBody.results) ? contentsBody.results.map(record) : [];
   const statuses = Array.isArray(contentsBody.statuses) ? contentsBody.statuses.map(parseStatus).filter((status): status is ExaSourceStatus => Boolean(status)) : [];
-  const hasExactStatusCoverage = selectedResults.every((result) => (
+  const hasExactStatusCoverage = contentResultsToRetrieve.every((result) => (
     statuses.filter((status) => sameUrl(status.id, result.url)).length === 1
   ));
   const boundContentResults = bindContentResults({
-    requestedUrls: selectedResults.map((result) => result.url),
+    requestedUrls: contentResultsToRetrieve.map((result) => result.url),
     results: contentResults,
     statuses,
   });
@@ -1085,7 +1411,7 @@ export async function searchExaComponentSuppliers(
     throw new ExaResearchError("INVALID_STRUCTURED_RESPONSE");
   }
   const retrievedAt = (dependencies.now ?? (() => new Date()))().toISOString();
-  const records = selectedResults.flatMap((searchResult, index) => {
+  const records = contentResultsToRetrieve.flatMap((searchResult, index) => {
     const content = boundContentResults[index];
     const status = statuses.find((candidate) => sameUrl(candidate.id, searchResult.url)) ?? null;
     const contentText = typeof content?.text === "string" ? content.text : "";
@@ -1123,18 +1449,28 @@ export async function searchExaComponentSuppliers(
     records,
   };
   const receipts = validateExaPublicListingReceipts(input, capture);
-  const raw = { candidates: buildRawCandidates(capture, receipts), warnings: [] };
-  const sources: EvidenceSource[] = records.map((source) => ({ url: source.sourceUrl, title: source.sourceTitle ?? undefined, sourceType: "PUBLIC" }));
+  const leadReceipts = validateExaPublicSupplierLeadReceipts(input, capture);
+  const raw = { candidates: buildRawCandidates(capture, receipts, leadReceipts), warnings: [] };
+  const sources: EvidenceSource[] = records.map((source) => ({
+    url: source.sourceUrl,
+    title: source.sourceTitle ?? undefined,
+    sourceType: "PUBLIC",
+  }));
   const normalized = normalizeSupplierResearch({
     officeId: input.officeId,
     workspaceId: input.workspaceId,
     componentItemKey: input.componentItemKey,
     raw,
     providerSources: sources,
+    validatedSupplierLeadSourceUrls: leadReceipts.map((receipt) => receipt.sourceUrl),
     now: new Date(retrievedAt),
     trustClaimedObservedAt: false,
   });
   const boundReceipts = receipts.flatMap((receipt) => {
+    const candidate = normalized.candidates.find((value) => value.sourceUrls.includes(receipt.sourceUrl));
+    return candidate ? [{ ...receipt, candidateId: candidate.id }] : [];
+  });
+  const boundLeadReceipts = leadReceipts.flatMap((receipt) => {
     const candidate = normalized.candidates.find((value) => value.sourceUrls.includes(receipt.sourceUrl));
     return candidate ? [{ ...receipt, candidateId: candidate.id }] : [];
   });
@@ -1143,5 +1479,12 @@ export async function searchExaComponentSuppliers(
     ...records.flatMap((source) => successfulFreshStatus(source.status, source.sourceUrl) ? [] : [`Exa could not force-live retrieve ${source.sourceUrl}.`]),
     ...(boundReceipts.length ? [] : ["No exact forced-live public price tuple survived evidence validation."]),
   ];
-  return { ...normalized, degraded: normalized.degraded || !records.some((source) => successfulFreshStatus(source.status, source.sourceUrl)), warnings, retrieval: capture, publicListingReceipts: boundReceipts };
+  return {
+    ...normalized,
+    degraded: normalized.degraded || !records.some((source) => successfulFreshStatus(source.status, source.sourceUrl)),
+    warnings,
+    retrieval: capture,
+    publicListingReceipts: boundReceipts,
+    publicSupplierLeadReceipts: boundLeadReceipts,
+  };
 }

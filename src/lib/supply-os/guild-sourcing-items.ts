@@ -1,16 +1,23 @@
 import type { AtlasInventoryItem } from "./atlas-robotics-inventory";
 
-type GuildSourcingLine = {
+export type GuildSourcingClassification = "SUPPLIER_SEARCH" | "CLARIFICATION_REQUIRED" | "REQUIREMENT_ONLY";
+
+type GuildSourcingLineInput = {
   item: string;
   name: string;
   specification: string;
-  quantity: number;
+  quantity: number | null;
   requirement: string;
-  unit: string;
+  unit: string | null;
   deliverable: string;
 };
 
-const GUILD_SOURCING_LINES: GuildSourcingLine[] = [
+export type GuildSourcingLine = GuildSourcingLineInput & {
+  sku: string;
+  classification: GuildSourcingClassification;
+};
+
+const GUILD_SOURCING_LINE_INPUTS: GuildSourcingLineInput[] = [
   { item: "001", name: "Main cylindrical structural skin stock", specification: "Aluminum alloy 6061-T6 sheet, 2.0 mm nominal thickness, mill finish, cut-to-size blanks per released drawing", quantity: 4, requirement: "4 blanks", unit: "blanks", deliverable: "Material certificate showing alloy and temper; heat or lot traceability" },
   { item: "002", name: "Internal equipment-deck plate stock", specification: "6061-T651 aluminum plate, 6.35 mm nominal, precision-sawn blanks", quantity: 3, requirement: "3 blanks", unit: "blanks", deliverable: "Material certificate and dimensional inspection report" },
   { item: "003", name: "Removable access-panel stock", specification: "5052-H32 aluminum sheet, 1.6 mm nominal, deburred edges", quantity: 6, requirement: "6 blanks", unit: "blanks", deliverable: "Certificate of conformance" },
@@ -37,7 +44,7 @@ const GUILD_SOURCING_LINES: GuildSourcingLine[] = [
   { item: "024", name: "Internal electronics enclosure", specification: "Machined 6061-T6 aluminum enclosure, removable lid, conductive gasket provision; blank enclosure only", quantity: 3, requirement: "3 enclosures", unit: "enclosures", deliverable: "Dimensional inspection and material certificate" },
   { item: "025", name: "Printed circuit board carrier", specification: "FR-4 laminate, 1.6 mm nominal, no active flight-control circuitry", quantity: 6, requirement: "6 carriers", unit: "carriers", deliverable: "Fabrication certificate of conformance" },
   { item: "026", name: "Electrical standoffs", specification: "M3 threaded nylon or PEEK standoffs, assorted 10 to 25 mm heights", quantity: 50, requirement: "50 standoffs", unit: "standoffs", deliverable: "Material identification" },
-  { item: "027", name: "Inert subsystem mass simulator", specification: "Machined aluminum or steel ballast blocks sized solely to reproduce specified test mass; permanently engraved INERT MASS SIMULATOR", quantity: 1, requirement: "As required", unit: "lot", deliverable: "Actual measured mass and serial number" },
+  { item: "027", name: "Inert subsystem mass simulator", specification: "Machined aluminum or steel ballast blocks sized solely to reproduce specified test mass; permanently engraved INERT MASS SIMULATOR", quantity: null, requirement: "Quantity and unit require clarification", unit: null, deliverable: "Actual measured mass and serial number" },
   { item: "028", name: "Temperature instrumentation", specification: "100 ohm platinum resistance temperature detector, PT100 RTD, 3-wire, adhesive or surface-mount style", quantity: 12, requirement: "12 sensors", unit: "sensors", deliverable: "Calibration certificate" },
   { item: "029", name: "Structural test strain gauges", specification: "Foil strain gauges, 350 ohm nominal, general-purpose aluminum-compatible gauge", quantity: 16, requirement: "16 gauges", unit: "gauges", deliverable: "Manufacturer lot and gauge factor documentation" },
   { item: "030", name: "Ground-test accelerometer", specification: "Industrial triaxial accelerometer, low-voltage output, used only for vibration or handling qualification", quantity: 3, requirement: "3 accelerometers", unit: "accelerometers", deliverable: "Calibration certificate and serial number" },
@@ -53,8 +60,18 @@ const GUILD_SOURCING_LINES: GuildSourcingLine[] = [
   { item: "040", name: "First-article inspection package", specification: "Measurement report against released drawing for first production unit", quantity: 1, requirement: "1 package", unit: "package", deliverable: "Signed inspection record and nonconformance disposition" },
 ];
 
-export const GUILD_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_LINES.map((line) => ({
+export const GUILD_SOURCING_LINES: GuildSourcingLine[] = GUILD_SOURCING_LINE_INPUTS.map((line) => ({
+  ...line,
   sku: `GUILD-${line.item}`,
+  classification: line.item === "027"
+    ? "CLARIFICATION_REQUIRED"
+    : line.item === "039"
+      ? "REQUIREMENT_ONLY"
+      : "SUPPLIER_SEARCH",
+}));
+
+export const GUILD_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_LINES.map((line) => ({
+  sku: line.sku,
   name: line.name,
   specification: line.specification,
   quantityPerRobot: 0,
@@ -62,11 +79,14 @@ export const GUILD_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_LINES.m
   allocated: 0,
   confirmedInbound: 0,
   location: "Program sourcing",
-  targetStock: line.quantity,
+  // Keep clarification lines visible in the demo queue without treating the
+  // display placeholder as a researchable requested quantity.
+  targetStock: line.quantity ?? 1,
   candidates: [],
   requirementLabel: line.requirement,
-  requestedQuantity: line.quantity,
-  requestedUnit: line.unit,
+  ...(line.quantity === null ? {} : { requestedQuantity: line.quantity }),
+  ...(line.unit === null ? {} : { requestedUnit: line.unit }),
+  requiredQuantity: line.quantity,
   supplierDeliverable: line.deliverable,
   needByDate: "2026-09-30",
   deliveryLocation: "Austin, TX, United States",

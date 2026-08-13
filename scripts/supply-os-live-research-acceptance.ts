@@ -1,10 +1,81 @@
 import assert from "node:assert/strict";
-import { searchComponentSuppliers } from "../src/lib/supply-os/component-supplier-research";
-import { GUILD_PROCUREMENT_BOM, REPRESENTATIVE_LIVE_RESEARCH_IDS, type ProcurementAcceptanceItem } from "./fixtures/guild-procurement-bom";
+import type { SupplierResearchResult } from "../src/lib/supply-os/research";
+import {
+  GUILD_PROCUREMENT_BOM,
+  REPRESENTATIVE_LIVE_RESEARCH_IDS,
+  type ProcurementAcceptanceItem,
+} from "./fixtures/guild-procurement-bom";
 
-type ResearchResult = Awaited<ReturnType<typeof searchComponentSuppliers>>;
+type ResearchRun = {
+  id: string;
+  workspaceId: string;
+  status: string;
+  output?: SupplierResearchResult | null;
+  error?: { message?: string } | null;
+};
 
-function hasAttributableListingClaim(result: ResearchResult) {
+type StartResponse = {
+  run?: ResearchRun;
+  reused?: boolean;
+  pollUrl?: string;
+  error?: string;
+};
+
+type PollResponse = {
+  run?: ResearchRun | null;
+  error?: string;
+};
+
+type AcceptanceConfig = {
+  baseUrl: string;
+  cookie: string;
+  workspaceId: string;
+  runTimeoutMs: number;
+  pollIntervalMs: number;
+};
+
+const ACTIVE_RUN_STATUSES = new Set(["QUEUED", "RUNNING"]);
+const TERMINAL_RUN_STATUSES = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
+
+function requiredEnvironment(name: string) {
+  const value = process.env[name]?.trim();
+  assert.ok(value, `${name} is required for deployed supplier research acceptance`);
+  return value;
+}
+
+function boundedMilliseconds(name: string, fallback: number, minimum: number, maximum: number) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  assert.ok(Number.isInteger(value) && value >= minimum && value <= maximum, `${name} must be an integer from ${minimum} to ${maximum}`);
+  return value;
+}
+
+function acceptanceConfig(): AcceptanceConfig {
+  const baseUrl = requiredEnvironment("SUPPLY_OS_ACCEPTANCE_BASE_URL").replace(/\/$/, "");
+  const parsedBaseUrl = new URL(baseUrl);
+  assert.ok(["http:", "https:"].includes(parsedBaseUrl.protocol), "SUPPLY_OS_ACCEPTANCE_BASE_URL must be HTTP or HTTPS");
+  return {
+    baseUrl,
+    cookie: requiredEnvironment("SUPPLY_OS_ACCEPTANCE_COOKIE"),
+    workspaceId: requiredEnvironment("SUPPLY_OS_ACCEPTANCE_WORKSPACE_ID"),
+    runTimeoutMs: boundedMilliseconds("SUPPLY_OS_ACCEPTANCE_RUN_TIMEOUT_MS", 15 * 60_000, 30_000, 60 * 60_000),
+    pollIntervalMs: boundedMilliseconds("SUPPLY_OS_ACCEPTANCE_POLL_INTERVAL_MS", 2_500, 500, 30_000),
+  };
+}
+
+function publicUrl(value: unknown) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || !url.hostname) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function hasAttributableListingClaim(result: SupplierResearchResult) {
   return result.candidates.some((candidate) => {
     if (
       candidate.price.state !== "SUPPORTED"
@@ -28,17 +99,17 @@ function hasAttributableListingClaim(result: ResearchResult) {
 }
 
 function selectedItems() {
-  const all = process.argv.includes("--all");
+  assert.ok(!process.argv.includes("--all"), "Use the continuous sourcing acceptance for all 38 searchable GUILD lines");
   const idsArgument = process.argv.find((argument) => argument.startsWith("--ids="));
-  const ids = all
-    ? GUILD_PROCUREMENT_BOM.filter((item) => item.expectedOutcome === "RESEARCHABLE").map((item) => item.id)
-    : idsArgument
-      ? idsArgument.slice("--ids=".length).split(",").map((id) => id.trim()).filter(Boolean)
-      : [...REPRESENTATIVE_LIVE_RESEARCH_IDS];
+  const ids = idsArgument
+    ? idsArgument.slice("--ids=".length).split(",").map((id) => id.trim()).filter(Boolean)
+    : [...REPRESENTATIVE_LIVE_RESEARCH_IDS];
+  assert.ok(ids.length > 0 && ids.length <= 10, "Single-run live acceptance accepts from 1 to 10 item IDs");
+  assert.equal(new Set(ids).size, ids.length, "Single-run live acceptance item IDs must be unique");
   return ids.map((id) => {
     const item = GUILD_PROCUREMENT_BOM.find((candidate) => candidate.id === id);
     assert.ok(item, `unknown BOM item ${id}`);
-    assert.equal(item.expectedOutcome, "RESEARCHABLE", `${id} requires clarification and cannot enter live research`);
+    assert.equal(item.expectedOutcome, "RESEARCHABLE", `${id} does not enter supplier research`);
     return item;
   });
 }
@@ -59,50 +130,109 @@ function requestBody(item: ProcurementAcceptanceItem, workspaceId: string) {
   };
 }
 
-async function research(item: ProcurementAcceptanceItem): Promise<ResearchResult> {
-  const baseUrl = process.env.SUPPLY_OS_ACCEPTANCE_BASE_URL?.replace(/\/$/, "");
-  const cookie = process.env.SUPPLY_OS_ACCEPTANCE_COOKIE;
-  const workspaceId = process.env.SUPPLY_OS_ACCEPTANCE_WORKSPACE_ID ?? "acceptance-guild";
-  if (baseUrl) {
-    assert.ok(cookie, "SUPPLY_OS_ACCEPTANCE_COOKIE is required for deployed acceptance tests");
-    const response = await fetch(`${baseUrl}/api/supply-os/supplier-research`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify(requestBody(item, workspaceId)),
-    });
-    const payload = await response.json() as { result?: ResearchResult; error?: string };
-    assert.equal(response.status, 200, `${item.id} deployed research failed: ${payload.error ?? response.statusText}`);
-    assert.ok(payload.result, `${item.id} deployed research returned no result`);
-    return payload.result;
+async function responseJson<T>(response: Response) {
+  const body = await response.text();
+  assert.ok(body, `HTTP ${response.status} returned an empty response`);
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    assert.fail(`HTTP ${response.status} returned invalid JSON`);
   }
-  assert.ok(process.env.OPENAI_API_KEY, "Set OPENAI_API_KEY or SUPPLY_OS_ACCEPTANCE_BASE_URL plus SUPPLY_OS_ACCEPTANCE_COOKIE");
-  return searchComponentSuppliers({
-    officeId: "acceptance-office",
-    workspaceId,
-    componentItemKey: `request:guild-${item.id}`,
-    componentName: item.description,
-    specification: `${item.specification}. Supplier deliverable: ${item.supplierDeliverable}.`,
-    targetCountry: "United States",
-    requestedQuantity: item.quantity ?? undefined,
-    requestedUnit: item.unit ?? undefined,
-    sourceRegion: "Any region",
-    deliveryLocation: "Austin, TX, United States",
-    needByDate: "2026-10-15",
+}
+
+async function fetchWithTimeout(url: URL | string, init: RequestInit, timeoutMs = 30_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function assertAttributableResult(item: ProcurementAcceptanceItem, result: SupplierResearchResult) {
+  assert.equal(result.degraded, false, `${item.id} degraded: ${result.warnings.join(" ")}`);
+  assert.ok(result.candidates.length > 0, `${item.id} returned no attributable supplier candidate`);
+  for (const candidate of result.candidates) {
+    assert.equal(candidate.status, "REVIEW_REQUIRED", `${item.id} candidate ${candidate.companyName} bypassed human review`);
+    assert.ok(candidate.companyName.trim(), `${item.id} returned a candidate without a company name`);
+    const website = candidate.website ? publicUrl(candidate.website) : null;
+    const sourceUrls = candidate.sourceUrls.flatMap((source) => publicUrl(source) ? [source] : []);
+    assert.ok(website || sourceUrls.length, `${item.id} candidate ${candidate.companyName} has no attributable public source`);
+    assert.equal(sourceUrls.length, candidate.sourceUrls.length, `${item.id} candidate ${candidate.companyName} contains an invalid source URL`);
+    assert.equal(candidate.productCapability.state, "SUPPORTED", `${item.id} candidate ${candidate.companyName} has no supported product capability`);
+    assert.ok(candidate.productCapability.sources.some((source) => publicUrl(source.url)), `${item.id} candidate ${candidate.companyName} has no capability source`);
+  }
+}
+
+async function pollResearchRun(args: {
+  config: AcceptanceConfig;
+  item: ProcurementAcceptanceItem;
+  run: ResearchRun;
+  pollUrl: string;
+}) {
+  const pollUrl = new URL(args.pollUrl, args.config.baseUrl);
+  assert.equal(pollUrl.origin, new URL(args.config.baseUrl).origin, "Supplier research polling must stay on the acceptance deployment");
+  assert.equal(pollUrl.searchParams.get("runId"), args.run.id, "pollUrl must identify the queued run");
+  assert.equal(pollUrl.searchParams.get("workspaceId"), args.config.workspaceId, "pollUrl must retain the real workspace");
+  const deadline = Date.now() + args.config.runTimeoutMs;
+  let lastStatus = args.run.status;
+  while (Date.now() < deadline) {
+    await wait(args.config.pollIntervalMs);
+    const response = await fetchWithTimeout(pollUrl, {
+      headers: { cookie: args.config.cookie },
+      cache: "no-store",
+    });
+    const payload = await responseJson<PollResponse>(response);
+    assert.equal(response.status, 200, `${args.item.id} poll failed: ${payload.error ?? response.statusText}`);
+    assert.match(response.headers.get("cache-control") ?? "", /no-store/i, "supplier research polling must not be cached");
+    const run = payload.run;
+    assert.ok(run, `${args.item.id} poll returned no run`);
+    assert.equal(run.id, args.run.id, `${args.item.id} poll returned the wrong run`);
+    assert.equal(run.workspaceId, args.config.workspaceId, `${args.item.id} poll returned the wrong workspace`);
+    assert.ok(ACTIVE_RUN_STATUSES.has(run.status) || TERMINAL_RUN_STATUSES.has(run.status), `${args.item.id} returned unexpected run status ${run.status}`);
+    lastStatus = run.status;
+    if (run.status === "SUCCEEDED") {
+      assert.ok(run.output, `${args.item.id} succeeded without a research result`);
+      return run.output;
+    }
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      assert.fail(`${args.item.id} ended ${run.status}: ${run.error?.message ?? "No failure reason was returned."}`);
+    }
+  }
+  assert.fail(`${args.item.id} run ${args.run.id} remained ${lastStatus} after ${args.config.runTimeoutMs} ms`);
+}
+
+async function research(config: AcceptanceConfig, item: ProcurementAcceptanceItem) {
+  const response = await fetchWithTimeout(`${config.baseUrl}/api/supply-os/supplier-research`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: config.cookie },
+    body: JSON.stringify(requestBody(item, config.workspaceId)),
   });
+  const payload = await responseJson<StartResponse>(response);
+  assert.equal(response.status, 202, `${item.id} enqueue failed: ${payload.error ?? response.statusText}`);
+  assert.match(response.headers.get("cache-control") ?? "", /no-store/i, "supplier research enqueue responses must not be cached");
+  assert.ok(payload.run?.id, `${item.id} enqueue returned no durable run`);
+  assert.equal(payload.run.workspaceId, config.workspaceId, `${item.id} enqueue used the wrong workspace`);
+  assert.ok(ACTIVE_RUN_STATUSES.has(payload.run.status), `${item.id} enqueue returned unexpected status ${payload.run.status}`);
+  assert.equal(typeof payload.reused, "boolean", `${item.id} enqueue omitted duplicate-run state`);
+  assert.ok(payload.pollUrl, `${item.id} enqueue returned no poll URL`);
+  return pollResearchRun({ config, item, run: payload.run, pollUrl: payload.pollUrl });
 }
 
 async function main() {
+  const config = acceptanceConfig();
   const items = selectedItems();
-  const results: Array<{ id: string; description: string; result: ResearchResult }> = [];
+  const results: Array<{ id: string; description: string; result: SupplierResearchResult }> = [];
   for (let index = 0; index < items.length; index += 2) {
     const batch = items.slice(index, index + 2);
-    const batchResults = await Promise.all(batch.map(async (item) => ({ item, result: await research(item) })));
+    const batchResults = await Promise.all(batch.map(async (item) => ({ item, result: await research(config, item) })));
     for (const { item, result } of batchResults) {
-      assert.equal(result.degraded, false, `${item.id} degraded: ${result.warnings.join(" ")}`);
-      assert.ok(result.candidates.length > 0, `${item.id} returned no attributable supplier candidate`);
-      for (const candidate of result.candidates) {
-        assert.ok(candidate.website || candidate.sourceUrls.length, `${item.id} candidate ${candidate.companyName} has no attributable source`);
-      }
+      assertAttributableResult(item, result);
       results.push({ id: item.id, description: item.description, result });
       console.log(`${item.id} ${item.description}: ${result.candidates.length} attributable candidate(s)`);
     }
@@ -119,7 +249,8 @@ async function main() {
 
   console.log(JSON.stringify({
     testedAt: new Date().toISOString(),
-    mode: process.env.SUPPLY_OS_ACCEPTANCE_BASE_URL ? "deployed" : "direct-provider",
+    mode: "deployed-async",
+    workspaceId: config.workspaceId,
     results: results.map(({ id, description, result }) => ({
       id,
       description,

@@ -26,6 +26,8 @@ import {
 } from "../src/lib/supply-os/procurement-case-persistence";
 import {
   completeSourcingResearchRun,
+  failStaleRunningSourcingResearchRuns,
+  getSourcingResearchRun,
   listSourcingResearchPage,
   listSourcingResearchRuns,
   startSourcingResearchRun,
@@ -61,6 +63,11 @@ import { normalizeSupplierQuoteExtraction } from "../src/lib/supply-os/supplier-
 import { SupplierQuoteAttachmentError } from "../src/lib/supply-os/supplier-quote-attachment-text";
 import { returnStaleReplacementToSourcing } from "../src/lib/supply-os/purchase-order-revision";
 import { supplyIntelligenceProfile } from "../src/lib/supply-os/supply-intelligence-persistence";
+import {
+  GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS,
+  guildSupplierResearchCampaignIdempotencyKey,
+  startOrResumeGuildSupplierResearchCampaign,
+} from "../src/lib/supply-os/supplier-research-campaign";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -102,6 +109,77 @@ async function main() {
   try {
     const context = await makeContext("owner");
     officeId = context.officeId;
+    const priorExaApiKey = process.env.EXA_API_KEY;
+    try {
+      process.env.EXA_API_KEY = "supplier-campaign-trigger-contract";
+      const firstCampaign = await startOrResumeGuildSupplierResearchCampaign({ context, now: new Date("2026-08-12T12:00:00.000Z") });
+      const firstCampaignRow = await prisma.supplyCapabilityRun.findUniqueOrThrow({
+        where: { id: firstCampaign.campaign.id },
+        select: { id: true, status: true, idempotencyKey: true },
+      });
+      assert.equal(firstCampaignRow.status, "RUNNING", "campaign parent must pass QUEUED to RUNNING through the database state guard");
+      assert.equal(firstCampaignRow.idempotencyKey, guildSupplierResearchCampaignIdempotencyKey());
+      await prisma.supplyCapabilityRun.update({
+        where: { id: firstCampaignRow.id },
+        data: { status: "FAILED", error: { message: "PROVIDER_AUTHENTICATION_FAILED: Test retry boundary." }, failedAt: new Date("2026-08-12T12:01:00.000Z") },
+      });
+      const retriedCampaign = await startOrResumeGuildSupplierResearchCampaign({ context, now: new Date("2026-08-12T12:02:00.000Z") });
+      const retriedCampaignRow = await prisma.supplyCapabilityRun.findUniqueOrThrow({
+        where: { id: retriedCampaign.campaign.id },
+        select: { id: true, status: true, idempotencyKey: true, parentRunId: true },
+      });
+      assert.notEqual(retriedCampaignRow.id, firstCampaignRow.id, "retry must create a new immutable campaign generation");
+      assert.equal(retriedCampaignRow.parentRunId, firstCampaignRow.id, "retry generation must retain audit lineage to the terminal parent");
+      assert.equal(retriedCampaignRow.status, "RUNNING");
+      assert.equal(retriedCampaignRow.idempotencyKey, `${guildSupplierResearchCampaignIdempotencyKey()}:generation:2`);
+      let latestCampaignId = retriedCampaignRow.id;
+      for (let generation = 3; generation <= GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS; generation += 1) {
+        const failedAt = new Date(Date.UTC(2026, 7, 12, 12, generation * 2));
+        await prisma.supplyCapabilityRun.update({
+          where: { id: latestCampaignId },
+          data: {
+            status: "FAILED",
+            error: { message: "CAMPAIGN_BLOCKED: Test bounded manual retry generation." },
+            failedAt,
+          },
+        });
+        const nextGeneration = await startOrResumeGuildSupplierResearchCampaign({
+          context,
+          now: new Date(failedAt.getTime() + 60_000),
+        });
+        latestCampaignId = nextGeneration.campaign.id;
+        assert.equal(
+          (await prisma.supplyCapabilityRun.findUniqueOrThrow({
+            where: { id: latestCampaignId },
+            select: { idempotencyKey: true },
+          })).idempotencyKey,
+          `${guildSupplierResearchCampaignIdempotencyKey()}:generation:${generation}`,
+        );
+      }
+      await prisma.supplyCapabilityRun.update({
+        where: { id: latestCampaignId },
+        data: {
+          status: "FAILED",
+          error: { message: "CAMPAIGN_BLOCKED: Test terminal retry ceiling." },
+          failedAt: new Date("2026-08-12T14:00:00.000Z"),
+        },
+      });
+      await assert.rejects(
+        () => startOrResumeGuildSupplierResearchCampaign({ context, now: new Date("2026-08-12T14:01:00.000Z") }),
+        new RegExp(`${GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS}-generation manual retry limit`, "i"),
+        "repeated no-op retries must stop visibly before campaign ancestry can strand a running parent",
+      );
+      assert.equal(await prisma.supplyCapabilityRun.count({
+        where: {
+          officeId: context.officeId,
+          workspaceId: firstCampaign.campaign.workspaceId,
+          capabilityKey: "research.supplier_campaign",
+        },
+      }), GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS);
+    } finally {
+      if (priorExaApiKey === undefined) delete process.env.EXA_API_KEY;
+      else process.env.EXA_API_KEY = priorExaApiKey;
+    }
     const visibleWorkspace = await createSupplyWorkspace(context, { name: "Visible robotics workspace" });
     const input = {
       componentItemKey: "VIS-DPT-410",
@@ -224,7 +302,7 @@ async function main() {
     const persistedSupplierProfiles = await prisma.supplySupplierProfile.findMany({
       where: { officeId: context.officeId, workspaceId: started.workspaceId, lastResearchRunId: started.id },
     });
-    assert.equal(persistedSupplierProfiles.length, 4, "completed research must persist every named supplier candidate");
+    assert.equal(persistedSupplierProfiles.length, 0, "model-only supplier names without rebuilt retrieval receipts must not enter durable supplier intelligence");
     const persistedPrices = await prisma.supplyPriceObservation.findMany({
       where: { officeId: context.officeId, workspaceId: started.workspaceId, capabilityRunId: started.id },
       include: { evidence: true },
@@ -322,12 +400,13 @@ async function main() {
     assert.equal(await prisma.supplyPriceObservation.count({ where: { capabilityRunId: tamperedExaRun.id } }), 0, "tampered managed capture must append no observation");
     const persistedIntelligence = await supplyIntelligenceProfile(context, started.workspaceId);
     assert.equal(persistedIntelligence.customer.factCount, 1);
-    assert.equal(persistedIntelligence.supplierCount, 4);
+    assert.equal(persistedIntelligence.supplierCount, 0, "unvalidated model candidates must not become durable supplier profiles");
 
     await prisma.supplyCapabilityRun.update({
       where: { id: stale.id },
       data: { updatedAt: new Date(Date.now() - 10 * 60 * 1_000) },
     });
+    await failStaleRunningSourcingResearchRuns();
     const runs = await listSourcingResearchRuns(context);
     assert.equal(runs.length, 2);
     const completed = runs.find((run) => run.id === started.id);
@@ -394,7 +473,7 @@ async function main() {
       evidenceState: { commercialTerms: string };
     };
     assert.equal(procurementResult.selectedOption.name, "Example supplier", "persisted evidence must override client-authored supplier identity");
-    assert.equal(procurementResult.selectedOption.sourceClass, "Official");
+    assert.equal(procurementResult.selectedOption.sourceClass, "New", "field-level model evidence without an attributable top-level source must not become Official or Public");
     assert.equal(procurementResult.selectedOption.sourceUrl, "https://example.com/");
     assert.equal(procurementResult.selectedOption.price, null, "legacy model-supplied freshness must not restore a sourced price");
     assert.equal(procurementResult.selectedOption.currency, null);
@@ -4238,11 +4317,9 @@ async function main() {
     });
     const refreshedCustomerIntelligence = await supplyIntelligenceProfile(context, visibleWorkspace.id);
     assert.equal(refreshedCustomerIntelligence.customer.factCount, customerIntelligenceBeforeExpansion.customer.factCount + 2, "new research must expand the customer profile without replacing prior needs");
-    assert.equal(refreshedCustomerIntelligence.supplierCount, customerIntelligenceBeforeExpansion.supplierCount + 1, "website discovery must merge into the existing supplier identity");
+    assert.equal(refreshedCustomerIntelligence.supplierCount, customerIntelligenceBeforeExpansion.supplierCount, "model-only supplier candidates must not expand durable supplier intelligence");
     const refreshedCustomerSupplier = refreshedCustomerIntelligence.suppliers.find((supplier) => supplier.companyName === "Customer workspace supplier");
-    assert.equal(refreshedCustomerSupplier?.website, "https://example.com/customer-workspace");
-    assert.deepEqual(refreshedCustomerSupplier?.roles, ["DISTRIBUTOR", "MANUFACTURER"], "supplier roles must accumulate across research runs");
-    assert.equal(refreshedCustomerSupplier?.priceObservations.length, 0, "provider price envelopes must not append price history without a revalidated managed retrieval capture");
+    assert.equal(refreshedCustomerSupplier, undefined, "an unattributed website and role claim must not create a supplier profile");
 
     const negotiationRun = await startSourcingResearchRun(context, {
       ...input,
@@ -4498,9 +4575,30 @@ async function main() {
 
     const foreign = await makeContext("foreign");
     foreignOfficeId = foreign.officeId;
+    assert.equal(await prisma.supplyWorkspace.count({ where: { officeId: foreign.officeId } }), 0);
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
     assert.equal((await listSourcingResearchPage(foreign)).runs.length, 0, "another office must not page through sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
+    assert.equal(
+      await prisma.supplyWorkspace.count({ where: { officeId: foreign.officeId } }),
+      0,
+      "empty history reads must not provision an Atlas system workspace",
+    );
+    await assert.rejects(
+      () => getSourcingResearchRun(foreign, started.id),
+      /not found/i,
+      "another office must not resolve an exact sourcing research run",
+    );
+    await assert.rejects(
+      () => listSourcingResearchPage(foreign, { workspaceId: started.workspaceId }),
+      /not found/i,
+      "an explicit foreign workspace must not be treated as empty history",
+    );
+    await assert.rejects(
+      () => listProcurementCasesForResearchRuns(foreign, [started.id], started.workspaceId),
+      /not found/i,
+      "an explicit foreign procurement workspace must not be treated as empty history",
+    );
     await assert.rejects(() => recordSupplierOrderException({ context: foreign, actionId: clonedAction.id, input: connectedExceptionInput }), /not found/i, "another office must not record supplier order exceptions");
     await assert.rejects(() => resolveSupplierOrderException({
       context: foreign,

@@ -5,7 +5,7 @@ export type ProcurementAcceptanceItem = {
   quantity: number | null;
   unit: string | null;
   supplierDeliverable: string;
-  expectedOutcome: "RESEARCHABLE" | "CLARIFICATION_REQUIRED";
+  expectedOutcome: "RESEARCHABLE" | "CLARIFICATION_REQUIRED" | "REQUIREMENT_ONLY";
 };
 
 export const GUILD_PROCUREMENT_BOM: ProcurementAcceptanceItem[] = [
@@ -47,7 +47,7 @@ export const GUILD_PROCUREMENT_BOM: ProcurementAcceptanceItem[] = [
   { id: "036", description: "Tamper or witness marking", specification: "Industrial torque-seal or witness lacquer", quantity: 6, unit: "tubes", supplierDeliverable: "Batch and date code", expectedOutcome: "RESEARCHABLE" },
   { id: "037", description: "Protective transit caps and plugs", specification: "Antistatic polymer caps and connector dust covers", quantity: 30, unit: "pieces", supplierDeliverable: "Certificate of conformance", expectedOutcome: "RESEARCHABLE" },
   { id: "038", description: "Shipping protection", specification: "Closed-cell polyethylene foam, antistatic bags, humidity indicators, and reusable shipping case", quantity: 1, unit: "set", supplierDeliverable: "Packaging compliance checklist", expectedOutcome: "RESEARCHABLE" },
-  { id: "039", description: "Supplier documentation package", specification: "Material certificates, certificates of conformance, inspection records, calibration certificates, deviation reports, and lot or serial traceability", quantity: 1, unit: "lot", supplierDeliverable: "Delivered digitally against BOM item numbers", expectedOutcome: "RESEARCHABLE" },
+  { id: "039", description: "Supplier documentation package", specification: "Material certificates, certificates of conformance, inspection records, calibration certificates, deviation reports, and lot or serial traceability", quantity: 1, unit: "lot", supplierDeliverable: "Delivered digitally against BOM item numbers", expectedOutcome: "REQUIREMENT_ONLY" },
   { id: "040", description: "First-article inspection package", specification: "Measurement report against released drawing for first production unit", quantity: 1, unit: "package", supplierDeliverable: "Signed inspection record and nonconformance disposition", expectedOutcome: "RESEARCHABLE" },
 ];
 

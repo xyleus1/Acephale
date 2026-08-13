@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
-import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import { findSourcingSystemWorkspace, sourcingSystemWorkspace } from "./sourcing-research-persistence";
 import {
   currentSupplierQualification,
   supplierQualificationValidOn,
@@ -49,7 +49,16 @@ const PURCHASE_RELEASE_CHANNELS = ["EMAIL", "SUPPLIER_PORTAL", "EDI", "PHONE_CON
 const SUPPLIER_ORDER_EXCEPTION_CATEGORIES = ["QUANTITY_CHANGE", "PRICE_CHANGE", "DELIVERY_CHANGE", "TERMS_CHANGE", "REJECTION", "OTHER"] as const;
 const SUPPLIER_ORDER_EXCEPTION_DISPOSITIONS = ["KEEP_ORIGINAL", "REQUIRE_REAUTHORIZATION", "RETURN_TO_SOURCING"] as const;
 const SUPPLIER_ORDER_REVISION_PENDING_STATUSES = ["REVISION_REQUIRED", "REVISION_DRAFTED", "REVISION_AUTHORIZED"] as const;
-const SUPPLIER_RELATIONSHIPS = ["MANUFACTURER", "AUTHORIZED_DISTRIBUTOR", "INDEPENDENT_DISTRIBUTOR"] as const;
+const SUPPLIER_RELATIONSHIPS = [
+  "MANUFACTURER",
+  "AUTHORIZED_DISTRIBUTOR",
+  "INDEPENDENT_DISTRIBUTOR",
+  "PRODUCER",
+  "PROCESSOR",
+  "EXPORTER",
+  "TRADER",
+  "SERVICE_PROVIDER",
+] as const;
 const SUPPLIER_REJECTION_REASONS = ["IDENTITY_UNRESOLVED", "CAPABILITY_UNRESOLVED", "AUTHORIZATION_UNRESOLVED", "SOURCE_UNVERIFIABLE", "OTHER"] as const;
 
 function digest(value: unknown) {
@@ -372,13 +381,18 @@ function canonicalSelection(
     const candidate = record(raw);
     const website = typeof candidate.website === "string" ? candidate.website : null;
     const sourceUrls = Array.isArray(candidate.sourceUrls) ? candidate.sourceUrls.filter((value): value is string => typeof value === "string") : [];
+    const researchSources = Array.isArray(output.sources) ? output.sources.map(record) : [];
+    const attributableSourceUrl = sourceUrls.find((url) => researchSources.some((source) => source.url === url)) ?? null;
+    const officialSourceUrl = sourceUrls.find((url) => researchSources.some((source) => (
+      typeof source.url === "string" && sameWebDomain(source.url, url) && source.sourceType === "OFFICIAL"
+    ))) ?? null;
     const status = candidate.status;
     return {
       ...selection,
       id: `public:${publicId}`,
       name: typeof candidate.companyName === "string" ? candidate.companyName : selection.name,
-      sourceClass: website ? "Official" as const : "New" as const,
-      sourceUrl: website ?? sourceUrls[0] ?? null,
+      sourceClass: officialSourceUrl ? "Official" as const : attributableSourceUrl ? "Public" as const : "New" as const,
+      sourceUrl: officialSourceUrl ?? attributableSourceUrl ?? website ?? null,
       // Search-provider commercial claims have no server-owned verification
       // receipt. This also downgrades legacy runs whose model-supplied dates
       // previously looked fresh.
@@ -405,7 +419,7 @@ function canonicalSelection(
 export type ProcurementSelectionInput = {
   id: string;
   name: string;
-  sourceClass: "Official" | "Trusted" | "New";
+  sourceClass: "Official" | "Public" | "Trusted" | "New";
   sourceUrl: string | null;
   price: number | null;
   currency: string | null;
@@ -604,7 +618,9 @@ async function listProcurementCasesMatching(
   options: { caseIds?: string[]; researchRunIds?: string[]; take?: number; workspaceId?: string } = {},
 ) {
   const accessContext = await currentAccessContext(context);
-  const workspace = await sourcingSystemWorkspace(accessContext, "view", options.workspaceId);
+  const workspace = options.workspaceId
+    ? await sourcingSystemWorkspace(accessContext, "view", options.workspaceId)
+    : await findSourcingSystemWorkspace(accessContext);
   const researchRunIds = options.researchRunIds
     ? [...new Set(options.researchRunIds.map((id) => id.trim()).filter(Boolean))]
     : null;
@@ -616,6 +632,7 @@ async function listProcurementCasesMatching(
   if (researchRunIds && researchRunIds.length > 50) {
     throw new SupplyPersistenceError("A sourcing queue page cannot include more than 50 research runs.", "invalid_input");
   }
+  if (!workspace) return [];
   const cases = await prisma.supplyExecutionTask.findMany({
     where: {
       officeId: accessContext.officeId,
@@ -2037,7 +2054,7 @@ export async function reviewProcurementGate(args: {
     if (outcome === "QUALIFIED") {
       const relationship = requiredText(body.relationship, "Supplier relationship", 40).toUpperCase();
       if (!SUPPLIER_RELATIONSHIPS.includes(relationship as (typeof SUPPLIER_RELATIONSHIPS)[number])) {
-        throw new SupplyPersistenceError("Supplier relationship must be manufacturer, authorized distributor, or independent distributor.", "invalid_input");
+        throw new SupplyPersistenceError("Supplier relationship is invalid.", "invalid_input");
       }
       const authorizationEvidenceUrl = optionalText(body.authorizationEvidenceUrl, "Authorization evidence URL", 2_000);
       if (relationship === "AUTHORIZED_DISTRIBUTOR" && !authorizationEvidenceUrl) {

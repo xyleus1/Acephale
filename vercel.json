@@ -13,6 +13,10 @@
       "schedule": "5 * * * *"
     },
     {
+      "path": "/api/cron/supplier-research",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/market-intelligence",
       "schedule": "0 11 * * *"
     },

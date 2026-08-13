@@ -16,6 +16,85 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-12 - Supplier research uses persisted jobs, not an HTTP request lifetime
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Supplier discovery and evidence validation can take longer than one
+  serverless request. The blocking route could be terminated while the browser
+  kept showing `Public web research is running` with zero sources. An in-memory
+  promise was not a durable job, and a longer timeout would only make the same
+  failure slower.
+- Decision: Use existing `SupplyCapabilityRun` records as the durable queue. A
+  POST validates, rate-limits, enqueues or reuses an identical active run, and
+  returns HTTP 202 with an exact polling URL. A scoped GET reads that run.
+  Next.js `after()` may start it immediately, but the authenticated cron is the
+  recovery mechanism and claims no more than two queued runs per invocation.
+- Concurrency boundary: A conditional database update atomically claims QUEUED
+  work. Only one worker can change it to RUNNING. Terminal records are not
+  claimed again. Recovery expires stale RUNNING work only and does not fail
+  ordinary QUEUED work. Campaign reconciliation uses an expiring token stored
+  on the RUNNING parent. Aggregate writes, child enqueue, lease release, and
+  terminalization verify that token while holding the parent row lock. Aggregate
+  revisions use an attempt watermark shared across retry generations, so stale
+  work cannot replace newer evidence and current validation may remove a lead
+  that no longer passes.
+- Campaign boundary: The GUILD campaign is a persisted parent run with durable
+  child attempts and aggregate result runs. Each invocation queues at most six
+  attempts. Retry backoff, three query profiles across as many as three
+  exploration cycles, a 48-attempt campaign daily cap, and a 72-attempt office
+  daily cap keep public discovery bounded and resumable across cron invocations.
+  Campaign enqueue and provider claim share one office-stable advisory lock and
+  derive the quota day from the database clock after acquiring it, including
+  across the UTC date boundary.
+  All campaign records follow the database run-state guard. A retry creates a
+  linked immutable generation and reuses validated predecessor history. Child
+  calls are pinned to Exa forced-live validation; missing or invalid provider
+  configuration blocks visibly instead of changing evidence semantics. Manual
+  retry generations stop at twelve, before the bounded ancestry reader can be
+  exhausted; further retry requires an operator-reviewed campaign scope.
+- Completion boundary: Search 38 lines. GUILD-027 remains
+  `CLARIFICATION_REQUIRED`; GUILD-039 remains `REQUIREMENT_ONLY`. A searchable
+  line completes with three to five distinct supplier identities and domains
+  whose retained `REVIEW_REQUIRED` candidates have attributable public identity
+  and capability evidence in the aggregate run.
+- Approval boundary: Campaign completion is sourcing research, not supplier
+  qualification, a quote, an award, an order, or permission to contact anyone.
+  Any blocked or operator-review outcome remains visible instead of being
+  converted into empty success.
+- Consequences: Research survives navigation, request termination, and
+  redeployment. The UI can stop active polling without cancelling work and can
+  later restore the exact saved run. Operations must configure the cron and
+  provider credentials, monitor queue age, and run authenticated deployment
+  acceptance before release.
+- Revisit when: A managed external queue replaces database claiming, provider
+  throughput supports different concurrency or daily limits, or campaign scope
+  expands beyond the fixed GUILD request.
+
+### 2026-08-12 - Exa discovery survives content timeout without commercial claims
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Exa Search could return attributable supplier URLs before the
+  forced-live Contents request timed out. The all-or-nothing integration then
+  discarded those URLs, persisted a failed run, and showed the operator zero
+  sources even though discovery had succeeded.
+- Decision: Bound forced-live content validation to the first three ranked
+  search results. If that validation request times out, complete the research
+  run as degraded and retain all public Search URLs as source-domain candidates.
+- Evidence boundary: Search-only candidates have no trusted role, product
+  capability, price, currency, unit, MOQ, lead time, or managed retrieval
+  receipt. They cannot create a public price observation or pass supplier
+  qualification without later evidence.
+- Failure boundary: A Search timeout still fails the run because there is no
+  attributable source to retain. Invalid, oversized, and non-timeout provider
+  failures continue to fail closed. Derya does not switch providers silently.
+- Consequences: Operators can inspect and retry discovered sources instead of
+  receiving a false zero-source screen. A partial provider failure loses claim
+  validation, not already obtained source provenance.
+- Revisit when: content validation moves to a separately persisted background
+  worker with per-source retries and progress events.
+
 ### 2026-08-12 - Exa forced-live retrieval may create public listing receipts
 
 - Status: accepted
@@ -42,15 +121,10 @@ Use this log for durable product and engineering decisions. Do not put every imp
   candidate selection remains server-downgraded to unknown commercial terms and
   routes through qualification and RFQ confirmation.
 - Fallback: OpenAI web discovery remains available only when Exa is not
-  configured. An Exa search timeout, provider error, invalid response, or
-  oversized response fails closed and does not silently fall back. If Search
-  returned attributable public URLs but the later Contents request times out,
-  retain those URLs only as degraded discovery candidates. Their supplier role,
-  product fit, price, currency, unit, availability, and lead time remain unknown,
-  and the search-only capture cannot create a listing receipt or price
-  observation. The unconfigured Exa fallback uses one 60-second OpenAI web
-  search attempt with no automatic retry. An external abort signal bounds both
-  response headers and body parsing inside the route budget.
+  configured. Exa does not silently switch providers. Search failures and
+  invalid, oversized, or non-timeout provider failures fail the run. A Contents
+  timeout after successful Search retains only unvalidated source URLs and no
+  commercial claims.
 - Revisit when: Exa coverage proves inadequate on JavaScript-heavy public
   listings and a separately sandboxed Cloudflare Browser Rendering fallback is
   ready for the same validator.
@@ -2846,12 +2920,9 @@ Use this log for durable product and engineering decisions. Do not put every imp
   specification, quantity, unit, and QA requirements while absent delivery
   location, need-by date, or open quantity remain row-level clarification facts.
 - Evidence boundary: A zero-result successful search is distinct from provider
-  failure. A successful provider Search followed by an enrichment timeout is a
-  degraded discovery result, not a completed evidence result and not a total
-  provider failure. Its public URLs remain visible for audit while all supplier
-  qualification and commercial fields remain unknown. Prices count as sourced
-  only when amount, currency, unit, observation time, and a common attributable
-  URL pass the existing evidence rule.
+  failure. Rejected and retained source URLs remain visible for audit. Prices
+  count as sourced only when amount, currency, unit, observation time, and a
+  common attributable URL pass the existing evidence rule.
 - Authorization: Only administrators and managers see parts import controls.
   Server-side workspace edit authorization remains the final enforcement point.
 - Consequences: Failed research cannot masquerade as a completed empty search,

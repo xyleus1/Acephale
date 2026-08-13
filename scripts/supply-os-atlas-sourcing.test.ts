@@ -30,6 +30,7 @@ const workbench = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply
 const procurement = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
 const researchRoute = readFileSync(resolve(root, "src/app/api/supply-os/supplier-research/route.ts"), "utf8");
 const researchRouteContract = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-route-contract.ts"), "utf8");
+const supplierResearchWorker = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-worker.ts"), "utf8");
 const supplierResearch = readFileSync(resolve(root, "src/lib/supply-os/component-supplier-research.ts"), "utf8");
 const intakeRoute = readFileSync(resolve(root, "src/app/api/supply-os/sourcing-request/route.ts"), "utf8");
 const procurementCasesRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/route.ts"), "utf8");
@@ -171,13 +172,21 @@ assert.match(dashboard, /procurementRequest[\s\S]*AtlasProcurementWorkspace/);
 assert.match(dashboard, /pendingSourcingRequests/);
 assert.match(dashboard, /openPendingSourcingRequest/);
 assert.match(dashboard, /sourceMap=\{sourceMapContext[\s\S]*SupplyOsCommandMap/);
+assert.match(dashboard, /const savedCampaign = await readCampaign\(\);[\s\S]*!savedCampaign \|\| explicitRetry[\s\S]*await startCampaign\(\)/, "GUILD must check for a saved campaign before creating or explicitly retrying one");
+assert.match(dashboard, /if \(demoCompanyId === "guild" && !sourcingWorkspaceId\)[\s\S]*setResearchRuns\(\[\]\)[\s\S]*return;/, "GUILD must not fall through to default Atlas sourcing history while its dedicated workspace is unresolved");
+assert.match(dashboard, /new URLSearchParams\(\{ workspaceId: sourcingWorkspaceId \}\)/, "GUILD history must use the campaign workspace");
+assert.match(dashboard, /campaignAggregateRunIdsKey[\s\S]*params\.append\("includeRunId", runId\)[\s\S]*setProcurementCases/, "GUILD reload must recover cases for the bounded campaign aggregate run set");
+assert.match(dashboard, /workspaceId=\{sourcingWorkspaceId\}/, "manual research and procurement must use the resolved sourcing workspace");
+assert.match(dashboard, /canStartProcurement=\{demoCompanyId !== "guild" \|\| Boolean\(sourcingWorkspaceId\)\}/, "the GUILD inspector must not open procurement against the default workspace");
+assert.match(dashboard, /filter\(visibleSourcingRun\)/, "campaign child attempts must be removed at the history boundary");
+assert.match(dashboard, /setSupplierResearchCampaignError\(error instanceof Error/, "sanitized campaign API errors must remain visible");
 assert.match(workbench, /Show source/);
 assert.match(workbench, /Hide map/);
 assert.match(workbench, /New sourcing request/);
 assert.match(workbench, /Sourcing queue/);
-assert.match(composerSource, /disabled=\{!query\.trim\(\)\}/);
+assert.match(composerSource, /disabled=\{!query\.trim\(\) \|\| !researchWorkspaceReady\}/);
 assert.doesNotMatch(composerSource, /dataState/, "saved-work loading errors must not disable a new sourcing request");
-assert.match(illustrativeRowsSource, /disabled=\{run\?\.status === "RUNNING"\}/);
+assert.doesNotMatch(illustrativeRowsSource, /disabled=\{run\?\.status === "RUNNING"\}/, "running research must remain reopenable");
 assert.doesNotMatch(illustrativeRowsSource, /dataState/, "saved-work loading errors must not disable illustrative research");
 assert.match(workbench, /pendingRequests\.map/);
 assert.match(workbench, /Clarification needed/);
@@ -188,7 +197,7 @@ assert.match(workbench, /View results/);
 assert.match(workbench, /Retry research/);
 assert.doesNotMatch(workbench, /disabled=\{!query\.trim\(\) \|\| dataState !== "ready"\}/, "history loading failure must not disable a new request");
 assert.doesNotMatch(workbench, /disabled=\{dataState !== "ready" \|\| run/, "history loading failure must not disable a row action");
-assert.match(workbench, /run\.status === "SUCCEEDED" \? onOpenSavedResearch\(run\) : onRetryResearch\(run\)/, "failed saved research must retry its stored request without re-entering intake");
+assert.match(workbench, /run\.status === "FAILED" \? onRetryResearch\(run\) : onOpenSavedResearch\(run\)/, "failed saved research retries while active research resumes its persisted run");
 assert.match(dashboard, /function retrySavedResearch\([\s\S]*savedRun: null,[\s\S]*savedCases: \[\]/, "retrying saved research must clear the failed run before remounting research");
 assert.doesNotMatch(workbench, /run\.status === "SUCCEEDED" \? onOpenSavedResearch\(run\) : onCreateRequest\(run\.input\.requestText\)/);
 assert.match(workbench, /Continue procurement/);
@@ -214,6 +223,11 @@ assert.match(workbench, /Saved research/);
 assert.match(workbench, /Load older requests/);
 assert.match(workbench, /Retry older work/);
 assert.match(workbench, /Office-shared work/);
+assert.match(workbench, /Source-backed candidates/);
+assert.match(workbench, /source-backed candidate.*unqualified/);
+assert.match(workbench, /researchCampaignError \?\? "Supplier research stopped/, "terminal campaign errors must be rendered instead of replaced by a generic status failure");
+assert.match(workbench, /researchWorkspaceReady/, "GUILD manual research must wait for its dedicated workspace");
+assert.match(workbench, /if \(!researchWorkspaceReady\) return;/, "form submission must fail closed until the GUILD workspace is ready");
 assert.doesNotMatch(workbench, /<th>Next step<\/th>/);
 assert.doesNotMatch(workbench, /<th>On hand<\/th>|<th>Allocated<\/th>|<th>Inbound<\/th>|<th>Projected<\/th>/);
 assert.doesNotMatch(workbench, /inventoryRailList/);
@@ -329,19 +343,32 @@ assert.match(procurement, /onClick=\{retryResearch\}>[\s\S]*Retry research/);
 assert.match(procurement, /onClick=\{refineRequest\}>Edit request/);
 assert.doesNotMatch(procurement, /Request added, terms still unknown/);
 assert.match(procurement, /Public web research is running/);
+assert.match(procurement, /Research continues in the background/);
+assert.match(procurement, /pollSupplierResearchRun/);
+assert.match(procurement, /Resume checking/);
+assert.match(workbench, /\["QUEUED", "RUNNING"\]/, "queued and running jobs must reopen progress instead of enqueueing duplicates");
+assert.doesNotMatch(workbench, /disabled=\{run\?\.status === "RUNNING"\}/, "a running research row must remain reopenable");
 assert.match(procurement, /View source/);
 assert.match(procurement, /Modeled[\s\S]*Sourced[\s\S]*Unknown/);
 assert.match(procurement, /No purchase order, supplier contact, booking, or spend was created/);
 assert.match(researchRoute, /getSession/);
 assert.match(researchRoute, /export async function GET/);
 assert.match(researchRoute, /ResearchRateLimiter/);
-assert.match(researchRoute, /searchComponentSuppliers/);
+assert.match(supplierResearchWorker, /searchComponentSuppliers/);
 assert.match(procurement, /Public listing claim - freshness unverified/, "listing prices may be shown without becoming sourced terms");
 assert.match(procurement, /publicPriceClaim/, "unverified listing prices must stay separate from orderable price fields");
 assert.match(procurement, /source\.sourceType === "OFFICIAL"/, "only an explicitly classified source may receive an official label");
 assert.doesNotMatch(procurement, /candidate\.website \? "Official"/, "a marketplace or trader listing must not become official merely because it has a URL");
-assert.match(researchRoute, /startSourcingResearchRun/);
-assert.match(researchRoute, /completeSourcingResearchRun/);
+assert.match(procurement, /sourcesShareDomain/, "official evidence must be matched using normalized domains rather than exact page URLs");
+assert.match(procurement, /sourceClass: officialSource \? "Official" : attributedSourceUrl \? "Public" : "New"/, "an attributable public page must display as Public evidence, not New");
+assert.match(procurement, /Public evidence, unqualified/, "source-backed supplier leads must remain visibly unqualified");
+assert.match(procurement, /<option value="PRODUCER">Producer<\/option>/);
+assert.match(procurement, /<option value="PROCESSOR">Processor<\/option>/);
+assert.match(procurement, /<option value="EXPORTER">Exporter<\/option>/);
+assert.match(procurement, /<option value="TRADER">Trader<\/option>/);
+assert.match(procurement, /<option value="SERVICE_PROVIDER">Service provider<\/option>/);
+assert.match(researchRoute, /enqueueSourcingResearchRun/);
+assert.match(researchRoute, /runSourcingResearchWorker/);
 assert.match(researchRoute, /listProcurementCasesForResearchRuns/);
 assert.match(researchRoute, /listSourcingResearchPage/);
 assert.match(researchRoute, /nextCursor/);
@@ -364,6 +391,11 @@ assert.match(researchPersistence, /capabilityKey: CAPABILITY_KEY/);
 assert.match(researchPersistence, /orderBy: \[\{ createdAt: "desc" \}, \{ id: "desc" \}\]/);
 assert.match(researchPersistence, /encodeResearchCursor/);
 assert.match(researchPersistence, /take: limit \+ 1/);
+assert.match(
+  researchPersistence,
+  /options\.workspaceId[\s\S]*?sourcingSystemWorkspace\(context, "view", options\.workspaceId\)[\s\S]*?findSourcingSystemWorkspace\(context\)[\s\S]*?if \(!workspace\) return \{ runs: \[\], nextCursor: null \};/,
+  "default research history must be empty without provisioning, while explicit workspace reads remain strict",
+);
 assert.match(procurementCasesRoute, /getSession/);
 assert.match(procurementCasesRoute, /saveProcurementShortlist/);
 assert.match(procurementCasesRoute, /procurementCases/);
@@ -449,6 +481,15 @@ assert.match(procurementPersistence, /SupplyExecutionEvent|supplyExecutionEvent/
 assert.match(procurementPersistence, /officeId: args\.context\.officeId/);
 assert.match(procurementPersistence, /purchaseApproval = "BLOCKED"/);
 assert.match(procurementPersistence, /canonicalSelection/);
+assert.match(procurementPersistence, /sameWebDomain\(source\.url, url\)[\s\S]*sourceType === "OFFICIAL"/, "official procurement provenance must match the supplier domain, not an exact homepage URL");
+assert.match(procurementPersistence, /attributableSourceUrl \? "Public" as const : "New" as const/, "public research evidence must stay Public when procurement is persisted");
+assert.match(
+  procurementPersistence,
+  /options\.workspaceId[\s\S]*?sourcingSystemWorkspace\(accessContext, "view", options\.workspaceId\)[\s\S]*?findSourcingSystemWorkspace\(accessContext\)[\s\S]*?if \(!workspace\) return \[\];/,
+  "default procurement history must be empty without provisioning, while explicit workspace reads remain strict",
+);
+assert.match(procurementPersistence, /"SERVICE_PROVIDER"/, "qualified inspection services must not be mislabeled as manufacturers");
+assert.match(procurementCasesRoute, /\["Official", "Public", "Trusted", "New"\]/, "the procurement API must preserve Public evidence provenance");
 assert.match(
   procurementPersistence,
   /function canonicalSelection[\s\S]*price: null,[\s\S]*currency: null,[\s\S]*minimumOrderQuantity: null,[\s\S]*priceType: "Unknown" as const,[\s\S]*deliveryDate: null,[\s\S]*deliveryType: "Unknown" as const/,

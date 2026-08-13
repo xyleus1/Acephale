@@ -41,6 +41,10 @@ import {
   type WorkstreamDraftState,
 } from "@/lib/supply-os/workstream-drafts";
 import styles from "./supply-os-logistics.module.css";
+import {
+  isTerminalSupplierResearchRun,
+  pollSupplierResearchRun,
+} from "./supplier-research-polling";
 import type {
   PublicResearchResult,
   ConnectedSupplierReply,
@@ -48,11 +52,10 @@ import type {
   SavedSourcingResearchRun,
   SupplierOrderException,
   SupplierSenderAccount,
-  SupplyIntelligenceProfile,
 } from "./supply-os-sourcing-research-types";
 
 type ProcurementPhase = "request" | "researching" | "compare" | "procure";
-type SourceClass = "Official" | "Trusted" | "New";
+type SourceClass = "Official" | "Public" | "Trusted" | "New";
 type QualityState = "Strong" | "Conditional" | "Unverified";
 
 type ProcurementOption = {
@@ -149,6 +152,28 @@ const RESEARCH_STEPS = [
 
 type ResearchSource = { url: string; sourceType: "OFFICIAL" | "PUBLIC" | "QUOTE" | "AUTHORITY" };
 
+function normalizedSourceDomain(value: string) {
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function sourcesShareDomain(left: string, right: string) {
+  const leftDomain = normalizedSourceDomain(left);
+  const rightDomain = normalizedSourceDomain(right);
+  if (!leftDomain || !rightDomain) return false;
+  return leftDomain === rightDomain
+    || leftDomain.endsWith(`.${rightDomain}`)
+    || rightDomain.endsWith(`.${leftDomain}`);
+}
+
+function classifiedSourceForUrl(result: PublicResearchResult, url: string) {
+  const matches = (result.sources ?? []).filter((source) => sourcesShareDomain(source.url, url));
+  return matches.find((source) => source.sourceType === "OFFICIAL") ?? matches[0] ?? null;
+}
+
 function researchSources(result: PublicResearchResult | null) {
   if (!result) return [];
   const sources = new Map<string, ResearchSource>();
@@ -160,7 +185,7 @@ function researchSources(result: PublicResearchResult | null) {
   for (const candidate of result.candidates) {
     for (const url of candidate.sourceUrls) remember({ url, sourceType: "PUBLIC" });
     if (candidate.website) {
-      const classified = result.sources?.find((source) => source.url === candidate.website);
+      const classified = classifiedSourceForUrl(result, candidate.website);
       remember(classified ?? { url: candidate.website, sourceType: "PUBLIC" });
     }
     for (const envelope of [
@@ -251,7 +276,7 @@ function supplierQualificationForm(procurementCase: SavedProcurementCase | null 
   const review = procurementCase?.result?.reviews?.sourceEvidence;
   const sourceUrl = procurementCase?.result?.selectedOption.sourceUrl ?? "";
   return {
-    relationship: review?.relationship ?? "MANUFACTURER" as "MANUFACTURER" | "AUTHORIZED_DISTRIBUTOR" | "INDEPENDENT_DISTRIBUTOR",
+    relationship: review?.relationship ?? "MANUFACTURER" as "MANUFACTURER" | "AUTHORIZED_DISTRIBUTOR" | "INDEPENDENT_DISTRIBUTOR" | "PRODUCER" | "PROCESSOR" | "EXPORTER" | "TRADER" | "SERVICE_PROVIDER",
     identityEvidenceUrl: review?.identityEvidenceUrl ?? sourceUrl,
     capabilityEvidenceUrl: review?.capabilityEvidenceUrl ?? sourceUrl,
     authorizationEvidenceUrl: review?.authorizationEvidenceUrl ?? "",
@@ -311,8 +336,12 @@ function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOp
 function publicResearchOptions(result: PublicResearchResult | null): ProcurementOption[] {
   if (!result) return [];
   return result.candidates.map((candidate) => {
-    const officialWebsite = candidate.website
-      ? result.sources?.some((source) => source.url === candidate.website && source.sourceType === "OFFICIAL") ?? false
+    const attributedSourceUrl = candidate.website
+      ?? candidate.sourceUrls[0]
+      ?? candidate.productCapability.sources[0]?.url
+      ?? null;
+    const officialSource = attributedSourceUrl
+      ? classifiedSourceForUrl(result, attributedSourceUrl)?.sourceType === "OFFICIAL"
       : false;
     const listingReceipt = result.publicListingReceipts?.find((receipt) => receipt.candidateId === candidate.id) ?? null;
     const priceSource = candidate.price.sources.find((source) =>
@@ -344,14 +373,14 @@ function publicResearchOptions(result: PublicResearchResult | null): Procurement
     modeledUnitCostUsd: priceSourced ? candidate.price.value ?? 0 : 0,
     currency: priceSourced ? candidate.currency.value?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null : null,
     fit: candidate.productCapability.value ?? "Product capability requires review.",
-    sourceClass: officialWebsite ? "Official" : "New",
-    sourceLabel: officialWebsite ? "Official supplier page" : "Public web source",
+    sourceClass: officialSource ? "Official" : attributedSourceUrl ? "Public" : "New",
+    sourceLabel: officialSource ? "Official evidence, unqualified" : attributedSourceUrl ? "Public evidence, unqualified" : "No attributable source",
     quality: candidate.status === "REVIEW_REQUIRED" ? "Conditional" : "Unverified",
     qualityEvidence: candidate.cautions[0] ?? `${candidate.productCapability.state.toLowerCase()} product-capability evidence`,
     deliveryDate: researchDeliveryDate(deliverySourced ? candidate.leadTimeDays.value : null),
     priceType: priceSourced ? "Sourced" : "Unknown",
     deliveryType: deliverySourced ? "Sourced" : "Unknown",
-    sourceUrl: candidate.website ?? candidate.sourceUrls[0] ?? null,
+    sourceUrl: attributedSourceUrl,
     priceSourceUrl: priceSourced || priceClaimed ? priceSource?.url ?? null : null,
     priceUnit: priceSourced ? candidate.unitOfMeasure.value : null,
     publicPriceClaim: !priceSourced && priceClaimed
@@ -448,7 +477,6 @@ export function AtlasProcurementWorkspace({
   canAuthorizePurchase,
   senderAccounts,
   onResearchSaved,
-  onIntelligenceUpdated,
   onProcurementCaseSaved,
   onRequestUpdate,
   onBack,
@@ -466,7 +494,6 @@ export function AtlasProcurementWorkspace({
   canAuthorizePurchase: boolean;
   senderAccounts: SupplierSenderAccount[];
   onResearchSaved: (run: SavedSourcingResearchRun) => void;
-  onIntelligenceUpdated?: (profile: SupplyIntelligenceProfile) => void;
   onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
   onRequestUpdate?: (update: {
     title: string;
@@ -494,6 +521,7 @@ export function AtlasProcurementWorkspace({
     ? initialMissingFields
     : startingDraft ? missingSourcingFields(startingDraft) : [];
   const [currentRun, setCurrentRun] = useState<SavedSourcingResearchRun | null>(initialRun ?? null);
+  const currentRunRef = useRef<SavedSourcingResearchRun | null>(initialRun ?? null);
   const [requestDraft, setRequestDraft] = useState<SourcingRequestDraft | null>(startingDraft);
   const [missingFields, setMissingFields] = useState<SourcingRequiredField[]>(startingMissingFields);
   const [messages, setMessages] = useState<SourcingConversationMessage[]>(() => [
@@ -506,6 +534,7 @@ export function AtlasProcurementWorkspace({
   const intakeControllerRef = useRef<AbortController | null>(null);
   const initialIntakeStartedRef = useRef(false);
   const onRequestUpdateRef = useRef(onRequestUpdate);
+  const onResearchSavedRef = useRef(onResearchSaved);
   const followUpHydrationKeyRef = useRef("");
   const [currentCase, setCurrentCase] = useState<SavedProcurementCase | null>(initialCase ?? null);
   const [workstreamCases, setWorkstreamCases] = useState<SavedProcurementCase[]>(
@@ -651,10 +680,23 @@ export function AtlasProcurementWorkspace({
   const [selectedExceptionReplyEvidenceId, setSelectedExceptionReplyEvidenceId] = useState<string | null>(null);
   const [exceptionResolutionNote, setExceptionResolutionNote] = useState("");
   const [showSupplierExceptionForm, setShowSupplierExceptionForm] = useState(false);
-  const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRun?.output ?? null);
-  const [researchError, setResearchError] = useState<string | null>(null);
-  const [researchState, setResearchState] = useState<"idle" | "running" | "complete" | "degraded">(
-    initialRun ? initialRun.output?.degraded ? "degraded" : "complete" : startingDraft && startingMissingFields.length === 0 ? "running" : "idle",
+  const initialRunStatus = initialRun?.status.toUpperCase() ?? null;
+  const initialRunSucceeded = initialRunStatus === "SUCCEEDED";
+  const initialRunActive = initialRunStatus === "QUEUED" || initialRunStatus === "RUNNING";
+  const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRunSucceeded ? initialRun?.output ?? null : null);
+  const [researchError, setResearchError] = useState<string | null>(
+    initialRunStatus === "FAILED" || initialRunStatus === "CANCELLED"
+      ? initialRun?.error?.message ?? "Supplier research stopped before completion."
+      : null,
+  );
+  const [researchState, setResearchState] = useState<"idle" | "running" | "background" | "complete" | "degraded">(
+    initialRunActive
+      ? "running"
+      : initialRunSucceeded
+        ? initialRun?.output?.degraded ? "degraded" : "complete"
+        : initialRun
+          ? "degraded"
+          : startingDraft && startingMissingFields.length === 0 ? "running" : "idle",
   );
   const [researchAttempt, setResearchAttempt] = useState(0);
   const options = useMemo(() => [
@@ -669,10 +711,11 @@ export function AtlasProcurementWorkspace({
   const [phase, setPhase] = useState<ProcurementPhase>(() => {
     if (initialCase?.result?.sourcingReturn?.state === "REQUIRED") return "compare";
     if (initialCase) return "procure";
-    if (initialRun) return "compare";
+    if (initialRunSucceeded) return "compare";
+    if (initialRun) return "researching";
     return startingDraft && startingMissingFields.length === 0 && !initialQuestion ? "researching" : "request";
   });
-  const [completedSources, setCompletedSources] = useState(initialRun ? RESEARCH_STEPS.length : 0);
+  const [completedSources, setCompletedSources] = useState(initialRunSucceeded ? RESEARCH_STEPS.length : initialRun ? 1 : 0);
   const [selectedOptionId, setSelectedOptionId] = useState(initialCase?.result?.selectedOption.id ?? recommended?.id ?? "");
   const [shortlistedOptionIds, setShortlistedOptionIds] = useState<string[]>(() => {
     const savedIds = (initialCases?.length ? initialCases : initialCase ? [initialCase] : [])
@@ -719,6 +762,14 @@ export function AtlasProcurementWorkspace({
   useEffect(() => {
     onRequestUpdateRef.current = onRequestUpdate;
   }, [onRequestUpdate]);
+
+  useEffect(() => {
+    onResearchSavedRef.current = onResearchSaved;
+  }, [onResearchSaved]);
+
+  useEffect(() => {
+    currentRunRef.current = currentRun;
+  }, [currentRun]);
 
   useEffect(() => () => intakeControllerRef.current?.abort(), []);
 
@@ -830,6 +881,12 @@ export function AtlasProcurementWorkspace({
         status: "Researching",
       });
     }
+  }
+
+  function resumeResearchPolling() {
+    setResearchError(null);
+    setResearchState("running");
+    setResearchAttempt((current) => current + 1);
   }
 
   useEffect(() => {
@@ -1110,76 +1167,103 @@ export function AtlasProcurementWorkspace({
 
   useEffect(() => {
     if (phase !== "researching" || (!item && !requestDraft)) return;
+    const existingRun = currentRunRef.current;
+    if (
+      researchAttempt === 0
+      && existingRun
+      && isTerminalSupplierResearchRun(existingRun)
+      && existingRun.status.toUpperCase() !== "SUCCEEDED"
+    ) return;
     const controller = new AbortController();
     setResearchState("running");
-    setPublicResearch(null);
+    if (!existingRun || isTerminalSupplierResearchRun(existingRun)) setPublicResearch(null);
     setResearchError(null);
     setCompletedSources(1);
-    void fetch("/api/supply-os/supplier-research", {
-      method: "POST",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        componentItemKey: item?.sku ?? `request:${requestText.slice(0, 120)}`,
-        componentName: requestDraft?.productName ?? item?.name ?? requestText,
-        manufacturer: requestDraft?.manufacturer ?? item?.manufacturer ?? undefined,
-        mpn: requestDraft?.partNumber ?? item?.mpn ?? undefined,
-        specification: requestDraft?.specification ?? item?.specification ?? requestText,
-        targetCountry: requestDraft?.deliveryLocation?.slice(0, 120) ?? (item ? sourcingDeliveryLocation(item)?.slice(0, 120) ?? undefined : undefined),
-        requestText,
-        workspaceId: workspaceId ?? undefined,
-        requestedQuantity: requestDraft?.quantity ?? (item ? sourcingRequestQuantity(item) ?? undefined : undefined),
-        requestedUnit: requestDraft?.unit ?? (item ? item.requestedUnit ?? item.unitOfMeasure ?? undefined : undefined),
-        sourceRegion: requestDraft?.sourceRegion ?? undefined,
-        deliveryLocation: requestDraft?.deliveryLocation ?? (item ? sourcingDeliveryLocation(item) ?? undefined : undefined),
-        needByDate: requestDraft?.needByDate ?? (item ? sourcingNeedByDate(item) ?? undefined : undefined),
-      }),
-    }).then(async (response) => {
-      const payload = await response.json().catch(() => ({})) as {
-        result?: PublicResearchResult;
-        run?: SavedSourcingResearchRun;
-        intelligenceProfile?: SupplyIntelligenceProfile;
-        error?: string;
-      };
-      if (!response.ok) throw new Error(payload.error ?? "Supplier research did not finish.");
-      const result = payload.result ?? { candidates: [], degraded: true, warnings: ["Supplier research returned no result."] };
-      setPublicResearch(result);
-      setResearchError(null);
-      setResearchState(result.degraded ? "degraded" : "complete");
-      setCompletedSources(RESEARCH_STEPS.length);
-      if (payload.run) {
-        setCurrentRun(payload.run);
-        onResearchSaved(payload.run);
-      }
-      if (payload.intelligenceProfile) onIntelligenceUpdated?.(payload.intelligenceProfile);
-      if (requestDraft && result.degraded && !result.candidates.length) {
-        onRequestUpdateRef.current?.({
-          title: requestDraft.productName ?? requestText,
-          draft: requestDraft,
-          missingFields: [],
-          lastQuestion: null,
-          status: "Research unavailable",
+    void (async () => {
+      try {
+        let run = existingRun && !isTerminalSupplierResearchRun(existingRun) ? existingRun : null;
+        if (!run) {
+          const response = await fetch("/api/supply-os/supplier-research", {
+            method: "POST",
+            cache: "no-store",
+            signal: controller.signal,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              componentItemKey: item?.sku ?? `request:${requestText.slice(0, 120)}`,
+              componentName: requestDraft?.productName ?? item?.name ?? requestText,
+              manufacturer: requestDraft?.manufacturer ?? item?.manufacturer ?? undefined,
+              mpn: requestDraft?.partNumber ?? item?.mpn ?? undefined,
+              specification: requestDraft?.specification ?? item?.specification ?? requestText,
+              targetCountry: requestDraft?.deliveryLocation?.slice(0, 120) ?? (item ? sourcingDeliveryLocation(item)?.slice(0, 120) ?? undefined : undefined),
+              requestText,
+              workspaceId: workspaceId ?? undefined,
+              requestedQuantity: requestDraft?.quantity ?? (item ? sourcingRequestQuantity(item) ?? undefined : undefined),
+              requestedUnit: requestDraft?.unit ?? (item ? item.requestedUnit ?? item.unitOfMeasure ?? undefined : undefined),
+              sourceRegion: requestDraft?.sourceRegion ?? undefined,
+              deliveryLocation: requestDraft?.deliveryLocation ?? (item ? sourcingDeliveryLocation(item) ?? undefined : undefined),
+              needByDate: requestDraft?.needByDate ?? (item ? sourcingNeedByDate(item) ?? undefined : undefined),
+            }),
+          });
+          const payload = await response.json().catch(() => ({})) as { run?: SavedSourcingResearchRun; error?: string };
+          if (!response.ok || !payload.run) throw new Error(payload.error ?? "Supplier research could not be queued.");
+          run = payload.run;
+          currentRunRef.current = run;
+          setCurrentRun(run);
+          onResearchSavedRef.current(run);
+        }
+
+        const outcome = await pollSupplierResearchRun({
+          run,
+          workspaceId,
+          signal: controller.signal,
+          onRun: (savedRun) => {
+            currentRunRef.current = savedRun;
+            setCurrentRun(savedRun);
+            onResearchSavedRef.current(savedRun);
+          },
         });
+        if (outcome.state === "background") {
+          setResearchState("background");
+          return;
+        }
+
+        const terminalRun = outcome.run;
+        if (terminalRun.status.toUpperCase() !== "SUCCEEDED" || !terminalRun.output) {
+          throw new Error(terminalRun.error?.message ?? "Supplier research stopped before completion.");
+        }
+        const result = terminalRun.output;
+        setPublicResearch(result);
+        setResearchError(null);
+        setResearchState(result.degraded ? "degraded" : "complete");
+        setCompletedSources(RESEARCH_STEPS.length);
+        if (requestDraft && result.degraded && !result.candidates.length) {
+          onRequestUpdateRef.current?.({
+            title: requestDraft.productName ?? requestText,
+            draft: requestDraft,
+            missingFields: [],
+            lastQuestion: null,
+            status: "Research unavailable",
+          });
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setPublicResearch(null);
+        setResearchError(error instanceof Error ? error.message : "Supplier research did not finish.");
+        setResearchState("degraded");
+        setCompletedSources(1);
+        if (requestDraft) {
+          onRequestUpdateRef.current?.({
+            title: requestDraft.productName ?? requestText,
+            draft: requestDraft,
+            missingFields: [],
+            lastQuestion: null,
+            status: "Research unavailable",
+          });
+        }
       }
-    }).catch((error: unknown) => {
-      if (controller.signal.aborted) return;
-      setPublicResearch(null);
-      setResearchError(error instanceof Error ? error.message : "Supplier research did not finish.");
-      setResearchState("degraded");
-      setCompletedSources(1);
-      if (requestDraft) {
-        onRequestUpdateRef.current?.({
-          title: requestDraft.productName ?? requestText,
-          draft: requestDraft,
-          missingFields: [],
-          lastQuestion: null,
-          status: "Research unavailable",
-        });
-      }
-    });
+    })();
     return () => controller.abort();
-  }, [item, onIntelligenceUpdated, onResearchSaved, phase, requestDraft, requestText, researchAttempt, workspaceId]);
+  }, [item, phase, requestDraft, requestText, researchAttempt, workspaceId]);
 
   function toggleShortlist(optionId: string) {
     setSelectedOptionId(optionId);
@@ -1928,6 +2012,8 @@ export function AtlasProcurementWorkspace({
                   <>
                     <p>{researchState === "running"
                       ? `Searching public pages for ${item?.name ?? requestDraft?.productName ?? requestText}.`
+                      : researchState === "background"
+                        ? "Research continues as a saved background job. Resume checking for the latest result."
                       : researchError
                         ? "No source records were returned to this screen."
                       : checkedResearchSources.length
@@ -1946,6 +2032,8 @@ export function AtlasProcurementWorkspace({
                         </ul>
                       ) : <p>{researchState === "running"
                         ? "Waiting for attributable sources from public search."
+                        : researchState === "background"
+                          ? "No attributable source has been saved yet. The background job is still active."
                         : researchError
                           ? "This screen received no source records to attribute."
                           : "No source links survived attribution checks."}</p>}
@@ -1954,6 +2042,8 @@ export function AtlasProcurementWorkspace({
                 ) : step.key === "validation" ? (
                   <p>{researchState === "running"
                     ? "Validation starts when attributable source records return."
+                    : researchState === "background"
+                      ? "Validation will be saved with the background result."
                     : researchError
                       ? "No validation result was returned to this screen."
                         : `${officialResearchSourceCount} official and ${checkedResearchSources.length - officialResearchSourceCount} other public source${checkedResearchSources.length - officialResearchSourceCount === 1 ? "" : "s"} passed URL attribution. A public price requires one exact forced-live record with amount, ISO currency, and unit; RFQ confirmation is still required.`}</p>
@@ -1961,6 +2051,8 @@ export function AtlasProcurementWorkspace({
                   <>
                     <p>{researchState === "running"
                       ? "Candidate screening waits for source validation."
+                      : researchState === "background"
+                        ? "Candidate screening will be saved with the background result."
                       : researchError
                         ? "No candidate-screening result was returned to this screen."
                         : `${publicResearch?.candidates.length ?? 0} candidate${publicResearch?.candidates.length === 1 ? "" : "s"} retained for human qualification.`}</p>
@@ -1984,12 +2076,19 @@ export function AtlasProcurementWorkspace({
             <footer>
               <span><TriangleAlert size={14} /> {researchState === "running"
                 ? "Public web research is running. No supplier system is connected."
+                : researchState === "background"
+                  ? "Research continues in the background. Leaving this page will not cancel it."
                 : researchState === "complete"
                   ? "Public results are attributable and unqualified. No supplier was contacted."
                   : researchError
                     ?? (publicResearch?.candidates.length ? "Public supplier pages were retained with verification gaps. No supplier was contacted." : publicResearch?.warnings[0])
                     ?? "Public research is unavailable."}</span>
-              {researchState !== "running" && publicResearch?.candidates.length ? (
+              {researchState === "background" ? (
+                <div>
+                  <button type="button" data-primary="true" onClick={resumeResearchPolling}><RefreshCw size={14} /> Resume checking</button>
+                  <button type="button" onClick={refineRequest}>Edit request</button>
+                </div>
+              ) : researchState !== "running" && publicResearch?.candidates.length ? (
                 <button type="button" onClick={() => setPhase("compare")}>Review {publicResearch.candidates.length} supplier{publicResearch.candidates.length === 1 ? "" : "s"} <ArrowRight size={14} /></button>
               ) : researchState !== "running" ? (
                 <div>
@@ -2119,7 +2218,7 @@ export function AtlasProcurementWorkspace({
                     <div className={styles.procurementFormGrid}>
                       <label className={styles.procurementWideField}>Identity evidence URL<input type="url" value={qualificationForm.identityEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, identityEvidenceUrl: event.target.value }))} placeholder="Official company or registry page" /></label>
                       <label className={styles.procurementWideField}>Component capability URL<input type="url" value={qualificationForm.capabilityEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, capabilityEvidenceUrl: event.target.value }))} placeholder="Product, catalog, or line-card page" /></label>
-                      <label>Supplier relationship<select value={qualificationForm.relationship} onChange={(event) => setQualificationForm((current) => ({ ...current, relationship: event.target.value as typeof current.relationship }))}><option value="MANUFACTURER">Manufacturer</option><option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option><option value="INDEPENDENT_DISTRIBUTOR">Independent distributor</option></select></label>
+                      <label>Supplier relationship<select value={qualificationForm.relationship} onChange={(event) => setQualificationForm((current) => ({ ...current, relationship: event.target.value as typeof current.relationship }))}><option value="MANUFACTURER">Manufacturer</option><option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option><option value="INDEPENDENT_DISTRIBUTOR">Independent distributor</option><option value="PRODUCER">Producer</option><option value="PROCESSOR">Processor</option><option value="EXPORTER">Exporter</option><option value="TRADER">Trader</option><option value="SERVICE_PROVIDER">Service provider</option></select></label>
                       <label>Valid through<input type="date" value={qualificationForm.validUntil} onChange={(event) => setQualificationForm((current) => ({ ...current, validUntil: event.target.value }))} /></label>
                       {qualificationForm.relationship === "AUTHORIZED_DISTRIBUTOR" ? <label className={styles.procurementWideField}>Manufacturer authorization URL<input type="url" value={qualificationForm.authorizationEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, authorizationEvidenceUrl: event.target.value }))} placeholder="Manufacturer partner or distributor listing" /></label> : null}
                       <label>Rejection reason<select value={qualificationForm.rejectionReason} onChange={(event) => setQualificationForm((current) => ({ ...current, rejectionReason: event.target.value as typeof current.rejectionReason }))}><option value="IDENTITY_UNRESOLVED">Identity unresolved</option><option value="CAPABILITY_UNRESOLVED">Capability unresolved</option><option value="AUTHORIZATION_UNRESOLVED">Authorization unresolved</option><option value="SOURCE_UNVERIFIABLE">Source unverifiable</option><option value="OTHER">Other</option></select></label>
