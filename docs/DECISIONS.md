@@ -3007,3 +3007,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
   but genuine query parameters remain part of the source identity. The UI must
   report discovery, retrieval, validation, and retained leads as separate
   stages.
+
+### 2026-08-13 - Supplier discovery excludes non-commercial reference domains
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Public search returned Reddit, Wikipedia, YouTube, academic papers,
+  and government reference documents beside real supplier catalogs. These URLs
+  could not become validated supplier leads, but they consumed retrieval slots
+  and made the sourcing result look like an unfiltered search page.
+- Decision: Apply one deterministic, client-safe supplier-discovery URL gate
+  before proposal eligibility, managed page retrieval, saved source output,
+  legacy public-search normalization, and UI display. Exclude known social,
+  community, encyclopedia, video, academic-reference, government, military,
+  and academic domain classes. Reject local and IP-literal URLs. Continue to
+  allow public supplier websites and supplier-hosted catalog PDFs.
+- Evidence boundary: Domain eligibility is only an intake filter. It does not
+  prove company identity, supplier role, product capability, price, stock, or
+  approval. Candidate retention still requires independently retrieved page
+  evidence and deterministic receipt validation.

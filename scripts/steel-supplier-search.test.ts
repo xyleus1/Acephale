@@ -43,7 +43,12 @@ const result = normalizeSteelSupplierSearch({
   ],
   gaps: ["Commercial references remain private."],
   warnings: ["Candidates are not approved."],
-}, [official, registry], "2026-08-07T12:00:00.000Z");
+}, [
+  official,
+  registry,
+  "https://www.reddit.com/r/steel/comments/example",
+  "https://en.wikipedia.org/wiki/Hot-rolled_coil",
+], "2026-08-07T12:00:00.000Z");
 
 assert.equal(result.candidates.length, 1, "candidates without provider-attributed sources must be removed");
 assert.equal(result.summary.includes("\u2014"), false, "model text must respect the repository character policy");
@@ -56,6 +61,25 @@ assert.equal(
   "a supported claim without an attributable source must be downgraded",
 );
 assert.equal(countSupportedEvidence(result.candidates[0]!), 2);
+
+const referenceOnly = normalizeSteelSupplierSearch({
+  summary: "Reference-only result.",
+  candidates: [{
+    companyName: "Community Steel",
+    website: "https://www.reddit.com/r/steel/",
+    country: "Unknown",
+    roles: ["trader"],
+    productFit: "Unverified discussion.",
+    evidenceSummary: "Community discussion only.",
+    evidence: [],
+    cautions: [],
+    nextVerification: "Find the company site.",
+    sourceUrls: ["https://www.reddit.com/r/steel/comments/example"],
+  }],
+  gaps: [],
+  warnings: [],
+}, ["https://www.reddit.com/r/steel/comments/example"]);
+assert.equal(referenceOnly.candidates.length, 0, "community and reference domains must never become supplier candidates");
 
 const publicInput = normalizeSteelSupplierSearchInput({
   segment: "raw_material",

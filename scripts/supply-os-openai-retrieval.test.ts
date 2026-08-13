@@ -13,6 +13,7 @@ import {
   searchOpenAiComponentSuppliers,
   type OpenAiSupplierResearchDependencies,
 } from "../src/lib/supply-os/openai-supplier-research";
+import { isSupplierDiscoveryUrl } from "../src/lib/supply-os/supplier-discovery-url";
 
 const now = new Date("2026-08-13T12:00:00.000Z");
 const sourceUrl = "https://acmeindustrial.example/catalog/dp420";
@@ -190,6 +191,42 @@ async function sourceBindingTests() {
   );
 }
 
+async function sourceQualityTests() {
+  const blockedUrls = [
+    "https://www.reddit.com/r/Machinists/comments/example",
+    "https://en.wikipedia.org/wiki/6061_aluminium_alloy",
+    "https://www.youtube.com/watch?v=example",
+    "https://arxiv.org/abs/1507.06938",
+    "https://materialsdata.nist.gov/example.pdf",
+    "https://engineering.example.edu/materials/aluminum",
+  ];
+  for (const url of blockedUrls) {
+    assert.equal(isSupplierDiscoveryUrl(url), false, `${url} is reference material, not a supplier lead`);
+  }
+  for (const url of [nationalSourceUrl, "https://www.mcmaster.com/products/made-to-order-6061-aluminum-sheets/"]) {
+    assert.equal(isSupplierDiscoveryUrl(url), true, `${url} is a legitimate supplier catalog`);
+  }
+
+  const mixed = dependencies(nativeResponse({
+    leads: [...blockedUrls.slice(0, 5).map((url) => lead(url)), lead()],
+    sourceUrls: [...blockedUrls, sourceUrl],
+    citations: [...blockedUrls, sourceUrl],
+  }));
+  const mixedResult = await searchOpenAiComponentSuppliers(input, mixed.value);
+  assert.deepEqual(mixedResult.sources.map((source) => source.url), [sourceUrl], "reference and community URLs must be removed before sources reach the result");
+  assert.deepEqual(mixed.requested.map((request) => request.url), [sourceUrl], "reference and community URLs must never consume independent retrieval slots");
+
+  const blockedOnly = dependencies(nativeResponse({
+    leads: blockedUrls.map((url) => lead(url)),
+    sourceUrls: blockedUrls,
+    citations: blockedUrls,
+  }));
+  const blockedOnlyResult = await searchOpenAiComponentSuppliers(input, blockedOnly.value);
+  assert.equal(blockedOnlyResult.sources.length, 0, "a junk-only search response must expose no supplier discovery URLs");
+  assert.equal(blockedOnly.requested.length, 0, "a junk-only search response must trigger no page retrieval");
+  assert.ok(blockedOnlyResult.warnings.includes("Public supplier lead pipeline: 0 discovered URLs, 0 eligible proposals, 0 retrieval attempts, 0 retrieved pages, 0 validated leads."));
+}
+
 async function evidenceForgeryTests() {
   const forged = dependencies(nativeResponse(), { [sourceUrl]: "<html><body>Unrelated page text.</body></html>" });
   const forgedResult = await searchOpenAiComponentSuppliers(input, forged.value);
@@ -359,6 +396,7 @@ async function boundedConcurrencyTest() {
 async function main() {
   await validLeadTest();
   await sourceBindingTests();
+  await sourceQualityTests();
   await evidenceForgeryTests();
   await pinnedRetrievalTests();
   await defaultTransportRegressionTest();

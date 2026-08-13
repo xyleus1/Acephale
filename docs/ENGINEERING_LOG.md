@@ -5270,3 +5270,19 @@ Use this file for chronological implementation notes that future agents should s
 - Focused supplier, OpenAI, Exa, campaign, UI, TypeScript, and diff-hygiene
   checks passed. Production still requires a new research attempt or campaign
   reconciliation after deployment to exercise the changed validator.
+
+### 2026-08-13 - Remove reference noise from supplier discovery
+
+- Confirmed the source-quality bug at provider intake. OpenAI copied every web
+  search source into the supplier result, and Exa admitted every public URL
+  before supplier relevance filtering. Later receipt validation rejected the
+  junk as candidates, but too late to prevent display and retrieval-slot waste.
+- Added `isSupplierDiscoveryUrl()` as the shared deterministic gate. It rejects
+  known reference, community, social, academic, and public-sector domains plus
+  local and IP-literal targets while preserving supplier catalogs and PDFs.
+- Applied it to OpenAI, Exa, the legacy component normalizer, the steel supplier
+  finder, and historical procurement research display.
+- Added regressions proving mixed result sets retain supplier pages, junk-only
+  sets fail closed, reference results cannot crowd out Exa supplier retrieval,
+  degraded output cannot preserve Reddit or Wikipedia, and historical UI paths
+  invoke the same gate.

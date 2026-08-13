@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { DERYA_AI_MODEL } from "@/lib/gpt56-client";
+import { isSupplierDiscoveryUrl } from "@/lib/supply-os/supplier-discovery-url";
 
 const MAX_FIELD_LENGTH = 1_000;
 const MAX_SOURCE_URLS = 40;
@@ -185,12 +186,12 @@ function collectWebSourceUrls(output: unknown): string[] {
     const action = record(item.action);
     for (const sourceValue of Array.isArray(action.sources) ? action.sources : []) {
       const url = publicHttpUrl(record(sourceValue).url);
-      if (url) urls.add(url);
+      if (url && isSupplierDiscoveryUrl(url)) urls.add(url);
     }
     for (const contentValue of Array.isArray(item.content) ? item.content : []) {
       for (const annotationValue of Array.isArray(record(contentValue).annotations) ? record(contentValue).annotations as unknown[] : []) {
         const url = publicHttpUrl(record(annotationValue).url);
-        if (url) urls.add(url);
+        if (url && isSupplierDiscoveryUrl(url)) urls.add(url);
       }
     }
   }
@@ -228,7 +229,7 @@ export function normalizeSteelSupplierSearch(
   const raw = record(rawValue);
   const allowedUrls = [...new Set(webSourceUrls.flatMap((item) => {
     const url = publicHttpUrl(item);
-    return url ? [url] : [];
+    return url && isSupplierDiscoveryUrl(url) ? [url] : [];
   }))].slice(0, MAX_SOURCE_URLS);
   const candidates = (Array.isArray(raw.candidates) ? raw.candidates : []).flatMap((candidateValue, index) => {
     const candidate = record(candidateValue);

@@ -17,6 +17,7 @@ import {
   type ExaSupplierResearchInput,
   type OpenAiRetrievalCapture,
 } from "../src/lib/supply-os/exa-supplier-research";
+import { isSupplierDiscoveryUrl } from "../src/lib/supply-os/supplier-discovery-url";
 
 const procurementWorkspace = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/supply-os-procurement-workspace.tsx"), "utf8");
 assert.doesNotMatch(procurementWorkspace, /candidate\.website \? "Official"/, "an Exa marketplace listing must remain a public New source in the UI");
@@ -52,6 +53,20 @@ const successProposal: ExaOfferProposal = {
   packageQuantity: null,
   evidenceText: successText,
 };
+
+const blockedDiscoveryUrls = [
+  "https://www.reddit.com/r/electronics/comments/example",
+  "https://en.wikipedia.org/wiki/Radio_module",
+  "https://www.youtube.com/watch?v=example",
+  "https://arxiv.org/abs/2307.06435",
+  "https://www.linkedin.com/posts/example",
+  "https://stackoverflow.com/questions/example",
+  "https://materialsdata.nist.gov/example.pdf",
+  "https://engineering.example.edu/catalog/rm-9",
+  "http://127.0.0.1/catalog/rm-9",
+];
+for (const url of blockedDiscoveryUrls) assert.equal(isSupplierDiscoveryUrl(url), false, `${url} must not be supplier discovery evidence`);
+assert.equal(isSupplierDiscoveryUrl(sourceUrl), true, "supplier catalogs must remain eligible");
 
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -358,6 +373,13 @@ assert.equal(validateExaPublicListingReceipts(input, capture([
 assert.equal(validateExaPublicListingReceipts(input, capture([
   sourceRecord({ sourceStatus: status({ status: "success", errorTag: "CRAWL_NOT_FOUND" }) }),
 ])).length, 0, "a nominal success status with an error tag must fail closed");
+const referenceListingUrl = "https://en.wikipedia.org/wiki/Radio_module";
+assert.equal(validateExaPublicListingReceipts(input, capture([
+  sourceRecord({
+    url: referenceListingUrl,
+    sourceStatus: status({ id: referenceListingUrl }),
+  }),
+])).length, 0, "a stored reference-domain capture must never rebuild a public listing receipt");
 
 async function main() {
 const requests: Array<{ url: string; body: Record<string, unknown>; redirect: RequestRedirect | undefined; cache: RequestCache | undefined }> = [];
@@ -369,6 +391,7 @@ const fetchFixture = async (request: string | URL | Request, init?: RequestInit)
     return new Response(JSON.stringify({
       requestId: "search-request-1",
       results: [
+        ...blockedDiscoveryUrls.map((url, index) => ({ id: `reference-${index}`, title: `Reference result ${index}`, url })),
         { id: "source-1", title: "RM-9 listing", url: sourceUrl, publishedDate: "1999-01-01T00:00:00.000Z" },
         { id: "source-private", title: "Private target", url: "http://127.0.0.1/internal" },
         { id: "source-2", title: "Unavailable RM-9 listing", url: failedSourceUrl },
@@ -395,6 +418,7 @@ assert.deepEqual(requests.map((request) => request.url), ["https://api.exa.ai/se
 assert.ok(requests.every((request) => request.redirect === "error" && request.cache === "no-store"), "managed requests must reject redirects and bypass HTTP caches");
 assert.equal((requests[1]?.body as { maxAgeHours?: number }).maxAgeHours, 0, "contents retrieval must always force a live crawl");
 assert.deepEqual((requests[1]?.body as { urls?: string[] }).urls, [sourceUrl, failedSourceUrl], "only public domain URLs returned by the current Exa search may be retrieved");
+assert.deepEqual(result.sources.map((source) => source.url).sort(), [sourceUrl, failedSourceUrl].sort(), "reference and community URLs must be removed before sources reach the result");
 assert.equal(result.retrieval.records[0]?.status?.status, "success", "the exact per-URL status must remain in the saved capture");
 assert.equal(result.retrieval.records[1]?.status?.errorTag, "CRAWL_LIVECRAWL_TIMEOUT", "failed URLs must remain in the saved capture even without content");
 assert.equal(result.retrieval.records[0]?.publishedDate, "1999-01-01T00:00:00.000Z", "provider dates may be retained only as source metadata");
@@ -405,8 +429,8 @@ assert.equal(result.sources[0]?.sourceType, "PUBLIC", "search results must not b
 assert.equal(result.candidates[0]?.price.freshness, "UNKNOWN", "forced-live retrieval does not invent an effective commercial date");
 assert.equal(parseStoredPublicListingReceipt(result.publicListingReceipts[0])?.candidateId, result.candidates[0]?.id, "the UI receipt must bind to the normalized candidate");
 
-const requestedCanonicalUrl = "https://arxiv.org/abs/2307.06435";
-const returnedCanonicalUrl = "https://arxiv.org/pdf/2307.06435.pdf";
+const requestedCanonicalUrl = "https://supplier-canonical.example/catalog/rm-9";
+const returnedCanonicalUrl = "https://supplier-canonical.example/products/rm-9.html";
 const canonicalizedResult = await searchExaComponentSuppliers(input, {
   apiKey: "fixture-key",
   now: () => new Date(retrievedAt),

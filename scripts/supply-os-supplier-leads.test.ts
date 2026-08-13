@@ -108,6 +108,8 @@ const degraded = normalizeOpenAiSupplierResponse(openAiInput, {
     action: {
       sources: [
         { type: "url", url: "https://acmeindustrial.example/catalog/dp420" },
+        { type: "url", url: "https://en.wikipedia.org/wiki/Epoxy" },
+        { type: "url", url: "https://www.reddit.com/r/adhesives/comments/example" },
         { type: "url", url: "http://127.0.0.1/private" },
       ],
     },
@@ -115,6 +117,7 @@ const degraded = normalizeOpenAiSupplierResponse(openAiInput, {
 });
 assert.equal(degraded.degraded, true);
 assert.equal(degraded.sources.length, 1, "attributable public URLs must survive invalid final JSON");
+assert.equal(degraded.sources[0]?.url, "https://acmeindustrial.example/catalog/dp420", "reference and community URLs must not survive degraded supplier discovery");
 assert.equal(degraded.sources[0]?.sourceType, "PUBLIC");
 assert.equal(degraded.candidates[0]?.status, "UNSUPPORTED");
 assert.deepEqual(degraded.candidates[0]?.roles, []);
@@ -384,6 +387,14 @@ function materialSupplierReceipt(args: {
   });
   return result[0] ?? null;
 }
+
+assert.equal(materialSupplierReceipt({
+  companyName: "Wikipedia",
+  sourceUrl: "https://en.wikipedia.org/wiki/6061_aluminium_alloy",
+  supplierRoleEvidence: "Wikipedia is a distributor of aluminum reference information.",
+  productCapabilityEvidence: "6061 aluminum sheet uses the T6 temper.",
+  itemIdentity: "6061-T6 aluminum sheet",
+}), null, "a stored reference-domain capture must fail receipt revalidation even when its text mimics supplier evidence");
 
 const tciMaterialReceipt = materialSupplierReceipt({
   companyName: "TCI Precision Metals",
