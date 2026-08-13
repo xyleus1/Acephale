@@ -12,6 +12,7 @@ import {
   OpenAiSupplierResearchError,
   searchOpenAiComponentSuppliers,
 } from "./openai-supplier-research";
+import { isSupplierDiscoveryUrl } from "./supplier-discovery-url";
 
 const MAX_SOURCES = 40;
 
@@ -133,15 +134,15 @@ function responseSourceUrls(output: unknown) {
     const item = asRecord(itemValue);
     const action = asRecord(item.action);
     const actionUrl = publicUrl(action.url);
-    if (actionUrl) urls.add(actionUrl);
+    if (actionUrl && isSupplierDiscoveryUrl(actionUrl)) urls.add(actionUrl);
     for (const sourceValue of Array.isArray(action.sources) ? action.sources : []) {
       const url = publicUrl(asRecord(sourceValue).url);
-      if (url) urls.add(url);
+      if (url && isSupplierDiscoveryUrl(url)) urls.add(url);
     }
     for (const contentValue of Array.isArray(item.content) ? item.content : []) {
       for (const annotationValue of Array.isArray(asRecord(contentValue).annotations) ? asRecord(contentValue).annotations as unknown[] : []) {
         const url = publicUrl(asRecord(annotationValue).url);
-        if (url) urls.add(url);
+        if (url && isSupplierDiscoveryUrl(url)) urls.add(url);
       }
     }
   }

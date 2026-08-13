@@ -8,6 +8,7 @@ import {
   type SupplierCandidateRole,
   type SupplierResearchResult,
 } from "./research";
+import { isSupplierDiscoveryUrl } from "./supplier-discovery-url";
 
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
 const EXA_CONTENTS_URL = "https://api.exa.ai/contents";
@@ -929,6 +930,7 @@ export function validatePublicSupplierLeadReceipts(
     const sourceBody = [source.text, ...source.highlights].filter(Boolean).join("\n");
     if (
       !sourceUrl
+      || !isSupplierDiscoveryUrl(sourceUrl)
       || !companyName
       || !role
       || !itemIdentity
@@ -1030,7 +1032,7 @@ export function validateExaPublicListingReceipts(
     const currency = text(proposal.currency, 20).toUpperCase();
     const unitOfMeasure = text(proposal.unitOfMeasure, 80);
     const amount = proposal.priceAmount;
-    if (!sourceUrl || !itemIdentity || !evidenceExcerpt || evidenceExcerpt.length > 1_000 || amount === null || dbRepresentableAmount(amount) === null) continue;
+    if (!sourceUrl || !isSupplierDiscoveryUrl(sourceUrl) || !itemIdentity || !evidenceExcerpt || evidenceExcerpt.length > 1_000 || amount === null || dbRepresentableAmount(amount) === null) continue;
     if (!containsPhrase(evidenceExcerpt, itemIdentity)) continue;
     if (!isIsoCurrency(currency) || !containsWord(evidenceExcerpt, currency)) continue;
     if (!unitOfMeasure || !containsPhrase(evidenceExcerpt, unitOfMeasure)) continue;
@@ -1568,7 +1570,7 @@ export async function searchExaComponentSuppliers(
   const selectedResults: SelectedSearchResult[] = searchResults.flatMap((result, index) => {
     const url = publicUrl(result.url);
     const id = text(result.id, 2_000) || url;
-    return url && id ? [{ result, index, url, id }] : [];
+    return url && id && isSupplierDiscoveryUrl(url) ? [{ result, index, url, id }] : [];
   }).filter((candidate, index, candidates) => candidates.findIndex((other) => other.url === candidate.url) === index).slice(0, MAX_RESULTS);
   if (!searchRequestId || !selectedResults.length) throw new ExaResearchError("INVALID_STRUCTURED_RESPONSE");
   const contentResultsToRetrieve = selectedResults.filter((candidate, index, candidates) => {

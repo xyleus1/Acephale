@@ -8565,3 +8565,35 @@ Verification:
 - `node --import tsx scripts/supply-os-continuous-sourcing.test.ts`
 - `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
 - `npx tsc --noEmit`
+
+### 2026-08-13 - Supplier discovery reference-domain filter
+
+Status:
+
+- Implemented after a deployed GUILD run displayed Reddit, Wikipedia, arXiv,
+  YouTube, NIST, and USITC URLs beside actual supplier catalogs.
+- No schema or dependency change is required.
+
+Behavior:
+
+- OpenAI and Exa now reject known social, community, encyclopedia, video,
+  academic-reference, government, military, academic, local, and IP-literal
+  domains before proposal selection, retrieval, capture, and result sources.
+- The legacy component research normalizer and steel supplier finder use the
+  same predicate, closing equivalent public-search attribution paths.
+- The procurement research view applies the predicate when reopening an older
+  immutable run, so historical reference links no longer appear as supplier
+  discovery URLs.
+- Supplier websites and supplier-hosted catalog PDFs remain eligible. Passing
+  this URL gate does not validate a supplier or a commercial claim.
+
+Verification:
+
+- `node --import tsx scripts/supply-os-openai-retrieval.test.ts`
+- `node --import tsx scripts/supply-os-exa-retrieval.test.ts`
+- `node --import tsx scripts/supply-os-supplier-leads.test.ts`
+- `node --import tsx scripts/steel-supplier-search.test.ts`
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- `node --import tsx scripts/supply-os-continuous-sourcing.test.ts`
+- `npx tsc --noEmit`
+- `git diff --check`

@@ -27,6 +27,7 @@ import {
   type AtlasSourcingCandidate,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import { displayedSupplierQuote, supplierQuoteSignals } from "@/lib/supply-os/quote-comparison";
+import { isSupplierDiscoveryUrl } from "@/lib/supply-os/supplier-discovery-url";
 import {
   missingSourcingFields,
   type SourcingConversationMessage,
@@ -181,10 +182,14 @@ function researchSources(result: PublicResearchResult | null) {
     const existing = sources.get(source.url);
     if (!existing || source.sourceType === "OFFICIAL") sources.set(source.url, source);
   };
-  for (const source of result.sources ?? []) remember(source);
+  for (const source of result.sources ?? []) {
+    if (isSupplierDiscoveryUrl(source.url)) remember(source);
+  }
   for (const candidate of result.candidates) {
-    for (const url of candidate.sourceUrls) remember({ url, sourceType: "PUBLIC" });
-    if (candidate.website) {
+    for (const url of candidate.sourceUrls) {
+      if (isSupplierDiscoveryUrl(url)) remember({ url, sourceType: "PUBLIC" });
+    }
+    if (candidate.website && isSupplierDiscoveryUrl(candidate.website)) {
       const classified = classifiedSourceForUrl(result, candidate.website);
       remember(classified ?? { url: candidate.website, sourceType: "PUBLIC" });
     }
@@ -198,7 +203,9 @@ function researchSources(result: PublicResearchResult | null) {
       candidate.minimumOrderQuantity,
       candidate.leadTimeDays,
     ]) {
-      for (const source of envelope.sources) remember(source);
+      for (const source of envelope.sources) {
+        if (isSupplierDiscoveryUrl(source.url)) remember(source);
+      }
     }
   }
   return [...sources.values()].sort((left, right) => left.url.localeCompare(right.url));
@@ -274,7 +281,8 @@ function revisedQuoteResponseDue(needBy: string) {
 
 function supplierQualificationForm(procurementCase: SavedProcurementCase | null | undefined) {
   const review = procurementCase?.result?.reviews?.sourceEvidence;
-  const sourceUrl = procurementCase?.result?.selectedOption.sourceUrl ?? "";
+  const selectedSourceUrl = procurementCase?.result?.selectedOption.sourceUrl;
+  const sourceUrl = selectedSourceUrl && isSupplierDiscoveryUrl(selectedSourceUrl) ? selectedSourceUrl : "";
   return {
     relationship: review?.relationship ?? "MANUFACTURER" as "MANUFACTURER" | "AUTHORIZED_DISTRIBUTOR" | "INDEPENDENT_DISTRIBUTOR" | "PRODUCER" | "PROCESSOR" | "EXPORTER" | "TRADER" | "SERVICE_PROVIDER",
     identityEvidenceUrl: review?.identityEvidenceUrl ?? sourceUrl,
@@ -335,17 +343,25 @@ function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOp
 
 function publicResearchOptions(result: PublicResearchResult | null): ProcurementOption[] {
   if (!result) return [];
-  return result.candidates.map((candidate) => {
-    const attributedSourceUrl = candidate.website
-      ?? candidate.sourceUrls[0]
-      ?? candidate.productCapability.sources[0]?.url
-      ?? null;
+  return result.candidates.flatMap((candidate): ProcurementOption[] => {
+    const eligibleWebsite = candidate.website
+      && isSupplierDiscoveryUrl(candidate.website)
+      && classifiedSourceForUrl(result, candidate.website)
+      ? candidate.website
+      : null;
+    const attributedSourceUrl = [
+      eligibleWebsite,
+      ...candidate.sourceUrls,
+      ...candidate.productCapability.sources.map((source) => source.url),
+    ].find((url): url is string => Boolean(url && isSupplierDiscoveryUrl(url))) ?? null;
+    if (!attributedSourceUrl) return [];
     const officialSource = attributedSourceUrl
       ? classifiedSourceForUrl(result, attributedSourceUrl)?.sourceType === "OFFICIAL"
       : false;
     const listingReceipt = result.publicListingReceipts?.find((receipt) => receipt.candidateId === candidate.id) ?? null;
     const priceSource = candidate.price.sources.find((source) =>
-      candidate.currency.sources.some((currencySource) => currencySource.url === source.url)
+      isSupplierDiscoveryUrl(source.url)
+      && candidate.currency.sources.some((currencySource) => currencySource.url === source.url)
       && candidate.unitOfMeasure.sources.some((unitSource) => unitSource.url === source.url));
     // A managed retrieval receipt can support a listing claim, but it is still
     // not a reviewed supplier quote or an orderable commercial term.
@@ -362,7 +378,7 @@ function publicResearchOptions(result: PublicResearchResult | null): Procurement
       && Boolean(candidate.unitOfMeasure.value.trim());
     const deliverySourced = isSourcedEvidence(candidate.leadTimeDays);
     const moqSourced = isSourcedEvidence(candidate.minimumOrderQuantity);
-    return ({
+    return [{
     id: `public:${candidate.id}`,
     name: candidate.companyName,
     location: candidate.facility.value ?? candidate.country.value ?? "Location unknown",
@@ -373,8 +389,8 @@ function publicResearchOptions(result: PublicResearchResult | null): Procurement
     modeledUnitCostUsd: priceSourced ? candidate.price.value ?? 0 : 0,
     currency: priceSourced ? candidate.currency.value?.toUpperCase().match(/^[A-Z]{3}$/)?.[0] ?? null : null,
     fit: candidate.productCapability.value ?? "Product capability requires review.",
-    sourceClass: officialSource ? "Official" : attributedSourceUrl ? "Public" : "New",
-    sourceLabel: officialSource ? "Official evidence, unqualified" : attributedSourceUrl ? "Public evidence, unqualified" : "No attributable source",
+    sourceClass: officialSource ? "Official" : "Public",
+    sourceLabel: officialSource ? "Official evidence, unqualified" : "Public evidence, unqualified",
     quality: candidate.status === "REVIEW_REQUIRED" ? "Conditional" : "Unverified",
     qualityEvidence: candidate.cautions[0] ?? `${candidate.productCapability.state.toLowerCase()} product-capability evidence`,
     deliveryDate: researchDeliveryDate(deliverySourced ? candidate.leadTimeDays.value : null),
@@ -387,7 +403,7 @@ function publicResearchOptions(result: PublicResearchResult | null): Procurement
       ? `${candidate.currency.value!.toUpperCase()} ${candidate.price.value!.toLocaleString()} / ${candidate.unitOfMeasure.value}`
       : null,
     publicPriceCapturedAt: listingReceipt?.retrievedAt ?? null,
-    });
+    }];
   });
 }
 
@@ -682,7 +698,7 @@ export function AtlasProcurementWorkspace({
   const [showSupplierExceptionForm, setShowSupplierExceptionForm] = useState(false);
   const initialRunStatus = initialRun?.status.toUpperCase() ?? null;
   const initialRunSucceeded = initialRunStatus === "SUCCEEDED";
-  const initialRunHasCandidates = initialRunSucceeded && Boolean(initialRun?.output?.candidates.length);
+  const initialRunHasCandidates = initialRunSucceeded && publicResearchOptions(initialRun?.output ?? null).length > 0;
   const initialRunActive = initialRunStatus === "QUEUED" || initialRunStatus === "RUNNING";
   const [publicResearch, setPublicResearch] = useState<PublicResearchResult | null>(initialRunSucceeded ? initialRun?.output ?? null : null);
   const [researchError, setResearchError] = useState<string | null>(
@@ -725,12 +741,15 @@ export function AtlasProcurementWorkspace({
   });
   const comparisonOption = options.find((option) => option.id === selectedOptionId) ?? recommended;
   const savedSelection = currentCase?.result?.selectedOption;
+  const currentCaseSourceUrl = savedSelection?.sourceUrl && isSupplierDiscoveryUrl(savedSelection.sourceUrl)
+    ? savedSelection.sourceUrl
+    : null;
   const selectedOption = savedSelection && comparisonOption?.id === savedSelection.id
     ? {
         ...comparisonOption,
         name: savedSelection.name,
         sourceClass: savedSelection.sourceClass,
-        sourceUrl: savedSelection.sourceUrl,
+        sourceUrl: currentCaseSourceUrl,
         modeledUnitCostUsd: currentCase?.result?.confirmedTerms?.price ?? savedSelection.price ?? 0,
         currency: currentCase?.result?.confirmedTerms?.currency ?? savedSelection.currency,
         minimumOrderQuantity: currentCase?.result?.confirmedTerms?.minimumOrderQuantity ?? savedSelection.minimumOrderQuantity ?? 0,
@@ -2237,7 +2256,7 @@ export function AtlasProcurementWorkspace({
                 {currentCase.result.stage === "SOURCE_EVIDENCE" || currentCase.result.stage === "SUPPLIER_REJECTED" ? (
                   <>
                     <header><small>Gate 1 of 4</small><h4>{currentCase.result.stage === "SUPPLIER_REJECTED" ? "Supplier rejected" : "Qualify the supplier"}</h4><p>Verify the business identity, component capability, and commercial relationship before an RFQ can leave Derya.</p></header>
-                    {currentCase.result.selectedOption.sourceUrl ? <a href={currentCase.result.selectedOption.sourceUrl} target="_blank" rel="noreferrer">Open attributed supplier source <ArrowRight size={14} /></a> : null}
+                    {currentCaseSourceUrl ? <a href={currentCaseSourceUrl} target="_blank" rel="noreferrer">Open attributed supplier source <ArrowRight size={14} /></a> : null}
                     <div className={styles.procurementFormGrid}>
                       <label className={styles.procurementWideField}>Identity evidence URL<input type="url" value={qualificationForm.identityEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, identityEvidenceUrl: event.target.value }))} placeholder="Official company or registry page" /></label>
                       <label className={styles.procurementWideField}>Component capability URL<input type="url" value={qualificationForm.capabilityEvidenceUrl} onChange={(event) => setQualificationForm((current) => ({ ...current, capabilityEvidenceUrl: event.target.value }))} placeholder="Product, catalog, or line-card page" /></label>
@@ -2248,7 +2267,7 @@ export function AtlasProcurementWorkspace({
                       <label className={styles.procurementWideField}>Review note<textarea value={qualificationForm.note} onChange={(event) => setQualificationForm((current) => ({ ...current, note: event.target.value }))} placeholder="Record what matched, what did not, and any remaining risk." /></label>
                     </div>
                     <div className={styles.procurementDecisionActions}>
-                      <button type="button" disabled={gateActionState === "saving" || !currentCase.result.selectedOption.sourceUrl || !qualificationComplete} onClick={() => reviewSourceEvidence("QUALIFIED")}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} {currentCase.result.stage === "SUPPLIER_REJECTED" ? "Requalify supplier" : "Qualify for RFQ"}</button>
+                      <button type="button" disabled={gateActionState === "saving" || !currentCaseSourceUrl || !qualificationComplete} onClick={() => reviewSourceEvidence("QUALIFIED")}>{gateActionState === "saving" ? <LoaderCircle size={14} className={styles.spin} /> : <Check size={14} />} {currentCase.result.stage === "SUPPLIER_REJECTED" ? "Requalify supplier" : "Qualify for RFQ"}</button>
                       <button type="button" disabled={gateActionState === "saving" || !rejectionComplete} onClick={() => reviewSourceEvidence("REJECTED")}><TriangleAlert size={14} /> Reject supplier</button>
                     </div>
                     <p className={styles.procurementPermissionNote}>Qualification permits quote outreach only. It is not a supplier award, compliance clearance, or purchase authorization.</p>
