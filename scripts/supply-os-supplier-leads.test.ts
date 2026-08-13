@@ -14,6 +14,7 @@ import {
   buildSupplierResearchQueryPlan,
   normalizeSupplierResearch,
   selectedSupplierResearchQueryVariant,
+  supplierCompanyMatchesDomain,
 } from "../src/lib/supply-os/research";
 import { GUILD_SOURCING_LINES } from "../src/lib/supply-os/guild-sourcing-items";
 
@@ -67,6 +68,10 @@ assert.equal(selectedSupplierResearchQueryVariant({
   componentName: "Bonding epoxy",
   queryVariant: "browser-invented-variant",
 }).selected, null, "unknown scheduler variants must fail closed");
+assert.equal(supplierCompanyMatchesDomain("TCI Precision Metals", "https://tciprecision.com/materials/aluminum"), true);
+assert.equal(supplierCompanyMatchesDomain("Texas Alloys & Tool Co.", "https://www.texasalloys.com/aluminum.html"), true);
+assert.equal(supplierCompanyMatchesDomain("National Aluminum & Alloy", "https://nationalaa.com/products/aluminum-plate"), true);
+assert.equal(supplierCompanyMatchesDomain("Fake Texas Alloys", "https://www.texasalloys.com/aluminum.html"), false, "a prefixed company name must not steal a matching trailing domain alias");
 
 const guildOpenRoleUrl = "https://guildprocessor.example/capability";
 const guildOpenRole = normalizeSupplierResearch({
@@ -342,6 +347,71 @@ assert.equal(validateExaPublicSupplierLeadReceipts(materialInput, {
     sourceTextHash: createHash("sha256").update(materialText).digest("hex"),
   }],
 }).length, 0, "generic aluminum sheet evidence must not count for a 6061-T6 2.0 mm material request");
+
+function materialSupplierReceipt(args: {
+  companyName: string;
+  sourceUrl: string;
+  supplierRoleEvidence: string;
+  productCapabilityEvidence: string;
+  itemIdentity: string;
+}) {
+  const companyIdentityEvidence = `${args.companyName} operates this official company website.`;
+  const sourceText = [companyIdentityEvidence, args.supplierRoleEvidence, args.productCapabilityEvidence].join(" ");
+  const result = validateExaPublicSupplierLeadReceipts(materialInput, {
+    ...capture,
+    records: [{
+      ...capture.records[0]!,
+      sourceUrl: args.sourceUrl,
+      status: { ...capture.records[0]!.status!, id: args.sourceUrl },
+      text: sourceText,
+      proposal: {
+        supplierName: args.companyName,
+        supplierRole: "DISTRIBUTOR",
+        companyIdentityEvidence,
+        supplierRoleEvidence: args.supplierRoleEvidence,
+        productCapabilityEvidence: args.productCapabilityEvidence,
+        itemIdentity: args.itemIdentity,
+        manufacturer: null,
+        mpn: null,
+        priceAmount: null,
+        currency: null,
+        unitOfMeasure: null,
+        packageQuantity: null,
+        evidenceText: null,
+      },
+      sourceTextHash: createHash("sha256").update(sourceText).digest("hex"),
+    }],
+  });
+  return result[0] ?? null;
+}
+
+const tciMaterialReceipt = materialSupplierReceipt({
+  companyName: "TCI Precision Metals",
+  sourceUrl: "https://tciprecision.com/materials/aluminum/aluminum-sheet-stock/",
+  supplierRoleEvidence: "TCI Precision Metals is a value-add aluminum sheet distributor.",
+  productCapabilityEvidence: "6061 Aluminum T6 Sheet. Standard thickness ranges from 0.032 to 0.190 inches.",
+  itemIdentity: "6061-T6 aluminum sheet, 2.0 mm nominal, mill finish, cut-to-size blanks",
+});
+assert.ok(tciMaterialReceipt, "a true 6061 Aluminum T6 Sheet supplier must remain a lead when exact 2.0 mm availability requires RFQ confirmation");
+assert.equal(tciMaterialReceipt.productCapability, "6061-T6 aluminum sheet", "unsupported thickness, finish, and cutting claims must not enter the supported capability");
+
+const stockistMaterialReceipt = materialSupplierReceipt({
+  companyName: "Texas Alloys & Tool Co.",
+  sourceUrl: "https://www.texasalloys.com/aluminum.html",
+  supplierRoleEvidence: "An independent metal service center serving Texas industry.",
+  productCapabilityEvidence: "Aluminum 6061 sheet is available in T6 temper.",
+  itemIdentity: "6061 T6 aluminum sheet",
+});
+assert.ok(stockistMaterialReceipt, "an exact company-domain-bound metal service center can support a distributor lead without synthetic company repetition in every excerpt");
+assert.equal(stockistMaterialReceipt.productCapability, "6061-T6 aluminum sheet");
+
+assert.equal(materialSupplierReceipt({
+  companyName: "Generic Metal",
+  sourceUrl: "https://genericmetal.example/aluminum",
+  supplierRoleEvidence: "An independent metal service center.",
+  productCapabilityEvidence: "Aluminum sheet in many thicknesses.",
+  itemIdentity: "6061-T6 aluminum sheet",
+}), null, "model-added grade or temper text must not turn generic aluminum sheet evidence into a lead");
 
 const brandedGeneric = structuredClone(capture) as ExaRetrievalCapture;
 const brandedText = "Acme Industrial operates this official catalog. Acme Industrial is a distributor. Acme Industrial distributes 3M structural epoxy.";

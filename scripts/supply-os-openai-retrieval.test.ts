@@ -18,6 +18,8 @@ const now = new Date("2026-08-13T12:00:00.000Z");
 const sourceUrl = "https://acmeindustrial.example/catalog/dp420";
 const secondSourceUrl = "https://secondindustrial.example/catalog/dp420";
 const thirdSourceUrl = "https://thirdindustrial.example/catalog/dp420";
+const nationalSourceUrl = "https://nationalaa.com/products/aluminum-plate/";
+const trackedNationalSourceUrl = `${nationalSourceUrl}?utm_source=openai&srsltid=tracking-token`;
 const identityEvidence = "Acme Industrial operates this public product catalog.";
 const roleEvidence = "Acme Industrial is a distributor of industrial adhesives.";
 const capabilityEvidence = "Acme Industrial supplies 3M Scotch-Weld DP420 structural epoxy.";
@@ -159,6 +161,17 @@ async function sourceBindingTests() {
   assert.equal(uncitedResult.candidates.length, 0, "a proposed source missing a native citation cannot admit a lead");
   assert.equal(uncited.requested.length, 0, "uncited model URLs must not be fetched");
 
+  const trackedCitation = dependencies(nativeResponse({
+    leads: [lead(nationalSourceUrl)],
+    sourceUrls: [nationalSourceUrl, trackedNationalSourceUrl],
+    citations: [trackedNationalSourceUrl],
+  }));
+  const trackedCitationResult = await searchOpenAiComponentSuppliers(input, trackedCitation.value);
+  assert.equal(trackedCitation.requested.length, 1, "known tracking parameters must not prevent independently retrieving a natively cited supplier page");
+  assert.equal(trackedCitation.requested[0]?.url, nationalSourceUrl);
+  assert.deepEqual(trackedCitationResult.sources.map((source) => source.url), [nationalSourceUrl], "tracking-only URL variants must collapse to one discovered source");
+  assert.equal(trackedCitationResult.retrieval.records.length, 1);
+
   await assert.rejects(
     () => searchOpenAiComponentSuppliers(input, dependencies(nativeResponse({ badRange: true })).value),
     /INVALID_STRUCTURED_RESPONSE/,
@@ -182,6 +195,10 @@ async function evidenceForgeryTests() {
   const forgedResult = await searchOpenAiComponentSuppliers(input, forged.value);
   assert.equal(forgedResult.publicSupplierLeadReceipts.length, 0);
   assert.equal(forgedResult.candidates.length, 0, "structured model claims cannot survive without exact page evidence");
+  assert.ok(forgedResult.warnings.includes("Public supplier lead pipeline: 1 discovered URLs, 1 eligible proposals, 1 retrieval attempts, 1 retrieved pages, 0 validated leads."));
+
+  const emptyLeadsResult = await searchOpenAiComponentSuppliers(input, dependencies(nativeResponse({ leads: [] })).value);
+  assert.ok(emptyLeadsResult.warnings.includes("Public supplier lead pipeline: 1 discovered URLs, 0 eligible proposals, 0 retrieval attempts, 0 retrieved pages, 0 validated leads."));
 
   const wrongCompanyLead = { ...lead(), companyName: "Different Company" };
   const wrongCompany = dependencies(nativeResponse({ leads: [wrongCompanyLead] }));

@@ -8529,3 +8529,39 @@ Remaining release checks:
 - Verification includes the new `test:supply-os-openai-retrieval` contract plus
   provider-selection, worker pinning, mixed-provider campaign aggregation,
   source-only evidence retention, and database cutover assertions.
+
+### 2026-08-13 - GUILD zero-lead supplier validation repair
+
+Status:
+
+- Implemented after production research returned relevant supplier domains but
+  retained zero candidates for GUILD-001.
+- No schema or dependency change is required.
+
+Root cause and operator result:
+
+- The material validator required literal order details such as `2.0 mm` and
+  exact alloy punctuation before retaining a supplier. It also rejected common
+  company/domain forms such as TCI Precision Metals on `tciprecision.com` and
+  could miss the same cited page when OpenAI added tracking parameters.
+- Material leads now require page-backed material, form, and requested alloy or
+  temper. Thickness, finish, cutting, QA documents, stock, price, and lead time
+  stay unknown for RFQ confirmation instead of erasing the supplier.
+- The supported capability is reduced to the proven core, for example
+  `6061-T6 aluminum sheet`. Generic aluminum pages still fail.
+- Known tracking-only query parameters are removed for native source, citation,
+  proposal, and retrieval binding. Genuine query parameters are preserved.
+- Zero-lead output now includes safe counts for discovered URLs, eligible
+  proposals, retrieval attempts, retrieved pages, and validated leads.
+- The research UI calls search results `Discovery URLs`, shows a terminal
+  `Research complete` state for zero leads, avoids repeating the first warning,
+  and reopens a saved zero-lead run on its diagnostic and retry view.
+
+Verification:
+
+- `node --import tsx scripts/supply-os-supplier-leads.test.ts`
+- `node --import tsx scripts/supply-os-openai-retrieval.test.ts`
+- `node --import tsx scripts/supply-os-exa-retrieval.test.ts`
+- `node --import tsx scripts/supply-os-continuous-sourcing.test.ts`
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- `npx tsc --noEmit`

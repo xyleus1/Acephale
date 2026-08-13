@@ -5244,3 +5244,29 @@ Use this file for chronological implementation notes that future agents should s
   superseded work cannot spend provider quota after a scope revision.
 - Registered the OpenAI retrieval regression in package scripts and the Supply
   OS GitHub Actions workflow.
+
+### 2026-08-13 - Repair real supplier false negatives after public discovery
+
+- Production symptom: GUILD-001 returned 36 attributable public-search URLs,
+  including multiple relevant aluminum suppliers, but retained zero candidates.
+- Confirmed root cause: the receipt validator required exact orderability facts
+  to admit a material supplier. A realistic TCI Precision Metals page fixture
+  proving 6061 Aluminum T6 Sheet failed without the literal requested `2.0 mm`.
+  Exact URL matching also failed when a native citation added tracking-only
+  query parameters, and the company/domain matcher rejected common compound or
+  abbreviated supplier domains.
+- Changed the material gate to require independently retrieved evidence for
+  supplier identity, role, material, form, and requested alloy or temper. It
+  emits only the supported material capability core. Order-specific thickness,
+  finish, cutting, QA, commercial, and availability facts remain unknown.
+- Added bounded company/domain aliases for leading company-name compounds and
+  first-name plus trailing initials. A prefixed impersonation fixture remains
+  rejected.
+- Canonicalized only known tracking parameters for OpenAI native source,
+  citation, proposal, and retrieval binding. Added safe zero-lead stage counts.
+- Corrected the research UI to separate discovery URLs from independently
+  retrieved and validated supplier pages, and to show terminal zero-lead work
+  as complete rather than still researching.
+- Focused supplier, OpenAI, Exa, campaign, UI, TypeScript, and diff-hygiene
+  checks passed. Production still requires a new research attempt or campaign
+  reconciliation after deployment to exercise the changed validator.
