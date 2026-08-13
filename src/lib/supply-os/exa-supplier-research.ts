@@ -471,8 +471,16 @@ function containsPhrase(haystack: string, needle: string) {
 }
 
 function containsDimensionPhrase(haystack: string, needle: string) {
-  const normalized = (value: string) => value.toLowerCase().replace(/(\d),(\d)/g, "$1.$2").replace(/\s+/g, "").replace(/inches|inch/g, "in");
-  return normalized(haystack).includes(normalized(needle));
+  const tokens = (value: string) => value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/(\d),(\d)/g, "$1.$2")
+    .replace(/\binches?\b/g, "in")
+    .match(/\d+(?:\.\d+)?|[\p{L}]+/gu) ?? [];
+  const sourceTokens = tokens(haystack);
+  const requestedTokens = tokens(needle);
+  if (!requestedTokens.length || requestedTokens.length > sourceTokens.length) return false;
+  return sourceTokens.some((_, index) => requestedTokens.every((token, offset) => sourceTokens[index + offset] === token));
 }
 
 function containsIdentityTerm(haystack: string, term: string) {
@@ -486,10 +494,6 @@ function containsIdentityTerm(haystack: string, term: string) {
   const termWords = identityWords(term).map(singular);
   if (!termWords.length || termWords.length > sourceWords.length) return false;
   return sourceWords.some((_, index) => termWords.every((word, offset) => sourceWords[index + offset] === word));
-}
-
-function containsIdentityPhrase(haystack: string, phrase: string) {
-  return containsIdentityTerm(haystack, phrase);
 }
 
 function containsAmount(source: string, amount: number) {
@@ -638,7 +642,28 @@ const SUPPLIER_ROLES = new Set<SupplierCandidateRole>([
 ]);
 
 function supplierRole(value: unknown): SupplierCandidateRole | null {
-  const role = text(value, 40).toUpperCase() as SupplierCandidateRole;
+  const proposed = text(value, 60).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+  const aliases: Record<string, SupplierCandidateRole> = {
+    AUTHORIZED_DISTRIBUTOR: "DISTRIBUTOR",
+    STOCKING_DISTRIBUTOR: "DISTRIBUTOR",
+    STOCKIST: "DISTRIBUTOR",
+    SERVICE_CENTER: "DISTRIBUTOR",
+    METAL_SERVICE_CENTER: "DISTRIBUTOR",
+    INDUSTRIAL_SUPPLIER: "DISTRIBUTOR",
+    PACKAGING_SUPPLIER: "DISTRIBUTOR",
+    MACHINE_SHOP: "PROCESSOR",
+    CNC_MACHINE_SHOP: "PROCESSOR",
+    FABRICATOR: "PROCESSOR",
+    FABRICATION_SHOP: "PROCESSOR",
+    HARNESS_ASSEMBLER: "SERVICE_PROVIDER",
+    WIRE_HARNESS_ASSEMBLER: "SERVICE_PROVIDER",
+    CABLE_ASSEMBLY_SERVICE: "SERVICE_PROVIDER",
+    PACKAGING_SERVICE: "SERVICE_PROVIDER",
+    INSPECTION_LABORATORY: "SERVICE_PROVIDER",
+    CALIBRATION_LABORATORY: "SERVICE_PROVIDER",
+    METROLOGY_LABORATORY: "SERVICE_PROVIDER",
+  };
+  const role = (aliases[proposed] ?? proposed) as SupplierCandidateRole;
   return SUPPLIER_ROLES.has(role) ? role : null;
 }
 
@@ -650,13 +675,13 @@ function roleAllowedForInput(input: ExaSupplierResearchInput, role: SupplierCand
 }
 
 const ROLE_EVIDENCE_PATTERNS: Record<SupplierCandidateRole, RegExp> = {
-  MANUFACTURER: /\b(?:manufacturer|manufacturing company|contract manufacturing|manufactures?)\b/i,
-  DISTRIBUTOR: /\b(?:distributor|distribution company|distributes?)\b/i,
-  PRODUCER: /\b(?:producer|produces?)\b/i,
-  PROCESSOR: /\b(?:processor|processing company|material processing|processes?)\b/i,
-  EXPORTER: /\b(?:exporter|exports?)\b/i,
-  TRADER: /\b(?:trader|trading company|trades?)\b/i,
-  SERVICE_PROVIDER: /\b(?:service provider|inspection service|inspection company|inspection laboratory|metrology lab(?:oratory)?|testing laboratory|calibration laboratory)\b/i,
+  MANUFACTURER: /\b(?:manufacturer|manufacturing company|contract manufactur\w*|manufactures?|maker|build[- ]to[- ]print|machine shop|fabricator|fabrication shop|cable assembl\w*|wire harness assembl\w*|case manufacturer)\b/i,
+  DISTRIBUTOR: /\b(?:distributor|distribution company|distributes?|supplier|stockist|service center|stocks?|sells?|industrial supply|packaging supplier)\b/i,
+  PRODUCER: /\b(?:producer|produces?|mill|converter)\b/i,
+  PROCESSOR: /\b(?:processor|processing company|material processing|processes?|service center|machine shop|fabricator|fabrication shop|cnc machining|cut[- ]to[- ]size)\b/i,
+  EXPORTER: /\b(?:exporter|exports?|export supplier)\b/i,
+  TRADER: /\b(?:trader|trading company|trades?|industrial trading)\b/i,
+  SERVICE_PROVIDER: /\b(?:service provider|inspection service|inspection company|inspection laboratory|metrology lab(?:oratory)?|testing laboratory|calibration laboratory|harness assembl\w*|cable assembl\w*|wire harness assembl\w*|custom packaging|packaging service)\b/i,
 };
 
 function explicitRoleEvidence(value: string, role: SupplierCandidateRole) {
@@ -704,6 +729,9 @@ const MATERIAL_GRADE_LABELS: Record<(typeof MATERIAL_GRADE_TERMS)[number], strin
 const CUSTOM_PROCESS_TERMS = [
   "machining", "machined", "cnc", "fabrication", "fabricator", "build to print", "laser etched", "engraving", "anodizing", "printed circuit board",
 ] as const;
+const CUSTOM_FABRICATION_PRODUCT_TERMS = [
+  "rail", "enclosure", "carrier", "nameplate", "printed circuit board", "pcb",
+] as const;
 const GENERIC_PRODUCT_TERMS = [
   "isolator", "mount", "fastener", "screw", "washer", "locknut", "nut", "threaded insert", "epoxy", "adhesive", "solvent", "isopropyl alcohol", "primer", "topcoat",
   "wire", "cable", "sleeve", "sleeving", "heat shrink", "connector", "standoff", "insert", "strap", "edge trim", "thermal pad", "lacquer", "cap", "plug",
@@ -712,10 +740,10 @@ const GENERIC_QUALIFIER_TERMS = [
   "vibration", "silicone", "elastomer", "stainless", "304", "a2", "socket head", "m3", "m4", "m5", "passivated",
   "flat", "prevailing torque", "helical thread", "high purity", "99 percent", "electronics grade", "corrosion resistant",
   "epoxy", "aluminum compatible", "polyurethane", "matte", "22 awg", "18 awg", "stranded copper", "etfe", "600 v",
-  "2 conductor", "twisted", "shielded", "fluoropolymer", "printable", "identification", "thermal transfer", "braided",
+  "2 conductor", "twisted", "shielded", "fluoropolymer", "printable", "thermal transfer", "braided",
   "expandable", "dual wall", "adhesive lined", "3:1", "circular", "multipole", "metallic shell", "positive locking",
-  "8 to 12 contacts", "nylon", "peek", "10 to 25 mm", "tinned copper", "grounding", "ring terminal", "epdm",
-  "electrically insulating", "1 to 2 mm", "torque seal", "witness", "antistatic", "dust cover",
+  "nylon", "peek", "tinned copper", "grounding", "ring terminal", "epdm",
+  "electrically insulating", "torque seal", "witness", "antistatic", "dust cover",
   "polyolefin",
 ] as const;
 const GENERIC_QUALIFIER_ALTERNATIVES = [
@@ -728,6 +756,7 @@ const GENERIC_QUALIFIER_ALTERNATIVES = [
 
 function containsMaterialGrade(value: string, grade: (typeof MATERIAL_GRADE_TERMS)[number]) {
   const normalizedGrade = grade.replace(/[^a-z0-9]+/g, "");
+  if (normalizedGrade === "fr4") return /\bfr\s*[-/]?\s*4\b/i.test(value);
   const words = identityWords(value).map((word) => word.replace(/[^a-z0-9]+/g, ""));
   if (words.includes(normalizedGrade)) return true;
   const alloyTemper = normalizedGrade.match(/^(\d{4})([th]\d+)$/);
@@ -765,6 +794,9 @@ function requestedMaterialMatch(requested: string, capabilityExcerpt: string) {
 }
 
 function materialStockCapability(requested: string, capabilityExcerpt: string) {
+  const requiresFlameRetardantFr4 = /\bflame[- ]retardant\b/i.test(requested)
+    && /\bfr[- ]?4\b/i.test(requested);
+  if (requiresFlameRetardantFr4 && !containsMaterialGrade(capabilityExcerpt, "fr-4")) return null;
   const material = requestedMaterialMatch(requested, capabilityExcerpt);
   const requestedForms = requestedTerms(requested, MATERIAL_FORM_TERMS);
   const form = requestedForms.find((term) => containsIdentityTerm(capabilityExcerpt, term));
@@ -782,6 +814,60 @@ function materialStockCapability(requested: string, capabilityExcerpt: string) {
   }).join(" ");
 }
 
+type RequestedNumericRange = { minimum: number; maximum: number; unit: string };
+
+function requestedNumericRanges(value: string): RequestedNumericRange[] {
+  return [...value.toLowerCase().matchAll(/\b(\d+(?:\.\d+)?)\s*(?:to|through|[-–])\s*(\d+(?:\.\d+)?)\s*(awg|mm|contacts?|shore\s*a)\b/g)]
+    .map((match) => ({
+      minimum: Math.min(Number(match[1]), Number(match[2])),
+      maximum: Math.max(Number(match[1]), Number(match[2])),
+      unit: (match[3] ?? "").replace(/\s+/g, " ").replace(/^contact$/, "contacts"),
+    }))
+    .filter((range) => Number.isFinite(range.minimum) && Number.isFinite(range.maximum) && Boolean(range.unit));
+}
+
+function capabilitySupportsNumericRange(value: string, range: RequestedNumericRange) {
+  const unitPattern = range.unit === "contacts" ? "contacts?" : range.unit === "shore a" ? "shore\\s*a" : regexEscape(range.unit);
+  const measurements = [...value.toLowerCase().matchAll(new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*(?:[- ]\\s*)?${unitPattern}\\b`, "g"))];
+  return measurements.some((match) => {
+    const measurement = Number(match[1]);
+    return Number.isFinite(measurement) && measurement >= range.minimum && measurement <= range.maximum;
+  });
+}
+
+function requiredStandaloneDimensions(value: string, ranges: RequestedNumericRange[]) {
+  return (value.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:awg|v|mm|in|inch|inches|percent|%)\b/g) ?? []).filter((dimension) => {
+    const match = dimension.match(/(\d+(?:\.\d+)?)\s*([a-z%]+)/);
+    if (!match) return true;
+    const amount = Number(match[1]);
+    const unit = match[2] === "contact" ? "contacts" : match[2];
+    return !ranges.some((range) => range.unit === unit && range.maximum === amount);
+  });
+}
+
+function supportsRequestedFabricationProcesses(requested: string, capabilityExcerpt: string) {
+  const checks: Array<[boolean, RegExp]> = [
+    [/\b(?:machin(?:ed|ing)?|cnc)\b/i.test(requested), /\b(?:machin\w*|cnc)\b/i],
+    [/\bfabricat\w*\b/i.test(requested), /\bfabricat\w*\b/i],
+    [/\bbuild[- ]to[- ]print\b/i.test(requested), /\bbuild[- ]to[- ]print\b/i],
+    [/\blaser[- ]etched\b/i.test(requested), /\b(?:laser[- ]etch\w*|engrave\w*)\b/i],
+    [/\bengraving\b/i.test(requested), /\b(?:engrave\w*|laser[- ]etch\w*)\b/i],
+    [/\banodiz\w*\b/i.test(requested), /\banodiz\w*\b/i],
+    [/\bprinted circuit board\b/i.test(requested), /\b(?:printed circuit board|pcb)\b/i],
+  ];
+  return checks.every(([required, pattern]) => !required || pattern.test(capabilityExcerpt));
+}
+
+function supportsPackagingProducts(requested: string, capabilityExcerpt: string) {
+  const checks: Array<[boolean, RegExp]> = [
+    [/\bfoam\b/i.test(requested), /\bfoam\b/i],
+    [/\bantistatic bags?\b/i.test(requested), /\b(?:(?:anti[- ]?static|esd)\s+bags?|bags?\s+(?:for\s+)?(?:anti[- ]?static|esd))\b/i],
+    [/\bhumidity indicators?\b/i.test(requested), /\bhumidity\s+(?:indicators?|cards?)\b/i],
+    [/\bshipping cases?\b/i.test(requested), /\b(?:shipping|transit|transport)\s+cases?\b/i],
+  ];
+  return checks.some(([required]) => required) && checks.every(([required, pattern]) => !required || pattern.test(capabilityExcerpt));
+}
+
 function supportedProductCapability(
   input: ExaSupplierResearchInput,
   itemIdentity: string,
@@ -794,32 +880,51 @@ function supportedProductCapability(
   const requested = `${input.componentName} ${input.manufacturer ?? ""} ${input.mpn ?? ""} ${productSpecification}`;
   const { plan } = selectedSupplierResearchQueryVariant(input);
   if (plan.profile === "MATERIAL_STOCK") return materialStockCapability(requested, capabilityExcerpt);
-  if (!containsIdentityPhrase(capabilityExcerpt, itemIdentity)) return null;
   if (!/\b(?:manufactur|distribut|suppl|stock|offer|provid|fabricat|machin|process|assembl|calibrat|inspect|metrology|measur|test(?:ing)? laborator|sell|lists?|specializ|service center|produc|export|trad)\w*\b/i.test(capabilityExcerpt)) {
     return null;
   }
-  if (input.manufacturer && !containsPhrase(itemIdentity, input.manufacturer)) return null;
-  if (input.mpn && !containsPhrase(itemIdentity, input.mpn)) return null;
+  const permitsBrandedEquivalent = plan.profile === "BRANDED_COTS" && /\bor equivalent\b/i.test(productSpecification);
+  if (input.manufacturer && !containsPhrase(itemIdentity, input.manufacturer) && !permitsBrandedEquivalent) return null;
+  if (input.mpn && !containsPhrase(itemIdentity, input.mpn) && !permitsBrandedEquivalent) return null;
   if (plan.profile === "BRANDED_COTS") {
+    if (!containsIdentityTerm(capabilityExcerpt, itemIdentity)) return null;
     const brandTerms = requestedTerms(requested, ["3m", "scotch-weld", "dowsil"]);
     const identifiers = (requested.toLowerCase().match(/\b(?:[a-z]+\d+[a-z0-9.-]*|\d+[a-z]+[a-z0-9.-]*|\d{4,})\b/g) ?? [])
       .filter((term) => !/^(?:600v|2026)$/.test(term));
-    return (!brandTerms.length || brandTerms.every((term) => containsIdentityTerm(capabilityExcerpt, term)))
+    const exactBrandMatch = (!brandTerms.length || brandTerms.every((term) => containsIdentityTerm(capabilityExcerpt, term)))
       && (!identifiers.length || identifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term)))
-      ? itemIdentity
-      : null;
+    if (exactBrandMatch) return itemIdentity;
+    if (!/\bor equivalent\b/i.test(productSpecification)) return null;
+    if (/\bdp\s*420\b|\bscotch[- ]weld\b/i.test(requested)) {
+      return containsIdentityTerm(capabilityExcerpt, "two-part")
+        && containsIdentityTerm(capabilityExcerpt, "structural epoxy")
+        && /\broom[- ]temperature\s+(?:cur\w*|cure)\b/i.test(capabilityExcerpt)
+        ? itemIdentity
+        : null;
+    }
+    if (/\bdowsil\b|\b3145\b/i.test(requested)) {
+      return containsIdentityTerm(capabilityExcerpt, "silicone")
+        && containsAnyIdentityTerm(capabilityExcerpt, ["adhesive", "sealant"])
+        && containsIdentityTerm(capabilityExcerpt, "neutral-cure")
+        && containsIdentityTerm(capabilityExcerpt, "electronics-grade")
+        ? itemIdentity
+        : null;
+    }
+    return null;
   }
   if (plan.profile === "CUSTOM_FABRICATION") {
-    const processes = requestedTerms(requested, CUSTOM_PROCESS_TERMS);
     const materials = requestedTerms(requested, MATERIAL_TERMS);
     const grades = requestedTerms(requested, MATERIAL_GRADE_TERMS);
+    const productClasses = requestedTerms(requested, CUSTOM_FABRICATION_PRODUCT_TERMS);
     const dimensions = requested.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:mm|in|inch|inches)\b/g) ?? [];
-    return processes.length > 0
-      && processes.every((term) => containsIdentityTerm(capabilityExcerpt, term))
+    return requestedTerms(requested, CUSTOM_PROCESS_TERMS).length > 0
+      && productClasses.length > 0
+      && containsAnyIdentityTerm(capabilityExcerpt, productClasses)
+      && supportsRequestedFabricationProcesses(requested, capabilityExcerpt)
       && (!materials.length || containsAnyIdentityTerm(capabilityExcerpt, materials))
       && grades.every((term) => containsIdentityTerm(capabilityExcerpt, term))
       && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension))
-      ? itemIdentity
+      ? capabilityExcerpt
       : null;
   }
   if (plan.profile === "CALIBRATED_INSTRUMENT") {
@@ -832,47 +937,52 @@ function supportedProductCapability(
     ]);
     const dimensions = instrumentRequest.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:ohm|v|mv|hz|khz)\b/g) ?? [];
     const mountingAlternatives = ["adhesive", "surface mount"].filter((term) => qualifiers.includes(term));
-    const requiredQualifiers = qualifiers.filter((term) => !mountingAlternatives.includes(term));
+    const aluminumCompatibilityRequested = qualifiers.includes("aluminum compatible");
+    const lowVoltageRequested = qualifiers.includes("low voltage");
+    const requiredQualifiers = qualifiers.filter((term) => !mountingAlternatives.includes(term) && term !== "aluminum compatible" && term !== "low voltage");
     return instruments.length > 0
-      && containsAnyIdentityTerm(itemIdentity, instruments)
+      && containsAnyIdentityTerm(capabilityExcerpt, instruments)
       && requiredQualifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term))
+      && (!aluminumCompatibilityRequested || (/\baluminum\b/i.test(capabilityExcerpt) && /\b(?:compatib|compensat|self[- ]temperature|use\s+on)\w*/i.test(capabilityExcerpt)))
+      && (!lowVoltageRequested || /\b(?:low[- ]voltage|iepe|\d+(?:\.\d+)?\s*m?v\s*\/\s*g)\b/i.test(capabilityExcerpt))
       && (mountingAlternatives.length < 2 || mountingAlternatives.some((term) => containsIdentityTerm(capabilityExcerpt, term)))
       && dimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension))
-      ? itemIdentity
+      ? capabilityExcerpt
       : null;
   }
   if (plan.profile === "ASSEMBLY_SERVICE") {
-    return /\b(?:wire|cable|data acquisition)?\s*harness\b/i.test(itemIdentity)
+    return /\b(?:wire|cable|data acquisition)?\s*harness\b/i.test(capabilityExcerpt)
       && /\b(?:assembl|build to print|continuity test|pin to pin)\w*\b/i.test(capabilityExcerpt)
-      ? itemIdentity
+      ? capabilityExcerpt
       : null;
   }
   if (plan.profile === "PACKAGING") {
-    const products = requestedTerms(`${input.componentName} ${productSpecification}`, ["packaging", "foam", "antistatic bag", "humidity indicator", "shipping case"]);
-    return products.length > 0 && products.every((term) => containsIdentityTerm(capabilityExcerpt, term)) ? itemIdentity : null;
+    return supportsPackagingProducts(`${input.componentName} ${productSpecification}`, capabilityExcerpt) ? capabilityExcerpt : null;
   }
   if (plan.profile === "INSPECTION_SERVICE") {
-    return /\b(?:first article|inspection|metrology|measurement|dimensional)\b/i.test(itemIdentity)
-      && /\b(?:inspect|metrology|measure|as9102|report)\w*\b/i.test(capabilityExcerpt)
-      ? itemIdentity
+    return /\b(?:first[- ]article|inspection|metrology|measurement|dimensional)\b/i.test(capabilityExcerpt)
+      && /\b(?:inspect\w*|metrology|measur\w*|as9102|first[- ]article\s+report)\b/i.test(capabilityExcerpt)
+      ? capabilityExcerpt
       : null;
   }
   const requestedProduct = `${input.componentName} ${input.manufacturer ?? ""} ${input.mpn ?? ""} ${productSpecification}`;
   const productTerms = requestedTerms(requestedProduct, GENERIC_PRODUCT_TERMS);
   const qualifiers = requestedTerms(requestedProduct, GENERIC_QUALIFIER_TERMS);
+  const numericRanges = requestedNumericRanges(requestedProduct);
   const requestedAlternativeGroups = GENERIC_QUALIFIER_ALTERNATIVES
     .map((group) => group.filter((term) => qualifiers.includes(term)))
     .filter((group) => group.length > 1);
   const alternativeTerms = new Set<string>(requestedAlternativeGroups.flat());
-  const requiredQualifiers = qualifiers.filter((term) => !alternativeTerms.has(term));
-  const requestedDimensions = requestedProduct.toLowerCase().match(/\b\d+(?:\.\d+)?\s*(?:awg|v|mm|in|inch|inches|percent|%)\b/g) ?? [];
+  const requiredQualifiers = qualifiers.filter((term) => !alternativeTerms.has(term) && !/\bto\b/.test(term));
+  const requestedDimensions = requiredStandaloneDimensions(requestedProduct, numericRanges);
   return productTerms.length > 0
-    && containsAnyIdentityTerm(itemIdentity, productTerms)
+    && containsAnyIdentityTerm(capabilityExcerpt, productTerms)
     && qualifiers.length > 0
     && requiredQualifiers.every((term) => containsIdentityTerm(capabilityExcerpt, term))
     && requestedAlternativeGroups.every((group) => group.some((term) => containsIdentityTerm(capabilityExcerpt, term)))
+    && numericRanges.every((range) => capabilitySupportsNumericRange(capabilityExcerpt, range))
     && requestedDimensions.every((dimension) => containsDimensionPhrase(capabilityExcerpt, dimension))
-    ? itemIdentity
+    ? capabilityExcerpt
     : null;
 }
 
@@ -950,8 +1060,6 @@ export function validatePublicSupplierLeadReceipts(
       || !productCapabilityExcerpt
       || !productCapability
       || !containsPhrase(companyIdentityExcerpt, companyName)
-      || (!materialStockRequest && !containsPhrase(supplierRoleExcerpt, companyName))
-      || (!materialStockRequest && !containsPhrase(productCapabilityExcerpt, companyName))
       || !(materialStockRequest
         ? explicitMaterialRoleEvidence(supplierRoleExcerpt, role)
         : explicitRoleEvidence(supplierRoleExcerpt, role))
@@ -1601,7 +1709,7 @@ export async function searchExaComponentSuppliers(
         text: { maxCharacters: MAX_RECORD_TEXT, verbosity: "standard", includeSections: ["header", "body", "metadata"] },
         highlights: { query: highlightQuery, maxCharacters: MAX_RECORD_HIGHLIGHTS },
         summary: {
-          query: `${highlightQuery}. Return null for every value not printed by this exact page. companyIdentityEvidence must be one verbatim excerpt that names the company operating this source domain. supplierRoleEvidence must be one verbatim excerpt that explicitly states the company role. productCapabilityEvidence must be one verbatim excerpt that states this company supplies, manufactures, distributes, processes, fabricates, assembles, calibrates, or inspects the requested item or capability. evidenceText must be one verbatim excerpt that contains the exact item identity, amount, ISO currency code, and unit or package basis.`,
+          query: `${highlightQuery}. Return null for every value not printed by this exact page. supplierRole must be one canonical value: MANUFACTURER, DISTRIBUTOR, PRODUCER, PROCESSOR, EXPORTER, TRADER, or SERVICE_PROVIDER. Map a machine shop or fabricator to PROCESSOR. Map a harness assembler, packaging service, calibration laboratory, or inspection service to SERVICE_PROVIDER. Map a stockist, service center, or packaging supplier to DISTRIBUTOR. companyIdentityEvidence must be one verbatim excerpt that names the company operating this source domain. supplierRoleEvidence must be one verbatim excerpt that explicitly states the supplier role in normal company language such as manufacturer, distributor, supplier, stockist, service center, machine shop, fabricator, harness assembler, packaging supplier, calibration laboratory, or inspection service. productCapabilityEvidence must be one verbatim excerpt that states the requested item or capability. The role and capability excerpts do not need to repeat the company name after companyIdentityEvidence binds the page. If the request says or equivalent, accept only an exact branded item or a functional equivalent whose excerpt states every critical product and performance qualifier. evidenceText must be one verbatim excerpt that contains the exact item identity, amount, ISO currency code, and unit or package basis.`,
           schema: OFFER_SCHEMA,
         },
         maxAgeHours: 0,

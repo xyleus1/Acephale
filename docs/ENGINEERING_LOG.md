@@ -5286,3 +5286,31 @@ Use this file for chronological implementation notes that future agents should s
   sets fail closed, reference results cannot crowd out Exa supplier retrieval,
   degraded output cannot preserve Reddit or Wikipedia, and historical UI paths
   invoke the same gate.
+
+### 2026-08-13 - Repair GUILD supplier reachability and exploration continuity
+
+- Replaced the tautological all-line supplier test, which copied each request
+  verbatim into a fake page, with sanitized supplier-style catalog fixtures and
+  explicit line-specific near-miss negatives for all 38 sourceable GUILD lines.
+  These fixtures test deterministic reachability and rejection, not live source
+  availability.
+- Kept company identity and domain binding strict while removing the redundant
+  requirement that every role and capability excerpt repeat the company name.
+- Added bounded role vocabulary, short-brand domain aliases, product synonyms,
+  allowed-equivalent rules, and in-range numeric matching needed by the fixed
+  GUILD catalog. Exact and catalog queries no longer include QA paperwork.
+- Changed the campaign scheduler from a terminal nine-attempt ceiling to
+  durable nine-attempt exploration epochs. Absolute stored ordinals drive query
+  rotation, exclusions, UI counts, and bounded backoff.
+- Added evidence-policy aggregate carry-forward across the ten-attempt database
+  window and bounded aggregate artifacts to five candidates, 64 sources, and 20
+  warnings per line.
+- Removed the demo-date expiry and twelve-generation product limit. Cron may
+  create an immutable successor only for legacy failures caused by the former
+  exhaustion rules. Operator-owned failures still require intervention.
+- Prevented parent terminal transitions while a child is running and preserved
+  daily campaign and office provider budgets.
+- Focused provider, campaign, worker, route, polling, BOM, UI, intelligence,
+  TypeScript, and diff-hygiene checks passed. The real PostgreSQL persistence
+  suite remains a mandatory GitHub CI gate because the local sandbox has no
+  database service.

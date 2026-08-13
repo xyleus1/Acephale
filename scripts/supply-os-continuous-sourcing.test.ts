@@ -5,8 +5,11 @@ import { resolve } from "node:path";
 import { GUILD_SOURCING_ITEMS, GUILD_SOURCING_LINES } from "../src/lib/supply-os/guild-sourcing-items";
 import {
   GUILD_SUPPLIER_CAMPAIGN_DAILY_ATTEMPT_CAP,
-  GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE,
-  GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS,
+  GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS,
+  GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION,
+  GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_SOURCE_LIMIT,
+  GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_WARNING_LIMIT,
+  SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW,
   GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE,
   GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS,
   GUILD_SUPPLIER_CAMPAIGN_RETAINED_MAXIMUM,
@@ -14,6 +17,7 @@ import {
   SUPPLIER_RESEARCH_OFFICE_DAILY_ATTEMPT_CAP,
   aggregateGuildSupplierResearchLine,
   campaignRetryDelayMs,
+  isSafeLegacyCampaignSuccessorError,
   configuredSupplierResearchProvider,
   guildSupplierResearchAttemptInput,
   guildSupplierResearchCampaignIdempotencyKey,
@@ -21,10 +25,12 @@ import {
   campaignGenerationFromIdempotencyKey,
   guildSupplierResearchCampaignRevision,
   guildSupplierResearchCampaignScopeExpired,
+  mergeGuildSupplierResearchAggregate,
   planGuildSupplierResearchQueue,
   projectGuildSupplierResearchCampaign,
   shouldPersistGuildSupplierResearchAggregate,
   supplierCandidateDomain,
+  validateSupplierResearchCampaignAncestryWindow,
   type SupplierResearchCampaignAttempt,
 } from "../src/lib/supply-os/supplier-research-campaign";
 import {
@@ -51,8 +57,9 @@ assert.equal(GUILD_SOURCING_LINES.find((line) => line.item === "039")?.classific
 assert.equal(GUILD_SOURCING_ITEMS.find((item) => item.sku === "GUILD-027")?.requestedQuantity, undefined);
 assert.equal(GUILD_SUPPLIER_CAMPAIGN_TARGET_MINIMUM, 3);
 assert.equal(GUILD_SUPPLIER_CAMPAIGN_RETAINED_MAXIMUM, 5);
-assert.equal(GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE, 9);
-assert.equal(GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS, 12);
+assert.equal(GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS, 9);
+assert.equal(GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION, 2);
+assert.equal(SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW, 50);
 assert.ok(GUILD_SUPPLIER_CAMPAIGN_DAILY_ATTEMPT_CAP < SUPPLIER_RESEARCH_OFFICE_DAILY_ATTEMPT_CAP);
 assert.deepEqual(GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS, ["exact-identity", "official-catalog", "capability-qa"]);
 assert.equal(configuredSupplierResearchProvider({ EXA_API_KEY: "exa", OPENAI_API_KEY: "openai" }), "EXA");
@@ -64,11 +71,27 @@ assert.equal(guildSupplierResearchCampaignIdempotencyKey("EXA"), `supplier-campa
 assert.equal(guildSupplierResearchCampaignGenerationKey(1, "OPENAI"), guildSupplierResearchCampaignIdempotencyKey("OPENAI"));
 assert.equal(guildSupplierResearchCampaignGenerationKey(2, "EXA"), `${guildSupplierResearchCampaignIdempotencyKey("EXA")}:generation:2`);
 assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(2, "OPENAI"), "OPENAI"), 2);
-assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS, "EXA"), "EXA"), GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS);
+assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(13, "EXA"), "EXA"), 13, "manual campaign generations are not capped below the work objective");
 assert.equal(campaignGenerationFromIdempotencyKey(guildSupplierResearchCampaignGenerationKey(2, "OPENAI"), "EXA"), null, "one provider scope cannot be resumed as another provider");
 assert.equal(campaignGenerationFromIdempotencyKey("supplier-campaign:guild-procurement:obsolete", "EXA"), null);
 assert.equal(guildSupplierResearchCampaignScopeExpired(new Date("2026-08-12T12:00:00.000Z")), false);
-assert.equal(guildSupplierResearchCampaignScopeExpired(new Date("2026-10-01T00:00:00.000Z")), true);
+assert.equal(guildSupplierResearchCampaignScopeExpired(new Date("2036-10-01T00:00:00.000Z")), false, "the fixed demo need-by date does not hard-expire a continuous campaign");
+
+const deepAncestryWindow = Array.from({ length: SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW }, (_, index) => ({
+  id: `campaign-${75 - index}`,
+  parentRunId: `campaign-${74 - index}`,
+  depth: index + 1,
+}));
+const deepAncestry = validateSupplierResearchCampaignAncestryWindow(deepAncestryWindow);
+assert.equal(deepAncestry.ids.length, SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW, "lineage validation stays response bounded after generation fifty");
+assert.equal(deepAncestry.truncated, true, "a valid older prefix is reported as truncated instead of terminalizing the campaign");
+assert.throws(() => validateSupplierResearchCampaignAncestryWindow([
+  { id: "campaign-2", parentRunId: "campaign-1", depth: 1 },
+  { id: "campaign-2", parentRunId: null, depth: 2 },
+]), /ancestry is invalid/i, "a cycle or duplicate inside the validated window is rejected");
+assert.throws(() => validateSupplierResearchCampaignAncestryWindow([
+  { id: "campaign-2", parentRunId: "missing-campaign", depth: 1 },
+]), /ancestry is invalid/i, "a missing ancestor inside a non-full window is rejected");
 
 const unknownEnvelope = {
   value: null,
@@ -476,7 +499,7 @@ const nineAttempts = Array.from({ length: 9 }, (_, index) => attempt({
   id: `empty-${index + 1}`,
   createdAt: `2026-08-0${index + 1}T00:00:00.000Z`,
 }));
-assert.equal(planGuildSupplierResearchQueue({
+const secondEpochPlan = planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
   requiredProvider: "EXA",
   attempts: nineAttempts,
@@ -484,7 +507,83 @@ assert.equal(planGuildSupplierResearchQueue({
   campaignAttemptsRemaining: 48,
   officeAttemptsRemaining: 72,
   batchSize: 38,
-}).some((work) => work.itemKey === "GUILD-001"), false, "a line stops after the bounded nine-attempt search matrix");
+});
+assert.equal(secondEpochPlan.find((work) => work.itemKey === "GUILD-001")?.attemptNumber, 10, "nine attempts finish one exploration epoch instead of terminalizing the line");
+assert.equal(secondEpochPlan.find((work) => work.itemKey === "GUILD-001")?.input.explorationEpoch, 2);
+assert.equal(secondEpochPlan.find((work) => work.itemKey === "GUILD-001")?.input.attemptInEpoch, 1);
+assert.equal(secondEpochPlan.find((work) => work.itemKey === "GUILD-001")?.input.queryCycle, 0, "each exploration epoch deterministically restarts the bounded query matrix");
+const epochStatus = projectGuildSupplierResearchCampaign({
+  campaign: { id: "campaign-a", workspaceId: "workspace-a", status: "RUNNING", updatedAt: now },
+  attempts: nineAttempts,
+  campaignAttemptsUsed: 9,
+  officeAttemptsUsed: 9,
+  now,
+});
+assert.notEqual(epochStatus.state, "FAILED", "epoch exhaustion alone never fails the parent campaign");
+assert.notEqual(epochStatus.items[0].state, "BLOCKED", "epoch exhaustion alone never blocks a sourceable line");
+assert.ok(campaignRetryDelayMs("GUILD-001", 9) <= 24 * 60 * 60_000, "the pause between exploration epochs is bounded at 24 hours");
+assert.ok(campaignRetryDelayMs("GUILD-001", 10) < campaignRetryDelayMs("GUILD-001", 9), "retry backoff restarts inside the next exploration epoch");
+
+const sparseHistoryPlan = planGuildSupplierResearchQueue({
+  campaignId: "campaign-a",
+  requiredProvider: "EXA",
+  attempts: [attempt({
+    id: "latest-only-99",
+    itemKey: "GUILD-001",
+    createdAt: "2026-08-01T00:00:00.000Z",
+    input: { componentItemKey: "request:guild-001", campaignItemKey: "GUILD-001", attemptNumber: 99 },
+  })],
+  now,
+  campaignAttemptsRemaining: 48,
+  officeAttemptsRemaining: 72,
+  batchSize: 38,
+});
+assert.equal(sparseHistoryPlan.find((work) => work.itemKey === "GUILD-001")?.attemptNumber, 100, "a bounded history window continues from the durable attempt ordinal");
+const maximumSafeExploration = guildSupplierResearchAttemptInput({
+  line: firstLine,
+  campaignId: "campaign-a",
+  attemptNumber: Number.MAX_SAFE_INTEGER,
+  requiredProvider: "EXA",
+});
+assert.equal(maximumSafeExploration.queryVariant, "exact-identity");
+assert.equal(maximumSafeExploration.queryCycle, 1, "query exploration uses bounded modular arithmetic at the largest safe attempt ordinal");
+assert.equal(maximumSafeExploration.attemptInEpoch, 4);
+const payloadBoundFixture = mergeGuildSupplierResearchAggregate(
+  {
+    candidates: [],
+    sources: Array.from({ length: 80 }, (_, index) => ({ url: `https://prior-${index}.example/catalog`, sourceType: "PUBLIC" as const })),
+    degraded: true,
+    warnings: Array.from({ length: 25 }, (_, index) => `prior warning ${index}`),
+  },
+  {
+    candidates: [],
+    sources: Array.from({ length: 20 }, (_, index) => ({ url: `https://new-${index}.example/catalog`, sourceType: "PUBLIC" as const })),
+    degraded: true,
+    warnings: Array.from({ length: 10 }, (_, index) => `new warning ${index}`),
+  },
+);
+assert.equal(payloadBoundFixture.sources.length, GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_SOURCE_LIMIT, "perpetual aggregate source history stays payload bounded");
+assert.deepEqual(payloadBoundFixture.sources.slice(0, 2).map((source) => source.url), ["https://new-0.example/catalog", "https://new-1.example/catalog"], "new discovery sources get exclusion priority");
+assert.equal(payloadBoundFixture.warnings.length, GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_WARNING_LIMIT, "perpetual aggregate warnings stay payload bounded");
+const carryForwardFixture = mergeGuildSupplierResearchAggregate(aggregate, {
+  candidates: [],
+  sources: [],
+  degraded: true,
+  warnings: ["new attempt found no additional validated lead"],
+});
+assert.equal(carryForwardFixture.candidates.length, 5, "a bounded attempt window does not discard validated leads carried by the current evidence-policy aggregate");
+assert.equal(new Set(carryForwardFixture.candidates.map(supplierCandidateDomain)).size, 5);
+assert.equal(isSafeLegacyCampaignSuccessorError({ message: "CAMPAIGN_BLOCKED: Supplier research reached the 9-attempt limit without three validated leads." }), true);
+assert.equal(isSafeLegacyCampaignSuccessorError({ message: "CAMPAIGN_BLOCKED: Supplier research has no retryable work." }), true);
+for (const unsafeLegacyFailure of [
+  "CAMPAIGN_BLOCKED: Supplier research provider configuration is unavailable.",
+  "PROVIDER_AUTHENTICATION_FAILED: Public supplier research authentication failed.",
+  "ACCESS_REVOKED: Supplier research workspace access was revoked.",
+  "CAMPAIGN_SCOPE_EXPIRED: Supplier research scope expired.",
+  "CAMPAIGN_SCOPE_SUPERSEDED: Supplier research campaign scope was replaced.",
+]) {
+  assert.equal(isSafeLegacyCampaignSuccessorError({ message: unsafeLegacyFailure }), false, `${unsafeLegacyFailure} remains an explicit manual blocker`);
+}
 const fourthAttempt = guildSupplierResearchAttemptInput({ line: firstLine, campaignId: "campaign-a", attemptNumber: 4, requiredProvider: "EXA", excludeDomains: ["acme.example"] });
 assert.equal(fourthAttempt.queryCycle, 1);
 assert.equal(fourthAttempt.queryVariant, "exact-identity");
@@ -528,6 +627,7 @@ const completeAggregates = GUILD_SOURCING_LINES.filter((line) => line.classifica
     campaignKey: "guild-procurement" as const,
     campaignItemKey: line.sku,
     campaignArtifactKind: "AGGREGATE" as const,
+    campaignEvidencePolicyVersion: GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION,
     campaignAttemptCount: 1,
     campaignTerminalAttemptCount: 1,
     campaignAttemptWatermark: `fixture-${line.sku}`,
@@ -554,6 +654,17 @@ assert.equal(status.completedLines, 38);
 assert.equal(status.progressPercent, 100);
 assert.equal(status.items.find((item) => item.componentItemKey === "GUILD-027")?.state, "CLARIFICATION_REQUIRED");
 assert.equal(status.items.find((item) => item.componentItemKey === "GUILD-039")?.state, "REQUIREMENT_ONLY");
+const completingChildStillRunning = projectGuildSupplierResearchCampaign({
+  campaign: { id: "campaign-a", workspaceId: "workspace-a", status: "RUNNING", updatedAt: now },
+  attempts: [attempt({ id: "still-running", itemKey: "GUILD-001", status: "RUNNING", createdAt: now.toISOString() })],
+  aggregates: completeAggregates,
+  campaignAttemptsUsed: 38,
+  officeAttemptsUsed: 38,
+  now,
+});
+assert.equal(completingChildStillRunning.state, "RUNNING", "the parent cannot terminalize while a child is RUNNING");
+assert.equal(completingChildStillRunning.status, "RUNNING");
+assert.equal(completingChildStillRunning.runningAttempts, 1);
 assert.equal(planGuildSupplierResearchQueue({
   campaignId: "campaign-a",
   requiredProvider: "EXA",
@@ -588,6 +699,7 @@ const aggregateRunStatus = projectGuildSupplierResearchCampaign({
       campaignKey: "guild-procurement",
       campaignItemKey: "GUILD-001",
       campaignArtifactKind: "AGGREGATE",
+      campaignEvidencePolicyVersion: GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION,
       campaignAttemptCount: 1,
       campaignTerminalAttemptCount: 1,
       campaignAttemptWatermark: "fixture-GUILD-001",
@@ -665,6 +777,13 @@ assert.match(campaignSource, /status !== "RUNNING" \|\| !hasReconciliationLease/
 assert.match(persistenceSource, /startedAt: \{ gte: dayStart \}/);
 assert.match(persistenceSource, /if \(callsStartedToday >= OFFICE_DAILY_PROVIDER_CALL_CAP\) continue/);
 assert.match(campaignSource, /idempotencyKey: `guild:\$\{args\.campaign\.id\}:\$\{work\.itemKey\}:attempt:\$\{work\.attemptNumber\}`/);
+assert.doesNotMatch(campaignSource, /generation > GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS/, "manual successors are not capped before the objective is met");
+assert.match(campaignSource, /isSafeLegacyCampaignSuccessorError/, "cron has an explicit allow-list for safe legacy failed-campaign successors");
+assert.match(campaignSource, /const runningCampaigns = await prisma\.supplyCapabilityRun\.findMany/, "RUNNING campaigns are selected before legacy recovery rows");
+assert.match(campaignSource, /const recoveryCapacity = Math\.max\(0, limit - runningCampaigns\.length\)/, "legacy recovery cannot consume capacity reserved for RUNNING campaigns");
+assert.match(campaignSource, /NOT EXISTS \(/, "only the latest failed campaign in an office workspace can auto-recover");
+assert.match(campaignSource, /status: "RUNNING",\s*\n\s*\},\s*\n\s*\}\);\s*\n\s*if \(runningChildren > 0\) return false;/, "a parent cannot terminalize while a child is RUNNING");
+assert.match(campaignSource, /::bigint/, "aggregate ordinal ordering does not overflow PostgreSQL int at high attempt counts");
 assert.match(cronSource, /advanceSupplierResearchCampaigns/);
 assert.doesNotMatch([campaignSource, routeSource, cronSource, guildSource].join("\n"), /\u2014/);
 

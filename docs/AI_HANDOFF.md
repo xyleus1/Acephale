@@ -8597,3 +8597,73 @@ Verification:
 - `node --import tsx scripts/supply-os-continuous-sourcing.test.ts`
 - `npx tsc --noEmit`
 - `git diff --check`
+
+### 2026-08-13 - Make GUILD supplier research reachable and continuous
+
+Status:
+
+- Implemented after reference-domain filtering exposed two remaining blockers:
+  real supplier pages were rejected unless they repeated request-shaped prose,
+  and an exhausted nine-attempt line could never run again.
+- No schema or dependency change is required.
+
+Supplier reachability:
+
+- Supplier identity remains bound to one independently retrieved public page
+  and the supplier domain. Role and capability excerpts no longer need to
+  repeat the company name after that binding is established.
+- Deterministic role vocabulary now covers service centers, stockists, machine
+  shops, fabricators, harness assemblers, packaging suppliers, and inspection
+  providers without treating a generic product catalog as role evidence.
+- Query variants for exact identity and official catalog discovery omit QA
+  paperwork. The capability and QA variant retains it.
+- The capability validator handles the bounded synonyms, allowed equivalents,
+  and numeric ranges present in the GUILD fixture. It keeps fail-closed negative
+  tests for wrong grades, dimensions, cure systems, domains, roles, product
+  families, and incomplete packaging bundles.
+- A table-driven fixture exercises all 38 sourceable lines with sanitized
+  supplier-style catalog phrasing and one line-specific wrong-fit. This is
+  deterministic validator coverage, not live supplier acceptance. GUILD-027
+  remains clarification-only and GUILD-039 remains a requirement attached to
+  awards.
+
+Campaign continuity:
+
+- Nine attempts is now an exploration epoch. Stored attempt ordinals continue
+  across epochs, query variants and excluded domains rotate, and retry backoff
+  remains bounded at 24 hours.
+- Current-policy aggregate evidence carries across the bounded database attempt
+  window. Each line retains at most five candidates, 64 sources, and 20
+  warnings.
+- The demo need-by date and the former twelve-generation limit no longer stop
+  discovery. Cron can safely recover only legacy failures caused by the old
+  exhaustion rules. Configuration, access, cancellation, superseded scope, and
+  manual-review failures remain operator-owned.
+- A parent cannot terminalize while a child attempt is running. Daily campaign
+  and office provider limits remain unchanged.
+
+Verification:
+
+- `node --import tsx scripts/supply-os-supplier-leads.test.ts`
+- `node --import tsx scripts/supply-os-openai-retrieval.test.ts`
+- `node --import tsx scripts/supply-os-exa-retrieval.test.ts`
+- `node --import tsx scripts/supply-os-continuous-sourcing.test.ts`
+- `npm run test:supply-os-research-worker-lifecycle`
+- `npm run test:supply-os-research-route-lifecycle`
+- `npm run test:supply-os-supplier-research-polling`
+- `npm run test:supply-os-supplier-research-failures`
+- `node --import tsx scripts/supply-os-bom-acceptance.test.ts`
+- `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
+- `NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-supply-intelligence.test.ts`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `git diff --check`
+
+Release boundary:
+
+- The PostgreSQL-backed sourcing persistence suite cannot run in the local
+  sandbox because no database service is available. It must pass in GitHub CI
+  before merge.
+- After deployment, open the authenticated GUILD sourcing queue once. A running
+  campaign continues through cron without the browser. Verify the campaign's
+  actual retained-lead counts rather than treating deployment status as live
+  acceptance.

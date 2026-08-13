@@ -31,6 +31,9 @@ assert.deepEqual(materialPlan.variants.map((variant) => variant.id), [
 ]);
 assert.match(materialPlan.variants[0]?.query ?? "", /service center stockist processor cut to size/i);
 assert.match(materialPlan.variants[2]?.query ?? "", /material certificate lot traceability/i);
+assert.doesNotMatch(materialPlan.variants[0]?.query ?? "", /material certificate|lot traceability/i, "exact supplier discovery must not be narrowed by downstream QA paperwork");
+assert.doesNotMatch(materialPlan.variants[1]?.query ?? "", /material certificate|lot traceability/i, "catalog discovery must not be narrowed by downstream QA paperwork");
+assert.match(materialPlan.variants[2]?.query ?? "", /required supplier evidence material certificate/i, "only the capability and QA variant should carry request-specific evidence terms");
 
 assert.equal(buildSupplierResearchQueryPlan({
   componentName: "Bonding epoxy",
@@ -71,6 +74,13 @@ assert.equal(selectedSupplierResearchQueryVariant({
 assert.equal(supplierCompanyMatchesDomain("TCI Precision Metals", "https://tciprecision.com/materials/aluminum"), true);
 assert.equal(supplierCompanyMatchesDomain("Texas Alloys & Tool Co.", "https://www.texasalloys.com/aluminum.html"), true);
 assert.equal(supplierCompanyMatchesDomain("National Aluminum & Alloy", "https://nationalaa.com/products/aluminum-plate"), true);
+assert.equal(supplierCompanyMatchesDomain("3M", "https://www.3m.com/catalog"), true, "short registered brands must bind to their exact domain label");
+assert.equal(supplierCompanyMatchesDomain("TE Connectivity", "https://www.te.com/connectors"), true, "short company abbreviations must bind to their exact domain label");
+assert.equal(supplierCompanyMatchesDomain("Dow", "https://www.dow.com/adhesives"), true, "three-letter company domains must remain reachable");
+assert.equal(supplierCompanyMatchesDomain("RS Components", "https://uk.rs-online.com/catalog"), true, "known short brand plus domain-tail naming must bind without fuzzy matching");
+assert.equal(supplierCompanyMatchesDomain("HBK", "https://www.hbkworld.com/strain-gauges"), true, "known acronym plus domain-tail naming must bind without fuzzy matching");
+assert.equal(supplierCompanyMatchesDomain("Fake 3M", "https://www.3m.com/catalog"), false, "a prefixed company must not steal a short registered brand domain");
+assert.equal(supplierCompanyMatchesDomain("Fake HBK", "https://www.hbkworld.com/strain-gauges"), false, "a prefixed company must not steal an acronym brand domain");
 assert.equal(supplierCompanyMatchesDomain("Fake Texas Alloys", "https://www.texasalloys.com/aluminum.html"), false, "a prefixed company name must not steal a matching trailing domain alias");
 
 const guildOpenRoleUrl = "https://guildprocessor.example/capability";
@@ -220,6 +230,21 @@ assert.equal(leadReceipts.length, 1, "one forced-live page with all supplier gat
 assert.equal(leadReceipts[0]?.companyName, "Acme Industrial");
 assert.equal(leadReceipts[0]?.role, "DISTRIBUTOR");
 assert.equal(leadReceipts[0]?.productCapability, "3M Scotch-Weld DP420 structural epoxy");
+const normalCatalogCopy = "Acme Industrial operates this official product catalog. Stocking distributor for industrial adhesives. Supplies 3M Scotch-Weld DP420 structural epoxy.";
+assert.equal(validateExaPublicSupplierLeadReceipts(exaInput, {
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    text: normalCatalogCopy,
+    proposal: record.proposal ? {
+      ...record.proposal,
+      companyIdentityEvidence: "Acme Industrial operates this official product catalog.",
+      supplierRoleEvidence: "Stocking distributor for industrial adhesives.",
+      productCapabilityEvidence: "Supplies 3M Scotch-Weld DP420 structural epoxy.",
+    } : null,
+    sourceTextHash: createHash("sha256").update(normalCatalogCopy).digest("hex"),
+  })),
+}).length, 1, "identity-bound role and capability excerpts must not repeat the company name");
 assert.equal(validateExaPublicSupplierLeadReceipts(exaInput, {
   ...capture,
   records: capture.records.map((record) => ({
@@ -235,6 +260,54 @@ assert.equal(validateExaPublicSupplierLeadReceipts(exaInput, {
     proposal: record.proposal ? { ...record.proposal, supplierRoleEvidence: "Acme Industrial sells many products." } : null,
   })),
 }).length, 0, "a role proposal without an explicit role excerpt must fail closed");
+const catalogOnlyRoleText = [companyIdentityEvidence, "Industrial adhesive product catalog.", productCapabilityEvidence].join(" ");
+assert.equal(validateExaPublicSupplierLeadReceipts(exaInput, {
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    text: catalogOnlyRoleText,
+    proposal: record.proposal ? { ...record.proposal, supplierRoleEvidence: "Industrial adhesive product catalog." } : null,
+    sourceTextHash: createHash("sha256").update(catalogOnlyRoleText).digest("hex"),
+  })),
+}).length, 0, "a product catalog label alone must not be treated as an explicit distributor role");
+
+const machineShopInput: ExaSupplierResearchInput = {
+  ...openAiInput,
+  componentItemKey: "GUILD-024",
+  componentName: "Internal electronics enclosure",
+  specification: "Machined 6061-T6 aluminum enclosure, removable lid, conductive gasket provision",
+};
+const machineShopIdentity = "Enclosure Works operates this official company website.";
+const machineShopRole = "CNC machine shop and enclosure fabricator.";
+const machineShopCapability = "CNC machining for 6061-T6 aluminum enclosure with removable lid and conductive gasket provision.";
+const machineShopText = [machineShopIdentity, machineShopRole, machineShopCapability].join(" ");
+const machineShopUrl = "https://enclosureworks.example/cnc-enclosures";
+const machineShopReceipts = validateExaPublicSupplierLeadReceipts(machineShopInput, {
+  ...capture,
+  records: [{
+    ...capture.records[0]!,
+    sourceUrl: machineShopUrl,
+    status: { ...capture.records[0]!.status!, id: machineShopUrl },
+    text: machineShopText,
+    proposal: {
+      supplierName: "Enclosure Works",
+      supplierRole: "MACHINE SHOP",
+      companyIdentityEvidence: machineShopIdentity,
+      supplierRoleEvidence: machineShopRole,
+      productCapabilityEvidence: machineShopCapability,
+      itemIdentity: "6061-T6 aluminum enclosure",
+      manufacturer: null,
+      mpn: null,
+      priceAmount: null,
+      currency: null,
+      unitOfMeasure: null,
+      packageQuantity: null,
+      evidenceText: null,
+    },
+    sourceTextHash: createHash("sha256").update(machineShopText).digest("hex"),
+  }],
+});
+assert.equal(machineShopReceipts[0]?.role, "PROCESSOR", "normal machine-shop profile language must normalize to the evidence-checked processor role");
 
 const inspectionInput: ExaSupplierResearchInput = {
   ...openAiInput,
@@ -276,6 +349,21 @@ const inspectionCapture: ExaRetrievalCapture = {
 const inspectionReceipts = validateExaPublicSupplierLeadReceipts(inspectionInput, inspectionCapture);
 assert.equal(inspectionReceipts.length, 1, "an explicit public inspection laboratory and exact capability page must support GUILD-040");
 assert.equal(inspectionReceipts[0]?.role, "SERVICE_PROVIDER");
+const annualReportCapability = "Provides annual reports to customers.";
+const annualReportText = [inspectionIdentity, inspectionRole, annualReportCapability].join(" ");
+assert.equal(validateExaPublicSupplierLeadReceipts(inspectionInput, {
+  ...inspectionCapture,
+  records: inspectionCapture.records.map((record) => ({
+    ...record,
+    text: annualReportText,
+    proposal: record.proposal ? {
+      ...record.proposal,
+      productCapabilityEvidence: annualReportCapability,
+      itemIdentity: "first article inspection measurement report",
+    } : null,
+    sourceTextHash: createHash("sha256").update(annualReportText).digest("hex"),
+  })),
+}).length, 0, "GUILD-040 must reject generic annual reports when only model-controlled item identity claims first-article inspection");
 
 const connectorInput: ExaSupplierResearchInput = {
   ...openAiInput,
@@ -424,6 +512,45 @@ assert.equal(materialSupplierReceipt({
   itemIdentity: "6061-T6 aluminum sheet",
 }), null, "model-added grade or temper text must not turn generic aluminum sheet evidence into a lead");
 
+const flameRetardantInput: ExaSupplierResearchInput = {
+  ...materialInput,
+  componentItemKey: "GUILD-005",
+  componentName: "Non-flight nose-shell/mockup laminate",
+  specification: "G10/FR-4 glass-epoxy laminate, 2.4 mm nominal, flame-retardant grade",
+};
+function laminateReceipt(capability: string) {
+  const identity = "Panel Plastics operates this official materials catalog.";
+  const role = "Industrial laminate stockist and distributor.";
+  const source = [identity, role, capability].join(" ");
+  return validateExaPublicSupplierLeadReceipts(flameRetardantInput, {
+    ...capture,
+    records: [{
+      ...capture.records[0]!,
+      sourceUrl: "https://panelplastics.example/laminates",
+      status: { ...capture.records[0]!.status!, id: "https://panelplastics.example/laminates" },
+      text: source,
+      proposal: {
+        supplierName: "Panel Plastics",
+        supplierRole: "DISTRIBUTOR",
+        companyIdentityEvidence: identity,
+        supplierRoleEvidence: role,
+        productCapabilityEvidence: capability,
+        itemIdentity: capability.replace(/[.]$/u, ""),
+        manufacturer: null,
+        mpn: null,
+        priceAmount: null,
+        currency: null,
+        unitOfMeasure: null,
+        packageQuantity: null,
+        evidenceText: null,
+      },
+      sourceTextHash: createHash("sha256").update(source).digest("hex"),
+    }],
+  })[0] ?? null;
+}
+assert.equal(laminateReceipt("Stocks G10 glass-epoxy laminate."), null, "G10-only evidence must not satisfy the explicitly flame-retardant GUILD-005 request");
+assert.ok(laminateReceipt("Stocks FR-4 flame-retardant glass-epoxy laminate."), "FR-4 evidence may satisfy the flame-retardant laminate capability gate");
+
 const brandedGeneric = structuredClone(capture) as ExaRetrievalCapture;
 const brandedText = "Acme Industrial operates this official catalog. Acme Industrial is a distributor. Acme Industrial distributes 3M structural epoxy.";
 if (brandedGeneric.stage !== "SEARCH_ONLY") {
@@ -441,6 +568,85 @@ if (brandedGeneric.stage !== "SEARCH_ONLY") {
   };
 }
 assert.equal(validateExaPublicSupplierLeadReceipts(exaInput, brandedGeneric).length, 0, "brand-only epoxy evidence must not count for the exact DP420 request");
+
+function brandedEquivalentReceipt(args: {
+  input: ExaSupplierResearchInput;
+  companyName: string;
+  sourceUrl: string;
+  itemIdentity: string;
+  capability: string;
+}) {
+  const identity = `${args.companyName} operates this official product catalog.`;
+  const role = "Stocking distributor for industrial adhesives and sealants.";
+  const source = [identity, role, args.capability].join(" ");
+  return validateExaPublicSupplierLeadReceipts(args.input, {
+    ...capture,
+    records: [{
+      ...capture.records[0]!,
+      sourceUrl: args.sourceUrl,
+      status: { ...capture.records[0]!.status!, id: args.sourceUrl },
+      text: source,
+      proposal: {
+        supplierName: args.companyName,
+        supplierRole: "DISTRIBUTOR",
+        companyIdentityEvidence: identity,
+        supplierRoleEvidence: role,
+        productCapabilityEvidence: args.capability,
+        itemIdentity: args.itemIdentity,
+        manufacturer: null,
+        mpn: null,
+        priceAmount: null,
+        currency: null,
+        unitOfMeasure: null,
+        packageQuantity: null,
+        evidenceText: null,
+      },
+      sourceTextHash: createHash("sha256").update(source).digest("hex"),
+    }],
+  })[0] ?? null;
+}
+
+const dp420EquivalentInput: ExaSupplierResearchInput = {
+  ...exaInput,
+  specification: "3M Scotch-Weld DP420 two-part structural epoxy or equivalent, room-temperature curing",
+};
+assert.ok(brandedEquivalentReceipt({
+  input: dp420EquivalentInput,
+  companyName: "Bondline Materials",
+  sourceUrl: "https://bondlinematerials.example/structural-epoxy",
+  itemIdentity: "two-part room-temperature curing structural epoxy",
+  capability: "Supplies two-part room-temperature curing structural epoxy.",
+}), "a permitted functional equivalent may pass when every critical epoxy qualifier is page-backed");
+assert.equal(brandedEquivalentReceipt({
+  input: dp420EquivalentInput,
+  companyName: "Bondline Materials",
+  sourceUrl: "https://bondlinematerials.example/general-epoxy",
+  itemIdentity: "two-part structural epoxy",
+  capability: "Supplies two-part structural epoxy.",
+}), null, "a proposed DP420 equivalent missing room-temperature cure evidence must fail closed");
+
+const dowsilEquivalentInput: ExaSupplierResearchInput = {
+  ...exaInput,
+  componentItemKey: "GUILD-012",
+  componentName: "Flexible electronics adhesive",
+  manufacturer: undefined,
+  mpn: undefined,
+  specification: "DOWSIL 3145 RTV silicone adhesive or sealant, or equivalent electronics-grade neutral-cure material",
+};
+assert.ok(brandedEquivalentReceipt({
+  input: dowsilEquivalentInput,
+  companyName: "Circuit Sealants",
+  sourceUrl: "https://circuitsealants.example/neutral-cure",
+  itemIdentity: "electronics-grade neutral-cure RTV silicone adhesive",
+  capability: "Offers electronics-grade neutral-cure RTV silicone adhesive.",
+}), "a permitted DOWSIL equivalent may pass only with page-backed electronics and cure qualifiers");
+assert.equal(brandedEquivalentReceipt({
+  input: dowsilEquivalentInput,
+  companyName: "Circuit Sealants",
+  sourceUrl: "https://circuitsealants.example/acetoxy-cure",
+  itemIdentity: "electronics-grade RTV silicone adhesive",
+  capability: "Offers electronics-grade acetoxy-cure RTV silicone adhesive.",
+}), null, "the wrong cure chemistry must not pass as a DOWSIL 3145 equivalent");
 
 const wireInput: ExaSupplierResearchInput = {
   ...openAiInput,
@@ -510,20 +716,144 @@ assert.equal(genericDistributorReceiptCount({
   specification: "Closed-cell polyethylene foam, antistatic bags, humidity indicators, and reusable shipping case",
 }, "Acme Packaging", "Acme Packaging supplies foam and antistatic bags."), 0, "a partial packaging catalog must not count for the four-part shipping-protection set");
 
-for (const line of GUILD_SOURCING_LINES.filter((candidate) => candidate.classification === "SUPPLIER_SEARCH")) {
-  const companyName = line.sku === "GUILD-040" ? "Guild Inspection 040" : `Guild Source ${line.item}`;
-  const hostname = companyName.toLowerCase().replace(/[^a-z0-9]+/g, "");
+type RealisticGuildSupplierLanguage = {
+  companyName: string;
+  role: "MANUFACTURER" | "DISTRIBUTOR" | "PROCESSOR" | "SERVICE_PROVIDER";
+  roleEvidence: string;
+  itemIdentity: string;
+  capabilityEvidence: string;
+};
+
+// These are sanitized fixture pages, not claims that any real supplier offers the item.
+// The capability excerpts deliberately use catalog rows and capability blurbs instead of request prose.
+const REALISTIC_GUILD_SUPPLIER_LANGUAGE: Record<string, RealisticGuildSupplierLanguage> = {
+  "GUILD-001": { companyName: "Metro Metals", role: "DISTRIBUTOR", roleEvidence: "Full-line metal service center and stockist.", itemIdentity: "6061-T6 aluminum sheet", capabilityEvidence: "Inventory table | 6061-T6 aluminum | sheet form | mill-stock condition." },
+  "GUILD-002": { companyName: "Metro Metals", role: "DISTRIBUTOR", roleEvidence: "Full-line metal service center and stockist.", itemIdentity: "6061-T651 aluminum plate", capabilityEvidence: "Saw-cut stock program: 6061-T651 aluminum plate blanks." },
+  "GUILD-003": { companyName: "Metro Metals", role: "DISTRIBUTOR", roleEvidence: "Full-line metal service center and stockist.", itemIdentity: "5052-H32 aluminum sheet", capabilityEvidence: "Service-center inventory includes 5052-H32 aluminum sheet with deburring available." },
+  "GUILD-004": { companyName: "Metro Metals", role: "PROCESSOR", roleEvidence: "Metal service center with cut-to-size processing.", itemIdentity: "6061-T6 aluminum extrusion machining stock", capabilityEvidence: "Cut-length 6061-T6 aluminum extrusion machining stock is available from the service center." },
+  "GUILD-005": { companyName: "Panel Plastics", role: "DISTRIBUTOR", roleEvidence: "Industrial laminate stockist and distributor.", itemIdentity: "FR-4 flame-retardant glass-epoxy laminate", capabilityEvidence: "Laminate catalog | NEMA FR-4 flame-retardant glass-epoxy sheet." },
+  "GUILD-006": { companyName: "Motion Isolators", role: "MANUFACTURER", roleEvidence: "Manufacturer of vibration-control components.", itemIdentity: "silicone elastomer vibration isolator mounts with stainless inserts, 50 Shore A", capabilityEvidence: "Series V50 catalog lists vibration isolator mounts with silicone elastomer bodies, stainless inserts, and 50 Shore A hardness." },
+  "GUILD-007": { companyName: "Metric Fasteners", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for metric hardware.", itemIdentity: "A2 stainless socket-head cap screws in M4 and M5, passivated", capabilityEvidence: "Fastener catalog lists passivated A2 stainless M4 and M5 socket-head cap screws." },
+  "GUILD-008": { companyName: "Metric Fasteners", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for metric hardware.", itemIdentity: "304 stainless flat washers for M4 and M5", capabilityEvidence: "Hardware table lists M4 and M5 flat washers in 304 stainless." },
+  "GUILD-009": { companyName: "Metric Fasteners", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for metric hardware.", itemIdentity: "304 stainless prevailing-torque locknuts in M4 and M5", capabilityEvidence: "Catalog lists M4 and M5 prevailing-torque locknuts made from 304 stainless." },
+  "GUILD-010": { companyName: "Metric Fasteners", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for metric hardware.", itemIdentity: "stainless helical-thread inserts for M4 and M5", capabilityEvidence: "Thread-repair catalog lists stainless helical-thread inserts for M4 and M5 tapped holes." },
+  "GUILD-011": { companyName: "Bondline Materials", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for industrial adhesives.", itemIdentity: "3M Scotch-Weld DP420 structural epoxy", capabilityEvidence: "The distributor catalog lists 3M Scotch-Weld DP420 structural epoxy." },
+  "GUILD-012": { companyName: "Circuit Sealants", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for electronics sealants.", itemIdentity: "DOWSIL 3145 RTV silicone adhesive", capabilityEvidence: "The electronics catalog lists DOWSIL 3145 RTV silicone adhesive." },
+  "GUILD-013": { companyName: "Process Chemicals", role: "DISTRIBUTOR", roleEvidence: "Industrial chemical supplier and distributor.", itemIdentity: "high-purity 99 percent electronics-grade isopropyl alcohol solvent", capabilityEvidence: "Solvent catalog lists high-purity isopropyl alcohol, 99 percent, electronics-grade." },
+  "GUILD-014": { companyName: "Coating Systems", role: "DISTRIBUTOR", roleEvidence: "Industrial coatings supplier and distributor.", itemIdentity: "corrosion-resistant epoxy primer compatible with aluminum", capabilityEvidence: "Coatings guide offers an aluminum-compatible, corrosion-resistant epoxy primer system." },
+  "GUILD-015": { companyName: "Coating Systems", role: "DISTRIBUTOR", roleEvidence: "Industrial coatings supplier and distributor.", itemIdentity: "matte polyurethane topcoat", capabilityEvidence: "Finish catalog offers a matte polyurethane topcoat for industrial coating systems." },
+  "GUILD-016": { companyName: "Precision Rails", role: "PROCESSOR", roleEvidence: "CNC machine shop and metal fabricator.", itemIdentity: "6061 aluminum instrumentation rail", capabilityEvidence: "Capabilities include CNC machining 6061 aluminum instrumentation rails followed by hard anodizing." },
+  "GUILD-017": { companyName: "Aero Wire Supply", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for high-performance wire.", itemIdentity: "22 AWG stranded copper wire with ETFE insulation, 600 V", capabilityEvidence: "Wire table lists 22 AWG stranded copper conductors, ETFE insulation, and a 600 V rating." },
+  "GUILD-018": { companyName: "Aero Wire Supply", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for high-performance wire.", itemIdentity: "18 AWG stranded copper wire with ETFE insulation", capabilityEvidence: "Wire table lists 18 AWG stranded copper conductors with ETFE insulation." },
+  "GUILD-019": { companyName: "Signal Cable", role: "MANUFACTURER", roleEvidence: "Manufacturer of shielded instrumentation cable.", itemIdentity: "2-conductor twisted shielded cable with 24 AWG conductors and fluoropolymer jacket", capabilityEvidence: "Cable data row: 2-conductor twisted shielded cable, 24 AWG, fluoropolymer jacket; manufactured to order." },
+  "GUILD-020": { companyName: "Harness Marking", role: "DISTRIBUTOR", roleEvidence: "Identification-products supplier and distributor.", itemIdentity: "heat-shrink printable identification sleeves in polyolefin for thermal-transfer marking", capabilityEvidence: "Identification catalog lists printable polyolefin heat-shrink sleeves for permanent thermal-transfer marking." },
+  "GUILD-021": { companyName: "Harness Protection", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for cable-management products.", itemIdentity: "abrasion-resistant braided expandable sleeving in 6 mm, 10 mm, and 15 mm diameters", capabilityEvidence: "Cable-management catalog lists abrasion-resistant braided expandable sleeving in 6 mm, 10 mm, and 15 mm sizes." },
+  "GUILD-022": { companyName: "Harness Protection", role: "DISTRIBUTOR", roleEvidence: "Stocking distributor for cable-management products.", itemIdentity: "dual-wall adhesive-lined heat shrink with 3:1 shrink ratio", capabilityEvidence: "Tubing data row lists dual-wall, adhesive-lined heat shrink with a 3:1 recovery ratio." },
+  "GUILD-023": { companyName: "Circular Interconnect", role: "DISTRIBUTOR", roleEvidence: "Connector supplier and authorized distributor.", itemIdentity: "10-contact multipole circular connector with metallic shell and positive locking", capabilityEvidence: "Connector catalog lists a 10-contact multipole circular connector with metallic shell and positive locking." },
+  "GUILD-024": { companyName: "Enclosure Works", role: "PROCESSOR", roleEvidence: "CNC machine shop and enclosure fabricator.", itemIdentity: "6061-T6 aluminum enclosure with removable lid and conductive gasket provision", capabilityEvidence: "Capabilities include CNC machining a 6061-T6 aluminum enclosure with removable lid and conductive-gasket land." },
+  "GUILD-025": { companyName: "Board Fabrication", role: "MANUFACTURER", roleEvidence: "Contract manufacturer and printed circuit board fabricator.", itemIdentity: "1.6 mm FR-4 printed circuit board carrier fabrication", capabilityEvidence: "Board shop provides 1.6 mm FR-4 printed circuit board carrier fabrication." },
+  "GUILD-026": { companyName: "Metric Supports", role: "DISTRIBUTOR", roleEvidence: "Electronic hardware supplier and distributor.", itemIdentity: "M3 threaded PEEK standoff, 18 mm height", capabilityEvidence: "Electronic hardware catalog lists an M3 threaded PEEK standoff at 18 mm height." },
+  "GUILD-028": { companyName: "Temperature Instruments", role: "MANUFACTURER", roleEvidence: "Instrumentation manufacturer and calibration supplier.", itemIdentity: "100 ohm PT100 RTD", capabilityEvidence: "Sensor catalog lists a 100 ohm PT100 RTD in a 3-wire surface-mount package." },
+  "GUILD-029": { companyName: "Strain Instruments", role: "MANUFACTURER", roleEvidence: "Manufacturer of strain measurement sensors.", itemIdentity: "350 ohm foil strain gauge", capabilityEvidence: "Gauge catalog lists a 350 ohm foil strain gauge with self-temperature compensation for aluminum." },
+  "GUILD-030": { companyName: "Motion Instruments", role: "MANUFACTURER", roleEvidence: "Manufacturer of industrial vibration sensors.", itemIdentity: "triaxial accelerometer", capabilityEvidence: "Vibration catalog lists a triaxial IEPE accelerometer with 100 mV/g output." },
+  "GUILD-031": { companyName: "Test Harness Works", role: "SERVICE_PROVIDER", roleEvidence: "Wire harness assembler and cable assembly service.", itemIdentity: "bench-test data-acquisition wire harness", capabilityEvidence: "Harness shop provides build-to-print bench data-acquisition harness assembly with continuity and pin-to-pin testing." },
+  "GUILD-032": { companyName: "Grounding Products", role: "MANUFACTURER", roleEvidence: "Manufacturer of electrical grounding hardware.", itemIdentity: "tinned-copper braided grounding straps with crimped ring terminals", capabilityEvidence: "Grounding catalog lists tinned-copper braided grounding straps terminated with crimped ring terminals." },
+  "GUILD-033": { companyName: "Trim Products", role: "DISTRIBUTOR", roleEvidence: "Industrial rubber-products supplier and distributor.", itemIdentity: "silicone edge trim", capabilityEvidence: "Trim catalog lists EPDM edge trim profiles for panel openings." },
+  "GUILD-034": { companyName: "Thermal Materials", role: "DISTRIBUTOR", roleEvidence: "Thermal-management materials supplier.", itemIdentity: "electrically insulating silicone thermal pad, 1.5 mm thick", capabilityEvidence: "Thermal catalog lists a 1.5 mm electrically insulating silicone thermal pad." },
+  "GUILD-035": { companyName: "Industrial Nameplates", role: "PROCESSOR", roleEvidence: "Nameplate fabricator and engraving shop.", itemIdentity: "laser-etched anodized-aluminum nameplates", capabilityEvidence: "The nameplate shop fabricates anodized aluminum nameplates and laser-etches legends." },
+  "GUILD-036": { companyName: "Inspection Marking", role: "DISTRIBUTOR", roleEvidence: "Industrial inspection-products supplier.", itemIdentity: "torque-seal witness lacquer", capabilityEvidence: "Inspection-supplies catalog lists industrial witness lacquer." },
+  "GUILD-037": { companyName: "Connector Protection", role: "DISTRIBUTOR", roleEvidence: "Connector accessory supplier and distributor.", itemIdentity: "antistatic polymer caps and connector dust covers", capabilityEvidence: "Catalog lists polymer caps with antistatic construction; connector accessories include dust covers." },
+  "GUILD-038": { companyName: "Transit Packaging", role: "DISTRIBUTOR", roleEvidence: "Industrial packaging supplier and custom case distributor.", itemIdentity: "closed-cell polyethylene foam, ESD bags, humidity indicator cards, and reusable transit cases", capabilityEvidence: "Packaging catalog supplies closed-cell polyethylene foam, ESD bags, humidity indicator cards, and reusable transit cases." },
+  "GUILD-040": { companyName: "Precision Metrology", role: "SERVICE_PROVIDER", roleEvidence: "First-article inspection service and metrology laboratory.", itemIdentity: "first-article inspection measurement report", capabilityEvidence: "Metrology services provide first-article measurement reports against released drawings." },
+};
+
+const researchableGuildLines = GUILD_SOURCING_LINES.filter((candidate) => candidate.classification === "SUPPLIER_SEARCH");
+const researchableGuildIds = researchableGuildLines.map((line) => line.sku).sort();
+const CRITICAL_NEAR_MISS_CAPABILITY: Record<string, string> = {
+  "GUILD-001": "Stocks 6061-T651 aluminum sheet.",
+  "GUILD-002": "Stocks 6061-T6 aluminum plate.",
+  "GUILD-003": "Stocks 5052-H34 aluminum sheet.",
+  "GUILD-004": "Stocks 6063-T6 aluminum extrusion machining stock.",
+  "GUILD-005": "Stocks G10 flame-retardant glass-epoxy laminate.",
+  "GUILD-006": "Manufactures silicone elastomer vibration isolator mounts with stainless inserts, 70 Shore A.",
+  "GUILD-007": "Supplies A2 stainless socket-head cap screws in M4 and M5, black oxide finish.",
+  "GUILD-008": "Supplies 316 stainless flat washers for M4 and M5.",
+  "GUILD-009": "Supplies 304 stainless plain hex nuts in M4 and M5.",
+  "GUILD-010": "Supplies stainless solid threaded inserts for M4 and M5.",
+  "GUILD-011": "Supplies BondPro 420 two-part structural epoxy for elevated-temperature curing.",
+  "GUILD-012": "Supplies SealFlex 3105 electronics-grade acid-cure silicone adhesive.",
+  "GUILD-013": "Supplies high-purity 95 percent electronics-grade isopropyl alcohol solvent.",
+  "GUILD-014": "Offers two-part corrosion-resistant acrylic primer for aluminum.",
+  "GUILD-015": "Offers gloss polyurethane topcoat.",
+  "GUILD-016": "CNC machining and powder coating for 6061 aluminum instrumentation rail.",
+  "GUILD-017": "Supplies 24 AWG stranded copper wire with ETFE insulation, 600 V.",
+  "GUILD-018": "Supplies 20 AWG stranded copper wire with ETFE insulation.",
+  "GUILD-019": "Manufactures 2-conductor twisted shielded cable with 26 AWG conductors and fluoropolymer jacket.",
+  "GUILD-020": "Supplies heat-shrink printable identification sleeves in polyolefin for inkjet marking.",
+  "GUILD-021": "Supplies abrasion-resistant braided expandable sleeving in 6 mm, 10 mm, and 12 mm diameters.",
+  "GUILD-022": "Supplies dual-wall adhesive-lined heat shrink with 2:1 shrink ratio.",
+  "GUILD-023": "Supplies 16-contact multipole circular connector with metallic shell and positive locking.",
+  "GUILD-024": "CNC machining for aluminum enclosure with removable lid and conductive gasket provision.",
+  "GUILD-025": "Provides 2.0 mm FR-4 printed circuit board carrier fabrication.",
+  "GUILD-026": "Supplies M3 threaded PEEK standoff, 30 mm height.",
+  "GUILD-028": "Manufactures 100 ohm PT100 RTD in a 2-wire surface-mount configuration.",
+  "GUILD-029": "Manufactures 350 ohm foil strain gauge with self-temperature compensation for steel.",
+  "GUILD-030": "Manufactures triaxial charge-mode accelerometer.",
+  "GUILD-031": "Build-to-print cable assemblies with continuity and pin-to-pin testing.",
+  "GUILD-032": "Manufactures bare-copper braided grounding straps with crimped ring terminals.",
+  "GUILD-033": "Supplies nitrile edge trim for access openings.",
+  "GUILD-034": "Supplies electrically insulating silicone thermal pad, 3 mm thick.",
+  "GUILD-035": "Fabricates laser-etched bare-aluminum nameplates.",
+  "GUILD-036": "Supplies UV inspection lacquer.",
+  "GUILD-037": "Supplies standard polymer caps and connector dust covers.",
+  "GUILD-038": "Supplies closed-cell polyethylene foam, ESD bags, and reusable transit cases.",
+  "GUILD-040": "Provides annual reports to customers.",
+};
+assert.deepEqual(
+  Object.keys(REALISTIC_GUILD_SUPPLIER_LANGUAGE).sort(),
+  researchableGuildIds,
+  "the supplier-language matrix key set must exactly equal every sourceable GUILD line",
+);
+assert.deepEqual(
+  Object.keys(CRITICAL_NEAR_MISS_CAPABILITY).sort(),
+  researchableGuildIds,
+  "the wrong-fit matrix key set must exactly equal every sourceable GUILD line",
+);
+const MODEL_IDENTITY_ONLY_NEAR_MISS: Record<string, string> = {
+  "GUILD-026": "Supplies M3 threaded PEEK parts in 18 mm height.",
+  "GUILD-029": "Manufactures 350 ohm sensors with self-temperature compensation for aluminum.",
+};
+const NUMERIC_SUBSTRING_NEAR_MISS: Record<string, string> = {
+  "GUILD-026": "Supplies M30 threaded PEEK standoff, 18 mm height.",
+  "GUILD-029": "Manufactures 1350 ohm foil strain gauge with self-temperature compensation for aluminum.",
+};
+const modelIdentityNearMissReceiptCounts = new Map<string, number>();
+const numericSubstringNearMissReceiptCounts = new Map<string, number>();
+
+function supplierFixturePage(
+  lineItem: string,
+  identityEvidence: string,
+  roleEvidence: string,
+  capabilityEvidence: string,
+) {
+  const sections = Number(lineItem) % 4;
+  if (sections === 0) return [identityEvidence, "Product catalog", capabilityEvidence, "About the supplier", roleEvidence].join("\n");
+  if (sections === 1) return [identityEvidence, "Company profile", roleEvidence, "Technical data", capabilityEvidence].join("\n");
+  if (sections === 2) return [identityEvidence, "Capabilities", capabilityEvidence, "Who we are", roleEvidence].join("\n");
+  return [identityEvidence, "About", roleEvidence, "Catalog row", capabilityEvidence].join("\n");
+}
+
+function normalizedFixtureText(value: string) {
+  return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/gu, " ").trim();
+}
+
+for (const line of researchableGuildLines) {
+  const language = REALISTIC_GUILD_SUPPLIER_LANGUAGE[line.sku];
+  assert.ok(language, `${line.sku} is missing a realistic supplier-language fixture`);
+  const hostname = language.companyName.toLowerCase().replace(/[^a-z0-9]+/g, "");
   const sourceUrl = `https://${hostname}.example/capability/${line.item}`;
-  const role = line.sku === "GUILD-040" ? "SERVICE_PROVIDER" : "MANUFACTURER";
-  const identityEvidence = `${companyName} operates this company capability website.`;
-  const roleEvidence = role === "SERVICE_PROVIDER"
-    ? `${companyName} is an inspection laboratory.`
-    : `${companyName} is a manufacturer.`;
-  const itemIdentity = `${line.name}: ${line.specification}`;
-  const capabilityEvidence = role === "SERVICE_PROVIDER"
-    ? `${companyName} provides and inspects ${itemIdentity}.`
-    : `${companyName} manufactures and supplies ${itemIdentity}.`;
-  const sourceText = [identityEvidence, roleEvidence, capabilityEvidence].join(" ");
+  const identityEvidence = `${language.companyName} operates this official company website.`;
+  const sourceText = supplierFixturePage(line.item, identityEvidence, language.roleEvidence, language.capabilityEvidence);
   const lineInput: ExaSupplierResearchInput = {
     officeId: "office-test",
     workspaceId: "workspace-test",
@@ -541,16 +871,16 @@ for (const line of GUILD_SOURCING_LINES.filter((candidate) => candidate.classifi
       ...capture.records[0]!,
       sourceId: `source-${line.item}`,
       sourceUrl,
-      sourceTitle: `${companyName} capability`,
+      sourceTitle: `${language.companyName} capability`,
       status: { ...capture.records[0]!.status!, id: sourceUrl },
       text: sourceText,
       proposal: {
-        supplierName: companyName,
-        supplierRole: role,
+        supplierName: language.companyName,
+        supplierRole: language.role,
         companyIdentityEvidence: identityEvidence,
-        supplierRoleEvidence: roleEvidence,
-        productCapabilityEvidence: capabilityEvidence,
-        itemIdentity,
+        supplierRoleEvidence: language.roleEvidence,
+        productCapabilityEvidence: language.capabilityEvidence,
+        itemIdentity: language.itemIdentity,
         manufacturer: null,
         mpn: null,
         priceAmount: null,
@@ -562,12 +892,100 @@ for (const line of GUILD_SOURCING_LINES.filter((candidate) => candidate.classifi
       sourceTextHash: createHash("sha256").update(sourceText).digest("hex"),
     }],
   };
+  const normalizedCapability = normalizedFixtureText(language.capabilityEvidence);
+  const normalizedSpecification = normalizedFixtureText(line.specification);
+  const normalizedFullRequest = normalizedFixtureText(`${line.name} ${line.specification}`);
+  assert.notEqual(normalizedCapability, normalizedSpecification, `${line.sku} fixture capability must not copy the full specification`);
+  assert.equal(normalizedCapability.includes(normalizedSpecification), false, `${line.sku} fixture capability must not contain the full specification`);
+  assert.equal(normalizedCapability.includes(normalizedFullRequest), false, `${line.sku} fixture capability must not contain the normalized full request`);
   assert.equal(
     validateExaPublicSupplierLeadReceipts(lineInput, lineCapture).length,
     1,
-    `${line.sku} must be able to retain an exact source-bound supplier receipt`,
+    `${line.sku} supplier-style fixture must retain exactly one source-bound receipt`,
   );
+  const nearMissCapability = CRITICAL_NEAR_MISS_CAPABILITY[line.sku];
+  assert.ok(nearMissCapability, `${line.sku} must have a wrong-fit capability fixture`);
+  const nearMissText = supplierFixturePage(line.item, identityEvidence, language.roleEvidence, nearMissCapability);
+  const nearMissCapture: ExaRetrievalCapture = {
+    ...lineCapture,
+    records: lineCapture.records.map((record) => ({
+      ...record,
+      text: nearMissText,
+      proposal: record.proposal ? {
+        ...record.proposal,
+        itemIdentity: nearMissCapability.replace(/[.]$/u, ""),
+        productCapabilityEvidence: nearMissCapability,
+      } : null,
+      sourceTextHash: createHash("sha256").update(nearMissText).digest("hex"),
+    })),
+  };
+  assert.equal(
+    validateExaPublicSupplierLeadReceipts(lineInput, nearMissCapture).length,
+    0,
+    `${line.sku} materially wrong supplier fit must fail closed`,
+  );
+  const modelIdentityOnlyCapability = MODEL_IDENTITY_ONLY_NEAR_MISS[line.sku];
+  if (modelIdentityOnlyCapability) {
+    const modelIdentityOnlyText = supplierFixturePage(line.item, identityEvidence, language.roleEvidence, modelIdentityOnlyCapability);
+    const modelIdentityOnlyCapture: ExaRetrievalCapture = {
+      ...lineCapture,
+      records: lineCapture.records.map((record) => ({
+        ...record,
+        text: modelIdentityOnlyText,
+        proposal: record.proposal ? {
+          ...record.proposal,
+          productCapabilityEvidence: modelIdentityOnlyCapability,
+        } : null,
+        sourceTextHash: createHash("sha256").update(modelIdentityOnlyText).digest("hex"),
+      })),
+    };
+    modelIdentityNearMissReceiptCounts.set(
+      line.sku,
+      validateExaPublicSupplierLeadReceipts(lineInput, modelIdentityOnlyCapture).length,
+    );
+  }
+  const numericSubstringCapability = NUMERIC_SUBSTRING_NEAR_MISS[line.sku];
+  if (numericSubstringCapability) {
+    const numericSubstringText = supplierFixturePage(line.item, identityEvidence, language.roleEvidence, numericSubstringCapability);
+    const numericSubstringCapture: ExaRetrievalCapture = {
+      ...lineCapture,
+      records: lineCapture.records.map((record) => ({
+        ...record,
+        text: numericSubstringText,
+        proposal: record.proposal ? {
+          ...record.proposal,
+          itemIdentity: numericSubstringCapability.replace(/[.]$/u, ""),
+          productCapabilityEvidence: numericSubstringCapability,
+        } : null,
+        sourceTextHash: createHash("sha256").update(numericSubstringText).digest("hex"),
+      })),
+    };
+    numericSubstringNearMissReceiptCounts.set(
+      line.sku,
+      validateExaPublicSupplierLeadReceipts(lineInput, numericSubstringCapture).length,
+    );
+  }
 }
+assert.equal(
+  modelIdentityNearMissReceiptCounts.get("GUILD-026"),
+  0,
+  "GUILD-026 must reject generic M3 threaded PEEK parts when only model-controlled item identity says standoff",
+);
+assert.equal(
+  modelIdentityNearMissReceiptCounts.get("GUILD-029"),
+  0,
+  "GUILD-029 must reject generic 350 ohm sensors when only model-controlled item identity says strain gauge",
+);
+assert.equal(
+  numericSubstringNearMissReceiptCounts.get("GUILD-026"),
+  0,
+  "GUILD-026 must not treat M30 as an M3 thread",
+);
+assert.equal(
+  numericSubstringNearMissReceiptCounts.get("GUILD-029"),
+  0,
+  "GUILD-029 must not treat 1350 ohm as 350 ohm",
+);
 
 async function verifyCandidatePromotion() {
   let searchQuery = "";

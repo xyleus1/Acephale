@@ -122,8 +122,8 @@ function sourceRecord(args: {
 }
 
 const leadIdentityEvidence = "Example Supplier operates the supplier.example company website.";
-const leadRoleEvidence = "Example Supplier is a distributor of industrial radio modules.";
-const leadCapabilityEvidence = "Example Supplier distributes and supplies the Acme RM-9 radio module.";
+const leadRoleEvidence = "Stocking distributor for industrial radio modules.";
+const leadCapabilityEvidence = "Distributes and supplies the Acme RM-9 radio module.";
 const leadText = [leadIdentityEvidence, leadRoleEvidence, leadCapabilityEvidence].join(" ");
 const leadSourceUrl = "https://examplesupplier.example/catalog/rm-9";
 const leadProposal: ExaOfferProposal = {

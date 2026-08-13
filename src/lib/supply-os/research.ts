@@ -136,7 +136,7 @@ function supplierResearchQueryProfile(input: SupplierResearchQueryInput): Suppli
   if (/\b(shipping protection|packaging|shipping case|antistatic bag|humidity indicator|transit case|custom foam)\b/.test(productIdentity)) {
     return "PACKAGING";
   }
-  if (/\b(harness assembl|cable assembl|wire harness|build[- ]to[- ]print|pin[- ]to[- ]pin|continuity test)\b/.test(productIdentity)) {
+  if (/\b(harness (?:assembl|assembled)|cable assembl|wire harness|build[- ]to[- ]print|pin[- ]to[- ]pin|continuity test)\b/.test(productIdentity)) {
     return "ASSEMBLY_SERVICE";
   }
   if (/\b(pt100|rtd|resistance temperature detector|strain gauges?|accelerometer|calibration certificate|calibrated sensor)\b/.test(productIdentity)) {
@@ -206,15 +206,22 @@ function boundedQuery(parts: Array<string | null | undefined>) {
   return text(parts.filter(Boolean).join(" "), 1_200);
 }
 
+function splitSupplierRequirement(value: string) {
+  const marker = /(?:\.|\|)\s*Supplier (?:deliverable|QA):\s*/i.exec(value);
+  if (!marker || marker.index === undefined) return { product: value.trim(), quality: "" };
+  return {
+    product: value.slice(0, marker.index).trim(),
+    quality: value.slice(marker.index + marker[0].length).trim(),
+  };
+}
+
 export function buildSupplierResearchQueryPlan(input: SupplierResearchQueryInput): SupplierResearchQueryPlan {
   const profile = supplierResearchQueryProfile(input);
   const terms = QUERY_PROFILE_TERMS[profile];
   const componentName = text(input.componentName, 240);
   const manufacturer = text(input.manufacturer, 180);
   const mpn = text(input.mpn, 180);
-  const specification = text(input.specification, 1_000)
-    .replace(/(?:\.|\|)\s*Supplier (?:deliverable|QA):\s*/i, ". Required QA: ")
-    .trim();
+  const specification = splitSupplierRequirement(text(input.specification, 1_000));
   const geography = text(input.sourceRegion, 180).toLowerCase() === "any region"
     ? text(input.targetCountry, 120) || text(input.deliveryLocation, 240)
     : text(input.sourceRegion, 180) || text(input.targetCountry, 120) || text(input.deliveryLocation, 240);
@@ -237,7 +244,7 @@ export function buildSupplierResearchQueryPlan(input: SupplierResearchQueryInput
     mpn,
     manufacturer,
     componentName,
-    specification,
+    specification.product,
     terms.roles,
     explorationTerms,
     exclusions,
@@ -247,7 +254,7 @@ export function buildSupplierResearchQueryPlan(input: SupplierResearchQueryInput
     mpn,
     manufacturer,
     componentName,
-    specification,
+    specification.product,
     "official company product catalog datasheet request quote",
     terms.roles,
     explorationTerms,
@@ -255,9 +262,10 @@ export function buildSupplierResearchQueryPlan(input: SupplierResearchQueryInput
   ]);
   const capabilityQa = boundedQuery([
     componentName,
-    specification,
+    specification.product,
     terms.roles,
     terms.quality,
+    specification.quality ? `required supplier evidence ${specification.quality}` : null,
     explorationTerms,
     exclusions,
     geography ? `serving ${geography}` : null,
@@ -291,6 +299,10 @@ const GENERIC_COMPANY_DOMAIN_LABELS = new Set([
   "distribution", "distributor", "global", "group", "industrial", "industries", "manufacturer", "manufacturing",
   "solutions", "supplier", "supplies", "supply", "systems", "technologies", "technology",
 ]);
+const COMPANY_DOMAIN_ALIASES = new Map<string, readonly string[]>([
+  ["rscomponents", ["rsonline"]],
+  ["hbk", ["hbkworld"]],
+]);
 
 function organizationDomainLabel(value: string) {
   const url = normalizeUrl(value);
@@ -304,7 +316,7 @@ function organizationDomainLabel(value: string) {
 
 export function supplierCompanyMatchesDomain(companyName: string, sourceUrl: string) {
   const domainLabel = organizationDomainLabel(sourceUrl);
-  if (domainLabel.length < 4 || GENERIC_COMPANY_DOMAIN_LABELS.has(domainLabel)) return false;
+  if (domainLabel.length < 2 || GENERIC_COMPANY_DOMAIN_LABELS.has(domainLabel)) return false;
   const companyTokens = text(companyName, 180).toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => (
     token.length >= 2 && !COMPANY_LEGAL_SUFFIXES.has(token) && !COMPANY_CONNECTOR_WORDS.has(token)
   )) ?? [];
@@ -313,10 +325,11 @@ export function supplierCompanyMatchesDomain(companyName: string, sourceUrl: str
   let leadingPrefix = "";
   for (const token of companyTokens) {
     leadingPrefix += token;
-    if (leadingPrefix.length >= 4) companyDomainLabels.add(leadingPrefix);
+    if (leadingPrefix.length >= 2) companyDomainLabels.add(leadingPrefix);
   }
   const firstTokenWithTailInitials = `${companyTokens[0]}${companyTokens.slice(1).map((token) => token[0]).join("")}`;
-  if (firstTokenWithTailInitials.length >= 4) companyDomainLabels.add(firstTokenWithTailInitials);
+  if (firstTokenWithTailInitials.length >= 2) companyDomainLabels.add(firstTokenWithTailInitials);
+  for (const alias of COMPANY_DOMAIN_ALIASES.get(companyTokens.join("")) ?? []) companyDomainLabels.add(alias);
   return companyDomainLabels.has(domainLabel);
 }
 

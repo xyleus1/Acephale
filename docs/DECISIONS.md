@@ -3026,3 +3026,44 @@ Use this log for durable product and engineering decisions. Do not put every imp
   prove company identity, supplier role, product capability, price, stock, or
   approval. Candidate retention still requires independently retrieved page
   evidence and deterministic receipt validation.
+
+### 2026-08-13 - GUILD supplier research continues in bounded exploration epochs
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first campaign design treated nine attempts per line, twelve
+  campaign generations, and the demo need-by date as terminal limits. That
+  contradicts the operating goal: keep looking for three to five attributable
+  supplier leads on each sourceable GUILD line while respecting provider and
+  office budgets. A terminal attempt ceiling also prevented improved evidence
+  validation from helping an existing failed campaign.
+- Decision: Treat each group of nine attempts as an exploration epoch, not a
+  terminal campaign limit. Keep the campaign durable and resumable across
+  epochs. Derive the next attempt from the immutable stored attempt ordinal,
+  rotate query variants and excluded domains by epoch, retain validated
+  aggregate evidence across the bounded attempt window, and cap retry backoff
+  at 24 hours. The fixed demo need-by date does not expire supplier discovery.
+- Recovery boundary: Cron may create one immutable successor only for an older
+  campaign that failed under the former attempt-exhaustion or no-retryable-work
+  rules. Authentication, authorization, missing configuration, cancellation,
+  superseded scope, and explicit manual-review failures remain operator-owned
+  and are never retried blindly. A parent cannot complete or fail while a child
+  attempt is still running.
+- Evidence boundary: Perpetual exploration does not weaken admission. A lead
+  still requires an independently retrieved page, company and domain binding,
+  explicit supplier-role evidence, and deterministic requested-capability
+  evidence. Aggregate artifacts keep at most five candidates, 64 attributable
+  sources, and 20 sanitized warnings per line. Research completion does not
+  qualify a supplier, contact it, approve spend, or create an order.
+- Supersedes: The nine-attempt terminal limit, twelve-generation manual retry
+  ceiling, and fixed-date expiry portions of the 2026-08-12 persisted supplier
+  research decision. Daily provider and office caps, tenant scoping, immutable
+  run lineage, human approval, and the 38 sourceable line target remain in
+  force.
+- Consequences: A valid running campaign can continue after the browser closes,
+  through daily quota resets and new exploration epochs, until each sourceable
+  line has three retained leads. Operators still must fix configuration or
+  access failures, and a campaign still stops on explicit cancellation.
+- Revisit when: Provider economics require a different daily budget, a managed
+  external queue replaces database claiming, or the GUILD request becomes a
+  versioned customer program instead of a fixed demo campaign.

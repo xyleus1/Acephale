@@ -20,8 +20,11 @@ export const GUILD_SUPPLIER_CAMPAIGN_RETAINED_MAXIMUM = 5;
 export const GUILD_SUPPLIER_CAMPAIGN_QUEUE_BATCH = 6;
 export const GUILD_SUPPLIER_CAMPAIGN_DAILY_ATTEMPT_CAP = 48;
 export const SUPPLIER_RESEARCH_OFFICE_DAILY_ATTEMPT_CAP = 72;
-export const GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE = 9;
-export const GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS = 12;
+export const GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS = 9;
+export const GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_SOURCE_LIMIT = 64;
+export const GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_WARNING_LIMIT = 20;
+export const SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW = 50;
+const GUILD_SUPPLIER_CAMPAIGN_ATTEMPT_HISTORY_LIMIT = 10;
 export const GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE = "2026-09-30";
 export const GUILD_SUPPLIER_CAMPAIGN_DELIVERY_LOCATION = "Austin, TX, United States";
 export const GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS = [
@@ -36,6 +39,7 @@ const CAMPAIGN_DSL_NAME = "guild_continuous_supplier_research";
 const ATTEMPT_DSL_NAME = "queued_supplier_research_child";
 const AGGREGATE_DSL_NAME = "guild_supplier_research_aggregate";
 const CAMPAIGN_SCOPE_VERSION = 3;
+export const GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION = 2;
 const CAMPAIGN_RECONCILIATION_LEASE_MS = 2 * 60_000;
 const RETRYABLE_FAILURE_CODES = new Set([
   "PROVIDER_TIMEOUT",
@@ -49,6 +53,38 @@ const RETRYABLE_FAILURE_CODES = new Set([
 const OPERATOR_BLOCKING_FAILURE_CODES = new Set(["MISSING_CONFIGURATION", "PROVIDER_AUTHENTICATION_FAILED", "ACCESS_REVOKED"]);
 
 type JsonRecord = Record<string, unknown>;
+
+export type SupplierResearchCampaignAncestryRow = {
+  id: string;
+  parentRunId: string | null;
+  depth: number;
+};
+
+export function validateSupplierResearchCampaignAncestryWindow(
+  rows: SupplierResearchCampaignAncestryRow[],
+) {
+  if (!rows.length || rows.length > SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW) {
+    throw new Error("Supplier research campaign ancestry is invalid.");
+  }
+  const ids = new Set<string>();
+  for (const [index, row] of rows.entries()) {
+    if (
+      !row.id
+      || ids.has(row.id)
+      || row.depth !== index + 1
+      || (index > 0 && rows[index - 1].parentRunId !== row.id)
+    ) {
+      throw new Error("Supplier research campaign ancestry is invalid.");
+    }
+    ids.add(row.id);
+  }
+  const last = rows.at(-1)!;
+  const truncated = rows.length === SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW && last.parentRunId !== null;
+  if (!truncated && last.parentRunId !== null) {
+    throw new Error("Supplier research campaign ancestry is invalid.");
+  }
+  return { ids: rows.map((row) => row.id), truncated };
+}
 
 export type SupplierResearchProvider = "EXA" | "OPENAI";
 
@@ -113,6 +149,7 @@ export type SupplierResearchAggregateInput = {
   campaignKey: typeof GUILD_SUPPLIER_CAMPAIGN_KEY;
   campaignItemKey: string;
   campaignArtifactKind: "AGGREGATE";
+  campaignEvidencePolicyVersion: number;
   campaignAttemptCount: number;
   campaignTerminalAttemptCount: number;
   campaignAttemptWatermark: string;
@@ -314,8 +351,8 @@ function campaignIdentity(value: { input: unknown; idempotencyKey: string | null
 }
 
 export function guildSupplierResearchCampaignScopeExpired(now = new Date()) {
-  const expiresAt = new Date(`${GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE}T23:59:59.999Z`);
-  return Number.isNaN(expiresAt.getTime()) || now.getTime() > expiresAt.getTime();
+  void now;
+  return false;
 }
 
 function publicUrl(value: unknown) {
@@ -511,6 +548,50 @@ export function aggregateGuildSupplierResearchLine(
   };
 }
 
+export function mergeGuildSupplierResearchAggregate(
+  persisted: SupplierResearchResult | null,
+  incoming: SupplierResearchResult,
+): SupplierResearchResult {
+  const previous = persisted ?? { candidates: [], sources: [], degraded: true, warnings: [] };
+  const choices: Array<{ domain: string; candidate: SupplierCandidate; score: number }> = [];
+  for (const candidate of [...previous.candidates, ...incoming.candidates]) {
+    const domain = supplierCandidateDomain(candidate);
+    if (!domain) continue;
+    const identity = normalizedCompanyIdentity(candidate.companyName);
+    const score = candidateScore(candidate);
+    const existingIndex = choices.findIndex((choice) => (
+      domainsOverlap(choice.domain, domain)
+      || normalizedCompanyIdentity(choice.candidate.companyName) === identity
+    ));
+    if (existingIndex < 0) choices.push({ domain, candidate, score });
+    else if (score > choices[existingIndex].score) choices[existingIndex] = { domain, candidate, score };
+  }
+  const candidates = choices
+    .sort((left, right) => right.score - left.score || left.domain.localeCompare(right.domain))
+    .slice(0, GUILD_SUPPLIER_CAMPAIGN_RETAINED_MAXIMUM)
+    .map((choice) => choice.candidate);
+  const sources = new Map<string, EvidenceSource>();
+  for (const value of [...previous.sources, ...incoming.sources]) {
+    const source = evidenceSource(value);
+    if (source) sources.set(source.url, { ...source, sourceType: "PUBLIC" });
+  }
+  const prioritizedSourceUrls = [
+    ...candidates.flatMap((candidate) => candidate.sourceUrls),
+    ...incoming.sources.map((source) => source.url),
+    ...previous.sources.map((source) => source.url),
+  ];
+  const retainedSources = [...new Set(prioritizedSourceUrls)]
+    .flatMap((url) => sources.get(url) ? [sources.get(url)!] : [])
+    .slice(0, GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_SOURCE_LIMIT);
+  return {
+    candidates,
+    sources: retainedSources,
+    degraded: candidates.length < GUILD_SUPPLIER_CAMPAIGN_TARGET_MINIMUM,
+    warnings: [...new Set([...incoming.warnings, ...previous.warnings])]
+      .slice(0, GUILD_SUPPLIER_CAMPAIGN_AGGREGATE_WARNING_LIMIT),
+  };
+}
+
 function deterministicJitterMs(itemKey: string, attemptCount: number, baseMs: number) {
   const hash = createHash("sha256").update(`${itemKey}:${attemptCount}`).digest();
   return Math.floor((hash.readUInt16BE(0) / 65_535) * Math.min(5 * 60_000, baseMs * 0.05));
@@ -518,7 +599,9 @@ function deterministicJitterMs(itemKey: string, attemptCount: number, baseMs: nu
 
 export function campaignRetryDelayMs(itemKey: string, completedAttemptCount: number) {
   const base = [15 * 60_000, 60 * 60_000, 4 * 60 * 60_000, 12 * 60 * 60_000, 24 * 60 * 60_000];
-  const selected = base[Math.min(base.length - 1, Math.max(0, completedAttemptCount - 1))];
+  const safeAttempt = Number.isSafeInteger(completedAttemptCount) && completedAttemptCount > 0 ? completedAttemptCount : 1;
+  const attemptInEpoch = Number((BigInt(safeAttempt) - 1n) % BigInt(GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS)) + 1;
+  const selected = base[Math.min(base.length - 1, attemptInEpoch - 1)];
   return Math.min(24 * 60 * 60_000, selected + deterministicJitterMs(itemKey, completedAttemptCount, selected));
 }
 
@@ -526,6 +609,17 @@ function lastFailureCode(attempt: SupplierResearchCampaignAttempt | undefined) {
   if (!attempt || attempt.status !== "FAILED") return null;
   const message = typeof record(attempt.error).message === "string" ? String(record(attempt.error).message) : "";
   return message.match(/^([A-Z][A-Z0-9_]+):/)?.[1] ?? "UNCLASSIFIED_FAILURE";
+}
+
+export function isSafeLegacyCampaignSuccessorError(value: unknown) {
+  const message = typeof record(value).message === "string" ? String(record(value).message).trim() : "";
+  if (!message.startsWith("CAMPAIGN_BLOCKED:")) return false;
+  const detail = message.slice("CAMPAIGN_BLOCKED:".length).trim();
+  if (/configuration|authentication|credential|access|expired|cancel|superseded|manual review|non-retryable/i.test(detail)) {
+    return false;
+  }
+  return /^Supplier research has no retryable work\.?$/i.test(detail)
+    || /^Supplier research reached (?:the )?\d+-attempt limit without three validated leads\.?$/i.test(detail);
 }
 
 function lineAttempts(line: GuildSourcingLine, attempts: SupplierResearchCampaignAttempt[]) {
@@ -551,7 +645,16 @@ function nextAttemptDate(line: GuildSourcingLine, attempts: SupplierResearchCamp
   const last = terminal.at(-1);
   const completedAt = last ? asDate(last.completedAt) ?? asDate(last.failedAt) ?? asDate(last.updatedAt) : null;
   if (!completedAt || !last) return null;
-  return new Date(completedAt.getTime() + campaignRetryDelayMs(line.sku, terminal.length));
+  return new Date(completedAt.getTime() + campaignRetryDelayMs(line.sku, attemptOrdinal(last, terminal.length)));
+}
+
+function attemptOrdinal(attempt: SupplierResearchCampaignAttempt | undefined, fallback: number) {
+  const value = Number(record(attempt?.input).attemptNumber);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+}
+
+function latestAttemptOrdinal(attempts: SupplierResearchCampaignAttempt[]) {
+  return attempts.reduce((latest, attempt, index) => Math.max(latest, attemptOrdinal(attempt, index + 1)), 0);
 }
 
 export function guildSupplierResearchAttemptInput(args: {
@@ -561,7 +664,16 @@ export function guildSupplierResearchAttemptInput(args: {
   requiredProvider: SupplierResearchProvider;
   excludeDomains?: string[];
 }) {
-  const queryVariant = GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS[(args.attemptNumber - 1) % GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length];
+  if (!Number.isSafeInteger(args.attemptNumber) || args.attemptNumber < 1) {
+    throw new Error("Supplier research attempt number must be a positive safe integer.");
+  }
+  const ordinal = BigInt(args.attemptNumber) - 1n;
+  const epochLength = BigInt(GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS);
+  const attemptIndex = Number(ordinal % epochLength);
+  const variantIndex = attemptIndex % GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length;
+  const queryCycle = Math.floor(attemptIndex / GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length);
+  const explorationEpoch = Number(ordinal / epochLength) + 1;
+  const queryVariant = GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS[variantIndex];
   const excludeDomains = [...new Set((args.excludeDomains ?? []).flatMap((value) => {
     const normalized = value.trim().toLowerCase().replace(/^www\./, "");
     return normalized && !isIP(normalized) && /^[a-z0-9.-]+$/.test(normalized) ? [normalized] : [];
@@ -583,12 +695,31 @@ export function guildSupplierResearchAttemptInput(args: {
     campaignKey: GUILD_SUPPLIER_CAMPAIGN_KEY,
     campaignItemKey: args.line.sku,
     queryVariant,
-    queryVariantIndex: (args.attemptNumber - 1) % GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length,
-    queryCycle: Math.min(2, Math.floor((args.attemptNumber - 1) / GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS.length)),
+    queryVariantIndex: variantIndex,
+    queryCycle,
+    explorationEpoch,
+    attemptInEpoch: attemptIndex + 1,
     excludeDomains,
     requiredProvider: args.requiredProvider,
     attemptNumber: args.attemptNumber,
   } satisfies Prisma.InputJsonObject;
+}
+
+function rotatingAggregateExclusionDomains(output: SupplierResearchResult, attemptNumber: number) {
+  const domains = [...new Set([
+    ...output.sources.flatMap((source) => {
+      const url = publicUrl(source.url);
+      return url ? [new URL(url).hostname.toLowerCase().replace(/^www\./, "")] : [];
+    }),
+    ...output.candidates.flatMap((candidate) => {
+      const domain = supplierCandidateDomain(candidate);
+      return domain ? [domain] : [];
+    }),
+  ])].sort();
+  if (domains.length <= 8) return domains;
+  const epochIndex = (BigInt(attemptNumber) - 1n) / BigInt(GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS);
+  const offset = Number((epochIndex * 8n) % BigInt(domains.length));
+  return Array.from({ length: 8 }, (_, index) => domains[(offset + index) % domains.length]);
 }
 
 export function planGuildSupplierResearchQueue(args: {
@@ -625,20 +756,18 @@ export function planGuildSupplierResearchQueue(args: {
       && !OPERATOR_BLOCKING_FAILURE_CODES.has(failureCode)
     ) return [];
     if (last?.status === "CANCELLED" && !args.allowTerminalRetry) return [];
-    if (terminalAttempts.length >= GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE) return [];
     const dueAt = nextAttemptDate(line, attempts);
     const terminalRetry = currentOperatorBlock || last?.status === "CANCELLED";
     if (dueAt && dueAt.getTime() > now.getTime() && !(args.allowTerminalRetry && terminalRetry)) return [];
-    const attemptNumber = attempts.length + 1;
+    const latestOrdinal = latestAttemptOrdinal(attempts);
+    if (latestOrdinal >= Number.MAX_SAFE_INTEGER) return [];
+    const attemptNumber = latestOrdinal + 1;
     const input = guildSupplierResearchAttemptInput({
       line,
       campaignId: args.campaignId,
       attemptNumber,
       requiredProvider: args.requiredProvider,
-      excludeDomains: persistedOutput.candidates.flatMap((candidate) => {
-        const domain = supplierCandidateDomain(candidate);
-        return domain ? [domain] : [];
-      }),
+      excludeDomains: rotatingAggregateExclusionDomains(persistedOutput, attemptNumber),
     });
     return [{
       line,
@@ -670,8 +799,8 @@ function aggregateAttemptWatermark(
   const relevant = lineAttempts(line, attempts);
   const terminal = relevant.filter((attempt) => ["SUCCEEDED", "FAILED", "CANCELLED"].includes(attempt.status));
   return {
-    attemptCount: relevant.length,
-    terminalAttemptCount: terminal.length,
+    attemptCount: latestAttemptOrdinal(relevant),
+    terminalAttemptCount: latestAttemptOrdinal(terminal),
     watermark: digest(relevant.map((attempt) => ({
       id: attempt.id,
       status: attempt.status,
@@ -705,6 +834,7 @@ function aggregateInput(
     campaignKey: GUILD_SUPPLIER_CAMPAIGN_KEY,
     campaignItemKey: line.sku,
     campaignArtifactKind: "AGGREGATE",
+    campaignEvidencePolicyVersion: GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION,
     campaignAttemptCount: attemptWatermark.attemptCount,
     campaignTerminalAttemptCount: attemptWatermark.terminalAttemptCount,
     campaignAttemptWatermark: attemptWatermark.watermark,
@@ -721,6 +851,7 @@ function latestAggregatesByItem(aggregates: PersistedAggregate[]) {
     const terminalDelta = Number(leftInput.campaignTerminalAttemptCount ?? 0) - Number(rightInput.campaignTerminalAttemptCount ?? 0);
     return attemptDelta || terminalDelta || left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
   })) {
+    if (record(aggregate.input).campaignEvidencePolicyVersion !== GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION) continue;
     const itemKey = typeof record(aggregate.input).campaignItemKey === "string" ? String(record(aggregate.input).campaignItemKey) : "";
     if (/^GUILD-\d{3}$/.test(itemKey)) latest.set(itemKey, aggregate);
   }
@@ -745,7 +876,6 @@ export function projectGuildSupplierResearchCampaign(args: {
     const last = attempts.at(-1);
     const failureCode = lastFailureCode(last);
     const terminalAttempts = attempts.filter((attempt) => ["SUCCEEDED", "FAILED", "CANCELLED"].includes(attempt.status));
-    const exhausted = terminalAttempts.length >= GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE;
     const operatorBlocked = failureCode ? OPERATOR_BLOCKING_FAILURE_CODES.has(failureCode) : false;
     const nonRetryableFailure = last?.status === "FAILED" && (!failureCode || !RETRYABLE_FAILURE_CODES.has(failureCode));
     const cancelled = last?.status === "CANCELLED";
@@ -756,7 +886,6 @@ export function projectGuildSupplierResearchCampaign(args: {
       && !operatorBlocked
       && !nonRetryableFailure
       && !cancelled
-      && !exhausted
       && terminalAttempts.length > 0;
     const retryAt = retryEligible ? nextAttemptDate(line, attempts) : null;
     let state: SupplierResearchCampaignItemState;
@@ -767,12 +896,12 @@ export function projectGuildSupplierResearchCampaign(args: {
     } else if (line.classification === "REQUIREMENT_ONLY") {
       state = "REQUIREMENT_ONLY";
       blocker = "This line is a documentation requirement applied to supplier awards, not a supplier search.";
-    } else if (targetMet) {
-      state = "COMPLETE";
     } else if (active?.status === "RUNNING") {
       state = "RUNNING";
     } else if (active?.status === "QUEUED") {
       state = "QUEUED";
+    } else if (targetMet) {
+      state = "COMPLETE";
     } else if (failureCode === "MISSING_CONFIGURATION") {
       state = "BLOCKED";
       blocker = "Supplier research provider configuration is unavailable.";
@@ -788,9 +917,6 @@ export function projectGuildSupplierResearchCampaign(args: {
     } else if (cancelled) {
       state = "BLOCKED";
       blocker = "Supplier research was cancelled. Manual retry is required.";
-    } else if (exhausted) {
-      state = "BLOCKED";
-      blocker = `Supplier research reached the ${GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE}-attempt limit without three validated leads.`;
     } else if (retryAt && retryAt.getTime() > now.getTime()) {
       state = "RETRY_WAIT";
     } else {
@@ -803,7 +929,7 @@ export function projectGuildSupplierResearchCampaign(args: {
       classification: line.classification,
       state,
       leadCount: persistedOutput?.candidates.length ?? 0,
-      attemptCount: attempts.length,
+      attemptCount: latestAttemptOrdinal(attempts),
       activeRunId: active?.id ?? null,
       aggregateRunId: persistedAggregate?.id ?? null,
       aggregateRun: persistedAggregate ?? null,
@@ -823,16 +949,14 @@ export function projectGuildSupplierResearchCampaign(args: {
   const blocked = searchable.filter((item) => item.state === "BLOCKED");
   const capped = args.campaignAttemptsUsed >= GUILD_SUPPLIER_CAMPAIGN_DAILY_ATTEMPT_CAP
     || args.officeAttemptsUsed >= SUPPLIER_RESEARCH_OFFICE_DAILY_ATTEMPT_CAP;
-  const complete = completed === 38;
-  const expired = guildSupplierResearchCampaignScopeExpired(now);
+  const hasActiveChildren = running > 0 || queued > 0;
+  const complete = completed === 38 && !hasActiveChildren;
   const persistedFailure = args.campaign.status === "FAILED";
   const operatorFailure = blocked.some((item) => item.lastErrorCode && OPERATOR_BLOCKING_FAILURE_CODES.has(item.lastErrorCode));
   const noRemainingWork = completed + blocked.length === searchable.length && !running && !queued && !retryWaiting;
-  const failed = persistedFailure || expired || operatorFailure || noRemainingWork;
+  const failed = !hasActiveChildren && (persistedFailure || operatorFailure || noRemainingWork);
   const state = complete ? "COMPLETE" : failed ? "FAILED" : capped ? "DAILY_CAP" : running || queued ? "RUNNING" : retryWaiting ? "RETRY_WAIT" : "RUNNING";
-  const blocker = expired
-    ? `Supplier research scope expired after ${GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE}. Create a new request with a valid need-by date.`
-    : blocked[0]?.blocker ?? (persistedFailure ? "Supplier research campaign failed. Manual retry is required." : null);
+  const blocker = blocked[0]?.blocker ?? (persistedFailure ? "Supplier research campaign failed. Manual retry is required." : null);
   const futureRetryTimes = searchable.flatMap((item) => item.state === "RETRY_WAIT" && item.nextAttemptAt
     ? [new Date(item.nextAttemptAt).getTime()]
     : []);
@@ -843,7 +967,7 @@ export function projectGuildSupplierResearchCampaign(args: {
     id: args.campaign.id,
     campaignKey: GUILD_SUPPLIER_CAMPAIGN_KEY,
     workspaceId: args.campaign.workspaceId,
-    status: complete ? "SUCCEEDED" : failed ? "FAILED" : args.campaign.status,
+    status: complete ? "SUCCEEDED" : failed ? "FAILED" : hasActiveChildren ? "RUNNING" : args.campaign.status,
     state,
     blocker,
     targetMinimum: GUILD_SUPPLIER_CAMPAIGN_TARGET_MINIMUM,
@@ -907,7 +1031,7 @@ async function loadCampaignDatabaseState(args: {
   const dayStart = utcDayStart(args.now);
   const ancestryRows = await prisma.$queryRaw<Array<{ id: string }>>`
     WITH RECURSIVE "campaignAncestry" AS (
-      SELECT "id", "parentRunId"
+      SELECT "id", "parentRunId", 1 AS "depth"
       FROM "SupplyCapabilityRun"
       WHERE "id" = ${args.campaign.id}
         AND "officeId" = ${args.officeId}
@@ -915,20 +1039,18 @@ async function loadCampaignDatabaseState(args: {
         AND "capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
         AND "dslName" = ${CAMPAIGN_DSL_NAME}
       UNION ALL
-      SELECT parent."id", parent."parentRunId"
+      SELECT parent."id", parent."parentRunId", child."depth" + 1
       FROM "SupplyCapabilityRun" parent
       JOIN "campaignAncestry" child ON child."parentRunId" = parent."id"
       WHERE parent."officeId" = ${args.officeId}
         AND parent."workspaceId" = ${args.campaign.workspaceId}
         AND parent."capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
         AND parent."dslName" = ${CAMPAIGN_DSL_NAME}
+        AND child."depth" < 50
     )
-    SELECT "id" FROM "campaignAncestry" LIMIT 51
+    SELECT "id" FROM "campaignAncestry"
   `;
   const campaignAncestryIds = ancestryRows.map((row) => row.id);
-  if (campaignAncestryIds.length > 50) {
-    throw new Error("Supplier research campaign ancestry is too deep.");
-  }
   if (!campaignAncestryIds.includes(args.campaign.id)) {
     throw new Error("Supplier research campaign ancestry could not be resolved.");
   }
@@ -959,7 +1081,7 @@ async function loadCampaignDatabaseState(args: {
             AND "capabilityKey" = ${RESEARCH_CAPABILITY_KEY}
             AND "dslName" = ${ATTEMPT_DSL_NAME}
         ) AS "rankedAttempts"
-        WHERE "attemptRank" <= ${GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE + 1}
+        WHERE "attemptRank" <= ${GUILD_SUPPLIER_CAMPAIGN_ATTEMPT_HISTORY_LIMIT}
         ORDER BY "createdAt" ASC, "id" ASC
       `
     : prisma.$queryRaw<Omit<AttemptRow, "output">[]>`
@@ -974,7 +1096,7 @@ async function loadCampaignDatabaseState(args: {
             AND "capabilityKey" = ${RESEARCH_CAPABILITY_KEY}
             AND "dslName" = ${ATTEMPT_DSL_NAME}
         ) AS "rankedAttempts"
-        WHERE "attemptRank" <= ${GUILD_SUPPLIER_CAMPAIGN_MAX_ATTEMPTS_PER_LINE + 1}
+        WHERE "attemptRank" <= ${GUILD_SUPPLIER_CAMPAIGN_ATTEMPT_HISTORY_LIMIT}
         ORDER BY "createdAt" ASC, "id" ASC
       `;
   const [attemptRows, aggregateRows, campaignAttemptsUsed, officeAttemptsUsed] = await Promise.all([
@@ -990,10 +1112,11 @@ async function loadCampaignDatabaseState(args: {
         AND "dslName" = ${AGGREGATE_DSL_NAME}
         AND "status" = 'SUCCEEDED'
         AND ("input"->>'campaignItemKey') ~ '^GUILD-[0-9]{3}$'
+        AND ("input"->>'campaignEvidencePolicyVersion') = ${String(GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION)}
       ORDER BY
         ("input"->>'campaignItemKey'),
-        CASE WHEN "input"->>'campaignAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignAttemptCount')::int ELSE 0 END DESC,
-        CASE WHEN "input"->>'campaignTerminalAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignTerminalAttemptCount')::int ELSE 0 END DESC,
+        CASE WHEN "input"->>'campaignAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignAttemptCount')::bigint ELSE 0 END DESC,
+        CASE WHEN "input"->>'campaignTerminalAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignTerminalAttemptCount')::bigint ELSE 0 END DESC,
         "createdAt" DESC,
         "id" DESC
       LIMIT 38
@@ -1140,6 +1263,17 @@ async function transitionCampaignWithReconciliationLease(args: {
     `;
     if (!campaign || campaign.status !== "RUNNING" || !hasReconciliationLease(campaign.output, args.token)) return false;
     if (args.status === "SUCCEEDED" && !args.output) throw new Error("Completed supplier research campaign requires output.");
+    const runningChildren = await tx.supplyCapabilityRun.count({
+      where: {
+        officeId: args.context.officeId,
+        workspaceId: args.campaign.workspaceId,
+        parentRunId: campaign.id,
+        capabilityKey: RESEARCH_CAPABILITY_KEY,
+        dslName: ATTEMPT_DSL_NAME,
+        status: "RUNNING",
+      },
+    });
+    if (runningChildren > 0) return false;
     await tx.supplyCapabilityRun.updateMany({
       where: {
         officeId: args.context.officeId,
@@ -1190,7 +1324,10 @@ async function persistChangedAggregates(args: {
     if (line.classification !== "SUPPLIER_SEARCH") continue;
     const relevantAttempts = lineAttempts(line, args.state.attempts);
     if (!relevantAttempts.some((attempt) => attempt.status === "SUCCEEDED") && !current.has(line.sku)) continue;
-    const output = aggregateGuildSupplierResearchLine(line, args.state.attempts);
+    const output = mergeGuildSupplierResearchAggregate(
+      current.get(line.sku)?.output ?? null,
+      aggregateGuildSupplierResearchLine(line, args.state.attempts),
+    );
     const outputHash = digest(output);
     const attemptWatermark = aggregateAttemptWatermark(line, args.state.attempts);
     const input = aggregateInput(line, args.state.campaign.id, requiredProvider, attemptWatermark);
@@ -1222,8 +1359,8 @@ async function persistChangedAggregates(args: {
           AND "status" = 'SUCCEEDED'
           AND "input"->>'campaignItemKey' = ${line.sku}
         ORDER BY
-          CASE WHEN "input"->>'campaignAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignAttemptCount')::int ELSE 0 END DESC,
-          CASE WHEN "input"->>'campaignTerminalAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignTerminalAttemptCount')::int ELSE 0 END DESC,
+          CASE WHEN "input"->>'campaignAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignAttemptCount')::bigint ELSE 0 END DESC,
+          CASE WHEN "input"->>'campaignTerminalAttemptCount' ~ '^[0-9]+$' THEN ("input"->>'campaignTerminalAttemptCount')::bigint ELSE 0 END DESC,
           "createdAt" DESC,
           "id" DESC
         LIMIT 1
@@ -1315,24 +1452,6 @@ async function reconcileCampaign(args: {
   }
 
   try {
-    if (guildSupplierResearchCampaignScopeExpired(args.now)) {
-      const blocker = `CAMPAIGN_SCOPE_EXPIRED: Supplier research scope expired after ${GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE}.`;
-      await transitionCampaignWithReconciliationLease({
-        context: args.context,
-        campaign: args.campaign,
-        token: reconciliationToken,
-        now: args.now,
-        status: "FAILED",
-        errorMessage: blocker,
-      });
-      const state = await loadCampaignDatabaseState({
-        campaign: { ...args.campaign, status: "FAILED", updatedAt: args.now },
-        officeId: args.context.officeId,
-        now: args.now,
-      });
-      return { campaign: projectGuildSupplierResearchCampaign({ ...state, now: args.now }), queued: 0 };
-    }
-
     let state = await loadCampaignDatabaseState({
       campaign: args.campaign,
       officeId: args.context.officeId,
@@ -1457,13 +1576,6 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
   }
   const { prisma } = await import("@/lib/prisma");
   const now = args.now ?? new Date();
-  if (guildSupplierResearchCampaignScopeExpired(now)) {
-    const { SupplyPersistenceError } = await import("./persistence");
-    throw new SupplyPersistenceError(
-      `The GUILD supplier research scope expired after ${GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE}. Create a request with a valid need-by date.`,
-      "conflict",
-    );
-  }
   const workspace = await campaignWorkspace(args.context);
   const selected = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ advisoryLock: string }>>`
@@ -1506,14 +1618,15 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
       };
     }
     const providerRows = validRows.filter((entry) => entry.requiredProvider === configuredProvider);
-    const generation = Math.max(0, ...providerRows.map((entry) => entry.generation)) + 1;
-    if (generation > GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS) {
+    const previousGeneration = providerRows.reduce((latest, entry) => Math.max(latest, entry.generation), 0);
+    if (previousGeneration >= Number.MAX_SAFE_INTEGER) {
       const { SupplyPersistenceError } = await import("./persistence");
       throw new SupplyPersistenceError(
-        `Supplier research reached the ${GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS}-generation manual retry limit. Review the blocked lines before creating a revised campaign scope.`,
+        "Supplier research campaign generation cannot be represented safely. Create a revised campaign scope.",
         "conflict",
       );
     }
+    const generation = previousGeneration + 1;
     for (const superseded of campaignRows) {
       await tx.supplyCapabilityRun.updateMany({
         where: {
@@ -1645,6 +1758,17 @@ async function failCampaignWithoutActiveReconciliation(args: {
     if (!campaign || campaign.status !== "RUNNING") return false;
     const leaseExpiresAt = asDate(reconciliationLease(campaign.output)?.expiresAt);
     if (leaseExpiresAt && leaseExpiresAt.getTime() > args.now.getTime()) return false;
+    const runningChildren = await tx.supplyCapabilityRun.count({
+      where: {
+        officeId: args.campaign.officeId,
+        workspaceId: args.campaign.workspaceId,
+        parentRunId: campaign.id,
+        capabilityKey: RESEARCH_CAPABILITY_KEY,
+        dslName: ATTEMPT_DSL_NAME,
+        status: "RUNNING",
+      },
+    });
+    if (runningChildren > 0) return false;
     await tx.supplyCapabilityRun.updateMany({
       where: {
         officeId: args.campaign.officeId,
@@ -1680,11 +1804,109 @@ function isWorkspaceAccessFailure(error: unknown) {
     && ["forbidden", "not_found"].includes(String((error as Error & { code?: unknown }).code ?? ""));
 }
 
+function supplierResearchProviderIsConfigured(provider: SupplierResearchProvider) {
+  return provider === "EXA"
+    ? Boolean(process.env.EXA_API_KEY?.trim())
+    : Boolean(process.env.OPENAI_API_KEY?.trim());
+}
+
+async function createSafeLegacyCampaignSuccessor(args: {
+  context: SupplyAccessContext;
+  campaign: {
+    id: string;
+    officeId: string;
+    workspaceId: string;
+    status: string;
+    input: unknown;
+    error: unknown;
+  };
+  now: Date;
+}) {
+  const requiredProvider = supplierResearchProviderFromInput(args.campaign.input);
+  if (
+    !requiredProvider
+    || !supplierResearchProviderIsConfigured(requiredProvider)
+    || !isSafeLegacyCampaignSuccessorError(args.campaign.error)
+  ) return null;
+  const { prisma } = await import("@/lib/prisma");
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ advisoryLock: string }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-campaign-generation:${args.context.officeId}:${args.campaign.workspaceId}:${GUILD_SUPPLIER_CAMPAIGN_KEY}`}, 0))::text AS "advisoryLock"
+    `;
+    const rows = await tx.$queryRaw<Array<{
+      id: string;
+      officeId: string;
+      workspaceId: string;
+      status: string;
+      updatedAt: Date;
+      idempotencyKey: string | null;
+      input: unknown;
+      error: unknown;
+    }>>`
+      SELECT "id", "officeId", "workspaceId", "status", "updatedAt", "idempotencyKey", "input", "error"
+      FROM "SupplyCapabilityRun"
+      WHERE "officeId" = ${args.context.officeId}
+        AND "workspaceId" = ${args.campaign.workspaceId}
+        AND "capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
+        AND "dslName" = ${CAMPAIGN_DSL_NAME}
+      ORDER BY "createdAt" DESC, "id" DESC
+      FOR UPDATE
+    `;
+    const latest = rows[0] ?? null;
+    if (
+      !latest
+      || latest.id !== args.campaign.id
+      || latest.status !== "FAILED"
+      || !isSafeLegacyCampaignSuccessorError(latest.error)
+    ) return null;
+    const validRows = rows.flatMap((row) => {
+      const rowIdentity = campaignIdentity(row);
+      return rowIdentity ? [{ row, ...rowIdentity }] : [];
+    });
+    const previousGeneration = validRows
+      .filter((entry) => entry.requiredProvider === requiredProvider)
+      .reduce((highest, entry) => Math.max(highest, entry.generation), 0);
+    if (previousGeneration >= Number.MAX_SAFE_INTEGER) return null;
+    const generation = previousGeneration + 1;
+    const input = guildSupplierResearchCampaignScope(requiredProvider) satisfies Prisma.InputJsonObject;
+    const queued = await tx.supplyCapabilityRun.create({
+      data: {
+        officeId: args.context.officeId,
+        workspaceId: args.campaign.workspaceId,
+        invokedByUserId: args.context.userId,
+        parentRunId: latest.id,
+        capabilityKey: CAMPAIGN_CAPABILITY_KEY,
+        capabilityVersion: String(CAMPAIGN_SCOPE_VERSION),
+        dslName: CAMPAIGN_DSL_NAME,
+        dslVersion: String(CAMPAIGN_SCOPE_VERSION),
+        input,
+        inputHash: digest(input),
+        idempotencyKey: guildSupplierResearchCampaignGenerationKey(generation, requiredProvider),
+      },
+      select: { id: true },
+    });
+    return tx.supplyCapabilityRun.update({
+      where: { id: queued.id },
+      data: { status: "RUNNING", startedAt: args.now },
+      select: {
+        id: true,
+        officeId: true,
+        workspaceId: true,
+        status: true,
+        updatedAt: true,
+        idempotencyKey: true,
+        input: true,
+        error: true,
+      },
+    });
+  }, { maxWait: 5_000, timeout: 15_000 });
+}
+
 export async function advanceSupplierResearchCampaigns(options: { limit?: number; now?: Date } = {}) {
   const { prisma } = await import("@/lib/prisma");
   const now = options.now ?? new Date();
   const limit = Math.min(20, Math.max(1, Math.trunc(options.limit ?? 10)));
-  const campaigns = await prisma.supplyCapabilityRun.findMany({
+  const runningCampaigns = await prisma.supplyCapabilityRun.findMany({
     where: {
       capabilityKey: CAMPAIGN_CAPABILITY_KEY,
       dslName: CAMPAIGN_DSL_NAME,
@@ -1700,16 +1922,67 @@ export async function advanceSupplierResearchCampaigns(options: { limit?: number
       updatedAt: true,
       idempotencyKey: true,
       input: true,
+      error: true,
       invokedBy: {
         select: { id: true, officeId: true, role: true, canViewWholeOffice: true, isActive: true },
       },
     },
   });
+  const recoveryCapacity = Math.max(0, limit - runningCampaigns.length);
+  const legacyRecoveryIds = recoveryCapacity > 0
+    ? await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT failed."id"
+        FROM "SupplyCapabilityRun" failed
+        WHERE failed."capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
+          AND failed."dslName" = ${CAMPAIGN_DSL_NAME}
+          AND failed."status" = 'FAILED'
+          AND (
+            failed."error"->>'message' ~* '^CAMPAIGN_BLOCKED: Supplier research has no retryable work[.]?$'
+            OR failed."error"->>'message' ~* '^CAMPAIGN_BLOCKED: Supplier research reached (the )?[0-9]+-attempt limit without three validated leads[.]?$'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "SupplyCapabilityRun" newer
+            WHERE newer."officeId" = failed."officeId"
+              AND newer."workspaceId" = failed."workspaceId"
+              AND newer."capabilityKey" = failed."capabilityKey"
+              AND newer."dslName" = failed."dslName"
+              AND (newer."createdAt", newer."id") > (failed."createdAt", failed."id")
+          )
+        ORDER BY failed."updatedAt" ASC, failed."id" ASC
+        LIMIT ${recoveryCapacity}
+      `
+    : [];
+  const recoveryRows = legacyRecoveryIds.length
+    ? await prisma.supplyCapabilityRun.findMany({
+        where: { id: { in: legacyRecoveryIds.map((row) => row.id) } },
+        select: {
+          id: true,
+          officeId: true,
+          workspaceId: true,
+          status: true,
+          updatedAt: true,
+          idempotencyKey: true,
+          input: true,
+          error: true,
+          invokedBy: {
+            select: { id: true, officeId: true, role: true, canViewWholeOffice: true, isActive: true },
+          },
+        },
+      })
+    : [];
+  const recoveryById = new Map(recoveryRows.map((campaign) => [campaign.id, campaign]));
+  const campaigns = [
+    ...runningCampaigns,
+    ...legacyRecoveryIds.flatMap((row) => recoveryById.get(row.id) ? [recoveryById.get(row.id)!] : []),
+  ];
   let queued = 0;
   let completed = 0;
   let failed = 0;
   for (const campaign of campaigns) {
-    if (!campaignIdentity(campaign)) {
+    const identity = campaignIdentity(campaign);
+    if (!identity) {
+      if (campaign.status !== "RUNNING") continue;
       const transitioned = await failCampaignWithoutActiveReconciliation({
         campaign,
         now,
@@ -1719,6 +1992,7 @@ export async function advanceSupplierResearchCampaigns(options: { limit?: number
       continue;
     }
     if (!campaign.invokedBy?.isActive || campaign.invokedBy.officeId !== campaign.officeId) {
+      if (campaign.status !== "RUNNING") continue;
       const transitioned = await failCampaignWithoutActiveReconciliation({
         campaign,
         now,
@@ -1736,9 +2010,13 @@ export async function advanceSupplierResearchCampaigns(options: { limit?: number
       } satisfies SupplyAccessContext;
       const { requireSupplyWorkspace } = await import("./persistence");
       await requireSupplyWorkspace(context, campaign.workspaceId, "edit");
+      const activeCampaign = campaign.status === "FAILED"
+        ? await createSafeLegacyCampaignSuccessor({ context, campaign, now })
+        : campaign;
+      if (!activeCampaign) continue;
       const result = await reconcileCampaign({
         context,
-        campaign,
+        campaign: activeCampaign,
         now,
       });
       queued += result.queued;

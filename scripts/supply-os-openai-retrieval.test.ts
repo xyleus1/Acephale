@@ -22,8 +22,8 @@ const thirdSourceUrl = "https://thirdindustrial.example/catalog/dp420";
 const nationalSourceUrl = "https://nationalaa.com/products/aluminum-plate/";
 const trackedNationalSourceUrl = `${nationalSourceUrl}?utm_source=openai&srsltid=tracking-token`;
 const identityEvidence = "Acme Industrial operates this public product catalog.";
-const roleEvidence = "Acme Industrial is a distributor of industrial adhesives.";
-const capabilityEvidence = "Acme Industrial supplies 3M Scotch-Weld DP420 structural epoxy.";
+const roleEvidence = "Stocking distributor for industrial adhesives.";
+const capabilityEvidence = "Supplies 3M Scotch-Weld DP420 structural epoxy.";
 const pageHtml = `<html><head><title>Acme DP420</title></head><body>${identityEvidence} ${roleEvidence} ${capabilityEvidence}</body></html>`;
 
 const input = {

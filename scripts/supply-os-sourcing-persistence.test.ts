@@ -71,7 +71,7 @@ import {
   type OpenAiRetrievalCapture,
 } from "../src/lib/supply-os/exa-supplier-research";
 import {
-  GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS,
+  SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW,
   guildSupplierResearchCampaignIdempotencyKey,
   startOrResumeGuildSupplierResearchCampaign,
 } from "../src/lib/supply-os/supplier-research-campaign";
@@ -204,7 +204,8 @@ async function main() {
       assert.equal(retriedCampaignRow.status, "RUNNING");
       assert.equal(retriedCampaignRow.idempotencyKey, `${guildSupplierResearchCampaignIdempotencyKey()}:generation:2`);
       let latestCampaignId = retriedCampaignRow.id;
-      for (let generation = 3; generation <= GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS; generation += 1) {
+      const testedGeneration = SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW + 5;
+      for (let generation = 3; generation <= testedGeneration; generation += 1) {
         const failedAt = new Date(Date.UTC(2026, 7, 12, 12, generation * 2));
         await prisma.supplyCapabilityRun.update({
           where: { id: latestCampaignId },
@@ -227,26 +228,13 @@ async function main() {
           `${guildSupplierResearchCampaignIdempotencyKey()}:generation:${generation}`,
         );
       }
-      await prisma.supplyCapabilityRun.update({
-        where: { id: latestCampaignId },
-        data: {
-          status: "FAILED",
-          error: { message: "CAMPAIGN_BLOCKED: Test terminal retry ceiling." },
-          failedAt: new Date("2026-08-12T14:00:00.000Z"),
-        },
-      });
-      await assert.rejects(
-        () => startOrResumeGuildSupplierResearchCampaign({ context, now: new Date("2026-08-12T14:01:00.000Z") }),
-        new RegExp(`${GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS}-generation manual retry limit`, "i"),
-        "repeated no-op retries must stop visibly before campaign ancestry can strand a running parent",
-      );
       assert.equal(await prisma.supplyCapabilityRun.count({
         where: {
           officeId: context.officeId,
           workspaceId: firstCampaign.campaign.workspaceId,
           capabilityKey: "research.supplier_campaign",
         },
-      }), GUILD_SUPPLIER_CAMPAIGN_MAX_GENERATIONS);
+      }), testedGeneration, "campaign enqueue and quota accounting continue through a lineage deeper than the bounded validation window");
     } finally {
       if (priorExaApiKey === undefined) delete process.env.EXA_API_KEY;
       else process.env.EXA_API_KEY = priorExaApiKey;

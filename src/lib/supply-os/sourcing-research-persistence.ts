@@ -10,6 +10,11 @@ import {
   type SupplyAccessContext,
 } from "./persistence";
 import { recordSupplyResearchKnowledge } from "./supply-intelligence-persistence";
+import {
+  SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW,
+  validateSupplierResearchCampaignAncestryWindow,
+  type SupplierResearchCampaignAncestryRow,
+} from "./supplier-research-campaign";
 
 const ATLAS_DEMO_WORKSPACE = { externalKey: "system:atlas-procurement", name: "Atlas Robotics procurement" } as const;
 const GUILD_DEMO_WORKSPACE = { externalKey: "system:guild-procurement", name: "GUILD procurement" } as const;
@@ -418,13 +423,14 @@ export async function enqueueSourcingResearchCampaignBatch(args: {
       SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-research-campaign:${accessContext.officeId}:${args.parentRunId}`}, 0))::text AS "advisoryLock"
     `;
 
-    const [parent] = await tx.$queryRaw<Array<{ id: string; parentRunId: string | null; status: string; output: unknown }>>`
-      SELECT "id", "parentRunId", "status", "output"
+    const [parent] = await tx.$queryRaw<Array<{ id: string; parentRunId: string | null; status: string; output: unknown; inputHash: string }>>`
+      SELECT "id", "parentRunId", "status", "output", "inputHash"
       FROM "SupplyCapabilityRun"
       WHERE "id" = ${args.parentRunId}
         AND "officeId" = ${accessContext.officeId}
         AND "workspaceId" = ${workspace.id}
         AND "capabilityKey" = 'research.supplier_campaign'
+        AND "dslName" = ${CAMPAIGN_DSL_NAME}
       FOR UPDATE
     `;
     const lease = parent?.output && typeof parent.output === "object" && !Array.isArray(parent.output)
@@ -436,39 +442,54 @@ export async function enqueueSourcingResearchCampaignBatch(args: {
     if (!parent || parent.status !== "RUNNING" || leaseToken !== args.reconciliationToken) {
       throw new SupplyPersistenceError("Running supplier research campaign was not found.", "conflict");
     }
-    const campaignAncestryIds = [parent.id];
-    let ancestorId = parent.parentRunId;
-    while (ancestorId && campaignAncestryIds.length < 50) {
-      const ancestor = await tx.supplyCapabilityRun.findFirst({
-        where: {
-          id: ancestorId,
-          officeId: accessContext.officeId,
-          workspaceId: workspace.id,
-          capabilityKey: "research.supplier_campaign",
-        },
-        select: { id: true, parentRunId: true },
-      });
-      if (!ancestor || campaignAncestryIds.includes(ancestor.id)) {
-        throw new SupplyPersistenceError("Supplier research campaign ancestry is invalid.", "conflict");
-      }
-      campaignAncestryIds.push(ancestor.id);
-      ancestorId = ancestor.parentRunId;
-    }
-    if (ancestorId) {
-      throw new SupplyPersistenceError("Supplier research campaign ancestry is too deep.", "conflict");
+    const ancestryRows = await tx.$queryRaw<SupplierResearchCampaignAncestryRow[]>`
+      WITH RECURSIVE "campaignAncestry" AS (
+        SELECT "id", "parentRunId", 1 AS "depth", ARRAY["id"]::text[] AS "path"
+        FROM "SupplyCapabilityRun"
+        WHERE "id" = ${parent.id}
+          AND "officeId" = ${accessContext.officeId}
+          AND "workspaceId" = ${workspace.id}
+          AND "capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
+          AND "dslName" = ${CAMPAIGN_DSL_NAME}
+          AND "inputHash" = ${parent.inputHash}
+        UNION ALL
+        SELECT ancestor."id", ancestor."parentRunId", child."depth" + 1, child."path" || ancestor."id"
+        FROM "SupplyCapabilityRun" ancestor
+        JOIN "campaignAncestry" child ON ancestor."id" = child."parentRunId"
+        WHERE child."depth" < ${SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW}
+          AND ancestor."officeId" = ${accessContext.officeId}
+          AND ancestor."workspaceId" = ${workspace.id}
+          AND ancestor."capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
+          AND ancestor."dslName" = ${CAMPAIGN_DSL_NAME}
+          AND ancestor."inputHash" = ${parent.inputHash}
+          AND NOT ancestor."id" = ANY(child."path")
+      )
+      SELECT "id", "parentRunId", "depth"
+      FROM "campaignAncestry"
+      ORDER BY "depth" ASC
+    `;
+    try {
+      validateSupplierResearchCampaignAncestryWindow(ancestryRows);
+    } catch {
+      throw new SupplyPersistenceError("Supplier research campaign ancestry is invalid.", "conflict");
     }
 
-    const [campaignAttemptsUsed, officeAttemptsUsed, activeAttempts] = await Promise.all([
-      tx.supplyCapabilityRun.count({
-        where: {
-          officeId: accessContext.officeId,
-          workspaceId: workspace.id,
-          parentRunId: { in: campaignAncestryIds },
-          capabilityKey: CAPABILITY_KEY,
-          dslName: "queued_supplier_research_child",
-          createdAt: { gte: dayStart },
-        },
-      }),
+    const [campaignAttemptCounts, officeAttemptsUsed, activeAttempts] = await Promise.all([
+      tx.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*)::bigint AS "count"
+        FROM "SupplyCapabilityRun" child
+        JOIN "SupplyCapabilityRun" campaign ON campaign."id" = child."parentRunId"
+        WHERE child."officeId" = ${accessContext.officeId}
+          AND child."workspaceId" = ${workspace.id}
+          AND child."capabilityKey" = ${CAPABILITY_KEY}
+          AND child."dslName" = 'queued_supplier_research_child'
+          AND child."createdAt" >= ${dayStart}
+          AND campaign."officeId" = ${accessContext.officeId}
+          AND campaign."workspaceId" = ${workspace.id}
+          AND campaign."capabilityKey" = ${CAMPAIGN_CAPABILITY_KEY}
+          AND campaign."dslName" = ${CAMPAIGN_DSL_NAME}
+          AND campaign."inputHash" = ${parent.inputHash}
+      `,
       tx.supplyCapabilityRun.count({
         where: {
           officeId: accessContext.officeId,
@@ -488,6 +509,7 @@ export async function enqueueSourcingResearchCampaignBatch(args: {
         },
       }),
     ]);
+    const campaignAttemptsUsed = Number(campaignAttemptCounts[0]?.count ?? 0n);
 
     let campaignRemaining = Math.max(0, campaignDailyCap - campaignAttemptsUsed);
     let officeRemaining = Math.max(0, officeDailyCap - officeAttemptsUsed);
