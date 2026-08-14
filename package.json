@@ -40,6 +40,8 @@
     "test:supply-os-supplier-research-polling": "node --import tsx scripts/supply-os-supplier-research-polling.test.ts",
     "test:supply-os-continuous-sourcing": "node --import tsx scripts/supply-os-continuous-sourcing.test.ts",
     "test:supply-os-continuous-sourcing-acceptance": "node --import tsx scripts/supply-os-continuous-sourcing-acceptance.ts",
+    "supply-os:supplier-eval": "node --import tsx scripts/supply-os-supplier-eval.ts",
+    "test:supply-os-supplier-eval": "node --import tsx scripts/supply-os-supplier-eval.test.ts",
     "test:supply-os-saved-research-retry": "node --import tsx scripts/supply-os-saved-research-retry.test.ts",
     "test:supply-os-exa-retrieval": "node --import tsx scripts/supply-os-exa-retrieval.test.ts",
     "test:supply-os-openai-retrieval": "node --import tsx scripts/supply-os-openai-retrieval.test.ts",

@@ -5314,3 +5314,34 @@ Use this file for chronological implementation notes that future agents should s
   TypeScript, and diff-hygiene checks passed. The real PostgreSQL persistence
   suite remains a mandatory GitHub CI gate because the local sandbox has no
   database service.
+
+### 2026-08-14 - Add a browser-free live supplier evaluation loop
+
+- Reproduced the old command failure: the deployed continuous-sourcing runner
+  exits unless it receives a base URL and authenticated session cookie. It only
+  starts and polls the database campaign, so it cannot compare providers,
+  replay captures, or explain why a page was rejected.
+- Added `evaluatePublicSupplierLeadReceipts()`. It preserves the exact receipt
+  admission path and emits one accepted decision or the first deterministic
+  fail-closed rejection for every capture record. Empty captures, source
+  freshness, URL class, company/domain identity, role proof, verbatim evidence,
+  content integrity, and product-profile fit now have stable codes. Diagnostics
+  omit page text, excerpts, titles, query strings, fragments, and exception
+  messages.
+- Added `supply-os:supplier-eval`. It runs Exa and OpenAI directly against the
+  canonical GUILD lines, uses the production request parser and aggregate
+  revalidation, keeps separate provider ordinals, checkpoints atomically, and
+  writes JSON plus Markdown scorecards with retained supplier evidence.
+- A fresh both-provider run executes the same baseline attempt through both
+  providers even if the first provider already returns three leads. Provider
+  configuration fails before file creation. Concurrency is capped at two and
+  target or retention flags cannot weaken production acceptance.
+- Added deterministic CLI coverage for zero start, both-provider pinning,
+  resume, interrupted attempts, key-free offline revalidation, integrity and
+  request revisions, file permissions, provider failure exit codes, and exact
+  38-line completion. Registered the test in package scripts and the Supply OS
+  GitHub Actions workflow.
+- Live provider acceptance was not run because this checkout has neither
+  `EXA_API_KEY` nor `OPENAI_API_KEY`. The next operator action is the bounded
+  76-call both-provider baseline from a shell where both keys are already
+  configured, followed by offline replay and evidence-driven tuning.

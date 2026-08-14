@@ -5,6 +5,7 @@ import {
   SupplierResearchError,
 } from "../src/lib/supply-os/component-supplier-research";
 import {
+  evaluatePublicSupplierLeadReceipts,
   searchExaComponentSuppliers,
   validateExaPublicSupplierLeadReceipts,
   type ExaRetrievalCapture,
@@ -230,6 +231,93 @@ assert.equal(leadReceipts.length, 1, "one forced-live page with all supplier gat
 assert.equal(leadReceipts[0]?.companyName, "Acme Industrial");
 assert.equal(leadReceipts[0]?.role, "DISTRIBUTOR");
 assert.equal(leadReceipts[0]?.productCapability, "3M Scotch-Weld DP420 structural epoxy");
+const acceptedEvaluation = evaluatePublicSupplierLeadReceipts(exaInput, capture);
+assert.deepEqual(
+  acceptedEvaluation.receipts,
+  leadReceipts,
+  "diagnostic evaluation must preserve the exact receipt admitted by the compatibility wrapper",
+);
+assert.deepEqual(
+  acceptedEvaluation.decisions.map(({ code, accepted }) => ({ code, accepted })),
+  [{ code: "ACCEPTED", accepted: true }],
+  "an admitted source must produce one explicit accepted decision",
+);
+assert.equal(acceptedEvaluation.decisions[0]?.queryProfile, "BRANDED_COTS");
+assert.equal(acceptedEvaluation.decisions[0]?.sourceHostname, "acmeindustrial.example");
+
+function supplierLeadDecisionCodes(candidateCapture: ExaRetrievalCapture) {
+  return evaluatePublicSupplierLeadReceipts(exaInput, candidateCapture).decisions.map((decision) => decision.code);
+}
+
+assert.deepEqual(
+  supplierLeadDecisionCodes({ ...capture, records: [] }),
+  ["CAPTURE_NO_RECORDS"],
+  "a successful retrieval with no bound records must expose a capture-level diagnostic",
+);
+
+const disallowedDomainUrl = "https://en.wikipedia.org/wiki/DP420?tracking=private#section";
+assert.deepEqual(supplierLeadDecisionCodes({
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    sourceUrl: disallowedDomainUrl,
+    status: record.status ? { ...record.status, id: disallowedDomainUrl } : null,
+  })),
+}), ["SOURCE_DOMAIN_DISALLOWED"], "reference domains must expose a deterministic domain rejection");
+const domainDecision = evaluatePublicSupplierLeadReceipts(exaInput, {
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    sourceUrl: disallowedDomainUrl,
+    status: record.status ? { ...record.status, id: disallowedDomainUrl } : null,
+  })),
+}).decisions[0];
+assert.equal(domainDecision?.sourceUrl, "https://en.wikipedia.org/wiki/DP420", "diagnostics must remove query strings and fragments from source URLs");
+assert.doesNotMatch(JSON.stringify(domainDecision), /tracking|private|section|operates this|structural epoxy/i, "diagnostics must not emit URL secrets or raw page evidence");
+
+assert.deepEqual(supplierLeadDecisionCodes({
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    status: record.status ? { ...record.status, cacheAgeHours: 1 } : null,
+  })),
+}), ["SOURCE_STATUS_NOT_FRESH"], "cached source content must expose a deterministic freshness rejection");
+assert.deepEqual(supplierLeadDecisionCodes({
+  ...capture,
+  records: capture.records.map((record) => ({ ...record, sourceTextHash: "0".repeat(64) })),
+}), ["SOURCE_HASH_MISMATCH"], "mutated source content must expose a deterministic integrity rejection");
+assert.deepEqual(supplierLeadDecisionCodes({
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    proposal: record.proposal ? { ...record.proposal, supplierName: null } : null,
+  })),
+}), ["COMPANY_MISSING"], "missing company identity must expose a deterministic company rejection");
+assert.deepEqual(supplierLeadDecisionCodes({
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    proposal: record.proposal ? { ...record.proposal, supplierRole: "RESELLER" } : null,
+  })),
+}), ["ROLE_INVALID"], "an unsupported proposed role must expose a deterministic role rejection");
+assert.deepEqual(supplierLeadDecisionCodes({
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    proposal: record.proposal ? { ...record.proposal, productCapabilityEvidence: "Model-only capability claim" } : null,
+  })),
+}), ["CAPABILITY_EXCERPT_NOT_VERBATIM"], "a model-only excerpt must expose a deterministic verbatim-evidence rejection");
+const genericCapability = "Acme Industrial distributes and supplies generic industrial epoxy.";
+const genericCapabilityText = [companyIdentityEvidence, supplierRoleEvidence, genericCapability].join(" ");
+assert.deepEqual(supplierLeadDecisionCodes({
+  ...capture,
+  records: capture.records.map((record) => ({
+    ...record,
+    text: genericCapabilityText,
+    proposal: record.proposal ? { ...record.proposal, productCapabilityEvidence: genericCapability } : null,
+    sourceTextHash: createHash("sha256").update(genericCapabilityText).digest("hex"),
+  })),
+}), ["CAPABILITY_PROFILE_MISMATCH"], "generic product evidence must expose a deterministic profile mismatch");
 const normalCatalogCopy = "Acme Industrial operates this official product catalog. Stocking distributor for industrial adhesives. Supplies 3M Scotch-Weld DP420 structural epoxy.";
 assert.equal(validateExaPublicSupplierLeadReceipts(exaInput, {
   ...capture,

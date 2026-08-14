@@ -8667,3 +8667,84 @@ Release boundary:
   campaign continues through cron without the browser. Verify the campaign's
   actual retained-lead counts rather than treating deployment status as live
   acceptance.
+
+### 2026-08-14 - Browser-free GUILD supplier evaluation
+
+Status:
+
+- Implemented a direct engineering evaluation command for the fixed 40-line
+  GUILD request. It does not use the browser, session cookies, Prisma, the
+  production campaign, or the global worker queue.
+- The receipt validator now exposes sanitized deterministic decisions for every
+  former silent rejection while the production compatibility wrapper returns
+  the exact same admitted receipts.
+
+Commands:
+
+```bash
+npm run supply-os:supplier-eval -- \
+  --provider=both \
+  --ids=all \
+  --target=3 \
+  --retain=5 \
+  --until-complete \
+  --max-calls=76 \
+  --concurrency=2 \
+  --checkpoint=.codex-tmp/supplier-eval/guild.json
+```
+
+Resume the same immutable provider streams:
+
+```bash
+npm run supply-os:supplier-eval -- \
+  --provider=both \
+  --ids=all \
+  --target=3 \
+  --retain=5 \
+  --until-complete \
+  --max-calls=76 \
+  --concurrency=2 \
+  --checkpoint=.codex-tmp/supplier-eval/guild.json \
+  --resume
+```
+
+Replay the saved public-page captures after a validator change without a
+provider call:
+
+```bash
+npm run supply-os:supplier-eval -- \
+  --revalidate=.codex-tmp/supplier-eval/guild.json
+```
+
+Output and safety:
+
+- The checkpoint is written atomically after reservation and after every
+  provider completion. Stale running attempts become interrupted on resume and
+  never reuse an ordinal.
+- The JSON and Markdown scorecards sit beside the checkpoint. They contain the
+  retained company, website, evidence URLs, lead counts, and rejection
+  histograms. They do not contain API keys or raw page text.
+- `EXA_API_KEY` and `OPENAI_API_KEY` must already be exported in the invoking
+  shell for `--provider=both`. Missing keys fail before a checkpoint is created.
+  Do not paste key values into chat.
+- Exit 0 means the exact 38-line, three-to-five-lead acceptance passed. Exit 2
+  means the evidence set remains incomplete. Exit 1 means configuration or a
+  provider call failed.
+
+Verification:
+
+- `npm run test:supply-os-supplier-eval`
+- `npm run test:supply-os-supplier-leads`
+- `npm run test:supply-os-exa-retrieval`
+- `npm run test:supply-os-openai-retrieval`
+- `npm run test:supply-os-continuous-sourcing`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `git diff --check`
+
+Live boundary:
+
+- Deterministic tests do not prove live supplier recall. This checkout has no
+  provider keys, so the live 38-line command still must be run from a shell
+  where both keys are already configured. Inspect the saved per-line rejection
+  histogram, improve only evidence-proven false rejections, revalidate offline,
+  and spend the next bounded call batch only when needed.

@@ -3067,3 +3067,42 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: Provider economics require a different daily budget, a managed
   external queue replaces database claiming, or the GUILD request becomes a
   versioned customer program instead of a fixed demo campaign.
+
+### 2026-08-14 - Live supplier acceptance uses direct provider checkpoints
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The deployed GUILD campaign can run durably, but its browser-facing
+  acceptance command only starts and polls persisted work. It cannot compare
+  providers from the same zero state, explain rejected supplier pages, or
+  replay captured evidence after deterministic validation changes. Blindly
+  increasing campaign quota would spend more while preserving the same
+  observability failure.
+- Decision: Use a browser-free engineering evaluation command that calls Exa
+  and OpenAI directly with the production GUILD request parser, query variants,
+  provider pins, receipt validator, and campaign aggregate function. In both
+  mode, keep separate immutable attempt ordinals for each provider and run the
+  same baseline attempt through both providers. The command never reads or
+  writes application database state and never contacts or approves a supplier.
+- Evidence boundary: Store the bounded provider result and independently
+  retrieved public-page capture in a local integrity-protected checkpoint so
+  current validation can be replayed without another provider call. Do not
+  store provider envelopes, request headers, cookies, API keys, or exception
+  text. Checkpoint and scorecard files are owner-only. Console and scorecard
+  diagnostics contain counts, hostnames, and deterministic rejection codes,
+  never page text or evidence excerpts.
+- Acceptance: Exit successfully only when all 38 `SUPPLIER_SEARCH` lines retain
+  three to five distinct company and domain candidates backed by a common
+  independently retrieved evidence URL. GUILD-027 remains
+  `CLARIFICATION_REQUIRED`, GUILD-039 remains `REQUIREMENT_ONLY`, and neither
+  receives a provider attempt. Target and retention flags cannot weaken the
+  production values of three and five.
+- Improvement loop: Start from a new checkpoint, run a bounded same-structure
+  comparison, inspect per-line rejection codes, change deterministic logic only
+  when captured evidence proves a false rejection, then use offline revalidation
+  before spending another provider call. A request-fixture mismatch blocks
+  append or replay, while an evidence-policy change is reported and intentionally
+  allowed for offline revalidation.
+- Operational boundary: Provider keys must already exist in the invoking shell.
+  The command names missing configuration but never prints or reads key values
+  outside the provider SDK. Keys must not be pasted into chat or committed.

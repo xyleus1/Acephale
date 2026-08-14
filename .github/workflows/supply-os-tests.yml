@@ -89,6 +89,7 @@ jobs:
           npm run test:supply-os-research-worker-lifecycle
           npm run test:supply-os-supplier-research-polling
           npm run test:supply-os-supplier-leads
+          npm run test:supply-os-supplier-eval
           npm run test:supply-os-continuous-sourcing
           npm run test:supply-os-atlas-sourcing
           npm run test:supply-os-saved-research-retry

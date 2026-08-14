@@ -6,6 +6,7 @@ import {
   supplierCompanyMatchesDomain,
   type EvidenceSource,
   type SupplierCandidateRole,
+  type SupplierResearchQueryProfile,
   type SupplierResearchResult,
 } from "./research";
 import { isSupplierDiscoveryUrl } from "./supplier-discovery-url";
@@ -208,6 +209,60 @@ export type OpenAiPublicSupplierLeadReceipt = PublicSupplierLeadReceiptFields & 
 };
 
 export type PublicSupplierLeadReceipt = ExaPublicSupplierLeadReceipt | OpenAiPublicSupplierLeadReceipt;
+
+export type SupplierLeadValidationDecisionCode =
+  | "ACCEPTED"
+  | "CAPTURE_SEARCH_ONLY"
+  | "CAPTURE_PROVIDER_POLICY_INVALID"
+  | "CAPTURE_SEARCH_HTTP_INVALID"
+  | "CAPTURE_CONTENTS_HTTP_INVALID"
+  | "CAPTURE_SEARCH_HASH_INVALID"
+  | "CAPTURE_CONTENTS_HASH_INVALID"
+  | "CAPTURE_RETRIEVED_AT_INVALID"
+  | "CAPTURE_NO_RECORDS"
+  | "PROPOSAL_MISSING"
+  | "SOURCE_STATUS_NOT_FRESH"
+  | "SOURCE_URL_INVALID"
+  | "SOURCE_DOMAIN_DISALLOWED"
+  | "COMPANY_MISSING"
+  | "ROLE_INVALID"
+  | "ITEM_IDENTITY_MISSING"
+  | "ROLE_NOT_ALLOWED"
+  | "COMPANY_DOMAIN_MISMATCH"
+  | "SOURCE_HASH_MISMATCH"
+  | "COMPANY_EXCERPT_NOT_VERBATIM"
+  | "ROLE_EXCERPT_NOT_VERBATIM"
+  | "CAPABILITY_EXCERPT_NOT_VERBATIM"
+  | "CAPABILITY_PROFILE_MISMATCH"
+  | "COMPANY_NAME_NOT_IN_EXCERPT"
+  | "ROLE_NOT_EXPLICIT";
+
+export type SupplierLeadValidationDecisionStage =
+  | "CAPTURE"
+  | "PROPOSAL"
+  | "SOURCE"
+  | "EVIDENCE"
+  | "PROFILE"
+  | "RESULT";
+
+export type SupplierLeadValidationDecision = {
+  code: SupplierLeadValidationDecisionCode;
+  stage: SupplierLeadValidationDecisionStage;
+  accepted: boolean;
+  provider: SupplierResearchRetrievalCapture["provider"];
+  itemKey: string;
+  queryProfile: SupplierResearchQueryProfile;
+  recordIndex: number | null;
+  searchRank: number | null;
+  sourceUrl: string | null;
+  sourceHostname: string | null;
+  proposedRole: SupplierCandidateRole | null;
+};
+
+export type PublicSupplierLeadEvaluation = {
+  receipts: PublicSupplierLeadReceipt[];
+  decisions: SupplierLeadValidationDecision[];
+};
 
 export type ExaSupplierResearchResult = SupplierResearchResult & {
   retrieval: ExaRetrievalCapture;
@@ -1012,58 +1067,156 @@ export function publicSupplierLeadReceiptHash(receipt: Omit<PublicSupplierLeadRe
   return hash(JSON.stringify(supplierLeadReceiptBase(receipt)));
 }
 
-export function validatePublicSupplierLeadReceipts(
+function supplierLeadDecisionSource(value: unknown) {
+  const normalized = publicUrl(value);
+  if (!normalized) return { sourceUrl: null, sourceHostname: null };
+  const parsed = new URL(normalized);
+  parsed.search = "";
+  parsed.hash = "";
+  return {
+    sourceUrl: parsed.toString(),
+    sourceHostname: parsed.hostname.toLowerCase(),
+  };
+}
+
+export function evaluatePublicSupplierLeadReceipts(
   input: SupplierLeadValidationInput,
   capture: SupplierResearchRetrievalCapture,
-) {
-  if (capture.stage === "SEARCH_ONLY") return [];
-  if (
-    !(
-      (capture.provider === "EXA" && capture.freshnessPolicy === "FORCED_LIVE")
-      || (capture.provider === "OPENAI" && capture.freshnessPolicy === "SERVER_RETRIEVED")
-    )
-    || capture.searchHttpStatus < 200 || capture.searchHttpStatus >= 300
-    || capture.contentsHttpStatus < 200 || capture.contentsHttpStatus >= 300
-    || !/^[a-f0-9]{64}$/.test(capture.searchResponseHash)
-    || !/^[a-f0-9]{64}$/.test(capture.contentsResponseHash)
-    || !plausibleServerRetrievedAt(capture.retrievedAt)
-  ) return [];
+): PublicSupplierLeadEvaluation {
   const receipts: PublicSupplierLeadReceipt[] = [];
+  const decisions: SupplierLeadValidationDecision[] = [];
   const { plan } = selectedSupplierResearchQueryVariant(input);
   const materialStockRequest = plan.profile === "MATERIAL_STOCK";
-  for (const source of capture.records) {
-    if (!source.proposal || !successfulFreshStatus(source.status, source.sourceUrl)) continue;
+  const decision = (args: {
+    code: SupplierLeadValidationDecisionCode;
+    stage: SupplierLeadValidationDecisionStage;
+    accepted?: boolean;
+    recordIndex?: number;
+    source?: ExaRetrievedRecord | OpenAiRetrievedRecord;
+    proposedRole?: SupplierCandidateRole | null;
+  }): SupplierLeadValidationDecision => {
+    const sanitized = supplierLeadDecisionSource(args.source?.sourceUrl);
+    return {
+      code: args.code,
+      stage: args.stage,
+      accepted: args.accepted ?? false,
+      provider: capture.provider,
+      itemKey: input.componentItemKey,
+      queryProfile: plan.profile,
+      recordIndex: args.recordIndex ?? null,
+      searchRank: args.source?.searchRank ?? null,
+      sourceUrl: sanitized.sourceUrl,
+      sourceHostname: sanitized.sourceHostname,
+      proposedRole: args.proposedRole ?? null,
+    };
+  };
+  const rejectCapture = (
+    code: SupplierLeadValidationDecisionCode,
+  ): PublicSupplierLeadEvaluation => ({
+    receipts,
+    decisions: [decision({ code, stage: "CAPTURE" })],
+  });
+
+  if (capture.stage === "SEARCH_ONLY") return rejectCapture("CAPTURE_SEARCH_ONLY");
+  if (!(
+    (capture.provider === "EXA" && capture.freshnessPolicy === "FORCED_LIVE")
+    || (capture.provider === "OPENAI" && capture.freshnessPolicy === "SERVER_RETRIEVED")
+  )) return rejectCapture("CAPTURE_PROVIDER_POLICY_INVALID");
+  if (capture.searchHttpStatus < 200 || capture.searchHttpStatus >= 300) {
+    return rejectCapture("CAPTURE_SEARCH_HTTP_INVALID");
+  }
+  if (capture.contentsHttpStatus < 200 || capture.contentsHttpStatus >= 300) {
+    return rejectCapture("CAPTURE_CONTENTS_HTTP_INVALID");
+  }
+  if (!/^[a-f0-9]{64}$/.test(capture.searchResponseHash)) {
+    return rejectCapture("CAPTURE_SEARCH_HASH_INVALID");
+  }
+  if (!/^[a-f0-9]{64}$/.test(capture.contentsResponseHash)) {
+    return rejectCapture("CAPTURE_CONTENTS_HASH_INVALID");
+  }
+  if (!plausibleServerRetrievedAt(capture.retrievedAt)) {
+    return rejectCapture("CAPTURE_RETRIEVED_AT_INVALID");
+  }
+  if (!capture.records.length) return rejectCapture("CAPTURE_NO_RECORDS");
+
+  for (const [recordIndex, source] of capture.records.entries()) {
+    if (!source.proposal) {
+      decisions.push(decision({ code: "PROPOSAL_MISSING", stage: "PROPOSAL", recordIndex, source }));
+      continue;
+    }
+    if (!successfulFreshStatus(source.status, source.sourceUrl)) {
+      decisions.push(decision({ code: "SOURCE_STATUS_NOT_FRESH", stage: "SOURCE", recordIndex, source }));
+      continue;
+    }
     const sourceUrl = publicUrl(source.sourceUrl);
     const companyName = text(source.proposal.supplierName, 180);
     const role = supplierRole(source.proposal.supplierRole);
     const itemIdentity = text(source.proposal.itemIdentity, 500);
     const sourceBody = [source.text, ...source.highlights].filter(Boolean).join("\n");
-    if (
-      !sourceUrl
-      || !isSupplierDiscoveryUrl(sourceUrl)
-      || !companyName
-      || !role
-      || !itemIdentity
-      || !roleAllowedForInput(input, role)
-      || !supplierCompanyMatchesDomain(companyName, sourceUrl)
-      || source.sourceTextHash !== hash(sourceBody)
-    ) continue;
+    if (!sourceUrl) {
+      decisions.push(decision({ code: "SOURCE_URL_INVALID", stage: "SOURCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!isSupplierDiscoveryUrl(sourceUrl)) {
+      decisions.push(decision({ code: "SOURCE_DOMAIN_DISALLOWED", stage: "SOURCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!companyName) {
+      decisions.push(decision({ code: "COMPANY_MISSING", stage: "PROPOSAL", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!role) {
+      decisions.push(decision({ code: "ROLE_INVALID", stage: "PROPOSAL", recordIndex, source }));
+      continue;
+    }
+    if (!itemIdentity) {
+      decisions.push(decision({ code: "ITEM_IDENTITY_MISSING", stage: "PROPOSAL", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!roleAllowedForInput(input, role)) {
+      decisions.push(decision({ code: "ROLE_NOT_ALLOWED", stage: "PROFILE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!supplierCompanyMatchesDomain(companyName, sourceUrl)) {
+      decisions.push(decision({ code: "COMPANY_DOMAIN_MISMATCH", stage: "SOURCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (source.sourceTextHash !== hash(sourceBody)) {
+      decisions.push(decision({ code: "SOURCE_HASH_MISMATCH", stage: "SOURCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
     const companyIdentityExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.companyIdentityEvidence, 1_000));
     const supplierRoleExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.supplierRoleEvidence, 1_000));
     const productCapabilityExcerpt = exactSourceExcerpt(sourceBody, text(source.proposal.productCapabilityEvidence, 1_000));
     const productCapability = productCapabilityExcerpt
       ? supportedProductCapability(input, itemIdentity, productCapabilityExcerpt)
       : null;
-    if (
-      !companyIdentityExcerpt
-      || !supplierRoleExcerpt
-      || !productCapabilityExcerpt
-      || !productCapability
-      || !containsPhrase(companyIdentityExcerpt, companyName)
-      || !(materialStockRequest
-        ? explicitMaterialRoleEvidence(supplierRoleExcerpt, role)
-        : explicitRoleEvidence(supplierRoleExcerpt, role))
-    ) continue;
+    if (!companyIdentityExcerpt) {
+      decisions.push(decision({ code: "COMPANY_EXCERPT_NOT_VERBATIM", stage: "EVIDENCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!supplierRoleExcerpt) {
+      decisions.push(decision({ code: "ROLE_EXCERPT_NOT_VERBATIM", stage: "EVIDENCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!productCapabilityExcerpt) {
+      decisions.push(decision({ code: "CAPABILITY_EXCERPT_NOT_VERBATIM", stage: "EVIDENCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!productCapability) {
+      decisions.push(decision({ code: "CAPABILITY_PROFILE_MISMATCH", stage: "PROFILE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!containsPhrase(companyIdentityExcerpt, companyName)) {
+      decisions.push(decision({ code: "COMPANY_NAME_NOT_IN_EXCERPT", stage: "EVIDENCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
+    if (!(materialStockRequest
+      ? explicitMaterialRoleEvidence(supplierRoleExcerpt, role)
+      : explicitRoleEvidence(supplierRoleExcerpt, role))) {
+      decisions.push(decision({ code: "ROLE_NOT_EXPLICIT", stage: "EVIDENCE", recordIndex, source, proposedRole: role }));
+      continue;
+    }
     const common = {
       itemKey: input.componentItemKey,
       companyName,
@@ -1096,8 +1249,23 @@ export function validatePublicSupplierLeadReceipts(
       };
       receipts.push({ ...base, candidateId: null, receiptHash: publicSupplierLeadReceiptHash(base) });
     }
+    decisions.push(decision({
+      code: "ACCEPTED",
+      stage: "RESULT",
+      accepted: true,
+      recordIndex,
+      source,
+      proposedRole: role,
+    }));
   }
-  return receipts;
+  return { receipts, decisions };
+}
+
+export function validatePublicSupplierLeadReceipts(
+  input: SupplierLeadValidationInput,
+  capture: SupplierResearchRetrievalCapture,
+) {
+  return evaluatePublicSupplierLeadReceipts(input, capture).receipts;
 }
 
 export function validateExaPublicSupplierLeadReceipts(
