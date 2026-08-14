@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,6 +14,7 @@ import { parseSupplierResearchRouteBody } from "../src/lib/supply-os/supplier-re
 import {
   GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION,
   GUILD_SUPPLIER_CAMPAIGN_DELIVERY_LOCATION,
+  GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS,
   GUILD_SUPPLIER_CAMPAIGN_NEED_BY_DATE,
   GUILD_SUPPLIER_CAMPAIGN_QUERY_VARIANTS,
   GUILD_SUPPLIER_CAMPAIGN_RETAINED_MAXIMUM,
@@ -29,11 +30,39 @@ const CHECKPOINT_SCHEMA_VERSION = 1;
 const FIXED_OFFICE_ID = "supplier-eval-office";
 const FIXED_WORKSPACE_ID = "supplier-eval-workspace";
 const DEFAULT_CHECKPOINT = ".codex-tmp/supplier-eval/guild.json";
+const RUNNING_ATTEMPT_STALE_MS = 15 * 60_000;
 const SEARCHABLE_LINES = GUILD_SOURCING_LINES.filter((line) => line.classification === "SUPPLIER_SEARCH");
 const SEARCHABLE_IDS = SEARCHABLE_LINES.map((line) => line.sku);
 
 type JsonRecord = Record<string, unknown>;
 export type SupplierEvalProviderMode = SupplierResearchProvider | "both";
+
+export type SupplierEvalDoctorConfig = {
+  provider: SupplierEvalProviderMode;
+  checkpointPath: string;
+};
+
+export type SupplierEvalDoctorResult = {
+  exitCode: 0 | 1;
+  provider: SupplierEvalProviderMode;
+  providerConfiguration: Record<SupplierResearchProvider, "CONFIGURED" | "MISSING" | "NOT_REQUIRED">;
+  checkpoint: {
+    path: string;
+    state: "ABSENT" | "VALID" | "BUSY" | "STALE_RESUMABLE" | "INVALID";
+    compatible: boolean;
+    storedProvider: SupplierEvalProviderMode | null;
+    selectedLines: number | null;
+    selectedIds: string[] | null;
+    attempts: number | null;
+    succeededAttempts: number | null;
+    runningAttempts: number | null;
+    activeRunningAttempts: number | null;
+    staleRunningAttempts: number | null;
+    failedAttempts: number | null;
+  };
+  ready: boolean;
+  nextAction: "START" | "RESUME" | "RESUME_STALE" | "WAIT_FOR_ACTIVE_RUN" | "FIX_CONFIGURATION" | "REPLACE_INVALID_CHECKPOINT" | "USE_MATCHING_PROVIDER";
+};
 
 export type SupplierEvalConfig = {
   mode: "run" | "revalidate";
@@ -191,6 +220,12 @@ function positiveInteger(value: string | undefined, name: string, minimum: numbe
   return parsed;
 }
 
+function normalizeProvider(value: string | undefined): SupplierEvalProviderMode {
+  const rawProvider = (value ?? "both").toUpperCase();
+  if (!['EXA', 'OPENAI', 'BOTH'].includes(rawProvider)) throw new Error("--provider must be EXA, OPENAI, or both.");
+  return rawProvider === "BOTH" ? "both" : rawProvider as SupplierResearchProvider;
+}
+
 function normalizeIds(value: string | undefined) {
   if (!value || value.toLowerCase() === "all") return [...SEARCHABLE_IDS];
   const ids = [...new Set(value.split(",").map((part) => {
@@ -249,9 +284,7 @@ export function parseSupplierEvalArgs(argv: string[], cwd = process.cwd()): Supp
       resume: false,
     };
   }
-  const rawProvider = (values.get("provider") ?? "both").toUpperCase();
-  if (!['EXA', 'OPENAI', 'BOTH'].includes(rawProvider)) throw new Error("--provider must be EXA, OPENAI, or both.");
-  const provider = rawProvider === "BOTH" ? "both" : rawProvider as SupplierResearchProvider;
+  const provider = normalizeProvider(values.get("provider"));
   const target = positiveInteger(values.get("target") ?? "3", "--target", 1, 5);
   const retain = positiveInteger(values.get("retain") ?? "5", "--retain", 1, 5);
   if (target !== 3 || retain !== 5) throw new Error("Production acceptance is fixed at --target=3 and --retain=5.");
@@ -269,6 +302,68 @@ export function parseSupplierEvalArgs(argv: string[], cwd = process.cwd()): Supp
     checkpointPath: resolve(cwd, values.get("checkpoint") ?? DEFAULT_CHECKPOINT),
     resume: flags.has("resume"),
   };
+}
+
+export function parseSupplierEvalDoctorArgs(argv: string[], cwd = process.cwd()): SupplierEvalDoctorConfig {
+  const doctorCount = argv.filter((argument) => argument === "--doctor").length;
+  if (doctorCount !== 1) throw new Error("Use --doctor exactly once.");
+  const { values, flags } = parsedArguments(argv.filter((argument) => argument !== "--doctor"));
+  const unsupportedValues = [...values.keys()].filter((name) => !["provider", "checkpoint"].includes(name));
+  if (unsupportedValues.length || flags.size) {
+    const option = unsupportedValues[0] ?? [...flags][0];
+    throw new Error(`--doctor accepts only --provider and --checkpoint, not --${option}.`);
+  }
+  return {
+    provider: normalizeProvider(values.get("provider")),
+    checkpointPath: resolve(cwd, values.get("checkpoint") ?? DEFAULT_CHECKPOINT),
+  };
+}
+
+export function supplierEvalHelpText() {
+  return [
+    "Derya GUILD supplier evaluation",
+    "",
+    "Runs public supplier discovery directly from the command line. It never contacts or approves a supplier.",
+    "",
+    "Preflight without provider requests or file writes:",
+    "  npm run supply-os:supplier-eval -- --doctor --provider=both --checkpoint=.codex-tmp/supplier-eval/guild.json",
+    "",
+    "Recommended six-line canary, bounded to 12 research attempts:",
+    "  npm run supply-os:supplier-eval -- --provider=both --ids=001,011,017,024,038,040 --target=3 --retain=5 --max-calls=12 --concurrency=2 --checkpoint=.codex-tmp/supplier-eval/guild-canary.json",
+    "",
+    "Full 38-line bounded exploration, up to 228 research attempts. Completion depends on retrieved evidence and is not guaranteed:",
+    "  npm run supply-os:supplier-eval -- --provider=both --ids=all --target=3 --retain=5 --until-complete --max-calls=228 --concurrency=2 --checkpoint=.codex-tmp/supplier-eval/guild.json",
+    "",
+    "Resume an existing checkpoint:",
+    "  Add --resume and repeat the exact provider, ids, target, retain, and checkpoint options used to create it.",
+    "",
+    "Revalidate saved captures with zero provider requests:",
+    "  npm run supply-os:supplier-eval -- --revalidate=.codex-tmp/supplier-eval/guild.json",
+    "",
+    "Options:",
+    "  --provider=EXA|OPENAI|both   Provider stream. Default: both.",
+    "  --ids=all|001,002            Sourceable GUILD lines. Default: all 38.",
+    "  --target=3                   Fixed production minimum.",
+    "  --retain=5                   Fixed production maximum.",
+    "  --until-complete             Continue rotating query variants within --max-calls.",
+    "  --max-calls=N                Hard research-attempt budget for this invocation.",
+    "                               One attempt may issue multiple provider HTTP requests.",
+    "  --concurrency=1|2            Concurrent research attempts. Maximum: 2.",
+    "  --checkpoint=PATH            Owner-only resumable checkpoint.",
+    "  --resume                     Continue a compatible checkpoint.",
+    "  --revalidate=PATH            Replay a checkpoint without provider requests.",
+    "  --doctor                     Check key presence and checkpoint health only.",
+    "  --help, -h                   Print this help and exit.",
+    "",
+    "Environment:",
+    "  EXA_API_KEY and/or OPENAI_API_KEY must already be exported for the selected provider.",
+    "  The command reports only whether a key is configured. Never paste key values into chat.",
+    "",
+    "Exit codes:",
+    "  0  Exact acceptance passed, or doctor is ready.",
+    "  1  Configuration, checkpoint, or provider failure.",
+    "  2  Evidence is valid but the requested sourcing scope remains incomplete.",
+  ].join("\n");
 }
 
 function newCheckpoint(config: SupplierEvalConfig, now: Date, runId: string): SupplierEvalCheckpoint {
@@ -314,6 +409,100 @@ async function checkpointExists(path: string) {
   }
 }
 
+type SupplierEvalCheckpointLock = {
+  path: string;
+  token: string;
+};
+
+function processIsAlive(pid: unknown) {
+  if (!Number.isSafeInteger(pid) || Number(pid) <= 0) return null;
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch (error) {
+    return record(error).code === "ESRCH" ? false : true;
+  }
+}
+
+async function acquireCheckpointLock(
+  checkpointPath: string,
+  dependencies: Pick<SupplierEvalDependencies, "now" | "randomId">,
+): Promise<SupplierEvalCheckpointLock> {
+  const lockPath = `${checkpointPath}.lock`;
+  const token = dependencies.randomId();
+  await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const handle = await open(lockPath, "wx", 0o600);
+      try {
+        await handle.writeFile(`${JSON.stringify({ token, pid: process.pid, acquiredAt: dependencies.now().toISOString() })}\n`, "utf8");
+      } catch (error) {
+        await handle.close();
+        await rm(lockPath, { force: true });
+        throw error;
+      }
+      await handle.close();
+      await chmod(lockPath, 0o600);
+      return { path: lockPath, token };
+    } catch (error) {
+      if (record(error).code !== "EEXIST") throw error;
+      let lockStat;
+      try {
+        lockStat = await stat(lockPath);
+      } catch (statError) {
+        if (record(statError).code === "ENOENT") continue;
+        throw statError;
+      }
+      if (dependencies.now().getTime() - lockStat.mtimeMs < RUNNING_ATTEMPT_STALE_MS) {
+        throw new Error("Checkpoint is already active in another process. Wait for it to finish before retrying.");
+      }
+      let ownerAlive: boolean | null = null;
+      try {
+        ownerAlive = processIsAlive(record(JSON.parse(await readFile(lockPath, "utf8"))).pid);
+      } catch {
+        ownerAlive = null;
+      }
+      if (ownerAlive !== false) {
+        throw new Error("Checkpoint lock is stale but its owner process is still running or cannot be verified. Stop that process before retrying.");
+      }
+      const stalePath = `${lockPath}.stale.${process.pid}.${token}`;
+      try {
+        await rename(lockPath, stalePath);
+        await rm(stalePath, { force: true });
+      } catch (renameError) {
+        if (record(renameError).code !== "ENOENT") throw renameError;
+      }
+    }
+  }
+  throw new Error("Checkpoint lock could not be acquired safely.");
+}
+
+async function heartbeatCheckpointLock(lock: SupplierEvalCheckpointLock, now: Date) {
+  let raw: string;
+  try {
+    raw = await readFile(lock.path, "utf8");
+  } catch {
+    throw new Error("Checkpoint ownership was lost. Provider work stopped.");
+  }
+  let token: unknown;
+  try {
+    token = record(JSON.parse(raw)).token;
+  } catch {
+    token = null;
+  }
+  if (token !== lock.token) throw new Error("Checkpoint ownership was lost. Provider work stopped.");
+  await utimes(lock.path, now, now);
+}
+
+async function releaseCheckpointLock(lock: SupplierEvalCheckpointLock) {
+  try {
+    const raw = JSON.parse(await readFile(lock.path, "utf8"));
+    if (record(raw).token === lock.token) await rm(lock.path, { force: true });
+  } catch {
+    // A missing or replaced lock is not safe for this process to remove.
+  }
+}
+
 export async function readSupplierEvalCheckpoint(path: string) {
   let raw: string;
   try {
@@ -329,6 +518,145 @@ export async function readSupplierEvalCheckpoint(path: string) {
     throw new Error("Checkpoint JSON is invalid.");
   }
   return assertCheckpoint(parsed);
+}
+
+function runningAttemptPartitions(checkpoint: SupplierEvalCheckpoint, now: Date) {
+  const running = checkpoint.attempts.filter((attempt) => attempt.status === "RUNNING");
+  const stale = running.filter((attempt) => {
+    const updatedAt = Date.parse(attempt.updatedAt);
+    return Number.isFinite(updatedAt) && now.getTime() - updatedAt >= RUNNING_ATTEMPT_STALE_MS;
+  });
+  const staleIds = new Set(stale.map((attempt) => attempt.id));
+  return {
+    active: running.filter((attempt) => !staleIds.has(attempt.id)),
+    stale,
+  };
+}
+
+function providerConfigurationStatus(
+  provider: SupplierEvalProviderMode,
+  environment: Record<string, string | undefined>,
+) {
+  const required = new Set<SupplierResearchProvider>(provider === "both" ? ["EXA", "OPENAI"] : [provider]);
+  return Object.fromEntries((["EXA", "OPENAI"] as const).map((candidate) => [
+    candidate,
+    required.has(candidate)
+      ? environment[candidate === "EXA" ? "EXA_API_KEY" : "OPENAI_API_KEY"]?.trim()
+        ? "CONFIGURED"
+        : "MISSING"
+      : "NOT_REQUIRED",
+  ])) as SupplierEvalDoctorResult["providerConfiguration"];
+}
+
+export async function runSupplierEvalDoctor(
+  config: SupplierEvalDoctorConfig,
+  environment: Record<string, string | undefined> = process.env,
+  now: () => Date = () => new Date(),
+): Promise<SupplierEvalDoctorResult> {
+  const providerConfiguration = providerConfigurationStatus(config.provider, environment);
+  const requiredProviders = config.provider === "both" ? ["EXA", "OPENAI"] as const : [config.provider];
+  const configurationReady = requiredProviders.every((provider) => providerConfiguration[provider] === "CONFIGURED");
+  let state: SupplierEvalDoctorResult["checkpoint"]["state"] = "ABSENT";
+  let compatible = true;
+  let storedProvider: SupplierEvalProviderMode | null = null;
+  let selectedLines: number | null = null;
+  let selectedIds: string[] | null = null;
+  let attempts: number | null = null;
+  let succeededAttempts: number | null = null;
+  let runningAttempts: number | null = null;
+  let activeRunningAttempts: number | null = null;
+  let staleRunningAttempts: number | null = null;
+  let failedAttempts: number | null = null;
+  if (await checkpointExists(config.checkpointPath)) {
+    try {
+      const checkpoint = await readSupplierEvalCheckpoint(config.checkpointPath);
+      storedProvider = checkpoint.scope.provider;
+      compatible = storedProvider === config.provider;
+      selectedLines = checkpoint.scope.ids.length;
+      selectedIds = checkpoint.scope.ids;
+      attempts = checkpoint.attempts.length;
+      succeededAttempts = checkpoint.attempts.filter((attempt) => attempt.status === "SUCCEEDED").length;
+      runningAttempts = checkpoint.attempts.filter((attempt) => attempt.status === "RUNNING").length;
+      const running = runningAttemptPartitions(checkpoint, now());
+      activeRunningAttempts = running.active.length;
+      staleRunningAttempts = running.stale.length;
+      state = activeRunningAttempts > 0 ? "BUSY" : staleRunningAttempts > 0 ? "STALE_RESUMABLE" : "VALID";
+      failedAttempts = checkpoint.attempts.filter((attempt) => attempt.status === "FAILED").length;
+    } catch {
+      state = "INVALID";
+      compatible = false;
+    }
+  }
+  const ready = configurationReady && !["INVALID", "BUSY"].includes(state) && compatible;
+  const nextAction = state === "BUSY"
+    ? "WAIT_FOR_ACTIVE_RUN"
+    : !configurationReady
+      ? "FIX_CONFIGURATION"
+      : state === "INVALID"
+        ? "REPLACE_INVALID_CHECKPOINT"
+        : !compatible
+          ? "USE_MATCHING_PROVIDER"
+          : state === "STALE_RESUMABLE"
+            ? "RESUME_STALE"
+            : state === "VALID"
+              ? "RESUME"
+              : "START";
+  return {
+    exitCode: ready ? 0 : 1,
+    provider: config.provider,
+    providerConfiguration,
+    checkpoint: {
+      path: config.checkpointPath,
+      state,
+      compatible,
+      storedProvider,
+      selectedLines,
+      selectedIds,
+      attempts,
+      succeededAttempts,
+      runningAttempts,
+      activeRunningAttempts,
+      staleRunningAttempts,
+      failedAttempts,
+    },
+    ready,
+    nextAction,
+  };
+}
+
+export function formatSupplierEvalDoctorResult(result: SupplierEvalDoctorResult) {
+  const nextAction = {
+    START: "Start without --resume.",
+    RESUME: "Repeat the checkpoint's exact scope and add --resume.",
+    RESUME_STALE: "No active attempt remains. Add --resume to mark stale RUNNING work interrupted and continue.",
+    WAIT_FOR_ACTIVE_RUN: "Another process may still own this checkpoint. Wait for it to finish before using --resume.",
+    FIX_CONFIGURATION: "Export the missing provider key in this shell. Never paste its value into chat.",
+    REPLACE_INVALID_CHECKPOINT: "Keep the invalid file for inspection and choose a new checkpoint path.",
+    USE_MATCHING_PROVIDER: "Use the checkpoint's stored provider mode, or choose a new checkpoint path.",
+  }[result.nextAction];
+  const checkpointDetails = !["ABSENT", "INVALID"].includes(result.checkpoint.state)
+    ? [
+        `Checkpoint provider: ${result.checkpoint.storedProvider}`,
+        `Checkpoint selected lines: ${result.checkpoint.selectedLines}`,
+        `Checkpoint ids: ${result.checkpoint.selectedIds?.map((id) => id.replace(/^GUILD-/, "")).join(",")}`,
+        `Checkpoint attempts: ${result.checkpoint.attempts} total, ${result.checkpoint.succeededAttempts} succeeded, ${result.checkpoint.runningAttempts} running, ${result.checkpoint.failedAttempts} failed`,
+        `Running attempts: ${result.checkpoint.activeRunningAttempts} active, ${result.checkpoint.staleRunningAttempts} stale`,
+        `Checkpoint compatible: ${result.checkpoint.compatible ? "yes" : "no"}`,
+      ]
+    : [];
+  return [
+    "Supplier evaluation doctor",
+    `Provider mode: ${result.provider}`,
+    `EXA_API_KEY: ${result.providerConfiguration.EXA.toLowerCase()}`,
+    `OPENAI_API_KEY: ${result.providerConfiguration.OPENAI.toLowerCase()}`,
+    `Checkpoint: ${result.checkpoint.state.toLowerCase()}`,
+    `Checkpoint path: ${result.checkpoint.path}`,
+    ...checkpointDetails,
+    "Sourceable lines: 38",
+    "Blocked without research attempts: GUILD-027 clarification required, GUILD-039 requirement only",
+    `Ready: ${result.ready ? "yes" : "no"}`,
+    `Next: ${nextAction}`,
+  ].join("\n");
 }
 
 export async function writeSupplierEvalCheckpointAtomic(
@@ -360,17 +688,21 @@ async function loadCheckpoint(config: SupplierEvalConfig, dependencies: Supplier
     if (!exists) throw new Error(`Checkpoint does not exist: ${config.checkpointPath}.`);
     const checkpoint = await readSupplierEvalCheckpoint(config.checkpointPath);
     if (!sameScope(checkpoint, config)) throw new Error("Checkpoint scope does not match the requested provider, ids, target, and retain settings.");
+    const resumeTime = dependencies.now();
+    const running = runningAttemptPartitions(checkpoint, resumeTime);
+    if (running.active.length) {
+      throw new Error("Checkpoint has active RUNNING research attempts. Wait for the owning process to finish before using --resume.");
+    }
     let interrupted = false;
-    for (const attempt of checkpoint.attempts) {
-      if (attempt.status !== "RUNNING") continue;
+    for (const attempt of running.stale) {
       attempt.status = "FAILED";
       attempt.error = { code: "INTERRUPTED" };
-      attempt.failedAt = dependencies.now().toISOString();
+      attempt.failedAt = resumeTime.toISOString();
       attempt.updatedAt = attempt.failedAt;
       interrupted = true;
     }
     if (interrupted) {
-      checkpoint.updatedAt = dependencies.now().toISOString();
+      checkpoint.updatedAt = resumeTime.toISOString();
       checkpoint.writeSequence += 1;
       await writeSupplierEvalCheckpointAtomic(config.checkpointPath, checkpoint, dependencies.randomId);
     }
@@ -382,13 +714,18 @@ async function loadCheckpoint(config: SupplierEvalConfig, dependencies: Supplier
   return checkpoint;
 }
 
-function providerForNextAttempt(checkpoint: SupplierEvalCheckpoint, itemKey: string): SupplierResearchProvider {
-  if (checkpoint.scope.provider !== "both") return checkpoint.scope.provider;
+function providerForNextAttempt(
+  checkpoint: SupplierEvalCheckpoint,
+  itemKey: string,
+  providers: SupplierResearchProvider[],
+): SupplierResearchProvider | null {
   const counts = { EXA: 0, OPENAI: 0 };
   for (const attempt of checkpoint.attempts) {
     if (record(attempt.input).campaignItemKey === itemKey) counts[attempt.provider] += 1;
   }
-  return counts.EXA <= counts.OPENAI ? "EXA" : "OPENAI";
+  return [...providers].sort((left, right) => (
+    counts[left] - counts[right] || ["EXA", "OPENAI"].indexOf(left) - ["EXA", "OPENAI"].indexOf(right)
+  ))[0] ?? null;
 }
 
 function nextProviderOrdinal(checkpoint: SupplierEvalCheckpoint, itemKey: string, provider: SupplierResearchProvider) {
@@ -397,6 +734,12 @@ function nextProviderOrdinal(checkpoint: SupplierEvalCheckpoint, itemKey: string
       ? Math.max(maximum, attempt.providerAttemptNumber)
       : maximum;
   }, 0) + 1;
+}
+
+function lineProviderAttemptCount(checkpoint: SupplierEvalCheckpoint, itemKey: string, provider: SupplierResearchProvider) {
+  return checkpoint.attempts.filter((attempt) => (
+    record(attempt.input).campaignItemKey === itemKey && attempt.provider === provider
+  )).length;
 }
 
 function candidateDomain(candidate: SupplierCandidate) {
@@ -408,8 +751,8 @@ function candidateDomain(candidate: SupplierCandidate) {
   }
 }
 
-function exclusionDomains(result: SupplierResearchResult) {
-  return [...new Set([
+function exclusionDomains(result: SupplierResearchResult, attemptNumber: number) {
+  const domains = [...new Set([
     ...result.candidates.flatMap((candidate) => candidateDomain(candidate) ? [candidateDomain(candidate)!] : []),
     ...result.sources.flatMap((source) => {
       try {
@@ -418,7 +761,11 @@ function exclusionDomains(result: SupplierResearchResult) {
         return [];
       }
     }),
-  ])].sort().slice(0, 8);
+  ])].sort();
+  if (domains.length <= 8) return domains;
+  const epochIndex = (BigInt(attemptNumber) - 1n) / BigInt(GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS);
+  const offset = Number((epochIndex * 8n) % BigInt(domains.length));
+  return Array.from({ length: 8 }, (_, index) => domains[(offset + index) % domains.length]);
 }
 
 function fixedScopeProviderInput(storedInput: JsonRecord): SearchInput {
@@ -644,7 +991,7 @@ function scorecardMarkdown(scorecard: SupplierEvalScorecard) {
     "",
     `Status: ${scorecard.exactPass ? "PASS" : "INCOMPLETE"}`,
     `Coverage: ${scorecard.coveredLines}/38 sourceable lines`,
-    `Calls this run: ${scorecard.callCount}`,
+    `Research attempts this run: ${scorecard.callCount}`,
     `Evidence policy: created v${scorecard.createdEvidencePolicyVersion}, revalidated v${scorecard.currentEvidencePolicyVersion}`,
     "",
     "## Rejections",
@@ -718,6 +1065,17 @@ function terminalErrorCode(error: unknown) {
   return typeof code === "string" && /^[A-Z][A-Z0-9_]{1,80}$/.test(code) ? code : "PROVIDER_FAILURE";
 }
 
+const PROVIDER_WIDE_FAILURE_CODES = new Set([
+  "MISSING_CONFIGURATION",
+  "PROVIDER_AUTHENTICATION_FAILED",
+  "ACCESS_REVOKED",
+  "PROVIDER_RATE_LIMITED",
+]);
+
+function suppressProviderAfterError(errorCode: string) {
+  return PROVIDER_WIDE_FAILURE_CODES.has(errorCode);
+}
+
 function reserveAttempt(
   checkpoint: SupplierEvalCheckpoint,
   line: GuildSourcingLine,
@@ -731,7 +1089,7 @@ function reserveAttempt(
     campaignId: `supplier-eval:${checkpoint.runId}:${provider.toLowerCase()}`,
     attemptNumber: providerAttemptNumber,
     requiredProvider: provider,
-    excludeDomains: exclusionDomains(aggregate),
+    excludeDomains: exclusionDomains(aggregate, providerAttemptNumber),
   }) as unknown as JsonRecord;
   const now = dependencies.now().toISOString();
   const attempt: SupplierEvalAttempt = {
@@ -775,7 +1133,11 @@ async function executeAttempt(attempt: SupplierEvalAttempt, dependencies: Suppli
 
 function incompleteSelectedLines(checkpoint: SupplierEvalCheckpoint, dependencies: SupplierEvalDependencies) {
   return SEARCHABLE_LINES.filter((line) => checkpoint.scope.ids.includes(line.sku))
-    .filter((line) => aggregateLine(checkpoint, line, dependencies).candidates.length < checkpoint.scope.target);
+    .filter((line) => {
+      const aggregate = aggregateLine(checkpoint, line, dependencies);
+      const candidates = aggregate.candidates.slice(0, checkpoint.scope.retain);
+      return !validCompletedCandidates(line, aggregate, candidates);
+    });
 }
 
 type PlannedAttempt = { line: GuildSourcingLine; provider: SupplierResearchProvider };
@@ -784,8 +1146,8 @@ function providerKeys(provider: SupplierEvalProviderMode): SupplierResearchProvi
   return provider === "both" ? ["EXA", "OPENAI"] : [provider];
 }
 
-function lineProviderKey(line: GuildSourcingLine, provider: SupplierResearchProvider) {
-  return `${line.sku}:${provider}`;
+function lineProviderKey(line: GuildSourcingLine | string, provider: SupplierResearchProvider) {
+  return `${typeof line === "string" ? line : line.sku}:${provider}`;
 }
 
 function hasSuccessfulProviderCapture(checkpoint: SupplierEvalCheckpoint, line: GuildSourcingLine, provider: SupplierResearchProvider) {
@@ -801,25 +1163,42 @@ function plannedAttempts(args: {
   config: SupplierEvalConfig;
   dependencies: SupplierEvalDependencies;
   attemptedThisRun: Set<string>;
+  suppressedProviders: Set<SupplierResearchProvider>;
+  failedLineProviders: Set<string>;
 }) {
   const selected = SEARCHABLE_LINES.filter((line) => args.checkpoint.scope.ids.includes(line.sku));
-  const providers = providerKeys(args.checkpoint.scope.provider);
+  const providers = providerKeys(args.checkpoint.scope.provider).filter((provider) => !args.suppressedProviders.has(provider));
   const missingBaseline = selected.flatMap((line) => providers.flatMap((provider) => (
     !hasSuccessfulProviderCapture(args.checkpoint, line, provider)
       && !args.attemptedThisRun.has(lineProviderKey(line, provider))
+      && !args.failedLineProviders.has(lineProviderKey(line, provider))
       ? [{ line, provider }]
       : []
-  )));
+  ))).sort((left, right) => (
+    lineProviderAttemptCount(args.checkpoint, left.line.sku, left.provider)
+    - lineProviderAttemptCount(args.checkpoint, right.line.sku, right.provider)
+    || left.line.sku.localeCompare(right.line.sku)
+    || ["EXA", "OPENAI"].indexOf(left.provider) - ["EXA", "OPENAI"].indexOf(right.provider)
+  ));
   if (missingBaseline.length) return missingBaseline;
   if (!args.config.untilComplete) {
     return selected.flatMap((line) => providers.flatMap((provider) => (
-      args.attemptedThisRun.has(lineProviderKey(line, provider)) ? [] : [{ line, provider }]
+      args.attemptedThisRun.has(lineProviderKey(line, provider))
+        || args.failedLineProviders.has(lineProviderKey(line, provider))
+        ? []
+        : [{ line, provider }]
     )));
   }
-  return incompleteSelectedLines(args.checkpoint, args.dependencies).map((line) => ({
-    line,
-    provider: providerForNextAttempt(args.checkpoint, line.sku),
-  }));
+  return incompleteSelectedLines(args.checkpoint, args.dependencies)
+    .flatMap((line) => {
+      const available = providers.filter((provider) => !args.failedLineProviders.has(lineProviderKey(line, provider)));
+      const provider = providerForNextAttempt(args.checkpoint, line.sku, available);
+      return provider ? [{ line, provider }] : [];
+    })
+    .sort((left, right) => (
+      attemptsForLine(args.checkpoint, left.line.sku).length - attemptsForLine(args.checkpoint, right.line.sku).length
+      || left.line.sku.localeCompare(right.line.sku)
+    ));
 }
 
 export async function runSupplierEval(
@@ -829,63 +1208,128 @@ export async function runSupplierEval(
   const dependencies = { ...defaultDependencies, ...overrides };
   const configurationError = providerConfigurationError(config, dependencies.environment);
   if (configurationError) throw new Error(configurationError);
-  const checkpoint = await loadCheckpoint(config, dependencies);
-  if (config.mode === "revalidate") {
-    const scorecard = buildScorecard(checkpoint, dependencies, 0);
-    const paths = await writeScorecard(config.checkpointPath, scorecard);
-    dependencies.log(`Revalidated ${checkpoint.attempts.length} captured attempts with zero provider calls: ${scorecard.coveredLines}/38 lines.`);
-    return { exitCode: scorecard.exactPass ? 0 : 2, checkpoint, scorecard, ...paths };
-  }
-  let calls = 0;
-  let hadProviderError = false;
-  const attemptedThisRun = new Set<string>();
-  let completionWrite = Promise.resolve();
-  while (calls < config.maxCalls) {
-    const planned = plannedAttempts({ checkpoint, config, dependencies, attemptedThisRun });
-    if (!planned.length) break;
-    const batch = planned.slice(0, Math.min(config.concurrency, config.maxCalls - calls));
-    const reservations = batch.map(({ line, provider }) => {
-      attemptedThisRun.add(lineProviderKey(line, provider));
-      return reserveAttempt(checkpoint, line, provider, dependencies);
-    });
-    checkpoint.updatedAt = dependencies.now().toISOString();
-    checkpoint.writeSequence += 1;
-    await writeSupplierEvalCheckpointAtomic(config.checkpointPath, checkpoint, dependencies.randomId);
-    const outcomes = await Promise.all(reservations.map(async (attempt) => {
-      const errorCode = await executeAttempt(attempt, dependencies);
-      calls += 1;
-      completionWrite = completionWrite.then(async () => {
-        checkpoint.updatedAt = dependencies.now().toISOString();
-        checkpoint.writeSequence += 1;
-        await writeSupplierEvalCheckpointAtomic(config.checkpointPath, checkpoint, dependencies.randomId);
-        if (errorCode) {
-          hadProviderError = true;
-          dependencies.log(`${String(record(attempt.input).campaignItemKey)} ${attempt.provider} #${attempt.providerAttemptNumber}: ${errorCode}`);
-        } else {
-          dependencies.log(`${String(record(attempt.input).campaignItemKey)} ${attempt.provider} #${attempt.providerAttemptNumber}: ${diagnosticsForAttempt(attempt, dependencies)}`);
-        }
-      });
-      await completionWrite;
-      return { attempt, errorCode };
-    }));
-    for (const { errorCode } of outcomes) {
-      if (errorCode) hadProviderError = true;
+  const lock = await acquireCheckpointLock(config.checkpointPath, dependencies);
+  try {
+    const checkpoint = await loadCheckpoint(config, dependencies);
+    await heartbeatCheckpointLock(lock, dependencies.now());
+    if (config.mode === "revalidate") {
+      const scorecard = buildScorecard(checkpoint, dependencies, 0);
+      const paths = await writeScorecard(config.checkpointPath, scorecard);
+      dependencies.log(`Revalidated ${checkpoint.attempts.length} captured attempts with zero provider requests: ${scorecard.coveredLines}/38 lines.`);
+      return { exitCode: scorecard.exactPass ? 0 : 2, checkpoint, scorecard, ...paths };
     }
-    if (hadProviderError) break;
+    let calls = 0;
+    let hadProviderError = false;
+    const attemptedThisRun = new Set<string>();
+    const suppressedProviders = new Set<SupplierResearchProvider>();
+    const failedLineProviders = new Set<string>();
+    let completionWrite = Promise.resolve();
+    while (calls < config.maxCalls) {
+      await heartbeatCheckpointLock(lock, dependencies.now());
+      const planned = plannedAttempts({
+        checkpoint,
+        config,
+        dependencies,
+        attemptedThisRun,
+        suppressedProviders,
+        failedLineProviders,
+      });
+      if (!planned.length) break;
+      const batch = planned.slice(0, Math.min(config.concurrency, config.maxCalls - calls));
+      const reservations = batch.map(({ line, provider }) => {
+        attemptedThisRun.add(lineProviderKey(line, provider));
+        return reserveAttempt(checkpoint, line, provider, dependencies);
+      });
+      checkpoint.updatedAt = dependencies.now().toISOString();
+      checkpoint.writeSequence += 1;
+      await writeSupplierEvalCheckpointAtomic(config.checkpointPath, checkpoint, dependencies.randomId);
+      await heartbeatCheckpointLock(lock, dependencies.now());
+      const outcomes = await Promise.all(reservations.map(async (attempt) => {
+        const errorCode = await executeAttempt(attempt, dependencies);
+        calls += 1;
+        completionWrite = completionWrite.then(async () => {
+          checkpoint.updatedAt = dependencies.now().toISOString();
+          checkpoint.writeSequence += 1;
+          await writeSupplierEvalCheckpointAtomic(config.checkpointPath, checkpoint, dependencies.randomId);
+          await heartbeatCheckpointLock(lock, dependencies.now());
+          if (errorCode) {
+            hadProviderError = true;
+            dependencies.log(`${String(record(attempt.input).campaignItemKey)} ${attempt.provider} #${attempt.providerAttemptNumber}: ${errorCode}`);
+          } else {
+            dependencies.log(`${String(record(attempt.input).campaignItemKey)} ${attempt.provider} #${attempt.providerAttemptNumber}: ${diagnosticsForAttempt(attempt, dependencies)}`);
+          }
+        });
+        await completionWrite;
+        return { attempt, errorCode };
+      }));
+      for (const { errorCode } of outcomes) {
+        if (!errorCode) continue;
+        hadProviderError = true;
+      }
+      for (const { attempt, errorCode } of outcomes) {
+        if (!errorCode) continue;
+        if (suppressProviderAfterError(errorCode)) {
+          if (!suppressedProviders.has(attempt.provider)) {
+            dependencies.log(`${attempt.provider} suspended for the remainder of this invocation after ${errorCode}.`);
+          }
+          suppressedProviders.add(attempt.provider);
+        } else {
+          failedLineProviders.add(lineProviderKey(String(record(attempt.input).campaignItemKey), attempt.provider));
+        }
+      }
+    }
+    await heartbeatCheckpointLock(lock, dependencies.now());
+    const scorecard = buildScorecard(checkpoint, dependencies, calls);
+    const paths = await writeScorecard(config.checkpointPath, scorecard);
+    dependencies.log(`GUILD supplier evaluation: ${scorecard.coveredLines}/38 lines, ${calls} research attempts, ${scorecard.exactPass ? "PASS" : "INCOMPLETE"}.`);
+    return { exitCode: hadProviderError ? 1 : scorecard.exactPass ? 0 : 2, checkpoint, scorecard, ...paths };
+  } finally {
+    await releaseCheckpointLock(lock);
   }
-  const scorecard = buildScorecard(checkpoint, dependencies, calls);
-  const paths = await writeScorecard(config.checkpointPath, scorecard);
-  dependencies.log(`GUILD supplier evaluation: ${scorecard.coveredLines}/38 lines, ${calls} calls, ${scorecard.exactPass ? "PASS" : "INCOMPLETE"}.`);
-  return { exitCode: hadProviderError ? 1 : scorecard.exactPass ? 0 : 2, checkpoint, scorecard, ...paths };
 }
 
-export async function supplierEvalMain(argv = process.argv.slice(2)) {
+export type SupplierEvalMainDependencies = {
+  run: (config: SupplierEvalConfig) => Promise<SupplierEvalRunResult>;
+  doctor: (config: SupplierEvalDoctorConfig) => Promise<SupplierEvalDoctorResult>;
+  cwd: () => string;
+  log: (message: string) => void;
+  error: (message: string) => void;
+  setExitCode: (code: 0 | 1 | 2) => void;
+};
+
+const defaultMainDependencies: SupplierEvalMainDependencies = {
+  run: runSupplierEval,
+  doctor: runSupplierEvalDoctor,
+  cwd: () => process.cwd(),
+  log: (message) => console.log(message),
+  error: (message) => console.error(message),
+  setExitCode: (code) => {
+    process.exitCode = code;
+  },
+};
+
+export async function supplierEvalMain(
+  argv = process.argv.slice(2),
+  overrides: Partial<SupplierEvalMainDependencies> = {},
+) {
+  const dependencies = { ...defaultMainDependencies, ...overrides };
   try {
-    const result = await runSupplierEval(parseSupplierEvalArgs(argv));
-    process.exitCode = result.exitCode;
+    if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
+      dependencies.log(supplierEvalHelpText());
+      dependencies.setExitCode(0);
+      return;
+    }
+    if (argv.includes("--doctor")) {
+      const result = await dependencies.doctor(parseSupplierEvalDoctorArgs(argv, dependencies.cwd()));
+      dependencies.log(formatSupplierEvalDoctorResult(result));
+      dependencies.setExitCode(result.exitCode);
+      return;
+    }
+    const result = await dependencies.run(parseSupplierEvalArgs(argv, dependencies.cwd()));
+    dependencies.setExitCode(result.exitCode);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : "Supplier evaluation failed.");
-    process.exitCode = 1;
+    dependencies.error(error instanceof Error ? error.message : "Supplier evaluation failed.");
+    dependencies.setExitCode(1);
   }
 }
 

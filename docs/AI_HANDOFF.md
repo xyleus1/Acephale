@@ -8683,12 +8683,36 @@ Commands:
 
 ```bash
 npm run supply-os:supplier-eval -- \
+  --doctor \
+  --provider=both \
+  --checkpoint=.codex-tmp/supplier-eval/guild-canary.json
+```
+
+Run the representative six-line canary before the full catalog:
+
+```bash
+npm run supply-os:supplier-eval -- \
+  --provider=both \
+  --ids=001,011,017,024,038,040 \
+  --target=3 \
+  --retain=5 \
+  --max-calls=12 \
+  --concurrency=2 \
+  --checkpoint=.codex-tmp/supplier-eval/guild-canary.json
+```
+
+After reviewing the canary, run the bounded full exploration. The 228-attempt
+cap does not guarantee completion, and one research attempt can make more than
+one provider HTTP request:
+
+```bash
+npm run supply-os:supplier-eval -- \
   --provider=both \
   --ids=all \
   --target=3 \
   --retain=5 \
   --until-complete \
-  --max-calls=76 \
+  --max-calls=228 \
   --concurrency=2 \
   --checkpoint=.codex-tmp/supplier-eval/guild.json
 ```
@@ -8702,7 +8726,7 @@ npm run supply-os:supplier-eval -- \
   --target=3 \
   --retain=5 \
   --until-complete \
-  --max-calls=76 \
+  --max-calls=228 \
   --concurrency=2 \
   --checkpoint=.codex-tmp/supplier-eval/guild.json \
   --resume
@@ -8721,15 +8745,26 @@ Output and safety:
 - The checkpoint is written atomically after reservation and after every
   provider completion. Stale running attempts become interrupted on resume and
   never reuse an ordinal.
+- A local owner-only lock serializes each checkpoint. Fresh or live process
+  ownership cannot be stolen. A stale lock is recoverable only when the local
+  operating system proves its recorded process is dead.
 - The JSON and Markdown scorecards sit beside the checkpoint. They contain the
   retained company, website, evidence URLs, lead counts, and rejection
   histograms. They do not contain API keys or raw page text.
 - `EXA_API_KEY` and `OPENAI_API_KEY` must already be exported in the invoking
   shell for `--provider=both`. Missing keys fail before a checkpoint is created.
   Do not paste key values into chat.
+- `--doctor` reports only whether required keys are present and whether the
+  checkpoint is compatible. It makes no provider calls and writes no file.
+- A retryable research error quarantines only that line and provider for the
+  current invocation. Authentication, configuration, access, and rate-limit
+  failures quarantine that provider. Independent lines and the other provider
+  continue, while the final exit remains nonzero so the failure is visible.
+- Excluded source domains rotate in bounded windows after every nine attempts,
+  and incomplete lines are scheduled by least attempt count to avoid starvation.
 - Exit 0 means the exact 38-line, three-to-five-lead acceptance passed. Exit 2
   means the evidence set remains incomplete. Exit 1 means configuration or a
-  provider call failed.
+  research attempt failed.
 
 Verification:
 
@@ -8746,5 +8781,6 @@ Live boundary:
 - Deterministic tests do not prove live supplier recall. This checkout has no
   provider keys, so the live 38-line command still must be run from a shell
   where both keys are already configured. Inspect the saved per-line rejection
-  histogram, improve only evidence-proven false rejections, revalidate offline,
-  and spend the next bounded call batch only when needed.
+  histogram from the six-line canary first, improve only evidence-proven false
+  rejections, revalidate offline, and spend the full bounded call batch only
+  when needed.

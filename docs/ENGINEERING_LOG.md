@@ -5341,7 +5341,27 @@ Use this file for chronological implementation notes that future agents should s
   request revisions, file permissions, provider failure exit codes, and exact
   38-line completion. Registered the test in package scripts and the Supply OS
   GitHub Actions workflow.
+- Added no-argument help, `--help`, and a read-only `--doctor` preflight so an
+  operator cannot accidentally start a 76-attempt default run while checking
+  the command. Doctor validates required key presence and checkpoint
+  compatibility without research attempts or file writes.
+- Changed live scheduling so one retryable line/provider failure does not abort
+  all independent work. Provider-wide configuration, authentication, access,
+  and rate-limit failures suppress only that provider for the invocation. Any
+  provider error remains visible through exit 1.
+- Rotated bounded exclusion-domain windows after each nine-attempt exploration
+  epoch and scheduled incomplete lines by least attempt count. The documented
+  operating sequence is now a 12-attempt six-line canary followed, only after
+  review, by an explicitly non-guaranteed 228-attempt full exploration cap.
+- Added an owner-only checkpoint lock with heartbeat and token checks. A live
+  process cannot be displaced by elapsed time, and a stale lock can be taken
+  over only when the local operating system proves its recorded process is
+  dead. Fresh running attempts fail closed for 15 minutes before stale resume
+  may mark them interrupted.
+- Sorted missing provider baselines by exact historical line/provider attempt
+  count. Repeated one-attempt resumes therefore advance untouched providers and
+  lines instead of retrying the first failed pair forever.
 - Live provider acceptance was not run because this checkout has neither
   `EXA_API_KEY` nor `OPENAI_API_KEY`. The next operator action is the bounded
-  76-call both-provider baseline from a shell where both keys are already
+  12-attempt both-provider canary from a shell where both keys are already
   configured, followed by offline replay and evidence-driven tuning.
