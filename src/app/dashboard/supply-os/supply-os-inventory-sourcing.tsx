@@ -41,6 +41,17 @@ export type PendingSourcingQueueItem = {
   status: "Clarification needed" | "Researching" | "Research unavailable";
 };
 
+export type ExternalWorkflowSummary = {
+  configured: boolean;
+  triggerConfigured: boolean;
+  materialCount: number;
+  latestRun: {
+    id: string;
+    status: "QUEUED" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+    error: string | null;
+  } | null;
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -77,6 +88,10 @@ export function AtlasInventoryWorkspace({
   researchCampaignState,
   researchCampaignError,
   onRetryResearchCampaign,
+  externalWorkflow,
+  externalWorkflowState,
+  externalWorkflowError,
+  onStartExternalWorkflow,
   researchWorkspaceReady = true,
   dataState,
   hasMore,
@@ -108,6 +123,10 @@ export function AtlasInventoryWorkspace({
   researchCampaignState?: "idle" | "running" | "complete" | "error";
   researchCampaignError?: string | null;
   onRetryResearchCampaign?: () => void;
+  externalWorkflow?: ExternalWorkflowSummary | null;
+  externalWorkflowState?: "idle" | "loading" | "starting" | "ready" | "error";
+  externalWorkflowError?: string | null;
+  onStartExternalWorkflow?: () => void;
   researchWorkspaceReady?: boolean;
   dataState: "loading" | "ready" | "error";
   hasMore: boolean;
@@ -309,6 +328,43 @@ export function AtlasInventoryWorkspace({
           ? <button type="button" onClick={onRetryData}>Retry saved work</button>
           : <span>{dataState === "loading" ? "Loading saved work" : pendingRequests.length ? `${pendingRequests.length} request${pendingRequests.length === 1 ? "" : "s"} need input` : "Office-shared work"}</span>}
       </header>
+
+      {externalWorkflowState && externalWorkflowState !== "idle" ? (
+        <section className={styles.sourcingCampaignSummary} aria-label="GUILD2 workflow status">
+          <span>
+            {externalWorkflowState === "error" || externalWorkflow?.latestRun?.status === "FAILED"
+              ? <TriangleAlert size={17} />
+              : externalWorkflow?.latestRun?.status === "SUCCEEDED"
+                ? <CheckCircle2 size={17} />
+                : <LoaderCircle size={17} />}
+            <span>
+              <small>New workflow database</small>
+              <strong>{externalWorkflowState === "loading"
+                ? "Loading GUILD2"
+                : `${externalWorkflow?.materialCount ?? 0} materials in GUILD2`}</strong>
+            </span>
+          </span>
+          <dl>
+            <div><dt>Database</dt><dd>{externalWorkflow?.configured ? "Connected" : "Missing"}</dd></div>
+            <div><dt>Workflow</dt><dd>{externalWorkflow?.triggerConfigured ? "Connected" : "Needs trigger"}</dd></div>
+            <div><dt>Latest run</dt><dd>{externalWorkflow?.latestRun?.status ?? "Not run"}</dd></div>
+          </dl>
+          <p>{externalWorkflowError
+            ?? externalWorkflow?.latestRun?.error
+            ?? (externalWorkflow?.triggerConfigured
+              ? "Run creates a durable record in the new database and dispatches the sourcing workflow."
+              : "Add the web agent trigger before running. The materials are already stored in the new database.")}</p>
+          {onStartExternalWorkflow ? (
+            <button
+              type="button"
+              onClick={onStartExternalWorkflow}
+              disabled={externalWorkflowState === "loading" || externalWorkflowState === "starting" || !externalWorkflow?.triggerConfigured || ["QUEUED", "DISPATCHED", "RUNNING"].includes(externalWorkflow?.latestRun?.status ?? "")}
+            >
+              {externalWorkflowState === "starting" ? "Starting" : "Run workflow"}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
 
       {researchCampaignState !== "idle" ? (
         <section className={styles.sourcingCampaignSummary} aria-label="Bulk supplier research status">

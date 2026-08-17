@@ -16,6 +16,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-16 - GUILD2 sourcing uses the workflow database and an explicit trigger
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The GUILD sourcing screen previously read and ran its fixed campaign
+  through the primary Derya database. The replacement workflow owns a separate
+  Neon database and runs outside this repository.
+- Decision: Store GUILD2 and its copied 40-line material list in tenant-scoped
+  `derya` tables in the workflow database. A dashboard run creates a durable
+  sourcing-run record there, then calls the configured web-agent trigger. The
+  primary Derya database remains responsible only for the current login session
+  until authentication is migrated separately.
+- Failure boundary: A missing or failed trigger is visible and cannot be shown
+  as a running workflow. Only one active GUILD2 run is allowed per office.
+- Consequences: The external workflow can read materials and update the exact
+  run using the supplied run ID. Its trigger URL and optional bearer token stay
+  in deployment environment variables.
+- Revisit when: Authentication also moves to the workflow database or the
+  external platform provides a first-class queue integration.
+
+
 ### 2026-08-12 - Supplier research uses persisted jobs, not an HTTP request lifetime
 
 - Status: accepted

@@ -12,10 +12,10 @@ export const SUPPLY_OS_DEMO_COMPANIES = {
   },
   guild: {
     id: "guild",
-    name: "GUILD",
+    name: "GUILD2",
     logoUrl: "https://www.guildai.co/favicon.ico",
     logoSourceUrl: "https://www.guildai.co/",
-    summary: "Defense manufacturing contractor",
+    summary: "Workflow database customer",
     primaryFact: "40 sourcing lines",
     secondaryFact: "Aerospace precision metals",
   },

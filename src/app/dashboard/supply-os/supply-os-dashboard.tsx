@@ -60,7 +60,7 @@ import {
   shortageQuantity,
   type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
-import { GUILD_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
+import { GUILD2_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
 import { SUPPLY_OS_DEMO_COMPANIES, type SupplyOsDemoCompanyId } from "@/lib/supply-os/demo-company";
 import { snapshotResponseToSourcingItems } from "@/lib/supply-os/snapshot-sourcing";
 import type { SupplyWorkspaceSnapshotResponse } from "@/lib/supply-os/snapshot-twin";
@@ -69,6 +69,7 @@ import { SupplyOsAutomations } from "./supply-os-automations";
 import {
   AtlasInventoryWorkspace,
   AtlasSourcingInspector,
+  type ExternalWorkflowSummary,
   type PendingSourcingQueueItem,
 } from "./supply-os-inventory-sourcing";
 import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
@@ -94,16 +95,6 @@ function visibleSourcingRun(run: SavedSourcingResearchRun) {
     campaignArtifactKind?: string;
   };
   return !input.campaignId || input.campaignArtifactKind === "AGGREGATE";
-}
-
-function campaignFailureMessage(campaign: SupplierResearchCampaign) {
-  const terminalMessage = storedText(campaign.errorMessage ?? campaign.error?.message, 500);
-  if (terminalMessage) return terminalMessage;
-  const configurationBlocker = campaign.items.find((item) => item.lastErrorCode === "MISSING_CONFIGURATION")?.blocker;
-  if (configurationBlocker) return configurationBlocker;
-  return campaign.state === "NEEDS_REVIEW"
-    ? "Research variants were exhausted for one or more lines. Saved source-backed candidates remain available for review."
-    : "Supplier research stopped. Saved source-backed candidates remain available for review.";
 }
 
 function dashboardName(dashboard: SupplyCaseDashboard) {
@@ -725,7 +716,7 @@ function CaseCommandCenter({
   demoCompanyId: SupplyOsDemoCompanyId | null;
 }) {
   const demoInventoryItems = demoCompanyId === "guild"
-    ? GUILD_SOURCING_ITEMS
+    ? GUILD2_SOURCING_ITEMS
     : demoCompanyId === "atlas-robotics" ? ATLAS_ROBOTICS_INVENTORY : [];
   const companyName = demoCompanyId
     ? SUPPLY_OS_DEMO_COMPANIES[demoCompanyId].name
@@ -777,8 +768,10 @@ function CaseCommandCenter({
   const [supplierResearchCampaign, setSupplierResearchCampaign] = useState<SupplierResearchCampaign | null>(null);
   const [supplierResearchCampaignState, setSupplierResearchCampaignState] = useState<"idle" | "running" | "complete" | "error">("idle");
   const [supplierResearchCampaignError, setSupplierResearchCampaignError] = useState<string | null>(null);
-  const [supplierResearchCampaignRevision, setSupplierResearchCampaignRevision] = useState(0);
-  const supplierResearchCampaignRetryRef = useRef(0);
+  const [externalWorkflow, setExternalWorkflow] = useState<ExternalWorkflowSummary | null>(null);
+  const [externalWorkflowState, setExternalWorkflowState] = useState<"idle" | "loading" | "starting" | "ready" | "error">("idle");
+  const [externalWorkflowError, setExternalWorkflowError] = useState<string | null>(null);
+  const [externalWorkflowRevision, setExternalWorkflowRevision] = useState(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
@@ -1006,97 +999,65 @@ function CaseCommandCenter({
   }, [demoCompanyId, sourcingLoadRevision, sourcingWorkspaceId]);
 
   useEffect(() => {
-    if (demoCompanyId !== "guild") {
-      setSupplierResearchCampaign(null);
-      setSupplierResearchCampaignState("idle");
-      setSupplierResearchCampaignError(null);
+    setSupplierResearchCampaign(null);
+    setSupplierResearchCampaignState("idle");
+    setSupplierResearchCampaignError(null);
+  }, [demoCompanyId]);
+
+  useEffect(() => {
+    if (demoCompanyId !== "guild" || activePanel !== "materials") {
+      setExternalWorkflow(null);
+      setExternalWorkflowState("idle");
+      setExternalWorkflowError(null);
       return;
     }
-    if (activePanel !== "materials") return;
     const controller = new AbortController();
-    setSupplierResearchCampaignState("running");
-    setSupplierResearchCampaignError(null);
-    const explicitRetry = supplierResearchCampaignRevision > supplierResearchCampaignRetryRef.current;
-    supplierResearchCampaignRetryRef.current = supplierResearchCampaignRevision;
+    setExternalWorkflowState("loading");
+    setExternalWorkflowError(null);
+    void fetch("/api/supply-os/external-sourcing/guild2", {
+      method: "POST",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({ action: "ensure" }),
+    }).then(async (response) => {
+      const payload = await response.json().catch(() => ({})) as ExternalWorkflowSummary & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "GUILD2 is unavailable.");
+      setExternalWorkflow(payload);
+      setExternalWorkflowState("ready");
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setExternalWorkflowState("error");
+      setExternalWorkflowError(error instanceof Error ? error.message : "GUILD2 is unavailable.");
+    });
+    return () => controller.abort();
+  }, [activePanel, demoCompanyId, externalWorkflowRevision]);
 
-    function acceptCampaign(campaign: SupplierResearchCampaign) {
-      setSupplierResearchCampaign(campaign);
-      const aggregateRuns = campaign.items.flatMap((item) => item.aggregateRun ? [item.aggregateRun] : []);
-      if (aggregateRuns.length) {
-        setResearchRuns((current) => [
-          ...aggregateRuns,
-          ...current.filter((run) => !aggregateRuns.some((aggregate) => aggregate.id === run.id)),
-        ]);
-      }
-      if (campaign.state === "COMPLETE") {
-        setSupplierResearchCampaignState("complete");
-        setSupplierResearchCampaignError(null);
-      } else if (["FAILED", "NEEDS_REVIEW"].includes(campaign.state)) {
-        setSupplierResearchCampaignState("error");
-        setSupplierResearchCampaignError(campaignFailureMessage(campaign));
-      } else {
-        setSupplierResearchCampaignState("running");
-        setSupplierResearchCampaignError(null);
-      }
-    }
+  useEffect(() => {
+    if (!["QUEUED", "DISPATCHED", "RUNNING"].includes(externalWorkflow?.latestRun?.status ?? "")) return;
+    const timer = window.setTimeout(() => setExternalWorkflowRevision((revision) => revision + 1), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [externalWorkflow?.latestRun?.status, externalWorkflowRevision]);
 
-    async function readCampaign() {
-      const params = new URLSearchParams({ campaignKey: "guild-procurement" });
-      const response = await fetch(`/api/supply-os/supplier-research/campaigns?${params.toString()}`, {
-        cache: "no-store",
-        signal: controller.signal,
-        headers: { accept: "application/json" },
-      });
-      const payload = await response.json().catch(() => ({})) as { campaign?: SupplierResearchCampaign | null; error?: string };
-      if (response.status === 404) return null;
-      if (!response.ok) throw new Error(storedText(payload.error, 500) ?? "Bulk supplier research status is unavailable.");
-      return payload.campaign ?? null;
-    }
-
-    async function startCampaign() {
-      const response = await fetch("/api/supply-os/supplier-research/campaigns", {
+  async function startExternalWorkflow() {
+    if (externalWorkflowState === "starting") return;
+    setExternalWorkflowState("starting");
+    setExternalWorkflowError(null);
+    try {
+      const response = await fetch("/api/supply-os/external-sourcing/guild2", {
         method: "POST",
         cache: "no-store",
-        signal: controller.signal,
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ campaignKey: "guild-procurement" }),
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ action: "run" }),
       });
-      const payload = await response.json().catch(() => ({})) as { campaign?: SupplierResearchCampaign; error?: string };
-      if (!response.ok || !payload.campaign) {
-        throw new Error(storedText(payload.error, 500) ?? "Bulk supplier research could not be started.");
-      }
-      return payload.campaign;
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "The workflow could not be started.");
+      setExternalWorkflowRevision((revision) => revision + 1);
+    } catch (error) {
+      setExternalWorkflowState("error");
+      setExternalWorkflowError(error instanceof Error ? error.message : "The workflow could not be started.");
     }
-
-    async function runCampaign() {
-      try {
-        const savedCampaign = await readCampaign();
-        let campaign = !savedCampaign || explicitRetry
-          ? await startCampaign()
-          : savedCampaign;
-        acceptCampaign(campaign);
-        while (!controller.signal.aborted && !["COMPLETE", "FAILED", "NEEDS_REVIEW"].includes(campaign.state)) {
-          const delay = Math.min(60_000, Math.max(2_500, campaign.retryAfterMs || 5_000));
-          await new Promise((resolve) => window.setTimeout(resolve, delay));
-          if (controller.signal.aborted) return;
-          const polledCampaign = await readCampaign();
-          if (!polledCampaign) throw new Error("Bulk supplier research status is unavailable.");
-          campaign = polledCampaign;
-          acceptCampaign(campaign);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setSupplierResearchCampaignState("error");
-          setSupplierResearchCampaignError(error instanceof Error
-            ? storedText(error.message, 500) ?? "Bulk supplier research is unavailable."
-            : "Bulk supplier research is unavailable.");
-        }
-      }
-    }
-
-    void runCampaign();
-    return () => controller.abort();
-  }, [activePanel, demoCompanyId, supplierResearchCampaignRevision]);
+  }
 
   useEffect(() => {
     if (demoCompanyId !== "guild" || !sourcingWorkspaceId || !campaignAggregateRunIdsKey) return;
@@ -1415,7 +1376,10 @@ function CaseCommandCenter({
             researchCampaign={demoCompanyId === "guild" ? supplierResearchCampaign : null}
             researchCampaignState={demoCompanyId === "guild" ? supplierResearchCampaignState : "idle"}
             researchCampaignError={demoCompanyId === "guild" ? supplierResearchCampaignError : null}
-            onRetryResearchCampaign={() => setSupplierResearchCampaignRevision((revision) => revision + 1)}
+            externalWorkflow={demoCompanyId === "guild" ? externalWorkflow : null}
+            externalWorkflowState={demoCompanyId === "guild" ? externalWorkflowState : "idle"}
+            externalWorkflowError={demoCompanyId === "guild" ? externalWorkflowError : null}
+            onStartExternalWorkflow={demoCompanyId === "guild" ? startExternalWorkflow : undefined}
             researchWorkspaceReady={demoCompanyId !== "guild" || Boolean(sourcingWorkspaceId)}
             dataState={sourcingDataState}
             hasMore={Boolean(sourcingNextCursor)}

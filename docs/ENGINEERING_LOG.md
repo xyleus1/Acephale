@@ -5365,3 +5365,14 @@ Use this file for chronological implementation notes that future agents should s
   `EXA_API_KEY` nor `OPENAI_API_KEY`. The next operator action is the bounded
   12-attempt both-provider canary from a shell where both keys are already
   configured, followed by offline replay and evidence-driven tuning.
+
+### 2026-08-16 - GUILD2 external workflow bridge
+
+- Added an idempotent, tenant-scoped `derya` schema boundary in the separate
+  workflow Neon database for the GUILD2 customer, copied materials, and durable
+  sourcing runs.
+- Replaced the GUILD page's automatic primary-database campaign start with an
+  explicit web-agent dispatch. Missing trigger configuration fails visibly.
+- Kept authentication on the primary database because replacing it without a
+  migrated user/session model would lock users out.
+

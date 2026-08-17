@@ -2,6 +2,31 @@
 
 ## Latest Update
 
+### GUILD2 now has a separate workflow-database boundary
+
+- The GUILD sourcing surface is labeled GUILD2 and uses the same 40 material
+  definitions with `GUILD2-001` through `GUILD2-040` identifiers.
+- Opening its materials page idempotently creates `derya.customers`,
+  `derya.materials`, and `derya.sourcing_runs` in `WORKFLOW_DATABASE_URL`,
+  then seeds the tenant-scoped GUILD2 customer and material rows.
+- The previous automatic GUILD campaign no longer starts from this page. Run
+  workflow creates one durable active run and dispatches
+  `WORKFLOW_AGENT_TRIGGER_URL`, with an optional bearer token stored in
+  `WORKFLOW_AGENT_TRIGGER_TOKEN`.
+- The Run workflow control stays disabled and states `Needs trigger` until that
+  endpoint is configured. A database connection alone is not represented as a
+  runnable external agent.
+- The existing Derya database remains the authentication source for now. No
+  sourcing campaign is written there from the GUILD2 page.
+
+Verification:
+
+- `node --import tsx scripts/workflow-guild2.test.ts`
+- TypeScript verification requires a regenerated Prisma client. Local
+  regeneration was blocked because Prisma attempted to install
+  `@prisma/client@6.19.3` without network access.
+
+
 ### Supplier research now survives the browser and request lifetime
 
 - Supplier research POST requests no longer wait for public discovery to

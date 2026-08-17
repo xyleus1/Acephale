@@ -91,3 +91,8 @@ export const GUILD_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_LINES.m
   needByDate: "2026-09-30",
   deliveryLocation: "Austin, TX, United States",
 }));
+
+export const GUILD2_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_ITEMS.map((item) => ({
+  ...item,
+  sku: item.sku.replace(/^GUILD-/, "GUILD2-"),
+}));
