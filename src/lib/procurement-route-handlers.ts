@@ -1,7 +1,5 @@
 import "server-only";
 
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { procurementRequestSchema } from "@/lib/procurement-contract";
 import {
   getProcurementRequest,
@@ -36,21 +34,21 @@ export type ProcurementDetailDependencies = {
 };
 
 const defaultRouteDependencies: ProcurementRouteDependencies = {
-  session: getSession,
+  session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
   submit: submitProcurementRequest,
   list: listProcurementRequests,
 };
 
 const defaultDetailDependencies: ProcurementDetailDependencies = {
-  session: getSession,
+  session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
   getRequest: getProcurementRequest,
 };
 
 function errorResponse(error: unknown) {
   if (!(error instanceof ProcurementWorkflowError)) {
-    return NextResponse.json({ error: "Procurement request failed." }, { status: 500, headers: responseHeaders });
+    return Response.json({ error: "Procurement request failed." }, { status: 500, headers: responseHeaders });
   }
   const status = error.code === "forbidden"
     ? 403
@@ -59,7 +57,7 @@ function errorResponse(error: unknown) {
       : error.code === "conflict" || error.code === "configuration"
         ? 409
         : 503;
-  return NextResponse.json({ error: error.message }, { status, headers: responseHeaders });
+  return Response.json({ error: error.message }, { status, headers: responseHeaders });
 }
 
 async function readRequestJson(request: Request) {
@@ -101,16 +99,16 @@ export async function handleProcurementPost(
   dependencies: ProcurementRouteDependencies = defaultRouteDependencies,
 ) {
   const session = await dependencies.session();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
 
   const requestBody = await readRequestJson(request);
   if (requestBody.tooLarge) {
-    return NextResponse.json({ error: "Procurement request is too large." }, { status: 413, headers: responseHeaders });
+    return Response.json({ error: "Procurement request is too large." }, { status: 413, headers: responseHeaders });
   }
 
   const parsed = procurementRequestSchema.safeParse(requestBody.body);
   if (!parsed.success) {
-    return NextResponse.json(
+    return Response.json(
       { error: parsed.error.issues[0]?.message ?? "Procurement request JSON is invalid." },
       { status: 400, headers: responseHeaders },
     );
@@ -119,7 +117,7 @@ export async function handleProcurementPost(
   try {
     const customerId = await dependencies.resolveCustomerId(session);
     const order = await dependencies.submit(customerId, parsed.data);
-    return NextResponse.json({
+    return Response.json({
       orderId: order.orderId,
       status: order.status,
       workflowWakeRequested: order.workflowWakeRequested,
@@ -134,11 +132,11 @@ export async function handleProcurementList(
   dependencies: ProcurementRouteDependencies = defaultRouteDependencies,
 ) {
   const session = await dependencies.session();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
   try {
     const customerId = await dependencies.resolveCustomerId(session);
     const requests = await dependencies.list(customerId);
-    return NextResponse.json({ requests }, { headers: responseHeaders });
+    return Response.json({ requests }, { headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);
   }
@@ -149,15 +147,15 @@ export async function handleProcurementDetail(
   dependencies: ProcurementDetailDependencies = defaultDetailDependencies,
 ) {
   const session = await dependencies.session();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
 
   try {
     const customerId = await dependencies.resolveCustomerId(session);
     const order = await dependencies.getRequest(customerId, orderId);
     if (!order) {
-      return NextResponse.json({ error: "Procurement request not found." }, { status: 404, headers: responseHeaders });
+      return Response.json({ error: "Procurement request not found." }, { status: 404, headers: responseHeaders });
     }
-    return NextResponse.json(order, { headers: responseHeaders });
+    return Response.json(order, { headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);
   }
