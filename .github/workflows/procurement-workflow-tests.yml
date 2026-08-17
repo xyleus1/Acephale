@@ -38,6 +38,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_app?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_app?schema=public
       WORKFLOW_DATABASE_OWNER_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_workflow
       WORKFLOW_DATABASE_URL: postgresql://dashboard_api:dashboard_test_password@workflow.invalid/neondb?sslmode=require
       WORKFLOW_DATABASE_TEST_URL: postgresql://dashboard_api:dashboard_test_password@127.0.0.1:5432/derya_procurement_workflow?schema=public
