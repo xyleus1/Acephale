@@ -21,7 +21,10 @@ input.
 
 1. Run `scripts/sql/procurement-dashboard-api.sql` against the Bourne Neon
    database as an owner. Supply the new role password through the documented
-   psql variable. Do not put the password in a file.
+   psql variable. Do not put the password in a file. The script is safe to
+   rerun after a partial failure. It uses only role changes permitted to Neon's
+   managed owner and stops unless every elevated role attribute and membership
+   is absent.
 2. Set the Office mapping in the deployment environment. Use the Office ID from
    the authenticated Derya database and the customer UUID from Neon:
 

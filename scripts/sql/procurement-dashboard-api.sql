@@ -8,7 +8,7 @@
 --   --file=scripts/sql/procurement-dashboard-api.sql
 
 SELECT format(
-  'CREATE ROLE dashboard_api LOGIN PASSWORD %L',
+  'CREATE ROLE dashboard_api LOGIN NOINHERIT PASSWORD %L',
   :'dashboard_api_password'
 )
 WHERE NOT EXISTS (
@@ -17,13 +17,43 @@ WHERE NOT EXISTS (
 
 ALTER ROLE dashboard_api SET statement_timeout = '10s';
 ALTER ROLE dashboard_api SET idle_in_transaction_session_timeout = '10s';
-ALTER ROLE dashboard_api
-  NOSUPERUSER
-  NOCREATEDB
-  NOCREATEROLE
-  NOINHERIT
-  NOREPLICATION
-  NOBYPASSRLS;
+ALTER ROLE dashboard_api NOINHERIT;
+
+-- Neon owners are managed roles, not PostgreSQL superusers. They cannot use
+-- ALTER ROLE to restate the target's superuser attribute.
+-- Verify the SQL-created role's safe defaults instead of trying to rewrite
+-- superuser-controlled attributes.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_roles WHERE rolname = 'dashboard_api'
+  ) THEN
+    RAISE EXCEPTION 'dashboard_api role was not created';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = 'dashboard_api'
+      AND (
+        rolsuper
+        OR rolcreatedb
+        OR rolcreaterole
+        OR rolinherit
+        OR rolreplication
+        OR rolbypassrls
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_auth_members
+    JOIN pg_roles ON pg_roles.oid = pg_auth_members.member
+    WHERE pg_roles.rolname = 'dashboard_api'
+  ) THEN
+    RAISE EXCEPTION 'dashboard_api has unsafe role attributes or memberships';
+  END IF;
+END
+$$;
+
 GRANT USAGE ON SCHEMA public TO dashboard_api;
 REVOKE CREATE ON SCHEMA public FROM dashboard_api;
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM dashboard_api;
