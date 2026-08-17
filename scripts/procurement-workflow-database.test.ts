@@ -202,7 +202,10 @@ async function main() {
     assert.equal("gmail_message_id" in detail, false);
     assert.equal("lease_owner" in detail, false);
     assert.equal("gmail_message_id" in (detail.vendors[0] ?? {}), false);
-    assert.equal((await listProcurementRequestsFromDatabase(workflowDatabase, customerA)).length, 1);
+    const customerAOrders = await listProcurementRequestsFromDatabase(workflowDatabase, customerA);
+    assert.equal(customerAOrders.length, 2);
+    assert(customerAOrders.some((order) => order.id === created.orderId));
+    assert(!customerAOrders.some((order) => order.id === customerScopedDuplicate.orderId));
     assert.equal(await getProcurementRequestFromDatabase(workflowDatabase, customerB, created.orderId), null);
 
     await permissionDenied(() => dashboard.$executeRawUnsafe(
