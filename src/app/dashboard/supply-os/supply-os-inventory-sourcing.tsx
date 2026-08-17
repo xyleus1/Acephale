@@ -11,7 +11,19 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  GUILD2_PROCUREMENT_PLAN,
+  guild2ProcurementLine,
+  guild2ProcurementRequest,
+  runWithBoundedConcurrency,
+  type Guild2ProcurementLine,
+} from "@/lib/supply-os/guild2-procurement";
+import {
+  PROCUREMENT_ACTIVE_STATUSES,
+  PROCUREMENT_APPROVAL_STATUSES,
+  PROCUREMENT_STATUS_LABELS,
+} from "@/lib/procurement-status";
 import {
   sourcingNeedByDate,
   sourcingRequestQuantity,
@@ -41,16 +53,15 @@ export type PendingSourcingQueueItem = {
   status: "Clarification needed" | "Researching" | "Research unavailable";
 };
 
-export type ExternalWorkflowSummary = {
-  configured: boolean;
-  triggerConfigured: boolean;
-  materialCount: number;
-  latestRun: {
-    id: string;
-    status: "QUEUED" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "FAILED";
-    error: string | null;
-  } | null;
+type Guild2OrderState = {
+  orderId: string | null;
+  status: string;
+  progress: string | null;
+  error: string | null;
+  workflowWakeRequested: boolean | null;
 };
+
+type Guild2BulkState = "idle" | "running" | "complete" | "error";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -68,6 +79,16 @@ function formatNeedBy(item: AtlasInventoryItem) {
 
 function formatResearchDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function procurementStatusLabel(status: string) {
+  return PROCUREMENT_STATUS_LABELS[status] ?? status.replaceAll("_", " ");
+}
+
+async function responseJson<T>(response: Response): Promise<T> {
+  const payload = await response.json().catch(() => null) as ({ error?: string } & T) | null;
+  if (!response.ok) throw new Error(payload?.error ?? "The procurement request failed.");
+  return payload as T;
 }
 
 export function AtlasInventoryWorkspace({
@@ -88,10 +109,6 @@ export function AtlasInventoryWorkspace({
   researchCampaignState,
   researchCampaignError,
   onRetryResearchCampaign,
-  externalWorkflow,
-  externalWorkflowState,
-  externalWorkflowError,
-  onStartExternalWorkflow,
   researchWorkspaceReady = true,
   dataState,
   hasMore,
@@ -123,10 +140,6 @@ export function AtlasInventoryWorkspace({
   researchCampaignState?: "idle" | "running" | "complete" | "error";
   researchCampaignError?: string | null;
   onRetryResearchCampaign?: () => void;
-  externalWorkflow?: ExternalWorkflowSummary | null;
-  externalWorkflowState?: "idle" | "loading" | "starting" | "ready" | "error";
-  externalWorkflowError?: string | null;
-  onStartExternalWorkflow?: () => void;
   researchWorkspaceReady?: boolean;
   dataState: "loading" | "ready" | "error";
   hasMore: boolean;
@@ -142,7 +155,115 @@ export function AtlasInventoryWorkspace({
   companyName?: string;
 }) {
   const [query, setQuery] = useState("");
+  const [guild2Orders, setGuild2Orders] = useState<Record<string, Guild2OrderState>>({});
+  const [guild2BulkState, setGuild2BulkState] = useState<Guild2BulkState>("idle");
+  const [guild2BulkProgress, setGuild2BulkProgress] = useState({ completed: 0, failed: 0 });
   const reduceMotion = useReducedMotion();
+  const guild2ItemSkus = useMemo(() => new Set(items.map((item) => item.sku)), [items]);
+  const guild2InventoryReady = GUILD2_PROCUREMENT_PLAN.ready
+    && GUILD2_PROCUREMENT_PLAN.all.every((line) => guild2ItemSkus.has(line.sourceSku));
+  const guild2Mode = GUILD2_PROCUREMENT_PLAN.all.some((line) => guild2ItemSkus.has(line.sourceSku));
+
+  const sourceGuild2Line = useCallback(async (line: Guild2ProcurementLine) => {
+    if (line.classification !== "SUPPLIER_SEARCH") return false;
+    setGuild2Orders((current) => ({
+      ...current,
+      [line.sourceSku]: {
+        orderId: current[line.sourceSku]?.orderId ?? null,
+        status: "submitting",
+        progress: "Creating request",
+        error: null,
+        workflowWakeRequested: current[line.sourceSku]?.workflowWakeRequested ?? null,
+      },
+    }));
+    try {
+      const response = await fetch("/api/procurement/requests", {
+        method: "POST",
+        cache: "no-store",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify(guild2ProcurementRequest(line)),
+      });
+      const created = response.status === 201;
+      const result = await responseJson<{ orderId: string; status: string; workflowWakeRequested: boolean }>(response);
+      setGuild2Orders((current) => ({
+        ...current,
+        [line.sourceSku]: {
+          orderId: result.orderId,
+          status: result.status,
+          progress: "Order received from dashboard",
+          error: null,
+          workflowWakeRequested: created
+            ? result.workflowWakeRequested
+            : current[line.sourceSku]?.workflowWakeRequested ?? null,
+        },
+      }));
+      return true;
+    } catch (error) {
+      setGuild2Orders((current) => ({
+        ...current,
+        [line.sourceSku]: {
+          orderId: current[line.sourceSku]?.orderId ?? null,
+          status: "error",
+          progress: null,
+          error: error instanceof Error ? error.message : "The procurement request failed.",
+          workflowWakeRequested: current[line.sourceSku]?.workflowWakeRequested ?? null,
+        },
+      }));
+      return false;
+    }
+  }, []);
+
+  const sourceAllGuild2Lines = useCallback(async () => {
+    if (!guild2InventoryReady || guild2BulkState === "running") return;
+    setGuild2BulkState("running");
+    setGuild2BulkProgress({ completed: 0, failed: 0 });
+    let completed = 0;
+    let failed = 0;
+    await runWithBoundedConcurrency(GUILD2_PROCUREMENT_PLAN.searchable, async (line) => {
+      const created = await sourceGuild2Line(line);
+      if (created) completed += 1;
+      else failed += 1;
+      setGuild2BulkProgress({ completed, failed });
+    });
+    setGuild2BulkState(failed ? "error" : "complete");
+  }, [guild2BulkState, guild2InventoryReady, sourceGuild2Line]);
+
+  useEffect(() => {
+    const active = Object.entries(guild2Orders).filter(([, order]) => (
+      Boolean(order.orderId) && PROCUREMENT_ACTIVE_STATUSES.has(order.status)
+    ));
+    if (!active.length) return;
+    const timer = window.setTimeout(() => {
+      void Promise.all(active.map(async ([sourceSku, order]) => {
+        try {
+          const response = await fetch(`/api/procurement/requests/${encodeURIComponent(order.orderId!)}`, {
+            cache: "no-store",
+            headers: { accept: "application/json" },
+          });
+          const detail = await responseJson<{ id: string; status: string; progress: string | null }>(response);
+          setGuild2Orders((current) => ({
+            ...current,
+            [sourceSku]: {
+              orderId: detail.id,
+              status: detail.status,
+              progress: detail.progress,
+              error: null,
+              workflowWakeRequested: current[sourceSku]?.workflowWakeRequested ?? null,
+            },
+          }));
+        } catch (error) {
+          setGuild2Orders((current) => ({
+            ...current,
+            [sourceSku]: {
+              ...current[sourceSku],
+              error: error instanceof Error ? error.message : "Status refresh failed.",
+            },
+          }));
+        }
+      }));
+    }, 7_000);
+    return () => window.clearTimeout(timer);
+  }, [guild2Orders]);
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
       campaignId?: string;
@@ -329,40 +450,38 @@ export function AtlasInventoryWorkspace({
           : <span>{dataState === "loading" ? "Loading saved work" : pendingRequests.length ? `${pendingRequests.length} request${pendingRequests.length === 1 ? "" : "s"} need input` : "Office-shared work"}</span>}
       </header>
 
-      {externalWorkflowState && externalWorkflowState !== "idle" ? (
-        <section className={styles.sourcingCampaignSummary} aria-label="GUILD2 workflow status">
+      {guild2Mode ? (
+        <section className={styles.sourcingCampaignSummary} aria-label="GUILD2 procurement status">
           <span>
-            {externalWorkflowState === "error" || externalWorkflow?.latestRun?.status === "FAILED"
+            {guild2BulkState === "error"
               ? <TriangleAlert size={17} />
-              : externalWorkflow?.latestRun?.status === "SUCCEEDED"
+              : guild2BulkState === "complete"
                 ? <CheckCircle2 size={17} />
                 : <LoaderCircle size={17} />}
             <span>
-              <small>New workflow database</small>
-              <strong>{externalWorkflowState === "loading"
-                ? "Loading GUILD2"
-                : `${externalWorkflow?.materialCount ?? 0} materials in GUILD2`}</strong>
+              <small>Bourne procurement queue</small>
+              <strong>{guild2BulkState === "running"
+                ? `${guild2BulkProgress.completed} of 38 requests accepted`
+                : "38 supplier-searchable requests"}</strong>
             </span>
           </span>
           <dl>
-            <div><dt>Database</dt><dd>{externalWorkflow?.configured ? "Connected" : "Missing"}</dd></div>
-            <div><dt>Workflow</dt><dd>{externalWorkflow?.triggerConfigured ? "Connected" : "Needs trigger"}</dd></div>
-            <div><dt>Latest run</dt><dd>{externalWorkflow?.latestRun?.status ?? "Not run"}</dd></div>
+            <div><dt>Classified</dt><dd>{GUILD2_PROCUREMENT_PLAN.all.length}</dd></div>
+            <div><dt>Clarification</dt><dd>GUILD-027</dd></div>
+            <div><dt>Documentation</dt><dd>GUILD-039</dd></div>
           </dl>
-          <p>{externalWorkflowError
-            ?? externalWorkflow?.latestRun?.error
-            ?? (externalWorkflow?.triggerConfigured
-              ? "Run creates a durable record in the new database and dispatches the sourcing workflow."
-              : "Add the web agent trigger before running. The materials are already stored in the new database.")}</p>
-          {onStartExternalWorkflow ? (
-            <button
-              type="button"
-              onClick={onStartExternalWorkflow}
-              disabled={externalWorkflowState === "loading" || externalWorkflowState === "starting" || !externalWorkflow?.triggerConfigured || ["QUEUED", "DISPATCHED", "RUNNING"].includes(externalWorkflow?.latestRun?.status ?? "")}
-            >
-              {externalWorkflowState === "starting" ? "Starting" : "Run workflow"}
-            </button>
-          ) : null}
+          <p>{guild2BulkState === "error"
+            ? `${guild2BulkProgress.failed} request${guild2BulkProgress.failed === 1 ? "" : "s"} failed. Retry is safe because each line has a durable customer-scoped key.`
+            : guild2InventoryReady
+              ? "Creates one order per searchable line. GUILD-027 is skipped and GUILD-039 remains an award documentation requirement."
+              : "Bulk sourcing stays disabled until all 40 lines have the required classification."}</p>
+          <button
+            type="button"
+            onClick={() => void sourceAllGuild2Lines()}
+            disabled={!guild2InventoryReady || guild2BulkState === "running"}
+          >
+            {guild2BulkState === "running" ? "Creating requests" : guild2BulkState === "error" ? "Retry failed requests" : "Source 38 lines"}
+          </button>
         </section>
       ) : null}
 
@@ -507,6 +626,8 @@ export function AtlasInventoryWorkspace({
               );
             })}
             {sourcingItems.map((item) => {
+              const guild2Line = guild2ProcurementLine(item.sku);
+              const guild2Order = guild2Orders[item.sku];
               const campaignItem = campaignItems.get(item.sku);
               const run = campaignItem?.aggregateRun ?? latestRuns.get(item.sku);
               const runCases = run ? casesByRunId.get(run.id) ?? [] : [];
@@ -525,7 +646,23 @@ export function AtlasInventoryWorkspace({
                 </td>
                 <td>{item.requirementLabel ?? (requestedQuantity === null ? "Quantity unknown" : `${requestedQuantity.toLocaleString("en-US")} ${item.requestedUnit ?? item.unitOfMeasure ?? "units"}`)}</td>
                 <td>{formatNeedBy(item)}</td>
-                <td>{workstreamSummary(runCases)
+                <td>{guild2Line
+                  ? guild2Line.classification === "CLARIFICATION_REQUIRED"
+                    ? "Clarification required"
+                    : guild2Line.classification === "REQUIREMENT_ONLY"
+                      ? "Documentation requirement"
+                      : guild2Order?.error
+                        ? guild2Order.error
+                        : guild2Order?.orderId
+                          ? guild2Order.workflowWakeRequested === false
+                            ? "Needs trigger: queued for scheduled pickup"
+                            : PROCUREMENT_APPROVAL_STATUSES.has(guild2Order.status)
+                            ? "Approval required in Bourne Inbox"
+                            : `${procurementStatusLabel(guild2Order.status)}${guild2Order.progress ? `: ${guild2Order.progress}` : ""}`
+                          : guild2Order?.status === "submitting"
+                            ? "Creating request"
+                            : "Ready to source"
+                  : workstreamSummary(runCases)
                   ?? (retryUnavailableCampaign
                     ? "Research unavailable"
                     : campaignItem?.leadCount
@@ -537,24 +674,48 @@ export function AtlasInventoryWorkspace({
                           : campaignInProgress
                             ? "Background research"
                             : resultState(run))}</td>
-                <td>
-                  <button
+                <td>{guild2Line && guild2Order?.orderId ? (
+                  <a
                     className={styles.sourcingQueueAction}
-                    type="button"
-                    disabled={!retryUnavailableCampaign && (campaignInProgress || campaignRequirementOnly || !researchWorkspaceReady)}
-                    onClick={() => {
-                      if (retryUnavailableCampaign) {
-                        retryUnavailableCampaign();
-                        return;
-                      }
-                      if (run && run.status !== "FAILED") onOpenSavedResearch(run);
-                      else onStartItemResearch(item);
-                    }}
+                    href={`/dashboard/workflow?orderId=${encodeURIComponent(guild2Order.orderId)}`}
                   >
-                    {retryUnavailableCampaign ? "Retry research" : campaignRequirementOnly ? "Applied to awards" : !researchWorkspaceReady ? "Preparing workspace" : campaignInProgress ? "Campaign running" : queueActionLabel(run, runCases)}
+                    View request
                     <ArrowRight size={13} />
-                  </button>
-                </td>
+                  </a>
+                ) : (
+                  <button
+                      className={styles.sourcingQueueAction}
+                      type="button"
+                      disabled={guild2Line
+                        ? guild2Line.classification !== "SUPPLIER_SEARCH" || guild2Order?.status === "submitting"
+                        : !retryUnavailableCampaign && (campaignInProgress || campaignRequirementOnly || !researchWorkspaceReady)}
+                      onClick={() => {
+                        if (guild2Line) {
+                          void sourceGuild2Line(guild2Line);
+                          return;
+                        }
+                        if (retryUnavailableCampaign) {
+                          retryUnavailableCampaign();
+                          return;
+                        }
+                        if (run && run.status !== "FAILED") onOpenSavedResearch(run);
+                        else onStartItemResearch(item);
+                      }}
+                    >
+                      {guild2Line
+                        ? guild2Line.classification === "CLARIFICATION_REQUIRED"
+                          ? "Needs clarification"
+                          : guild2Line.classification === "REQUIREMENT_ONLY"
+                            ? "Applied to awards"
+                            : guild2Order?.status === "submitting"
+                              ? "Creating request"
+                              : guild2Order?.error
+                                ? "Retry source"
+                                : "Source"
+                        : retryUnavailableCampaign ? "Retry research" : campaignRequirementOnly ? "Applied to awards" : !researchWorkspaceReady ? "Preparing workspace" : campaignInProgress ? "Campaign running" : queueActionLabel(run, runCases)}
+                      <ArrowRight size={13} />
+                    </button>
+                )}</td>
               </tr>
               );
             })}

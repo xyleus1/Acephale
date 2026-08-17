@@ -1,0 +1,319 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { procurementRequestSchema } from "../src/lib/procurement-contract";
+import {
+  createProcurementRequest,
+  createProcurementRequestInDatabase,
+  ProcurementDatabase,
+  procurementCustomerIdFromServerMetadata,
+  ProcurementWorkflowError,
+  requestBourneWorkflowWake,
+  submitProcurementRequest,
+} from "../src/lib/procurement-workflow";
+
+const customerA = "11111111-1111-4111-8111-111111111111";
+const customerB = "22222222-2222-4222-8222-222222222222";
+
+assert.equal(
+  procurementCustomerIdFromServerMetadata("office-a", JSON.stringify({ "office-a": customerA })),
+  customerA,
+);
+assert.throws(
+  () => procurementCustomerIdFromServerMetadata("office-b", JSON.stringify({ "office-a": customerA })),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "configuration",
+);
+assert.throws(
+  () => procurementCustomerIdFromServerMetadata("office-a", JSON.stringify({ "office-a": "not-a-uuid" })),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "configuration",
+);
+assert.throws(
+  () => procurementCustomerIdFromServerMetadata("office-a", ""),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "configuration",
+);
+assert.throws(
+  () => procurementCustomerIdFromServerMetadata("office-a", "{"),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "configuration",
+);
+assert.throws(
+  () => procurementCustomerIdFromServerMetadata("office-a", "[]"),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "configuration",
+);
+
+type State = {
+  customers: Set<string>;
+  boms: Map<string, { customerId: string }>;
+  orders: Map<string, { customerId: string; status: string }>;
+  idempotency: Map<string, { requestHash: string; orderId: string | null }>;
+  sequence: number;
+};
+
+function copyState(state: State): State {
+  return {
+    customers: new Set(state.customers),
+    boms: new Map(state.boms),
+    orders: new Map(state.orders),
+    idempotency: new Map(state.idempotency),
+    sequence: state.sequence,
+  };
+}
+
+class FakeProcurementDatabase implements ProcurementDatabase {
+  state: State = {
+    customers: new Set([customerA, customerB]),
+    boms: new Map(),
+    orders: new Map(),
+    idempotency: new Map(),
+    sequence: 0,
+  };
+  readonly events: string[];
+
+  constructor(events: string[] = []) {
+    this.events = events;
+  }
+
+  private key(customerId: unknown, idempotencyKey: unknown) {
+    return `${String(customerId)}:${String(idempotencyKey)}`;
+  }
+
+  async $transaction<T>(operation: (transaction: ProcurementDatabase) => Promise<T>): Promise<T> {
+    this.events.push("transaction:begin");
+    const transaction = new FakeProcurementDatabase(this.events);
+    transaction.state = copyState(this.state);
+    try {
+      const result = await operation(transaction);
+      this.state = transaction.state;
+      this.events.push("transaction:commit");
+      return result;
+    } catch (error) {
+      this.events.push("transaction:rollback");
+      throw error;
+    }
+  }
+
+  async $queryRawUnsafe<T>(query: string, ...values: unknown[]): Promise<T> {
+    const sql = query.replace(/\s+/g, " ").trim();
+
+    if (sql.startsWith("SELECT id::text AS id FROM customers")) {
+      return (this.state.customers.has(String(values[0])) ? [{ id: String(values[0]) }] : []) as T;
+    }
+
+    if (sql.startsWith("INSERT INTO procurement_api_idempotency")) {
+      const key = this.key(values[0], values[1]);
+      if (this.state.idempotency.has(key)) return [] as T;
+      const row = { requestHash: String(values[2]), orderId: null };
+      this.state.idempotency.set(key, row);
+      return [{ requestHash: row.requestHash, orderId: null }] as T;
+    }
+
+    if (sql.includes("FROM procurement_api_idempotency")) {
+      const row = this.state.idempotency.get(this.key(values[0], values[1]));
+      return (row ? [{ requestHash: row.requestHash, orderId: row.orderId }] : []) as T;
+    }
+
+    if (sql.includes('SELECT id::text AS "orderId", status FROM orders')) {
+      const order = this.state.orders.get(String(values[0]));
+      return (order && order.customerId === values[1]
+        ? [{ orderId: String(values[0]), status: order.status }]
+        : []) as T;
+    }
+
+    if (sql.startsWith("SELECT id::text AS id FROM bill_of_materials")) {
+      const bom = this.state.boms.get(String(values[0]));
+      return (bom && bom.customerId === values[1] ? [{ id: String(values[0]) }] : []) as T;
+    }
+
+    if (sql.startsWith("INSERT INTO bill_of_materials")) {
+      const id = `aaaaaaaa-aaaa-4aaa-8aaa-${String(++this.state.sequence).padStart(12, "0")}`;
+      this.state.boms.set(id, { customerId: String(values[0]) });
+      return [{ id }] as T;
+    }
+
+    if (sql.startsWith("INSERT INTO orders")) {
+      const id = `bbbbbbbb-bbbb-4bbb-8bbb-${String(++this.state.sequence).padStart(12, "0")}`;
+      this.state.orders.set(id, { customerId: String(values[0]), status: "new" });
+      assert.equal(values[7], undefined, "Status must be fixed in SQL, not supplied by browser input.");
+      assert(sql.includes("'new'"));
+      assert(sql.includes("'Order received from dashboard'"));
+      return [{ orderId: id, status: "new" }] as T;
+    }
+
+    throw new Error(`Unexpected query in fake database: ${sql}`);
+  }
+
+  async $executeRawUnsafe(query: string, ...values: unknown[]) {
+    const sql = query.replace(/\s+/g, " ").trim();
+    assert(sql.startsWith("UPDATE procurement_api_idempotency"));
+    const key = this.key(values[0], values[1]);
+    const row = this.state.idempotency.get(key);
+    if (!row || row.requestHash !== values[3]) return 0;
+    row.orderId = String(values[2]);
+    return 1;
+  }
+}
+
+async function main() {
+  const validInput = procurementRequestSchema.parse({
+    bomId: null,
+    material: "6061-T651 aluminum plate",
+    specification: "6.35 mm nominal, precision-sawn blanks",
+    lineItemPreferences: { schema_version: 1 },
+    quantity: 10,
+    unit: "blanks",
+    neededBy: "2026-09-30",
+    notes: "Internal equipment-deck plate stock",
+    requestContext: { schema_version: 1, logistics: { destination: null } },
+    idempotencyKey: "tenant-123-request-456",
+  });
+
+const priorWorkflowDatabaseUrl = process.env.WORKFLOW_DATABASE_URL;
+try {
+  const invalidDatabaseUrls = [
+    undefined,
+    "not-a-url",
+    "https://dashboard_api@example.test/neondb?sslmode=require",
+    "postgresql://owner@example.test/neondb?sslmode=require",
+    "postgresql://dashboard_api@example.test/neondb",
+  ];
+  for (const databaseUrl of invalidDatabaseUrls) {
+    if (databaseUrl === undefined) delete process.env.WORKFLOW_DATABASE_URL;
+    else process.env.WORKFLOW_DATABASE_URL = databaseUrl;
+    await assert.rejects(
+      createProcurementRequest(customerA, validInput),
+      (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "configuration",
+    );
+  }
+} finally {
+  if (priorWorkflowDatabaseUrl === undefined) delete process.env.WORKFLOW_DATABASE_URL;
+  else process.env.WORKFLOW_DATABASE_URL = priorWorkflowDatabaseUrl;
+}
+
+assert(!procurementRequestSchema.safeParse({ ...validInput, quantity: 0 }).success);
+assert(!procurementRequestSchema.safeParse({ ...validInput, unit: "" }).success);
+assert(!procurementRequestSchema.safeParse({ ...validInput, neededBy: "2026-02-30" }).success);
+assert(!procurementRequestSchema.safeParse({ ...validInput, requestContext: [] }).success);
+assert(!procurementRequestSchema.safeParse({ ...validInput, status: "ordered" }).success);
+assert(!procurementRequestSchema.safeParse({ ...validInput, customer_id: customerB }).success);
+assert(!procurementRequestSchema.safeParse({ ...validInput, bomId: null, material: "" }).success);
+
+const missingCustomerDatabase = new FakeProcurementDatabase();
+missingCustomerDatabase.state.customers.delete(customerA);
+await assert.rejects(
+  createProcurementRequestInDatabase(missingCustomerDatabase, customerA, validInput),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "configuration",
+);
+assert.equal(missingCustomerDatabase.state.orders.size, 0);
+
+const database = new FakeProcurementDatabase();
+const first = await createProcurementRequestInDatabase(database, customerA, validInput);
+assert.equal(first.status, "new");
+assert.equal(first.created, true);
+assert.equal(database.state.orders.size, 1);
+
+const duplicate = await createProcurementRequestInDatabase(database, customerA, validInput);
+assert.equal(duplicate.orderId, first.orderId);
+assert.equal(duplicate.created, false);
+assert.equal(database.state.orders.size, 1, "A duplicate key must not create a second order.");
+
+await assert.rejects(
+  createProcurementRequestInDatabase(database, customerA, { ...validInput, quantity: 11 }),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "conflict",
+);
+
+const foreignBom = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+database.state.boms.set(foreignBom, { customerId: customerB });
+await assert.rejects(
+  createProcurementRequestInDatabase(database, customerA, {
+    ...validInput,
+    bomId: foreignBom,
+    material: undefined,
+    idempotencyKey: "foreign-bom-attempt",
+  }),
+  (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "not_found",
+);
+assert(!database.state.idempotency.has(`${customerA}:foreign-bom-attempt`), "A failed transaction must release its idempotency claim.");
+
+const priorWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
+const webhookDatabase = new FakeProcurementDatabase();
+const successFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+  webhookDatabase.events.push("webhook");
+  const payload = JSON.parse(String(init?.body));
+  assert.equal(payload.event, "procurement.request.created");
+  assert.equal(payload.customerId, customerA);
+  return new Response(null, { status: 204 });
+}) as typeof fetch;
+const submitted = await submitProcurementRequest(customerA, {
+  ...validInput,
+  idempotencyKey: "webhook-order",
+}, { database: webhookDatabase, fetchImplementation: successFetch });
+assert.equal(submitted.workflowWakeRequested, true);
+assert(webhookDatabase.events.indexOf("transaction:commit") < webhookDatabase.events.indexOf("webhook"));
+
+const failureDatabase = new FakeProcurementDatabase();
+const priorWarn = console.warn;
+console.warn = () => undefined;
+try {
+  const failingFetch = (async () => {
+    failureDatabase.events.push("webhook");
+    throw new Error("network failure");
+  }) as typeof fetch;
+  const result = await submitProcurementRequest(customerA, {
+    ...validInput,
+    idempotencyKey: "failed-webhook-order",
+  }, { database: failureDatabase, fetchImplementation: failingFetch });
+  assert.equal(result.status, "new");
+  assert.equal(result.workflowWakeRequested, true);
+  assert.equal(failureDatabase.state.orders.size, 1, "Webhook failure must not roll back the committed order.");
+
+  process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "http://insecure.example.test/workflow";
+  let insecureFetchCalled = false;
+  const insecureRequested = await requestBourneWorkflowWake(
+    { orderId: result.orderId, customerId: customerA },
+    (async () => {
+      insecureFetchCalled = true;
+      return new Response(null, { status: 204 });
+    }) as typeof fetch,
+  );
+  assert.equal(insecureRequested, false);
+  assert.equal(insecureFetchCalled, false);
+} finally {
+  console.warn = priorWarn;
+  if (priorWebhookUrl === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+  else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorWebhookUrl;
+}
+
+const routeSource = await readFile("src/app/api/procurement/requests/route.ts", "utf8");
+const detailRouteSource = await readFile("src/app/api/procurement/requests/[orderId]/route.ts", "utf8");
+const handlerSource = await readFile("src/lib/procurement-route-handlers.ts", "utf8");
+const workflowSource = await readFile("src/lib/procurement-workflow.ts", "utf8");
+const clientSource = await readFile("src/app/dashboard/workflow/procurement-workflow.tsx", "utf8");
+const provisioningSql = await readFile("scripts/sql/procurement-dashboard-api.sql", "utf8");
+
+assert(handlerSource.includes("if (!session)"), "Procurement handlers must reject unauthenticated requests.");
+assert(routeSource.includes("handleProcurementPost"), "POST must use the authenticated procurement handler.");
+assert(detailRouteSource.includes("handleProcurementDetail"), "Detail must use the authenticated procurement handler.");
+assert(workflowSource.includes("AND orders.customer_id = $2::uuid"), "Order detail reads must scope by customer.");
+assert(workflowSource.includes("AND customer_id = $2::uuid"), "BOM reads must scope by customer.");
+assert(workflowSource.includes("AbortSignal.timeout(3_000)"), "The webhook must use a short timeout.");
+assert(handlerSource.includes("request.body.getReader()"), "The API must enforce its request limit against streamed bytes.");
+assert(clientSource.includes("Evidence"), "Supplier evidence must be visible in the request detail table.");
+assert(clientSource.includes("slice(0, 180)"), "Supplier evidence text must be bounded before rendering.");
+assert(!clientSource.includes("WORKFLOW_DATABASE_URL"));
+assert(!clientSource.includes("BOURNE_WORKFLOW_WEBHOOK_URL"));
+assert(!clientSource.includes("lease_owner"));
+assert(!clientSource.includes("gmail"));
+assert(!clientSource.includes("customer_id"));
+assert(provisioningSql.includes("NOBYPASSRLS"));
+assert(provisioningSql.includes("GRANT SELECT (id) ON customers TO dashboard_api"));
+assert(provisioningSql.includes("GRANT UPDATE (order_id, updated_at) ON procurement_api_idempotency"));
+assert(!/GRANT\s+UPDATE(?:\s*\([^)]*\))?\s+ON\s+orders\b/i.test(provisioningSql));
+assert(!/GRANT\s+(?:[^;]*,\s*)?UPDATE(?:\s*\([^)]*\))?\s+ON\s+order_vendors\b/i.test(provisioningSql));
+assert(!/GRANT\s+INSERT(?:\s*\([^)]*\))?\s+ON\s+order_vendors\b/i.test(provisioningSql));
+
+console.log("Procurement workflow contract passed.");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

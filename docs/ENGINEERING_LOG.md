@@ -25,6 +25,55 @@ Use this file for chronological implementation notes that future agents should s
 - Safety: Tenant scope stays on every company, workspace, membership, evidence, and media operation. Research failure does not roll back the canonical customer record.
 - Verification: company-create, company-navigation, company-research, product-copy, TypeScript, production build, whitespace, and changed-file U+2014 checks.
 - Boundary: GUILD public positioning comes from its official website. Suppliers, BOM, inventory, demand, facilities, rates, customs treatment, and approvals remain unconfirmed until customer data is connected.
+### 2026-08-17 - Add the dashboard to Bourne procurement boundary
+
+- Branch: `feat/bourne-neon-dashboard-clean`, based on the locally cached
+  `origin/main` commit `fdbf485`
+- Commit: see git log
+- Task: Add authenticated procurement creation, customer-scoped idempotency,
+  read-only status and supplier polling, and an optional post-commit Bourne wake
+  signal.
+- Files changed: procurement API routes and server library, workflow dashboard,
+  request and status contracts, restricted-role Neon provisioning SQL,
+  database fixtures and tests, environment examples, and integration docs.
+- Verification: procurement contract, TypeScript, product-copy policy,
+  deployment-boundary contract, and production build passed with placeholder
+  server-only configuration.
+- Failed/skipped checks: Local PostgreSQL could not initialize because the host
+  had exhausted its System V shared-memory IDs. The database-backed role and
+  tenant suite remains required against provisioned test databases. Network
+  resolution also prevented refreshing the GitHub remote beyond the locally
+  cached `origin/main` commit. Full-repository lint remains red on inherited
+  files; the task-scoped files have no lint findings. The packaged-server smoke
+  test could not bind `127.0.0.1:3107` because this sandbox returned
+  `listen EPERM` before startup.
+- Caveats: No Derya Prisma migration was added. Production Neon was not
+  provisioned, no deployment secrets were changed, no webhook was created, and
+  Bourne remains unactivated by this change.
+- Follow-up: Provision temporary Derya and workflow databases, run
+  `npm run test:procurement-workflow-db`, then apply the reviewed Neon SQL and
+  activate Bourne only after explicit production approval.
+
+### 2026-08-17 - Route GUILD2 through the reviewed procurement boundary
+
+- Branch: `feat/bourne-neon-dashboard-clean`, rebased onto verified
+  `origin/main` commit `cffef825`.
+- Task: Replace the conflicting GUILD2 runtime-schema bridge with row-level and
+  bounded bulk procurement order creation through the authenticated API.
+- Behavior: The plan validates 40 lines, blocks GUILD-027, keeps GUILD-039 as
+  documentation, and creates the 38 searchable orders with deterministic keys
+  and concurrency three. Active order detail polls every seven seconds.
+- Safety: Browser input cannot choose a customer or workflow-owned fields. A
+  webhook runs only for a newly committed order, and duplicate retries do not
+  issue another wake.
+- Verification: GUILD2 boundary, procurement contract, Atlas sourcing, and
+  TypeScript checks passed. A disposable PostgreSQL CI job now provisions
+  separate app and workflow databases and exercises tenant isolation,
+  privileges, idempotency, webhook failure, and authenticated route handlers.
+- Failed/skipped checks: Local PostgreSQL `initdb` still fails because this host
+  has exhausted System V shared-memory IDs. The new database CI job has not run
+  until the branch is pushed. No production provisioning or deployment was
+  attempted.
 
 ### 2026-08-10 - Add controlled connected-Gmail supplier quote release
 
@@ -5376,3 +5425,25 @@ Use this file for chronological implementation notes that future agents should s
 - Kept authentication on the primary database because replacing it without a
   migrated user/session model would lock users out.
 
+### 2026-08-17 - Harden procurement commissioning boundaries
+
+- Branch: `feat/bourne-neon-dashboard-clean`, targeting `main`.
+- Task: Close the pre-preview security and demo gaps in the dashboard to Neon
+  to Bourne workflow.
+- Behavior: GUILD2 Source requests carry `[BOURNE TEST]`, missing wake
+  configuration is visible without revealing secrets, supplier evidence is
+  rendered as bounded text, and request polling remains seven seconds while
+  active.
+- Safety: POST bodies are limited by streamed byte count, GitHub Actions are
+  SHA-pinned with read-only contents permission and no persisted credentials,
+  and the database suite covers concurrent idempotency plus destructive grant
+  denial.
+- Verification: GUILD2, procurement, Atlas sourcing, product-copy, deployment
+  boundary, TypeScript, optimized Next.js build, and diff hygiene passed.
+- Failed/skipped checks: The database-backed test requires its disposable CI
+  PostgreSQL services and was not run against production or a local substitute.
+- Caveats: Production Neon, deployment secrets, the Bourne webhook, and Bourne
+  activation remain untouched until CI and preview commissioning pass.
+- Follow-up: Push the branch, require the procurement security workflow, deploy
+  a preview, then provision and test temporary infrastructure before any
+  production change.

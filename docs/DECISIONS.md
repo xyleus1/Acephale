@@ -16,9 +16,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
-### 2026-08-16 - GUILD2 sourcing uses the workflow database and an explicit trigger
+### 2026-08-17 - GUILD2 uses the authenticated procurement API
 
 - Status: accepted
+- Owner: product and engineering
+- Context: The GUILD2 screen briefly had a second workflow bridge that created
+  runtime `derya` tables and called a separate trigger. That bypassed the
+  reviewed customer-scoped order contract and duplicated credentials.
+- Decision: Every row-level Source action uses
+  `/api/procurement/requests`. The fixed plan must classify all 40 lines before
+  bulk sourcing is enabled. It skips GUILD-027, treats GUILD-039 as
+  documentation, and creates only the 38 supplier-searchable orders with a
+  concurrency limit of three.
+- Idempotency and trigger boundary: Each line uses a deterministic versioned
+  key scoped by the authenticated Neon customer. Only a newly committed order
+  receives one bounded webhook attempt. A duplicate returns the existing order
+  and does not wake Bourne again. The schedule remains recovery.
+- Read boundary: Active orders poll the customer-scoped detail endpoint every
+  seven seconds. Approval states are read-only and direct operators to Bourne
+  Inbox.
+- Consequences: Runtime schema creation and `WORKFLOW_AGENT_TRIGGER_*` are
+  removed. The only workflow database credential is the `dashboard_api` URL,
+  and the only optional wake credential is `BOURNE_WORKFLOW_WEBHOOK_URL`.
+- Revisit when: A server-side bulk endpoint can provide a stronger atomic batch
+  receipt without weakening per-order idempotency or tenant isolation.
+
+### 2026-08-16 - GUILD2 sourcing uses the workflow database and an explicit trigger
+
+- Status: superseded by the 2026-08-17 authenticated procurement API decision
 - Owner: product and engineering
 - Context: The GUILD sourcing screen previously read and ran its fixed campaign
   through the primary Derya database. The replacement workflow owns a separate
@@ -218,6 +243,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
   appropriate market-data rights; public web research is not a substitute.
 - Revisit when: Supplier identity resolution needs cross-workspace sharing, or
   licensed exchange feeds require entitlement-aware distribution controls.
+### 2026-08-17 - Map Derya Offices to Neon customers through server-only metadata
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The authenticated Derya user and Office live in the application
+  database, while Bourne's procurement records live in a separate Neon
+  database. The current Neon `customers` table has no external auth key.
+- Decision: Keep Derya authentication on `DATABASE_URL`. Resolve the active
+  Office from the authenticated session and map that Office ID to a Neon
+  customer UUID through `PROCUREMENT_CUSTOMER_MAP_JSON`, which is server-only
+  deployment metadata. Use a separate SSL-only `WORKFLOW_DATABASE_URL` whose
+  username is exactly `dashboard_api`.
+- Idempotency: Provision `procurement_api_idempotency` in the Bourne Neon
+  database. Claim the Office-derived customer and idempotency key in the same
+  transaction that inserts the order. Do not split the claim across the Derya
+  and Neon databases.
+- Approval boundary: The dashboard reads Bourne state and supplier results but
+  cannot approve, change workflow state, update leases, or mutate supplier
+  research and quotes. Approval remains in Bourne Inbox.
+- Consequences: No Derya Prisma migration is needed for this MVP. Neon requires
+  explicit role and idempotency provisioning before traffic is enabled. A
+  future external tenant key can replace the environment mapping when the Neon
+  contract supports it.
 
 ### 2026-08-11 - Connected quote PDFs are bounded evidence sources
 

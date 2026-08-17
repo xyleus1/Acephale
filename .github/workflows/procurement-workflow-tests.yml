@@ -1,0 +1,65 @@
+name: Procurement workflow security
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/procurement-workflow-tests.yml"
+      - "src/app/api/procurement/**"
+      - "src/app/dashboard/supply-os/**"
+      - "src/app/dashboard/workflow/**"
+      - "src/lib/procurement-**"
+      - "src/lib/supply-os/guild**"
+      - "scripts/procurement-workflow-database.test.ts"
+      - "scripts/sql/procurement-**"
+      - "scripts/workflow-dashboard.test.ts"
+      - "scripts/workflow-guild2.test.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  database-security:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_app?schema=public
+      WORKFLOW_DATABASE_OWNER_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_workflow
+      WORKFLOW_DATABASE_URL: postgresql://dashboard_api:dashboard_test_password@workflow.invalid/neondb?sslmode=require
+      WORKFLOW_DATABASE_TEST_URL: postgresql://dashboard_api:dashboard_test_password@127.0.0.1:5432/derya_procurement_workflow?schema=public
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Provision disposable databases
+        run: |
+          createdb -h 127.0.0.1 -U postgres derya_procurement_app
+          createdb -h 127.0.0.1 -U postgres derya_procurement_workflow
+          npx prisma db push --skip-generate
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --file=scripts/sql/procurement-workflow-test-schema.sql
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=dashboard_api_password=dashboard_test_password --file=scripts/sql/procurement-dashboard-api.sql
+      - name: Run procurement security contracts
+        run: |
+          npm run test:procurement-workflow
+          npm run test:workflow-guild2
+          npm run test:procurement-workflow-db

@@ -69,7 +69,6 @@ import { SupplyOsAutomations } from "./supply-os-automations";
 import {
   AtlasInventoryWorkspace,
   AtlasSourcingInspector,
-  type ExternalWorkflowSummary,
   type PendingSourcingQueueItem,
 } from "./supply-os-inventory-sourcing";
 import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
@@ -768,10 +767,6 @@ function CaseCommandCenter({
   const [supplierResearchCampaign, setSupplierResearchCampaign] = useState<SupplierResearchCampaign | null>(null);
   const [supplierResearchCampaignState, setSupplierResearchCampaignState] = useState<"idle" | "running" | "complete" | "error">("idle");
   const [supplierResearchCampaignError, setSupplierResearchCampaignError] = useState<string | null>(null);
-  const [externalWorkflow, setExternalWorkflow] = useState<ExternalWorkflowSummary | null>(null);
-  const [externalWorkflowState, setExternalWorkflowState] = useState<"idle" | "loading" | "starting" | "ready" | "error">("idle");
-  const [externalWorkflowError, setExternalWorkflowError] = useState<string | null>(null);
-  const [externalWorkflowRevision, setExternalWorkflowRevision] = useState(0);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
@@ -1003,61 +998,6 @@ function CaseCommandCenter({
     setSupplierResearchCampaignState("idle");
     setSupplierResearchCampaignError(null);
   }, [demoCompanyId]);
-
-  useEffect(() => {
-    if (demoCompanyId !== "guild" || activePanel !== "materials") {
-      setExternalWorkflow(null);
-      setExternalWorkflowState("idle");
-      setExternalWorkflowError(null);
-      return;
-    }
-    const controller = new AbortController();
-    setExternalWorkflowState("loading");
-    setExternalWorkflowError(null);
-    void fetch("/api/supply-os/external-sourcing/guild2", {
-      method: "POST",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: { accept: "application/json", "content-type": "application/json" },
-      body: JSON.stringify({ action: "ensure" }),
-    }).then(async (response) => {
-      const payload = await response.json().catch(() => ({})) as ExternalWorkflowSummary & { error?: string };
-      if (!response.ok) throw new Error(payload.error || "GUILD2 is unavailable.");
-      setExternalWorkflow(payload);
-      setExternalWorkflowState("ready");
-    }).catch((error: unknown) => {
-      if (controller.signal.aborted) return;
-      setExternalWorkflowState("error");
-      setExternalWorkflowError(error instanceof Error ? error.message : "GUILD2 is unavailable.");
-    });
-    return () => controller.abort();
-  }, [activePanel, demoCompanyId, externalWorkflowRevision]);
-
-  useEffect(() => {
-    if (!["QUEUED", "DISPATCHED", "RUNNING"].includes(externalWorkflow?.latestRun?.status ?? "")) return;
-    const timer = window.setTimeout(() => setExternalWorkflowRevision((revision) => revision + 1), 5_000);
-    return () => window.clearTimeout(timer);
-  }, [externalWorkflow?.latestRun?.status, externalWorkflowRevision]);
-
-  async function startExternalWorkflow() {
-    if (externalWorkflowState === "starting") return;
-    setExternalWorkflowState("starting");
-    setExternalWorkflowError(null);
-    try {
-      const response = await fetch("/api/supply-os/external-sourcing/guild2", {
-        method: "POST",
-        cache: "no-store",
-        headers: { accept: "application/json", "content-type": "application/json" },
-        body: JSON.stringify({ action: "run" }),
-      });
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "The workflow could not be started.");
-      setExternalWorkflowRevision((revision) => revision + 1);
-    } catch (error) {
-      setExternalWorkflowState("error");
-      setExternalWorkflowError(error instanceof Error ? error.message : "The workflow could not be started.");
-    }
-  }
 
   useEffect(() => {
     if (demoCompanyId !== "guild" || !sourcingWorkspaceId || !campaignAggregateRunIdsKey) return;
@@ -1376,10 +1316,6 @@ function CaseCommandCenter({
             researchCampaign={demoCompanyId === "guild" ? supplierResearchCampaign : null}
             researchCampaignState={demoCompanyId === "guild" ? supplierResearchCampaignState : "idle"}
             researchCampaignError={demoCompanyId === "guild" ? supplierResearchCampaignError : null}
-            externalWorkflow={demoCompanyId === "guild" ? externalWorkflow : null}
-            externalWorkflowState={demoCompanyId === "guild" ? externalWorkflowState : "idle"}
-            externalWorkflowError={demoCompanyId === "guild" ? externalWorkflowError : null}
-            onStartExternalWorkflow={demoCompanyId === "guild" ? startExternalWorkflow : undefined}
             researchWorkspaceReady={demoCompanyId !== "guild" || Boolean(sourcingWorkspaceId)}
             dataState={sourcingDataState}
             hasMore={Boolean(sourcingNextCursor)}

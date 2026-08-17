@@ -2,29 +2,54 @@
 
 ## Latest Update
 
-### GUILD2 now has a separate workflow-database boundary
+### GUILD2 now creates customer-scoped Bourne procurement orders
 
-- The GUILD sourcing surface is labeled GUILD2 and uses the same 40 material
-  definitions with `GUILD2-001` through `GUILD2-040` identifiers.
-- Opening its materials page idempotently creates `derya.customers`,
-  `derya.materials`, and `derya.sourcing_runs` in `WORKFLOW_DATABASE_URL`,
-  then seeds the tenant-scoped GUILD2 customer and material rows.
-- The previous automatic GUILD campaign no longer starts from this page. Run
-  workflow creates one durable active run and dispatches
-  `WORKFLOW_AGENT_TRIGGER_URL`, with an optional bearer token stored in
-  `WORKFLOW_AGENT_TRIGGER_TOKEN`.
-- The Run workflow control stays disabled and states `Needs trigger` until that
-  endpoint is configured. A database connection alone is not represented as a
-  runnable external agent.
-- The existing Derya database remains the authentication source for now. No
-  sourcing campaign is written there from the GUILD2 page.
+- Each searchable GUILD2 row posts to the authenticated
+  `/api/procurement/requests` endpoint. The browser sends request inputs and a
+  deterministic line key only. Customer identity still comes from the active
+  Derya Office mapping on the server.
+- The fixed plan classifies all 40 lines. GUILD-027 remains blocked for missing
+  quantity and unit, GUILD-039 remains an award documentation requirement, and
+  only the other 38 lines can create orders.
+- The bulk control is enabled only when that exact 40-line classification is
+  present. It creates the 38 orders with concurrency capped at three. Retrying
+  uses the same durable keys, returns existing orders, and does not issue a
+  second Bourne wake.
+- Each newly committed order gets at most one bounded post-commit webhook
+  attempt. Failure leaves the order in Neon for the Bourne schedule. Active
+  row status polls the customer-scoped detail endpoint every seven seconds.
+- GUILD2 request notes carry the `[BOURNE TEST]` marker required for controlled
+  commissioning. A row shows `Needs trigger` when no server-side wake URL is
+  configured for a newly created order, without exposing its value. An
+  idempotent duplicate does not falsely report a missing trigger.
+- The request detail supplier table renders at most three bounded evidence
+  snippets per candidate. React escapes the text, and arbitrary research JSON
+  is not dumped into the page.
+- The POST route counts streamed request bytes and rejects bodies above 64 KB,
+  including requests with missing or false `Content-Length` headers.
+- The database suite now races the same tenant-scoped idempotency key through
+  separate clients, asserts one order and one wake, and checks destructive
+  customer, BOM, order, vendor, and idempotency privileges are denied.
+- The obsolete runtime DDL bridge and `WORKFLOW_AGENT_TRIGGER_*` configuration
+  were removed. `WORKFLOW_DATABASE_URL` is only the restricted `dashboard_api`
+  connection, and `BOURNE_WORKFLOW_WEBHOOK_URL` is the only optional wake URL.
+- No production database, deployment secret, webhook, or Bourne automation was
+  changed.
 
 Verification:
 
-- `node --import tsx scripts/workflow-guild2.test.ts`
-- TypeScript verification requires a regenerated Prisma client. Local
-  regeneration was blocked because Prisma attempted to install
-  `@prisma/client@6.19.3` without network access.
+- `npm run test:workflow-guild2`
+- `npm run test:procurement-workflow`
+- `npm run test:supply-os-atlas-sourcing`
+- `node --import tsx scripts/product-copy-policy.test.ts`
+- `node --import tsx scripts/supply-os-deployment-boundary.test.ts`
+- `npx tsc --noEmit`
+- `npx next build` with placeholder server-only database URLs
+- Local disposable PostgreSQL provisioning was attempted and remains blocked
+  by the host System V shared-memory ID limit. A pull-request workflow now
+  provisions separate disposable app and workflow databases and runs the
+  database-backed tenant, privilege, idempotency, webhook, and authenticated
+  handler suite before production can be considered.
 
 
 ### Supplier research now survives the browser and request lifetime
@@ -315,6 +340,38 @@ Verification:
 - `node --import tsx scripts/supply-os-atlas-sourcing.test.ts`
 - Database-backed migration and sourcing persistence tests require a disposable
   PostgreSQL server and were not available in this workspace.
+### Dashboard procurement requests now use the Bourne Neon workflow boundary
+
+- Authenticated users can create, list, and poll procurement requests from
+  `/dashboard/workflow`. The API resolves the active Derya Office on the server,
+  then maps it to a Neon customer UUID through server-only auth metadata.
+- Derya authentication remains on `DATABASE_URL`. The separate
+  `WORKFLOW_DATABASE_URL` is accepted only when it uses the `dashboard_api`
+  username and requires SSL.
+- Request creation, BOM creation, and customer-scoped idempotency happen in one
+  Neon transaction. A webhook is attempted only after commit, and its failure
+  leaves the order queued for the Bourne schedule.
+- The dashboard can read status and supplier results. It has no mutation route
+  for workflow state, approvals, leases, vendor research, quotes, or email IDs.
+- No Derya Prisma migration is required. Neon still needs the reviewed
+  `dashboard_api` role and `procurement_api_idempotency` provisioning before the
+  integration can run.
+- Production was not provisioned and Bourne was not activated. This remains a
+  staging candidate until database-backed tests run against provisioned test
+  databases.
+
+Verification:
+
+- `npm run test:procurement-workflow`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `node --import tsx scripts/product-copy-policy.test.ts`
+- `node --import tsx scripts/supply-os-deployment-boundary.test.ts`
+- production `next build` with placeholder server-only configuration
+- Local PostgreSQL database-contract setup was blocked during `initdb` by the
+  host System V shared-memory ID limit. The database-backed suite was not
+  represented as passing.
+- The packaged-server smoke test was blocked before startup because the sandbox
+  denied binding `127.0.0.1:3107` with `listen EPERM`.
 
 ### Connected supplier quote PDFs are bounded review sources
 
