@@ -528,7 +528,8 @@ export async function requestBourneWorkflowWake(
   fetchImplementation: typeof fetch = fetch,
 ) {
   const webhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL?.trim();
-  if (!webhookUrl) return false;
+  const webhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET?.trim();
+  if (!webhookUrl || !webhookSecret) return false;
   let parsed: URL;
   try {
     parsed = new URL(webhookUrl);
@@ -544,7 +545,10 @@ export async function requestBourneWorkflowWake(
   try {
     const response = await fetchImplementation(webhookUrl, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${webhookSecret}`,
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         event: "procurement.request.created",
         orderId: payload.orderId,

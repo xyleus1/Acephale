@@ -17,6 +17,18 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-18 - Authenticate Bourne webhook wakes
+
+- Branch: `fix/bourne-webhook-auth`, based on `origin/main` commit `2a0e01b`.
+- Task: Send the separate Bourne inbound webhook secret as a server-only bearer
+  credential after the procurement transaction commits.
+- Files changed: procurement workflow, webhook contract tests, environment
+  example, integration guide, decision log, and handoff.
+- Verification: procurement workflow contract, GUILD2 boundary, TypeScript,
+  product-copy policy, deployment boundary, and production build passed.
+- Caveats: The webhook remains only a wake signal. Neon remains authoritative,
+  and webhook failure does not roll back or delete an accepted order.
+
 ### 2026-08-11 - Make company creation canonical and evidence-backed
 
 - Branch: `agent/guild-company-create`, targeting `main`.

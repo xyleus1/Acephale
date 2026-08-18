@@ -233,10 +233,13 @@ await assert.rejects(
 assert(!database.state.idempotency.has(`${customerA}:foreign-bom-attempt`), "A failed transaction must release its idempotency claim.");
 
 const priorWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+const priorWebhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
 process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
+process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
 const webhookDatabase = new FakeProcurementDatabase();
 const successFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
   webhookDatabase.events.push("webhook");
+  assert.equal(new Headers(init?.headers).get("authorization"), "Bearer test-webhook-secret");
   const payload = JSON.parse(String(init?.body));
   assert.equal(payload.event, "procurement.request.created");
   assert.equal(payload.customerId, customerA);
@@ -265,6 +268,19 @@ try {
   assert.equal(result.workflowWakeRequested, true);
   assert.equal(failureDatabase.state.orders.size, 1, "Webhook failure must not roll back the committed order.");
 
+  delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+  let missingSecretFetchCalled = false;
+  const missingSecretRequested = await requestBourneWorkflowWake(
+    { orderId: result.orderId, customerId: customerA },
+    (async () => {
+      missingSecretFetchCalled = true;
+      return new Response(null, { status: 204 });
+    }) as typeof fetch,
+  );
+  assert.equal(missingSecretRequested, false);
+  assert.equal(missingSecretFetchCalled, false);
+  process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+
   process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "http://insecure.example.test/workflow";
   let insecureFetchCalled = false;
   const insecureRequested = await requestBourneWorkflowWake(
@@ -280,6 +296,8 @@ try {
   console.warn = priorWarn;
   if (priorWebhookUrl === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
   else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorWebhookUrl;
+  if (priorWebhookSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+  else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = priorWebhookSecret;
 }
 
 const routeSource = await readFile("src/app/api/procurement/requests/route.ts", "utf8");
@@ -300,6 +318,7 @@ assert(clientSource.includes("Evidence"), "Supplier evidence must be visible in 
 assert(clientSource.includes("slice(0, 180)"), "Supplier evidence text must be bounded before rendering.");
 assert(!clientSource.includes("WORKFLOW_DATABASE_URL"));
 assert(!clientSource.includes("BOURNE_WORKFLOW_WEBHOOK_URL"));
+assert(!clientSource.includes("BOURNE_WORKFLOW_WEBHOOK_SECRET"));
 assert(!clientSource.includes("lease_owner"));
 assert(!clientSource.includes("gmail"));
 assert(!clientSource.includes("customer_id"));

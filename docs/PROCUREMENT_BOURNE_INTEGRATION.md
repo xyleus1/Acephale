@@ -9,8 +9,9 @@ database uses `WORKFLOW_DATABASE_URL` because replacing the application
 
 `WORKFLOW_DATABASE_URL` must use the restricted `dashboard_api` role and an SSL
 mode of `require`, `verify-ca`, or `verify-full`. The optional
-`BOURNE_WORKFLOW_WEBHOOK_URL` is also server-only. Neither value may use a
-`NEXT_PUBLIC_` name.
+`BOURNE_WORKFLOW_WEBHOOK_URL` and `BOURNE_WORKFLOW_WEBHOOK_SECRET` are also
+server-only. None of these values may use a `NEXT_PUBLIC_` name. Derya sends
+the webhook secret as an `Authorization: Bearer` credential.
 
 `PROCUREMENT_CUSTOMER_MAP_JSON` stores the server-only mapping from authenticated
 Derya Office IDs to Neon customer UUIDs. API routes resolve the Office from the
@@ -39,7 +40,8 @@ input.
 4. Set `WORKFLOW_DATABASE_URL` to the `dashboard_api` connection URL with
    `sslmode=require`.
 5. Optionally add a Bourne webhook trigger and set
-   `BOURNE_WORKFLOW_WEBHOOK_URL` to its HTTPS URL.
+   `BOURNE_WORKFLOW_WEBHOOK_URL` to its HTTPS URL. Store the separate trigger
+   secret as `BOURNE_WORKFLOW_WEBHOOK_SECRET`.
 6. Activate Bourne automation `6a80c50915936370994a7dfc`. Keep the
    `*/15 * * * *` schedule as recovery when the webhook is absent or fails.
 

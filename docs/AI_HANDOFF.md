@@ -2,6 +2,15 @@
 
 ## Latest Update
 
+### Bourne webhook wakes now include the required bearer credential
+
+- The post-commit Bourne wake reads `BOURNE_WORKFLOW_WEBHOOK_SECRET` only on
+  the server and sends it as `Authorization: Bearer`.
+- A configured URL without the separate secret is treated as an unavailable
+  trigger. The committed Neon order remains queued for scheduled recovery.
+- Tests assert the bearer header, missing-secret behavior, post-commit order
+  durability, and absence of the secret name from browser code.
+
 ### GUILD2 now creates customer-scoped Bourne procurement orders
 
 - Each searchable GUILD2 row posts to the authenticated

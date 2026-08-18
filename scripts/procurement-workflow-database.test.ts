@@ -138,7 +138,9 @@ async function main() {
     assert.equal(customerScopedDuplicate.created, true);
 
     const priorConcurrentWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+    const priorConcurrentWebhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
     process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
+    process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
     let concurrentWebhookCount = 0;
     try {
       const concurrentInput = {
@@ -174,6 +176,8 @@ async function main() {
     } finally {
       if (priorConcurrentWebhookUrl === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
       else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorConcurrentWebhookUrl;
+      if (priorConcurrentWebhookSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+      else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = priorConcurrentWebhookSecret;
     }
 
     await assert.rejects(
@@ -253,6 +257,7 @@ async function main() {
     ));
 
     process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
+    process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
     const priorWarn = console.warn;
     console.warn = () => undefined;
     try {
@@ -472,6 +477,7 @@ async function main() {
     const clientSource = await readFile("src/app/dashboard/workflow/procurement-workflow.tsx", "utf8");
     assert(!clientSource.includes("WORKFLOW_DATABASE_URL"));
     assert(!clientSource.includes("BOURNE_WORKFLOW_WEBHOOK_URL"));
+    assert(!clientSource.includes("BOURNE_WORKFLOW_WEBHOOK_SECRET"));
     assert(!clientSource.includes("PROCUREMENT_CUSTOMER_MAP_JSON"));
     console.log("Procurement workflow database contract passed.");
   } finally {

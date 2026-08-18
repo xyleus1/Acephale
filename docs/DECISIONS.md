@@ -37,7 +37,8 @@ Use this log for durable product and engineering decisions. Do not put every imp
   Inbox.
 - Consequences: Runtime schema creation and `WORKFLOW_AGENT_TRIGGER_*` are
   removed. The only workflow database credential is the `dashboard_api` URL,
-  and the only optional wake credential is `BOURNE_WORKFLOW_WEBHOOK_URL`.
+  and the optional wake credentials are `BOURNE_WORKFLOW_WEBHOOK_URL` plus the
+  server-only `BOURNE_WORKFLOW_WEBHOOK_SECRET` bearer credential.
 - Revisit when: A server-side bulk endpoint can provide a stronger atomic batch
   receipt without weakening per-order idempotency or tenant isolation.
 
