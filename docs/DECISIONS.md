@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-18 - Bourne orders use the guided Supply OS sourcing workspace
+
+- Status: accepted
+- Owner: product and engineering
+- Context: GUILD2 row actions exposed workflow status and supplier results in
+  an inline queue panel. That made a durable procurement workflow look like a
+  database status viewer and hid the existing Request, Research, Compare, and
+  Procure product flow.
+- Decision: Opening or creating a GUILD2 procurement order replaces the queue
+  with a guided workspace. Derya renders live Neon state, a visible research
+  progress sequence, and the existing supplier comparison table. Bourne stays
+  responsible for research, workflow state, quotes, and approvals.
+- Approval boundary: The supplier table is read-only. Shortlist and final
+  approval remain in Bourne Inbox. The browser cannot submit workflow state,
+  supplier research, quotes, lease data, or approval decisions.
+- Consequences: Active orders poll the customer-scoped detail endpoint every
+  seven seconds. Supplier contact snapshots may be displayed, but Gmail IDs
+  and internal workflow fields remain excluded. The generic procurement page
+  is not the primary GUILD2 experience.
+- Revisit when: Derya intentionally becomes the approval system of record or
+  Bourne exposes a supported embedded Inbox surface.
+
 ### 2026-08-18 - Product application uses app.derya.ai
 
 - Status: accepted

@@ -8924,3 +8924,45 @@ Operational caveat:
   execution issue, not a dashboard insert failure. A Draft Bourne automation
   does not automatically claim webhook or scheduled work. Run it manually for
   a controlled test or explicitly activate it for unattended processing.
+
+## 2026-08-18: GUILD2 orders now open the guided sourcing workspace
+
+- Clicking `Source` creates or reuses the customer-scoped Neon order and then
+  opens the full Request, Research, Compare, and Procure workspace already used
+  by the Supply OS demo.
+- Clicking `View results` opens the same workspace for an existing order. The
+  old inline results panel is no longer the primary interaction.
+- The Research step shows request acceptance, Bourne claim state, supplier
+  search, and evidence review. It polls the authenticated order detail route
+  every seven seconds while the order is active.
+- The Compare step uses the existing supplier comparison table layout and
+  renders supplier identity, safe contact snapshots, evidence, quote state,
+  and source links from Neon.
+- The workspace is read-only for workflow decisions. Shortlist and final
+  approval remain in Bourne Inbox, and no dashboard action can edit research,
+  quotes, leases, or workflow status.
+- The detail API now returns bounded supplier contact name, email, and phone
+  fields when those values exist in the supplier snapshot. Gmail identifiers
+  and internal connection data remain excluded.
+
+Verification:
+
+- `npm run test:workflow-guild2`
+- `npm run test:procurement-workflow`
+- `npm run test:supply-os-atlas-sourcing`
+- `npm run check:product-copy`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `DATABASE_URL='postgresql://derya:derya@127.0.0.1:5432/derya' npm run build`
+- `git diff --check`
+
+Verification caveat:
+
+- The local database-backed workflow test could not run because the Docker
+  daemon was unavailable. Its disposable test schema and fixture now cover
+  flat, nested, and identity-based supplier contact projection. The GitHub
+  workflow must pass this suite before merge.
+- Targeted `next lint` could not run because Next selected the parent checkout
+  as the workspace root and reported a duplicate `@next/next` plugin. The
+  optimized build completed its own type validation successfully.
+- Authenticated browser QA still requires a signed-in session. The headless
+  review browser only reaches the login boundary without imported cookies.

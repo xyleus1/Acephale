@@ -191,18 +191,45 @@ async function main() {
     );
 
     await owner.$executeRawUnsafe(
-      "INSERT INTO order_vendors (order_id, name, website, status, research, quote, gmail_message_id) VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6::jsonb, $7)",
+      "INSERT INTO order_vendors (order_id, name, website, contact_name, contact_email, contact_phone, status, research, quote, gmail_message_id) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10)",
       created.orderId,
       "Example supplier",
       "https://example.com",
+      "Ada Buyer",
+      "ada@example.com",
+      "+1 555 0100",
       "shortlisted",
       JSON.stringify({ source: "public" }),
       JSON.stringify({ amount: 100 }),
       "must-not-leak",
     );
+    await owner.$executeRawUnsafe(
+      "INSERT INTO order_vendors (order_id, name, contact, identity, status) VALUES ($1::uuid, $2, $3::jsonb, '{}'::jsonb, $4), ($1::uuid, $5, '{}'::jsonb, $6::jsonb, $4)",
+      created.orderId,
+      "Nested contact supplier",
+      JSON.stringify({ name: "Grace Seller", email: "grace@example.com", phone: "+1 555 0101" }),
+      "shortlisted",
+      "Identity contact supplier",
+      JSON.stringify({ contact_name: "Lin Vendor", contact_email: "lin@example.com", contact_phone: "+1 555 0102" }),
+    );
     const detail = await getProcurementRequestFromDatabase(workflowDatabase, customerA, created.orderId);
     assert(detail);
-    assert.equal(detail.vendors[0]?.name, "Example supplier");
+    const vendorsByName = new Map(detail.vendors.map((vendor) => [vendor.name, vendor]));
+    assert.deepEqual(vendorsByName.get("Example supplier")?.contact, {
+      name: "Ada Buyer",
+      email: "ada@example.com",
+      phone: "+1 555 0100",
+    });
+    assert.deepEqual(vendorsByName.get("Nested contact supplier")?.contact, {
+      name: "Grace Seller",
+      email: "grace@example.com",
+      phone: "+1 555 0101",
+    });
+    assert.deepEqual(vendorsByName.get("Identity contact supplier")?.contact, {
+      name: "Lin Vendor",
+      email: "lin@example.com",
+      phone: "+1 555 0102",
+    });
     assert.equal("gmail_message_id" in detail, false);
     assert.equal("lease_owner" in detail, false);
     assert.equal("gmail_message_id" in (detail.vendors[0] ?? {}), false);

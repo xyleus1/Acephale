@@ -58,6 +58,11 @@ export type ProcurementOrderVendor = {
   id: string;
   name: string;
   website: string | null;
+  contact: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   status: string;
   research: Record<string, unknown>;
   quote: Record<string, unknown> | null;
@@ -364,12 +369,18 @@ export async function createProcurementRequest(customerId: string, input: Procur
   }
 }
 
-function normalizeVendor(value: unknown): ProcurementOrderVendor | null {
+export function normalizeProcurementVendor(value: unknown): ProcurementOrderVendor | null {
   if (!isObject(value) || typeof value.id !== "string") return null;
+  const contact = isObject(value.contact) ? {
+    name: typeof value.contact.name === "string" && value.contact.name.trim() ? value.contact.name : null,
+    email: typeof value.contact.email === "string" && value.contact.email.trim() ? value.contact.email : null,
+    phone: typeof value.contact.phone === "string" && value.contact.phone.trim() ? value.contact.phone : null,
+  } : null;
   return {
     id: value.id,
     name: typeof value.name === "string" && value.name.trim() ? value.name : "Unknown supplier",
     website: safeWebsite(value.website),
+    contact: contact && (contact.name || contact.email || contact.phone) ? contact : null,
     status: typeof value.status === "string" ? value.status : "unknown",
     research: isObject(value.research) ? value.research : {},
     quote: isObject(value.quote) ? value.quote : null,
@@ -387,7 +398,7 @@ function safeWebsite(value: unknown) {
 }
 
 function normalizeOrder(row: OrderDetailRow): ProcurementOrderDetail {
-  const vendors = Array.isArray(row.vendors) ? row.vendors.map(normalizeVendor).filter(Boolean) : [];
+  const vendors = Array.isArray(row.vendors) ? row.vendors.map(normalizeProcurementVendor).filter(Boolean) : [];
   return {
     id: row.id,
     status: row.status,
@@ -442,6 +453,23 @@ export async function getProcurementRequestFromDatabase(
                 to_jsonb(order_vendors)->>'vendor_website',
                 to_jsonb(order_vendors)->'identity'->>'website'
               ),
+              'contact', jsonb_strip_nulls(jsonb_build_object(
+                'name', COALESCE(
+                  to_jsonb(order_vendors)->>'contact_name',
+                  to_jsonb(order_vendors)->'contact'->>'name',
+                  to_jsonb(order_vendors)->'identity'->>'contact_name'
+                ),
+                'email', COALESCE(
+                  to_jsonb(order_vendors)->>'contact_email',
+                  to_jsonb(order_vendors)->'contact'->>'email',
+                  to_jsonb(order_vendors)->'identity'->>'contact_email'
+                ),
+                'phone', COALESCE(
+                  to_jsonb(order_vendors)->>'contact_phone',
+                  to_jsonb(order_vendors)->'contact'->>'phone',
+                  to_jsonb(order_vendors)->'identity'->>'contact_phone'
+                )
+              )),
               'status', COALESCE(to_jsonb(order_vendors)->>'status', 'unknown'),
               'research', COALESCE(
                 to_jsonb(order_vendors)->'research',

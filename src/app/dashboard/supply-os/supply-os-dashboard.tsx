@@ -61,6 +61,7 @@ import {
   type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import { GUILD2_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
+import type { Guild2ProcurementOrderState } from "@/lib/supply-os/guild2-procurement";
 import { SUPPLY_OS_DEMO_COMPANIES, type SupplyOsDemoCompanyId } from "@/lib/supply-os/demo-company";
 import { snapshotResponseToSourcingItems } from "@/lib/supply-os/snapshot-sourcing";
 import type { SupplyWorkspaceSnapshotResponse } from "@/lib/supply-os/snapshot-twin";
@@ -72,6 +73,7 @@ import {
   type PendingSourcingQueueItem,
 } from "./supply-os-inventory-sourcing";
 import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
+import { BourneProcurementWorkspace } from "./supply-os-bourne-procurement-workspace";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
@@ -756,6 +758,10 @@ function CaseCommandCenter({
     savedCase?: SavedProcurementCase | null;
     savedCases?: SavedProcurementCase[];
   } | null>(null);
+  const [bourneProcurementRequest, setBourneProcurementRequest] = useState<{
+    itemSku: string;
+    order: Guild2ProcurementOrderState;
+  } | null>(null);
   const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
   const [procurementCases, setProcurementCases] = useState<SavedProcurementCase[]>([]);
   const [supplierSenderAccounts, setSupplierSenderAccounts] = useState<SupplierSenderAccount[]>([]);
@@ -855,6 +861,9 @@ function CaseCommandCenter({
     ?? null;
   const procurementItem = procurementRequest?.itemSku
     ? inventoryItems.find((item) => item.sku === procurementRequest.itemSku) ?? null
+    : null;
+  const bourneProcurementItem = bourneProcurementRequest
+    ? inventoryItems.find((item) => item.sku === bourneProcurementRequest.itemSku) ?? null
     : null;
   const reduceMotion = useReducedMotion();
 
@@ -1270,11 +1279,19 @@ function CaseCommandCenter({
       aria-label={`${domain.railTitle} workspace`}
       data-domain={activePanel}
       data-embedded={!presentationMode}
-      data-procurement={activePanel === "materials" && Boolean(procurementRequest)}
+      data-procurement={activePanel === "materials" && Boolean(procurementRequest || bourneProcurementRequest)}
     >
       <div ref={commandStageRef} className={styles.commandMapStage}>
         <AnimatePresence mode="wait" initial={false}>
-        {activePanel === "materials" && procurementRequest ? (
+        {activePanel === "materials" && bourneProcurementRequest?.order.orderId && bourneProcurementItem ? (
+          <BourneProcurementWorkspace
+            key={`bourne-procurement:${bourneProcurementRequest.order.orderId}`}
+            orderId={bourneProcurementRequest.order.orderId}
+            item={bourneProcurementItem}
+            initialOrder={bourneProcurementRequest.order}
+            onBack={() => setBourneProcurementRequest(null)}
+          />
+        ) : activePanel === "materials" && procurementRequest ? (
           <AtlasProcurementWorkspace
             key={`procurement:${procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
@@ -1324,6 +1341,11 @@ function CaseCommandCenter({
             onLoadMore={loadOlderSourcingWork}
             onStartItemResearch={(item) => startProcurement(item)}
             onOpenSavedResearch={openSavedResearch}
+            onOpenGuild2Procurement={(item, order) => {
+              setSelectedInventorySku(item.sku);
+              setProcurementRequest(null);
+              setBourneProcurementRequest({ itemSku: item.sku, order });
+            }}
             sourceName={selectedSourceCandidate?.name}
             sourceLocation={selectedSourceCandidate?.location}
             onHideSourceMap={() => {

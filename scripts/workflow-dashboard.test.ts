@@ -5,6 +5,7 @@ import {
   createProcurementRequest,
   createProcurementRequestInDatabase,
   listProcurementRequestsFromDatabase,
+  normalizeProcurementVendor,
   ProcurementDatabase,
   procurementCustomerIdFromServerMetadata,
   ProcurementWorkflowError,
@@ -14,6 +15,29 @@ import {
 
 const customerA = "11111111-1111-4111-8111-111111111111";
 const customerB = "22222222-2222-4222-8222-222222222222";
+
+assert.deepEqual(normalizeProcurementVendor({
+  id: "vendor-1",
+  name: "Supplier One",
+  website: "https://example.com",
+  contact: { name: "Ada Buyer", email: "ada@example.com", phone: "+1 555 0100" },
+  status: "shortlisted",
+  research: { source: "public" },
+  quote: { amount: 100 },
+}), {
+  id: "vendor-1",
+  name: "Supplier One",
+  website: "https://example.com/",
+  contact: { name: "Ada Buyer", email: "ada@example.com", phone: "+1 555 0100" },
+  status: "shortlisted",
+  research: { source: "public" },
+  quote: { amount: 100 },
+});
+assert.equal(normalizeProcurementVendor({
+  contact: { name: " ", email: "", phone: "  " },
+}), null, "A vendor without a valid id should be rejected.");
+assert.equal(normalizeProcurementVendor({ id: "vendor-2", contact: { name: " ", email: "", phone: "  " } })?.contact, null);
+assert.equal(normalizeProcurementVendor({ id: "vendor-3" })?.contact, null);
 
 assert.equal(
   procurementCustomerIdFromServerMetadata("office-a", JSON.stringify({ "office-a": customerA })),

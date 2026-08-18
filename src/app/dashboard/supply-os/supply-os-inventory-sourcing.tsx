@@ -11,16 +11,16 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   GUILD2_PROCUREMENT_PLAN,
   guild2ActiveProcurementOrders,
-  guild2ProcurementEvidenceSummary,
   guild2ProcurementLine,
   guild2ProcurementRequest,
   mergeGuild2ProcurementOrderDetail,
   restoreGuild2ProcurementOrders,
   runWithBoundedConcurrency,
+  sourceGuild2ProcurementAndOpen,
   type Guild2ProcurementOrderState,
   type Guild2ProcurementLine,
   type Guild2ProcurementRequestDetail,
@@ -115,6 +115,7 @@ export function AtlasInventoryWorkspace({
   onLoadMore,
   onStartItemResearch,
   onOpenSavedResearch,
+  onOpenGuild2Procurement,
   sourceMap,
   sourceName,
   sourceLocation,
@@ -146,6 +147,7 @@ export function AtlasInventoryWorkspace({
   onLoadMore: () => void;
   onStartItemResearch: (item: AtlasInventoryItem) => void;
   onOpenSavedResearch: (run: SavedSourcingResearchRun) => void;
+  onOpenGuild2Procurement: (item: AtlasInventoryItem, order: Guild2ProcurementOrderState) => void;
   sourceMap?: ReactNode;
   sourceName?: string;
   sourceLocation?: string;
@@ -156,7 +158,6 @@ export function AtlasInventoryWorkspace({
   const [guild2Orders, setGuild2Orders] = useState<Record<string, Guild2ProcurementOrderState>>({});
   const [guild2BulkState, setGuild2BulkState] = useState<Guild2BulkState>("idle");
   const [guild2BulkProgress, setGuild2BulkProgress] = useState({ completed: 0, failed: 0 });
-  const guild2ResultsRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
   const guild2ItemSkus = useMemo(() => new Set(items.map((item) => item.sku)), [items]);
   const guild2InventoryReady = GUILD2_PROCUREMENT_PLAN.ready
@@ -207,7 +208,7 @@ export function AtlasInventoryWorkspace({
   }, [guild2Mode]);
 
   const sourceGuild2Line = useCallback(async (line: Guild2ProcurementLine) => {
-    if (line.classification !== "SUPPLIER_SEARCH") return false;
+    if (line.classification !== "SUPPLIER_SEARCH") return null;
     setGuild2Orders((current) => ({
       ...current,
       [line.sourceSku]: {
@@ -241,7 +242,14 @@ export function AtlasInventoryWorkspace({
           vendors: current[line.sourceSku]?.vendors ?? [],
         },
       }));
-      return true;
+      return {
+        orderId: result.orderId,
+        status: result.status,
+        progress: "Order received from dashboard",
+        error: null,
+        workflowWakeRequested: result.workflowWakeRequested,
+        vendors: [],
+      } satisfies Guild2ProcurementOrderState;
     } catch (error) {
       setGuild2Orders((current) => ({
         ...current,
@@ -254,7 +262,7 @@ export function AtlasInventoryWorkspace({
           vendors: current[line.sourceSku]?.vendors ?? [],
         },
       }));
-      return false;
+      return null;
     }
   }, []);
 
@@ -265,7 +273,7 @@ export function AtlasInventoryWorkspace({
     let completed = 0;
     let failed = 0;
     await runWithBoundedConcurrency(GUILD2_PROCUREMENT_PLAN.searchable, async (line) => {
-      const created = await sourceGuild2Line(line);
+      const created = Boolean(await sourceGuild2Line(line));
       if (created) completed += 1;
       else failed += 1;
       setGuild2BulkProgress({ completed, failed });
@@ -283,26 +291,6 @@ export function AtlasInventoryWorkspace({
     }, 7_000);
     return () => window.clearTimeout(timer);
   }, [guild2Orders, refreshGuild2Order]);
-  const selectedGuild2Order = guild2Orders[selectedSku];
-  const selectedGuild2Line = guild2ProcurementLine(selectedSku);
-
-  useEffect(() => {
-    if (!selectedGuild2Order?.orderId) return;
-    void refreshGuild2Order(selectedSku, selectedGuild2Order.orderId);
-  }, [refreshGuild2Order, selectedGuild2Order?.orderId, selectedSku]);
-
-  const openGuild2Results = useCallback((sourceSku: string) => {
-    onSelect(sourceSku);
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        guild2ResultsRef.current?.focus({ preventScroll: true });
-        guild2ResultsRef.current?.scrollIntoView({
-          behavior: reduceMotion ? "auto" : "smooth",
-          block: "start",
-        });
-      });
-    });
-  }, [onSelect, reduceMotion]);
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
       campaignId?: string;
@@ -553,48 +541,6 @@ export function AtlasInventoryWorkspace({
         </section>
       ) : null}
 
-      {selectedGuild2Line && selectedGuild2Order?.orderId ? (
-        <section
-          ref={guild2ResultsRef}
-          className={styles.supplyIntelligenceSummary}
-          aria-label={`Procurement results for ${selectedGuild2Line.name}`}
-          tabIndex={-1}
-        >
-          <header>
-            <span>
-              <small>{selectedGuild2Line.sourceSku}</small>
-              <strong>{procurementStatusLabel(selectedGuild2Order.status)}</strong>
-            </span>
-            <dl>
-              <div><dt>Suppliers</dt><dd>{selectedGuild2Order.vendors.length}</dd></div>
-              <div><dt>Order</dt><dd>{selectedGuild2Order.orderId.slice(0, 8)}</dd></div>
-            </dl>
-          </header>
-          <div>
-            <article>
-              <span><strong>{selectedGuild2Line.name}</strong><small>{selectedGuild2Order.progress ?? "No workflow update"}</small></span>
-              <span>
-                <strong>{PROCUREMENT_APPROVAL_STATUSES.has(selectedGuild2Order.status) ? "Approval required in Bourne Inbox" : "Workflow status"}</strong>
-                <small>{selectedGuild2Order.error ?? procurementStatusLabel(selectedGuild2Order.status)}</small>
-              </span>
-              <span>
-                <button className={styles.sourcingQueueAction} type="button" onClick={() => void refreshGuild2Order(selectedSku, selectedGuild2Order.orderId!)}>Refresh</button>
-              </span>
-            </article>
-            {selectedGuild2Order.vendors.map((vendor) => {
-              const evidence = guild2ProcurementEvidenceSummary(vendor.research);
-              return (
-                <article key={vendor.id}>
-                  <span><strong>{vendor.name}</strong><small>{procurementStatusLabel(vendor.status)}</small></span>
-                  <span><strong>{vendor.quote ? "Quote received" : "Quote not received"}</strong><small>{evidence.join(" ") || "Evidence not available"}</small></span>
-                  <span>{vendor.website ? <a href={vendor.website} target="_blank" rel="noreferrer">Open site</a> : <small>Website unavailable</small>}</span>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
       {intelligenceProfile ? (
         <section className={styles.supplyIntelligenceSummary} aria-label="Customer supply profile">
           <header>
@@ -759,7 +705,7 @@ export function AtlasInventoryWorkspace({
                   <button
                     className={styles.sourcingQueueAction}
                     type="button"
-                    onClick={() => openGuild2Results(item.sku)}
+                    onClick={() => onOpenGuild2Procurement(item, guild2Order)}
                   >
                     View results
                     <ArrowRight size={13} />
@@ -773,7 +719,10 @@ export function AtlasInventoryWorkspace({
                         : !retryUnavailableCampaign && (campaignInProgress || campaignRequirementOnly || !researchWorkspaceReady)}
                       onClick={() => {
                         if (guild2Line) {
-                          void sourceGuild2Line(guild2Line);
+                          void sourceGuild2ProcurementAndOpen(
+                            () => sourceGuild2Line(guild2Line),
+                            (order) => onOpenGuild2Procurement(item, order),
+                          );
                           return;
                         }
                         if (retryUnavailableCampaign) {

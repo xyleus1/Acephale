@@ -4,6 +4,86 @@ import { GUILD_SOURCING_LINES, type GuildSourcingLine } from "./guild-sourcing-i
 
 export const GUILD2_PROCUREMENT_REVISION = "v1";
 export const GUILD2_BULK_CONCURRENCY = 3;
+export const GUILD2_PROCUREMENT_POLL_INTERVAL_MS = 7_000;
+
+export type Guild2ProcurementPhase = "researching" | "compare" | "procure" | "attention";
+
+export function guild2ProcurementPhase(status: string, supplierCount: number): Guild2ProcurementPhase {
+  if (["needs_attention", "cancelled"].includes(status)) return "attention";
+  if (["ordered", "awaiting_order_approval"].includes(status)) return "procure";
+  if (["awaiting_shortlist_approval", "sourcing"].includes(status) || supplierCount > 0) return "compare";
+  return "researching";
+}
+
+export async function sourceGuild2ProcurementAndOpen(
+  source: () => Promise<Guild2ProcurementOrderState | null>,
+  open: (order: Guild2ProcurementOrderState) => void,
+) {
+  const order = await source();
+  if (order?.orderId) open(order);
+  return order;
+}
+
+export function startGuild2ProcurementPolling<T extends { status: string }>({
+  initialStatus,
+  load,
+  onDetail,
+  onError,
+  schedule,
+  cancel,
+  intervalMs = GUILD2_PROCUREMENT_POLL_INTERVAL_MS,
+}: {
+  initialStatus: string;
+  load: () => Promise<T>;
+  onDetail: (detail: T) => void;
+  onError: (error: unknown) => void;
+  schedule: (callback: () => void, delay: number) => unknown;
+  cancel: (handle: unknown) => void;
+  intervalMs?: number;
+}) {
+  let stopped = false;
+  let inFlight = false;
+  let lastStatus = initialStatus;
+  let timer: unknown = null;
+
+  const tick = () => {
+    if (stopped || inFlight) return;
+    inFlight = true;
+    void load()
+      .then((detail) => {
+        if (stopped) return;
+        lastStatus = detail.status;
+        onDetail(detail);
+      })
+      .catch((error: unknown) => {
+        if (!stopped) onError(error);
+      })
+      .finally(() => {
+        inFlight = false;
+        if (!stopped && PROCUREMENT_ACTIVE_STATUSES.has(lastStatus)) {
+          timer = schedule(() => {
+            timer = null;
+            tick();
+          }, intervalMs);
+        }
+      });
+  };
+
+  tick();
+  return () => {
+    stopped = true;
+    if (timer !== null) cancel(timer);
+  };
+}
+
+export function guild2ProcurementResearchComplete(status: string, supplierCount: number) {
+  return supplierCount > 0 || [
+    "awaiting_shortlist_approval",
+    "sourcing",
+    "awaiting_order_approval",
+    "ordered",
+  ].includes(status);
+}
 
 export type Guild2ProcurementLine = GuildSourcingLine & {
   sourceSku: string;
@@ -21,6 +101,11 @@ export type Guild2ProcurementVendor = {
   id: string;
   name: string;
   website: string | null;
+  contact: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   status: string;
   research: Record<string, unknown>;
   quote: Record<string, unknown> | null;
@@ -43,7 +128,15 @@ export type Guild2ProcurementRequestSummary = {
 };
 
 export type Guild2ProcurementRequestDetail = Guild2ProcurementRequestSummary & {
+  neededBy: string | null;
+  quantity: number;
+  unit: string;
+  material: string;
+  specification: string | null;
+  approvalRequestedAt: string | null;
+  decisionSnapshot: Record<string, unknown> | null;
   vendors: Guild2ProcurementVendor[];
+  updatedAt: string;
 };
 
 function guild2Sku(line: GuildSourcingLine) {
@@ -155,6 +248,37 @@ export function guild2ProcurementEvidenceSummary(research: Record<string, unknow
   }
   collect(research);
   return snippets.slice(0, 2);
+}
+
+export function guild2ProcurementQuoteSummary(quote: Record<string, unknown> | null) {
+  if (!quote) return "Not received";
+  const amount = typeof quote.amount === "number"
+    ? quote.amount
+    : typeof quote.price === "number"
+      ? quote.price
+      : typeof quote.unit_price === "number"
+        ? quote.unit_price
+        : null;
+  const currency = typeof quote.currency === "string" ? quote.currency.toUpperCase() : null;
+  const unit = typeof quote.unit === "string"
+    ? quote.unit
+    : typeof quote.unit_of_measure === "string"
+      ? quote.unit_of_measure
+      : null;
+  if (amount !== null) return `${currency ? `${currency} ` : ""}${amount.toLocaleString("en-US")}${unit ? ` / ${unit}` : ""}`;
+  const reference = typeof quote.reference === "string"
+    ? quote.reference
+    : typeof quote.quote_reference === "string"
+      ? quote.quote_reference
+      : null;
+  return reference ? `Received: ${reference}` : "Received";
+}
+
+export function guild2ProcurementContactSummary(contact: Guild2ProcurementVendor["contact"]) {
+  return {
+    primary: contact?.name ?? "Not identified",
+    secondary: contact?.email ?? contact?.phone ?? "No contact saved",
+  };
 }
 
 export function guild2ProcurementIdempotencyKey(line: Guild2ProcurementLine) {

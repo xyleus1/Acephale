@@ -5489,3 +5489,25 @@ Use this file for chronological implementation notes that future agents should s
 - Passed the GUILD2 and procurement workflow contracts, TypeScript, product
   copy policy, deployment boundary, optimized production build, and diff
   hygiene.
+
+### 2026-08-18 - Restore the guided sourcing experience for Bourne orders
+
+- Replaced the inline GUILD2 results panel with the existing four-step Supply
+  OS sourcing workspace pattern.
+- Row-level Source now opens visible research progress immediately after the
+  durable order is accepted. Existing orders open the same workspace through
+  View results.
+- Added continuous seven-second polling while an order is active and automatic
+  progression from Research to Compare and Procure based on Neon status.
+- Reused the existing supplier comparison table for read-only supplier,
+  contact, evidence, quote, and source display.
+- Extended the bounded order detail projection with safe supplier contact
+  snapshots. No Gmail IDs or workflow-controlled fields were added.
+- Preserved the Bourne Inbox approval boundary and removed dashboard-side
+  shortlist mutation from this integration path.
+- Passed GUILD2, procurement, Atlas sourcing, product-copy, TypeScript,
+  production build, and diff-hygiene checks. Targeted Next lint remains blocked
+  by the repository's duplicate plugin resolution across nested checkouts.
+- Added database-backed contact projection fixtures for flat, nested, and
+  identity snapshots. The suite was not run locally because Docker was
+  unavailable and must pass in GitHub CI before merge.
