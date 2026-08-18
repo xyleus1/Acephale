@@ -14,6 +14,7 @@ const responseHeaders = {
   "x-content-type-options": "nosniff",
 };
 const MAX_REQUEST_BYTES = 64_000;
+const SOURCE_CAMPAIGN_PATTERN = /^[A-Z0-9_-]{1,64}$/;
 
 type ProcurementRouteSession = {
   userId: string;
@@ -130,12 +131,17 @@ export async function handleProcurementPost(
 
 export async function handleProcurementList(
   dependencies: ProcurementRouteDependencies = defaultRouteDependencies,
+  options: { sourceCampaign?: string | null } = {},
 ) {
   const session = await dependencies.session();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
+  const sourceCampaign = options.sourceCampaign?.trim() || undefined;
+  if (sourceCampaign && !SOURCE_CAMPAIGN_PATTERN.test(sourceCampaign)) {
+    return Response.json({ error: "Invalid procurement source campaign." }, { status: 400, headers: responseHeaders });
+  }
   try {
     const customerId = await dependencies.resolveCustomerId(session);
-    const requests = await dependencies.list(customerId);
+    const requests = await dependencies.list(customerId, 50, sourceCampaign);
     return Response.json({ requests }, { headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);

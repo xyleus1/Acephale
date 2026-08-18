@@ -5473,3 +5473,19 @@ Use this file for chronological implementation notes that future agents should s
 - Caveats: Google Cloud must allow
   `https://app.derya.ai/api/auth/gmail/callback` before a Gmail account can be
   connected or reconnected from the new host.
+
+### 2026-08-18 - Keep Bourne procurement results in the Supply OS queue
+
+- Confirmed that the stuck Threaded inserts request was committed correctly in
+  Neon but had never been leased or updated by Bourne.
+- Removed the GUILD2 row redirect to the generic procurement dashboard.
+- Restored saved row state from the customer-scoped order list using the
+  stored `request_context.source.source_sku` value.
+- Added in-place status, progress, supplier evidence, quote state, and approval
+  boundary display, plus focus and scroll behavior from each row action.
+- Added a validated, parameterized GUILD2 campaign filter after customer
+  scoping so unrelated orders cannot push saved GUILD2 rows out of the list.
+- Preserved seven-second active polling and bounded concurrent detail reads.
+- Passed the GUILD2 and procurement workflow contracts, TypeScript, product
+  copy policy, deployment boundary, optimized production build, and diff
+  hygiene.

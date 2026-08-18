@@ -8886,3 +8886,41 @@ Live boundary:
   histogram from the six-line canary first, improve only evidence-proven false
   rejections, revalidate offline, and spend the full bounded call batch only
   when needed.
+
+## 2026-08-18: GUILD2 procurement results restored inside Supply OS
+
+- The GUILD2 sourcing queue now reloads its saved order mappings from the
+  authenticated, customer-scoped procurement list. Refreshing the page no
+  longer makes already-created lines look ready to source again.
+- Clicking `View results` keeps the operator in `/dashboard/supply-os` instead
+  of sending them to the generic procurement request page. The action focuses
+  and scrolls the in-place results panel into view.
+- The selected line now shows Bourne status, progress, supplier count,
+  supplier evidence, quote state, and the read-only Bourne Inbox approval
+  boundary directly above the 40-line queue.
+- Active `new`, `researching`, and `sourcing` orders continue to poll their
+  customer-scoped detail endpoint every seven seconds with bounded
+  concurrency. Saved approval and terminal results load when the row is
+  selected.
+- The recent order list now returns stored `requestContext`. Supply OS asks for
+  the validated `GUILD2` source campaign, and the database applies that filter
+  after customer scoping. This keeps all 38 searchable lines recoverable even
+  when unrelated orders are newer. No customer or workflow-controlled fields
+  are accepted from the browser.
+
+Verification:
+
+- `npm run test:workflow-guild2`
+- `npm run test:procurement-workflow`
+- `npx tsc --noEmit`
+- `npm run check:product-copy`
+- `DATABASE_URL='postgresql://user:pass@127.0.0.1:5432/derya?sslmode=disable' npm run build`
+- `git diff --check`
+
+Operational caveat:
+
+- Order `eb3ae018-dc0f-4cfd-ad3b-af3b13d34038` is committed in Neon with
+  status `new`, no lease owner, and no supplier rows. That is a Bourne
+  execution issue, not a dashboard insert failure. A Draft Bourne automation
+  does not automatically claim webhook or scheduled work. Run it manually for
+  a controlled test or explicitly activate it for unattended processing.

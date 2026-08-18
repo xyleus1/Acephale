@@ -295,7 +295,9 @@ async function main() {
         request,
         { database: workflowDatabase, fetchImplementation: previewFetch },
       ),
-      list: (customerId: string) => listProcurementRequestsFromDatabase(workflowDatabase, customerId),
+      list: (customerId: string, limit = 50, sourceCampaign?: string) => (
+        listProcurementRequestsFromDatabase(workflowDatabase, customerId, limit, sourceCampaign)
+      ),
     };
     const previewInput = {
       ...input,
@@ -435,6 +437,12 @@ async function main() {
     assert.notEqual((await customerBPreview.json() as { orderId: string }).orderId, previewPayload.orderId);
     assert.equal(previewWebhookCount, 2, "The same durable key is independent for each authenticated customer.");
 
+    const customerBGuildOrder = await createProcurementRequestInDatabase(
+      workflowDatabase,
+      customerB,
+      guild2ProcurementRequest(GUILD2_PROCUREMENT_PLAN.searchable[0]!),
+    );
+
     const guildOrderIds = new Set<string>();
     await runWithBoundedConcurrency(GUILD2_PROCUREMENT_PLAN.searchable, async (line) => {
       const response = await handleProcurementPost(
@@ -473,6 +481,38 @@ async function main() {
     `, customerA);
     assert.equal(guildRows.length, 38);
     assert(!guildRows.some((row) => row.lineId === "GUILD-027" || row.lineId === "GUILD-039"));
+
+    const filteredGuildOrders = await listProcurementRequestsFromDatabase(
+      workflowDatabase,
+      customerA,
+      50,
+      "GUILD2",
+    );
+    assert.equal(filteredGuildOrders.length, 38);
+    assert(filteredGuildOrders.every((order) => (
+      (order.requestContext.source as Record<string, unknown> | undefined)?.campaign === "GUILD2"
+    )));
+    assert.equal(
+      (await listProcurementRequestsFromDatabase(workflowDatabase, customerB, 50, "GUILD2"))[0]?.id,
+      customerBGuildOrder.orderId,
+      "Campaign filtering must not weaken customer isolation.",
+    );
+    assert(!filteredGuildOrders.some((order) => order.id === customerBGuildOrder.orderId));
+    const filteredRoute = await handleProcurementList(authenticatedDependencies, { sourceCampaign: "GUILD2" });
+    assert.equal(filteredRoute.status, 200);
+    assert.equal(((await filteredRoute.json()) as { requests: unknown[] }).requests.length, 38);
+    let invalidCampaignListCalls = 0;
+    assert.equal(
+      (await handleProcurementList({
+        ...authenticatedDependencies,
+        list: async () => {
+          invalidCampaignListCalls += 1;
+          return [];
+        },
+      }, { sourceCampaign: "GUILD2!" })).status,
+      400,
+    );
+    assert.equal(invalidCampaignListCalls, 0);
 
     const clientSource = await readFile("src/app/dashboard/workflow/procurement-workflow.tsx", "utf8");
     assert(!clientSource.includes("WORKFLOW_DATABASE_URL"));

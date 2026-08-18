@@ -11,16 +11,22 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   GUILD2_PROCUREMENT_PLAN,
+  guild2ActiveProcurementOrders,
+  guild2ProcurementEvidenceSummary,
   guild2ProcurementLine,
   guild2ProcurementRequest,
+  mergeGuild2ProcurementOrderDetail,
+  restoreGuild2ProcurementOrders,
   runWithBoundedConcurrency,
+  type Guild2ProcurementOrderState,
   type Guild2ProcurementLine,
+  type Guild2ProcurementRequestDetail,
+  type Guild2ProcurementRequestSummary,
 } from "@/lib/supply-os/guild2-procurement";
 import {
-  PROCUREMENT_ACTIVE_STATUSES,
   PROCUREMENT_APPROVAL_STATUSES,
   PROCUREMENT_STATUS_LABELS,
 } from "@/lib/procurement-status";
@@ -51,14 +57,6 @@ export type PendingSourcingQueueItem = {
   missingFields: SourcingRequiredField[];
   lastQuestion: string | null;
   status: "Clarification needed" | "Researching" | "Research unavailable";
-};
-
-type Guild2OrderState = {
-  orderId: string | null;
-  status: string;
-  progress: string | null;
-  error: string | null;
-  workflowWakeRequested: boolean | null;
 };
 
 type Guild2BulkState = "idle" | "running" | "complete" | "error";
@@ -155,14 +153,58 @@ export function AtlasInventoryWorkspace({
   companyName?: string;
 }) {
   const [query, setQuery] = useState("");
-  const [guild2Orders, setGuild2Orders] = useState<Record<string, Guild2OrderState>>({});
+  const [guild2Orders, setGuild2Orders] = useState<Record<string, Guild2ProcurementOrderState>>({});
   const [guild2BulkState, setGuild2BulkState] = useState<Guild2BulkState>("idle");
   const [guild2BulkProgress, setGuild2BulkProgress] = useState({ completed: 0, failed: 0 });
+  const guild2ResultsRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
   const guild2ItemSkus = useMemo(() => new Set(items.map((item) => item.sku)), [items]);
   const guild2InventoryReady = GUILD2_PROCUREMENT_PLAN.ready
     && GUILD2_PROCUREMENT_PLAN.all.every((line) => guild2ItemSkus.has(line.sourceSku));
   const guild2Mode = GUILD2_PROCUREMENT_PLAN.all.some((line) => guild2ItemSkus.has(line.sourceSku));
+
+  const refreshGuild2Order = useCallback(async (sourceSku: string, orderId: string) => {
+    try {
+      const response = await fetch(`/api/procurement/requests/${encodeURIComponent(orderId)}`, {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      const detail = await responseJson<Guild2ProcurementRequestDetail>(response);
+      setGuild2Orders((current) => ({
+        ...current,
+        [sourceSku]: mergeGuild2ProcurementOrderDetail(current[sourceSku], detail),
+      }));
+    } catch (error) {
+      setGuild2Orders((current) => ({
+        ...current,
+        [sourceSku]: {
+          ...current[sourceSku],
+          error: error instanceof Error ? error.message : "Status refresh failed.",
+        },
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!guild2Mode) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/procurement/requests?sourceCampaign=GUILD2", {
+          cache: "no-store",
+          headers: { accept: "application/json" },
+        });
+        const payload = await responseJson<{ requests: Guild2ProcurementRequestSummary[] }>(response);
+        if (cancelled) return;
+        setGuild2Orders((current) => restoreGuild2ProcurementOrders(current, payload.requests));
+      } catch {
+        // The queue remains usable for new requests when saved status is temporarily unavailable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [guild2Mode]);
 
   const sourceGuild2Line = useCallback(async (line: Guild2ProcurementLine) => {
     if (line.classification !== "SUPPLIER_SEARCH") return false;
@@ -174,6 +216,7 @@ export function AtlasInventoryWorkspace({
         progress: "Creating request",
         error: null,
         workflowWakeRequested: current[line.sourceSku]?.workflowWakeRequested ?? null,
+        vendors: current[line.sourceSku]?.vendors ?? [],
       },
     }));
     try {
@@ -195,6 +238,7 @@ export function AtlasInventoryWorkspace({
           workflowWakeRequested: created
             ? result.workflowWakeRequested
             : current[line.sourceSku]?.workflowWakeRequested ?? null,
+          vendors: current[line.sourceSku]?.vendors ?? [],
         },
       }));
       return true;
@@ -207,6 +251,7 @@ export function AtlasInventoryWorkspace({
           progress: null,
           error: error instanceof Error ? error.message : "The procurement request failed.",
           workflowWakeRequested: current[line.sourceSku]?.workflowWakeRequested ?? null,
+          vendors: current[line.sourceSku]?.vendors ?? [],
         },
       }));
       return false;
@@ -229,41 +274,35 @@ export function AtlasInventoryWorkspace({
   }, [guild2BulkState, guild2InventoryReady, sourceGuild2Line]);
 
   useEffect(() => {
-    const active = Object.entries(guild2Orders).filter(([, order]) => (
-      Boolean(order.orderId) && PROCUREMENT_ACTIVE_STATUSES.has(order.status)
-    ));
+    const active = guild2ActiveProcurementOrders(guild2Orders);
     if (!active.length) return;
     const timer = window.setTimeout(() => {
-      void Promise.all(active.map(async ([sourceSku, order]) => {
-        try {
-          const response = await fetch(`/api/procurement/requests/${encodeURIComponent(order.orderId!)}`, {
-            cache: "no-store",
-            headers: { accept: "application/json" },
-          });
-          const detail = await responseJson<{ id: string; status: string; progress: string | null }>(response);
-          setGuild2Orders((current) => ({
-            ...current,
-            [sourceSku]: {
-              orderId: detail.id,
-              status: detail.status,
-              progress: detail.progress,
-              error: null,
-              workflowWakeRequested: current[sourceSku]?.workflowWakeRequested ?? null,
-            },
-          }));
-        } catch (error) {
-          setGuild2Orders((current) => ({
-            ...current,
-            [sourceSku]: {
-              ...current[sourceSku],
-              error: error instanceof Error ? error.message : "Status refresh failed.",
-            },
-          }));
-        }
-      }));
+      void runWithBoundedConcurrency(active, async ([sourceSku, order]) => {
+        await refreshGuild2Order(sourceSku, order.orderId!);
+      });
     }, 7_000);
     return () => window.clearTimeout(timer);
-  }, [guild2Orders]);
+  }, [guild2Orders, refreshGuild2Order]);
+  const selectedGuild2Order = guild2Orders[selectedSku];
+  const selectedGuild2Line = guild2ProcurementLine(selectedSku);
+
+  useEffect(() => {
+    if (!selectedGuild2Order?.orderId) return;
+    void refreshGuild2Order(selectedSku, selectedGuild2Order.orderId);
+  }, [refreshGuild2Order, selectedGuild2Order?.orderId, selectedSku]);
+
+  const openGuild2Results = useCallback((sourceSku: string) => {
+    onSelect(sourceSku);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        guild2ResultsRef.current?.focus({ preventScroll: true });
+        guild2ResultsRef.current?.scrollIntoView({
+          behavior: reduceMotion ? "auto" : "smooth",
+          block: "start",
+        });
+      });
+    });
+  }, [onSelect, reduceMotion]);
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
       campaignId?: string;
@@ -514,6 +553,48 @@ export function AtlasInventoryWorkspace({
         </section>
       ) : null}
 
+      {selectedGuild2Line && selectedGuild2Order?.orderId ? (
+        <section
+          ref={guild2ResultsRef}
+          className={styles.supplyIntelligenceSummary}
+          aria-label={`Procurement results for ${selectedGuild2Line.name}`}
+          tabIndex={-1}
+        >
+          <header>
+            <span>
+              <small>{selectedGuild2Line.sourceSku}</small>
+              <strong>{procurementStatusLabel(selectedGuild2Order.status)}</strong>
+            </span>
+            <dl>
+              <div><dt>Suppliers</dt><dd>{selectedGuild2Order.vendors.length}</dd></div>
+              <div><dt>Order</dt><dd>{selectedGuild2Order.orderId.slice(0, 8)}</dd></div>
+            </dl>
+          </header>
+          <div>
+            <article>
+              <span><strong>{selectedGuild2Line.name}</strong><small>{selectedGuild2Order.progress ?? "No workflow update"}</small></span>
+              <span>
+                <strong>{PROCUREMENT_APPROVAL_STATUSES.has(selectedGuild2Order.status) ? "Approval required in Bourne Inbox" : "Workflow status"}</strong>
+                <small>{selectedGuild2Order.error ?? procurementStatusLabel(selectedGuild2Order.status)}</small>
+              </span>
+              <span>
+                <button className={styles.sourcingQueueAction} type="button" onClick={() => void refreshGuild2Order(selectedSku, selectedGuild2Order.orderId!)}>Refresh</button>
+              </span>
+            </article>
+            {selectedGuild2Order.vendors.map((vendor) => {
+              const evidence = guild2ProcurementEvidenceSummary(vendor.research);
+              return (
+                <article key={vendor.id}>
+                  <span><strong>{vendor.name}</strong><small>{procurementStatusLabel(vendor.status)}</small></span>
+                  <span><strong>{vendor.quote ? "Quote received" : "Quote not received"}</strong><small>{evidence.join(" ") || "Evidence not available"}</small></span>
+                  <span>{vendor.website ? <a href={vendor.website} target="_blank" rel="noreferrer">Open site</a> : <small>Website unavailable</small>}</span>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       {intelligenceProfile ? (
         <section className={styles.supplyIntelligenceSummary} aria-label="Customer supply profile">
           <header>
@@ -675,13 +756,14 @@ export function AtlasInventoryWorkspace({
                             ? "Background research"
                             : resultState(run))}</td>
                 <td>{guild2Line && guild2Order?.orderId ? (
-                  <a
+                  <button
                     className={styles.sourcingQueueAction}
-                    href={`/dashboard/workflow?orderId=${encodeURIComponent(guild2Order.orderId)}`}
+                    type="button"
+                    onClick={() => openGuild2Results(item.sku)}
                   >
-                    View request
+                    View results
                     <ArrowRight size={13} />
-                  </a>
+                  </button>
                 ) : (
                   <button
                       className={styles.sourcingQueueAction}

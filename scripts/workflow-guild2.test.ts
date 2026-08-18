@@ -4,10 +4,16 @@ import { procurementRequestSchema } from "../src/lib/procurement-contract";
 import {
   GUILD2_BULK_CONCURRENCY,
   GUILD2_PROCUREMENT_PLAN,
+  guild2ActiveProcurementOrders,
+  guild2ProcurementEvidenceSummary,
   guild2ProcurementIdempotencyKey,
   guild2ProcurementLine,
   guild2ProcurementRequest,
+  guild2ProcurementSourceSku,
+  mergeGuild2ProcurementOrderDetail,
+  restoreGuild2ProcurementOrders,
   runWithBoundedConcurrency,
+  type Guild2ProcurementOrderState,
 } from "../src/lib/supply-os/guild2-procurement";
 import { GUILD2_SOURCING_ITEMS, GUILD_SOURCING_ITEMS } from "../src/lib/supply-os/guild-sourcing-items";
 
@@ -44,11 +50,22 @@ let maximumActive = 0;
 const processed: string[] = [];
 
 const workbench = fs.readFileSync("src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx", "utf8");
+const procurementHelpers = fs.readFileSync("src/lib/supply-os/guild2-procurement.ts", "utf8");
 const dashboard = fs.readFileSync("src/app/dashboard/supply-os/supply-os-dashboard.tsx", "utf8");
 const environment = fs.readFileSync(".env.example", "utf8");
 
-assert.match(workbench, /fetch\("\/api\/procurement\/requests"/);
+assert.match(workbench, /fetch\("\/api\/procurement\/requests\?sourceCampaign=GUILD2"/);
 assert.match(workbench, /7_000/);
+assert.match(workbench, /runWithBoundedConcurrency\(active/);
+assert.match(workbench, /restoreGuild2ProcurementOrders/);
+assert.match(procurementHelpers, /requestContext/);
+assert.match(procurementHelpers, /guild2ProcurementSourceSku/);
+assert.match(procurementHelpers, /restoredFromList/);
+assert.match(workbench, /View results/);
+assert.match(workbench, /scrollIntoView/);
+assert.match(workbench, /Approval required in Bourne Inbox/);
+assert.match(workbench, /selectedGuild2Order\.vendors\.map/);
+assert.doesNotMatch(workbench, /dashboard\/workflow\?orderId/);
 assert.match(workbench, /workflowWakeRequested/);
 assert.match(workbench, /response\.status === 201/);
 assert.match(workbench, /Needs trigger: queued for scheduled pickup/);
@@ -59,6 +76,78 @@ assert.match(workbench, /disabled=\{!guild2InventoryReady \|\| guild2BulkState =
 assert.doesNotMatch(dashboard, /\/api\/supply-os\/external-sourcing\/guild2/);
 assert.doesNotMatch(environment, /WORKFLOW_AGENT_TRIGGER_/);
 assert.equal((environment.match(/^WORKFLOW_DATABASE_URL=/gm) ?? []).length, 1);
+
+const queuedOrder: Guild2ProcurementOrderState = {
+  orderId: "11111111-1111-4111-8111-111111111111",
+  status: "new",
+  progress: "Queued",
+  error: null,
+  workflowWakeRequested: true,
+  vendors: [],
+};
+assert.equal(guild2ProcurementSourceSku({ source: { source_sku: "GUILD2-001" } }), "GUILD2-001");
+assert.equal(guild2ProcurementSourceSku({}), null);
+assert.equal(guild2ProcurementSourceSku({ source: [] }), null);
+assert.equal(guild2ProcurementSourceSku({ source: { source_sku: 1 } }), null);
+assert.equal(guild2ProcurementSourceSku({ source: { source_sku: "GUILD2-999" } }), null);
+
+const restoredOrders = restoreGuild2ProcurementOrders({
+  "GUILD2-001": { ...queuedOrder, status: "submitting", workflowWakeRequested: true },
+}, [
+  { id: "newest", status: "researching", progress: "Newest", requestContext: { source: { source_sku: "GUILD2-002" } } },
+  { id: "older", status: "new", progress: "Older", requestContext: { source: { source_sku: "GUILD2-002" } } },
+  { id: "ignored", status: "new", progress: null, requestContext: { source: { source_sku: "OTHER-001" } } },
+  { id: "submitting", status: "new", progress: null, requestContext: { source: { source_sku: "GUILD2-001" } } },
+]);
+assert.equal(restoredOrders["GUILD2-001"]?.status, "submitting");
+assert.equal(restoredOrders["GUILD2-002"]?.orderId, "newest");
+assert.equal(restoredOrders["GUILD2-002"]?.progress, "Newest");
+assert.equal(restoredOrders["GUILD2-002"]?.workflowWakeRequested, null);
+assert.deepEqual(restoredOrders["GUILD2-002"]?.vendors, []);
+assert.equal(Object.hasOwn(restoredOrders, "OTHER-001"), false);
+
+const restoredAfterCancellation = restoreGuild2ProcurementOrders({}, [
+  { id: "cancelled", status: "cancelled", progress: null, requestContext: { source: { source_sku: "GUILD2-003" } } },
+  { id: "active", status: "researching", progress: "Working", requestContext: { source: { source_sku: "GUILD2-003" } } },
+]);
+assert.equal(restoredAfterCancellation["GUILD2-003"]?.orderId, "active");
+
+const vendor = {
+  id: "vendor-1",
+  name: "Supplier One",
+  website: "https://example.com",
+  status: "shortlisted",
+  research: { summary: "Evidence" },
+  quote: null,
+};
+const mergedOrder = mergeGuild2ProcurementOrderDetail(queuedOrder, {
+  id: queuedOrder.orderId!,
+  status: "awaiting_shortlist_approval",
+  progress: "Shortlist ready",
+  requestContext: {},
+  vendors: [vendor],
+});
+assert.equal(mergedOrder.workflowWakeRequested, true);
+assert.equal(mergedOrder.status, "awaiting_shortlist_approval");
+assert.deepEqual(mergedOrder.vendors, [vendor]);
+
+const activeOrders = guild2ActiveProcurementOrders({
+  new: queuedOrder,
+  researching: { ...queuedOrder, status: "researching" },
+  sourcing: { ...queuedOrder, status: "sourcing" },
+  approval: { ...queuedOrder, status: "awaiting_shortlist_approval" },
+  completed: { ...queuedOrder, status: "ordered" },
+  missing: { ...queuedOrder, orderId: null },
+});
+assert.deepEqual(activeOrders.map(([key]) => key), ["new", "researching", "sourcing"]);
+
+const longEvidence = "x".repeat(220);
+assert.deepEqual(guild2ProcurementEvidenceSummary({
+  unrelated: "ignored after two preferred values",
+  evidence: ["same", "same", 7, true],
+  summary: longEvidence,
+}), [longEvidence.slice(0, 180), "same"]);
+assert.deepEqual(guild2ProcurementEvidenceSummary({ a: { b: { c: "too deep" } } }), []);
 
 async function main() {
   const emptyProcessed: string[] = [];

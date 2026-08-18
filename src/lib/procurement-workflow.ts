@@ -52,7 +52,7 @@ type OrderDetailRow = {
   updatedAt: Date | string;
 };
 
-type OrderListRow = Omit<OrderDetailRow, "requestContext" | "approvalRequestedAt" | "decisionSnapshot" | "vendors">;
+type OrderListRow = Omit<OrderDetailRow, "approvalRequestedAt" | "decisionSnapshot" | "vendors">;
 
 export type ProcurementOrderVendor = {
   id: string;
@@ -481,6 +481,7 @@ export async function listProcurementRequestsFromDatabase(
   database: RawDatabase,
   customerId: string,
   limit = 25,
+  sourceCampaign?: string,
 ) {
   try {
     const rows = await database.$queryRawUnsafe<OrderListRow[]>(`
@@ -493,15 +494,17 @@ export async function listProcurementRequestsFromDatabase(
         orders.unit,
         bill_of_materials.material,
         bill_of_materials.specification,
+        orders.request_context AS "requestContext",
         orders.updated_at AS "updatedAt"
       FROM orders
       JOIN bill_of_materials
         ON bill_of_materials.id = orders.bom_id
         AND bill_of_materials.customer_id = orders.customer_id
       WHERE orders.customer_id = $1::uuid
+        AND ($3::text IS NULL OR orders.request_context #>> '{source,campaign}' = $3::text)
       ORDER BY orders.updated_at DESC, orders.id DESC
       LIMIT $2
-    `, customerId, Math.min(Math.max(limit, 1), 50));
+    `, customerId, Math.min(Math.max(limit, 1), 50), sourceCampaign ?? null);
     return rows.map((row) => ({
       id: row.id,
       status: row.status,
@@ -511,6 +514,7 @@ export async function listProcurementRequestsFromDatabase(
       unit: row.unit,
       material: row.material,
       specification: row.specification,
+      requestContext: isObject(row.requestContext) ? row.requestContext : {},
       updatedAt: isoTimestamp(row.updatedAt) ?? new Date(0).toISOString(),
     }));
   } catch (error) {
@@ -519,8 +523,8 @@ export async function listProcurementRequestsFromDatabase(
   }
 }
 
-export async function listProcurementRequests(customerId: string, limit = 25) {
-  return listProcurementRequestsFromDatabase(externalDatabase(), customerId, limit);
+export async function listProcurementRequests(customerId: string, limit = 50, sourceCampaign?: string) {
+  return listProcurementRequestsFromDatabase(externalDatabase(), customerId, limit, sourceCampaign);
 }
 
 export async function requestBourneWorkflowWake(

@@ -4,6 +4,7 @@ import { procurementRequestSchema } from "../src/lib/procurement-contract";
 import {
   createProcurementRequest,
   createProcurementRequestInDatabase,
+  listProcurementRequestsFromDatabase,
   ProcurementDatabase,
   procurementCustomerIdFromServerMetadata,
   ProcurementWorkflowError,
@@ -214,6 +215,32 @@ assert.equal(duplicate.orderId, first.orderId);
 assert.equal(duplicate.created, false);
 assert.equal(database.state.orders.size, 1, "A duplicate key must not create a second order.");
 
+const listQueryValues: unknown[][] = [];
+const listDatabase = {
+  async $queryRawUnsafe<T>(_query: string, ...values: unknown[]): Promise<T> {
+    listQueryValues.push(values);
+    return [{
+      id: first.orderId,
+      status: "new",
+      progress: "Order received from dashboard",
+      neededBy: "2026-09-30",
+      quantity: "10",
+      unit: "blanks",
+      material: "6061-T651 aluminum plate",
+      specification: "6.35 mm nominal, precision-sawn blanks",
+      requestContext: { source: { source_sku: "GUILD2-001" } },
+      updatedAt: "2026-08-18T20:00:00.000Z",
+    }] as T;
+  },
+  async $executeRawUnsafe() {
+    return 0;
+  },
+};
+const listed = await listProcurementRequestsFromDatabase(listDatabase, customerA, 75, "GUILD2");
+assert.deepEqual(listQueryValues, [[customerA, 50, "GUILD2"]], "List reads must remain customer-scoped, campaign-filtered, and capped at 50 rows.");
+assert.equal(listed[0]?.requestContext.source instanceof Object, true);
+assert.equal((listed[0]?.requestContext.source as Record<string, unknown>).source_sku, "GUILD2-001");
+
 await assert.rejects(
   createProcurementRequestInDatabase(database, customerA, { ...validInput, quantity: 11 }),
   (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "conflict",
@@ -311,6 +338,8 @@ assert(handlerSource.includes("if (!session)"), "Procurement handlers must rejec
 assert(routeSource.includes("handleProcurementPost"), "POST must use the authenticated procurement handler.");
 assert(detailRouteSource.includes("handleProcurementDetail"), "Detail must use the authenticated procurement handler.");
 assert(workflowSource.includes("AND orders.customer_id = $2::uuid"), "Order detail reads must scope by customer.");
+assert(workflowSource.includes('orders.request_context AS "requestContext"'), "Order lists must restore stored request context.");
+assert(workflowSource.includes("limit = 50"), "The recent order list must cover all 38 GUILD2 sourcing lines.");
 assert(workflowSource.includes("AND customer_id = $2::uuid"), "BOM reads must scope by customer.");
 assert(workflowSource.includes("AbortSignal.timeout(3_000)"), "The webhook must use a short timeout.");
 assert(handlerSource.includes("request.body.getReader()"), "The API must enforce its request limit against streamed bytes.");
