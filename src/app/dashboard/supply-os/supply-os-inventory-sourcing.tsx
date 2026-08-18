@@ -15,6 +15,8 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import {
   GUILD2_PROCUREMENT_PLAN,
   guild2ActiveProcurementOrders,
+  guild2CustomerProcurementProgress,
+  guild2CustomerProcurementStatusLabel,
   guild2ProcurementLine,
   guild2ProcurementRequest,
   mergeGuild2ProcurementOrderDetail,
@@ -28,7 +30,6 @@ import {
 } from "@/lib/supply-os/guild2-procurement";
 import {
   PROCUREMENT_APPROVAL_STATUSES,
-  PROCUREMENT_STATUS_LABELS,
 } from "@/lib/procurement-status";
 import {
   sourcingNeedByDate,
@@ -77,10 +78,6 @@ function formatNeedBy(item: AtlasInventoryItem) {
 
 function formatResearchDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
-}
-
-function procurementStatusLabel(status: string) {
-  return PROCUREMENT_STATUS_LABELS[status] ?? status.replaceAll("_", " ");
 }
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -486,7 +483,7 @@ export function AtlasInventoryWorkspace({
                 ? <CheckCircle2 size={17} />
                 : <LoaderCircle size={17} />}
             <span>
-              <small>Bourne procurement queue</small>
+              <small>Procurement queue</small>
               <strong>{guild2BulkState === "running"
                 ? `${guild2BulkProgress.completed} of 38 requests accepted`
                 : "38 supplier-searchable requests"}</strong>
@@ -682,10 +679,10 @@ export function AtlasInventoryWorkspace({
                         ? guild2Order.error
                         : guild2Order?.orderId
                           ? guild2Order.workflowWakeRequested === false
-                            ? "Needs trigger: queued for scheduled pickup"
+                            ? "Queued for processing"
                             : PROCUREMENT_APPROVAL_STATUSES.has(guild2Order.status)
-                            ? "Approval required in Bourne Inbox"
-                            : `${procurementStatusLabel(guild2Order.status)}${guild2Order.progress ? `: ${guild2Order.progress}` : ""}`
+                            ? "Shortlist under review"
+                            : `${guild2CustomerProcurementStatusLabel(guild2Order.status)}: ${guild2CustomerProcurementProgress(guild2Order.status, guild2Order.vendors.length)}`
                           : guild2Order?.status === "submitting"
                             ? "Creating request"
                             : "Ready to source"

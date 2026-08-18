@@ -6,6 +6,8 @@ import {
   GUILD2_PROCUREMENT_POLL_INTERVAL_MS,
   GUILD2_PROCUREMENT_PLAN,
   guild2ActiveProcurementOrders,
+  guild2CustomerProcurementProgress,
+  guild2CustomerProcurementStatusLabel,
   guild2ProcurementEvidenceSummary,
   guild2ProcurementContactSummary,
   guild2ProcurementIdempotencyKey,
@@ -69,7 +71,8 @@ let maximumActive = 0;
 const processed: string[] = [];
 
 const workbench = fs.readFileSync("src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx", "utf8");
-const guidedWorkspace = fs.readFileSync("src/app/dashboard/supply-os/supply-os-bourne-procurement-workspace.tsx", "utf8");
+const guidedWorkspace = fs.readFileSync("src/app/dashboard/supply-os/supply-os-customer-procurement-workspace.tsx", "utf8");
+const workspaceStyles = fs.readFileSync("src/app/dashboard/supply-os/supply-os-logistics.module.css", "utf8");
 const procurementHelpers = fs.readFileSync("src/lib/supply-os/guild2-procurement.ts", "utf8");
 const dashboard = fs.readFileSync("src/app/dashboard/supply-os/supply-os-dashboard.tsx", "utf8");
 const environment = fs.readFileSync(".env.example", "utf8");
@@ -87,13 +90,20 @@ assert.match(guidedWorkspace, /Request<\/span>/);
 assert.match(guidedWorkspace, /Research<\/span>/);
 assert.match(guidedWorkspace, /Compare<\/span>/);
 assert.match(guidedWorkspace, /Procure<\/span>/);
-assert.match(guidedWorkspace, /Approval required in Bourne Inbox/);
+assert.match(guidedWorkspace, /Shortlist under review/);
 assert.match(guidedWorkspace, /detail\.vendors\.map/);
 assert.match(guidedWorkspace, /GUILD2_PROCUREMENT_POLL_INTERVAL_MS/);
+assert.doesNotMatch(guidedWorkspace, /Bourne|Neon|Gmail/);
+assert.doesNotMatch(guidedWorkspace, /\{detail\.progress/);
+assert.match(workspaceStyles, /\.procurementSourceLog > li > span:first-child/);
+assert.match(workspaceStyles, /\.procurementSourceLog > li > div/);
+assert.doesNotMatch(workspaceStyles, /\.procurementSourceLog > li > span \{/);
 assert.doesNotMatch(workbench, /dashboard\/workflow\?orderId/);
 assert.match(workbench, /workflowWakeRequested/);
 assert.match(workbench, /response\.status === 201/);
-assert.match(workbench, /Needs trigger: queued for scheduled pickup/);
+assert.match(workbench, /Queued for processing/);
+assert.doesNotMatch(workbench, /Bourne procurement queue|Approval required in Bourne Inbox/);
+assert.doesNotMatch(workbench, /guild2Order\.progress/);
 assert.match(workbench, /Source 38 lines/);
 assert.match(workbench, /GUILD-027 is skipped/);
 assert.match(workbench, /GUILD-039 remains an award documentation requirement/);
@@ -115,6 +125,26 @@ assert.equal(guild2ProcurementSourceSku({}), null);
 assert.equal(guild2ProcurementSourceSku({ source: [] }), null);
 assert.equal(guild2ProcurementSourceSku({ source: { source_sku: 1 } }), null);
 assert.equal(guild2ProcurementSourceSku({ source: { source_sku: "GUILD2-999" } }), null);
+assert.equal(guild2CustomerProcurementStatusLabel("researching"), "Researching suppliers");
+assert.equal(guild2CustomerProcurementStatusLabel("awaiting_shortlist_approval"), "Shortlist review");
+assert.equal(guild2CustomerProcurementStatusLabel("internal_worker_state"), "In progress");
+assert.equal(guild2CustomerProcurementProgress("new", 0), "Request received. Supplier research has not started yet.");
+assert.equal(guild2CustomerProcurementProgress("researching", 1), "1 supplier candidate is being verified.");
+assert.equal(guild2CustomerProcurementProgress("awaiting_shortlist_approval", 1), "1 supplier candidate is ready for review.");
+assert.equal(guild2CustomerProcurementProgress("awaiting_shortlist_approval", 4), "4 supplier candidates are ready for review.");
+assert.doesNotMatch(
+  Object.values({
+    new: guild2CustomerProcurementProgress("new", 0),
+    researching: guild2CustomerProcurementProgress("researching", 0),
+    review: guild2CustomerProcurementProgress("awaiting_shortlist_approval", 4),
+    sourcing: guild2CustomerProcurementProgress("sourcing", 4),
+    orderReview: guild2CustomerProcurementProgress("awaiting_order_approval", 4),
+    ordered: guild2CustomerProcurementProgress("ordered", 4),
+    attention: guild2CustomerProcurementProgress("needs_attention", 0),
+    cancelled: guild2CustomerProcurementProgress("cancelled", 0),
+  }).join(" "),
+  /Bourne|Neon|Gmail/i,
+);
 
 const restoredOrders = restoreGuild2ProcurementOrders({
   "GUILD2-001": { ...queuedOrder, status: "submitting", workflowWakeRequested: true },
@@ -182,6 +212,10 @@ assert.deepEqual(guild2ProcurementEvidenceSummary({
   summary: longEvidence,
 }), [longEvidence.slice(0, 180), "same"]);
 assert.deepEqual(guild2ProcurementEvidenceSummary({ a: { b: { c: "too deep" } } }), []);
+assert.deepEqual(guild2ProcurementEvidenceSummary({
+  summary: "Bourne run details are internal.",
+  evidence: ["Public supplier capability page"],
+}), ["Public supplier capability page"]);
 assert.equal(guild2ProcurementQuoteSummary(null), "Not received");
 assert.equal(guild2ProcurementQuoteSummary({ amount: 1250, currency: "usd", unit: "lot" }), "USD 1,250 / lot");
 assert.equal(guild2ProcurementQuoteSummary({ quote_reference: "RFQ-12" }), "Received: RFQ-12");

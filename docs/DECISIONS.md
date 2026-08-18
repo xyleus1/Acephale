@@ -54,6 +54,24 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: The landing page and product are intentionally served by one
   routing layer that can safely split paths between them.
 
+### 2026-08-18 - Customer sourcing states hide workflow implementation details
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Workflow progress can contain internal service names, run failures,
+  email-provider details, and operator approval instructions. Rendering that
+  text directly makes the customer surface confusing and leaks implementation
+  details.
+- Decision: Customer sourcing pages derive bounded status and progress copy
+  from the order status and supplier count. They do not render the raw workflow
+  progress field. Internal service, database, email-provider, and approval-tool
+  names stay out of customer-visible copy.
+- Consequences: Request, Research, Compare, and Procure remain the customer
+  lifecycle. The Compare step shows supplier, contact, evidence, quote, and
+  source data. Internal operators retain their separate approval workflow.
+- Revisit when: Customers receive an explicit approval role with a reviewed,
+  customer-scoped action contract.
+
 ### 2026-08-17 - GUILD2 uses the authenticated procurement API
 
 - Status: accepted

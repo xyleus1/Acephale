@@ -85,6 +85,46 @@ export function guild2ProcurementResearchComplete(status: string, supplierCount:
   ].includes(status);
 }
 
+const CUSTOMER_PROCUREMENT_STATUS_LABELS: Record<string, string> = {
+  new: "Queued",
+  researching: "Researching suppliers",
+  awaiting_shortlist_approval: "Shortlist review",
+  sourcing: "Collecting quotes",
+  awaiting_order_approval: "Order review",
+  ordered: "Ordered",
+  needs_attention: "Needs attention",
+  cancelled: "Canceled",
+};
+
+export function guild2CustomerProcurementStatusLabel(status: string) {
+  return CUSTOMER_PROCUREMENT_STATUS_LABELS[status] ?? "In progress";
+}
+
+export function guild2CustomerProcurementProgress(status: string, supplierCount: number) {
+  switch (status) {
+    case "new":
+      return "Request received. Supplier research has not started yet.";
+    case "researching":
+      return supplierCount > 0
+        ? `${supplierCount} supplier candidate${supplierCount === 1 ? " is" : "s are"} being verified.`
+        : "Searching and verifying supplier candidates.";
+    case "awaiting_shortlist_approval":
+      return `${supplierCount} supplier candidate${supplierCount === 1 ? " is" : "s are"} ready for review.`;
+    case "sourcing":
+      return "Shortlisted suppliers are being evaluated and commercial terms are being collected.";
+    case "awaiting_order_approval":
+      return "Commercial terms are ready for final review.";
+    case "ordered":
+      return "The order has been approved and placed.";
+    case "needs_attention":
+      return "The sourcing team needs additional information before work can continue.";
+    case "cancelled":
+      return "This request was canceled.";
+    default:
+      return "The sourcing request is being updated.";
+  }
+}
+
 export type Guild2ProcurementLine = GuildSourcingLine & {
   sourceSku: string;
 };
@@ -222,7 +262,11 @@ export function guild2ProcurementEvidenceSummary(research: Record<string, unknow
     if (typeof value === "string") {
       const normalized = value.replace(/\s+/g, " ").trim();
       const bounded = normalized.slice(0, 180);
-      if (bounded && !snippets.includes(bounded)) snippets.push(bounded);
+      if (
+        bounded
+        && !/\b(?:bourne|neon|gmail)\b/i.test(bounded)
+        && !snippets.includes(bounded)
+      ) snippets.push(bounded);
       return;
     }
     if (typeof value === "number" || typeof value === "boolean") {

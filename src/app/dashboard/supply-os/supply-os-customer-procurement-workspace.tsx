@@ -16,6 +16,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GUILD2_PROCUREMENT_POLL_INTERVAL_MS,
+  guild2CustomerProcurementProgress,
+  guild2CustomerProcurementStatusLabel,
   guild2ProcurementContactSummary,
   guild2ProcurementEvidenceSummary,
   guild2ProcurementPhase,
@@ -32,7 +34,7 @@ import {
 import type { AtlasInventoryItem } from "@/lib/supply-os/atlas-robotics-inventory";
 import styles from "./supply-os-logistics.module.css";
 
-function statusLabel(status: string) {
+function vendorStatusLabel(status: string) {
   return PROCUREMENT_STATUS_LABELS[status] ?? status.replaceAll("_", " ");
 }
 
@@ -64,7 +66,7 @@ async function responseJson<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
-export function BourneProcurementWorkspace({
+export function CustomerProcurementWorkspace({
   orderId,
   item,
   initialOrder,
@@ -130,18 +132,19 @@ export function BourneProcurementWorkspace({
     const claimed = detail.status !== "new";
     const suppliersFound = guild2ProcurementResearchComplete(detail.status, detail.vendors.length);
     return [
-      { label: "Request accepted", detail: `${detail.quantity.toLocaleString("en-US")} ${detail.unit} saved in Neon`, complete: true, active: false },
-      { label: "Workflow claimed", detail: detail.status === "new" ? "Waiting for Bourne to claim the queued order" : "Bourne has claimed the order", complete: claimed, active: !claimed },
-      { label: "Supplier search", detail: suppliersFound ? `${detail.vendors.length} supplier candidate${detail.vendors.length === 1 ? "" : "s"} saved` : detail.progress ?? "Searching supplier sources", complete: suppliersFound, active: claimed && !suppliersFound },
-      { label: "Evidence review", detail: suppliersFound ? "Supplier evidence is ready for operator review" : "Starts after supplier candidates are found", complete: suppliersFound, active: false },
+      { label: "Request received", detail: `${detail.quantity.toLocaleString("en-US")} ${detail.unit} confirmed`, complete: true, active: false },
+      { label: "Sourcing started", detail: detail.status === "new" ? "Waiting for supplier research to start" : "Supplier research is active", complete: claimed, active: !claimed },
+      { label: "Supplier search", detail: suppliersFound ? `${detail.vendors.length} supplier candidate${detail.vendors.length === 1 ? "" : "s"} found` : "Searching and verifying supplier candidates", complete: suppliersFound, active: claimed && !suppliersFound },
+      { label: "Evidence review", detail: suppliersFound ? "Supplier evidence is ready for review" : "Starts after supplier candidates are found", complete: suppliersFound, active: false },
     ];
   }, [detail]);
 
-  const currentStatus = statusLabel(detail.status);
+  const currentStatus = guild2CustomerProcurementStatusLabel(detail.status);
+  const visibleProgress = guild2CustomerProcurementProgress(detail.status, detail.vendors.length);
   return (
     <motion.section
-      className={styles.procurementWorkspace}
-      aria-label="Bourne procurement research"
+      className={`${styles.procurementWorkspace} ${styles.customerProcurementWorkspace}`}
+      aria-label="Supplier sourcing progress"
       initial={reduceMotion ? false : { opacity: 0, x: 14 }}
       animate={{ opacity: 1, x: 0 }}
       exit={reduceMotion ? undefined : { opacity: 0, x: 14 }}
@@ -174,18 +177,18 @@ export function BourneProcurementWorkspace({
               <span className={styles.procurementResearchIcon}><Sparkles size={22} /></span>
               <small>{currentStatus}</small>
               <h3>{detail.material}</h3>
-              <p>{refreshError ?? detail.progress ?? "The request is queued. This page checks Neon every seven seconds while Bourne works."}</p>
+              <p>{refreshError ?? visibleProgress}</p>
             </section>
             <ol className={styles.procurementSourceLog}>
               {researchSteps.map((step) => (
                 <li key={step.label} data-complete={step.complete} data-active={step.active}>
                   <span>{step.complete ? <Check size={15} /> : step.active ? <LoaderCircle size={15} /> : <Search size={15} />}</span>
-                  <span><strong>{step.label}</strong><small>{step.detail}</small></span>
+                  <div><strong>{step.label}</strong><small>{step.detail}</small></div>
                 </li>
               ))}
             </ol>
             <footer>
-              <span><ShieldCheck size={14} /> Bourne performs research and writes supplier results. Derya only reads the customer-scoped workflow record.</span>
+              <span><ShieldCheck size={14} /> Supplier candidates remain unqualified until reviewed.</span>
               <button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>{refreshState === "running" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />} Refresh now</button>
             </footer>
           </motion.div>
@@ -199,8 +202,8 @@ export function BourneProcurementWorkspace({
             transition={{ duration: 0.16 }}
           >
             <TriangleAlert size={28} />
-            <h3>{detail.status === "cancelled" ? "Request canceled" : "Human intervention required"}</h3>
-            <p>{refreshError ?? detail.progress ?? "Open the Bourne run to resolve the workflow issue, then refresh this status."}</p>
+            <h3>{detail.status === "cancelled" ? "Request canceled" : "More information needed"}</h3>
+            <p>{refreshError ?? visibleProgress}</p>
             <button type="button" onClick={() => void refresh().catch(() => undefined)}><RefreshCw size={14} /> Refresh status</button>
           </motion.div>
         ) : phase === "compare" ? (
@@ -215,9 +218,9 @@ export function BourneProcurementWorkspace({
             <section className={styles.procurementRecommendation}>
               {approvalRequired ? <ShieldCheck size={20} /> : <CheckCircle2 size={24} />}
               <span>
-                <small>{approvalRequired ? "Approval required in Bourne Inbox" : currentStatus}</small>
+                <small>{approvalRequired ? "Shortlist under review" : currentStatus}</small>
                 <h3>{detail.vendors.length} supplier candidate{detail.vendors.length === 1 ? "" : "s"}</h3>
-                <p>{detail.progress ?? "Compare the supplier evidence. Workflow decisions remain in Bourne."}</p>
+                <p>{visibleProgress}</p>
               </span>
               <strong>{currentStatus}</strong>
             </section>
@@ -230,22 +233,22 @@ export function BourneProcurementWorkspace({
                     const contact = guild2ProcurementContactSummary(vendor.contact);
                     return (
                       <tr key={vendor.id}>
-                        <td><strong>{vendor.name}</strong><small>{statusLabel(vendor.status)}</small></td>
+                        <td><strong>{vendor.name}</strong><small>{vendorStatusLabel(vendor.status)}</small></td>
                         <td><strong>{contact.primary}</strong><small>{contact.secondary}</small></td>
                         <td><strong>{evidence[0] ?? "Evidence pending"}</strong><small>{evidence[1] ?? "Review the supplier source before approval"}</small></td>
-                        <td><strong>{guild2ProcurementQuoteSummary(vendor.quote)}</strong><small>{vendor.quote ? "Review in Bourne before approval" : "No commercial terms saved"}</small></td>
+                        <td><strong>{guild2ProcurementQuoteSummary(vendor.quote)}</strong><small>{vendor.quote ? "Commercial terms saved" : "No commercial terms saved"}</small></td>
                         <td>{vendor.website ? <a href={vendor.website} target="_blank" rel="noreferrer">Open site <ExternalLink size={12} /></a> : <small>Website unavailable</small>}</td>
                       </tr>
                     );
                   })}
                   {!detail.vendors.length ? (
-                    <tr><td colSpan={5}><strong>No supplier candidates saved</strong><small>Refresh after Bourne finishes writing the shortlist.</small></td></tr>
+                    <tr><td colSpan={5}><strong>No supplier candidates yet</strong><small>Supplier candidates are still being prepared.</small></td></tr>
                   ) : null}
                 </tbody>
               </table>
             </div>
             <footer className={styles.procurementDecisionFooter}>
-              <span><TriangleAlert size={14} /> This table is read-only. Approve or reject the shortlist in Bourne Inbox.</span>
+              <span><TriangleAlert size={14} /> Results are read-only while the shortlist is reviewed.</span>
               <button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>{refreshState === "running" ? "Refreshing" : "Refresh results"} <RefreshCw size={14} /></button>
             </footer>
           </motion.div>
@@ -259,8 +262,8 @@ export function BourneProcurementWorkspace({
             transition={{ duration: 0.16 }}
           >
             {detail.status === "ordered" ? <CheckCircle2 size={28} /> : <ShieldCheck size={28} />}
-            <h3>{detail.status === "ordered" ? "Order completed" : "Final approval required in Bourne Inbox"}</h3>
-            <p>{detail.progress ?? "The dashboard stays read-only while Bourne owns the final workflow decision."}</p>
+            <h3>{detail.status === "ordered" ? "Order completed" : "Order under review"}</h3>
+            <p>{visibleProgress}</p>
             <button type="button" onClick={() => void refresh().catch(() => undefined)}><RefreshCw size={14} /> Refresh status</button>
           </motion.div>
         )}

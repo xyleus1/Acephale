@@ -2256,7 +2256,7 @@
   opacity: 1;
 }
 
-.procurementSourceLog > li > span {
+.procurementSourceLog > li > span:first-child {
   width: 32px;
   height: 32px;
   display: grid;
@@ -2264,15 +2264,19 @@
   color: var(--ink-muted);
 }
 
-.procurementSourceLog > li[data-active="true"] > span {
+.procurementSourceLog > li > div {
+  min-width: 0;
+}
+
+.procurementSourceLog > li[data-active="true"] > span:first-child {
   color: var(--navy);
 }
 
-.procurementSourceLog > li[data-active="true"] > span svg {
+.procurementSourceLog > li[data-active="true"] > span:first-child svg {
   animation: sourcingSpinner 900ms linear infinite;
 }
 
-.procurementSourceLog > li[data-complete="true"] > span {
+.procurementSourceLog > li[data-complete="true"] > span:first-child {
   color: var(--success);
 }
 
@@ -2298,6 +2302,41 @@
   margin-top: 3px;
   color: var(--ink-muted);
   font-size: 10px;
+}
+
+.customerProcurementWorkspace .procurementResearch {
+  grid-template-columns: minmax(320px, 0.85fr) minmax(460px, 1.15fr);
+}
+
+.customerProcurementWorkspace .procurementSourceLog > li {
+  min-height: 82px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.customerProcurementWorkspace .procurementSourceLog > li > span:first-child {
+  width: 36px;
+  height: 36px;
+}
+
+.customerProcurementWorkspace .procurementSourceLog strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.customerProcurementWorkspace .procurementSourceLog small {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.customerProcurementWorkspace .procurementResearchLead p {
+  font-size: 14px;
+}
+
+.customerProcurementWorkspace .procurementResearch > footer {
+  min-height: 50px;
+  font-size: 11px;
 }
 
 .procurementSourceLog i {

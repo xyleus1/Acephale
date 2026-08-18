@@ -17,6 +17,23 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-18 - Repair the customer sourcing workspace
+
+- Branch: `fix/customer-sourcing-workspace-ui`, based on `origin/main` commit
+  `e26fd95`.
+- Task: Fix overlapping research progress copy and keep workflow implementation
+  details out of the customer-facing sourcing experience.
+- Files changed: Customer procurement workspace, Supply OS queue, customer
+  status helpers, scoped layout styles, workflow boundary tests, decision log,
+  and handoff.
+- Verification: GUILD2 workflow, procurement workflow, Atlas sourcing,
+  product-copy policy, deployment boundary, TypeScript, and whitespace checks
+  passed.
+- Caveats: The UI cannot claim or process a queued order. Worker activation,
+  trigger delivery, and schedule recovery remain separate infrastructure.
+- Follow-up: Verify the deployed workspace visually, then manually run the
+  current queued request before enabling unattended processing.
+
 ### 2026-08-18 - Authenticate Bourne webhook wakes
 
 - Branch: `fix/bourne-webhook-auth`, based on `origin/main` commit `2a0e01b`.

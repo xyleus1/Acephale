@@ -2,6 +2,29 @@
 
 ## Latest Update
 
+### Customer sourcing workspace is readable and implementation-neutral
+
+- The GUILD2 Source action still opens the guided Request, Research, Compare,
+  Procure workspace inside Supply OS.
+- The research progress list now keeps its icon and copy in separate columns,
+  uses readable customer-facing type, and retains the active loading state.
+- The customer surface no longer renders raw workflow progress. It derives
+  bounded product states from order status and supplier count instead.
+- Customer-visible copy does not name Bourne, Neon, Gmail, or internal approval
+  tooling. Supplier, contact, evidence, quote, and source results remain in the
+  existing Compare table.
+- A queued order still means it has been committed but not claimed. The worker
+  trigger and schedule remain operational infrastructure outside this UI.
+
+Verification:
+
+- `npm run test:workflow-guild2`
+- `npm run test:procurement-workflow`
+- `npm run test:supply-os-atlas-sourcing`
+- `node --import tsx scripts/product-copy-policy.test.ts`
+- `node --import tsx scripts/supply-os-deployment-boundary.test.ts`
+- `npx tsc --noEmit --pretty false --incremental false`
+
 ### Product application moved to app.derya.ai
 
 - `app.derya.ai` is attached to the production Vercel project with verified
