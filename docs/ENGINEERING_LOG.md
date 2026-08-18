@@ -5528,3 +5528,20 @@ Use this file for chronological implementation notes that future agents should s
 - Added database-backed contact projection fixtures for flat, nested, and
   identity snapshots. The suite was not run locally because Docker was
   unavailable and must pass in GitHub CI before merge.
+
+### 2026-08-18 - Fix customer sourcing canvas and queued-order recovery
+
+- Branch: `fix/sourcing-workspace-density-worker-wake`, based on
+  `origin/main` commit `26e7102`.
+- Task: Remove the accidental duplicate dossier and recover a committed order
+  when its first workflow wake does not produce a claim.
+- Files changed: customer procurement workspace, Supply OS dashboard,
+  procurement workflow, focused contracts, and durable handoff docs.
+- Verification: `npm run test:procurement-workflow`,
+  `npm run test:workflow-guild2`, TypeScript, and diff hygiene passed locally.
+- Failed/skipped checks: Authenticated visual verification requires the user's
+  browser session and will be repeated after production deployment.
+- Caveats: Recovery can wake an active worker, but it cannot activate or publish
+  an external automation. The schedule remains the final fallback.
+- Follow-up: Keep the external automation active with its webhook and schedule,
+  and use atomic bounded claims when more than one order is queued.

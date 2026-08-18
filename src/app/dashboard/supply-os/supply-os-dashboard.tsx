@@ -1445,7 +1445,7 @@ function CaseCommandCenter({
         </AnimatePresence>
 
         <AnimatePresence initial={false}>
-        {activePanel === "materials" && selectedInventoryItem && !procurementRequest ? (
+        {activePanel === "materials" && selectedInventoryItem && !procurementRequest && !customerProcurementRequest ? (
           <AtlasSourcingInspector
             key={`sourcing-inspector:${selectedInventoryItem.sku}`}
             item={selectedInventoryItem}

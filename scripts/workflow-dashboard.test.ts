@@ -68,7 +68,7 @@ type State = {
   customers: Set<string>;
   boms: Map<string, { customerId: string }>;
   orders: Map<string, { customerId: string; status: string }>;
-  idempotency: Map<string, { requestHash: string; orderId: string | null }>;
+  idempotency: Map<string, { requestHash: string; orderId: string | null; retryWakeReady: boolean }>;
   sequence: number;
 };
 
@@ -77,7 +77,7 @@ function copyState(state: State): State {
     customers: new Set(state.customers),
     boms: new Map(state.boms),
     orders: new Map(state.orders),
-    idempotency: new Map(state.idempotency),
+    idempotency: new Map(Array.from(state.idempotency, ([key, value]) => [key, { ...value }])),
     sequence: state.sequence,
   };
 }
@@ -125,7 +125,7 @@ class FakeProcurementDatabase implements ProcurementDatabase {
     if (sql.startsWith("INSERT INTO procurement_api_idempotency")) {
       const key = this.key(values[0], values[1]);
       if (this.state.idempotency.has(key)) return [] as T;
-      const row = { requestHash: String(values[2]), orderId: null };
+      const row = { requestHash: String(values[2]), orderId: null, retryWakeReady: false };
       this.state.idempotency.set(key, row);
       return [{ requestHash: row.requestHash, orderId: null }] as T;
     }
@@ -170,8 +170,13 @@ class FakeProcurementDatabase implements ProcurementDatabase {
     assert(sql.startsWith("UPDATE procurement_api_idempotency"));
     const key = this.key(values[0], values[1]);
     const row = this.state.idempotency.get(key);
-    if (!row || row.requestHash !== values[3]) return 0;
-    row.orderId = String(values[2]);
+    if (sql.includes("SET order_id")) {
+      if (!row || row.requestHash !== values[3]) return 0;
+      row.orderId = String(values[2]);
+      return 1;
+    }
+    if (!row || row.requestHash !== values[2] || row.orderId !== values[3] || !row.retryWakeReady) return 0;
+    row.retryWakeReady = false;
     return 1;
   }
 }
@@ -237,6 +242,7 @@ assert.equal(database.state.orders.size, 1);
 const duplicate = await createProcurementRequestInDatabase(database, customerA, validInput);
 assert.equal(duplicate.orderId, first.orderId);
 assert.equal(duplicate.created, false);
+assert.equal(duplicate.retryWake, false);
 assert.equal(database.state.orders.size, 1, "A duplicate key must not create a second order.");
 
 const listQueryValues: unknown[][] = [];
@@ -302,6 +308,40 @@ const submitted = await submitProcurementRequest(customerA, {
 }, { database: webhookDatabase, fetchImplementation: successFetch });
 assert.equal(submitted.workflowWakeRequested, true);
 assert(webhookDatabase.events.indexOf("transaction:commit") < webhookDatabase.events.indexOf("webhook"));
+
+const retryKey = `${customerA}:webhook-order`;
+const retryRow = webhookDatabase.state.idempotency.get(retryKey);
+assert(retryRow);
+retryRow.retryWakeReady = true;
+const retried = await submitProcurementRequest(customerA, {
+  ...validInput,
+  idempotencyKey: "webhook-order",
+}, { database: webhookDatabase, fetchImplementation: successFetch });
+assert.equal(retried.created, false);
+assert.equal(retried.retryWake, true);
+assert.equal(retried.workflowWakeRequested, true);
+assert.equal(webhookDatabase.state.orders.size, 1, "A recovery wake must reuse the original order.");
+assert.equal(webhookDatabase.events.filter((event) => event === "webhook").length, 2);
+
+const boundedRetry = await submitProcurementRequest(customerA, {
+  ...validInput,
+  idempotencyKey: "webhook-order",
+}, { database: webhookDatabase, fetchImplementation: successFetch });
+assert.equal(boundedRetry.retryWake, false);
+assert.equal(boundedRetry.workflowWakeRequested, false);
+assert.equal(webhookDatabase.events.filter((event) => event === "webhook").length, 2, "Recovery wakes must be rate-limited durably.");
+
+retryRow.retryWakeReady = true;
+const progressedOrder = webhookDatabase.state.orders.get(submitted.orderId);
+assert(progressedOrder);
+progressedOrder.status = "researching";
+const progressedDuplicate = await submitProcurementRequest(customerA, {
+  ...validInput,
+  idempotencyKey: "webhook-order",
+}, { database: webhookDatabase, fetchImplementation: successFetch });
+assert.equal(progressedDuplicate.retryWake, false);
+assert.equal(progressedDuplicate.workflowWakeRequested, false);
+assert.equal(webhookDatabase.events.filter((event) => event === "webhook").length, 2, "An active order must never receive a recovery wake.");
 
 const failureDatabase = new FakeProcurementDatabase();
 const priorWarn = console.warn;

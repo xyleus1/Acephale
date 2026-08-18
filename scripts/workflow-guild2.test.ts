@@ -102,6 +102,9 @@ assert.doesNotMatch(workbench, /dashboard\/workflow\?orderId/);
 assert.match(workbench, /workflowWakeRequested/);
 assert.match(workbench, /response\.status === 201/);
 assert.match(workbench, /Queued for processing/);
+assert.match(guidedWorkspace, /automaticStartRetryRef/);
+assert.match(guidedWorkspace, /Start sourcing/);
+assert.doesNotMatch(guidedWorkspace, /Sourcing started/);
 assert.doesNotMatch(workbench, /Bourne procurement queue|Approval required in Bourne Inbox/);
 assert.doesNotMatch(workbench, /guild2Order\.progress/);
 assert.match(workbench, /Source 38 lines/);
@@ -109,6 +112,7 @@ assert.match(workbench, /GUILD-027 is skipped/);
 assert.match(workbench, /GUILD-039 remains an award documentation requirement/);
 assert.match(workbench, /disabled=\{!guild2InventoryReady \|\| guild2BulkState === "running"\}/);
 assert.doesNotMatch(dashboard, /\/api\/supply-os\/external-sourcing\/guild2/);
+assert.match(dashboard, /!procurementRequest && !customerProcurementRequest/);
 assert.doesNotMatch(environment, /WORKFLOW_AGENT_TRIGGER_/);
 assert.equal((environment.match(/^WORKFLOW_DATABASE_URL=/gm) ?? []).length, 1);
 

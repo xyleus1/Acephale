@@ -2,6 +2,29 @@
 
 ## Latest Update
 
+### Customer sourcing uses the full workspace and recovers a missed start
+
+- Opening a GUILD2 procurement request now unmounts the inventory dossier. The
+  sourcing workspace owns the full materials canvas instead of creating an
+  accidental second grid track and a large dead area.
+- A queued request is labeled as waiting to begin. The interface no longer says
+  sourcing started before the worker has claimed the order.
+- If an order remains `new`, the workspace makes one automatic recovery request
+  after 35 seconds and exposes a `Start sourcing` retry action.
+- Recovery posts the same authenticated, customer-scoped request with the same
+  durable idempotency key. The existing order is reused and no browser field can
+  change workflow state, supplier results, quotes, leases, or approvals.
+- The idempotency row provides a durable 30-second gate, so concurrent or rapid
+  retries produce at most one additional webhook wake. The schedule remains the
+  fallback when the webhook or external worker is unavailable.
+
+Verification:
+
+- `npm run test:procurement-workflow`
+- `npm run test:workflow-guild2`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `git diff --check`
+
 ### Customer sourcing workspace is readable and implementation-neutral
 
 - The GUILD2 Source action still opens the guided Request, Research, Compare,

@@ -236,7 +236,18 @@ async function existingIdempotentOrder(
   if (!orders[0]) {
     throw new ProcurementWorkflowError("The prior procurement request is unavailable.", "conflict");
   }
-  return { ...orders[0], created: false };
+  const retryWake = orders[0].status === "new"
+    ? await transaction.$executeRawUnsafe(`
+        UPDATE procurement_api_idempotency
+        SET updated_at = now()
+        WHERE customer_id = $1::uuid
+          AND idempotency_key = $2
+          AND request_hash = $3
+          AND order_id = $4::uuid
+          AND updated_at <= now() - interval '30 seconds'
+      `, customerId, idempotencyKey, requestHash, existing.orderId) === 1
+    : false;
+  return { ...orders[0], created: false, retryWake };
 }
 
 export async function createProcurementRequestInDatabase(
@@ -356,7 +367,7 @@ export async function createProcurementRequestInDatabase(
     if (updated !== 1) {
       throw new ProcurementWorkflowError("The procurement request could not be finalized.", "unavailable");
     }
-    return { ...order, created: true };
+    return { ...order, created: true, retryWake: false };
   });
 }
 
@@ -611,7 +622,7 @@ export async function submitProcurementRequest(
   const order = dependencies?.database
     ? await createProcurementRequestInDatabase(dependencies.database, customerId, input)
     : await createProcurementRequest(customerId, input);
-  const workflowWakeRequested = order.created
+  const workflowWakeRequested = order.created || order.retryWake
     ? await requestBourneWorkflowWake(
         { orderId: order.orderId, customerId },
         dependencies?.fetchImplementation,

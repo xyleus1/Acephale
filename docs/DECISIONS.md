@@ -16,6 +16,25 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-18 - Queued customer sourcing may issue one durable recovery wake
+
+- Status: accepted
+- Owner: product and engineering
+- Context: An order can commit successfully and remain `new` when the immediate
+  webhook is lost, rejected, or accepted without a worker claim. Recreating the
+  order is unsafe, while a read endpoint must not gain side effects.
+- Decision: Reposting the same authenticated procurement request may issue one
+  recovery wake only when the original order is still `new` and its idempotency
+  row has not been touched for 30 seconds. The transaction updates that row
+  before the post-commit wake, so concurrent retries collapse to one attempt.
+- Rationale: Recovery must reuse the original order without giving browser code
+  access to customer identity or workflow-controlled fields.
+- Consequences: The customer workspace can recover a missed start without a new
+  order or a new database table. The external worker must still be active and
+  must claim work atomically.
+- Revisit when: Wake delivery has a dedicated outbox with attempt state and
+  backoff, or the workflow platform provides a durable queue acknowledgement.
+
 ### 2026-08-18 - Bourne orders use the guided Supply OS sourcing workspace
 
 - Status: accepted

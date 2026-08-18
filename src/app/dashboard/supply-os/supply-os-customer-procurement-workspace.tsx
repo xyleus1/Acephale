@@ -18,10 +18,12 @@ import {
   GUILD2_PROCUREMENT_POLL_INTERVAL_MS,
   guild2CustomerProcurementProgress,
   guild2CustomerProcurementStatusLabel,
+  guild2ProcurementLine,
   guild2ProcurementContactSummary,
   guild2ProcurementEvidenceSummary,
   guild2ProcurementPhase,
   guild2ProcurementQuoteSummary,
+  guild2ProcurementRequest,
   guild2ProcurementResearchComplete,
   startGuild2ProcurementPolling,
   type Guild2ProcurementOrderState,
@@ -80,10 +82,13 @@ export function CustomerProcurementWorkspace({
   const reduceMotion = useReducedMotion();
   const [detail, setDetail] = useState(() => detailFromInitialState(orderId, item, initialOrder));
   const [refreshState, setRefreshState] = useState<"idle" | "running" | "error">("idle");
+  const [startRetryState, setStartRetryState] = useState<"idle" | "running" | "requested" | "error">("idle");
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const refreshPromiseRef = useRef<Promise<Guild2ProcurementRequestDetail> | null>(null);
+  const automaticStartRetryRef = useRef(false);
   const phase = guild2ProcurementPhase(detail.status, detail.vendors.length);
   const approvalRequired = PROCUREMENT_APPROVAL_STATUSES.has(detail.status);
+  const procurementLine = useMemo(() => guild2ProcurementLine(item.sku), [item.sku]);
 
   const refresh = useCallback((signal?: AbortSignal) => {
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
@@ -111,6 +116,25 @@ export function CustomerProcurementWorkspace({
     return pending;
   }, [orderId]);
 
+  const retryStart = useCallback(async () => {
+    if (detail.status !== "new" || !procurementLine || startRetryState === "running") return;
+    setStartRetryState("running");
+    try {
+      const response = await fetch("/api/procurement/requests", {
+        method: "POST",
+        cache: "no-store",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify(guild2ProcurementRequest(procurementLine)),
+      });
+      const result = await responseJson<{ workflowWakeRequested: boolean }>(response);
+      setStartRetryState(result.workflowWakeRequested ? "requested" : "idle");
+      await refresh();
+    } catch (error) {
+      setStartRetryState("error");
+      setRefreshError(error instanceof Error ? error.message : "Sourcing could not be restarted.");
+    }
+  }, [detail.status, procurementLine, refresh, startRetryState]);
+
   useEffect(() => {
     const controller = new AbortController();
     const stop = startGuild2ProcurementPolling({
@@ -128,12 +152,24 @@ export function CustomerProcurementWorkspace({
     };
   }, [orderId, refresh]);
 
+  useEffect(() => {
+    if (detail.status !== "new" || !procurementLine || automaticStartRetryRef.current) return;
+    const updatedAt = new Date(detail.updatedAt).valueOf();
+    const elapsed = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0;
+    const delay = Math.max(0, 35_000 - elapsed);
+    const timer = window.setTimeout(() => {
+      automaticStartRetryRef.current = true;
+      void retryStart();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [detail.status, detail.updatedAt, procurementLine, retryStart]);
+
   const researchSteps = useMemo(() => {
     const claimed = detail.status !== "new";
     const suppliersFound = guild2ProcurementResearchComplete(detail.status, detail.vendors.length);
     return [
       { label: "Request received", detail: `${detail.quantity.toLocaleString("en-US")} ${detail.unit} confirmed`, complete: true, active: false },
-      { label: "Sourcing started", detail: detail.status === "new" ? "Waiting for supplier research to start" : "Supplier research is active", complete: claimed, active: !claimed },
+      { label: "Processing start", detail: detail.status === "new" ? "Waiting to begin" : "Supplier research is active", complete: claimed, active: !claimed },
       { label: "Supplier search", detail: suppliersFound ? `${detail.vendors.length} supplier candidate${detail.vendors.length === 1 ? "" : "s"} found` : "Searching and verifying supplier candidates", complete: suppliersFound, active: claimed && !suppliersFound },
       { label: "Evidence review", detail: suppliersFound ? "Supplier evidence is ready for review" : "Starts after supplier candidates are found", complete: suppliersFound, active: false },
     ];
@@ -189,7 +225,14 @@ export function CustomerProcurementWorkspace({
             </ol>
             <footer>
               <span><ShieldCheck size={14} /> Supplier candidates remain unqualified until reviewed.</span>
-              <button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>{refreshState === "running" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />} Refresh now</button>
+              {detail.status === "new" ? (
+                <button type="button" onClick={() => void retryStart()} disabled={startRetryState === "running"}>
+                  {startRetryState === "running" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />}
+                  {startRetryState === "requested" ? "Start requested" : startRetryState === "error" ? "Retry start" : "Start sourcing"}
+                </button>
+              ) : (
+                <button type="button" onClick={() => void refresh().catch(() => undefined)} disabled={refreshState === "running"}>{refreshState === "running" ? <LoaderCircle size={14} className={styles.spin} /> : <RefreshCw size={14} />} Refresh now</button>
+              )}
             </footer>
           </motion.div>
         ) : phase === "attention" ? (
