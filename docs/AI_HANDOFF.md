@@ -2,6 +2,17 @@
 
 ## Latest Update
 
+### Product application moved to app.derya.ai
+
+- `app.derya.ai` is attached to the production Vercel project with verified
+  CNAME routing and a renewable certificate.
+- Production sets `NEXT_PUBLIC_APP_URL=https://app.derya.ai`; the apex and
+  `www` hosts remain the landing page.
+- RFQ email links now use the product domain, and the Gmail setup guide uses
+  `https://app.derya.ai/api/auth/gmail/callback`.
+- Deployment boundary checks prevent product links from returning to the
+  landing-page host.
+
 ### Bourne webhook wakes now include the required bearer credential
 
 - The post-commit Bourne wake reads `BOURNE_WORKFLOW_WEBHOOK_SECRET` only on

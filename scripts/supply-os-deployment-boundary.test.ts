@@ -17,6 +17,8 @@ for (const file of requiredFiles) {
 
 const page = readFileSync(join(root, "src/app/dashboard/supply-os/page.tsx"), "utf8");
 const middleware = readFileSync(join(root, "src/middleware.ts"), "utf8");
+const rfqMail = readFileSync(join(root, "src/lib/rfq-mail.ts"), "utf8");
+const envExample = readFileSync(join(root, ".env.example"), "utf8");
 const migration = readFileSync(
   join(root, "prisma/migrations/20260812000100_supply_intelligence_profiles/migration.sql"),
   "utf8",
@@ -28,6 +30,9 @@ const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8")) as {
 
 assert.match(page, /SupplyOsOperatingShell/, "Supply OS route must render the operating shell");
 assert.match(middleware, /\/dashboard\/supply-os/, "Dashboard routing must retain the Supply OS destination");
+assert.match(rfqMail, /https:\/\/app\.derya\.ai\/dashboard\/rfq\//, "RFQ links must use the product domain");
+assert.doesNotMatch(rfqMail, /https:\/\/www\.derya\.ai\/dashboard\//, "Product links must not use the landing-page domain");
+assert.match(envExample, /^NEXT_PUBLIC_APP_URL=/m, "The canonical application origin must be documented");
 assert.equal(vercel.buildCommand, undefined, "routine application builds must not run database migrations");
 assert.deepEqual(
   vercel.crons?.find((cron) => cron.path === "/api/cron/supply-os-connectors"),

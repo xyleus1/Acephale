@@ -195,7 +195,7 @@ export function buildDeskForwardEmail(inq: InquiryForMail) {
     sections.push(`- Notes -\n${raw.slice(0, 1500)}${raw.length > 1500 ? "…" : ""}`);
   }
 
-  sections.push(`Open in Derya: https://www.derya.ai/dashboard/rfq/${inq.id}`);
+  sections.push(`Open in Derya: https://app.derya.ai/dashboard/rfq/${inq.id}`);
 
   return {
     from: config.user,

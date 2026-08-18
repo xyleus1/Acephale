@@ -45,7 +45,7 @@ Once set up, on `/dashboard/settings/email` you can:
 2. Application type: **Web application**
 3. Name: `Derya OAuth`
 4. **Authorized redirect URIs** — add **both** of these (exactly):
-   - `https://derya-crm.vercel.app/api/auth/gmail/callback` *(or your production domain)*
+   - `https://app.derya.ai/api/auth/gmail/callback`
    - `http://localhost:3000/api/auth/gmail/callback` *(for local dev)*
 5. Click **Create**. A modal pops up with the **Client ID** and **Client Secret** — copy both.
 
@@ -57,7 +57,7 @@ In **Vercel project → Settings → Environment Variables**, add (Production + 
 |---|---|
 | `GOOGLE_CLIENT_ID` | the Client ID from step 4 |
 | `GOOGLE_CLIENT_SECRET` | the Client Secret from step 4 |
-| `GOOGLE_REDIRECT_URI` | `https://derya-crm.vercel.app/api/auth/gmail/callback` |
+| `GOOGLE_REDIRECT_URI` | `https://app.derya.ai/api/auth/gmail/callback` |
 
 > **Important:** The `GOOGLE_REDIRECT_URI` value must match **exactly** what you put in step 4's "Authorized redirect URIs" — same protocol, host, path. A trailing slash mismatch will fail.
 
@@ -74,7 +74,7 @@ Vercel project → Deployments → **Redeploy** the latest. Env var changes don'
 
 ### 7. Connect your first inbox
 
-1. Go to `https://derya-crm.vercel.app/dashboard/settings/email`
+1. Go to `https://app.derya.ai/dashboard/settings/email`
 2. Click **"Connect a Gmail inbox"**
 3. Google asks you to choose an account → choose, click through consent
 4. You'll be redirected back with a green confirmation banner

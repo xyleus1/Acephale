@@ -5459,3 +5459,17 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Push the branch, require the procurement security workflow, deploy
   a preview, then provision and test temporary infrastructure before any
   production change.
+
+### 2026-08-18 - Move the product origin to app.derya.ai
+
+- Branch: `chore/app-product-domain`, targeting `main`.
+- Task: Keep the public landing page on the apex domain and make
+  `app.derya.ai` the canonical Freight OS origin.
+- Files changed: environment example, RFQ link generation, Gmail setup guide,
+  deployment boundary test, decision log, and handoff.
+- Verification: deployment boundary, product-copy policy, TypeScript, diff
+  hygiene, public DNS, Vercel domain verification, TLS, login, and protected
+  route redirect.
+- Caveats: Google Cloud must allow
+  `https://app.derya.ai/api/auth/gmail/callback` before a Gmail account can be
+  connected or reconnected from the new host.

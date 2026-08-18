@@ -16,6 +16,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-18 - Product application uses app.derya.ai
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The apex `derya.ai` domain now serves the public landing page.
+  Product routes on that host therefore return the landing site instead of the
+  authenticated Freight OS.
+- Decision: Use `https://app.derya.ai` as the canonical production origin for
+  the Derya application. Keep the apex and `www` hosts dedicated to the landing
+  page.
+- Consequences: Vercel production sets `NEXT_PUBLIC_APP_URL` to the product
+  origin. Product links and new Google OAuth callback registrations use the app
+  subdomain.
+- Revisit when: The landing page and product are intentionally served by one
+  routing layer that can safely split paths between them.
+
 ### 2026-08-17 - GUILD2 uses the authenticated procurement API
 
 - Status: accepted
