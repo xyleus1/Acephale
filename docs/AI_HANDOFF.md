@@ -2,6 +2,27 @@
 
 ## Latest Update
 
+### Custom sourcing runs open the correct saved result
+
+- Saved supplier-research rows now remount the procurement workspace by the
+  persisted run ID. Two requests with identical text no longer share stale
+  component state or open the same failed result.
+- OpenAI supplier discovery now accepts URLs from the native bounded web-search
+  source list even when strict JSON output has no inline citation annotations.
+  Proposed URLs outside that provider list remain rejected.
+- Every accepted discovery URL still passes source filtering, pinned DNS,
+  bounded server retrieval, exact page-evidence checks, and supplier identity
+  validation before it can become a candidate.
+- Dreamz custom requests still use Derya's saved public-research queue. This is
+  separate from the GUILD2 Bourne and Neon procurement workflow.
+
+Verification:
+
+- `npm run test:supply-os-openai-retrieval`
+- `npm run test:supply-os-atlas-sourcing`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `git diff --check`
+
 ### Customer sourcing uses the full workspace and recovers a missed start
 
 - Opening a GUILD2 procurement request now unmounts the inventory dossier. The

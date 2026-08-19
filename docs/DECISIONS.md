@@ -16,6 +16,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-18 - OpenAI web-search sources may enter independent validation without inline JSON citations
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Strict JSON output from the Responses API can include the bounded
+  `web_search_call.action.sources` list without attaching URL citation ranges
+  to the JSON text. Requiring both representations discarded provider-returned
+  supplier URLs before any page was retrieved.
+- Decision: Treat URLs in the native web-search source list as discovery
+  provenance. A proposed supplier URL must still be present in that list, pass
+  the supplier-source allow rules, and survive the existing pinned DNS, bounded
+  page retrieval, exact evidence, and supplier identity validation pipeline.
+- Rationale: Inline citation annotations are useful audit metadata, but they do
+  not add trust after the server independently retrieves and validates the exact
+  provider-returned page.
+- Consequences: Structured supplier research can continue when JSON has no
+  inline citation annotations. Model-proposed URLs outside the provider source
+  set remain rejected and are never fetched.
+- Revisit when: The provider guarantees citation ranges for strict JSON output
+  or supplier discovery moves to a dedicated search provider.
+
 ### 2026-08-18 - Queued customer sourcing may issue one durable recovery wake
 
 - Status: accepted

@@ -17,6 +17,21 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-18 - Repair custom supplier-research result routing
+
+- Branch: `fix/custom-sourcing-run-results`, based on production `origin/main`.
+- Task: Stop same-text saved research runs from opening stale state and retain
+  native provider source URLs for independent validation when strict JSON has
+  no inline citation annotations.
+- Files changed: Supply OS dashboard keying, OpenAI supplier research, provider
+  retrieval contracts, Atlas workflow contract, decision log, and handoff.
+- Verification: OpenAI retrieval, supplier-research failure and lifecycle,
+  polling, Atlas sourcing, product-copy, deployment-boundary, TypeScript,
+  whitespace, and production build checks passed.
+- Caveats: Dreamz custom sourcing uses Derya's primary saved-research worker, not
+  the GUILD2 Bourne workflow. Existing failed runs remain immutable; the user
+  must retry them after the fix is deployed.
+
 ### 2026-08-18 - Repair the customer sourcing workspace
 
 - Branch: `fix/customer-sourcing-workspace-ui`, based on `origin/main` commit

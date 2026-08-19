@@ -589,6 +589,7 @@ assert.match(dashboard, /sourcingDataState/);
 assert.match(dashboard, /sourcingNextCursor/);
 assert.match(dashboard, /loadOlderSourcingWork/);
 assert.match(dashboard, /initialRun=\{procurementRequest\.savedRun\}/);
+assert.match(dashboard, /key=\{`procurement:\$\{procurementRequest\.savedRun\?\.id \?\? procurementRequest\.requestId/, "saved runs with identical request text must remount independently");
 assert.doesNotMatch(workbench, /approved supplier|live quote|supplier contacted/i);
 
 console.log("Supply OS Atlas inventory and sourcing workflow contract passed.");

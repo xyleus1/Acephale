@@ -1293,7 +1293,7 @@ function CaseCommandCenter({
           />
         ) : activePanel === "materials" && procurementRequest ? (
           <AtlasProcurementWorkspace
-            key={`procurement:${procurementRequest.itemSku ?? procurementRequest.requestText}`}
+            key={`procurement:${procurementRequest.savedRun?.id ?? procurementRequest.requestId ?? procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
             requestText={procurementRequest.requestText}
             workspaceId={sourcingWorkspaceId}

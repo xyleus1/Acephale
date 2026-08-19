@@ -162,7 +162,6 @@ export type OpenAiRetrievedPage = {
 
 export type OpenAiSupplierLeadRecord = OpenAiRetrievedPage & {
   proposal: OpenAiSupplierLeadProposal;
-  citation: OpenAiNativeCitation;
 };
 
 export type OpenAiSupplierResearchResult = SupplierResearchResult & {
@@ -578,7 +577,6 @@ function parseNativeResponse(value: unknown) {
       }
     }
   }
-  if (!citations.length) return null;
   const nativeOutputText = outputTextParts.join("");
   const outputText = typeof response.output_text === "string" ? response.output_text : nativeOutputText;
   if (outputText !== nativeOutputText) return null;
@@ -607,7 +605,7 @@ const SUPPLIER_ROLES = new Set<SupplierCandidateRole>([
   "SERVICE_PROVIDER",
 ]);
 
-function parseProposals(outputText: string, sourceUrls: string[], citations: OpenAiNativeCitation[]) {
+function parseProposals(outputText: string, sourceUrls: string[]) {
   let parsed: unknown;
   try {
     parsed = JSON.parse(outputText);
@@ -617,7 +615,6 @@ function parseProposals(outputText: string, sourceUrls: string[], citations: Ope
   const rawLeads = Array.isArray(record(parsed).leads) ? record(parsed).leads as unknown[] : [];
   if (rawLeads.length > MAX_PROPOSALS) return [];
   const sourceSet = new Set(sourceUrls);
-  const citationUrls = new Set(citations.map((citation) => citation.url));
   const proposals: OpenAiSupplierLeadProposal[] = [];
   const seenSources = new Set<string>();
   for (const value of rawLeads) {
@@ -632,7 +629,6 @@ function parseProposals(outputText: string, sourceUrls: string[], citations: Ope
     if (
       !sourceUrl
       || !sourceSet.has(sourceUrl)
-      || !citationUrls.has(sourceUrl)
       || seenSources.has(sourceUrl)
       || !companyName
       || !SUPPLIER_ROLES.has(supplierRole)
@@ -770,7 +766,7 @@ export async function searchOpenAiComponentSuppliers(
   if (responseExceedsBounds(response)) throw new OpenAiSupplierResearchError("PROVIDER_RESPONSE_TOO_LARGE");
   const native = parseNativeResponse(response);
   if (!native) throw new OpenAiSupplierResearchError("INVALID_STRUCTURED_RESPONSE");
-  const proposals = parseProposals(native.outputText, native.sourceUrls, native.citations);
+  const proposals = parseProposals(native.outputText, native.sourceUrls);
   const selectedProposals = proposals.slice(0, MAX_PAGES);
   const settledPages: Array<{
     record: OpenAiSupplierLeadRecord | null;
@@ -784,8 +780,7 @@ export async function searchOpenAiComponentSuppliers(
     const proposal = selectedProposals[index]!;
     try {
       const page = await retrieveOpenAiPublicPage(proposal.sourceUrl, dependencies);
-      const citation = native.citations.find((entry) => entry.url === proposal.sourceUrl)!;
-      settledPages[index] = { record: { ...page, proposal, citation }, warning: null };
+      settledPages[index] = { record: { ...page, proposal }, warning: null };
     } catch (error) {
       const code = error instanceof OpenAiPageRetrievalError ? error.code : "PAGE_NETWORK_ERROR";
       settledPages[index] = {

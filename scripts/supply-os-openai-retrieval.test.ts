@@ -157,10 +157,19 @@ async function validLeadTest() {
 }
 
 async function sourceBindingTests() {
-  const uncited = dependencies(nativeResponse({ sourceUrls: [sourceUrl, secondSourceUrl], citations: [secondSourceUrl] }));
-  const uncitedResult = await searchOpenAiComponentSuppliers(input, uncited.value);
-  assert.equal(uncitedResult.candidates.length, 0, "a proposed source missing a native citation cannot admit a lead");
-  assert.equal(uncited.requested.length, 0, "uncited model URLs must not be fetched");
+  const structuredOutputWithoutAnnotations = dependencies(nativeResponse({ citations: [] }));
+  const structuredOutputWithoutAnnotationsResult = await searchOpenAiComponentSuppliers(input, structuredOutputWithoutAnnotations.value);
+  assert.equal(structuredOutputWithoutAnnotationsResult.candidates.length, 1, "a provider source may be validated when structured JSON has no citation annotation");
+  assert.equal(structuredOutputWithoutAnnotations.requested.length, 1, "provider-returned source URLs must still be independently retrieved");
+
+  const sourceOutsideProviderResults = dependencies(nativeResponse({
+    leads: [lead(secondSourceUrl)],
+    sourceUrls: [sourceUrl],
+    citations: [sourceUrl],
+  }));
+  const sourceOutsideProviderResultsResult = await searchOpenAiComponentSuppliers(input, sourceOutsideProviderResults.value);
+  assert.equal(sourceOutsideProviderResultsResult.candidates.length, 0, "a proposal outside the provider source set cannot admit a lead");
+  assert.equal(sourceOutsideProviderResults.requested.length, 0, "model-proposed URLs outside the provider source set must not be fetched");
 
   const trackedCitation = dependencies(nativeResponse({
     leads: [lead(nationalSourceUrl)],
