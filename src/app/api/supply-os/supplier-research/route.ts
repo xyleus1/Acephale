@@ -1,17 +1,10 @@
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { listProcurementCasesForResearchRuns } from "@/lib/supply-os/procurement-case-persistence";
 import { listSupplierSenderAccounts } from "@/lib/supply-os/supplier-communication-persistence";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
-import { ResearchRateLimiter } from "@/lib/supply-os/research";
 import { supplyIntelligenceProfile } from "@/lib/supply-os/supply-intelligence-persistence";
-import { runSourcingResearchWorker } from "@/lib/supply-os/supplier-research-worker";
 import {
-  executeSupplierResearchRoute,
-  type SupplierResearchRouteResponse,
-} from "@/lib/supply-os/supplier-research-route-contract";
-import {
-  enqueueSourcingResearchRun,
   getSourcingResearchRun,
   listSourcingResearchPage,
 } from "@/lib/supply-os/sourcing-research-persistence";
@@ -19,19 +12,10 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const limiter = new ResearchRateLimiter(10, 60 * 60 * 1_000);
-
 function requiredText(value: unknown, max: number) {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized && normalized.length <= max ? normalized : null;
-}
-
-function routeResponse(response: SupplierResearchRouteResponse) {
-  return NextResponse.json(response.body, {
-    status: response.status,
-    headers: response.headers,
-  });
 }
 
 export async function GET(request: NextRequest) {
@@ -93,38 +77,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const context = supplyAccessContext(session);
-  const body = await request.json().catch(() => null);
-  const response = await executeSupplierResearchRoute({
-    body,
-    context,
-    dependencies: {
-      consumeRateLimit: (key) => limiter.consume(key),
-      enqueueRun: ({ context: routeContext, input, workspaceId }) => enqueueSourcingResearchRun({
-        context: routeContext as typeof context,
-        input,
-        workspaceId,
-      }),
-      persistenceFailure: async (error) => {
-        const response = supplyErrorResponse(error);
-        return {
-          status: response.status,
-          body: await response.json() as Record<string, unknown>,
-        };
-      },
-    },
+  void request;
+  return NextResponse.json({
+    error: "Legacy supplier research is disabled. Create a procurement request instead.",
+  }, {
+    status: 410,
+    headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
   });
-  if (response.status === 202) {
-    const run = response.body.run as { id?: unknown; workspaceId?: unknown } | undefined;
-    if (typeof run?.id === "string" && typeof run.workspaceId === "string") {
-      after(async () => {
-        await runSourcingResearchWorker({
-          id: run.id as string,
-          officeId: context.officeId,
-          workspaceId: run.workspaceId as string,
-        }).catch(() => undefined);
-      });
-    }
-  }
-  return routeResponse(response);
 }

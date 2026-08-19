@@ -745,7 +745,8 @@ assert.equal(shouldPersistGuildSupplierResearchAggregate({
   incomingOutputHash: "zero-revalidated-leads",
 }), true, "current receipt revalidation may invalidate every prior lead");
 
-assert.match(routeSource, /startOrResumeGuildSupplierResearchCampaign/);
+assert.match(routeSource, /status: 410/, "legacy campaign creation must remain disabled");
+assert.doesNotMatch(routeSource, /startOrResumeGuildSupplierResearchCampaign/, "legacy campaign creation must not be reachable");
 assert.match(routeSource, /pollGuildSupplierResearchCampaign/);
 assert.doesNotMatch(routeSource, /searchComponentSuppliers|runSourcingResearchWorker|OpenAI|Exa/);
 const pollSource = campaignSource.slice(
@@ -784,7 +785,8 @@ assert.match(campaignSource, /const recoveryCapacity = Math\.max\(0, limit - run
 assert.match(campaignSource, /NOT EXISTS \(/, "only the latest failed campaign in an office workspace can auto-recover");
 assert.match(campaignSource, /status: "RUNNING",\s*\n\s*\},\s*\n\s*\}\);\s*\n\s*if \(runningChildren > 0\) return false;/, "a parent cannot terminalize while a child is RUNNING");
 assert.match(campaignSource, /::bigint/, "aggregate ordinal ordering does not overflow PostgreSQL int at high attempt counts");
-assert.match(cronSource, /advanceSupplierResearchCampaigns/);
+assert.match(cronSource, /disabled: true/, "legacy supplier-research cron must remain disabled");
+assert.doesNotMatch(cronSource, /advanceSupplierResearchCampaigns|runQueuedSourcingResearchWorkers/);
 assert.doesNotMatch([campaignSource, routeSource, cronSource, guildSource].join("\n"), /\u2014/);
 
 console.log("Supply OS continuous supplier sourcing checks passed.");

@@ -18,12 +18,10 @@ import {
   GUILD2_PROCUREMENT_POLL_INTERVAL_MS,
   guild2CustomerProcurementProgress,
   guild2CustomerProcurementStatusLabel,
-  guild2ProcurementLine,
   guild2ProcurementContactSummary,
   guild2ProcurementEvidenceSummary,
   guild2ProcurementPhase,
   guild2ProcurementQuoteSummary,
-  guild2ProcurementRequest,
   guild2ProcurementResearchComplete,
   startGuild2ProcurementPolling,
   type Guild2ProcurementOrderState,
@@ -50,7 +48,7 @@ function detailFromInitialState(
     status: initialOrder.status,
     progress: initialOrder.progress,
     requestContext: {},
-    neededBy: "2026-09-30",
+    neededBy: item.needByDate ?? null,
     quantity: item.requestedQuantity ?? 0,
     unit: item.requestedUnit ?? item.unitOfMeasure ?? "units",
     material: item.name,
@@ -88,7 +86,6 @@ export function CustomerProcurementWorkspace({
   const automaticStartRetryRef = useRef(false);
   const phase = guild2ProcurementPhase(detail.status, detail.vendors.length);
   const approvalRequired = PROCUREMENT_APPROVAL_STATUSES.has(detail.status);
-  const procurementLine = useMemo(() => guild2ProcurementLine(item.sku), [item.sku]);
 
   const refresh = useCallback((signal?: AbortSignal) => {
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
@@ -117,14 +114,13 @@ export function CustomerProcurementWorkspace({
   }, [orderId]);
 
   const retryStart = useCallback(async () => {
-    if (detail.status !== "new" || !procurementLine || startRetryState === "running") return;
+    if (detail.status !== "new" || startRetryState === "running") return;
     setStartRetryState("running");
     try {
-      const response = await fetch("/api/procurement/requests", {
+      const response = await fetch(`/api/procurement/requests/${encodeURIComponent(orderId)}/wake`, {
         method: "POST",
         cache: "no-store",
-        headers: { accept: "application/json", "content-type": "application/json" },
-        body: JSON.stringify(guild2ProcurementRequest(procurementLine)),
+        headers: { accept: "application/json" },
       });
       const result = await responseJson<{ workflowWakeRequested: boolean }>(response);
       setStartRetryState(result.workflowWakeRequested ? "requested" : "idle");
@@ -133,7 +129,7 @@ export function CustomerProcurementWorkspace({
       setStartRetryState("error");
       setRefreshError(error instanceof Error ? error.message : "Sourcing could not be restarted.");
     }
-  }, [detail.status, procurementLine, refresh, startRetryState]);
+  }, [detail.status, orderId, refresh, startRetryState]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -153,7 +149,7 @@ export function CustomerProcurementWorkspace({
   }, [orderId, refresh]);
 
   useEffect(() => {
-    if (detail.status !== "new" || !procurementLine || automaticStartRetryRef.current) return;
+    if (detail.status !== "new" || automaticStartRetryRef.current) return;
     const updatedAt = new Date(detail.updatedAt).valueOf();
     const elapsed = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0;
     const delay = Math.max(0, 35_000 - elapsed);
@@ -162,7 +158,7 @@ export function CustomerProcurementWorkspace({
       void retryStart();
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [detail.status, detail.updatedAt, procurementLine, retryStart]);
+  }, [detail.status, detail.updatedAt, retryStart]);
 
   const researchSteps = useMemo(() => {
     const claimed = detail.status !== "new";

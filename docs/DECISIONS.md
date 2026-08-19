@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-18 - Neon is the sole execution path for customer sourcing
+
+- Status: accepted
+- Owner: product and engineering
+- Context: GUILD2 created Neon orders for the external workflow, while custom
+  Dreamz requests started a separate OpenAI worker in Derya's primary database.
+  Identical customer actions therefore produced different queues, progress
+  screens, failure modes, and supplier records.
+- Decision: Keep Derya's structured request intake, but send every complete
+  custom, inventory, and GUILD2 sourcing request through the authenticated
+  Neon procurement API. Mark custom orders with source campaign `CUSTOM`.
+  Disable the legacy supplier-research POST, campaign POST, and cron. Preserve
+  authenticated GET only for historical audit.
+- Authorization boundary: The authenticated Office mapping selects the Neon
+  customer. Workspace and company metadata only group the interface and are
+  never accepted as authorization inputs.
+- Consequences: All new sourcing work uses one idempotency model, one wake and
+  schedule recovery path, one status screen, and one supplier table. Derya does
+  not run supplier research, change workflow status, or send supplier email.
+- Revisit when: Historical `SupplyCapabilityRun` data has been migrated or can
+  be deleted under an explicit retention decision.
+
 ### 2026-08-18 - OpenAI web-search sources may enter independent validation without inline JSON citations
 
 - Status: accepted

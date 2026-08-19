@@ -246,15 +246,16 @@ clear boundaries.
 ### Procurement-to-logistics handoff
 
 - Supplier research stays inside Inventory & sourcing through request, visible
-  source research, option comparison, selection, and a procurement brief.
-- Each interactive research request is persisted before provider execution as
-  an office-scoped `SupplyCapabilityRun`. Its hashed input and completed output
-  let the sourcing queue restore results after navigation, refresh, or another
-  authorized office browser opens the workspace.
-- The queue displays the latest run per component plus saved custom requests.
-  Older runs remain visible as dated saved research and load through a stable
-  server cursor. Each page loads every supplier workstream tied to its exact
-  research-run IDs instead of joining against a capped recent-case window.
+  research progress, supplier comparison, and procurement status.
+- Structured intake is deterministic application logic. Once required facts
+  are present, the dashboard creates a customer-scoped Neon procurement order
+  with a durable idempotency key and sends an optional post-commit wake.
+- Neon is authoritative for workflow status and supplier results. The browser
+  polls authenticated list and detail endpoints and cannot write workflow
+  status, evidence, quotes, leases, approvals, or communication identifiers.
+- The former office-scoped `SupplyCapabilityRun` engine is retired from new
+  customer sourcing. Its request POST, campaign POST, and cron entry points are
+  disabled. Historical GET remains read-only for audit and migration work.
 - Quote-cycle and supplier-email routes reload their parent procurement case by
   exact task ancestry. Old workstreams remain actionable even after the office
   has more than the legacy recent-case limit.

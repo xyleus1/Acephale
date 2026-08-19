@@ -14,6 +14,7 @@
     "test:procurement-workflow": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/workflow-dashboard.test.ts",
     "test:procurement-workflow-db": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-workflow-database.test.ts",
     "test:workflow-guild2": "node --import tsx scripts/workflow-guild2.test.ts",
+    "test:customer-procurement-bourne": "node --import tsx scripts/customer-procurement-bourne.test.ts",
     "test:strategy": "tsx scripts/commercial-strategy.test.ts",
     "test:supply-os-prototype": "tsx scripts/supply-os-prototype.test.ts",
     "test:supply-os-single-surface": "tsx scripts/supply-os-single-surface.test.ts",

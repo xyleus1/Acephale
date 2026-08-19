@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { advanceSupplierResearchCampaigns } from "@/lib/supply-os/supplier-research-campaign";
-import { runQueuedSourcingResearchWorkers } from "@/lib/supply-os/supplier-research-worker";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -16,17 +14,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const campaigns = await advanceSupplierResearchCampaigns();
-    const result = await runQueuedSourcingResearchWorkers({ limit: 2 });
-    const reconciledCampaigns = await advanceSupplierResearchCampaigns();
-    return NextResponse.json({ ranAt: new Date().toISOString(), campaigns, reconciledCampaigns, ...result }, {
-      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
-    });
-  } catch {
-    return NextResponse.json({ error: "Supplier research queue failed." }, {
-      status: 500,
-      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
-    });
-  }
+  return NextResponse.json({
+    ranAt: new Date().toISOString(),
+    disabled: true,
+    message: "Legacy supplier research is disabled. Procurement work is processed by the workflow service.",
+  }, {
+    headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+  });
 }

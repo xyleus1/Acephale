@@ -23,9 +23,12 @@ const pageReadSource = persistenceSource.slice(
 
 assert.match(routeSource, /rawRunId[\s\S]*getSourcingResearchRun/, "GET must poll one tenant-scoped run by runId");
 assert.match(routeSource, /rawIncludeRunIds[\s\S]*rawIncludeRunIds\.length > 40[\s\S]*listProcurementCasesForResearchRuns/, "GET must support a bounded workspace-scoped aggregate case lookup");
-assert.match(routeSource, /after\([\s\S]*runSourcingResearchWorker/, "POST must start the worker after sending its response");
+assert.match(routeSource, /status: 410/, "legacy POST must remain disabled");
+assert.match(routeSource, /Legacy supplier research is disabled/);
+assert.doesNotMatch(routeSource, /after\(|runSourcingResearchWorker|enqueueSourcingResearchRun/, "legacy POST must not start any worker");
 assert.match(cronSource, /process\.env\.CRON_SECRET/);
-assert.match(cronSource, /runQueuedSourcingResearchWorkers\(\{ limit: 2 \}\)/, "cron concurrency must stay capped at two");
+assert.match(cronSource, /disabled: true/, "legacy cron must report that it is disabled");
+assert.doesNotMatch(cronSource, /runQueuedSourcingResearchWorkers|runSourcingResearchWorker/, "legacy cron must not start any worker");
 assert.doesNotMatch(exactReadSource, /update|markAbandonedResearchFailed/, "exact polling must remain a read-only workspace view");
 assert.doesNotMatch(pageReadSource, /\.update|markAbandonedResearchFailed/, "queue reads must not mutate stale runs under view access");
 assert.match(persistenceSource, /failStaleRunningSourcingResearchRuns[\s\S]*status: "RUNNING"/);

@@ -2,7 +2,41 @@
 
 ## Latest Update
 
-### Custom sourcing runs open the correct saved result
+### All customer sourcing now enters the Neon workflow
+
+- Dreamz and other free-text or inventory sourcing requests keep the existing
+  structured intake, then create a customer-scoped Neon procurement order.
+- The dashboard switches to the same Request, Research, Compare, and Procure
+  workspace used by GUILD2 and polls supplier results every seven seconds.
+- Each saved intake request has a stable idempotency key. Reopening or retrying
+  it returns the same order instead of creating a duplicate.
+- The old Derya supplier-research and campaign POST handlers return `410`.
+  Their cron route is inert. Historical records remain available through
+  authenticated read-only GET for audit purposes, but are no longer shown in
+  the active sourcing queue.
+- A queued order can request one authenticated, customer-scoped recovery wake
+  every 30 seconds. The browser cannot submit customer identity or any
+  workflow-controlled field.
+- No supplier email action was added. Research results and outreach drafts are
+  read-only in Derya, and supplier contact remains controlled by the external
+  workflow policy.
+
+Verification:
+
+- `npm run test:customer-procurement-bourne`
+- `npm run test:procurement-workflow`
+- `npm run test:procurement-workflow-db` with provisioned test databases
+- `npm run test:workflow-guild2`
+- `npm run test:supply-os-atlas-sourcing`
+- `npm run test:supply-os-research-route-lifecycle`
+- `npm run test:supply-os-supplier-research-failures`
+- `npm run test:supply-os-continuous-sourcing`
+- `npm run check:product-copy`
+- `node --import tsx scripts/supply-os-deployment-boundary.test.ts`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `npm run build`
+
+### Superseded: legacy custom sourcing result restoration
 
 - Saved supplier-research rows now remount the procurement workspace by the
   persisted run ID. Two requests with identical text no longer share stale
@@ -13,8 +47,9 @@
 - Every accepted discovery URL still passes source filtering, pinned DNS,
   bounded server retrieval, exact page-evidence checks, and supplier identity
   validation before it can become a candidate.
-- Dreamz custom requests still use Derya's saved public-research queue. This is
-  separate from the GUILD2 Bourne and Neon procurement workflow.
+- This section describes the former Derya public-research path. New Dreamz and
+  custom requests now use the Neon workflow described in the latest update
+  above. Historical results remain read-only for audit.
 
 Verification:
 

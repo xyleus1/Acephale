@@ -62,6 +62,14 @@ import {
 } from "@/lib/supply-os/atlas-robotics-inventory";
 import { GUILD2_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
 import type { Guild2ProcurementOrderState } from "@/lib/supply-os/guild2-procurement";
+import {
+  CUSTOMER_PROCUREMENT_CAMPAIGN,
+  customerProcurementDraftItem,
+  customerProcurementItem,
+  customerProcurementMatchesWorkspace,
+  customerProcurementOrderState,
+  type CustomerProcurementListItem,
+} from "@/lib/supply-os/customer-procurement";
 import { SUPPLY_OS_DEMO_COMPANIES, type SupplyOsDemoCompanyId } from "@/lib/supply-os/demo-company";
 import { snapshotResponseToSourcingItems } from "@/lib/supply-os/snapshot-sourcing";
 import type { SupplyWorkspaceSnapshotResponse } from "@/lib/supply-os/snapshot-twin";
@@ -748,7 +756,7 @@ function CaseCommandCenter({
   const [pendingSourcingRequests, setPendingSourcingRequests] = useState<PendingSourcingQueueItem[]>([]);
   const [pendingSourcingStorageReady, setPendingSourcingStorageReady] = useState(false);
   const [procurementRequest, setProcurementRequest] = useState<{
-    requestId: string | null;
+    requestId: string;
     requestText: string;
     itemSku: string | null;
     initialDraft: PendingSourcingQueueItem["draft"];
@@ -759,9 +767,10 @@ function CaseCommandCenter({
     savedCases?: SavedProcurementCase[];
   } | null>(null);
   const [customerProcurementRequest, setCustomerProcurementRequest] = useState<{
-    itemSku: string;
+    item: AtlasInventoryItem;
     order: Guild2ProcurementOrderState;
   } | null>(null);
+  const [customerProcurementOrders, setCustomerProcurementOrders] = useState<CustomerProcurementListItem[]>([]);
   const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
   const [procurementCases, setProcurementCases] = useState<SavedProcurementCase[]>([]);
   const [supplierSenderAccounts, setSupplierSenderAccounts] = useState<SupplierSenderAccount[]>([]);
@@ -862,14 +871,41 @@ function CaseCommandCenter({
   const procurementItem = procurementRequest?.itemSku
     ? inventoryItems.find((item) => item.sku === procurementRequest.itemSku) ?? null
     : null;
-  const customerProcurementItem = customerProcurementRequest
-    ? inventoryItems.find((item) => item.sku === customerProcurementRequest.itemSku) ?? null
-    : null;
   const reduceMotion = useReducedMotion();
+  const visibleCustomerProcurementOrders = useMemo(() => customerProcurementOrders.filter((order) => (
+    customerProcurementMatchesWorkspace(order, sourcingWorkspaceId, companyName)
+  )), [companyName, customerProcurementOrders, sourcingWorkspaceId]);
+
+  const refreshCustomerProcurementOrders = useCallback(async (signal?: AbortSignal) => {
+    const params = new URLSearchParams({ sourceCampaign: CUSTOMER_PROCUREMENT_CAMPAIGN });
+    const response = await fetch(`/api/procurement/requests?${params.toString()}`, {
+      cache: "no-store",
+      signal,
+      headers: { accept: "application/json" },
+    });
+    const payload = await response.json().catch(() => null) as ({ requests?: CustomerProcurementListItem[]; error?: string }) | null;
+    if (!response.ok) throw new Error(payload?.error ?? "Saved procurement requests are unavailable.");
+    setCustomerProcurementOrders(payload?.requests ?? []);
+    return payload?.requests ?? [];
+  }, []);
 
   useEffect(() => {
     setInspectorMode(domain.defaultInspector);
   }, [activePanel, domain.defaultInspector]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void refreshCustomerProcurementOrders(controller.signal).catch(() => undefined);
+    return () => controller.abort();
+  }, [refreshCustomerProcurementOrders]);
+
+  useEffect(() => {
+    if (!visibleCustomerProcurementOrders.some((order) => ["new", "researching", "sourcing"].includes(order.status))) return;
+    const timer = window.setTimeout(() => {
+      void refreshCustomerProcurementOrders().catch(() => undefined);
+    }, 7_000);
+    return () => window.clearTimeout(timer);
+  }, [refreshCustomerProcurementOrders, visibleCustomerProcurementOrders]);
 
   useEffect(() => {
     if (!workspaceId) {
@@ -1069,7 +1105,7 @@ function CaseCommandCenter({
       setPendingSourcingRequests((current) => current.filter((request) => request.id !== requestId));
     }
     setProcurementRequest((current) => current?.requestText === run.input.requestText
-      ? { ...current, requestId: null, savedRun: run }
+      ? { ...current, requestId: run.id, savedRun: run }
       : current);
   }, []);
 
@@ -1135,7 +1171,7 @@ function CaseCommandCenter({
           `Company: ${companyName}`,
         ].filter(Boolean).join(". "));
     setProcurementRequest({
-      requestId: null,
+      requestId: crypto.randomUUID(),
       itemSku: completePublishedItem || item.source !== "published-snapshot" ? item.sku : null,
       requestText: generatedRequestText,
       initialDraft: item.source === "published-snapshot" ? {
@@ -1177,7 +1213,7 @@ function CaseCommandCenter({
     setSourceMapObjectId("");
     if (matchedItem) {
       setProcurementRequest({
-        requestId: null,
+        requestId: crypto.randomUUID(),
         requestText,
         itemSku: matchedItem.sku,
         initialDraft: null,
@@ -1243,7 +1279,7 @@ function CaseCommandCenter({
       ?? savedCases[0]
       ?? null;
     setProcurementRequest({
-      requestId: null,
+      requestId: run.id,
       requestText: run.input.requestText || run.input.componentName,
       itemSku: matchedItem?.sku ?? null,
       initialDraft: matchedItem ? null : sourcingDraftFromResearchInput(run.input),
@@ -1261,7 +1297,7 @@ function CaseCommandCenter({
     setSourceMapCandidateId(null);
     setSourceMapObjectId("");
     setProcurementRequest({
-      requestId: null,
+      requestId: crypto.randomUUID(),
       requestText: run.input.requestText || run.input.componentName,
       itemSku: matchedItem?.sku ?? null,
       initialDraft: sourcingDraftFromResearchInput(run.input),
@@ -1283,20 +1319,25 @@ function CaseCommandCenter({
     >
       <div ref={commandStageRef} className={styles.commandMapStage}>
         <AnimatePresence mode="wait" initial={false}>
-        {activePanel === "materials" && customerProcurementRequest?.order.orderId && customerProcurementItem ? (
+        {activePanel === "materials" && customerProcurementRequest?.order.orderId ? (
           <CustomerProcurementWorkspace
             key={`customer-procurement:${customerProcurementRequest.order.orderId}`}
             orderId={customerProcurementRequest.order.orderId}
-            item={customerProcurementItem}
+            item={customerProcurementRequest.item}
             initialOrder={customerProcurementRequest.order}
-            onBack={() => setCustomerProcurementRequest(null)}
+            onBack={() => {
+              setCustomerProcurementRequest(null);
+              void refreshCustomerProcurementOrders().catch(() => undefined);
+            }}
           />
         ) : activePanel === "materials" && procurementRequest ? (
           <AtlasProcurementWorkspace
             key={`procurement:${procurementRequest.savedRun?.id ?? procurementRequest.requestId ?? procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
+            requestId={procurementRequest.requestId}
             requestText={procurementRequest.requestText}
             workspaceId={sourcingWorkspaceId}
+            companyName={companyName}
             initialDraft={procurementRequest.initialDraft}
             initialMissingFields={procurementRequest.initialMissingFields}
             initialQuestion={procurementRequest.initialQuestion}
@@ -1306,11 +1347,19 @@ function CaseCommandCenter({
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
             senderAccounts={supplierSenderAccounts}
-            onResearchSaved={saveResearchRun}
             onProcurementCaseSaved={saveProcurementCase}
             onRequestUpdate={procurementRequest.requestId
-              ? (update) => updatePendingSourcingRequest(procurementRequest.requestId!, update)
+              ? (update) => updatePendingSourcingRequest(procurementRequest.requestId, update)
               : undefined}
+            onWorkflowSubmitted={({ draft, order }) => {
+              setPendingSourcingRequests((current) => current.filter((request) => request.id !== procurementRequest.requestId));
+              setCustomerProcurementRequest({
+                item: customerProcurementDraftItem(procurementRequest.requestId, draft),
+                order,
+              });
+              setProcurementRequest(null);
+              void refreshCustomerProcurementOrders().catch(() => undefined);
+            }}
             onBack={() => setProcurementRequest(null)}
           />
         ) : activePanel === "materials" ? (
@@ -1326,9 +1375,14 @@ function CaseCommandCenter({
             onCreateRequest={createProcurementRequest}
             onRetryResearch={retrySavedResearch}
             pendingRequests={pendingSourcingRequests}
+            customerProcurementOrders={visibleCustomerProcurementOrders}
             onOpenPendingRequest={openPendingSourcingRequest}
-            researchRuns={researchRuns}
-            procurementCases={procurementCases}
+            onOpenCustomerProcurement={(item, order) => {
+              setProcurementRequest(null);
+              setCustomerProcurementRequest({ item, order });
+            }}
+            researchRuns={[]}
+            procurementCases={[]}
             intelligenceProfile={intelligenceProfile}
             researchCampaign={demoCompanyId === "guild" ? supplierResearchCampaign : null}
             researchCampaignState={demoCompanyId === "guild" ? supplierResearchCampaignState : "idle"}
@@ -1344,7 +1398,7 @@ function CaseCommandCenter({
             onOpenGuild2Procurement={(item, order) => {
               setSelectedInventorySku(item.sku);
               setProcurementRequest(null);
-              setCustomerProcurementRequest({ itemSku: item.sku, order });
+              setCustomerProcurementRequest({ item, order });
             }}
             sourceName={selectedSourceCandidate?.name}
             sourceLocation={selectedSourceCandidate?.location}

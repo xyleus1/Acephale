@@ -17,6 +17,22 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-18 - Unify customer sourcing on Neon and Bourne
+
+- Branch: `feat/unify-custom-sourcing-bourne`, based on current `origin/main`.
+- Task: Route custom and inventory sourcing through the same customer-scoped
+  Neon workflow as GUILD2 and disable the old in-application research engine.
+- Files changed: Supply OS intake, dashboard and queue restoration, customer
+  workflow bridge, authenticated wake retry route, legacy POST and cron routes,
+  procurement contracts, tests, and architecture documentation.
+- Verification: Custom bridge, procurement workflow, GUILD2, Atlas sourcing,
+  legacy route shutdown, supplier-research failure, and TypeScript checks pass.
+- Caveats: Historical legacy research is retained as authenticated read-only
+  data. External research progress still requires the active workflow and its
+  webhook secret or fallback schedule.
+- Follow-up: Deploy, create one complete custom request, and confirm it advances
+  from queued to supplier results without any supplier email being sent.
+
 ### 2026-08-18 - Repair custom supplier-research result routing
 
 - Branch: `fix/custom-sourcing-run-results`, based on production `origin/main`.

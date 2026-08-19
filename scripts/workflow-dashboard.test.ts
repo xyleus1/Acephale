@@ -12,6 +12,7 @@ import {
   requestBourneWorkflowWake,
   submitProcurementRequest,
 } from "../src/lib/procurement-workflow";
+import { handleProcurementWake } from "../src/lib/procurement-route-handlers";
 
 const customerA = "11111111-1111-4111-8111-111111111111";
 const customerB = "22222222-2222-4222-8222-222222222222";
@@ -193,6 +194,37 @@ async function main() {
     notes: "Internal equipment-deck plate stock",
     requestContext: { schema_version: 1, logistics: { destination: null } },
     idempotencyKey: "tenant-123-request-456",
+  });
+
+  const unauthenticatedWake = await handleProcurementWake(
+    "33333333-3333-4333-8333-333333333333",
+    {
+      session: async () => null,
+      resolveCustomerId: async () => customerA,
+      wake: async () => ({ claimed: true, workflowWakeRequested: true }),
+    },
+  );
+  assert.equal(unauthenticatedWake.status, 401);
+
+  let observedWake: { customerId: string; orderId: string } | null = null;
+  const authenticatedWake = await handleProcurementWake(
+    "33333333-3333-4333-8333-333333333333",
+    {
+      session: async () => ({ userId: "user-a", officeId: "office-a" }),
+      resolveCustomerId: async (session) => {
+        assert.equal(session.officeId, "office-a");
+        return customerA;
+      },
+      wake: async (customerId, orderId) => {
+        observedWake = { customerId, orderId };
+        return { claimed: true, workflowWakeRequested: true };
+      },
+    },
+  );
+  assert.equal(authenticatedWake.status, 202);
+  assert.deepEqual(observedWake, {
+    customerId: customerA,
+    orderId: "33333333-3333-4333-8333-333333333333",
   });
 
 const priorWorkflowDatabaseUrl = process.env.WORKFLOW_DATABASE_URL;
@@ -393,6 +425,7 @@ try {
 
 const routeSource = await readFile("src/app/api/procurement/requests/route.ts", "utf8");
 const detailRouteSource = await readFile("src/app/api/procurement/requests/[orderId]/route.ts", "utf8");
+const wakeRouteSource = await readFile("src/app/api/procurement/requests/[orderId]/wake/route.ts", "utf8");
 const handlerSource = await readFile("src/lib/procurement-route-handlers.ts", "utf8");
 const workflowSource = await readFile("src/lib/procurement-workflow.ts", "utf8");
 const clientSource = await readFile("src/app/dashboard/workflow/procurement-workflow.tsx", "utf8");
@@ -401,6 +434,9 @@ const provisioningSql = await readFile("scripts/sql/procurement-dashboard-api.sq
 assert(handlerSource.includes("if (!session)"), "Procurement handlers must reject unauthenticated requests.");
 assert(routeSource.includes("handleProcurementPost"), "POST must use the authenticated procurement handler.");
 assert(detailRouteSource.includes("handleProcurementDetail"), "Detail must use the authenticated procurement handler.");
+assert(wakeRouteSource.includes("handleProcurementWake"), "Wake retries must use the authenticated procurement handler.");
+assert(workflowSource.includes("claim.updated_at <= now() - interval '30 seconds'"), "Wake retries must be durably rate limited.");
+assert(workflowSource.includes("orders.status = 'new'"), "Wake retries must only target queued orders.");
 assert(workflowSource.includes("AND orders.customer_id = $2::uuid"), "Order detail reads must scope by customer.");
 assert(workflowSource.includes('orders.request_context AS "requestContext"'), "Order lists must restore stored request context.");
 assert(workflowSource.includes("limit = 50"), "The recent order list must cover all 38 GUILD2 sourcing lines.");

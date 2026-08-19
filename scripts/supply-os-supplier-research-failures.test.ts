@@ -65,8 +65,9 @@ assert.match(service, /searchExaComponentSuppliers/);
 assert.match(service, /searchOpenAiComponentSuppliers/);
 assert.doesNotMatch(service, /verifyCurrentSupplierPrices/);
 assert.match(service, /selectedProvider = selectSupplierResearchProvider\(input\.requiredProvider\)/);
-assert.match(route, /executeSupplierResearchRoute/);
-assert.match(route, /after\([\s\S]*runSourcingResearchWorker/);
+assert.match(route, /status: 410/);
+assert.match(route, /Legacy supplier research is disabled/);
+assert.doesNotMatch(route, /executeSupplierResearchRoute|after\(|runSourcingResearchWorker/);
 assert.match(routeContract, /status: 202/);
 assert.match(worker, /supplierFailure\(error\)/);
 assert.match(worker, /failRun\([\s\S]*failure\.code/);
@@ -75,8 +76,8 @@ assert.equal(
   false,
   "workspace research must use the persisted canonical route instead of a read-only untracked back door",
 );
-assert.match(procurement, /setResearchAttempt\(\(current\) => current \+ 1\)/);
-assert.match(procurement, /researchAttempt, workspaceId/);
+assert.match(procurement, /customerProcurementRequest/);
+assert.match(procurement, /\/api\/procurement\/requests/);
 assert.match(procurement, /workspaceId \? \[\] : buildProcurementOptions\(item\)/);
 assert.match(persistence, /\{ maxWait: 5_000, timeout: 45_000 \}/, "research knowledge persistence needs an explicit transaction budget");
 assert.match(persistence, /pg_advisory_xact_lock\(hashtextextended\(\$\{`supply-research:/, "supplier profile expansion must serialize per workspace");

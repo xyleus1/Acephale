@@ -37,6 +37,11 @@ import {
   shortageQuantity,
   type AtlasInventoryItem,
 } from "@/lib/supply-os/atlas-robotics-inventory";
+import {
+  customerProcurementItem,
+  customerProcurementOrderState,
+  type CustomerProcurementListItem,
+} from "@/lib/supply-os/customer-procurement";
 import type {
   SourcingRequestDraft,
   SourcingRequiredField,
@@ -96,7 +101,9 @@ export function AtlasInventoryWorkspace({
   onCreateRequest,
   onRetryResearch,
   pendingRequests,
+  customerProcurementOrders,
   onOpenPendingRequest,
+  onOpenCustomerProcurement,
   researchRuns,
   procurementCases,
   intelligenceProfile,
@@ -128,7 +135,9 @@ export function AtlasInventoryWorkspace({
   onCreateRequest: (query: string) => void;
   onRetryResearch: (run: SavedSourcingResearchRun) => void;
   pendingRequests: PendingSourcingQueueItem[];
+  customerProcurementOrders: CustomerProcurementListItem[];
   onOpenPendingRequest: (request: PendingSourcingQueueItem) => void;
+  onOpenCustomerProcurement: (item: AtlasInventoryItem, order: Guild2ProcurementOrderState) => void;
   researchRuns: SavedSourcingResearchRun[];
   procurementCases: SavedProcurementCase[];
   intelligenceProfile: SupplyIntelligenceProfile | null;
@@ -649,6 +658,30 @@ export function AtlasInventoryWorkspace({
                 </tr>
               );
             })}
+            {customerProcurementOrders.map((request) => {
+              const item = customerProcurementItem(request);
+              const order = customerProcurementOrderState(request);
+              return (
+                <tr key={request.id} data-status="request">
+                  <td>
+                    <button type="button" onClick={() => onOpenCustomerProcurement(item, order)}>
+                      <span className={styles.inventoryStatusDot} />
+                      <span><small>{item.sku}</small><strong>{request.material}</strong><em>{request.specification ?? "Specification not provided"}</em></span>
+                    </button>
+                  </td>
+                  <td>{request.quantity.toLocaleString("en-US")} {request.unit}</td>
+                  <td>{request.neededBy ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${request.neededBy}T12:00:00Z`)) : "Not set"}</td>
+                  <td>{PROCUREMENT_APPROVAL_STATUSES.has(request.status)
+                    ? "Shortlist under review"
+                    : `${guild2CustomerProcurementStatusLabel(request.status)}: ${guild2CustomerProcurementProgress(request.status, 0)}`}</td>
+                  <td>
+                    <button className={styles.sourcingQueueAction} type="button" onClick={() => onOpenCustomerProcurement(item, order)}>
+                      {["new", "researching", "sourcing"].includes(request.status) ? "View progress" : "View results"} <ArrowRight size={13} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
             {sourcingItems.map((item) => {
               const guild2Line = guild2ProcurementLine(item.sku);
               const guild2Order = guild2Orders[item.sku];
@@ -747,7 +780,7 @@ export function AtlasInventoryWorkspace({
               </tr>
               );
             })}
-            {!pendingRequests.length && !sourcingItems.length && !customRuns.length && !additionalRuns.length ? (
+            {!pendingRequests.length && !customerProcurementOrders.length && !sourcingItems.length && !customRuns.length && !additionalRuns.length ? (
               <tr data-status="empty">
                 <td colSpan={5}>No sourceable parts are published. Import a parts CSV with quantity, delivery location, and need-by date.</td>
               </tr>

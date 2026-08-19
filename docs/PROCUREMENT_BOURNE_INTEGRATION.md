@@ -61,6 +61,26 @@ It submits the 38 requests with concurrency capped at three. Each new order can
 attempt the webhook once; a bulk retry returns existing orders without another
 wake. Active rows poll the scoped detail endpoint every seven seconds.
 
+## Custom and inventory sourcing
+
+Free-text and regular inventory requests use the structured Derya intake only
+to collect the item, quantity, unit, technical identity, delivery location,
+and need-by date. A complete intake posts to the same authenticated
+`POST /api/procurement/requests` endpoint as GUILD2. It does not invoke the old
+in-application supplier-research worker.
+
+Custom requests store `request_context.source.campaign = CUSTOM` plus a bounded
+request ID and optional workspace metadata. The request ID produces a stable
+idempotency key. Workspace metadata groups the customer interface; it is never
+an authorization input. The authenticated Office-to-customer mapping remains
+the security boundary.
+
+The legacy `/api/supply-os/supplier-research` route and its campaign route
+permit authenticated GET only for historical audit. Both POST handlers return
+`410`, and the legacy cron does no work. Active sourcing screens restore CUSTOM
+orders from Neon and poll the customer-scoped detail endpoint every seven
+seconds.
+
 ## Write and read ownership
 
 `POST /api/procurement/requests` creates or scopes a BOM and creates an order in
@@ -81,6 +101,7 @@ Detail and list reads always include the authenticated external customer UUID.
 ```bash
 npm run test:procurement-workflow
 npm run test:workflow-guild2
+npm run test:customer-procurement-bourne
 npm run test:procurement-workflow-db
 npx tsc --noEmit --pretty false --incremental false
 node --import tsx scripts/product-copy-policy.test.ts

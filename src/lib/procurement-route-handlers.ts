@@ -5,6 +5,7 @@ import {
   getProcurementRequest,
   listProcurementRequests,
   ProcurementWorkflowError,
+  retryProcurementWorkflowWake,
   resolveProcurementCustomerId,
   submitProcurementRequest,
 } from "@/lib/procurement-workflow";
@@ -34,6 +35,12 @@ export type ProcurementDetailDependencies = {
   getRequest: typeof getProcurementRequest;
 };
 
+export type ProcurementWakeDependencies = {
+  session: () => Promise<ProcurementRouteSession | null>;
+  resolveCustomerId: typeof resolveProcurementCustomerId;
+  wake: typeof retryProcurementWorkflowWake;
+};
+
 const defaultRouteDependencies: ProcurementRouteDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
@@ -45,6 +52,12 @@ const defaultDetailDependencies: ProcurementDetailDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
   getRequest: getProcurementRequest,
+};
+
+const defaultWakeDependencies: ProcurementWakeDependencies = {
+  session: async () => (await import("@/lib/auth")).getSession(),
+  resolveCustomerId: resolveProcurementCustomerId,
+  wake: retryProcurementWorkflowWake,
 };
 
 function errorResponse(error: unknown) {
@@ -162,6 +175,24 @@ export async function handleProcurementDetail(
       return Response.json({ error: "Procurement request not found." }, { status: 404, headers: responseHeaders });
     }
     return Response.json(order, { headers: responseHeaders });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function handleProcurementWake(
+  orderId: string,
+  dependencies: ProcurementWakeDependencies = defaultWakeDependencies,
+) {
+  const session = await dependencies.session();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
+  try {
+    const customerId = await dependencies.resolveCustomerId(session);
+    const result = await dependencies.wake(customerId, orderId);
+    return Response.json({
+      workflowWakeRequested: result.workflowWakeRequested,
+      message: result.claimed ? "Processing requested" : "Request is already processing or was recently requested",
+    }, { status: result.claimed ? 202 : 200, headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);
   }

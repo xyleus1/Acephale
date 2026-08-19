@@ -35,6 +35,8 @@ import {
   type SourcingRequestDraft,
   type SourcingRequiredField,
 } from "@/lib/supply-os/sourcing-request-contract";
+import { customerProcurementRequest } from "@/lib/supply-os/customer-procurement";
+import type { Guild2ProcurementOrderState } from "@/lib/supply-os/guild2-procurement";
 import {
   hasDirtyWorkstream,
   markWorkstreamDraft,
@@ -42,10 +44,6 @@ import {
   type WorkstreamDraftState,
 } from "@/lib/supply-os/workstream-drafts";
 import styles from "./supply-os-logistics.module.css";
-import {
-  isTerminalSupplierResearchRun,
-  pollSupplierResearchRun,
-} from "./supplier-research-polling";
 import type {
   PublicResearchResult,
   ConnectedSupplierReply,
@@ -481,8 +479,10 @@ const QUOTE_EXTRACTION_FIELDS = [
 
 export function AtlasProcurementWorkspace({
   item,
+  requestId,
   requestText,
   workspaceId,
+  companyName,
   initialDraft,
   initialMissingFields,
   initialQuestion,
@@ -492,14 +492,16 @@ export function AtlasProcurementWorkspace({
   canApproveProcurement,
   canAuthorizePurchase,
   senderAccounts,
-  onResearchSaved,
   onProcurementCaseSaved,
   onRequestUpdate,
+  onWorkflowSubmitted,
   onBack,
 }: {
   item: AtlasInventoryItem | null;
+  requestId: string;
   requestText: string;
   workspaceId?: string | null;
+  companyName?: string | null;
   initialDraft: SourcingRequestDraft | null;
   initialMissingFields: SourcingRequiredField[];
   initialQuestion: string | null;
@@ -509,7 +511,6 @@ export function AtlasProcurementWorkspace({
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
   senderAccounts: SupplierSenderAccount[];
-  onResearchSaved: (run: SavedSourcingResearchRun) => void;
   onProcurementCaseSaved: (procurementCase: SavedProcurementCase) => void;
   onRequestUpdate?: (update: {
     title: string;
@@ -517,6 +518,10 @@ export function AtlasProcurementWorkspace({
     missingFields: SourcingRequiredField[];
     lastQuestion: string | null;
     status: "Clarification needed" | "Researching" | "Research unavailable";
+  }) => void;
+  onWorkflowSubmitted: (result: {
+    draft: SourcingRequestDraft;
+    order: Guild2ProcurementOrderState;
   }) => void;
   onBack: () => void;
 }) {
@@ -537,7 +542,6 @@ export function AtlasProcurementWorkspace({
     ? initialMissingFields
     : startingDraft ? missingSourcingFields(startingDraft) : [];
   const [currentRun, setCurrentRun] = useState<SavedSourcingResearchRun | null>(initialRun ?? null);
-  const currentRunRef = useRef<SavedSourcingResearchRun | null>(initialRun ?? null);
   const [requestDraft, setRequestDraft] = useState<SourcingRequestDraft | null>(startingDraft);
   const [missingFields, setMissingFields] = useState<SourcingRequiredField[]>(startingMissingFields);
   const [messages, setMessages] = useState<SourcingConversationMessage[]>(() => [
@@ -549,8 +553,9 @@ export function AtlasProcurementWorkspace({
   const [intakeError, setIntakeError] = useState("");
   const intakeControllerRef = useRef<AbortController | null>(null);
   const initialIntakeStartedRef = useRef(false);
+  const workflowSubmissionRef = useRef(false);
   const onRequestUpdateRef = useRef(onRequestUpdate);
-  const onResearchSavedRef = useRef(onResearchSaved);
+  const onWorkflowSubmittedRef = useRef(onWorkflowSubmitted);
   const followUpHydrationKeyRef = useRef("");
   const [currentCase, setCurrentCase] = useState<SavedProcurementCase | null>(initialCase ?? null);
   const [workstreamCases, setWorkstreamCases] = useState<SavedProcurementCase[]>(
@@ -715,7 +720,6 @@ export function AtlasProcurementWorkspace({
           ? "degraded"
           : startingDraft && startingMissingFields.length === 0 ? "running" : "idle",
   );
-  const [researchAttempt, setResearchAttempt] = useState(0);
   const options = useMemo(() => [
     ...(workspaceId ? [] : buildProcurementOptions(item)),
     ...publicResearchOptions(publicResearch),
@@ -783,12 +787,8 @@ export function AtlasProcurementWorkspace({
   }, [onRequestUpdate]);
 
   useEffect(() => {
-    onResearchSavedRef.current = onResearchSaved;
-  }, [onResearchSaved]);
-
-  useEffect(() => {
-    currentRunRef.current = currentRun;
-  }, [currentRun]);
+    onWorkflowSubmittedRef.current = onWorkflowSubmitted;
+  }, [onWorkflowSubmitted]);
 
   useEffect(() => () => intakeControllerRef.current?.abort(), []);
 
@@ -884,12 +884,12 @@ export function AtlasProcurementWorkspace({
   }
 
   function retryResearch() {
+    workflowSubmissionRef.current = false;
     setCurrentRun(null);
     setPublicResearch(null);
     setResearchError(null);
     setCompletedSources(0);
     setResearchState("idle");
-    setResearchAttempt((current) => current + 1);
     setPhase("researching");
     if (requestDraft) {
       onRequestUpdateRef.current?.({
@@ -905,7 +905,6 @@ export function AtlasProcurementWorkspace({
   function resumeResearchPolling() {
     setResearchError(null);
     setResearchState("running");
-    setResearchAttempt((current) => current + 1);
   }
 
   useEffect(() => {
@@ -1186,103 +1185,73 @@ export function AtlasProcurementWorkspace({
 
   useEffect(() => {
     if (phase !== "researching" || (!item && !requestDraft)) return;
-    const existingRun = currentRunRef.current;
-    if (
-      researchAttempt === 0
-      && existingRun
-      && isTerminalSupplierResearchRun(existingRun)
-      && existingRun.status.toUpperCase() !== "SUCCEEDED"
-    ) return;
-    const controller = new AbortController();
-    setResearchState("running");
-    if (!existingRun || isTerminalSupplierResearchRun(existingRun)) setPublicResearch(null);
-    setResearchError(null);
-    setCompletedSources(1);
-    void (async () => {
-      try {
-        let run = existingRun && !isTerminalSupplierResearchRun(existingRun) ? existingRun : null;
-        if (!run) {
-          const response = await fetch("/api/supply-os/supplier-research", {
+    if (!initialRun) {
+      const workflowDraft = requestDraft ?? (item ? inventoryItemSourcingDraft(item) : null);
+      if (!workflowDraft || missingSourcingFields(workflowDraft).length || workflowSubmissionRef.current) return;
+      workflowSubmissionRef.current = true;
+      const controller = new AbortController();
+      let handedOff = false;
+      setResearchState("running");
+      setResearchError(null);
+      setCompletedSources(1);
+      void (async () => {
+        try {
+          const response = await fetch("/api/procurement/requests", {
             method: "POST",
             cache: "no-store",
             signal: controller.signal,
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              componentItemKey: item?.sku ?? `request:${requestText.slice(0, 120)}`,
-              componentName: requestDraft?.productName ?? item?.name ?? requestText,
-              manufacturer: requestDraft?.manufacturer ?? item?.manufacturer ?? undefined,
-              mpn: requestDraft?.partNumber ?? item?.mpn ?? undefined,
-              specification: requestDraft?.specification ?? item?.specification ?? requestText,
-              targetCountry: requestDraft?.deliveryLocation?.slice(0, 120) ?? (item ? sourcingDeliveryLocation(item)?.slice(0, 120) ?? undefined : undefined),
+            headers: { accept: "application/json", "content-type": "application/json" },
+            body: JSON.stringify(customerProcurementRequest({
+              requestId,
               requestText,
-              workspaceId: workspaceId ?? undefined,
-              requestedQuantity: requestDraft?.quantity ?? (item ? sourcingRequestQuantity(item) ?? undefined : undefined),
-              requestedUnit: requestDraft?.unit ?? (item ? item.requestedUnit ?? item.unitOfMeasure ?? undefined : undefined),
-              sourceRegion: requestDraft?.sourceRegion ?? undefined,
-              deliveryLocation: requestDraft?.deliveryLocation ?? (item ? sourcingDeliveryLocation(item) ?? undefined : undefined),
-              needByDate: requestDraft?.needByDate ?? (item ? sourcingNeedByDate(item) ?? undefined : undefined),
-            }),
+              draft: workflowDraft,
+              workspaceId,
+              companyName,
+            })),
           });
-          const payload = await response.json().catch(() => ({})) as { run?: SavedSourcingResearchRun; error?: string };
-          if (!response.ok || !payload.run) throw new Error(payload.error ?? "Supplier research could not be queued.");
-          run = payload.run;
-          currentRunRef.current = run;
-          setCurrentRun(run);
-          onResearchSavedRef.current(run);
-        }
-
-        const outcome = await pollSupplierResearchRun({
-          run,
-          workspaceId,
-          signal: controller.signal,
-          onRun: (savedRun) => {
-            currentRunRef.current = savedRun;
-            setCurrentRun(savedRun);
-            onResearchSavedRef.current(savedRun);
-          },
-        });
-        if (outcome.state === "background") {
-          setResearchState("background");
-          return;
-        }
-
-        const terminalRun = outcome.run;
-        if (terminalRun.status.toUpperCase() !== "SUCCEEDED" || !terminalRun.output) {
-          throw new Error(terminalRun.error?.message ?? "Supplier research stopped before completion.");
-        }
-        const result = terminalRun.output;
-        setPublicResearch(result);
-        setResearchError(null);
-        setResearchState(result.degraded ? "degraded" : "complete");
-        setCompletedSources(RESEARCH_STEPS.length);
-        if (requestDraft && result.degraded && !result.candidates.length) {
+          const payload = await response.json().catch(() => null) as ({
+            orderId?: string;
+            status?: string;
+            workflowWakeRequested?: boolean;
+            error?: string;
+          }) | null;
+          if (!response.ok || !payload?.orderId || !payload.status) {
+            throw new Error(payload?.error ?? "The procurement request could not be created.");
+          }
+          handedOff = true;
+          onWorkflowSubmittedRef.current({
+            draft: workflowDraft,
+            order: {
+              orderId: payload.orderId,
+              status: payload.status,
+              progress: "Order received from dashboard",
+              error: null,
+              workflowWakeRequested: payload.workflowWakeRequested ?? false,
+              vendors: [],
+            },
+          });
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          workflowSubmissionRef.current = false;
+          setResearchError(error instanceof Error ? error.message : "The procurement request could not be created.");
+          setResearchState("degraded");
+          setCompletedSources(1);
           onRequestUpdateRef.current?.({
-            title: requestDraft.productName ?? requestText,
-            draft: requestDraft,
+            title: workflowDraft.productName ?? requestText,
+            draft: workflowDraft,
             missingFields: [],
             lastQuestion: null,
             status: "Research unavailable",
           });
         }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setPublicResearch(null);
-        setResearchError(error instanceof Error ? error.message : "Supplier research did not finish.");
-        setResearchState("degraded");
-        setCompletedSources(1);
-        if (requestDraft) {
-          onRequestUpdateRef.current?.({
-            title: requestDraft.productName ?? requestText,
-            draft: requestDraft,
-            missingFields: [],
-            lastQuestion: null,
-            status: "Research unavailable",
-          });
-        }
-      }
-    })();
-    return () => controller.abort();
-  }, [item, phase, requestDraft, requestText, researchAttempt, workspaceId]);
+      })();
+      return () => {
+        controller.abort();
+        if (!handedOff) workflowSubmissionRef.current = false;
+      };
+    }
+    return;
+  }, [companyName, initialRun, item, phase, requestDraft, requestId, requestText, workspaceId]);
 
   function toggleShortlist(optionId: string) {
     setSelectedOptionId(optionId);
@@ -1915,7 +1884,10 @@ export function AtlasProcurementWorkspace({
     && qualificationForm.note.trim().length >= 10
     && (qualificationForm.relationship !== "AUTHORIZED_DISTRIBUTOR" || Boolean(qualificationForm.authorizationEvidenceUrl.trim()));
   const rejectionComplete = qualificationForm.note.trim().length >= 10;
-  const researchOutcomeLabel = researchState === "running"
+  const creatingWorkflowRequest = researchState === "running" && !initialRun;
+  const researchOutcomeLabel = creatingWorkflowRequest
+    ? "Starting sourcing"
+    : researchState === "running"
     ? "Researching"
     : researchState === "background"
       ? "Background research"
@@ -1924,7 +1896,9 @@ export function AtlasProcurementWorkspace({
         : researchError
           ? "Research stopped"
           : "Research";
-  const researchOutcomeDetail = researchState === "running"
+  const researchOutcomeDetail = creatingWorkflowRequest
+    ? "Creating the sourcing request and starting supplier research."
+    : researchState === "running"
     ? "Searching public supplier pages, then validating source attribution and exact commercial claims."
     : researchState === "background"
       ? "Public supplier research continues as a saved background job."
@@ -1957,7 +1931,7 @@ export function AtlasProcurementWorkspace({
           <small>{item?.sku ?? "New request"}</small>
           <h2>{item?.name ?? requestDraft?.productName ?? requestText}</h2>
         </span>
-        <i>{phase === "request" ? "Request intake" : currentRun ? "Saved research" : "Public research"}</i>
+        <i>{phase === "request" ? "Request intake" : currentRun ? "Saved research" : "Sourcing request"}</i>
       </header>
 
       <nav className={styles.procurementProgress} aria-label="Procurement progress">
@@ -1987,7 +1961,7 @@ export function AtlasProcurementWorkspace({
                 <div><dt>Deliver to</dt><dd>{requestDraft?.deliveryLocation ?? "Required"}</dd></div>
                 <div><dt>Need by</dt><dd>{requestDraft?.needByDate ?? "Required"}</dd></div>
               </dl>
-              <p><TriangleAlert size={14} /> Web research starts only after the required facts are present.</p>
+              <p><TriangleAlert size={14} /> Supplier research starts only after the required facts are present.</p>
             </section>
             <section className={styles.procurementRequestChat} aria-label="Sourcing request clarification">
               <div className={styles.procurementRequestMessages} aria-live="polite">
@@ -2014,7 +1988,7 @@ export function AtlasProcurementWorkspace({
                   {intakeState === "running"
                     ? <LoaderCircle size={15} className={styles.spin} />
                     : answer.trim() ? <Send size={15} /> : <Search size={15} />}
-                  {answer.trim() ? "Send answer" : "Continue to research"}
+                  {answer.trim() ? "Send answer" : "Continue to sourcing"}
                 </button>
               </form>
             </section>
@@ -2113,8 +2087,10 @@ export function AtlasProcurementWorkspace({
               })}
             </ol>
             <footer>
-              <span><TriangleAlert size={14} /> {researchState === "running"
-                ? "Public web research is running. No supplier system is connected."
+              <span><TriangleAlert size={14} /> {creatingWorkflowRequest
+                ? "The request is being queued. No supplier has been contacted."
+                : researchState === "running"
+                ? "Historical public web research is running. No supplier has been contacted."
                 : researchState === "background"
                   ? "Research continues in the background. Leaving this page will not cancel it."
                 : researchState === "complete" && publicResearch?.candidates.length

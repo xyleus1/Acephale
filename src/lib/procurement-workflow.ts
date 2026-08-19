@@ -614,6 +614,58 @@ export async function requestBourneWorkflowWake(
   return true;
 }
 
+export async function claimProcurementWakeRetryFromDatabase(
+  database: RawDatabase,
+  customerId: string,
+  orderId: string,
+) {
+  if (!uuidSchema.safeParse(customerId).success || !uuidSchema.safeParse(orderId).success) {
+    throw new ProcurementWorkflowError("Procurement request not found.", "not_found");
+  }
+  try {
+    const updated = await database.$executeRawUnsafe(`
+      UPDATE procurement_api_idempotency AS claim
+      SET updated_at = now()
+      WHERE claim.customer_id = $1::uuid
+        AND claim.order_id = $2::uuid
+        AND claim.updated_at <= now() - interval '30 seconds'
+        AND EXISTS (
+          SELECT 1
+          FROM orders
+          WHERE orders.id = claim.order_id
+            AND orders.customer_id = claim.customer_id
+            AND orders.status = 'new'
+        )
+    `, customerId, orderId);
+    if (updated === 1) return true;
+    const rows = await database.$queryRawUnsafe<OrderStatusRow[]>(`
+      SELECT id::text AS "orderId", status
+      FROM orders
+      WHERE id = $1::uuid
+        AND customer_id = $2::uuid
+      LIMIT 1
+    `, orderId, customerId);
+    if (!rows[0]) throw new ProcurementWorkflowError("Procurement request not found.", "not_found");
+    return false;
+  } catch (error) {
+    if (error instanceof ProcurementWorkflowError) throw error;
+    throw new ProcurementWorkflowError("The procurement workflow database is unavailable.", "unavailable");
+  }
+}
+
+export async function retryProcurementWorkflowWake(
+  customerId: string,
+  orderId: string,
+  dependencies?: { database?: RawDatabase; fetchImplementation?: typeof fetch },
+) {
+  const database = dependencies?.database ?? externalDatabase();
+  const claimed = await claimProcurementWakeRetryFromDatabase(database, customerId, orderId);
+  const workflowWakeRequested = claimed
+    ? await requestBourneWorkflowWake({ orderId, customerId }, dependencies?.fetchImplementation)
+    : false;
+  return { claimed, workflowWakeRequested };
+}
+
 export async function submitProcurementRequest(
   customerId: string,
   input: ProcurementRequestInput,

@@ -19,6 +19,7 @@ import {
   listProcurementRequestsFromDatabase,
   ProcurementWorkflowError,
   resolveProcurementCustomerId,
+  retryProcurementWorkflowWake,
   submitProcurementRequest,
 } from "../src/lib/procurement-workflow";
 
@@ -136,6 +137,46 @@ async function main() {
     const customerScopedDuplicate = await createProcurementRequestInDatabase(workflowDatabase, customerB, input);
     assert.notEqual(customerScopedDuplicate.orderId, created.orderId);
     assert.equal(customerScopedDuplicate.created, true);
+
+    await owner.$executeRawUnsafe(
+      "UPDATE procurement_api_idempotency SET updated_at = now() - interval '31 seconds' WHERE customer_id = $1::uuid AND order_id = $2::uuid",
+      customerA,
+      created.orderId,
+    );
+    const priorRetryWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+    const priorRetryWebhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+    process.env.BOURNE_WORKFLOW_WEBHOOK_URL = "https://bourne.example.test/workflow";
+    process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = "test-webhook-secret";
+    let retryWebhookCount = 0;
+    try {
+      const wake = (async () => {
+        retryWebhookCount += 1;
+        return new Response(null, { status: 204 });
+      }) as typeof fetch;
+      const retry = await retryProcurementWorkflowWake(customerA, created.orderId, {
+        database: workflowDatabase,
+        fetchImplementation: wake,
+      });
+      assert.deepEqual(retry, { claimed: true, workflowWakeRequested: true });
+      const boundedRetry = await retryProcurementWorkflowWake(customerA, created.orderId, {
+        database: workflowDatabase,
+        fetchImplementation: wake,
+      });
+      assert.deepEqual(boundedRetry, { claimed: false, workflowWakeRequested: false });
+      assert.equal(retryWebhookCount, 1, "Wake retries must be customer-scoped and durably rate limited.");
+      await assert.rejects(
+        retryProcurementWorkflowWake(customerB, created.orderId, {
+          database: workflowDatabase,
+          fetchImplementation: wake,
+        }),
+        (error: unknown) => error instanceof ProcurementWorkflowError && error.code === "not_found",
+      );
+    } finally {
+      if (priorRetryWebhookUrl === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
+      else process.env.BOURNE_WORKFLOW_WEBHOOK_URL = priorRetryWebhookUrl;
+      if (priorRetryWebhookSecret === undefined) delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
+      else process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET = priorRetryWebhookSecret;
+    }
 
     const priorConcurrentWebhookUrl = process.env.BOURNE_WORKFLOW_WEBHOOK_URL;
     const priorConcurrentWebhookSecret = process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
