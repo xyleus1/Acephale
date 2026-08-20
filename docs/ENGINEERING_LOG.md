@@ -17,6 +17,21 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-20 - Remove dashboard hydration server action
+
+- Branch: `fix/dashboard-server-action-hook-crash`, based on production main.
+- Task: Fix persistent React error #310 by removing the initial client-side
+  server action that suspended Next.js App Router during hydration.
+- Files changed: live event toast, authenticated latest-event GET route, Supply
+  OS navigation contract, handoff, and engineering log.
+- Evidence: the minified `D` frame maps to Next.js App Router, production logs
+  show POST immediately after GET, and `LiveEventToast` made the matching
+  `getLatestEvent` server-action call on mount.
+- Verification target: Supply OS and security CI, Vercel preview and production
+  builds, production request-method logs, and a fresh browser load.
+- Safety: event reads remain session-authenticated and office-scoped. No send,
+  purchase, booking, or customer-visible mutation is added.
+
 ### 2026-08-20 - Remove Context hook-order crash
 
 - Branch: `fix/context-react-hook-crash`, based on production main.

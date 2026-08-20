@@ -13,12 +13,18 @@ const workspaceRoute = readFileSync(resolve(root, "src/app/api/supply-os/workspa
 const customerWorkspace = readFileSync(resolve(root, "src/lib/supply-os/customer-workspace.ts"), "utf8");
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const profileRoute = readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/company-profile/route.ts"), "utf8");
+const liveEventToast = readFileSync(resolve(root, "src/components/live-event-toast.tsx"), "utf8");
+const latestEventRoute = readFileSync(resolve(root, "src/app/api/dashboard/events/latest/route.ts"), "utf8");
 
 assert.match(shell, /className=\{styles\.operatingSidebar\}/, "left domain sidebar must remain persistent");
 assert.match(shell, /const \[companyIndexOpen, setCompanyIndexOpen\] = useState\(true\)/, "company list must be the clean entry state");
 assert.doesNotMatch(shell, /autoOpenContextWorkspace/, "Context navigation must not add release-sensitive hook state");
 assert.match(shell, /autoOpenFirstWorkspace=\{[\s\S]*activePanel === "context"[\s\S]*!workspaceSelection[\s\S]*Boolean\(workspaceSelection\.demoCompanyId\)/, "Context must derive real-workspace resolution without another hook");
 assert.doesNotMatch(index, /autoOpenedWorkspaceRef|useRef/, "the company index must not add an auto-open effect hook");
+assert.doesNotMatch(liveEventToast, /\bgetLatestEvent\b|useRouter|router\.refresh/, "dashboard hydration must not enter the App Router action queue");
+assert.match(liveEventToast, /fetch\("\/api\/dashboard\/events\/latest"/, "event polling must use the authenticated GET endpoint");
+assert.match(latestEventRoute, /getSession[\s\S]*getLatestEvent/, "the GET endpoint must authenticate before reading office-scoped events");
+assert.match(latestEventRoute, /Cache-Control": "private, no-store"/, "dashboard events must not be shared or cached");
 assert.match(index, /const nextWorkspaces = body\.workspaces \?\? \[\][\s\S]*if \(autoOpenFirstWorkspace && nextWorkspaces\[0\]\)[\s\S]*onOpenWorkspace\(selectionFor\(nextWorkspaces\[0\]\)\)/, "the existing load path must open the first office-scoped real workspace");
 assert.match(shell, /<ArrowLeft size=\{15\} \/> Companies/, "selected workspaces need a back-to-companies control");
 assert.match(shell, /className=\{styles\.commandHeader\}/, "company identity ribbon must remain above every domain view");

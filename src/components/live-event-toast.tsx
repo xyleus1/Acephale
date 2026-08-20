@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { getLatestEvent, type LatestEvent } from "@/lib/agent-events";
+import type { LatestEvent } from "@/lib/agent-events";
 
 const POLL_MS = 15_000;
 
@@ -16,7 +15,6 @@ const KIND_ICON: Record<LatestEvent["kind"], React.ReactNode> = {
 };
 
 export function LiveEventToast() {
-  const router = useRouter();
   const lastSeenAt = useRef<string | null>(null);
   const [toast, setToast] = useState<LatestEvent | null>(null);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -26,7 +24,13 @@ export function LiveEventToast() {
 
     async function tick() {
       try {
-        const ev = await getLatestEvent();
+        const response = await fetch("/api/dashboard/events/latest", {
+          cache: "no-store",
+          headers: { accept: "application/json" },
+        });
+        if (!response.ok) return;
+        const body = await response.json().catch(() => ({})) as { event?: LatestEvent | null };
+        const ev = body.event ?? null;
         if (stopped || !ev) return;
         // Establish baseline silently on first run
         if (lastSeenAt.current === null) {
@@ -38,8 +42,6 @@ export function LiveEventToast() {
           setToast(ev);
           if (dismissTimer.current) clearTimeout(dismissTimer.current);
           dismissTimer.current = setTimeout(() => setToast(null), 8000);
-          // Refresh server data on the current page
-          router.refresh();
         }
       } catch {
         // swallow
@@ -49,7 +51,7 @@ export function LiveEventToast() {
     tick();
     const id = setInterval(tick, POLL_MS);
     return () => { stopped = true; clearInterval(id); if (dismissTimer.current) clearTimeout(dismissTimer.current); };
-  }, [router]);
+  }, []);
 
   if (!toast) return null;
 

@@ -2,6 +2,23 @@
 
 ## Latest Update
 
+### Dashboard event polling no longer enters the App Router action queue
+
+- Production React error #310 mapped to the first `useMemo` in Next.js App
+  Router, not a Derya component hook. Runtime logs showed a server-action POST
+  to `/dashboard/supply-os` immediately after each page GET.
+- `LiveEventToast` caused that POST by calling the `getLatestEvent` server
+  action during its first client effect. It also called `router.refresh()` when
+  a newer event appeared, which could re-enter the same router action path.
+- The client now polls `/api/dashboard/events/latest` with a normal no-store
+  GET. The route authenticates the session before reading office-scoped event
+  data. Automatic App Router refresh was removed.
+- A focused contract rejects direct server-action imports, `useRouter`, and
+  `router.refresh()` in the dashboard poller and requires the authenticated GET
+  boundary.
+- Verification target: Supply OS and security CI, exact-head Vercel preview,
+  production deployment, GET plus POST runtime logs, and a fresh browser load.
+
 ### Context navigation no longer changes mounted hook order
 
 - Production React error #310 traced to Context auto-open state added before an
