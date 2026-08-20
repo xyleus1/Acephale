@@ -28,7 +28,8 @@ Use this log for durable product and engineering decisions. Do not put every imp
   release step with the controlled owner connection before application rollout.
 - Consequences: The runtime role stays least-privileged and ordinary code
   releases cannot mutate schema. Migration-bearing releases must prove the
-  owner-run migration separately before production deployment.
+  owner-run migration separately before production deployment. CI also requires
+  the explicit `derya_app` table allowlist to match every Prisma model.
 - Revisit when: Deployment infrastructure supports a dedicated, audited
   pre-deploy migration job with a separate credential.
 

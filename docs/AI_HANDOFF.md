@@ -10,7 +10,8 @@
   controlled owner connection. This restores least-privilege production
   deploys without weakening the database role.
 - The deployment boundary test now rejects migration commands in the routine
-  build script.
+  build script and requires the `derya_app` table allowlist to match every
+  Prisma model.
 
 ### Context release hardening on the merged chat surface
 

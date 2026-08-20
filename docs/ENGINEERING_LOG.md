@@ -23,10 +23,10 @@ Use this file for chronological implementation notes that future agents should s
 - Task: Recover the failed Context hotfix deployment after Vercel attempted
   `prisma migrate deploy` with the intentionally restricted application role.
 - Files changed: package scripts, deployment boundary contract, decisions,
-  handoff, and engineering log.
+  app-role grants, handoff, and engineering log.
 - Verification: Deployment boundary, CI, preview build, and production deploy.
-- Safety: No credentials or database grants change. Migrations remain available
-  through an explicit owner-run command.
+- Safety: Workflow-table isolation is unchanged. The app role gains only the
+  six new quoted Context tables and migrations remain owner-run.
 
 ### 2026-08-20 - Open the Context chat from direct navigation
 

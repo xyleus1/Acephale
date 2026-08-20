@@ -85,8 +85,8 @@ ALLOW_PRODUCTION_OFFICE_SEED=1 \
 DATABASE_URL="$DERYA_APP_DATABASE_URL" \
 DATABASE_URL_UNPOOLED="$DERYA_APP_DATABASE_URL_UNPOOLED" \
 PRODUCTION_OFFICE_NAME="Dreamz" \
-PRODUCTION_COMPANY_NAME="Dreamz" \
-PRODUCTION_WORKSPACE_NAME="Dreamz" \
+PRODUCTION_COMPANY_NAME="HypnoDreamz" \
+PRODUCTION_WORKSPACE_NAME="HypnoDreamz" \
 PRODUCTION_ADMIN_NAME="Mert" \
 PRODUCTION_ADMIN_EMAIL="mert@usederya.com" \
 PRODUCTION_ADMIN_PASSWORD="$PRODUCTION_ADMIN_PASSWORD" \
@@ -115,6 +115,10 @@ Keep these unchanged:
 - `BOURNE_WORKFLOW_WEBHOOK_URL`
 - `BOURNE_WORKFLOW_WEBHOOK_SECRET`
 - `AUTH_SECRET`
+
+Do not put the owner URL in Vercel. Run `npm run deploy:migrations` from a
+controlled owner session before deployment. `npm run build` never applies
+migrations.
 
 Redeploy Production after the variables are saved. Existing cookies from the
 old database will not authorize a missing user in the new database, so sign in
