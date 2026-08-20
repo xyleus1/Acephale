@@ -5,12 +5,20 @@ on:
     paths:
       - ".github/workflows/procurement-workflow-tests.yml"
       - "src/app/api/procurement/**"
+      - "src/app/login/**"
       - "src/app/dashboard/supply-os/**"
       - "src/app/dashboard/workflow/**"
+      - "src/lib/auth.ts"
+      - "src/lib/password.ts"
       - "src/lib/procurement-**"
       - "src/lib/supply-os/guild**"
+      - "prisma/schema.prisma"
+      - "prisma/migrations/**"
       - "scripts/procurement-workflow-database.test.ts"
+      - "scripts/create-production-office.ts"
+      - "scripts/unified-neon-cutover.test.ts"
       - "scripts/sql/procurement-**"
+      - "scripts/sql/derya-app-role.sql"
       - "scripts/workflow-dashboard.test.ts"
       - "scripts/workflow-guild2.test.ts"
       - "package.json"
@@ -37,11 +45,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_app?schema=public
-      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_app?schema=public
-      WORKFLOW_DATABASE_OWNER_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_procurement_workflow
+      DATABASE_OWNER_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_unified
+      DATABASE_URL: postgresql://derya_app:app_test_password@127.0.0.1:5432/derya_unified?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://derya_app:app_test_password@127.0.0.1:5432/derya_unified?schema=public
+      WORKFLOW_DATABASE_OWNER_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_unified
       WORKFLOW_DATABASE_URL: postgresql://dashboard_api:dashboard_test_password@workflow.invalid/neondb?sslmode=require
-      WORKFLOW_DATABASE_TEST_URL: postgresql://dashboard_api:dashboard_test_password@127.0.0.1:5432/derya_procurement_workflow?schema=public
+      WORKFLOW_DATABASE_TEST_URL: postgresql://dashboard_api:dashboard_test_password@127.0.0.1:5432/derya_unified?schema=public
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -52,13 +61,74 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Provision disposable databases
+      - name: Provision disposable unified database
         run: |
-          createdb -h 127.0.0.1 -U postgres derya_procurement_app
-          createdb -h 127.0.0.1 -U postgres derya_procurement_workflow
-          npx prisma db push --skip-generate
+          createdb -h 127.0.0.1 -U postgres derya_unified
+          DATABASE_URL="$DATABASE_OWNER_URL" DATABASE_URL_UNPOOLED="$DATABASE_OWNER_URL" npx prisma migrate deploy
           psql "$WORKFLOW_DATABASE_OWNER_URL" --file=scripts/sql/procurement-workflow-test-schema.sql
           psql "$WORKFLOW_DATABASE_OWNER_URL" --set=dashboard_api_password=dashboard_test_password --file=scripts/sql/procurement-dashboard-api.sql
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=derya_app_password=app_test_password --file=scripts/sql/derya-app-role.sql
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 --command="INSERT INTO customers (id, name) VALUES ('33333333-3333-4333-8333-333333333333', 'Dreamz')"
+          ALLOW_PRODUCTION_OFFICE_SEED=1 \
+            PRODUCTION_OFFICE_NAME=Dreamz \
+            PRODUCTION_ADMIN_EMAIL=mert@usederya.com \
+            PRODUCTION_ADMIN_PASSWORD=local-test-password-only \
+            PRODUCTION_ADMIN_NAME=Mert \
+            npm run seed:production-office
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 <<'SQL'
+          UPDATE "User"
+          SET "canViewWholeOffice" = false,
+              role = 'EMPLOYEE',
+              "isActive" = false,
+              "passwordHash" = 'invalid'
+          WHERE email = 'mert@usederya.com';
+          UPDATE "SupplyWorkspace"
+          SET name = 'Incorrect name', status = 'ARCHIVED', "archivedAt" = now()
+          WHERE "externalKey" = 'production:primary';
+          UPDATE "SupplyWorkspaceMember"
+          SET role = 'VIEWER', "isActive" = false;
+          SQL
+          ALLOW_PRODUCTION_OFFICE_SEED=1 \
+            PRODUCTION_OFFICE_NAME=Dreamz \
+            PRODUCTION_ADMIN_EMAIL=mert@usederya.com \
+            PRODUCTION_ADMIN_PASSWORD=rotated-local-test-password \
+            PRODUCTION_ADMIN_NAME=Mert \
+            npm run seed:production-office
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=derya_app_password=rotated_app_test_password --file=scripts/sql/derya-app-role.sql
+          ALLOW_PRODUCTION_OFFICE_SEED=1 \
+            DATABASE_URL=postgresql://derya_app:rotated_app_test_password@127.0.0.1:5432/derya_unified?schema=public \
+            DATABASE_URL_UNPOOLED=postgresql://derya_app:rotated_app_test_password@127.0.0.1:5432/derya_unified?schema=public \
+            PRODUCTION_OFFICE_NAME=Dreamz \
+            PRODUCTION_ADMIN_EMAIL=mert@usederya.com \
+            PRODUCTION_ADMIN_PASSWORD=rotated-local-test-password \
+            PRODUCTION_ADMIN_NAME=Mert \
+            npm run seed:production-office
+          DATABASE_URL=postgresql://derya_app:rotated_app_test_password@127.0.0.1:5432/derya_unified?schema=public \
+            DATABASE_URL_UNPOOLED=postgresql://derya_app:rotated_app_test_password@127.0.0.1:5432/derya_unified?schema=public \
+            UNIFIED_NEON_TEST_PASSWORD=rotated-local-test-password \
+            UNIFIED_NEON_TEST_CUSTOMER_ID=33333333-3333-4333-8333-333333333333 \
+            NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/unified-neon-cutover.test.ts
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT count(*) FROM "Office" WHERE name = 'Dreamz') <> 1
+              OR (SELECT count(*) FROM "User" WHERE email = 'mert@usederya.com') <> 1
+              OR (SELECT count(*) FROM "Company" WHERE name = 'Dreamz') <> 1
+              OR (SELECT count(*) FROM "User" WHERE email = 'mert@usederya.com' AND role = 'ADMIN' AND "isActive" AND "canViewWholeOffice") <> 1
+              OR (SELECT count(*) FROM "SupplyWorkspace" w JOIN "Company" c ON c.id = w."companyId" WHERE w."externalKey" = 'production:primary' AND w.name = 'Dreamz' AND w.status = 'ACTIVE' AND w."archivedAt" IS NULL AND w."officeId" = c."officeId") <> 1
+              OR (SELECT count(*) FROM "SupplyWorkspaceMember" m JOIN "User" u ON u.id = m."userId" JOIN "SupplyWorkspace" w ON w.id = m."workspaceId" WHERE m.role = 'OWNER' AND m."isActive" AND m."officeId" = u."officeId" AND m."officeId" = w."officeId") <> 1
+              OR has_table_privilege('dashboard_api', 'public."User"', 'SELECT')
+              OR has_table_privilege('dashboard_api', 'public."User"', 'INSERT')
+              OR has_table_privilege('derya_app', 'public.orders', 'SELECT')
+              OR has_table_privilege('derya_app', 'public.orders', 'INSERT')
+              OR has_table_privilege('derya_app', 'public.orders', 'UPDATE')
+              OR has_table_privilege('derya_app', 'public.orders', 'DELETE') THEN
+              RAISE EXCEPTION 'production identity seed is not idempotent';
+            END IF;
+          END
+          $$;
+          SQL
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=derya_app_password=app_test_password --file=scripts/sql/derya-app-role.sql
       - name: Run procurement security contracts
         run: |
           npm run test:procurement-workflow

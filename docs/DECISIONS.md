@@ -3294,3 +3294,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Operational boundary: Provider keys must already exist in the invoking shell.
   The command names missing configuration but never prints or reads key values
   outside the provider SDK. Keys must not be pasted into chat or committed.
+### 2026-08-19 - Share one Neon database without sharing database roles
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The production sourcing workflow already uses the authoritative
+  Neon database, while Derya login and Office records still use an older
+  application database that has no data worth carrying forward. Keeping two
+  physical databases adds commissioning friction and makes a fresh customer
+  login look disconnected from its workflow records.
+- Decision: Store the quoted Prisma application tables and lowercase workflow
+  tables in one physical Neon database. Keep `DATABASE_URL` on a restricted
+  `derya_app` role, keep `WORKFLOW_DATABASE_URL` on `dashboard_api`, and keep
+  Bourne on its existing workflow role. Schema migrations run only as owner.
+- Identity boundary: A fresh production seed creates the Office, ADMIN user,
+  Company, SupplyWorkspace, and OWNER membership together. The authenticated
+  Office ID still maps server-side to one workflow customer UUID. Browser input
+  never chooses that customer.
+- Permission boundary: `derya_app` receives CRUD only on quoted PascalCase
+  Prisma tables. It receives no workflow-table privileges. `dashboard_api`
+  keeps its existing limited workflow grants and receives no Prisma login-table
+  access.
+- Cutover boundary: Test the combined layout in a disposable database first,
+  retain the old database unchanged for rollback, then switch only server-side
+  production variables and smoke-test one request. Do not use `prisma db push`
+  or a privileged owner URL at runtime.

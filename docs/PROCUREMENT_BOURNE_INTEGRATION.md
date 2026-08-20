@@ -2,10 +2,10 @@
 
 ## Runtime boundary
 
-The Derya application database remains on `DATABASE_URL`. It owns login,
-Office records, and the authenticated tenant mapping. The Bourne workflow
-database uses `WORKFLOW_DATABASE_URL` because replacing the application
-`DATABASE_URL` would disconnect auth from its own database.
+The Derya application connection remains on `DATABASE_URL`. It owns login,
+Office records, and the authenticated tenant mapping. The workflow connection
+uses `WORKFLOW_DATABASE_URL`. These connections may use the same physical Neon
+database, but they must use separate roles and permission boundaries.
 
 `WORKFLOW_DATABASE_URL` must use the restricted `dashboard_api` role and an SSL
 mode of `require`, `verify-ca`, or `verify-full`. The optional
@@ -107,9 +107,12 @@ npx tsc --noEmit --pretty false --incremental false
 node --import tsx scripts/product-copy-policy.test.ts
 ```
 
-No Derya Prisma migration is required. The external idempotency table is still
-required because it makes the idempotency claim and order insert atomic in the
-authoritative Neon transaction.
+An existing separate workflow database does not require Derya Prisma tables.
+When authentication and workflow data are consolidated into one physical Neon
+database, apply the current Prisma migrations as owner and provision the
+restricted `derya_app` role before changing `DATABASE_URL`. The external
+idempotency table remains required because it makes the idempotency claim and
+order insert atomic in the authoritative Neon transaction.
 
 Live acceptance still requires the real Neon schema, the restricted role, the
 server-side Office mapping, and an authenticated deployment. Confirm that

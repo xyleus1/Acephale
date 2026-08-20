@@ -2,6 +2,38 @@
 
 ## Latest Update
 
+### Production can use one physical Neon database with a fresh login
+
+- The existing workflow database can now also host Derya's quoted Prisma
+  application tables. Authentication and procurement keep separate restricted
+  roles even though they share one physical database.
+- `scripts/sql/derya-app-role.sql` provisions `derya_app` with CRUD only on
+  quoted Prisma tables and verifies that it cannot access lowercase workflow
+  tables.
+- The production identity seed now creates or reuses the Office, ADMIN user,
+  Company, SupplyWorkspace, and OWNER membership in one transaction. Running it
+  twice produces one identity and workspace.
+- The procurement security CI job now provisions the combined layout, applies
+  Prisma migrations, provisions and rotates both restricted roles, corrupts and
+  repairs the seeded identity, verifies its login password, and executes the
+  database-backed isolation and privilege contracts.
+- Production cutover instructions are in
+  `docs/RUNBOOKS/UNIFIED_NEON_CUTOVER.md`. The old database is retained only as
+  rollback and is not copied or deleted.
+
+Verification:
+
+- `npx tsc --noEmit --pretty false --incremental false`
+- `npm run build`
+- `npm run test:procurement-workflow`
+- `npm run test:workflow-guild2`
+- `npm run test:customer-procurement-bourne`
+- `npm run check:product-copy`
+- `node --import tsx scripts/supply-os-deployment-boundary.test.ts`
+- workflow YAML parse
+- `git diff --check`
+- GitHub `Procurement workflow security` job required before production
+
 ### All customer sourcing now enters the Neon workflow
 
 - Dreamz and other free-text or inventory sourcing requests keep the existing

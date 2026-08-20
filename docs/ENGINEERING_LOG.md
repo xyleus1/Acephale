@@ -17,6 +17,29 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-19 - Prepare unified Neon login and workflow cutover
+
+- Branch: `chore/unified-neon-cutover`, based on current `origin/main`.
+- Task: Retire the old application database from the production path by adding
+  the current Prisma schema and a fresh Dreamz login to the existing workflow
+  Neon database, without weakening database roles.
+- Files changed: production identity seed, restricted app-role SQL, procurement
+  database CI, unified cutover runbook, integration guide, decision log, and
+  handoff.
+- Verification: production build, TypeScript, procurement workflow contracts,
+  GUILD2 contracts, customer procurement bridge, deployment boundary, product
+  copy policy, workflow YAML parsing, and diff hygiene passed locally.
+- Failed/skipped checks: The disposable local PostgreSQL server could not start
+  because the Mac exhausted its System V shared-memory slots before database
+  creation. The existing GitHub PostgreSQL job now performs the exact combined
+  schema, role, seed-idempotency, tenant-isolation, and privilege test.
+- Caveats: Production database and Vercel secret changes remain intentionally
+  blocked until that disposable CI job passes. The old database must remain
+  untouched as rollback through production smoke testing.
+- Follow-up: Push the branch, require the procurement security job, then apply
+  `docs/RUNBOOKS/UNIFIED_NEON_CUTOVER.md` using the owner connection in a
+  controlled shell.
+
 ### 2026-08-18 - Unify customer sourcing on Neon and Bourne
 
 - Branch: `feat/unify-custom-sourcing-bourne`, based on current `origin/main`.
