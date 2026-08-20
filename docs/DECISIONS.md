@@ -16,6 +16,19 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-20 - Retire the production pentest tenant
+
+- Status: accepted, supersedes the 2026-07-01 pentest self-repair decision
+- Owner: engineering
+- Context: Production now has one commissioned Dreamz login and one
+  HypnoDreamz workspace on unified Neon. The five-minute pentest cron was
+  recreating a second Office, user, company, and synthetic fixture data.
+- Decision: Remove the pentest seed from Vercel cron scheduling. Keep the
+  explicit local seed command for deliberate isolated testing, but never run it
+  automatically against production.
+- Consequences: Production contains only the commissioned application tenant.
+  A future sandbox must use an isolated database or an explicit temporary setup.
+
 ### 2026-08-20 - Application builds never run database DDL
 
 - Status: accepted

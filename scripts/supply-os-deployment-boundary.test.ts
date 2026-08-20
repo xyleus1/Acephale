@@ -40,6 +40,11 @@ assert.doesNotMatch(rfqMail, /https:\/\/www\.derya\.ai\/dashboard\//, "Product l
 assert.match(envExample, /^NEXT_PUBLIC_APP_URL=/m, "The canonical application origin must be documented");
 assert.equal(vercel.buildCommand, undefined, "routine application builds must not run database migrations");
 assert.equal(
+  vercel.crons?.some((cron) => cron.path === "/api/cron/pentest-demo"),
+  false,
+  "production must not recreate the retired pentest tenant",
+);
+assert.equal(
   packageJson.scripts?.build,
   "prisma generate && next build",
   "the application build must not require migration-ledger privileges",

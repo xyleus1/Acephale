@@ -2,6 +2,14 @@
 
 ## Latest Update
 
+### Production no longer recreates a pentest tenant
+
+- Removed `/api/cron/pentest-demo` from Vercel scheduling.
+- The explicit pentest seed command remains available for isolated test
+  databases, but production now keeps only the commissioned Dreamz login and
+  HypnoDreamz workspace.
+- The deployment boundary test prevents the pentest cron from returning.
+
 ### Vercel builds no longer attempt database migrations
 
 - Production application connections use a restricted role without DDL access.

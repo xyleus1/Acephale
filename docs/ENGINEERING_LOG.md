@@ -17,6 +17,18 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-20 - Retire automatic production pentest seeding
+
+- Branch: `fix/remove-production-pentest-cron`, based on current main.
+- Task: Stop the five-minute Vercel cron from recreating synthetic tenant data
+  in the newly unified production database.
+- Files changed: Vercel cron configuration, deployment boundary contract,
+  decisions, handoff, and engineering log.
+- Verification: Deployment boundary, TypeScript, build, CI, production deploy,
+  and post-deploy tenant counts.
+- Safety: The explicit seed tool remains available for isolated test databases.
+  No workflow data or supplier email behavior changes.
+
 ### 2026-08-20 - Remove database DDL from Vercel builds
 
 - Branch: `fix/vercel-build-no-ddl`, based on production main.
