@@ -17,6 +17,19 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-20 - Remove Context hook-order crash
+
+- Branch: `fix/context-react-hook-crash`, based on production main.
+- Task: Fix React error #310 on `/dashboard/supply-os` after the Context
+  auto-open release changed the hook count of long-lived client components.
+- Files changed: Supply OS shell, company index, two focused contracts, handoff,
+  and engineering log.
+- Verification target: focused Context and company-navigation contracts,
+  TypeScript, production build, CI, preview deploy, and production smoke test.
+- Safety: Navigation still resolves the first real office-scoped workspace.
+  Tenant authorization, Context persistence, uploads, and outbound approval are
+  unchanged.
+
 ### 2026-08-20 - Retire automatic production pentest seeding
 
 - Branch: `fix/remove-production-pentest-cron`, based on current main.

@@ -56,9 +56,6 @@ export function SupplyOsOperatingShell({
 }) {
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
-  const [autoOpenContextWorkspace, setAutoOpenContextWorkspace] = useState(
-    () => normalizeSupplyOsPanel(initialPanel) === "context",
-  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
   const [workspaceProfile, setWorkspaceProfile] = useState<{
@@ -71,7 +68,6 @@ export function SupplyOsOperatingShell({
   const openWorkspace = useCallback((selection: SupplyOsWorkspaceSelection) => {
     setWorkspaceSelection(selection);
     setWorkspaceProfile(null);
-    setAutoOpenContextWorkspace(false);
     setCompanyIndexOpen(false);
   }, []);
   const demoCompany = workspaceSelection?.demoCompanyId
@@ -109,7 +105,6 @@ export function SupplyOsOperatingShell({
     setActivePanel(panel);
     const needsContextWorkspace = panel === "context"
       && (!workspaceSelection || Boolean(workspaceSelection.demoCompanyId));
-    setAutoOpenContextWorkspace(needsContextWorkspace);
     setCompanyIndexOpen(needsContextWorkspace);
   }, [workspaceSelection]);
 
@@ -224,10 +219,7 @@ export function SupplyOsOperatingShell({
               </dl>
               <motion.button
                 type="button"
-                onClick={() => {
-                  setAutoOpenContextWorkspace(false);
-                  setCompanyIndexOpen(true);
-                }}
+                onClick={() => setCompanyIndexOpen(true)}
                 whileTap={{ scale: 0.98 }}
                 disabled={companyIndexOpen}
               >
@@ -240,7 +232,10 @@ export function SupplyOsOperatingShell({
             {companyIndexOpen ? (
               <SupplyOsCompanyIndex
                 canCreateCompany={canCreateCompany}
-                autoOpenFirstWorkspace={autoOpenContextWorkspace}
+                autoOpenFirstWorkspace={
+                  activePanel === "context"
+                    && (!workspaceSelection || Boolean(workspaceSelection.demoCompanyId))
+                }
                 onOpenWorkspace={openWorkspace}
               />
             ) : (

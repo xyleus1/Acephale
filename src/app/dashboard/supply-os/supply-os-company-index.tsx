@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, Building2, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { SUPPLY_OS_DEMO_COMPANIES } from "@/lib/supply-os/demo-company";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import styles from "./supply-os-company-index.module.css";
@@ -53,7 +53,6 @@ export function SupplyOsCompanyIndex({
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyWebsite, setNewCompanyWebsite] = useState("");
   const [creating, setCreating] = useState(false);
-  const autoOpenedWorkspaceRef = useRef(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -62,23 +61,19 @@ export function SupplyOsCompanyIndex({
       const response = await fetch("/api/supply-os/workspaces", { cache: "no-store", headers: { accept: "application/json" } });
       const body = await response.json().catch(() => ({})) as { workspaces?: Workspace[]; error?: string };
       if (!response.ok) throw new Error(body.error || "Companies could not be loaded.");
-      setWorkspaces(body.workspaces ?? []);
+      const nextWorkspaces = body.workspaces ?? [];
+      setWorkspaces(nextWorkspaces);
       setState("ready");
+      if (autoOpenFirstWorkspace && nextWorkspaces[0]) {
+        onOpenWorkspace(selectionFor(nextWorkspaces[0]));
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Companies could not be loaded.");
       setState("error");
     }
-  }, []);
+  }, [autoOpenFirstWorkspace, onOpenWorkspace]);
 
   useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => {
-    if (!autoOpenFirstWorkspace || state !== "ready" || autoOpenedWorkspaceRef.current) return;
-    const firstWorkspace = workspaces[0];
-    if (!firstWorkspace) return;
-    autoOpenedWorkspaceRef.current = true;
-    onOpenWorkspace(selectionFor(firstWorkspace));
-  }, [autoOpenFirstWorkspace, onOpenWorkspace, state, workspaces]);
 
   async function createCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

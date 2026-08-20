@@ -2,6 +2,20 @@
 
 ## Latest Update
 
+### Context navigation no longer changes mounted hook order
+
+- Production React error #310 traced to Context auto-open state added before an
+  existing `useMemo` in the long-lived Supply OS shell. The company index also
+  added a second effect only to open the first durable workspace.
+- Context auto-open is now derived from the active panel and selected workspace.
+  The first office-scoped workspace opens inside the existing load callback, so
+  the behavior no longer requires another shell state hook, ref, or effect.
+- Focused source contracts reject reintroducing the release-sensitive hook
+  state and verify that direct Context navigation still skips demo workspaces
+  and opens the first durable office workspace.
+- Verification target: focused contracts, TypeScript, production build, CI,
+  preview deployment, production deployment, and a fresh-browser smoke test.
+
 ### Production no longer recreates a pentest tenant
 
 - Removed `/api/cron/pentest-demo` from Vercel scheduling.
