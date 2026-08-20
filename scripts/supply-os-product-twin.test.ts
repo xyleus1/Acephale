@@ -20,8 +20,12 @@ assert.match(page, /session\.officeId/, "the shell must keep office-scoped persi
 assert.match(page, /session\.userId/, "browser-local compatibility state must remain user scoped");
 assert.match(shell, /: "materials"/, "materials must be the default operating panel");
 
-for (const panel of ["materials", "fulfillment", "scenarios", "logistics", "tracking"]) {
+for (const panel of ["materials", "scenarios", "logistics"]) {
   assert.match(shell, new RegExp(`id: "${panel}"`), `the integrated shell is missing the ${panel} panel`);
+}
+
+for (const retiredPanel of ["fulfillment", "tracking"]) {
+  assert.doesNotMatch(shell, new RegExp(`id: "${retiredPanel}"`), `the retired ${retiredPanel} panel must stay out of navigation`);
 }
 
 assert.match(shell, /SupplyOsDashboardWorkspace/, "the existing logistics and customs map must remain available inside Supply OS");
