@@ -208,19 +208,21 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
       createdAt: new Date().toISOString(),
       pending: true,
     });
+    let messageSaved = false;
     try {
       const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context/nodes/${selectedNodeId}/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ instruction }),
       });
-      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      const payload = await response.json().catch(() => null) as { error?: string; messageSaved?: boolean } | null;
+      messageSaved = payload?.messageSaved === true;
       if (!response.ok) throw new Error(payload?.error || "The reply did not finish.");
       await load(selectedNodeId);
       setOptimisticMessage(null);
     } catch (cause) {
       const refreshed = await load(selectedNodeId).catch(() => null);
-      const persisted = refreshed?.messages.some((entry) => entry.role === "OPERATOR" && entry.body === instruction);
+      const persisted = messageSaved || refreshed?.messages.some((entry) => entry.role === "OPERATOR" && entry.body === instruction);
       if (!persisted) setMessage(instruction);
       setOptimisticMessage(null);
       setError(cause instanceof Error ? cause.message : "The reply did not finish.");

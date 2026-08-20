@@ -16,6 +16,25 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-19 - Context evidence and delivery recovery fail closed
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The merged Context chat persisted generated replies as ordinary
+  citable messages and could strand uncertain Gmail sends without a safe retry
+  path.
+- Decision: Generated replies remain conversation history but never evidence.
+  A grounded reply requires at least one server-approved citation. Supplier
+  messages use a stable RFC message ID and reconcile uncertain outcomes before
+  retry. Missing delivery returns to human review.
+- Rollout: Context is available only to an explicitly allowlisted office or an
+  office already commissioned in the server-only procurement customer map.
+- Consequences: Generated claims cannot become self-reinforcing evidence,
+  invalid customer inputs remain recoverable, and ambiguous supplier delivery
+  cannot silently duplicate an email.
+- Revisit when: A provider supplies a stronger transactional delivery receipt
+  or Context moves to a dedicated reviewed evidence workflow.
+
 ### 2026-08-19 - Supply OS Context replaces browser-local Automations
 
 - Status: accepted

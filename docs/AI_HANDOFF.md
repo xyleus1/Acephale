@@ -2,6 +2,22 @@
 
 ## Latest Update
 
+### Context release hardening on the merged chat surface
+
+- Main now contains the Context chat from PR #177. This follow-up keeps that
+  product shape and fixes its release boundaries instead of merging the
+  conflicting earlier application PR.
+- Production pilot gating accepts an explicit office allowlist or an office
+  already commissioned in the server-only procurement customer map.
+- Agent replies remain conversation history but cannot become citable evidence.
+  Citation-free generated replies are rejected.
+- Invalid uploads return actionable 400-class errors. Customer transcript and
+  file history stay on the selected scope, and failed portal posts preserve the
+  customer's text.
+- Uncertain Gmail sends reconcile the stable RFC message ID before retry. A
+  found message finalizes once, a missing message returns to human review, and
+  an unknown result remains blocked.
+
 ### Supply OS Context is one conversation with a file rail
 
 - Automations is replaced by Context for allowlisted offices. The operator

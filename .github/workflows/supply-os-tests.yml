@@ -78,6 +78,14 @@ jobs:
           npm run test:supply-os-sourcing-persistence
           npm run test:supply-os-planning-persistence
           npm run test:supply-os-execution
+          npm run test:supply-os-context-db
+
+      - name: Run Context contracts
+        run: |
+          npm run test:supply-os-context
+          npm run test:supply-os-context-review
+          npm run test:supply-os-context-documents
+          npm run test:supply-os-supplier-email-provider
 
       - name: Run deterministic sourcing regressions
         run: |

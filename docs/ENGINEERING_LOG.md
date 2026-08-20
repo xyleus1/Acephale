@@ -17,6 +17,20 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-19 - Harden the merged Context chat release
+
+- Branch: `fix/context-chat-hardening-20260819`, based on main after PR #177.
+- Task: Repair the evidence, upload, portal scoping, retry, pilot-gating, and
+  uncertain Gmail delivery paths on the Context implementation that actually
+  reached main.
+- Files changed: Context agent, persistence, outbound Gmail state machine,
+  authenticated routes, internal and portal chat clients, focused contracts,
+  and release documentation.
+- Verification: Context source contracts, TypeScript, production build, and the
+  disposable PostgreSQL persistence suite are required before merge.
+- Safety: No supplier message, customer message, purchase, booking, migration,
+  or feature flag is executed by this change.
+
 ### 2026-08-19 - Prepare unified Neon login and workflow cutover
 
 - Branch: `chore/unified-neon-cutover`, based on current `origin/main`.

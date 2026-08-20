@@ -22,7 +22,11 @@ const CONTEXT_REPLY_SCHEMA = {
 } as const;
 
 export class ContextAgentError extends Error {
-  constructor(message: string, public readonly code: "invalid_input" | "unavailable" | "invalid_response") {
+  constructor(
+    message: string,
+    public readonly code: "invalid_input" | "unavailable" | "invalid_response",
+    public readonly messageSaved = false,
+  ) {
     super(message);
     this.name = "ContextAgentError";
   }
@@ -81,7 +85,12 @@ export async function chatWithSupplyContext(args: {
       value: fact.value,
       inherited: fact.inherited,
     })),
-    messages: assembled.messages.slice(-60).map((message) => ({
+    conversationHistory: assembled.messages.slice(-60).map((message) => ({
+      role: message.role,
+      body: message.body,
+      createdAt: message.createdAt,
+    })),
+    evidenceMessages: assembled.messages.filter((message) => message.role !== "AGENT").slice(-60).map((message) => ({
       citationId: `message:${message.id}`,
       role: message.role,
       body: message.body,
@@ -111,10 +120,6 @@ export async function chatWithSupplyContext(args: {
     })),
   };
 
-  if (!process.env.OPENAI_API_KEY) {
-    throw new ContextAgentError("AI replies are not configured for this environment.", "unavailable");
-  }
-
   let response;
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -135,7 +140,7 @@ export async function chatWithSupplyContext(args: {
       store: false,
     });
   } catch {
-    throw new ContextAgentError("The grounded context reply did not finish. Try again.", "unavailable");
+    throw new ContextAgentError("The grounded context reply did not finish. Try again.", "unavailable", true);
   }
   let parsed: Record<string, unknown> | null = null;
   try {
@@ -145,7 +150,10 @@ export async function chatWithSupplyContext(args: {
   const citationIds = Array.isArray(parsed?.citationIds)
     ? parsed.citationIds.filter((value): value is string => typeof value === "string" && allowedCitations.has(value)).slice(0, 20)
     : [];
-  if (!answer) throw new ContextAgentError("The grounded context reply could not be read.", "invalid_response");
+  if (!answer) throw new ContextAgentError("The grounded context reply could not be read.", "invalid_response", true);
+  if (!citationIds.length) {
+    throw new ContextAgentError("The grounded context reply did not cite valid evidence. Try again.", "invalid_response", true);
+  }
   const citations = citationIds.map((id) => allowedCitations.get(id)!);
   const message = await saveSupplyContextAgentMessage({
     context: args.context,

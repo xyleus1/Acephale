@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { prisma } from "../src/lib/prisma";
 import type { CustomerPortalPrincipal } from "../src/lib/customer-portal-data";
 import {
@@ -14,21 +16,23 @@ import {
   loadCustomerSupplyContext,
   promoteSupplyContextFact,
   reviewSupplyContextFact,
+  saveSupplyContextAgentMessage,
   uploadCustomerSupplyContextDocument,
 } from "../src/lib/supply-os/context-persistence";
 import {
   createSupplyContextOutboundDraft,
+  reconcileSupplyContextOutboundDraft,
   reviewSupplyContextOutboundDraft,
   sendSupplyContextOutboundDraft,
 } from "../src/lib/supply-os/context-outbound";
-import { createSupplyWorkspace, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
+import { createSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import type { SupplierEmailProvider } from "../src/lib/supply-os/supplier-email-provider";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
 let foreignOfficeId = "";
 process.env.DOCUMENT_STORAGE_DRIVER = "local";
-process.env.DOCUMENT_STORAGE_LOCAL_ROOT = `/private/tmp/derya-context-docs-${suffix}`;
+process.env.DOCUMENT_STORAGE_LOCAL_ROOT = join(tmpdir(), `derya-context-docs-${suffix}`);
 process.env.SUPPLY_CONTEXT_OFFICE_ALLOWLIST = "*";
 
 async function cleanup() {
@@ -87,10 +91,22 @@ async function main() {
     const principal: CustomerPortalPrincipal = { id: portalUser.id, officeId, email: portalUser.email, fullName: portalUser.fullName, memberships: [{ id: membership.id, companyId: created.company.id, role: membership.role, company: { id: created.company.id, name: created.company.name } }] };
     const uploaded = await uploadCustomerSupplyContextDocument({ principal, companyId: created.company.id, nodeId: part.id, file: malicious });
     assert.equal(uploaded.processingState, "EXTRACTED");
+    await assert.rejects(
+      () => uploadCustomerSupplyContextDocument({ principal, companyId: created.company.id, nodeId: part.id, file: new File([], "empty.txt", { type: "text/plain" }) }),
+      (error: unknown) => error instanceof SupplyPersistenceError && error.code === "invalid_input",
+      "invalid document metadata must map to a 400-class persistence error",
+    );
     await assert.rejects(() => uploadCustomerSupplyContextDocument({ principal, companyId: created.company.id, nodeId: part.id, file: malicious }), /already attached/i);
     const portalRequest = await createCustomerSupplyContextNode({ principal, companyId: created.company.id, parentId: part.id, scopeType: "REQUEST", name: "Quote revision B" });
     await appendCustomerSupplyContextMessage({ principal, companyId: created.company.id, nodeId: portalRequest.id, body: "Need 400 units by October." });
     await assert.rejects(() => createCustomerSupplyContextNode({ principal, companyId: created.company.id, parentId: product.id, scopeType: "PART", name: "Forbidden part" }), /Customers can create product or request/i);
+    const historicalAgent = await saveSupplyContextAgentMessage({
+      context,
+      workspaceId,
+      nodeId: part.id,
+      body: "Earlier generated summary.",
+      citations: [{ id: `message:${partEvidence.id}`, kind: "MESSAGE", sourceId: partEvidence.id, label: "operator message" }],
+    });
 
     const assembled = await assembleSupplyContext({ context, workspaceId, nodeId: part.id });
     assert.deepEqual(assembled.chain.map((node) => node.id), [root.id, product.id, part.id]);
@@ -98,6 +114,8 @@ async function main() {
     assert.equal(assembled.resolvedFacts.find((fact) => fact.key === "headquarters")?.value, "San Diego");
     assert.equal(assembled.resolvedFacts.find((fact) => fact.key === "material")?.value, "PC-ABS");
     assert.deepEqual(assembled.resolvedFacts.find((fact) => fact.key === "material")?.overridden.map((fact) => fact.id), [productFact.id]);
+    assert.equal(assembled.messages.some((message) => message.id === historicalAgent.id), true, "agent replies remain conversation history");
+    assert.equal(assembled.citations.some((citation) => citation.id === `message:${historicalAgent.id}`), false, "agent replies cannot become citable evidence");
 
     await linkSupplyContextSource({ context, workspaceId, nodeId: part.id, sourceType: "MESSAGE", sourceId: siblingEvidence.id, label: "Explicit frame evidence", visibility: "INTERNAL" });
     const explicitlyLinked = await assembleSupplyContext({ context, workspaceId, nodeId: part.id });
@@ -133,6 +151,36 @@ async function main() {
     assert.equal(sent.state, "SENT");
     await sendSupplyContextOutboundDraft({ context, draftId: draft.id, provider });
     assert.equal(sends, 1, "sent drafts are idempotent");
+
+    const uncertainDraft = await createSupplyContextOutboundDraft({ context, workspaceId, nodeId: part.id, senderAccountId: sender.id, recipient: "supplier@example.test", subject: "Reconcile accepted delivery", body: "Please confirm the cited specification.", linkedThreadId: thread.id, citationIds: assembled.citations.slice(0, 2).map((citation) => citation.id) });
+    await reviewSupplyContextOutboundDraft({ context, draftId: uncertainDraft.id, decision: "APPROVED" });
+    let reconciliations = 0;
+    const uncertainProvider: SupplierEmailProvider = {
+      async send() { return { state: "UNKNOWN", error: "Gmail timed out after accepting the request." }; },
+      async reconcile() {
+        reconciliations += 1;
+        return { state: "SENT", provider: "GMAIL", providerMessageId: `reconciled-${suffix}`, providerThreadId: `thread-${suffix}`, sourceUrl: "https://mail.google.com/test" };
+      },
+    };
+    const uncertain = await sendSupplyContextOutboundDraft({ context, draftId: uncertainDraft.id, provider: uncertainProvider });
+    assert.equal(uncertain.state, "DELIVERY_UNKNOWN");
+    const reconciled = await reconcileSupplyContextOutboundDraft({ context, draftId: uncertainDraft.id, provider: uncertainProvider });
+    assert.equal(reconciled.state, "SENT");
+    await reconcileSupplyContextOutboundDraft({ context, draftId: uncertainDraft.id, provider: uncertainProvider });
+    assert.equal(reconciliations, 1, "sent reconciliation is idempotent");
+
+    const missingDraft = await createSupplyContextOutboundDraft({ context, workspaceId, nodeId: part.id, senderAccountId: sender.id, recipient: "supplier@example.test", subject: "Reconcile missing delivery", body: "Please confirm the cited specification.", linkedThreadId: thread.id, citationIds: assembled.citations.slice(0, 2).map((citation) => citation.id) });
+    await reviewSupplyContextOutboundDraft({ context, draftId: missingDraft.id, decision: "APPROVED" });
+    const missingProvider: SupplierEmailProvider = {
+      async send() { return { state: "UNKNOWN", error: "Gmail timed out before returning a receipt." }; },
+      async reconcile() { return { state: "NOT_FOUND" }; },
+    };
+    await sendSupplyContextOutboundDraft({ context, draftId: missingDraft.id, provider: missingProvider });
+    const missing = await reconcileSupplyContextOutboundDraft({ context, draftId: missingDraft.id, provider: missingProvider });
+    assert.equal(missing.state, "FAILED");
+    const reapproved = await reviewSupplyContextOutboundDraft({ context, draftId: missingDraft.id, decision: "APPROVED" });
+    assert.equal(reapproved.state, "APPROVED", "a missing Gmail message requires a new human review before retry");
+
     await prisma.emailMessage.create({ data: { threadId: thread.id, accountId: sender.id, externalId: `reply-${suffix}`, direction: "INBOUND", fromEmail: "supplier@example.test", toEmails: JSON.stringify([sender.email]), bodyText: "Quoted lead time is six weeks.", sentAt: new Date() } });
     const withReply = await assembleSupplyContext({ context, workspaceId, nodeId: part.id });
     assert.match(withReply.linkedThreads[0]?.messages.at(-1)?.bodyText ?? "", /six weeks/);

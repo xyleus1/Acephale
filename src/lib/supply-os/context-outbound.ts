@@ -1,11 +1,16 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import type { SupplyContextOutboundDraft } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { cleanContextBody, cleanContextText } from "./context-contract";
 import { assembleSupplyContext, emitContextMemory } from "./context-persistence";
-import { gmailSupplierEmailProvider, type SupplierEmailProvider } from "./supplier-email-provider";
+import {
+  gmailSupplierEmailProvider,
+  type SupplierEmailProvider,
+  type SupplierEmailSent,
+} from "./supplier-email-provider";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { supplyContextEnabled } from "./context-feature";
 
@@ -116,7 +121,7 @@ export async function reviewSupplyContextOutboundDraft(args: {
     throw new SupplyPersistenceError("Draft decision must be APPROVED or REJECTED.", "invalid_input");
   }
   const draft = await prisma.supplyContextOutboundDraft.findFirst({
-    where: { id: args.draftId, officeId: args.context.officeId, state: { in: ["DRAFT", "PENDING_REVIEW"] } },
+    where: { id: args.draftId, officeId: args.context.officeId, state: { in: ["DRAFT", "PENDING_REVIEW", "FAILED"] } },
   });
   if (!draft) throw new SupplyPersistenceError("Reviewable supplier draft not found.", "not_found");
   await requireSupplyWorkspace(args.context, draft.workspaceId, "edit");
@@ -124,6 +129,135 @@ export async function reviewSupplyContextOutboundDraft(args: {
     where: { id: draft.id },
     data: { state: decision, reviewedByUserId: args.context.userId, reviewedAt: new Date() },
   });
+}
+
+async function completeSupplyContextOutboundDelivery(args: {
+  context: SupplyAccessContext;
+  draft: SupplyContextOutboundDraft;
+  receipt: SupplierEmailSent;
+}) {
+  const workspace = await requireSupplyWorkspace(args.context, args.draft.workspaceId, "edit");
+  if (!args.draft.senderAccountId) {
+    throw new SupplyPersistenceError("The approved Gmail sender is missing.", "conflict");
+  }
+  const sender = await prisma.emailAccount.findFirst({
+    where: { id: args.draft.senderAccountId, officeId: args.context.officeId, provider: "GMAIL", isActive: true },
+    select: { id: true, email: true },
+  });
+  if (!sender) throw new SupplyPersistenceError("The approved Gmail sender is unavailable.", "conflict");
+  const linkedThread = args.draft.linkedThreadId ? await prisma.emailThread.findFirst({
+    where: { id: args.draft.linkedThreadId, officeId: args.context.officeId, companyId: workspace.companyId },
+    select: { id: true },
+  }) : null;
+  const now = new Date();
+  let localThreadId = linkedThread?.id ?? null;
+  if (!localThreadId) {
+    const thread = await prisma.emailThread.findFirst({
+      where: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        externalThreadId: args.receipt.providerThreadId,
+      },
+      select: { id: true },
+    }) ?? await prisma.emailThread.create({
+      data: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        subject: args.draft.subject,
+        participants: JSON.stringify([sender.email, args.draft.recipient]),
+        externalThreadId: args.receipt.providerThreadId,
+        lastMessageAt: now,
+        messageCount: 0,
+      },
+    });
+    localThreadId = thread.id;
+    const existingLink = await prisma.supplyContextSourceLink.findFirst({
+      where: {
+        officeId: args.context.officeId,
+        workspaceId: args.draft.workspaceId,
+        nodeId: args.draft.nodeId,
+        sourceType: "GMAIL_THREAD",
+        sourceId: thread.id,
+      },
+    });
+    if (!existingLink) {
+      await prisma.supplyContextSourceLink.create({
+        data: {
+          officeId: args.context.officeId,
+          workspaceId: args.draft.workspaceId,
+          nodeId: args.draft.nodeId,
+          sourceType: "GMAIL_THREAD",
+          sourceId: thread.id,
+          label: args.draft.subject,
+          visibility: "INTERNAL",
+          linkedByUserId: args.context.userId,
+        },
+      });
+    }
+  }
+  const existingMessage = await prisma.emailMessage.findUnique({
+    where: { externalId: args.receipt.providerMessageId },
+    select: { id: true },
+  });
+  await prisma.$transaction([
+    prisma.emailMessage.upsert({
+      where: { externalId: args.receipt.providerMessageId },
+      update: {},
+      create: {
+        threadId: localThreadId,
+        accountId: sender.id,
+        externalId: args.receipt.providerMessageId,
+        gmailMessageId: args.receipt.providerMessageId,
+        direction: "OUTBOUND",
+        fromEmail: sender.email,
+        toEmails: JSON.stringify([args.draft.recipient]),
+        subject: args.draft.subject,
+        bodyText: args.draft.body,
+        sentAt: now,
+      },
+    }),
+    prisma.emailThread.update({
+      where: { id: localThreadId },
+      data: {
+        externalThreadId: args.receipt.providerThreadId,
+        lastMessageAt: now,
+        ...(existingMessage ? {} : { messageCount: { increment: 1 } }),
+      },
+    }),
+  ]);
+  const sent = await prisma.supplyContextOutboundDraft.update({
+    where: { id: args.draft.id, officeId: args.context.officeId },
+    data: {
+      state: "SENT",
+      linkedThreadId: localThreadId,
+      sentAt: now,
+      providerMessageId: args.receipt.providerMessageId,
+      providerThreadId: args.receipt.providerThreadId,
+      sendError: null,
+    },
+  });
+  await emitContextMemory({
+    officeId: args.context.officeId,
+    companyId: workspace.companyId,
+    nodeId: args.draft.nodeId,
+    recordId: args.draft.id,
+    kind: "send",
+    title: args.draft.subject,
+    text: args.draft.body,
+    visibility: "INTERNAL",
+    actorType: "user",
+    actorId: args.context.userId,
+    payload: {
+      workspaceId: args.draft.workspaceId,
+      nodeId: args.draft.nodeId,
+      draftId: args.draft.id,
+      state: "SENT",
+      providerMessageId: args.receipt.providerMessageId,
+      providerThreadId: args.receipt.providerThreadId,
+      contextHash: args.draft.contextHash,
+    },
+  });
+  return sent;
 }
 
 export async function sendSupplyContextOutboundDraft(args: {
@@ -178,76 +312,65 @@ export async function sendSupplyContextOutboundDraft(args: {
       },
     });
   }
-  const now = new Date();
-  let localThreadId = linkedThread?.id ?? null;
-  if (!localThreadId) {
-    const thread = await prisma.emailThread.create({
-      data: {
-        officeId: args.context.officeId,
-        companyId: workspace.companyId,
-        subject: draft.subject,
-        participants: JSON.stringify([sender.email, draft.recipient]),
-        externalThreadId: receipt.providerThreadId,
-        lastMessageAt: now,
-        messageCount: 0,
-      },
-    });
-    localThreadId = thread.id;
-    await prisma.supplyContextSourceLink.create({
-      data: {
-        officeId: args.context.officeId,
-        workspaceId: draft.workspaceId,
-        nodeId: draft.nodeId,
-        sourceType: "GMAIL_THREAD",
-        sourceId: thread.id,
-        label: draft.subject,
-        visibility: "INTERNAL",
-        linkedByUserId: args.context.userId,
-      },
-    });
+  return completeSupplyContextOutboundDelivery({ context: args.context, draft, receipt });
+}
+
+export async function reconcileSupplyContextOutboundDraft(args: {
+  context: SupplyAccessContext;
+  draftId: string;
+  provider?: SupplierEmailProvider;
+}) {
+  await reviewer(args.context);
+  const draft = await prisma.supplyContextOutboundDraft.findFirst({
+    where: { id: args.draftId, officeId: args.context.officeId },
+  });
+  if (!draft) throw new SupplyPersistenceError("Supplier draft not found.", "not_found");
+  if (draft.state === "SENT") return draft;
+  if (!["SENDING", "DELIVERY_UNKNOWN"].includes(draft.state)) {
+    throw new SupplyPersistenceError("This supplier draft does not need delivery reconciliation.", "conflict");
   }
-  await prisma.$transaction([
-    prisma.emailMessage.upsert({
-      where: { externalId: receipt.providerMessageId },
-      update: {},
-      create: {
-        threadId: localThreadId,
-        accountId: sender.id,
-        externalId: receipt.providerMessageId,
-        gmailMessageId: receipt.providerMessageId,
-        direction: "OUTBOUND",
-        fromEmail: sender.email,
-        toEmails: JSON.stringify([draft.recipient]),
-        subject: draft.subject,
-        bodyText: draft.body,
-        sentAt: now,
-      },
-    }),
-    prisma.emailThread.update({ where: { id: localThreadId }, data: { externalThreadId: receipt.providerThreadId, lastMessageAt: now, messageCount: { increment: 1 } } }),
-  ]);
-  const sent = await prisma.supplyContextOutboundDraft.update({
-    where: { id: draft.id },
-    data: {
-      state: "SENT",
-      linkedThreadId: localThreadId,
-      sentAt: now,
-      providerMessageId: receipt.providerMessageId,
-      providerThreadId: receipt.providerThreadId,
-      sendError: null,
+  if (draft.state === "SENDING" && draft.updatedAt.getTime() > Date.now() - 30_000) {
+    throw new SupplyPersistenceError("The Gmail send is still active. Reconcile after 30 seconds.", "conflict");
+  }
+  await requireSupplyWorkspace(args.context, draft.workspaceId, "edit");
+  if (!draft.senderAccountId) throw new SupplyPersistenceError("The approved Gmail sender is missing.", "conflict");
+  const sender = await prisma.emailAccount.findFirst({
+    where: { id: draft.senderAccountId, officeId: args.context.officeId, provider: "GMAIL", isActive: true },
+    select: { id: true, email: true },
+  });
+  if (!sender) throw new SupplyPersistenceError("The approved Gmail sender is unavailable.", "conflict");
+  const claimed = await prisma.supplyContextOutboundDraft.updateMany({
+    where: {
+      id: draft.id,
+      officeId: args.context.officeId,
+      state: draft.state,
+      updatedAt: draft.updatedAt,
     },
+    data: { state: "SENDING" },
   });
-  await emitContextMemory({
+  if (claimed.count !== 1) {
+    throw new SupplyPersistenceError("Supplier draft reconciliation changed concurrently.", "conflict");
+  }
+  const provider = args.provider ?? gmailSupplierEmailProvider;
+  const receipt = await provider.reconcile({
     officeId: args.context.officeId,
-    companyId: workspace.companyId,
-    nodeId: draft.nodeId,
-    recordId: draft.id,
-    kind: "send",
-    title: draft.subject,
-    text: draft.body,
-    visibility: "INTERNAL",
-    actorType: "user",
-    actorId: args.context.userId,
-    payload: { workspaceId: draft.workspaceId, nodeId: draft.nodeId, draftId: draft.id, state: "SENT", providerMessageId: receipt.providerMessageId, providerThreadId: receipt.providerThreadId, contextHash: draft.contextHash },
+    accountId: sender.id,
+    senderEmail: sender.email,
+    rfcMessageId: `<context-${draft.id}@usederya.com>`,
   });
-  return sent;
+  if (receipt.state === "SENT") {
+    return completeSupplyContextOutboundDelivery({ context: args.context, draft, receipt });
+  }
+  return prisma.supplyContextOutboundDraft.update({
+    where: { id: draft.id },
+    data: receipt.state === "NOT_FOUND"
+      ? {
+        state: "FAILED",
+        sendError: "Gmail did not find the stable message ID. Review the draft before retrying.",
+      }
+      : {
+        state: "DELIVERY_UNKNOWN",
+        sendError: receipt.error ?? "Gmail reconciliation did not return a definitive result.",
+      },
+  });
 }

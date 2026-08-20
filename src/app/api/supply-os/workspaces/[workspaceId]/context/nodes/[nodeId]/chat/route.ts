@@ -16,7 +16,10 @@ export async function POST(request: NextRequest, route: { params: Promise<{ work
     return NextResponse.json({ result }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     if (error instanceof ContextAgentError) {
-      return NextResponse.json({ error: error.message }, { status: error.code === "invalid_input" ? 400 : 503 });
+      return NextResponse.json(
+        { error: error.message, messageSaved: error.messageSaved },
+        { status: error.code === "invalid_input" ? 400 : 503 },
+      );
     }
     return supplyErrorResponse(error);
   }

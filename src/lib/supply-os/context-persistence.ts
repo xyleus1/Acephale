@@ -36,6 +36,17 @@ function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
 }
 
+function contextDocumentMetadata(file: File) {
+  try {
+    return validateContextDocumentUpload(file);
+  } catch (error) {
+    throw new SupplyPersistenceError(
+      error instanceof Error ? error.message : "The document is invalid.",
+      "invalid_input",
+    );
+  }
+}
+
 async function bumpContextVersion(workspaceId: string, nodeId: string) {
   await prisma.$transaction([
     prisma.supplyContextNode.update({ where: { id: nodeId }, data: { version: { increment: 1 } } }),
@@ -284,7 +295,7 @@ export async function uploadSupplyContextDocument(args: {
   visibility?: unknown;
 }) {
   const node = await contextNode(args.context, args.workspaceId, args.nodeId, "edit");
-  const metadata = validateContextDocumentUpload(args.file);
+  const metadata = contextDocumentMetadata(args.file);
   const visibility = normalizeContextVisibility(args.visibility);
   if (node.visibility === "INTERNAL" && visibility === "SHARED") {
     throw new SupplyPersistenceError("A document in an internal scope cannot be shared.", "invalid_input");
@@ -681,7 +692,7 @@ export async function assembleSupplyContext(args: {
       select: { id: true, title: true, canonicalType: true, occurredAt: true, updatedAt: true, chunks: { orderBy: { ordinal: "asc" }, take: 20, select: { text: true } } },
     }) : Promise.resolve([]),
     messageIds.length ? prisma.supplyContextMessage.findMany({
-      where: { id: { in: messageIds }, officeId: args.context.officeId, workspaceId: args.workspaceId },
+      where: { id: { in: messageIds }, officeId: args.context.officeId, workspaceId: args.workspaceId, role: { not: "AGENT" } },
       select: { id: true, role: true, body: true, citations: true, visibility: true, createdAt: true },
     }) : Promise.resolve([]),
     documentIds.length ? prisma.supplyContextDocument.findMany({
@@ -697,7 +708,7 @@ export async function assembleSupplyContext(args: {
     ...linkedDocuments.map((record) => ({ sourceType: "DOCUMENT", id: record.id, label: record.name, updatedAt: record.updatedAt, content: { ...record, extractionText: record.extractionText?.slice(0, 60_000) ?? null } })),
   ];
   const citations = [
-    ...messages.map((message) => contextCitation("MESSAGE", message.id, `${message.role.toLowerCase()} message`)),
+    ...messages.filter((message) => message.role !== "AGENT").map((message) => contextCitation("MESSAGE", message.id, `${message.role.toLowerCase()} message`)),
     ...documents.map((document) => contextCitation("DOCUMENT", document.id, document.name)),
     ...factResolution.resolved.map((fact) => contextCitation("FACT", fact.id, fact.key)),
     ...linkedThreads.map((thread) => contextCitation(thread.sourceType, thread.id, thread.subject)),
@@ -795,7 +806,7 @@ export async function loadCustomerSupplyContext(principal: CustomerPortalPrincip
   ]);
   const resolution = resolveContextFacts({ chain, facts, sharedOnly: true });
   const allowedCitationIds = new Set([
-    ...messages.map((message) => `message:${message.id}`),
+    ...messages.filter((message) => message.role !== "AGENT").map((message) => `message:${message.id}`),
     ...documents.map((document) => `document:${document.id}`),
     ...facts.map((fact) => `fact:${fact.id}`),
   ]);
@@ -917,7 +928,7 @@ export async function uploadCustomerSupplyContextDocument(args: {
     where: { id: args.nodeId, officeId: args.principal.officeId, workspaceId: workspace.id, visibility: "SHARED", archivedAt: null },
   });
   if (!node) throw new SupplyPersistenceError("Context scope not found.", "not_found");
-  const metadata = validateContextDocumentUpload(args.file);
+  const metadata = contextDocumentMetadata(args.file);
   const bytes = Buffer.from(await args.file.arrayBuffer());
   const contentHash = contextDocumentHash(bytes);
   const duplicate = await prisma.supplyContextDocument.findUnique({ where: { workspaceId_contentHash: { workspaceId: workspace.id, contentHash } } });
