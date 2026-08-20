@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, Building2, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { SUPPLY_OS_DEMO_COMPANIES } from "@/lib/supply-os/demo-company";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import styles from "./supply-os-company-index.module.css";
@@ -39,9 +39,11 @@ function updatedLabel(value: string) {
 
 export function SupplyOsCompanyIndex({
   canCreateCompany,
+  autoOpenFirstWorkspace = false,
   onOpenWorkspace,
 }: {
   canCreateCompany: boolean;
+  autoOpenFirstWorkspace?: boolean;
   onOpenWorkspace: (selection: SupplyOsWorkspaceSelection) => void;
 }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -51,6 +53,7 @@ export function SupplyOsCompanyIndex({
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyWebsite, setNewCompanyWebsite] = useState("");
   const [creating, setCreating] = useState(false);
+  const autoOpenedWorkspaceRef = useRef(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -68,6 +71,14 @@ export function SupplyOsCompanyIndex({
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!autoOpenFirstWorkspace || state !== "ready" || autoOpenedWorkspaceRef.current) return;
+    const firstWorkspace = workspaces[0];
+    if (!firstWorkspace) return;
+    autoOpenedWorkspaceRef.current = true;
+    onOpenWorkspace(selectionFor(firstWorkspace));
+  }, [autoOpenFirstWorkspace, onOpenWorkspace, state, workspaces]);
 
   async function createCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -56,6 +56,9 @@ export function SupplyOsOperatingShell({
 }) {
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
+  const [autoOpenContextWorkspace, setAutoOpenContextWorkspace] = useState(
+    () => normalizeSupplyOsPanel(initialPanel) === "context",
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
   const [workspaceProfile, setWorkspaceProfile] = useState<{
@@ -68,6 +71,7 @@ export function SupplyOsOperatingShell({
   const openWorkspace = useCallback((selection: SupplyOsWorkspaceSelection) => {
     setWorkspaceSelection(selection);
     setWorkspaceProfile(null);
+    setAutoOpenContextWorkspace(false);
     setCompanyIndexOpen(false);
   }, []);
   const demoCompany = workspaceSelection?.demoCompanyId
@@ -103,7 +107,10 @@ export function SupplyOsOperatingShell({
   const selectPanel = useCallback((panel: SupplyOsPanel) => {
     window.history.pushState({}, "", supplyOsPanelHref(window.location.href, panel));
     setActivePanel(panel);
-    setCompanyIndexOpen(panel === "context" && !workspaceSelection);
+    const needsContextWorkspace = panel === "context"
+      && (!workspaceSelection || Boolean(workspaceSelection.demoCompanyId));
+    setAutoOpenContextWorkspace(needsContextWorkspace);
+    setCompanyIndexOpen(needsContextWorkspace);
   }, [workspaceSelection]);
 
   if (presentationMode) {
@@ -215,7 +222,15 @@ export function SupplyOsOperatingShell({
                   </dd>
                 </div>
               </dl>
-              <motion.button type="button" onClick={() => setCompanyIndexOpen(true)} whileTap={{ scale: 0.98 }} disabled={companyIndexOpen}>
+              <motion.button
+                type="button"
+                onClick={() => {
+                  setAutoOpenContextWorkspace(false);
+                  setCompanyIndexOpen(true);
+                }}
+                whileTap={{ scale: 0.98 }}
+                disabled={companyIndexOpen}
+              >
                 <ArrowLeft size={15} /> Companies
               </motion.button>
             </div>
@@ -223,7 +238,11 @@ export function SupplyOsOperatingShell({
 
           <div className={styles.panelStage}>
             {companyIndexOpen ? (
-              <SupplyOsCompanyIndex canCreateCompany={canCreateCompany} onOpenWorkspace={openWorkspace} />
+              <SupplyOsCompanyIndex
+                canCreateCompany={canCreateCompany}
+                autoOpenFirstWorkspace={autoOpenContextWorkspace}
+                onOpenWorkspace={openWorkspace}
+              />
             ) : (
               <SupplyOsDashboardWorkspace
                 storageScope={storageScope}

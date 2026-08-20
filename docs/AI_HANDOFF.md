@@ -36,9 +36,12 @@
   persistence, TXT upload and parsing, authenticated desktop QA at 1440 by
   1000, mobile QA at 390 by 844, focused contracts, TypeScript, product copy,
   and the optimized build passed on the current main branch.
-- Clicking Context without a selected company now keeps the company directory
-  visible. Concurrent initial loads create or reuse exactly one company root,
-  so React development replays cannot produce a false 500 response.
+- Opening Context without a selected company now resolves the first real
+  office-scoped workspace and launches its chat. Demo workspaces are skipped
+  because they have no durable context, while the Companies control still opens
+  the directory for deliberate switching.
+- Concurrent initial loads create or reuse exactly one company root, so React
+  development replays cannot produce a false 500 response.
 - A live local agent answer remains unavailable because this shell has no
   `OPENAI_API_KEY`. Production also requires the additive migration and
   `SUPPLY_CONTEXT_OFFICE_ALLOWLIST`.

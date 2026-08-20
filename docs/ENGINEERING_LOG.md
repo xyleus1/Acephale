@@ -17,6 +17,19 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-20 - Open the Context chat from direct navigation
+
+- Branch: `fix/context-opens-chat`, based on production main.
+- Task: Stop `?panel=context` from highlighting Context while leaving the
+  company directory visible. Resolve the first real office workspace and open
+  its persistent chat, including when the current selection is demo-only.
+- Files changed: Supply OS shell, company index, navigation contract, and
+  release documentation.
+- Verification: Company navigation contract, TypeScript, production build,
+  diff hygiene, and the forbidden-character scan are required before merge.
+- Safety: The fix changes navigation only. It does not send messages, upload
+  files, modify schema, or change tenant authorization.
+
 ### 2026-08-19 - Harden the merged Context chat release
 
 - Branch: `fix/context-chat-hardening-20260819`, based on main after PR #177.

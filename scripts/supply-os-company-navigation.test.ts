@@ -16,6 +16,11 @@ const profileRoute = readFileSync(resolve(root, "src/app/api/supply-os/workspace
 
 assert.match(shell, /className=\{styles\.operatingSidebar\}/, "left domain sidebar must remain persistent");
 assert.match(shell, /const \[companyIndexOpen, setCompanyIndexOpen\] = useState\(true\)/, "company list must be the clean entry state");
+assert.match(shell, /normalizeSupplyOsPanel\(initialPanel\) === "context"/, "a direct Context route must resolve a durable company workspace");
+assert.match(shell, /Boolean\(workspaceSelection\.demoCompanyId\)/, "Context must never open against a demo workspace without durable context");
+assert.match(shell, /autoOpenFirstWorkspace=\{autoOpenContextWorkspace\}/, "Context must instruct the company index to open a real workspace");
+assert.match(index, /const firstWorkspace = workspaces\[0\]/, "the Context route must resolve the first office-scoped real workspace");
+assert.match(index, /onOpenWorkspace\(selectionFor\(firstWorkspace\)\)/, "the resolved workspace must open the chat instead of leaving the company index visible");
 assert.match(shell, /<ArrowLeft size=\{15\} \/> Companies/, "selected workspaces need a back-to-companies control");
 assert.match(shell, /className=\{styles\.commandHeader\}/, "company identity ribbon must remain above every domain view");
 assert.match(shell, /companyLogoUrl/, "company identity ribbon must resolve a company image");
