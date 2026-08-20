@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { getValidAccessToken } from "@/lib/gmail-oauth";
 
@@ -6,6 +7,18 @@ const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 3;
 const REQUEST_WINDOW_MS = 15 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
+const DEFAULT_LOGIN_CODE_SMTP_USER = "rfq@usederya.com";
+
+export function loginCodeSmtpConfig() {
+  return {
+    user: process.env.RFQ_MAIL_USER ?? DEFAULT_LOGIN_CODE_SMTP_USER,
+    appPassword: (process.env.RFQ_MAIL_APP_PASSWORD ?? "").replace(/\s+/g, ""),
+  };
+}
+
+export function loginCodeSmtpConfigured() {
+  return loginCodeSmtpConfig().appPassword.length >= 8;
+}
 
 // Internal deployment: founders + loadboard operators. Extend via the
 // LOGIN_ALLOWED_EMAILS env var (comma-separated) without a code change.
@@ -91,6 +104,30 @@ async function sendCodeEmail(accountId: string, from: string, to: string, code: 
   }
 }
 
+async function sendCodeEmailWithSmtp(to: string, code: string) {
+  const config = loginCodeSmtpConfig();
+  if (!loginCodeSmtpConfigured()) {
+    throw new Error("Login code SMTP is not configured.");
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: config.user, pass: config.appPassword },
+  });
+  await transporter.sendMail({
+    from: config.user,
+    to,
+    subject: `Derya sign-in code: ${code}`,
+    text: [
+      `Your Derya sign-in code is: ${code}`,
+      "",
+      "It expires in 10 minutes. If you did not request this, ignore this email.",
+    ].join("\r\n"),
+  });
+}
+
 export async function requestLoginCode(rawEmail: string): Promise<RequestCodeResult> {
   const email = normalizeLoginEmail(rawEmail);
   if (!isLoginEmailAllowed(email)) return { ok: false, error: "not_allowed" };
@@ -106,16 +143,37 @@ export async function requestLoginCode(rawEmail: string): Promise<RequestCodeRes
   if (recent >= MAX_REQUESTS_PER_WINDOW) return { ok: false, error: "rate_limited" };
 
   const sender = await pickSenderAccount(user.officeId, email);
-  if (!sender) return { ok: false, error: "send_failed" };
-
   const code = generateLoginCode();
+  let sentVia: string | null = null;
 
   // Send BEFORE persisting: a failed send must not burn a rate-limit slot or
   // invalidate a code the user may still be holding from a prior request.
-  try {
-    await sendCodeEmail(sender.id, sender.email, email, code);
-  } catch (error) {
-    console.warn("login code send failed", error);
+  if (sender) {
+    try {
+      await sendCodeEmail(sender.id, sender.email, email, code);
+      sentVia = sender.email;
+    } catch (error) {
+      console.warn("login code Gmail send failed", error);
+    }
+  }
+
+  // A fresh database may have the internal user but no connected office
+  // mailbox yet. The existing RFQ SMTP desk is the bootstrap fallback so an
+  // allowlisted operator can sign in and reconnect Gmail.
+  if (!sentVia && loginCodeSmtpConfigured()) {
+    try {
+      await sendCodeEmailWithSmtp(email, code);
+      sentVia = loginCodeSmtpConfig().user;
+    } catch (error) {
+      console.warn("login code SMTP send failed", error);
+    }
+  }
+
+  if (!sentVia) {
+    console.warn("login code delivery unavailable", {
+      hasOfficeGmailSender: Boolean(sender),
+      hasSmtpFallback: loginCodeSmtpConfigured(),
+    });
     return { ok: false, error: "send_failed" };
   }
 
@@ -132,7 +190,7 @@ export async function requestLoginCode(rawEmail: string): Promise<RequestCodeRes
     },
   });
 
-  return { ok: true, sentVia: sender.email };
+  return { ok: true, sentVia };
 }
 
 export type VerifyCodeResult = { ok: true; email: string } | { ok: false; error: "invalid" };

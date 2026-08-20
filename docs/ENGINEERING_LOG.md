@@ -5699,3 +5699,16 @@ Use this file for chronological implementation notes that future agents should s
   configured model key. Production requires the additive migration and one
   allowlisted pilot office before Context is visible.
 - Follow-up: Push the branch and test the preview before any production merge.
+
+### 2026-08-20 - Restore login-code bootstrap delivery
+
+- Traced production `send_failed` responses through the login-code state
+  machine. The active user and LoginCode schema were present; the fresh Office
+  lacked an OAuth-connected Gmail sender.
+- Added an RFQ Gmail SMTP fallback after the office-scoped Gmail attempt. This
+  removes the fresh-database login deadlock without copying OAuth tokens or
+  weakening the allowlist.
+- Kept code persistence after confirmed delivery so a failed SMTP or Gmail send
+  cannot consume a rate-limit slot or invalidate a previously delivered code.
+- Added focused configuration coverage. Production merge remains gated on CI,
+  deployment readiness, and one live code-delivery attempt.

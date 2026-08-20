@@ -3,10 +3,32 @@ import {
   allowedLoginEmails,
   generateLoginCode,
   isLoginEmailAllowed,
+  loginCodeSmtpConfig,
+  loginCodeSmtpConfigured,
   normalizeLoginEmail,
 } from "../src/lib/login-code";
 
 process.env.AUTH_SECRET = process.env.AUTH_SECRET || "test-secret";
+
+// A fresh database can deliver the first login code without an office Gmail
+// row by using the already-configured RFQ SMTP desk.
+delete process.env.RFQ_MAIL_USER;
+delete process.env.RFQ_MAIL_APP_PASSWORD;
+assert.deepStrictEqual(loginCodeSmtpConfig(), {
+  user: "rfq@usederya.com",
+  appPassword: "",
+});
+assert.strictEqual(loginCodeSmtpConfigured(), false);
+
+process.env.RFQ_MAIL_USER = "auth@usederya.com";
+process.env.RFQ_MAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
+assert.deepStrictEqual(loginCodeSmtpConfig(), {
+  user: "auth@usederya.com",
+  appPassword: "abcdefghijklmnop",
+});
+assert.strictEqual(loginCodeSmtpConfigured(), true);
+delete process.env.RFQ_MAIL_USER;
+delete process.env.RFQ_MAIL_APP_PASSWORD;
 
 // Default allowlist: the two founders plus the loadboard operators.
 delete process.env.LOGIN_ALLOWED_EMAILS;

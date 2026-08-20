@@ -9194,3 +9194,21 @@ Verification caveat:
   optimized build completed its own type validation successfully.
 - Authenticated browser QA still requires a signed-in session. The headless
   review browser only reaches the login boundary without imported cookies.
+
+## 2026-08-20: Restore login-code delivery after the shared Neon cutover
+
+- Confirmed from the production response path that the allowlisted User and
+  LoginCode schema exist in the new database. A missing user would return
+  `no_user`; production returned `send_failed`.
+- Identified the bootstrap deadlock: the fresh Office has no active Gmail
+  EmailAccount, so the operator cannot receive a code to sign in and reconnect
+  Gmail.
+- Login codes now prefer the office-scoped Gmail sender and fall back to the
+  configured RFQ Gmail SMTP desk when the office sender is absent or OAuth
+  delivery fails.
+- The code is generated before delivery but is invalidated and persisted only
+  after a successful send. Allowlist, active-user, expiry, attempt, and
+  rate-limit controls are unchanged.
+- Focused verification covers SMTP configuration normalization and availability.
+  CI must pass the login contract, TypeScript, build, and forbidden-character
+  checks before production merge.

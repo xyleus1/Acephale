@@ -3393,3 +3393,26 @@ Use this log for durable product and engineering decisions. Do not put every imp
   retain the old database unchanged for rollback, then switch only server-side
   production variables and smoke-test one request. Do not use `prisma db push`
   or a privileged owner URL at runtime.
+
+### 2026-08-20 - Login codes keep a database-independent SMTP bootstrap path
+
+- Status: accepted
+- Owner: engineering
+- Context: The shared Neon cutover seeds the Office and allowlisted ADMIN user,
+  but a fresh database does not contain an OAuth-connected EmailAccount. The
+  previous login-code implementation required that tenant mailbox row, which
+  created a bootstrap deadlock: an operator had to sign in before reconnecting
+  Gmail, while sign-in itself required Gmail to be connected.
+- Decision: Login-code delivery still prefers an active Gmail account scoped to
+  the user's Office. If that sender is missing or its OAuth delivery fails, the
+  server may use the already-configured RFQ Gmail SMTP desk as a bootstrap
+  fallback. Codes remain restricted to the login allowlist and an active User,
+  and are persisted only after delivery succeeds.
+- Security boundary: The SMTP password remains server-only. Codes are never
+  logged, stored in plaintext, or sent to an address different from the
+  allowlisted login identity.
+- Consequences: A fresh database can complete first login without copying Gmail
+  OAuth tokens across databases. Operators can then reconnect the office
+  mailbox through the authenticated settings surface.
+- Revisit when: Internal authentication moves to a dedicated identity provider
+  or transactional email service.
