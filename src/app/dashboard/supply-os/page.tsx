@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
 import styles from "./supply-os-logistics.module.css";
+import { supplyContextEnabled } from "@/lib/supply-os/context-feature";
 
 export const metadata: Metadata = {
   title: { absolute: "Derya" },
@@ -22,9 +23,16 @@ export default async function SupplyOsPage({
   });
   if (!currentUser) redirect("/login");
   const params = await searchParams;
+  const contextEnabled = supplyContextEnabled(session.officeId);
   if (params.panel === "suppliers") {
     redirect(params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
   }
+  if (params.panel === "automations") {
+    redirect(contextEnabled
+      ? params.present === "1" ? "/dashboard/supply-os?present=1&panel=context" : "/dashboard/supply-os?panel=context"
+      : params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
+  }
+  if (params.panel === "context" && !contextEnabled) redirect(params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
   return (
     <div className={styles.pageFrame}>
       <SupplyOsOperatingShell
@@ -35,6 +43,7 @@ export default async function SupplyOsPage({
         canImportSupplyData={currentUser.role === "ADMIN" || currentUser.role === "MANAGER"}
         canApproveProcurement={currentUser.role === "ADMIN" || currentUser.role === "MANAGER"}
         canAuthorizePurchase={currentUser.role === "ADMIN"}
+        contextEnabled={contextEnabled}
       />
     </div>
   );

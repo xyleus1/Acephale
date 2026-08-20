@@ -27,7 +27,7 @@ const PANELS: PanelDefinition[] = [
   { id: "fulfillment", shortLabel: "Fulfillment" },
   { id: "scenarios", shortLabel: "Opportunities" },
   { id: "tracking", shortLabel: "Tracking" },
-  { id: "automations", shortLabel: "Automations" },
+  { id: "context", shortLabel: "Context" },
 ];
 
 function panelFromCurrentUrl() {
@@ -43,6 +43,7 @@ export function SupplyOsOperatingShell({
   canImportSupplyData,
   canApproveProcurement,
   canAuthorizePurchase,
+  contextEnabled,
 }: {
   storageScope: string;
   presentationMode: boolean;
@@ -51,6 +52,7 @@ export function SupplyOsOperatingShell({
   canImportSupplyData: boolean;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
+  contextEnabled: boolean;
 }) {
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
@@ -101,11 +103,11 @@ export function SupplyOsOperatingShell({
   const selectPanel = useCallback((panel: SupplyOsPanel) => {
     window.history.pushState({}, "", supplyOsPanelHref(window.location.href, panel));
     setActivePanel(panel);
-    setCompanyIndexOpen(false);
-  }, []);
+    setCompanyIndexOpen(panel === "context" && !workspaceSelection);
+  }, [workspaceSelection]);
 
   if (presentationMode) {
-    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} canImportSupplyData={canImportSupplyData} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
+    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} workspaceId={null} canImportSupplyData={canImportSupplyData} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
   }
 
   return (
@@ -140,7 +142,7 @@ export function SupplyOsOperatingShell({
             </button>
           </div>
           <nav id="supply-os-panel-navigation" ref={panelNavRef} className={styles.panelNav} aria-label="Workspace sections">
-            {PANELS.map((panel, index) => {
+            {PANELS.filter((panel) => panel.id !== "context" || contextEnabled).map((panel, index) => {
               const active = panel.id === activePanel;
               return (
                 <motion.button

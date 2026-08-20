@@ -23,6 +23,7 @@ type S3Config = {
 };
 
 const LOCAL_SCHEME = "local-upload://job-documents/";
+const CONTEXT_LOCAL_SCHEME = "local-upload://context-documents/";
 const S3_SCHEME = "s3://";
 
 export function mimeFromName(name: string) {
@@ -39,6 +40,8 @@ export function mimeFromName(name: string) {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xls": "application/vnd.ms-excel",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".zip": "application/zip",
+    ".stl": "model/stl",
   };
   return map[ext] ?? "application/octet-stream";
 }
@@ -205,11 +208,45 @@ export async function storeJobDocumentFile(args: {
   return { url: `${LOCAL_SCHEME}${key}` };
 }
 
+export async function storeContextDocumentFile(args: {
+  officeId: string;
+  workspaceId: string;
+  preferredName: string;
+  bytes: Buffer;
+  contentType?: string | null;
+}): Promise<StoredDocument> {
+  const storedName = `${crypto.randomUUID()}-${safeUploadName(args.preferredName)}`;
+  const key = `${args.officeId}/${args.workspaceId}/${storedName}`;
+  const contentType = args.contentType || mimeFromName(storedName);
+
+  if (storageDriver() === "s3") {
+    const config = requireS3Config();
+    const objectKey = `context-documents/${key}`;
+    const url = s3Url(config, objectKey);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: signedS3Headers({ method: "PUT", url, config, payload: args.bytes, contentType }),
+      body: new Uint8Array(args.bytes),
+    });
+    if (!res.ok) throw new Error(`S3 document upload failed (${res.status}).`);
+    return { url: `${S3_SCHEME}${config.bucket}/${objectKey}` };
+  }
+
+  assertLocalAllowed();
+  const root = localRoot();
+  const absoluteDir = path.resolve(root, "context", args.officeId, args.workspaceId);
+  if (!absoluteDir.startsWith(root + path.sep)) throw new Error("Bad local document path.");
+  await mkdir(absoluteDir, { recursive: true });
+  await writeFile(path.join(absoluteDir, storedName), args.bytes);
+  return { url: `${CONTEXT_LOCAL_SCHEME}${key}` };
+}
+
 export async function readStoredJobDocument(url: string): Promise<ReadDocument | null> {
-  if (url.startsWith(LOCAL_SCHEME)) {
-    const relative = url.slice(LOCAL_SCHEME.length);
+  if (url.startsWith(LOCAL_SCHEME) || url.startsWith(CONTEXT_LOCAL_SCHEME)) {
+    const isContext = url.startsWith(CONTEXT_LOCAL_SCHEME);
+    const relative = url.slice(isContext ? CONTEXT_LOCAL_SCHEME.length : LOCAL_SCHEME.length);
     const root = localRoot();
-    const absolute = path.resolve(root, relative);
+    const absolute = path.resolve(root, isContext ? "context" : "", relative);
     if (!absolute.startsWith(root + path.sep)) return null;
     const bytes = await readFile(absolute);
     return { bytes, contentType: mimeFromName(absolute) };
@@ -233,5 +270,7 @@ export async function readStoredJobDocument(url: string): Promise<ReadDocument |
 }
 
 export function isManagedDocumentUrl(url: string) {
-  return url.startsWith(LOCAL_SCHEME) || url.startsWith(S3_SCHEME);
+  return url.startsWith(LOCAL_SCHEME) || url.startsWith(CONTEXT_LOCAL_SCHEME) || url.startsWith(S3_SCHEME);
 }
+
+export const readStoredDocument = readStoredJobDocument;

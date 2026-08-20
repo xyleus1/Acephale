@@ -142,6 +142,8 @@ Allowed `canonicalType` values:
 - `email_thread`
 - `email_message`
 - `job_document`
+- `company_document`
+- `context_node`
 - `strategy_assessment`
 - `agent_proposal`
 - `customer_note`
@@ -171,6 +173,26 @@ Allowed source types:
 `strategy_decision` is a legacy canonical type and normalizes to
 `strategy_assessment`. New writes should never intentionally create
 `strategy_decision`; the doctor flags existing rows so they can be cleaned.
+
+## Supply Context Memory Contract
+
+Supply Context writes use the canonical memory layer as provenance, not as a
+second source of truth. The office-scoped `SupplyContextNode` hierarchy and its
+messages, documents, facts, source links, and outbound drafts remain the
+operational records.
+
+- Context documents emit `company_document` knowledge objects. Other context
+  mutations emit `context_node` objects and `supply_context.*` memory events.
+- Every record carries the source record id, node id, actor, operation, and
+  office scope. Stable record ids are used as memory idempotency keys.
+- Retrieval is assembled on the server from the selected node and its
+  ancestors. Canonical memory search does not authorize sibling or cross-office
+  context inclusion.
+- Customer text, extracted files, Gmail, and WhatsApp content are untrusted
+  evidence. They cannot supply agent instructions or become confirmed facts
+  without review.
+- Agent replies cite the exact eligible source ids. External drafts persist a
+  frozen copy of the eligible snapshot and citations used at creation time.
 
 Write-path rules:
 

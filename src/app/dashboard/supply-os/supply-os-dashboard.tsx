@@ -74,7 +74,7 @@ import { SUPPLY_OS_DEMO_COMPANIES, type SupplyOsDemoCompanyId } from "@/lib/supp
 import { snapshotResponseToSourcingItems } from "@/lib/supply-os/snapshot-sourcing";
 import type { SupplyWorkspaceSnapshotResponse } from "@/lib/supply-os/snapshot-twin";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
-import { SupplyOsAutomations } from "./supply-os-automations";
+import { SupplyOsContext } from "./supply-os-context";
 import {
   AtlasInventoryWorkspace,
   AtlasSourcingInspector,
@@ -294,9 +294,9 @@ const DOMAIN_CONFIG: Record<SupplyOsPanel, {
     objectKinds: ["movement", "customs", "factory", "customer"],
     defaultInspector: "object",
   },
-  automations: {
-    railTitle: "Automations",
-    railSummary: "Draft workflows",
+  context: {
+    railTitle: "Context",
+    railSummary: "Company records and discussion",
     objectKinds: [],
     defaultInspector: "object",
   },
@@ -308,7 +308,7 @@ const PANEL_FOCUS_KINDS: Record<SupplyOsPanel, SupplyCommandObject["kind"][]> = 
   fulfillment: ["customer", "distribution", "movement", "factory"],
   scenarios: ["customer", "distribution", "supplier"],
   tracking: ["movement", "customs", "customer"],
-  automations: [],
+  context: [],
 };
 
 function preferredPanelObject(panel: SupplyOsPanel, objects: SupplyCommandObject[]) {
@@ -570,6 +570,7 @@ export function SupplyOsDashboardWorkspace({
   }, [keys.cases, keys.selected, storageScope]);
 
   useEffect(() => {
+    if (activePanel === "context") return;
     if (!workspaceId) {
       setWorkspaceResearch(null);
       setProfileState("idle");
@@ -618,7 +619,7 @@ export function SupplyOsDashboardWorkspace({
     });
 
     return () => controller.abort();
-  }, [onWorkspaceProfile, profileRevision, workspaceId]);
+  }, [activePanel, onWorkspaceProfile, profileRevision, workspaceId]);
 
   useEffect(() => {
     if (!presentationMode) return;
@@ -649,7 +650,9 @@ export function SupplyOsDashboardWorkspace({
 
   return (
     <div className={`${styles.workspace} ${styles.commandWorkspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>
-      {!storageReady || (workspaceId && ["loading", "researching"].includes(profileState)) ? (
+      {activePanel === "context" ? (
+        <SupplyOsContext workspaceId={workspaceId ?? null} />
+      ) : !storageReady || (workspaceId && ["loading", "researching"].includes(profileState)) ? (
         <CommandState
           title={profileState === "researching" ? "Researching company profile" : "Loading customer network"}
           detail={profileState === "researching"
@@ -663,9 +666,6 @@ export function SupplyOsDashboardWorkspace({
           action={<button type="button" onClick={() => setProfileRevision((revision) => revision + 1)}>Retry profile</button>}
         />
       ) : currentCase ? (
-        activePanel === "automations" ? (
-          <SupplyOsAutomations key={currentCase.id} company={dashboardName(currentCase)} />
-        ) : (
           <CaseCommandCenter
             key={`${currentCase.id}:${workspaceId ?? "demo"}`}
             dashboard={currentCase}
@@ -678,7 +678,6 @@ export function SupplyOsDashboardWorkspace({
             canAuthorizePurchase={canAuthorizePurchase}
             demoCompanyId={resolvedDemoCompanyId}
           />
-        )
       ) : null}
     </div>
   );

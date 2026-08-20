@@ -131,6 +131,15 @@ The company directory uses rows, not cards. Company creation is inline or uses a
 
 Do not fill unused rail space for visual balance. Lower-rail utilities must be real global actions, visually separated from the domain switcher, and useful from every domain.
 
+### Context conversation
+
+Context is a deliberate dark-surface exception inside the authenticated shell.
+It uses one full-height conversation, one bottom composer, and one right file
+rail on desktop. Do not expose the context hierarchy, fact database, source
+linker, or outbound drafts as competing panels on this screen. On mobile, the
+file rail becomes a full-screen sheet and the composer remains pinned above the
+safe area. Uploaded files must show their name, type, size, and processing state.
+
 ## Maps and operational workspaces
 
 The map is a bounded primary workspace, not full-page wallpaper and not a decorative card. Keep generous canvas around the workspace. Inside it, object rails and dossiers may be denser.

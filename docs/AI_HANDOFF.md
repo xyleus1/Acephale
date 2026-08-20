@@ -2,6 +2,31 @@
 
 ## Latest Update
 
+### Supply OS Context is one conversation with a file rail
+
+- Automations is replaced by Context for allowlisted offices. The operator
+  surface is one ChatGPT-style conversation, one attachment composer, and one
+  `Files in context` rail. The file rail becomes a full-screen sheet on mobile.
+- Context stays attached to the canonical company `SupplyWorkspace`. Server
+  assembly uses the selected node and ancestors, excludes siblings, preserves
+  citations, and keeps risky external actions behind human approval.
+- PDF, TXT, CSV, image, Word, and Excel uploads are limited to 10 MB. Text PDF,
+  TXT, and CSV extraction is deterministic. Images, Word, and Excel use model
+  extraction when configured. ZIP and STL remain stored and downloadable.
+- Company creation already links the CRM company and Supply OS workspace. The
+  Context root is created with that linked workspace, so a newly created company
+  can open Context without an unusable intermediate record.
+- Fresh PostgreSQL migrations and seed, concurrent root creation, Context
+  persistence, TXT upload and parsing, authenticated desktop QA at 1440 by
+  1000, mobile QA at 390 by 844, focused contracts, TypeScript, product copy,
+  and the optimized build passed on the current main branch.
+- Clicking Context without a selected company now keeps the company directory
+  visible. Concurrent initial loads create or reuse exactly one company root,
+  so React development replays cannot produce a false 500 response.
+- A live local agent answer remains unavailable because this shell has no
+  `OPENAI_API_KEY`. Production also requires the additive migration and
+  `SUPPLY_CONTEXT_OFFICE_ALLOWLIST`.
+
 ### Production can use one physical Neon database with a fresh login
 
 - The existing workflow database can now also host Derya's quoted Prisma

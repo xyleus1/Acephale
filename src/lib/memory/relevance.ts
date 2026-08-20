@@ -65,6 +65,8 @@ export function canonicalTypeBoost(canonicalType: string | null | undefined) {
     case "email_message":
     case "email_thread":
     case "job_document":
+    case "company_document":
+    case "context_node":
       return 10;
     case "company":
     case "contact":

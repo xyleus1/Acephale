@@ -18,7 +18,11 @@ export function generateCustomerPortalCode() {
 }
 
 export function isCustomerPortalDocumentSource(url: string) {
-  if (url.startsWith("local-upload://job-documents/") || url.startsWith("s3://")) {
+  if (
+    url.startsWith("local-upload://job-documents/")
+    || url.startsWith("local-upload://context-documents/")
+    || url.startsWith("s3://")
+  ) {
     return true;
   }
   if (/^data:[^;]+;base64,/.test(url)) return true;

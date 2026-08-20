@@ -39,6 +39,8 @@ export async function searchCustomerMemory(input: Omit<SearchMemoryInput, "entit
       "email_thread",
       "email_message",
       "job_document",
+      "company_document",
+      "context_node",
       "strategy_assessment",
       "customer_note",
     ],

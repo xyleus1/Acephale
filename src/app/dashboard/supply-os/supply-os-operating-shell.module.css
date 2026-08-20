@@ -432,14 +432,21 @@
   overflow: hidden;
 }
 
-.shell[data-panel="automations"][data-company-index="false"] .panelStage {
-  padding: 36px 40px 40px;
+.shell[data-panel="context"][data-company-index="false"] .panelStage {
+  padding: 0;
+  background: #212121;
 }
 
-.shell[data-panel="automations"][data-company-index="false"] .panelStage > :global(.supply-os-workspace) {
-  max-width: 1240px;
-  margin-right: auto;
-  margin-left: auto;
+.shell[data-panel="context"][data-company-index="false"] .workspace {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.shell[data-panel="context"][data-company-index="false"] .panelStage > :global(.supply-os-workspace) {
+  max-width: none;
+}
+
+.shell[data-panel="context"][data-company-index="false"] .commandHeader {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -485,7 +492,7 @@
     padding: 20px;
   }
 
-  .shell[data-panel="automations"][data-company-index="false"] .panelStage {
+  .shell[data-panel="context"][data-company-index="false"] .panelStage {
     padding: 24px;
   }
 }
@@ -621,7 +628,7 @@
     padding: 20px;
   }
 
-  .shell[data-panel="automations"][data-company-index="false"] .panelStage {
+  .shell[data-panel="context"][data-company-index="false"] .panelStage {
     padding: 20px;
   }
 }
@@ -660,7 +667,7 @@
   }
 
 
-  .shell[data-panel="automations"][data-company-index="false"] .panelStage {
+  .shell[data-panel="context"][data-company-index="false"] .panelStage {
     padding: 0;
   }
 }

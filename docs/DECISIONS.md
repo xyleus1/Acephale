@@ -16,6 +16,31 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-19 - Supply OS Context replaces browser-local Automations
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Automations stored browser-local workflow drafts and exposed a
+  workflow editor. The required product is durable company context assembled
+  from operator messages and uploaded evidence for a grounded agent.
+- Decision: Context uses the canonical tenant-scoped `SupplyWorkspace` and a
+  company, product, part, and request hierarchy. The primary operator interface
+  is one conversation with one composer and one file rail. Hierarchy controls,
+  proposed facts, source linking, and outbound draft records remain server-owned
+  internals rather than competing panels on this screen.
+- Evidence boundary: Selected-node ancestors are included and sibling scopes
+  are excluded unless explicitly linked. Extracted content is untrusted.
+  Confirmed facts control, conflicts block definitive output, and material
+  claims carry citations.
+- Visibility boundary: Customer reads expose only shared records and published
+  replies. Supplier conversations, economics, internal notes, raw extraction,
+  and drafts remain internal. External email still requires manager or admin
+  approval before the idempotent send path can claim it.
+- Rollout: Production is gated by `SUPPLY_CONTEXT_OFFICE_ALLOWLIST`. Apply the
+  additive migration before enabling one pilot office.
+- Revisit when: The pilot proves a concrete need for visible hierarchy editing,
+  OCR, or another reviewed outbound channel.
+
 ### 2026-08-18 - Neon is the sole execution path for customer sourcing
 
 - Status: accepted

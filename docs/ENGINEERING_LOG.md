@@ -5599,3 +5599,25 @@ Use this file for chronological implementation notes that future agents should s
   an external automation. The schedule remains the final fallback.
 - Follow-up: Keep the external automation active with its webhook and schedule,
   and use atomic bounded claims when more than one order is queued.
+
+### 2026-08-19 - Rebuild Context as a conversation with attachments
+
+- Branch: `feature/context-chat-v2`, targeting current `main`.
+- Commit: see git log.
+- Task: Replace the rejected database-style Context workspace with one
+  ChatGPT-style conversation and a file rail while preserving tenant scoping,
+  provenance, grounded retrieval, portal visibility, and approval boundaries.
+- Files changed: Context persistence and APIs, operator and portal surfaces,
+  document extraction and storage, shell routing and layout, tests, design
+  guidance, decision record, and handoff.
+- Verification on current main: Fresh PostgreSQL migrations and seed, concurrent
+  Context root creation, database persistence, TXT upload and parsing, desktop
+  and mobile browser QA, focused contracts, Prisma, TypeScript, product copy,
+  optimized build, and diff hygiene passed.
+- Failed/skipped checks: This local environment has no `OPENAI_API_KEY`, so the
+  live model answer was not available. The user message still persisted and the
+  UI showed the explicit configuration blocker.
+- Caveats: ZIP and STL are stored but not parsed. Images, Word, and Excel need a
+  configured model key. Production requires the additive migration and one
+  allowlisted pilot office before Context is visible.
+- Follow-up: Push the branch and test the preview before any production merge.

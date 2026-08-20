@@ -19,6 +19,7 @@ import {
 import { requireCustomerPortalPreviewPrincipal } from "@/lib/customer-portal-preview";
 import { buildCustomerPortalOperationsBrief } from "@/lib/customer-portal-view";
 import styles from "../portal-workspace.module.css";
+import { supplyContextEnabled } from "@/lib/supply-os/context-feature";
 
 export const metadata: Metadata = {
   title: { absolute: "Freight operations | Derya" },
@@ -84,6 +85,7 @@ export default async function CustomerPortalWorkspacePage({
           <nav className={styles.portalNav} aria-label="Customer workspace">
             <a aria-current="page" className={styles.portalNavActive} href={customerPortalWorkspaceHref(data.company.id, isPreview)}>Overview</a>
             <a className={styles.portalNavLink} href="#shipments">Shipments</a>
+            {!isPreview && supplyContextEnabled(principal.officeId) && <a className={styles.portalNavLink} href={`/portal/context?company=${encodeURIComponent(data.company.id)}`}>Context</a>}
             <a className={styles.portalNavLink} href="mailto:rfq@usederya.com">New request</a>
           </nav>
           <div className={styles.userNav}>

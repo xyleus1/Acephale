@@ -149,22 +149,40 @@ export async function createSupplyWorkspace(
     if (!company) throw new SupplyPersistenceError("Company not found in this office.", "invalid_input");
   }
 
-  return prisma.supplyWorkspace.create({
-    data: {
-      officeId: context.officeId,
-      companyId: input.companyId || null,
-      createdByUserId: context.userId,
-      externalKey: input.externalKey?.trim() || null,
-      name,
-      members: {
-        create: {
-          officeId: context.officeId,
-          userId: context.userId,
-          role: "OWNER",
+  return prisma.$transaction(async (tx) => {
+    const companyId = input.companyId || null;
+
+    const workspace = await tx.supplyWorkspace.create({
+      data: {
+        officeId: context.officeId,
+        companyId,
+        createdByUserId: context.userId,
+        externalKey: input.externalKey?.trim() || null,
+        name,
+        members: {
+          create: {
+            officeId: context.officeId,
+            userId: context.userId,
+            role: "OWNER",
+          },
         },
       },
-    },
-    include: { members: true },
+      include: { members: true },
+    });
+    if (companyId) {
+      await tx.supplyContextNode.create({
+        data: {
+          officeId: context.officeId,
+          workspaceId: workspace.id,
+          contextKey: "company",
+          scopeType: "COMPANY",
+          name: workspace.name,
+          visibility: "SHARED",
+          createdByUserId: context.userId,
+        },
+      });
+    }
+    return workspace;
   });
 }
 
