@@ -5712,3 +5712,13 @@ Use this file for chronological implementation notes that future agents should s
   cannot consume a rate-limit slot or invalidate a previously delivered code.
 - Added focused configuration coverage. Production merge remains gated on CI,
   deployment readiness, and one live code-delivery attempt.
+
+### 2026-08-20 - Retire empty Supply OS tabs
+
+- Removed Fulfillment and Tracking from the operating sidebar and normalized
+  their old URLs to the default Inventory and sourcing panel.
+- Removed the green Logistics marker.
+- Added an inactive Opportunities state with skeleton cards for current and
+  alternative comparisons. Numeric impact remains intentionally blank.
+- Added contract coverage for sidebar visibility, retired routing, and the
+  evidence-gated preview.

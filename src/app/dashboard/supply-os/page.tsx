@@ -24,7 +24,7 @@ export default async function SupplyOsPage({
   if (!currentUser) redirect("/login");
   const params = await searchParams;
   const contextEnabled = supplyContextEnabled(session.officeId);
-  if (params.panel === "suppliers") {
+  if (params.panel === "suppliers" || params.panel === "fulfillment" || params.panel === "tracking") {
     redirect(params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
   }
   if (params.panel === "automations") {

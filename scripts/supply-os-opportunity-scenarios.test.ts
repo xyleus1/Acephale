@@ -4,53 +4,32 @@ import { resolve } from "node:path";
 
 const root = process.cwd();
 const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
-const styles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"), "utf8");
+const preview = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-opportunities-preview.tsx"), "utf8");
+const styles = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-opportunities-preview.module.css"), "utf8");
 
-assert.equal(
-  /activePanel === "scenarios"[\s\S]*<OpportunityScenarioWorkbench/.test(dashboard),
-  false,
-  "Opportunities must not replace the stable map workspace",
-);
-assert.match(dashboard, /<div[^>]*className=\{styles\.commandMapStage\}>[\s\S]*<SupplyOsCommandMap/);
-assert.match(dashboard, /scenarios: \["customer", "distribution", "supplier"\]/);
-assert.match(dashboard, /Supply, logistics, production, and network scenarios/);
+assert.match(dashboard, /activePanel === "scenarios"[\s\S]*<SupplyOsOpportunitiesPreview/);
+assert.doesNotMatch(dashboard, /OpportunityScenarioWorkbench|Run scenario/);
+assert.match(preview, /<h2 id="opportunities-preview-title">Not active<\/h2>/);
+assert.match(preview, /Verified baselines and alternatives are not available/);
+assert.match(preview, /Impact estimates stay hidden until cost or transit evidence is verified/);
 
-for (const scenario of ["Supply", "Logistics", "Production", "Network"]) {
-  assert.match(dashboard, new RegExp(`label: "${scenario}"`), `missing ${scenario} scenario play`);
+for (const title of ["Supplier change", "Route change", "Order change"]) {
+  assert.match(preview, new RegExp(`title: "${title}"`), `missing ${title} preview`);
 }
 
-for (const field of [
-  "Current condition",
-  "Change to test",
-  "Inputs required",
-  "Scenario output",
-  "Measure",
-  "Decision",
-  "Evidence state",
-  "Approval",
-]) {
-  assert.equal(dashboard.includes(field), true, `scenario workspace is missing ${field}`);
+for (const measure of ["Cost impact", "Transit impact", "Margin impact"]) {
+  assert.match(preview, new RegExp(`measure: "${measure}"`), `missing ${measure} preview`);
 }
 
-assert.match(dashboard, /onClick=\{\(\) => \{[\s\S]*setPlayedPlayId\(selectedPlay\.id\)/);
-assert.match(dashboard, /Human decision required before any external action/);
-assert.match(dashboard, /No supplier, booking, filing, or spend action is approved/);
-assert.match(dashboard, /function productionCopy[\s\S]*replace\(\/\\bassembly\\b\/gi, "production"\)/);
+assert.match(preview, />Current</);
+assert.match(preview, />Alternative</);
+assert.doesNotMatch(preview, /%|\$\d|<button/, "the inactive preview must not invent impact values or actions");
 
-for (const selector of [
-  ".scenarioWorkbench",
-  ".scenarioPlayList",
-  ".scenarioDraft",
-  ".scenarioRunButton",
-  ".scenarioOutput",
-  ".scenarioComparison",
-  ".scenarioOutcomeGrid",
-  ".scenarioBoundary",
-]) {
-  assert.equal(styles.includes(selector), true, `scenario workspace is missing ${selector}`);
+for (const selector of [".preview", ".cardGrid", ".card", ".swapRow", ".impactRow", ".boundary"]) {
+  assert.equal(styles.includes(selector), true, `opportunity preview is missing ${selector}`);
 }
 
-assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.scenarioWorkbenchBody \{[\s\S]*display: block/);
-assert.equal(`${dashboard}\n${styles}`.includes("\u2014"), false, "scenario workspace must not contain em dashes");
+assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.cardGrid \{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+assert.equal(`${dashboard}\n${preview}\n${styles}`.includes("\u2014"), false, "opportunity preview must not contain em dashes");
 
-console.log("Supply OS opportunity scenario contract passed.");
+console.log("Supply OS opportunity preview contract passed.");

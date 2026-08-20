@@ -19,14 +19,13 @@ import styles from "./supply-os-operating-shell.module.css";
 type PanelDefinition = {
   id: SupplyOsPanel;
   shortLabel: string;
+  inactive?: boolean;
 };
 
 const PANELS: PanelDefinition[] = [
   { id: "materials", shortLabel: "Inventory & sourcing" },
   { id: "logistics", shortLabel: "Logistics" },
-  { id: "fulfillment", shortLabel: "Fulfillment" },
-  { id: "scenarios", shortLabel: "Opportunities" },
-  { id: "tracking", shortLabel: "Tracking" },
+  { id: "scenarios", shortLabel: "Opportunities", inactive: true },
   { id: "context", shortLabel: "Context" },
 ];
 
@@ -150,9 +149,10 @@ export function SupplyOsOperatingShell({
                 <motion.button
                   key={panel.id}
                   type="button"
-                  aria-label={`${String(index + 1).padStart(2, "0")} ${panel.shortLabel}`}
+                  aria-label={`${String(index + 1).padStart(2, "0")} ${panel.shortLabel}${panel.inactive ? " inactive preview" : ""}`}
                   aria-pressed={active}
                   data-active={active}
+                  data-availability={panel.inactive ? "inactive" : "active"}
                   data-panel-id={panel.id}
                   onClick={() => selectPanel(panel.id)}
                   whileHover={sidebarCollapsed ? undefined : { x: 2 }}
@@ -163,7 +163,7 @@ export function SupplyOsOperatingShell({
                   <span className={styles.navCopy}>
                     <strong>{panel.shortLabel}</strong>
                   </span>
-                  {panel.id === "logistics" ? <span className={styles.liveMapDot} aria-label="Network map available" /> : null}
+                  {panel.inactive ? <span className={styles.inactiveLabel}>Inactive</span> : null}
                 </motion.button>
               );
             })}

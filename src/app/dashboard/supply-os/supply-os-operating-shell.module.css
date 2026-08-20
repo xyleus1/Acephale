@@ -9,7 +9,6 @@
   --os-soft: #4d5552;
   --os-muted: #747c78;
   --os-navy: #29485c;
-  --os-success: #3f6c55;
   width: 100%;
   height: 100dvh;
   display: grid;
@@ -91,7 +90,7 @@
   min-width: 0;
   min-height: 58px;
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 12px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 0 16px;
@@ -112,6 +111,10 @@
 .panelNav button[data-active="true"] {
   color: var(--os-ink);
   background: var(--os-selected);
+}
+
+.panelNav button[data-availability="inactive"]:not([data-active="true"]) {
+  color: var(--os-muted);
 }
 
 .activeRail {
@@ -150,12 +153,13 @@
   white-space: nowrap;
 }
 
-.liveMapDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--os-success);
-  box-shadow: 0 0 0 4px rgb(63 108 85 / 10%);
+.inactiveLabel {
+  color: var(--os-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .sidebarToggle {
@@ -245,7 +249,7 @@
   }
 
   .shell[data-sidebar-collapsed="true"] .operatingBrand strong,
-  .shell[data-sidebar-collapsed="true"] .liveMapDot {
+  .shell[data-sidebar-collapsed="true"] .inactiveLabel {
     display: none;
   }
 
@@ -474,7 +478,7 @@
   }
 
   .panelNav button {
-    grid-template-columns: 26px minmax(0, 1fr) 10px;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
     padding: 0 12px;
   }
 
@@ -582,7 +586,7 @@
   }
 
   .navIndex,
-  .liveMapDot {
+  .inactiveLabel {
     display: none;
   }
 

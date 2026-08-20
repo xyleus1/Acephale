@@ -9212,3 +9212,12 @@ Verification caveat:
 - Focused verification covers SMTP configuration normalization and availability.
   CI must pass the login contract, TypeScript, build, and forbidden-character
   checks before production merge.
+
+## 2026-08-20: Retire empty navigation and evidence-gate Opportunities
+
+- Removed Fulfillment and Tracking from the Supply OS navigation.
+- Removed the green Logistics availability marker.
+- Marked Opportunities as inactive and replaced the scenario runner with
+  skeleton comparison cards for current and alternative choices.
+- Cost, transit, and margin results stay hidden until verified evidence exists.
+- Retired Fulfillment and Tracking URLs redirect to Inventory and sourcing.

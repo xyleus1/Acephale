@@ -6,8 +6,8 @@ import { normalizeSupplyOsPanel, supplyOsPanelHref } from "../src/lib/supply-os/
 assert.equal(normalizeSupplyOsPanel(undefined), "materials");
 assert.equal(normalizeSupplyOsPanel("garbage"), "materials");
 assert.equal(normalizeSupplyOsPanel("suppliers"), "materials", "retired supplier links must enter the consolidated inventory and sourcing domain");
-assert.equal(normalizeSupplyOsPanel("fulfillment"), "fulfillment");
-assert.equal(normalizeSupplyOsPanel("tracking"), "tracking");
+assert.equal(normalizeSupplyOsPanel("fulfillment"), "materials", "retired fulfillment links must enter the default domain");
+assert.equal(normalizeSupplyOsPanel("tracking"), "materials", "retired tracking links must enter the default domain");
 
 assert.equal(
   supplyOsPanelHref("https://derya.test/dashboard/supply-os?present=0", "scenarios"),
@@ -28,7 +28,9 @@ assert.match(shell, /window\.history\.pushState/);
 assert.match(shell, /window\.addEventListener\("popstate", syncPanelFromUrl\)/);
 assert.match(shell, /window\.removeEventListener\("popstate", syncPanelFromUrl\)/);
 assert.match(shell, /shortLabel: "Inventory & sourcing"/);
-assert.match(shell, /shortLabel: "Fulfillment"/);
+assert.doesNotMatch(shell, /shortLabel: "Fulfillment"|shortLabel: "Tracking"/);
+assert.match(shell, /shortLabel: "Opportunities", inactive: true/);
+assert.doesNotMatch(shell, /liveMapDot|Network map available/);
 assert.doesNotMatch(shell, /shortLabel: "Supply"|shortLabel: "Suppliers"/);
 
 console.log("Supply OS shell routing contract passed.");

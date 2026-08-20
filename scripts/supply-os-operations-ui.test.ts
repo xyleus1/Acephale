@@ -25,7 +25,10 @@ const logisticsStyles = readFileSync(
 );
 
 assert.match(shell, /className=\{`\$\{styles\.shell\} supply-os-workspace`\}/);
-assert.match(shell, /shortLabel: "Tracking"/);
+assert.doesNotMatch(shell, /shortLabel: "Fulfillment"|shortLabel: "Tracking"/);
+assert.doesNotMatch(shell, /liveMapDot|Network map available/);
+assert.match(shell, /shortLabel: "Opportunities", inactive: true/);
+assert.match(dashboard, /<SupplyOsOpportunitiesPreview \/>/);
 assert.match(shell, /className=\{styles\.operatingBrand\}/);
 assert.match(shell, /<strong>Derya<\/strong>/);
 assert.match(twin, /Approval required/);

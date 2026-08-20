@@ -3416,3 +3416,20 @@ Use this log for durable product and engineering decisions. Do not put every imp
   mailbox through the authenticated settings surface.
 - Revisit when: Internal authentication moves to a dedicated identity provider
   or transactional email service.
+
+### 2026-08-20 - Opportunities stays evidence-gated until comparison inputs are verified
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The previous Opportunities workspace looked active even when it could
+  not support a defensible current-versus-alternative comparison. Fulfillment
+  and Tracking also exposed empty navigation surfaces.
+- Decision: Hide Fulfillment and Tracking from navigation, retire their direct
+  routes to Inventory and sourcing, remove the Logistics status dot, and show
+  Opportunities as an inactive preview. The preview may describe comparison
+  fields, but it must not display numeric savings, speed, or margin claims
+  without verified baseline and alternative evidence.
+- Consequences: The sidebar reflects usable product surfaces. Opportunities
+  communicates its intended shape without inventing operational outcomes.
+- Revisit when: Verified comparison inputs and deterministic impact calculations
+  are available for a real customer workspace.
