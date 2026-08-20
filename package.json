@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "tsx scripts/supply-os-deployment-boundary.test.ts",
-    "build": "prisma generate && next build",
+    "build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy && prisma migrate status; fi && prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",
