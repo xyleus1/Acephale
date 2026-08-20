@@ -27,6 +27,9 @@ const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8")) as {
   buildCommand?: string;
   crons?: Array<{ path?: string; schedule?: string }>;
 };
+const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+  scripts?: Record<string, string>;
+};
 
 assert.match(page, /SupplyOsOperatingShell/, "Supply OS route must render the operating shell");
 assert.match(middleware, /\/dashboard\/supply-os/, "Dashboard routing must retain the Supply OS destination");
@@ -34,6 +37,8 @@ assert.match(rfqMail, /https:\/\/app\.derya\.ai\/dashboard\/rfq\//, "RFQ links m
 assert.doesNotMatch(rfqMail, /https:\/\/www\.derya\.ai\/dashboard\//, "Product links must not use the landing-page domain");
 assert.match(envExample, /^NEXT_PUBLIC_APP_URL=/m, "The canonical application origin must be documented");
 assert.equal(vercel.buildCommand, undefined, "routine application builds must not run database migrations");
+assert.doesNotMatch(packageJson.scripts?.build ?? "", /prisma migrate/, "Vercel builds must run under the restricted application role without database DDL");
+assert.match(packageJson.scripts?.["deploy:migrations"] ?? "", /prisma migrate deploy/, "database migrations must remain an explicit owner-run release step");
 assert.deepEqual(
   vercel.crons?.find((cron) => cron.path === "/api/cron/supply-os-connectors"),
   { path: "/api/cron/supply-os-connectors", schedule: "10 * * * *" },

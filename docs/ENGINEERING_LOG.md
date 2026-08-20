@@ -17,6 +17,17 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-20 - Remove database DDL from Vercel builds
+
+- Branch: `fix/vercel-build-no-ddl`, based on production main.
+- Task: Recover the failed Context hotfix deployment after Vercel attempted
+  `prisma migrate deploy` with the intentionally restricted application role.
+- Files changed: package scripts, deployment boundary contract, decisions,
+  handoff, and engineering log.
+- Verification: Deployment boundary, CI, preview build, and production deploy.
+- Safety: No credentials or database grants change. Migrations remain available
+  through an explicit owner-run command.
+
 ### 2026-08-20 - Open the Context chat from direct navigation
 
 - Branch: `fix/context-opens-chat`, based on production main.

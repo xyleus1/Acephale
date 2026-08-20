@@ -2,6 +2,16 @@
 
 ## Latest Update
 
+### Vercel builds no longer attempt database migrations
+
+- Production application connections use a restricted role without DDL access.
+  The build now runs Prisma generation and Next.js only.
+- Schema rollout is an explicit `npm run deploy:migrations` step using the
+  controlled owner connection. This restores least-privilege production
+  deploys without weakening the database role.
+- The deployment boundary test now rejects migration commands in the routine
+  build script.
+
 ### Context release hardening on the merged chat surface
 
 - Main now contains the Context chat from PR #177. This follow-up keeps that

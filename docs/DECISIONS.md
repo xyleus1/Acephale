@@ -16,6 +16,22 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-20 - Application builds never run database DDL
+
+- Status: accepted
+- Owner: engineering
+- Context: Production uses a restricted application database role by design.
+  Running `prisma migrate deploy` inside a Vercel build made routine code
+  deployments depend on DDL privileges and blocked a navigation hotfix.
+- Decision: `npm run build` only generates the Prisma client and builds the
+  application. Schema changes use the explicit `npm run deploy:migrations`
+  release step with the controlled owner connection before application rollout.
+- Consequences: The runtime role stays least-privileged and ordinary code
+  releases cannot mutate schema. Migration-bearing releases must prove the
+  owner-run migration separately before production deployment.
+- Revisit when: Deployment infrastructure supports a dedicated, audited
+  pre-deploy migration job with a separate credential.
+
 ### 2026-08-19 - Context evidence and delivery recovery fail closed
 
 - Status: accepted
