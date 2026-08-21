@@ -16,6 +16,31 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-21 - Context procurement separates items and reports wake delivery truthfully
+
+- Status: accepted
+- Owner: product and engineering
+- Context: One Context instruction could request multiple unrelated sourcing
+  items, but the structured agent response permitted only one draft. The
+  resulting order combined unrelated processes. Separately, the Bourne wake
+  helper returned success after provider errors or timeouts, leaving saved
+  orders in `new` while the UI implied that processing had started.
+- Decision: Context returns one independently cited procurement confirmation
+  per distinct item, part, material, or manufacturing process. All cards from
+  one reply are saved atomically, and every card still requires separate human
+  confirmation. A workflow wake is successful only when the configured HTTPS
+  endpoint returns a successful response. A failed
+  accepted retry returns an explicit service error while preserving the saved
+  order for another bounded retry.
+- Presentation boundary: The supplier worker retains the frozen request and
+  company evidence envelopes, but Inventory renders the concise request
+  specification instead of the compatibility copy used by the worker.
+- Consequences: PCBA and foam requests cannot silently become one supplier
+  search. Queued work shows Start sourcing, failed delivery is visible, and no
+  retry creates another order. Existing combined orders are not rewritten.
+- Revisit when: Bourne provides a durable queue acknowledgment and a first-class
+  evidence field that removes the specification compatibility copy.
+
 ### 2026-08-21 - Supplier activity joins workflow receipts to connected Gmail
 
 - Status: accepted

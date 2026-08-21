@@ -5904,3 +5904,25 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: If an older release created a synthetic Atlas workspace row,
   inspect its references and remove it with a separate reviewed cleanup. Do not
   couple data deletion to the application release.
+
+### 2026-08-21 - Fix stuck Context procurement progress
+
+- Branch: `fix/procurement-progress-recovery`, based on current `origin/main`.
+- Confirmed defects: Unsuccessful Bourne webhook delivery reported success;
+  the Context schema permitted only one draft; and Context evidence stored in
+  the workflow specification leaked into the sourcing queue presentation.
+- Implementation: Return the real webhook result, fail an undelivered claimed
+  retry visibly without rolling back its order, label `new` work Start
+  sourcing, render the concise request specification, and emit one cited
+  confirmation proposal per distinct sourcing item.
+- Review hardening: Save multi-item confirmation proposals atomically, preserve
+  distinct specifications during exact-duplicate removal, and do not present a
+  concurrent worker claim as a failed start.
+- Safety: No schema, dependency, supplier contact, purchasing, customer, or
+  workflow-state mutation was added. Existing office, workspace, company,
+  customer, confirmation, and idempotency boundaries remain intact.
+- Tests: `npm run test:procurement-workflow`,
+  `npm run test:supply-os-context`,
+  `npm run test:customer-procurement-bourne`, and
+  `npm run test:workflow-guild2` passed. The production build passed type
+  checking with only the pre-existing CSS autoprefixer warning.

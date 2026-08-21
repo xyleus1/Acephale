@@ -122,9 +122,9 @@ export function CustomerProcurementWorkspace({
         cache: "no-store",
         headers: { accept: "application/json" },
       });
-      const result = await responseJson<{ workflowWakeRequested: boolean }>(response);
-      setStartRetryState(result.workflowWakeRequested ? "requested" : "idle");
+      await responseJson<{ workflowWakeRequested: boolean; message?: string }>(response);
       await refresh();
+      setStartRetryState("requested");
     } catch (error) {
       setStartRetryState("error");
       setRefreshError(error instanceof Error ? error.message : "Sourcing could not be restarted.");

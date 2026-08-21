@@ -13,6 +13,7 @@ import type { ProcurementRequestInput } from "../src/lib/procurement-contract";
 import {
   confirmCompanyContextProcurementAction,
   createCompanyContextProcurementAction,
+  createCompanyContextProcurementActions,
   dismissCompanyContextProcurementAction,
   listCompanyContextProcurementActions,
 } from "../src/lib/supply-os/context-procurement";
@@ -112,6 +113,34 @@ async function main() {
     });
     assert.equal(procurementAction.status, "PENDING");
     assert.equal((await listCompanyContextProcurementActions(context, workspace.id)).length, 1);
+
+    assert.deepEqual(await createCompanyContextProcurementActions({
+      context,
+      workspaceId: workspace.id,
+      items: [],
+      requestMessageId: operatorMessage.id,
+      requestBody: operatorMessage.body,
+      requestCreatedAt: operatorMessage.createdAt,
+    }), []);
+    const separateActions = await createCompanyContextProcurementActions({
+      context,
+      workspaceId: workspace.id,
+      items: [{
+        draft: { ...procurementAction.draft, material: "Rigid PCBA", specification: "Four-layer board" },
+        citations: [{ id: `document:${uploaded.id}`, label: "parts.csv" }],
+      }, {
+        draft: { ...procurementAction.draft, material: "Memory foam casting", specification: "Mold and cast foam" },
+        citations: [{ id: `message:${operatorMessage.id}`, label: "Operator request" }],
+      }],
+      requestMessageId: operatorMessage.id,
+      requestBody: operatorMessage.body,
+      requestCreatedAt: operatorMessage.createdAt,
+    });
+    assert.equal(separateActions.length, 2);
+    assert.deepEqual(separateActions.map((action) => action.draft.material), ["Rigid PCBA", "Memory foam casting"]);
+    assert.deepEqual(separateActions[0]?.citations, [{ id: `document:${uploaded.id}`, label: "parts.csv" }]);
+    assert.deepEqual(separateActions[1]?.citations, [{ id: `message:${operatorMessage.id}`, label: "Operator request" }]);
+    assert.equal((await listCompanyContextProcurementActions(context, workspace.id)).length, 3);
 
     let submitted: ProcurementRequestInput | null = null;
     let submitCount = 0;

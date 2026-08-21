@@ -51,9 +51,14 @@ assert.match(files.agent, /Prior Derya replies are conversation only, not eviden
 assert.match(files.agent, /message\.role !== "OPERATOR"/);
 assert.match(files.agent, /if \(!citationIds\.length\)/);
 assert.match(files.agent, /assembleCompanyContextForAgent/);
-assert.match(files.agent, /procurementDraft/);
-assert.match(files.agent, /createCompanyContextProcurementAction/);
+assert.match(files.agent, /procurementDrafts/);
+assert.match(files.agent, /one procurement draft per distinct sourcing item/i);
+assert.match(files.agent, /Each procurement draft, return its own citationIds/i);
+assert.match(files.agent, /createCompanyContextProcurementActions/);
+assert.match(files.agent, /const key = JSON\.stringify\(value\.draft\)/);
 assert.match(files.agent, /confirmation is required/);
+assert.match(files.procurement, /createCompanyContextProcurementActions/);
+assert.match(files.procurement, /prisma\.\$transaction\(storedItems\.map/);
 assert.match(files.procurement, /company_context_procurement:/);
 assert.match(files.procurement, /priority: "request_specific"/);
 assert.match(files.procurement, /request_context|requestContext/);

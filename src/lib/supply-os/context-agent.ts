@@ -8,7 +8,7 @@ import {
   type CompanyContextCitation,
 } from "@/lib/company-context";
 import {
-  createCompanyContextProcurementAction,
+  createCompanyContextProcurementActions,
   normalizeContextProcurementDraft,
 } from "@/lib/supply-os/context-procurement";
 import type { SupplyAccessContext } from "./persistence";
@@ -16,15 +16,18 @@ import type { SupplyAccessContext } from "./persistence";
 const CONTEXT_REPLY_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["answer", "citationIds", "procurementDraft"],
+  required: ["answer", "citationIds", "procurementDrafts"],
   properties: {
     answer: { type: "string" },
     citationIds: { type: "array", items: { type: "string" }, maxItems: 20 },
-    procurementDraft: {
-      anyOf: [{
+    procurementDrafts: {
+      type: "array",
+      maxItems: 8,
+      items: {
         type: "object",
         additionalProperties: false,
         required: [
+          "citationIds",
           "material",
           "specification",
           "manufacturer",
@@ -36,6 +39,7 @@ const CONTEXT_REPLY_SCHEMA = {
           "notes",
         ],
         properties: {
+          citationIds: { type: "array", items: { type: "string" }, maxItems: 20 },
           material: { type: "string" },
           specification: { type: ["string", "null"] },
           manufacturer: { type: ["string", "null"] },
@@ -46,7 +50,7 @@ const CONTEXT_REPLY_SCHEMA = {
           deliveryLocation: { type: ["string", "null"] },
           notes: { type: ["string", "null"] },
         },
-      }, { type: "null" }],
+      },
     },
   },
 } as const;
@@ -112,11 +116,12 @@ export async function chatWithCompanyContext(args: {
         "Prior Derya replies are conversation only, not evidence.",
         "Do not invent missing facts. Say what is missing or uncertain.",
         "Return citationIds for every material claim, using only citationId values in the packet.",
-        "If and only if the operator explicitly asks to create, start, add, or run a procurement or supplier search, prepare procurementDraft for human confirmation.",
-        "A procurementDraft requires a supported material or part, positive quantity, and unit. If any are missing, set procurementDraft to null and ask for the missing fields.",
+        "If and only if the operator explicitly asks to create, start, add, or run procurement or supplier searches, prepare procurementDrafts for human confirmation.",
+        "Create one procurement draft per distinct sourcing item. Never combine unrelated products, parts, materials, or manufacturing processes into one draft.",
+        "Each procurement draft requires a supported material or part, positive quantity, and unit. If any are missing, return no draft for that item and ask for the missing fields.",
         "Use manufacturer, part number, specifications, delivery location, needed-by date, and notes when the supplied evidence supports them. Use null when unknown.",
-        "For a procurementDraft, cite only the operator request and files directly relevant to that procurement need.",
-        "Preparing a procurementDraft does not create an order or contact a supplier. Tell the operator that confirmation is required.",
+        "For each procurement draft, return its own citationIds containing only the operator request and files directly relevant to that procurement need.",
+        "Preparing procurementDrafts does not create orders or contact suppliers. Tell the operator that separate confirmation is required for each item.",
         "Do not perform or claim any supplier, forwarder, booking, customs, purchasing, or spending action.",
         "Keep the answer direct and operational.",
         "Do not use the em dash character.",
@@ -129,7 +134,7 @@ export async function chatWithCompanyContext(args: {
     throw new ContextAgentError("The context reply did not finish. Try again.", "unavailable", true);
   }
 
-  let parsed: { answer?: unknown; citationIds?: unknown; procurementDraft?: unknown } = {};
+  let parsed: { answer?: unknown; citationIds?: unknown; procurementDrafts?: unknown } = {};
   try {
     parsed = JSON.parse(response.output_text) as typeof parsed;
   } catch {}
@@ -146,34 +151,48 @@ export async function chatWithCompanyContext(args: {
     );
   }
   const citations = citationIds.map((id) => allowedCitations.get(id)!);
-  const procurementDraft = parsed.procurementDraft === null
-    ? null
-    : normalizeContextProcurementDraft(parsed.procurementDraft);
-  if (parsed.procurementDraft !== null && !procurementDraft) {
+  const requestCitationId = `message:${operatorMessage.id}`;
+  const rawDrafts = Array.isArray(parsed.procurementDrafts) ? parsed.procurementDrafts.slice(0, 8) : [];
+  const normalizedDrafts = rawDrafts.map((value) => {
+    const record = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+    const draft = normalizeContextProcurementDraft(record);
+    if (!record || !draft) return null;
+    const draftCitationIds = Array.isArray(record.citationIds)
+      ? record.citationIds.filter((id): id is string => typeof id === "string" && allowedCitations.has(id)).slice(0, 20)
+      : [];
+    return { draft, draftCitationIds };
+  });
+  if (normalizedDrafts.some((entry) => entry === null)) {
     throw new ContextAgentError(
-      "The procurement draft was incomplete. State the item, quantity, and unit, then try again.",
+      "A procurement draft was incomplete. State the item, quantity, and unit for each sourcing item, then try again.",
       "invalid_response",
       true,
     );
   }
-  const requestCitationId = `message:${operatorMessage.id}`;
-  const actionCitations = procurementDraft
-    ? [
-        { id: requestCitationId, label: "Operator request" },
-        ...citations.filter((citation) => citation.id !== requestCitationId),
-      ].slice(0, 20)
-    : [];
-  const procurementAction = procurementDraft
-    ? await createCompanyContextProcurementAction({
-        context: args.context,
-        workspaceId: args.workspaceId,
-        draft: procurementDraft,
-        citations: actionCitations,
-        requestMessageId: operatorMessage.id,
-        requestBody: instruction,
-        requestCreatedAt: operatorMessage.createdAt,
-      })
-    : null;
+  const uniqueDrafts = [...new Map(normalizedDrafts.map((entry) => {
+    const value = entry!;
+    const key = JSON.stringify(value.draft);
+    return [key, value] as const;
+  })).values()];
+  const procurementActionItems = uniqueDrafts.map(({ draft, draftCitationIds }) => {
+    const actionCitations = [
+      { id: requestCitationId, label: "Operator request" },
+      ...draftCitationIds
+        .filter((id) => id !== requestCitationId)
+        .map((id) => allowedCitations.get(id)!),
+    ].slice(0, 20);
+    return { draft, citations: actionCitations };
+  });
+  const procurementActions = await createCompanyContextProcurementActions({
+    context: args.context,
+    workspaceId: args.workspaceId,
+    items: procurementActionItems,
+    requestMessageId: operatorMessage.id,
+    requestBody: instruction,
+    requestCreatedAt: operatorMessage.createdAt,
+  });
   const message = await appendCompanyContextMessage({
     context: args.context,
     workspaceId: args.workspaceId,
@@ -181,5 +200,5 @@ export async function chatWithCompanyContext(args: {
     body: answer,
     citations,
   });
-  return { message, citations, procurementAction };
+  return { message, citations, procurementActions };
 }

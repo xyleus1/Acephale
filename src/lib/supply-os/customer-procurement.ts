@@ -84,10 +84,18 @@ export function customerProcurementItem(order: CustomerProcurementListItem): Sup
     && typeof (logistics as Record<string, unknown>).destination === "string"
     ? (logistics as Record<string, unknown>).destination as string
     : null;
+  const procurementContext = order.requestContext.procurement_context;
+  const contextRequest = procurementContext && typeof procurementContext === "object" && !Array.isArray(procurementContext)
+    ? (procurementContext as Record<string, unknown>).request
+    : null;
+  const conciseSpecification = contextRequest && typeof contextRequest === "object" && !Array.isArray(contextRequest)
+    && typeof (contextRequest as Record<string, unknown>).specification === "string"
+    ? (contextRequest as Record<string, unknown>).specification as string
+    : order.specification;
   return {
     sku: `REQ-${requestId.slice(0, 8).toUpperCase()}`,
     name: order.material,
-    specification: order.specification ?? "Specification not provided",
+    specification: conciseSpecification ?? "Specification not provided",
     quantityPerRobot: 0,
     onHand: 0,
     allocated: 0,

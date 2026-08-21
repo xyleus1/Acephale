@@ -742,13 +742,15 @@ export async function requestBourneWorkflowWake(
         orderId: payload.orderId,
         status: response.status,
       });
+      return false;
     }
+    return true;
   } catch {
     console.warn("Bourne workflow wake request failed after the order was committed.", {
       orderId: payload.orderId,
     });
+    return false;
   }
-  return true;
 }
 
 export async function claimProcurementWakeRetryFromDatabase(

@@ -22,6 +22,8 @@ assert.doesNotMatch(guidedWorkspace, /GUILD2|guild2/);
 assert.match(campaignRoute, /status: 410/);
 assert.doesNotMatch(campaignRoute, /pollGuildSupplierResearchCampaign|GUILD_SUPPLIER_CAMPAIGN_KEY/);
 assert.doesNotMatch(researchPersistence, /system:guild-procurement|demoSourcingWorkspace/);
+assert.match(workbench, /Start sourcing/);
+assert.doesNotMatch(guidedWorkspace, /if \(!result\.workflowWakeRequested\)/);
 assert.match(guidedWorkspace, /Request<\/span>/);
 assert.match(guidedWorkspace, /Research<\/span>/);
 assert.match(guidedWorkspace, /Compare<\/span>/);

@@ -443,7 +443,7 @@ export function SupplyInventoryWorkspace({
                     : `${customerProcurementStatusLabel(request.status)}: ${customerProcurementProgress(request.status, 0)}`}</td>
                   <td>
                     <button className={styles.sourcingQueueAction} type="button" onClick={() => onOpenCustomerProcurement(item, order)}>
-                      {["new", "researching", "sourcing"].includes(request.status) ? "View progress" : "View results"} <ArrowRight size={13} />
+                      {request.status === "new" ? "Start sourcing" : ["researching", "sourcing"].includes(request.status) ? "View progress" : "View results"} <ArrowRight size={13} />
                     </button>
                   </td>
                 </tr>

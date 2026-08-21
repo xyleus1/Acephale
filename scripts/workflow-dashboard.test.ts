@@ -227,6 +227,16 @@ async function main() {
     customerId: customerA,
     orderId: "33333333-3333-4333-8333-333333333333",
   });
+  const rejectedWake = await handleProcurementWake(
+    "33333333-3333-4333-8333-333333333333",
+    {
+      session: async () => ({ userId: "user-a", officeId: "office-a" }),
+      resolveCustomerId: async () => customerA,
+      wake: async () => ({ claimed: true, workflowWakeRequested: false }),
+    },
+  );
+  assert.equal(rejectedWake.status, 503);
+  assert.match((await rejectedWake.json() as { error: string }).error, /saved order is safe/i);
 
 const priorWorkflowDatabaseUrl = process.env.WORKFLOW_DATABASE_URL;
 try {
@@ -403,8 +413,14 @@ try {
     idempotencyKey: "failed-webhook-order",
   }, { database: failureDatabase, fetchImplementation: failingFetch });
   assert.equal(result.status, "new");
-  assert.equal(result.workflowWakeRequested, true);
+  assert.equal(result.workflowWakeRequested, false);
   assert.equal(failureDatabase.state.orders.size, 1, "Webhook failure must not roll back the committed order.");
+
+  const rejectedByProvider = await requestBourneWorkflowWake(
+    { orderId: result.orderId, customerId: customerA },
+    (async () => new Response(null, { status: 503 })) as typeof fetch,
+  );
+  assert.equal(rejectedByProvider, false);
 
   delete process.env.BOURNE_WORKFLOW_WEBHOOK_SECRET;
   let missingSecretFetchCalled = false;

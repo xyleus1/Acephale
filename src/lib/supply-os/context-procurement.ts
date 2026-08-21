@@ -252,32 +252,58 @@ export async function createCompanyContextProcurementAction(args: {
   requestBody: string;
   requestCreatedAt: Date;
 }) {
+  const [action] = await createCompanyContextProcurementActions({
+    context: args.context,
+    workspaceId: args.workspaceId,
+    items: [{ draft: args.draft, citations: args.citations }],
+    requestMessageId: args.requestMessageId,
+    requestBody: args.requestBody,
+    requestCreatedAt: args.requestCreatedAt,
+  });
+  if (!action) throw new SupplyPersistenceError("The procurement confirmation could not be saved.", "conflict");
+  return action;
+}
+
+export async function createCompanyContextProcurementActions(args: {
+  context: SupplyAccessContext;
+  workspaceId: string;
+  items: Array<{
+    draft: ContextProcurementDraft;
+    citations: CompanyContextCitation[];
+  }>;
+  requestMessageId: string;
+  requestBody: string;
+  requestCreatedAt: Date;
+}) {
+  if (!args.items.length) return [];
   const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
-  const stored: StoredContextProcurementAction = {
-    schemaVersion: 1,
-    status: "PENDING",
-    draft: args.draft,
-    citations: args.citations.slice(0, 20),
+  const storedItems = args.items.map((item) => ({
+    schemaVersion: 1 as const,
+    status: "PENDING" as const,
+    draft: item.draft,
+    citations: item.citations.slice(0, 20),
     requestMessageId: args.requestMessageId,
     requestBody: cleanText(args.requestBody, 4_000),
     requestCreatedAt: args.requestCreatedAt.toISOString(),
     confirmationStartedAt: null,
     order: null,
-  };
-  const row = await prisma.companyDocument.create({
+  }));
+  const rows = await prisma.$transaction(storedItems.map((stored) => prisma.companyDocument.create({
     data: {
       officeId: args.context.officeId,
       companyId: workspace.companyId,
-      name: `Procurement request - ${args.draft.material}.json`,
+      name: `Procurement request - ${stored.draft.material}.json`,
       url: dataUrlJson(stored),
       docType: `${ACTION_PREFIX}${stored.status}`,
       uploadedByUserId: args.context.userId,
     },
     select: { id: true, url: true, createdAt: true },
-  });
-  const action = actionFromRow(row);
-  if (!action) throw new SupplyPersistenceError("The procurement confirmation could not be saved.", "conflict");
-  return action;
+  })));
+  const actions = rows.map((row) => actionFromRow(row));
+  if (actions.some((action) => !action)) {
+    throw new SupplyPersistenceError("The procurement confirmations could not be read.", "conflict");
+  }
+  return actions as ContextProcurementAction[];
 }
 
 export function buildProcurementRequestSpecificContextSnapshot(args: {

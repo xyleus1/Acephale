@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   CUSTOMER_PROCUREMENT_CAMPAIGN,
+  customerProcurementItem,
   customerProcurementMatchesWorkspace,
   customerProcurementRequest,
   type CustomerProcurementListItem,
@@ -77,5 +78,27 @@ assert.equal(customerProcurementMatchesWorkspace({
   ...order,
   requestContext: { source: { campaign: "GUILD2", workspace_id: null, company_name: "Dreamz" } },
 }, null, "Dreamz"), false, "The company-name fallback remains limited to custom sourcing requests.");
+
+const conciseContextItem = customerProcurementItem({
+  ...order,
+  specification: "[Request-specific procurement context.]\n\nLarge evidence snapshot",
+  requestContext: {
+    ...order.requestContext,
+    procurement_context: {
+      request: { specification: "4-layer FR-4, turnkey PCBA" },
+    },
+  },
+});
+assert.equal(conciseContextItem.specification, "4-layer FR-4, turnkey PCBA");
+
+const malformedContextItem = customerProcurementItem({
+  ...order,
+  specification: "Fallback specification",
+  requestContext: {
+    ...order.requestContext,
+    procurement_context: { request: { specification: 42 } },
+  },
+});
+assert.equal(malformedContextItem.specification, "Fallback specification");
 
 console.log("Customer procurement Bourne bridge checks passed.");

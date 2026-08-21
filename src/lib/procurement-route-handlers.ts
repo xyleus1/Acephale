@@ -214,6 +214,12 @@ export async function handleProcurementWake(
   try {
     const customerId = await dependencies.resolveCustomerId(session);
     const result = await dependencies.wake(customerId, orderId);
+    if (result.claimed && !result.workflowWakeRequested) {
+      return Response.json({
+        error: "The sourcing workflow did not accept the start request. The saved order is safe. Retry after 30 seconds.",
+        workflowWakeRequested: false,
+      }, { status: 503, headers: responseHeaders });
+    }
     return Response.json({
       workflowWakeRequested: result.workflowWakeRequested,
       message: result.claimed ? "Processing requested" : "Request is already processing or was recently requested",

@@ -2,6 +2,28 @@
 
 ## Latest Update
 
+### Context procurement now separates items and exposes failed starts
+
+- Context structured output now creates one independently cited confirmation
+  card per distinct sourcing item. Unrelated products or manufacturing
+  processes cannot be collapsed into one proposal.
+- A multi-item reply saves all confirmation cards in one database transaction,
+  so a partial write cannot leave only some requested items available.
+- Every item still requires its own Start procurement confirmation and keeps
+  its own idempotent order key. No supplier contact or purchase was added.
+- Bourne wake delivery now returns success only after a successful HTTPS
+  response. A rejected or timed-out accepted retry returns a visible error but
+  preserves the saved order for a later bounded retry.
+- Inventory labels `new` orders Start sourcing. The detail workspace retries
+  the same order after the durable 30-second claim window.
+- Inventory renders the concise request-specific specification instead of the
+  full frozen evidence compatibility copy. The supplier worker still receives
+  both request-specific and inherited company Context.
+- Existing combined orders are not mutated by this release.
+- Verification: Procurement workflow, Context, customer procurement bridge,
+  GUILD2 workflow, and optimized production build passed. The build retains
+  the pre-existing CSS autoprefixer warning.
+
 ### Inventory and sourcing now has a supplier Messages view
 
 - A visible Inventory and Messages tab switch now separates BOM and request
