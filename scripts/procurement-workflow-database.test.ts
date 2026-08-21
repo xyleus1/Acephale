@@ -17,6 +17,7 @@ import {
   createProcurementRequestInDatabase,
   getProcurementRequestFromDatabase,
   getProcurementVendorConversationRefFromDatabase,
+  listDueProcurementWakeCandidatesFromDatabase,
   listProcurementRequestsFromDatabase,
   ProcurementWorkflowError,
   resolveProcurementCustomerId,
@@ -154,11 +155,22 @@ async function main() {
         retryWebhookCount += 1;
         return new Response(null, { status: 204 });
       }) as typeof fetch;
+      const dueBeforeRetry = await listDueProcurementWakeCandidatesFromDatabase(
+        workflowDatabase,
+        [customerA],
+        10,
+      );
+      assert.deepEqual(dueBeforeRetry, [{ customerId: customerA, orderId: created.orderId }]);
       const retry = await retryProcurementWorkflowWake(customerA, created.orderId, {
         database: workflowDatabase,
         fetchImplementation: wake,
       });
       assert.deepEqual(retry, { claimed: true, workflowWakeRequested: true });
+      assert.deepEqual(
+        await listDueProcurementWakeCandidatesFromDatabase(workflowDatabase, [customerA], 10),
+        [],
+        "A claimed wake must leave the reconciliation queue until its durable retry window expires.",
+      );
       const boundedRetry = await retryProcurementWorkflowWake(customerA, created.orderId, {
         database: workflowDatabase,
         fetchImplementation: wake,

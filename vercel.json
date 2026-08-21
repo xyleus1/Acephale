@@ -17,6 +17,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/procurement-workflow",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/market-intelligence",
       "schedule": "0 11 * * *"
     },

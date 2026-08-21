@@ -16,7 +16,8 @@ the webhook secret as an `Authorization: Bearer` credential.
 `PROCUREMENT_CUSTOMER_MAP_JSON` stores the server-only mapping from authenticated
 Derya Office IDs to Neon customer UUIDs. API routes resolve the Office from the
 active user session. No procurement route accepts a customer ID from browser
-input.
+input. `CRON_SECRET` protects the Derya reconciliation endpoint and must remain
+configured for the Vercel schedule.
 
 ## Provisioning
 
@@ -42,8 +43,12 @@ input.
 5. Optionally add a Bourne webhook trigger and set
    `BOURNE_WORKFLOW_WEBHOOK_URL` to its HTTPS URL. Store the separate trigger
    secret as `BOURNE_WORKFLOW_WEBHOOK_SECRET`.
-6. Activate Bourne automation `6a80c50915936370994a7dfc`. Keep the
-   `*/15 * * * *` schedule as recovery when the webhook is absent or fails.
+6. Activate Bourne automation `6a80c50915936370994a7dfc`. Poll eligible
+   `new` orders every minute. The webhook is an immediate-pickup optimization,
+   not the recovery mechanism.
+7. Keep Derya's protected `/api/cron/procurement-workflow` schedule enabled at
+   `*/5 * * * *`. It reissues bounded wake requests only for mapped customer
+   orders that remain `new` after the durable thirty-second claim window.
 
 While the automation is draft, new orders correctly remain in `new` status.
 
@@ -104,6 +109,30 @@ Reusing a key for a different request returns a conflict.
 The webhook runs only after that transaction commits. An absent, invalid,
 timed-out, or unsuccessful webhook does not roll back the order.
 
+## Reliable pickup contract
+
+The connection has three layers:
+
+1. The committed `orders` row is the durable request.
+2. The authenticated webhook asks Bourne to inspect that order immediately.
+3. Independent Bourne polling and Derya wake reconciliation recover missed,
+   rejected, acknowledged-but-unprocessed, and redeploy-interrupted wakes.
+
+Derya's reconciliation loop reads only customers present in the server-side
+Office mapping. It selects at most twelve stale `new` orders, processes at most
+four wake requests concurrently, and uses the existing customer-scoped
+idempotency row as an atomic thirty-second wake claim. It never changes order
+status, worker leases, supplier records, or approval state. Concurrent cron
+invocations therefore skip already claimed work instead of duplicating wake
+delivery.
+
+Bourne owns worker claiming and recovery. It must atomically claim eligible
+orders, maintain a bounded lease or heartbeat, retry infrastructure failures,
+and make every external side effect idempotent. It must not use
+`needs_attention` for timeouts, provider failures, webhook failures, expired
+leases, or worker crashes. See `docs/BOURNE_WORKER_RELIABILITY_HANDOFF.md` for
+the exact implementation contract.
+
 The dashboard writes only BOM request fields and the initial order fields. It
 does not expose an API to update workflow status, progress, approval timestamps,
 leases, decision snapshots, supplier research, quotes, or Gmail identifiers.
@@ -113,6 +142,7 @@ Detail and list reads always include the authenticated external customer UUID.
 
 ```bash
 npm run test:procurement-workflow
+npm run test:procurement-wake-reconciliation
 npm run test:workflow-guild2
 npm run test:customer-procurement-bourne
 npm run test:supply-os-context

@@ -72,6 +72,11 @@ assert.deepEqual(
   { path: "/api/cron/supply-os-connectors", schedule: "10 * * * *" },
   "the schema rollout must preserve the Supply OS connector cron",
 );
+assert.deepEqual(
+  vercel.crons?.find((cron) => cron.path === "/api/cron/procurement-workflow"),
+  { path: "/api/cron/procurement-workflow", schedule: "*/5 * * * *" },
+  "the production deployment must reconcile durable procurement wake requests",
+);
 assert.match(
   migration,
   /^BEGIN;\nSET LOCAL lock_timeout = '5s';\nSET LOCAL statement_timeout = '120s';/,

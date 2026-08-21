@@ -33,6 +33,11 @@ type OrderStatusRow = {
   status: string;
 };
 
+type ProcurementWakeCandidateRow = {
+  customerId: string;
+  orderId: string;
+};
+
 type BomRow = { id: string };
 type CustomerRow = { id: string };
 
@@ -110,6 +115,17 @@ export type ProcurementVendorConversationRef = {
   contactEmail: string | null;
   gmailMessageId: string | null;
 };
+
+export type ProcurementWakeReconciliationResult = {
+  candidates: number;
+  claimed: number;
+  delivered: number;
+  failed: number;
+  skipped: number;
+};
+
+export const PROCUREMENT_WAKE_RECONCILIATION_LIMIT = 12;
+export const PROCUREMENT_WAKE_RECONCILIATION_CONCURRENCY = 4;
 
 export class ProcurementWorkflowError extends Error {
   constructor(
@@ -230,6 +246,28 @@ export function procurementCustomerIdFromServerMetadata(
     throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
   }
   return customerId as string;
+}
+
+export function procurementCustomerIdsFromServerMetadata(
+  rawMapping = process.env.PROCUREMENT_CUSTOMER_MAP_JSON,
+) {
+  if (!rawMapping?.trim()) {
+    throw new ProcurementWorkflowError("No procurement customers are configured for reconciliation.", "configuration");
+  }
+  let mapping: unknown;
+  try {
+    mapping = JSON.parse(rawMapping);
+  } catch {
+    throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
+  }
+  if (!isObject(mapping)) {
+    throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
+  }
+  const customerIds = [...new Set(Object.values(mapping))];
+  if (!customerIds.length || customerIds.some((customerId) => !uuidSchema.safeParse(customerId).success)) {
+    throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
+  }
+  return customerIds as string[];
 }
 
 async function existingIdempotentOrder(
@@ -753,6 +791,39 @@ export async function requestBourneWorkflowWake(
   }
 }
 
+export async function listDueProcurementWakeCandidatesFromDatabase(
+  database: RawDatabase,
+  customerIds: string[],
+  limit = PROCUREMENT_WAKE_RECONCILIATION_LIMIT,
+) {
+  const uniqueCustomerIds = [...new Set(customerIds)];
+  if (!uniqueCustomerIds.length) return [];
+  if (uniqueCustomerIds.some((customerId) => !uuidSchema.safeParse(customerId).success)) {
+    throw new ProcurementWorkflowError("The procurement customer mapping is invalid.", "configuration");
+  }
+  const boundedLimit = Math.min(25, Math.max(1, Math.floor(limit)));
+  try {
+    return await database.$queryRawUnsafe<ProcurementWakeCandidateRow[]>(`
+      SELECT
+        claim.customer_id::text AS "customerId",
+        claim.order_id::text AS "orderId"
+      FROM procurement_api_idempotency AS claim
+      JOIN orders
+        ON orders.id = claim.order_id
+        AND orders.customer_id = claim.customer_id
+      WHERE claim.customer_id = ANY(string_to_array($1, ',')::uuid[])
+        AND claim.order_id IS NOT NULL
+        AND orders.status = 'new'
+        AND claim.updated_at <= now() - interval '30 seconds'
+      ORDER BY claim.updated_at ASC, claim.order_id ASC
+      LIMIT $2
+    `, uniqueCustomerIds.join(","), boundedLimit);
+  } catch (error) {
+    if (error instanceof ProcurementWorkflowError) throw error;
+    throw new ProcurementWorkflowError("The procurement workflow database is unavailable.", "unavailable");
+  }
+}
+
 export async function claimProcurementWakeRetryFromDatabase(
   database: RawDatabase,
   customerId: string,
@@ -803,6 +874,59 @@ export async function retryProcurementWorkflowWake(
     ? await requestBourneWorkflowWake({ orderId, customerId }, dependencies?.fetchImplementation)
     : false;
   return { claimed, workflowWakeRequested };
+}
+
+export async function reconcileProcurementWorkflowWakes(dependencies: {
+  database?: RawDatabase;
+  fetchImplementation?: typeof fetch;
+  rawCustomerMapping?: string;
+  limit?: number;
+  concurrency?: number;
+} = {}): Promise<ProcurementWakeReconciliationResult> {
+  const database = dependencies.database ?? externalDatabase();
+  const customerIds = procurementCustomerIdsFromServerMetadata(dependencies.rawCustomerMapping);
+  const limit = Math.min(
+    25,
+    Math.max(1, Math.floor(dependencies.limit ?? PROCUREMENT_WAKE_RECONCILIATION_LIMIT)),
+  );
+  const concurrency = Math.min(
+    5,
+    Math.max(1, Math.floor(dependencies.concurrency ?? PROCUREMENT_WAKE_RECONCILIATION_CONCURRENCY)),
+  );
+  const candidates = await listDueProcurementWakeCandidatesFromDatabase(database, customerIds, limit);
+  const result: ProcurementWakeReconciliationResult = {
+    candidates: candidates.length,
+    claimed: 0,
+    delivered: 0,
+    failed: 0,
+    skipped: 0,
+  };
+
+  for (let index = 0; index < candidates.length; index += concurrency) {
+    const batch = candidates.slice(index, index + concurrency);
+    const outcomes = await Promise.all(batch.map(async (candidate) => {
+      try {
+        return await retryProcurementWorkflowWake(candidate.customerId, candidate.orderId, {
+          database,
+          fetchImplementation: dependencies.fetchImplementation,
+        });
+      } catch {
+        return { claimed: false, workflowWakeRequested: false, failed: true };
+      }
+    }));
+    for (const outcome of outcomes) {
+      if ("failed" in outcome) {
+        result.failed += 1;
+      } else if (!outcome.claimed) {
+        result.skipped += 1;
+      } else {
+        result.claimed += 1;
+        if (outcome.workflowWakeRequested) result.delivered += 1;
+        else result.failed += 1;
+      }
+    }
+  }
+  return result;
 }
 
 export async function submitProcurementRequest(

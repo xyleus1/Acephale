@@ -16,6 +16,31 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-21 - Procurement wake delivery is reconciled from durable orders
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Derya commits procurement orders before calling Bourne, but an HTTPS
+  wake can time out, be rejected, or acknowledge receipt without advancing the
+  order. A manual retry and Bourne's fifteen-minute schedule left ordinary
+  connection failures visible as stuck work.
+- Decision: The Bourne database remains authoritative and its `orders` rows are
+  the durable queue. Derya may request immediate pickup through the authenticated
+  webhook, but a protected five-minute reconciliation cron reclaims stale wake
+  attempts for mapped customers while the order remains `new`. Atomic updates
+  to the existing idempotency claim prevent duplicate concurrent wakes. Bourne
+  must independently poll and lease eligible orders, so HTTP delivery is never
+  the only recovery path.
+- Failure boundary: Infrastructure failures remain retryable `new` work.
+  `needs_attention` is reserved for missing, conflicting, or invalid business
+  input that requires an operator decision.
+- Consequences: No new Derya or workflow table is introduced. A webhook failure
+  cannot lose an accepted request, duplicate cron invocations cannot fan out
+  duplicate wakes, and an acknowledged but unprocessed order is requested again
+  while it remains `new`.
+- Revisit when: Bourne exposes a durable enqueue receipt or a managed queue
+  replaces database polling and leasing.
+
 ### 2026-08-21 - Context procurement separates items and reports wake delivery truthfully
 
 - Status: accepted

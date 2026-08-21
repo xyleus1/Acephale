@@ -2,6 +2,40 @@
 
 ## Latest Update
 
+### Procurement wakes now recover without browser retries
+
+- Added a protected five-minute reconciliation cron for durable Bourne orders
+  that remain `new` after the thirty-second wake claim window.
+- Reconciliation is bounded to twelve candidates and four concurrent webhook
+  requests. It reads only customer UUIDs from the server-side Office mapping.
+- The existing customer-scoped idempotency row is the atomic wake claim, so
+  overlapping cron invocations skip work another invocation already claimed.
+- A failed webhook leaves the accepted order untouched and returns a failed cron
+  run. A later invocation retries it. A successful webhook does not suppress
+  future reconciliation if Bourne acknowledged the request but never advanced
+  the order.
+- No Prisma model, migration, external workflow table, supplier action, or
+  approval behavior changed.
+- Added a Bourne implementation handoff covering independent one-minute polling,
+  lease expiry, retry backoff, idempotent side effects, status rules, and failure
+  acceptance tests.
+
+Verification completed:
+
+- procurement wake reconciliation contract
+- procurement workflow, customer bridge, GUILD2, and Context contracts
+- product copy policy
+- TypeScript, diff hygiene, and changed-line U+2014 scan
+
+Release requirement:
+
+- Keep `CRON_SECRET`, `WORKFLOW_DATABASE_URL`,
+  `PROCUREMENT_CUSTOMER_MAP_JSON`, `BOURNE_WORKFLOW_WEBHOOK_URL`, and
+  `BOURNE_WORKFLOW_WEBHOOK_SECRET` configured in production.
+- Bourne must implement `docs/BOURNE_WORKER_RELIABILITY_HANDOFF.md`. Derya's
+  cron closes missed wake delivery, but it cannot replace Bourne's worker lease
+  and side-effect idempotency.
+
 ### Last selected company survives refresh
 
 - Supply OS now stores only the selected workspace ID in browser storage. The

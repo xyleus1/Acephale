@@ -5966,3 +5966,29 @@ Use this file for chronological implementation notes that future agents should s
   or authorization. The server-scoped workspace list remains authoritative.
 - Verification: Company navigation regression contract, TypeScript, diff
   hygiene, and forbidden-character scan.
+
+### 2026-08-21 - Reconcile missed Bourne procurement wakes
+
+- Branch: `fix/bourne-reliable-handoff`, based on current production main.
+- Task: Make the Derya-to-Bourne connection recover automatically when the
+  immediate HTTPS wake is absent, rejected, timed out, or acknowledged without
+  workflow progress.
+- Implementation: Added a protected five-minute cron that selects stale `new`
+  orders only for server-mapped customers, atomically reclaims the existing
+  idempotency wake row, and retries at most twelve candidates with four
+  concurrent requests. Failed delivery leaves the durable order untouched and
+  produces a failed cron response for monitoring.
+- Architecture: The order remains the queue and the webhook remains a latency
+  optimization. No table or Prisma schema was added. Bourne retains ownership
+  of worker leases, status transitions, retries, suppliers, messages, quotes,
+  and approvals.
+- Handoff: Added `docs/BOURNE_WORKER_RELIABILITY_HANDOFF.md` with the required
+  one-minute polling, atomic claim, five-minute lease, heartbeat, backoff,
+  idempotent external-side-effect, and acceptance-test contract.
+- Verification: Reconciliation, procurement workflow, customer bridge, GUILD2,
+  Context, product copy, TypeScript, diff hygiene, and changed-line U+2014
+  checks passed. The disposable workflow database test now verifies the real
+  stale-candidate SQL when CI provisions PostgreSQL.
+- Caveat: Derya can guarantee that an accepted order stays discoverable and its
+  wake is retried. Bourne must implement the handoff before end-to-end worker
+  recovery and duplicate-email safety can be claimed.
