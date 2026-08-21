@@ -67,6 +67,38 @@
 - Uncertain Gmail sends reconcile the stable RFC message ID before retry. A
   found message finalizes once, a missing message returns to human review, and
   an unknown result remains blocked.
+### Admins can edit and archive companies from the company directory
+
+- The released company directory previously rendered two hardcoded demo rows
+  and made every row one large arrow button. The Edit and Delete controls had
+  never reached `origin/main`.
+- The directory now contains durable company workspaces only. The top action is
+  a plus-labeled Add button, and every real company row has a three-dot menu
+  containing Edit and Delete.
+- Edit updates the canonical Company and linked SupplyWorkspace in one
+  transaction. Delete keeps both records, changes every active workspace for
+  the company to ARCHIVED, records the workspace archival time, marks the CRM
+  company stage archived, and revokes active customer portal memberships.
+- Add rejects names or websites reserved by an archived company. Restoration
+  remains a direct database administration action.
+- Current database role is checked for every mutation. Non-admin edit and
+  Delete requests return 403 even when the user has workspace membership.
+
+Verification:
+
+- `npm run test:supply-os-company-navigation`
+- `npx tsc --noEmit --pretty false --incremental false`
+- `npm run build`
+- Fresh PostgreSQL migration chain
+- Authenticated local HTTP checks for admin edit, archival, retained rows,
+  portal revocation, archived-name conflict, and non-admin rejection
+- `git diff --check`
+
+Verification limitation:
+
+- The in-app browser reported no available tab, so the three-dot menu could not
+  be visually clicked in this environment. The component contract and live
+  authenticated server lifecycle passed.
 
 ### Supply OS Context is one conversation with a file rail
 

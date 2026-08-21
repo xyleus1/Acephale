@@ -33,7 +33,7 @@ async function currentAdmin(context: SupplyAccessContext) {
     );
   }
   if (user.role !== "ADMIN") {
-    throw new SupplyPersistenceError("Only admins can create company workspaces.", "forbidden");
+    throw new SupplyPersistenceError("Only admins can manage companies.", "forbidden");
   }
   return user;
 }
@@ -60,7 +60,7 @@ async function findExistingCompany(officeId: string, name: string, domain: strin
         ...(domain ? [{ domain: { equals: domain, mode: "insensitive" as const } }] : []),
       ],
     },
-    select: { id: true, name: true, website: true, domain: true },
+    select: { id: true, name: true, website: true, domain: true, crmStage: true },
   });
 }
 
@@ -71,6 +71,12 @@ export async function createSupplyCustomerWorkspace(
   await currentAdmin(context);
   const normalized = normalizeSupplyCustomerInput(input);
   const existingCompany = await findExistingCompany(context.officeId, normalized.name, normalized.domain);
+  if (existingCompany?.crmStage === "archived") {
+    throw new SupplyPersistenceError(
+      "An archived company already uses that name or website. Restore it directly in the database before using it again.",
+      "conflict",
+    );
+  }
 
   return prisma.$transaction(async (tx) => {
     const company = existingCompany
@@ -129,6 +135,103 @@ export async function createSupplyCustomerWorkspace(
     }
     return { company, workspace, created, normalized };
   });
+}
+
+async function activeManagedWorkspace(context: SupplyAccessContext, workspaceId: string) {
+  await currentAdmin(context);
+  const workspace = await prisma.supplyWorkspace.findFirst({
+    where: {
+      id: workspaceId,
+      officeId: context.officeId,
+      status: "ACTIVE",
+    },
+    select: {
+      id: true,
+      companyId: true,
+      company: { select: { id: true, name: true, website: true, domain: true } },
+    },
+  });
+  if (!workspace?.companyId || !workspace.company) {
+    throw new SupplyPersistenceError("Company workspace not found.", "not_found");
+  }
+  return { ...workspace, companyId: workspace.companyId, company: workspace.company };
+}
+
+export async function updateSupplyCustomerWorkspace(
+  context: SupplyAccessContext,
+  workspaceId: string,
+  input: SupplyCustomerWorkspaceInput,
+) {
+  const workspace = await activeManagedWorkspace(context, workspaceId);
+  const normalized = normalizeSupplyCustomerInput(input);
+  const conflict = await prisma.company.findFirst({
+    where: {
+      officeId: context.officeId,
+      id: { not: workspace.company.id },
+      OR: [
+        { name: { equals: normalized.name, mode: "insensitive" } },
+        ...(normalized.domain ? [{ domain: { equals: normalized.domain, mode: "insensitive" as const } }] : []),
+      ],
+    },
+    select: { id: true },
+  });
+  if (conflict) {
+    throw new SupplyPersistenceError("Another company already uses that name or website.", "conflict");
+  }
+  const externalKey = normalized.domain ? `company:${normalized.domain}` : null;
+  const workspaceConflict = externalKey
+    ? await prisma.supplyWorkspace.findFirst({
+        where: {
+          officeId: context.officeId,
+          id: { not: workspace.id },
+          externalKey,
+        },
+        select: { id: true },
+      })
+    : null;
+  if (workspaceConflict) {
+    throw new SupplyPersistenceError("Another company workspace already uses that website.", "conflict");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const company = await tx.company.update({
+      where: { id: workspace.company.id },
+      data: {
+        name: normalized.name,
+        website: normalized.website,
+        domain: normalized.domain,
+      },
+      select: { id: true, name: true, website: true },
+    });
+    const updatedWorkspace = await tx.supplyWorkspace.update({
+      where: { id: workspace.id },
+      data: { name: normalized.name, externalKey, version: { increment: 1 } },
+      select: { id: true, name: true, updatedAt: true },
+    });
+    return { company, workspace: updatedWorkspace };
+  });
+}
+
+export async function archiveSupplyCustomerWorkspace(context: SupplyAccessContext, workspaceId: string) {
+  const workspace = await activeManagedWorkspace(context, workspaceId);
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.supplyWorkspace.updateMany({
+      where: { officeId: context.officeId, companyId: workspace.company.id, status: "ACTIVE" },
+      data: { status: "ARCHIVED", archivedAt: now, version: { increment: 1 } },
+    });
+    await tx.company.updateMany({
+      where: { id: workspace.company.id, officeId: context.officeId },
+      data: { crmStage: "archived" },
+    });
+    await tx.customerPortalMembership.updateMany({
+      where: { officeId: context.officeId, companyId: workspace.company.id, isActive: true },
+      data: { isActive: false },
+    });
+  });
+
+  return { companyId: workspace.company.id, archivedAt: now };
 }
 
 export async function storeSupplyCompanyResearch(args: {

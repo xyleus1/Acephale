@@ -64,6 +64,21 @@ Use this log for durable product and engineering decisions. Do not put every imp
   cannot silently duplicate an email.
 - Revisit when: A provider supplies a stronger transactional delivery receipt
   or Context moves to a dedicated reviewed evidence workflow.
+### 2026-08-20 - Company directory Delete is archival
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The released Supply OS company directory mixed fake demo companies
+  with durable customer records and exposed no row management controls.
+- Decision: Show only durable company workspaces in the directory. Admin rows
+  use a three-dot menu with Edit and Delete. Delete archives every active
+  workspace for the company, marks the CRM stage archived, and revokes portal
+  memberships. It never deletes the Company or SupplyWorkspace record.
+- Consequences: Archived companies disappear from the dashboard but retain
+  their operational history and keep their name and website reserved. Physical
+  deletion and restoration require direct database administration.
+- Revisit when: A separate archived-company administration surface is designed
+  with explicit restoration permissions and audit history.
 
 ### 2026-08-19 - Supply OS Context replaces browser-local Automations
 

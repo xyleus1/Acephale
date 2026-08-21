@@ -5722,3 +5722,20 @@ Use this file for chronological implementation notes that future agents should s
   alternative comparisons. Numeric impact remains intentionally blank.
 - Added contract coverage for sidebar visibility, retired routing, and the
   evidence-gated preview.
+### 2026-08-20 - Release company Edit and archival controls
+
+- Branch: `fix/company-management-controls`, based on current `origin/main`.
+- Root cause: The deployed company index still used the old arrow-only demo
+  implementation. The management controls existed only in an unrelated dirty
+  checkout and had never been committed or released.
+- Removed the hardcoded Atlas Robotics and GUILD2 rows from the company
+  directory. Only durable workspaces now contribute rows and company counts.
+- Added the plus Add control and a three-dot menu with Edit and Delete for each
+  admin-visible company row.
+- Added tenant-scoped admin-only PATCH and DELETE handlers. Edit updates the
+  Company and workspace together. Delete retains records, archives active
+  workspaces, marks the CRM stage archived, and revokes portal memberships.
+- Verification: Company navigation and creation contracts, product-copy and
+  docs checks, TypeScript, optimized build, fresh PostgreSQL migrations,
+  authenticated admin and non-admin lifecycle checks, and diff hygiene passed.
+- Limitation: No in-app browser tab was available for a visual click test.
