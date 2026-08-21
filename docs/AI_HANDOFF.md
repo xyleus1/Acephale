@@ -2,6 +2,32 @@
 
 ## Latest Update
 
+### Context is reduced to one existing document table
+
+- Context now uses only `CompanyDocument`. Original files, one-time parsed
+  Markdown, operator messages, and Derya replies are stored as company-scoped
+  file records. No new Context table or preference store remains.
+- The migration flattens any existing Context records into Markdown where
+  useful, then drops exactly the six `SupplyContext*` tables without a broad
+  dependency drop.
+- The production upload failure was caused by the local document-storage driver
+  on Vercel. The replacement stores Context files as data URLs in
+  `CompanyDocument`, so PNG, CSV, STL, PDF, text, image, Word, Excel, and ZIP
+  uploads no longer require local disk or S3 configuration.
+- Browser uploads larger than 3 MB are split below Vercel's request limit,
+  staged temporarily in `CompanyDocument`, assembled once, and cleaned up.
+  The user-facing maximum remains 10 MB without another storage table.
+- CSV, TXT, Markdown, text PDFs, and STL geometry are parsed deterministically.
+  Images, Word, and Excel use model extraction when configured. Every parsed
+  result is saved as Markdown and reused by the agent.
+- The product remains one internal ChatGPT-style conversation with one file
+  rail. The portal Context page, scope hierarchy, facts, preferences, source
+  linker, supplier drafts, and Context allowlist are removed.
+- The application release can precede the destructive production migration
+  because it reads and writes the already-existing `CompanyDocument` table.
+  The six old tables must still be removed with the controlled owner database
+  connection.
+
 ### Dashboard event polling no longer enters the App Router action queue
 
 - Production React error #310 mapped to the first `useMemo` in Next.js App

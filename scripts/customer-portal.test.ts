@@ -40,8 +40,6 @@ const staffLoginSource = readFileSync(resolve(process.cwd(), "src/app/login/page
 const staffPortalSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/page.tsx"), "utf8");
 const customerDevelopmentPreviewSource = readFileSync(resolve(process.cwd(), "src/app/customer/page.tsx"), "utf8");
 const customerWorkspaceSource = readFileSync(resolve(process.cwd(), "src/app/portal/workspace/page.tsx"), "utf8");
-const customerContextSource = readFileSync(resolve(process.cwd(), "src/app/portal/context/page.tsx"), "utf8");
-const customerContextApiSource = readFileSync(resolve(process.cwd(), "src/app/api/portal/context/route.ts"), "utf8");
 
 assert.match(customerLoginSource, /href="\/login">Team sign in/);
 assert.match(customerLoginSource, /href="mailto:rfq@usederya\.com">Start shipment/);
@@ -58,10 +56,7 @@ assert.doesNotMatch(customerDevelopmentPreviewSource, /\bprisma\./);
 assert.doesNotMatch(customerDevelopmentPreviewSource, /loadCustomerPortalWorkspace/);
 assert.match(customerWorkspaceSource, /CustomerOperationsOverview/);
 assert.match(customerWorkspaceSource, /Freight operations \| Derya/);
-assert.match(customerWorkspaceSource, />Context</);
-assert.match(customerContextSource, /CustomerContextWorkspace/);
-assert.match(customerContextApiSource, /getCustomerPortalPrincipal/);
-assert.doesNotMatch(customerContextApiSource, /getSession\(/);
+assert.doesNotMatch(customerWorkspaceSource, />Context</);
 
 assert.strictEqual(normalizeCustomerPortalEmail("  Ops@Customer.COM "), "ops@customer.com");
 for (let index = 0; index < 100; index += 1) {

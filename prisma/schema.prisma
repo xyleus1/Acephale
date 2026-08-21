@@ -138,12 +138,6 @@ model Office {
   customerPortalLoginCodes  CustomerPortalLoginCode[]
   customerPortalActions     CustomerPortalAction[]
   supplyWorkspaces          SupplyWorkspace[]
-  supplyContextNodes        SupplyContextNode[]
-  supplyContextMessages     SupplyContextMessage[]
-  supplyContextDocuments    SupplyContextDocument[]
-  supplyContextFacts        SupplyContextFact[]
-  supplyContextSourceLinks  SupplyContextSourceLink[]
-  supplyContextDrafts       SupplyContextOutboundDraft[]
   supplyWorkspaceMembers    SupplyWorkspaceMember[]
   connectorInstallations    ConnectorInstallation[]
   supplyImportRuns          SupplyImportRun[]
@@ -244,14 +238,6 @@ model User {
   supplyApprovalsDecided   SupplyApproval[]        @relation("SupplyApprovalDecidedBy")
   supplyExecutionTasks     SupplyExecutionTask[]   @relation("SupplyExecutionTaskCreatedBy")
   supplyExecutionEvents    SupplyExecutionEvent[]  @relation("SupplyExecutionEventActor")
-  supplyContextNodesCreated SupplyContextNode[]
-  supplyContextMessagesCreated SupplyContextMessage[] @relation("SupplyContextMessageCreatedBy")
-  supplyContextMessagesPublished SupplyContextMessage[] @relation("SupplyContextMessagePublishedBy")
-  supplyContextDocumentsUploaded SupplyContextDocument[]
-  supplyContextFactsReviewed SupplyContextFact[]
-  supplyContextSourceLinksCreated SupplyContextSourceLink[]
-  supplyContextDraftsCreated SupplyContextOutboundDraft[] @relation("SupplyContextDraftCreatedBy")
-  supplyContextDraftsReviewed SupplyContextOutboundDraft[] @relation("SupplyContextDraftReviewedBy")
 
   @@unique([officeId, email])
   @@index([officeId, role])
@@ -983,6 +969,7 @@ model CompanyDocument {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([officeId, companyId, createdAt])
+  @@index([officeId, companyId, docType, createdAt])
 }
 
 // ── Pricing module ────────────────────────────────────────────────────────
@@ -1005,7 +992,6 @@ model LaneRate {
 
   @@index([officeId, origin, destination, mode])
 }
-
 model MarginProfile {
   id            String   @id @default(cuid())
   officeId      String
@@ -1853,9 +1839,6 @@ model CustomerPortalUser {
   loginCodes  CustomerPortalLoginCode[]
   actions     CustomerPortalAction[]
   uploads     JobDocument[]
-  contextNodes     SupplyContextNode[]
-  contextMessages  SupplyContextMessage[]
-  contextDocuments SupplyContextDocument[]
 
   @@unique([officeId, email])
   @@index([officeId, isActive])
@@ -1982,12 +1965,6 @@ model SupplyWorkspace {
   executionTasks      SupplyExecutionTask[]
   executionEvents     SupplyExecutionEvent[]
   connectorInstallations ConnectorInstallation[]
-  contextNodes            SupplyContextNode[]
-  contextMessages         SupplyContextMessage[]
-  contextDocuments        SupplyContextDocument[]
-  contextFacts            SupplyContextFact[]
-  contextSourceLinks      SupplyContextSourceLink[]
-  contextDrafts           SupplyContextOutboundDraft[]
 
   @@unique([officeId, externalKey])
   @@index([officeId, status, updatedAt])
@@ -1996,182 +1973,13 @@ model SupplyWorkspace {
 
 // Durable company, product, part, and request context. The root node uses the
 // stable contextKey "company". Runtime validation preserves the scope tree.
-model SupplyContextNode {
-  id                    String   @id @default(cuid())
-  officeId              String
-  workspaceId           String
-  parentId              String?
-  contextKey            String
-  scopeType             String // COMPANY / PRODUCT / PART / REQUEST
-  name                  String
-  description           String?
-  visibility            String   @default("INTERNAL") // SHARED / INTERNAL
-  version               Int      @default(1)
-  createdByUserId       String?
-  createdByPortalUserId String?
-  archivedAt            DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  office          Office              @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  workspace       SupplyWorkspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  parent          SupplyContextNode?  @relation("SupplyContextTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children        SupplyContextNode[] @relation("SupplyContextTree")
-  createdBy       User?               @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-  createdByPortal CustomerPortalUser? @relation(fields: [createdByPortalUserId], references: [id], onDelete: SetNull)
-  messages        SupplyContextMessage[]
-  documents       SupplyContextDocument[]
-  facts           SupplyContextFact[]
-  sourceLinks     SupplyContextSourceLink[]
-  outboundDrafts  SupplyContextOutboundDraft[]
-
-  @@unique([workspaceId, contextKey])
-  @@index([officeId, workspaceId, parentId, archivedAt])
-  @@index([officeId, workspaceId, scopeType, visibility])
-}
 
 // Conversation and activity entries are append-only. Corrections are new
 // messages or facts, never edits to prior source material.
-model SupplyContextMessage {
-  id                    String   @id @default(cuid())
-  officeId              String
-  workspaceId           String
-  nodeId                String
-  role                  String // CUSTOMER / OPERATOR / AGENT / SYSTEM
-  body                  String
-  citations             Json?
-  visibility            String   @default("INTERNAL") // SHARED / INTERNAL
-  createdByUserId       String?
-  createdByPortalUserId String?
-  publishedByUserId     String?
-  publishedAt           DateTime?
-  createdAt             DateTime @default(now())
 
-  office          Office              @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  workspace       SupplyWorkspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  node            SupplyContextNode   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  createdBy       User?               @relation("SupplyContextMessageCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  createdByPortal CustomerPortalUser? @relation(fields: [createdByPortalUserId], references: [id], onDelete: SetNull)
-  publishedBy     User?               @relation("SupplyContextMessagePublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
 
-  @@index([officeId, workspaceId, nodeId, createdAt])
-  @@index([officeId, workspaceId, visibility, createdAt])
-}
 
-model SupplyContextDocument {
-  id                     String   @id @default(cuid())
-  officeId               String
-  workspaceId            String
-  nodeId                 String
-  name                   String
-  storageUrl             String
-  mimeType               String
-  sizeBytes              Int
-  contentHash            String
-  processingState        String   @default("PENDING") // PENDING / EXTRACTED / UNSUPPORTED / FAILED
-  extractionText         String?
-  extractionError        String?
-  visibility             String   @default("INTERNAL") // SHARED / INTERNAL
-  uploadedByUserId       String?
-  uploadedByPortalUserId String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
 
-  office           Office              @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  workspace        SupplyWorkspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  node             SupplyContextNode   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  uploadedBy       User?               @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  uploadedByPortal CustomerPortalUser? @relation(fields: [uploadedByPortalUserId], references: [id], onDelete: SetNull)
-
-  @@unique([workspaceId, contentHash])
-  @@index([officeId, workspaceId, nodeId, createdAt])
-  @@index([officeId, workspaceId, visibility, processingState])
-}
-
-model SupplyContextFact {
-  id                 String   @id @default(cuid())
-  officeId           String
-  workspaceId        String
-  nodeId             String
-  key                String
-  value              Json
-  status             String   @default("PROPOSED") // PROPOSED / CONFIRMED / REJECTED / SUPERSEDED
-  visibility         String   @default("INTERNAL") // SHARED / INTERNAL
-  evidence           Json
-  proposedBy         String // CUSTOMER / OPERATOR / AGENT / SYSTEM
-  reviewedByUserId   String?
-  reviewedAt         DateTime?
-  supersedesFactId   String?  @unique
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  office       Office             @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  workspace    SupplyWorkspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  node         SupplyContextNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  reviewedBy   User?              @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-  supersedes   SupplyContextFact? @relation("SupplyContextFactHistory", fields: [supersedesFactId], references: [id], onDelete: SetNull)
-  supersededBy SupplyContextFact? @relation("SupplyContextFactHistory")
-
-  @@index([officeId, workspaceId, nodeId, key, status])
-  @@index([officeId, workspaceId, visibility, status])
-}
-
-model SupplyContextSourceLink {
-  id             String   @id @default(cuid())
-  officeId       String
-  workspaceId    String
-  nodeId         String
-  sourceType     String // MESSAGE / DOCUMENT / GMAIL_THREAD / WHATSAPP / JOB / INQUIRY / KNOWLEDGE_OBJECT
-  sourceId       String
-  label          String?
-  visibility     String   @default("INTERNAL") // SHARED / INTERNAL
-  linkedByUserId String?
-  createdAt      DateTime @default(now())
-
-  office    Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  workspace SupplyWorkspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  node      SupplyContextNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  linkedBy  User?             @relation(fields: [linkedByUserId], references: [id], onDelete: SetNull)
-
-  @@unique([workspaceId, nodeId, sourceType, sourceId])
-  @@index([officeId, workspaceId, nodeId, visibility])
-  @@index([officeId, sourceType, sourceId])
-}
-
-model SupplyContextOutboundDraft {
-  id                String    @id @default(cuid())
-  officeId          String
-  workspaceId       String
-  nodeId            String
-  senderAccountId   String?
-  recipient         String
-  subject           String
-  body              String
-  linkedThreadId    String?
-  contextVersion    Int
-  contextHash       String
-  sourceSnapshot    Json
-  state             String    @default("DRAFT") // DRAFT / PENDING_REVIEW / APPROVED / SENDING / SENT / REJECTED / FAILED / DELIVERY_UNKNOWN
-  idempotencyKey    String    @unique
-  createdByUserId   String
-  reviewedByUserId  String?
-  reviewedAt        DateTime?
-  sentAt            DateTime?
-  providerMessageId String?
-  providerThreadId  String?
-  sendError         String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  office     Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  workspace  SupplyWorkspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  node       SupplyContextNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  createdBy  User              @relation("SupplyContextDraftCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  reviewedBy User?             @relation("SupplyContextDraftReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([officeId, workspaceId, nodeId, createdAt])
-  @@index([officeId, workspaceId, state, updatedAt])
-}
 
 // Explicit membership supports shared office state without granting every
 // restricted operator access to every workspace.

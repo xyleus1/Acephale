@@ -152,7 +152,7 @@ export async function createSupplyWorkspace(
   return prisma.$transaction(async (tx) => {
     const companyId = input.companyId || null;
 
-    const workspace = await tx.supplyWorkspace.create({
+    return tx.supplyWorkspace.create({
       data: {
         officeId: context.officeId,
         companyId,
@@ -169,20 +169,6 @@ export async function createSupplyWorkspace(
       },
       include: { members: true },
     });
-    if (companyId) {
-      await tx.supplyContextNode.create({
-        data: {
-          officeId: context.officeId,
-          workspaceId: workspace.id,
-          contextKey: "company",
-          scopeType: "COMPANY",
-          name: workspace.name,
-          visibility: "SHARED",
-          createdByUserId: context.userId,
-        },
-      });
-    }
-    return workspace;
   });
 }
 

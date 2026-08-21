@@ -39,21 +39,23 @@ type ContextDocument = {
   name: string;
   mimeType: string;
   sizeBytes: number;
+  summary: string | null;
   processingState: string;
-  extractionError: string | null;
+  processingError: string | null;
   createdAt: string;
 };
 
 type ContextPayload = {
   workspace: { id: string; name: string };
-  selectedNodeId: string;
   messages: ContextMessage[];
   documents: ContextDocument[];
 };
 
 type OptimisticMessage = ContextMessage & { pending: true };
 
-const ACCEPTED_FILES = ".pdf,.txt,.csv,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip,.stl";
+const ACCEPTED_FILES = ".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip,.stl";
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
 
 function fileExtension(name: string) {
   const extension = name.split(".").pop()?.toLowerCase();
@@ -90,7 +92,7 @@ function formatBytes(size: number) {
 }
 
 function documentState(document: ContextDocument) {
-  if (document.processingState === "EXTRACTED") return "Ready";
+  if (document.processingState === "READY" || document.processingState === "EXTRACTED") return "Ready";
   if (document.processingState === "UNSUPPORTED") return "Stored";
   if (document.processingState === "FAILED") return "Could not parse";
   return "Processing";
@@ -143,7 +145,6 @@ function MessageBody({ body }: { body: string }) {
 
 export function SupplyOsContext({ workspaceId }: { workspaceId: string | null }) {
   const [data, setData] = useState<ContextPayload | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [optimisticMessage, setOptimisticMessage] = useState<OptimisticMessage | null>(null);
   const [busy, setBusy] = useState(false);
@@ -156,14 +157,12 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
   const streamEndRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
 
-  const load = useCallback(async (nodeId?: string | null) => {
+  const load = useCallback(async () => {
     if (!workspaceId) return;
-    const query = nodeId ? `?node=${encodeURIComponent(nodeId)}` : "";
-    const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context${query}`, { cache: "no-store" });
+    const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context`, { cache: "no-store" });
     const payload = await response.json().catch(() => null) as { context?: ContextPayload; error?: string } | null;
     if (!response.ok || !payload?.context) throw new Error(payload?.error || "Context could not be loaded.");
     setData(payload.context);
-    setSelectedNodeId(payload.context.selectedNodeId);
     return payload.context;
   }, [workspaceId]);
 
@@ -195,7 +194,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
 
   async function submitMessage(event?: FormEvent) {
     event?.preventDefault();
-    if (!workspaceId || !selectedNodeId || !message.trim() || busy) return;
+    if (!workspaceId || !message.trim() || busy) return;
     const instruction = message.trim();
     setMessage("");
     setError(null);
@@ -210,7 +209,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
     });
     let messageSaved = false;
     try {
-      const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context/nodes/${selectedNodeId}/chat`, {
+      const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ instruction }),
@@ -218,10 +217,10 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
       const payload = await response.json().catch(() => null) as { error?: string; messageSaved?: boolean } | null;
       messageSaved = payload?.messageSaved === true;
       if (!response.ok) throw new Error(payload?.error || "The reply did not finish.");
-      await load(selectedNodeId);
+      await load();
       setOptimisticMessage(null);
     } catch (cause) {
-      const refreshed = await load(selectedNodeId).catch(() => null);
+      const refreshed = await load().catch(() => null);
       const persisted = messageSaved || refreshed?.messages.some((entry) => entry.role === "OPERATOR" && entry.body === instruction);
       if (!persisted) setMessage(instruction);
       setOptimisticMessage(null);
@@ -233,22 +232,37 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
   }
 
   async function uploadFiles(files: File[]) {
-    if (!workspaceId || !selectedNodeId || !files.length) return;
+    if (!workspaceId || !files.length) return;
     setError(null);
     setFilesOpen(true);
     setUploadingNames(files.map((file) => file.name));
     const failures: string[] = [];
     for (const file of files) {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("visibility", "INTERNAL");
       try {
-        const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context/nodes/${selectedNodeId}/documents`, {
-          method: "POST",
-          body: form,
-        });
-        const payload = await response.json().catch(() => null) as { error?: string } | null;
-        if (!response.ok) throw new Error(payload?.error || "Upload failed.");
+        if (file.size < 1) throw new Error("The document is empty.");
+        if (file.size > MAX_FILE_BYTES) throw new Error("Documents are limited to 10 MB.");
+        const chunkCount = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+        const uploadId = chunkCount > 1 ? crypto.randomUUID() : null;
+        for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+          const form = new FormData();
+          const start = chunkIndex * UPLOAD_CHUNK_BYTES;
+          const end = Math.min(start + UPLOAD_CHUNK_BYTES, file.size);
+          form.set("file", chunkCount === 1 ? file : file.slice(start, end), file.name);
+          if (uploadId) {
+            form.set("uploadId", uploadId);
+            form.set("chunkIndex", String(chunkIndex));
+            form.set("chunkCount", String(chunkCount));
+            form.set("fileName", file.name);
+            form.set("fileType", file.type);
+            form.set("fileSize", String(file.size));
+          }
+          const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context/documents`, {
+            method: "POST",
+            body: form,
+          });
+          const payload = await response.json().catch(() => null) as { error?: string } | null;
+          if (!response.ok) throw new Error(payload?.error || `Upload failed (${response.status}).`);
+        }
       } catch (cause) {
         failures.push(`${file.name}: ${cause instanceof Error ? cause.message : "Upload failed."}`);
       } finally {
@@ -256,7 +270,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
       }
     }
     if (fileRef.current) fileRef.current.value = "";
-    await load(selectedNodeId).catch(() => undefined);
+    await load().catch(() => undefined);
     if (failures.length) setError(failures.join(" "));
   }
 
@@ -398,8 +412,8 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
             <a
               className={styles.fileRow}
               key={document.id}
-              href={`/api/supply-os/context/documents/${document.id}`}
-              title={document.extractionError || document.name}
+              href={`/api/supply-os/workspaces/${workspaceId}/context/documents/${document.id}`}
+              title={document.processingError || document.summary || document.name}
             >
               <FileKindIcon document={document} />
               <span>

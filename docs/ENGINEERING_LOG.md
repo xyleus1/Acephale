@@ -17,6 +17,31 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-20 - Collapse Context to CompanyDocument and repair uploads
+
+- Branch: `fix/minimal-company-context-v2`, based on production main.
+- Task: Remove the six-table Context backend and fix the production upload path
+  without changing the approved single-chat product surface.
+- Root cause: `storeContextDocumentFile` selected local storage in production,
+  and Vercel rejected the write before extraction or persistence. Every file
+  type therefore returned the same generic 500 response.
+- Files above 3 MB are uploaded in bounded chunks so the 10 MB product limit
+  does not hit Vercel's 4.5 MB function request limit. Chunks use the existing
+  `CompanyDocument` table and are deleted after assembly or expiry.
+- Files changed: Prisma schema and migration, company document ingestion,
+  Context agent and authenticated routes, internal chat, portal removal,
+  canonical memory taxonomy, app-role allowlist, focused tests, and release
+  documentation.
+- Safety: Reads and writes resolve the authenticated office, accessible supply
+  workspace, and linked company on the server. Uploaded content is untrusted,
+  and the agent has no outbound side effects.
+- Verification: Prisma validation, document and Context contracts, customer
+  isolation, product copy, deployment boundary, TypeScript, production build,
+  migration CI, and live authenticated upload are the release gates.
+- Caveat: This sandbox cannot start disposable PostgreSQL because System V
+  shared memory is blocked. GitHub PostgreSQL CI must execute the full migration
+  and database-backed Context contract before merge.
+
 ### 2026-08-20 - Remove dashboard hydration server action
 
 - Branch: `fix/dashboard-server-action-hook-crash`, based on production main.

@@ -143,7 +143,6 @@ Allowed `canonicalType` values:
 - `email_message`
 - `job_document`
 - `company_document`
-- `context_node`
 - `strategy_assessment`
 - `agent_proposal`
 - `customer_note`
@@ -176,23 +175,19 @@ Allowed source types:
 
 ## Supply Context Memory Contract
 
-Supply Context writes use the canonical memory layer as provenance, not as a
-second source of truth. The office-scoped `SupplyContextNode` hierarchy and its
-messages, documents, facts, source links, and outbound drafts remain the
-operational records.
+Supply Context has no separate memory schema. The existing `CompanyDocument`
+table is the only persistence boundary for original files, one-time parsed
+Markdown, operator messages, and agent replies.
 
-- Context documents emit `company_document` knowledge objects. Other context
-  mutations emit `context_node` objects and `supply_context.*` memory events.
-- Every record carries the source record id, node id, actor, operation, and
-  office scope. Stable record ids are used as memory idempotency keys.
-- Retrieval is assembled on the server from the selected node and its
-  ancestors. Canonical memory search does not authorize sibling or cross-office
-  context inclusion.
-- Customer text, extracted files, Gmail, and WhatsApp content are untrusted
-  evidence. They cannot supply agent instructions or become confirmed facts
-  without review.
-- Agent replies cite the exact eligible source ids. External drafts persist a
-  frozen copy of the eligible snapshot and citations used at creation time.
+- Every query includes the authenticated `officeId` and the company resolved
+  from the selected accessible `SupplyWorkspace`.
+- Original files and parsed Markdown remain paired records. The parsed copy is
+  reused for later agent requests instead of running extraction again.
+- File content is untrusted source material and cannot supply agent
+  instructions.
+- Agent replies cite the exact eligible company files and conversation records.
+- Context provides no external draft or send action. Supplier, purchasing,
+  booking, customs, and spending actions remain outside this surface.
 
 Write-path rules:
 

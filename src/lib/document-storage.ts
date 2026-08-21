@@ -34,6 +34,7 @@ export function mimeFromName(name: string) {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
+    ".md": "text/markdown",
     ".txt": "text/plain; charset=utf-8",
     ".csv": "text/csv; charset=utf-8",
     ".doc": "application/msword",

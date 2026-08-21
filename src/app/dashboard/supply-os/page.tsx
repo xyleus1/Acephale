@@ -4,7 +4,6 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
 import styles from "./supply-os-logistics.module.css";
-import { supplyContextEnabled } from "@/lib/supply-os/context-feature";
 
 export const metadata: Metadata = {
   title: { absolute: "Derya" },
@@ -23,16 +22,13 @@ export default async function SupplyOsPage({
   });
   if (!currentUser) redirect("/login");
   const params = await searchParams;
-  const contextEnabled = supplyContextEnabled(session.officeId);
+  const contextEnabled = true;
   if (params.panel === "suppliers" || params.panel === "fulfillment" || params.panel === "tracking") {
     redirect(params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
   }
   if (params.panel === "automations") {
-    redirect(contextEnabled
-      ? params.present === "1" ? "/dashboard/supply-os?present=1&panel=context" : "/dashboard/supply-os?panel=context"
-      : params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
+    redirect(params.present === "1" ? "/dashboard/supply-os?present=1&panel=context" : "/dashboard/supply-os?panel=context");
   }
-  if (params.panel === "context" && !contextEnabled) redirect(params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
   return (
     <div className={styles.pageFrame}>
       <SupplyOsOperatingShell

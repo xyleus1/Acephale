@@ -11,6 +11,7 @@ on:
       - "scripts/fixtures/**"
       - "src/app/api/supply-os/**"
       - "src/app/dashboard/supply-os/**"
+      - "src/lib/company-context.ts"
       - "src/lib/supply-os/**"
   push:
     branches: [main]
@@ -23,6 +24,7 @@ on:
       - "scripts/fixtures/**"
       - "src/app/api/supply-os/**"
       - "src/app/dashboard/supply-os/**"
+      - "src/lib/company-context.ts"
       - "src/lib/supply-os/**"
 
 permissions:
@@ -83,7 +85,6 @@ jobs:
       - name: Run Context contracts
         run: |
           npm run test:supply-os-context
-          npm run test:supply-os-context-review
           npm run test:supply-os-context-documents
           npm run test:supply-os-supplier-email-provider
 

@@ -16,6 +16,38 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-20 - Context uses only CompanyDocument
+
+- Status: accepted, supersedes the 2026-08-19 Context hierarchy, fact,
+  source-link, outbound-draft, portal, and allowlist decisions
+- Owner: product and engineering
+- Context: The six-table Context schema recreated preferences, facts, scopes,
+  sources, and drafts that the product does not need. Production uploads also
+  failed before parsing because the default storage driver tried to write to a
+  local Vercel filesystem.
+- Decision: Context is one internal company conversation backed only by the
+  existing `CompanyDocument` table. Original uploads, their one-time parsed
+  Markdown, operator messages, and agent replies are all file records scoped by
+  `officeId` and `companyId`. Remove all six `SupplyContext*` tables and the
+  `context_node` memory type. Do not provide a customer portal Context page,
+  hierarchy, fact database, preferences, source linker, or outbound draft
+  workflow.
+- Retrieval boundary: The server resolves the selected `SupplyWorkspace` to its
+  company and reads only that company's parsed Markdown and conversation. File
+  contents remain untrusted. Agent replies cite eligible files and messages and
+  cannot perform external actions.
+- Storage boundary: V1 stores original bytes and parsed Markdown as data URLs in
+  `CompanyDocument`. Each file is limited to 10 MB and parsed once. Browser
+  uploads larger than 3 MB use temporary rows in the same table so every
+  request remains below the hosting limit. Completed and expired chunks are
+  removed. Unsupported content stays downloadable with an explicit processing
+  state.
+- Consequences: Context has no dedicated tables and no deployment dependency on
+  local disk or object-storage configuration. The database cost is base64
+  overhead, which is an intentional tradeoff for the requested one-table model.
+- Revisit when: Stored Context files are large enough to justify moving the URL
+  payload to managed object storage without adding another Context table.
+
 ### 2026-08-20 - Retire the production pentest tenant
 
 - Status: accepted, supersedes the 2026-07-01 pentest self-repair decision
