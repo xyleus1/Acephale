@@ -75,6 +75,19 @@ idempotency key. Workspace metadata groups the customer interface; it is never
 an authorization input. The authenticated Office-to-customer mapping remains
 the security boundary.
 
+When CUSTOM includes a workspace ID, the server validates access to that
+workspace and resolves its company before the workflow write. It freezes a
+bounded snapshot of ready parsed documents and operator messages under
+`request_context.company_context`. Derya replies are excluded because generated
+text cannot become evidence. The same snapshot is appended to the BOM
+specification with citation IDs and an untrusted-source warning, so the current
+Bourne supplier worker sees the evidence without a new workflow table.
+
+The snapshot hash and captured timestamp are derived from the included sources,
+not request time. Exact retries therefore keep the same request hash. Context
+changes require a new request and produce a new snapshot version. Orders created
+before this integration are not backfilled.
+
 The legacy `/api/supply-os/supplier-research` route and its campaign route
 permit authenticated GET only for historical audit. Both POST handlers return
 `410`, and the legacy cron does no work. Active sourcing screens restore CUSTOM
@@ -102,6 +115,7 @@ Detail and list reads always include the authenticated external customer UUID.
 npm run test:procurement-workflow
 npm run test:workflow-guild2
 npm run test:customer-procurement-bourne
+npm run test:supply-os-context
 npm run test:procurement-workflow-db
 npx tsc --noEmit --pretty false --incremental false
 node --import tsx scripts/product-copy-policy.test.ts

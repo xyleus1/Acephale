@@ -188,6 +188,11 @@ Markdown, operator messages, and agent replies.
 - Agent replies cite the exact eligible company files and conversation records.
 - Context provides no external draft or send action. Supplier, purchasing,
   booking, customs, and spending actions remain outside this surface.
+- New CUSTOM procurement requests freeze the selected company's ready parsed
+  documents and operator messages into the workflow request. Generated replies
+  stay excluded. The snapshot is stored in workflow `request_context` and
+  copied into the BOM specification for the current supplier worker. This is
+  explicit server-side retrieval, not ambient global agent memory.
 
 Write-path rules:
 

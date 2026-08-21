@@ -2,6 +2,22 @@
 
 ## Latest Update
 
+### Context is light and available to new custom supplier searches
+
+- The Context chat now uses the same white, light-gray, ink, and border tokens
+  as the rest of Supply OS. The hard-coded dark canvas and file rail are gone.
+- The screenshot supplied for HypnoDreamz confirms four original files reached
+  Ready state, their parsed outputs were reused, and the answer cited the exact
+  stored document IDs.
+- New CUSTOM procurement requests now assemble Context on the authenticated
+  server. The selected workspace must be accessible and company-linked.
+- The request freezes ready parsed documents and operator messages in
+  `request_context.company_context`, excludes generated Derya replies, and
+  appends a bounded evidence copy to the BOM specification read by Bourne.
+- Existing workflow orders are unchanged. Start a new supplier search to
+  capture the current Context. Later Context edits require another new request.
+- No schema or dependency change was added.
+
 ### Context is reduced to one existing document table
 
 - Context now uses only `CompanyDocument`. Original files, one-time parsed

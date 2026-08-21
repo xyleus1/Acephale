@@ -5766,3 +5766,25 @@ Use this file for chronological implementation notes that future agents should s
   docs checks, TypeScript, optimized build, fresh PostgreSQL migrations,
   authenticated admin and non-admin lifecycle checks, and diff hygiene passed.
 - Limitation: No in-app browser tab was available for a visual click test.
+
+### 2026-08-20 - Light Context and share it with supplier research
+
+- Branch: `fix/context-light-and-shared`, based on deployed Context main.
+- Task: Match the Context chat to the light app shell and remove the isolation
+  between saved company documents and new custom supplier-search requests.
+- Root cause: The Context module defined its own dark palette. The CUSTOM
+  procurement bridge submitted only browser intake fields and workspace
+  metadata, so Bourne never received parsed company evidence.
+- Files changed: Context CSS, procurement Context snapshot builder,
+  authenticated procurement route, regression contracts, and durable docs.
+- Safety: Context assembly is server-owned and checks the authenticated office,
+  user, workspace, and company. Source content is labeled untrusted, Derya
+  replies are excluded, snapshots are bounded and frozen, and no external
+  action or database table was added.
+- Verification: Context contracts, supplier-context regression, procurement
+  workflow contracts, TypeScript, production build, diff hygiene, and the
+  forbidden-character scan.
+- Limitation: The in-app browser had no controllable tab. The supplied
+  production screenshot verifies ingestion before the change; final light-theme
+  verification relies on the CSS regression and build until the release is
+  opened in an authenticated browser.

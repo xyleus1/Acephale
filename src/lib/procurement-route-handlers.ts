@@ -9,6 +9,7 @@ import {
   resolveProcurementCustomerId,
   submitProcurementRequest,
 } from "@/lib/procurement-workflow";
+import { contextualizeProcurementRequest } from "@/lib/supply-os/procurement-company-context";
 
 const responseHeaders = {
   "cache-control": "no-store",
@@ -27,6 +28,7 @@ export type ProcurementRouteDependencies = {
   resolveCustomerId: typeof resolveProcurementCustomerId;
   submit: typeof submitProcurementRequest;
   list: typeof listProcurementRequests;
+  contextualize?: typeof contextualizeProcurementRequest;
 };
 
 export type ProcurementDetailDependencies = {
@@ -46,6 +48,7 @@ const defaultRouteDependencies: ProcurementRouteDependencies = {
   resolveCustomerId: resolveProcurementCustomerId,
   submit: submitProcurementRequest,
   list: listProcurementRequests,
+  contextualize: contextualizeProcurementRequest,
 };
 
 const defaultDetailDependencies: ProcurementDetailDependencies = {
@@ -129,8 +132,12 @@ export async function handleProcurementPost(
   }
 
   try {
+    const contextualized = await (dependencies.contextualize ?? contextualizeProcurementRequest)({
+      session,
+      input: parsed.data,
+    });
     const customerId = await dependencies.resolveCustomerId(session);
-    const order = await dependencies.submit(customerId, parsed.data);
+    const order = await dependencies.submit(customerId, contextualized);
     return Response.json({
       orderId: order.orderId,
       status: order.status,

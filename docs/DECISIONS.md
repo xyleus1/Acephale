@@ -16,6 +16,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-20 - Custom procurement freezes the selected company Context
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Context documents and operator messages were durable, but custom
+  supplier research received only the browser intake fields. The supplier
+  worker could not see the saved company evidence.
+- Decision: For a new CUSTOM procurement request with a workspace ID, the
+  authenticated server resolves that accessible workspace and builds a
+  deterministic, bounded snapshot from its parsed company documents and
+  operator messages. Generated Derya replies are excluded. The snapshot is
+  stored in `orders.request_context.company_context`, and a bounded evidence
+  copy is appended to the BOM specification consumed by supplier research.
+- Trust boundary: The snapshot is labeled untrusted source material. Document
+  and message content is evidence, never agent instruction. Every read remains
+  scoped by the authenticated `officeId`, user access, workspace, and company.
+- Consequences: The worker and later reads of that procurement order share the
+  exact same Context version without a new table. Later Context edits do not
+  silently mutate an active request. A new request captures a new version.
+  Existing orders are not retroactively changed.
+- Revisit when: Bourne exposes a versioned first-class evidence input that can
+  replace the bounded BOM specification copy without weakening compatibility.
+
 ### 2026-08-20 - Context uses only CompanyDocument
 
 - Status: accepted, supersedes the 2026-08-19 Context hierarchy, fact,
