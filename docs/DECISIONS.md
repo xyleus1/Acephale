@@ -40,6 +40,59 @@ Use this log for durable product and engineering decisions. Do not put every imp
   while it remains `new`.
 - Revisit when: Bourne exposes a durable enqueue receipt or a managed queue
   replaces database polling and leasing.
+### 2026-08-21 - Customer and procurement context use one minimal canonical schema
+
+- Status: accepted, supersedes the 2026-08-20 `CompanyDocument` storage model
+- Owner: product and engineering
+- Context: The live Neon database contained a second workflow customer table,
+  item rows carrying free-form procurement preferences, supplier rows copied
+  per order, and Context encoded as several synthetic document records. That
+  made hard facts, soft guidance, and technical workflow state difficult to
+  distinguish. It also left old CRM opportunity and margin-preference tables
+  in the application schema even though no active runtime used them.
+- Decision: `Company` remains the customer identity. `Item` stores hard catalog
+  facts. `Supplier` stores one office-wide supplier identity, and
+  `CompanySupplier` stores the status or notes specific to one company. The
+  only customer-context table is `CompanyContext`: a null `itemId` is generic
+  company context, while a populated `itemId` is item-specific. A document row
+  holds its original storage reference, extracted Markdown, processing result,
+  explanation, provenance, and creator. The same table also stores bounded
+  Context messages and approval-gated action payloads by `kind`.
+- Compatibility boundary: The external procurement worker keeps its UUID
+  tenant key through `CompanyWorkflowAccount`. Canonical operational tables are
+  `ProcurementOrder`, `OrderSupplier`, and `ProcurementRequestKey`. The old
+  lowercase names remain restricted compatibility views so the worker does not
+  need an unsafe coordinated cutover. Real orders, quotes, delivery dates,
+  supplier contacts, and realized prices are preserved.
+- Cleanup boundary: Useful `CompanyDocument` and `CrmOpportunity` rows are
+  converted to `CompanyContext` before those tables are retired.
+  The active minimum value from `MarginProfile` is moved to the structured
+  `Office.pricingTargetMarginPct` field before the table is removed. Unused
+  labels, tiers, and urgency variants are not carried forward. Existing item
+  `procurement_preferences` are preserved as attributable Context notes before
+  that column is removed. No preference JSON remains on the customer or item
+  tables.
+- Safety boundary: Every canonical row is tenant-scoped. Database triggers
+  reject item, supplier, Context, order, supplier-order, or request-key links
+  whose customer and office do not agree. The migration refuses to guess when
+  a workflow customer cannot be mapped uniquely to a real `Company`.
+- Worker boundary: Existing worker-specific columns on the renamed operational
+  tables remain visible through the lowercase views. Existing worker-role data
+  privileges are copied to those views, then removed from the canonical table
+  names. Derya's application and dashboard roles are reset to their narrower
+  explicit grants.
+- Release boundary: The table renames and data conversions run in one
+  transaction so workers never observe half-converted tables. That transaction
+  requires the maintenance procedure in
+  `docs/RUNBOOKS/MINIMAL_SCHEMA_CUTOVER.md`; Bourne and procurement writes stay
+  paused until migration, count checks, app deployment, and smoke tests pass.
+- Consequences: Hard delivery, address, item, supplier, order, and quote facts
+  remain structured. Soft email style, document explanations, and procurement
+  guidance live in one attributable context surface. Historical worker SQL
+  continues to operate through bounded views and triggers.
+- Revisit when: The procurement worker accepts the canonical Company id
+  directly, or stored document volume justifies moving file bytes to managed
+  object storage while retaining `CompanyContext` metadata.
 
 ### 2026-08-21 - Context procurement separates items and reports wake delivery truthfully
 

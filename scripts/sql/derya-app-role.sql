@@ -39,8 +39,9 @@ DECLARE
     'AuditLog', 'Event', 'BackgroundJob', 'KnowledgeSource', 'KnowledgeObject',
     'KnowledgeChunk', 'EntityMention', 'MemoryEvent', 'AgentMemory',
     'MarketSignal', 'MarketSignalLink', 'MarketImpactReview',
-    'MarketSignalFeedback', 'MarketIngestionRun', 'Task', 'CrmOpportunity',
-    'RiskAlert', 'CompanyDocument', 'LaneRate', 'MarginProfile', 'Inquiry',
+    'MarketSignalFeedback', 'MarketIngestionRun', 'Task',
+    'RiskAlert', 'CompanyContext', 'Item', 'Supplier', 'CompanySupplier',
+    'LaneRate', 'Inquiry',
     'TargetPriceHistory', 'CarrierQuote', 'Forwarder', 'ForwarderRequestDraft',
     'LoadSecurityCheck', 'Carrier', 'CarrierChecklistItem', 'CarrierBid',
     'TruckloadQuote', 'ShipmentRecord', 'Job', 'AgentProposal',
@@ -110,8 +111,10 @@ BEGIN
   END IF;
 
   FOREACH workflow_table IN ARRAY ARRAY[
-    'customers', 'bill_of_materials', 'orders', 'order_vendors',
-    'procurement_api_idempotency', 'procurement_sources', 'supplier_memory'
+    'CompanyWorkflowAccount', 'ProcurementOrder', 'OrderSupplier',
+    'ProcurementRequestKey', 'customers', 'bill_of_materials', 'orders',
+    'order_vendors', 'procurement_api_idempotency', 'procurement_sources',
+    'supplier_memory'
   ] LOOP
     CONTINUE WHEN to_regclass(format('public.%I', workflow_table)) IS NULL;
     IF has_table_privilege('derya_app', format('public.%I', workflow_table), 'SELECT')

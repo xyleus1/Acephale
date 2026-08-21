@@ -51,7 +51,7 @@ async function main() {
     crossOfficeInquiries,
     crossOfficeActivities,
     jobDocuments,
-    companyDocuments,
+    companyContext,
   ] = await Promise.all([
     prisma.user.count({ where: { officeId: office.id, role: "ADMIN", isActive: true } }),
     prisma.company.count({ where: { officeId: office.id } }),
@@ -103,9 +103,9 @@ async function main() {
       select: { id: true, name: true, url: true },
       take: 20,
     }),
-    prisma.companyDocument.findMany({
+    prisma.companyContext.findMany({
       where: { officeId: office.id },
-      select: { id: true, name: true, url: true },
+      select: { id: true, name: true, storageUrl: true },
       take: 20,
     }),
   ]);
@@ -131,9 +131,9 @@ async function main() {
   checks.push(Number(crossOfficeActivities[0]?.count ?? 0) === 0 ? pass("activities_do_not_cross_offices") : fail("activities_do_not_cross_offices", String(crossOfficeActivities[0]?.count ?? 0)));
 
   const badJobDocs = jobDocuments.filter((doc) => doc.url && !doc.url.startsWith("metadata-only://"));
-  const badCompanyDocs = companyDocuments.filter((doc) => doc.url && !doc.url.startsWith("metadata-only://"));
+  const badCompanyDocs = companyContext.filter((entry) => entry.storageUrl && !entry.storageUrl.startsWith("metadata-only://"));
   checks.push(badJobDocs.length === 0 ? pass("job_documents_metadata_only") : fail("job_documents_metadata_only", `${badJobDocs.length} document URL(s) look live`));
-  checks.push(badCompanyDocs.length === 0 ? pass("company_documents_metadata_only") : fail("company_documents_metadata_only", `${badCompanyDocs.length} document URL(s) look live`));
+  checks.push(badCompanyDocs.length === 0 ? pass("company_context_storage_metadata_only") : fail("company_context_storage_metadata_only", `${badCompanyDocs.length} storage URL(s) look live`));
 
   printChecks(checks);
 

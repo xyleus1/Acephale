@@ -10,6 +10,9 @@ import {
   uploadCompanyContextDocumentChunk,
 } from "../src/lib/company-context";
 import type { ProcurementRequestInput } from "../src/lib/procurement-contract";
+import { contextDocumentHash } from "../src/lib/supply-os/context-documents";
+import { loadInquiryStrategyInput } from "../src/lib/commercial-strategy-persistence";
+import { getCustomerDossier } from "../src/lib/memory/customer-dossier";
 import {
   confirmCompanyContextProcurementAction,
   createCompanyContextProcurementAction,
@@ -32,7 +35,9 @@ async function main() {
   const previousApiKey = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   try {
-    const office = await prisma.office.create({ data: { name: `Context test ${suffix}` } });
+    const office = await prisma.office.create({
+      data: { name: `Context test ${suffix}`, pricingTargetMarginPct: 12.5 },
+    });
     officeId = office.id;
     const admin = await prisma.user.create({
       data: {
@@ -51,11 +56,24 @@ async function main() {
       canViewWholeOffice: true,
     };
     const company = await prisma.company.create({ data: { officeId, name: `HypnoDreamz ${suffix}` } });
+    const inquiry = await prisma.inquiry.create({
+      data: { officeId, companyId: company.id, subject: "Pricing policy runtime check" },
+    });
+    const strategyInput = await loadInquiryStrategyInput(officeId, inquiry.id);
+    assert.deepEqual(strategyInput?.marginPolicy, {
+      targetMarginPct: 12.5,
+      minMarginPct: 10,
+      stretchMarginPct: 19.5,
+    });
     const workspace = await createSupplyWorkspace(context, { name: company.name, companyId: company.id });
+    const item = await prisma.item.create({
+      data: { officeId, companyId: company.id, name: "PC-ABS enclosure", sku: `ENC-${suffix}` },
+    });
 
     const uploaded = await uploadCompanyContextDocument({
       context,
       workspaceId: workspace.id,
+      itemId: item.id,
       file: new File(["part,material\nboard,PC-ABS\n"], "parts.csv", { type: "text/csv" }),
     });
     assert.equal(uploaded.processingState, "READY");
@@ -64,8 +82,18 @@ async function main() {
     const loaded = await loadCompanyContext(context, workspace.id);
     assert.equal(loaded.documents.length, 1);
     assert.equal(loaded.documents[0].name, "parts.csv");
+    assert.equal(loaded.documents[0].itemId, item.id);
+    assert.equal(loaded.documents[0].itemName, item.name);
     assert.equal(loaded.documents[0].processingState, "READY");
     assert.equal(loaded.messages.length, 0);
+    const dossier = await getCustomerDossier({ officeId, companyId: company.id, limit: 10 });
+    assert.equal(dossier.found, true);
+    if (!dossier.found) throw new Error("Customer dossier was not found.");
+    assert.ok(dossier.recent_documents.company_documents.some((document) => (
+      document.id === uploaded.id
+        && document.itemId === item.id
+        && document.kind === "DOCUMENT"
+    )));
 
     const operatorMessage = await appendCompanyContextMessage({
       context,
@@ -293,9 +321,46 @@ async function main() {
       documentId: secondChunk.document.id,
     });
     assert.equal(chunkedOriginal.bytes.toString("utf8"), "hello world");
-    assert.equal(await prisma.companyDocument.count({
-      where: { officeId, companyId: company.id, docType: { startsWith: "company_context_upload_chunk:" } },
+    assert.equal(await prisma.companyContext.count({
+      where: { officeId, companyId: company.id, kind: "UPLOAD_CHUNK" },
     }), 0);
+
+    const restoredBytes = Buffer.from("part,material\ninsert,memory foam\n");
+    const restoredHash = contextDocumentHash(restoredBytes);
+    const placeholder = await prisma.companyContext.create({
+      data: {
+        officeId,
+        companyId: company.id,
+        itemId: item.id,
+        kind: "DOCUMENT",
+        name: "restored.csv",
+        storageUrl: "metadata-only://company-context/source-restored-document",
+        mimeType: "text/csv",
+        contentHash: null,
+        markdown: "# Restored placeholder",
+        processingState: "READY",
+        payload: {
+          importSource: {
+            id: "source-restored-document",
+            contentHash: restoredHash,
+            storageState: "metadata_only",
+          },
+        },
+      },
+    });
+    const hydrated = await uploadCompanyContextDocument({
+      context,
+      workspaceId: workspace.id,
+      file: new File([new Uint8Array(restoredBytes)], "restored.csv", { type: "text/csv" }),
+    });
+    assert.equal(hydrated.id, placeholder.id, "A real upload must hydrate its imported metadata placeholder.");
+    assert.equal(hydrated.itemId, item.id, "Hydration without an item field must preserve the imported item scope.");
+    assert.equal(hydrated.itemName, item.name);
+    const hydratedRow = await prisma.companyContext.findUniqueOrThrow({ where: { id: placeholder.id } });
+    assert.equal(hydratedRow.contentHash, restoredHash);
+    assert.equal(hydratedRow.itemId, item.id);
+    assert.match(hydratedRow.storageUrl ?? "", /^data:text\/csv;base64,/);
+    assert.equal(await prisma.companyContext.count({ where: { officeId, companyId: company.id, contentHash: restoredHash } }), 1);
 
     const foreignOffice = await prisma.office.create({ data: { name: `Foreign context ${suffix}` } });
     foreignOfficeId = foreignOffice.id;
@@ -315,6 +380,22 @@ async function main() {
       role: foreignUser.role,
       canViewWholeOffice: true,
     };
+    const fallbackCompany = await prisma.company.create({
+      data: { officeId: foreignOffice.id, name: `Fallback pricing ${suffix}` },
+    });
+    const fallbackInquiry = await prisma.inquiry.create({
+      data: {
+        officeId: foreignOffice.id,
+        companyId: fallbackCompany.id,
+        subject: "Default pricing policy runtime check",
+      },
+    });
+    const fallbackStrategyInput = await loadInquiryStrategyInput(foreignOffice.id, fallbackInquiry.id);
+    assert.deepEqual(fallbackStrategyInput?.marginPolicy, {
+      targetMarginPct: 18,
+      minMarginPct: 12.6,
+      stretchMarginPct: 25,
+    });
     await assert.rejects(() => loadCompanyContext(foreignContext, workspace.id), /not found/i);
     await assert.rejects(() => listCompanyContextProcurementActions(foreignContext, workspace.id), /not found/i);
 

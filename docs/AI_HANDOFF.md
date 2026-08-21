@@ -35,6 +35,47 @@ Release requirement:
 - Bourne must implement `docs/BOURNE_WORKER_RELIABILITY_HANDOFF.md`. Derya's
   cron closes missed wake delivery, but it cannot replace Bourne's worker lease
   and side-effect idempotency.
+### Customer context and procurement identity now use a minimal canonical schema
+
+- `Company` is the customer identity. `Item` contains hard item facts,
+  `Supplier` contains office-wide supplier identity, and `CompanySupplier`
+  contains company-specific supplier status and notes.
+- `CompanyContext` is the only customer-context table. It stores original file
+  metadata, extracted Markdown, processing explanation, provenance, operator
+  messages, agent replies, and approval-gated action payloads. A null `itemId`
+  is company-generic; a populated `itemId` is item-specific.
+- Existing `CompanyDocument` and `CrmOpportunity` rows are preserved as Context
+  notes or documents before those unused tables are retired. Item and workflow
+  customer preference JSON is converted to Context notes before the preference
+  columns are dropped. The active minimum `MarginProfile` target is preserved
+  as `Office.pricingTargetMarginPct`; unused profile labels, tiers, and urgency
+  variants are removed with the redundant table.
+- Office exports retain that pricing target. Imports also recover the old
+  minimum `MarginProfile` value from existing version 1 backup artifacts.
+  Context imports use stable source IDs, preserve same-name messages as
+  separate rows, and carry unavailable-file hashes across repeated exports so
+  a later real upload can hydrate the placeholder safely.
+- The procurement worker keeps its UUID customer bridge and old lowercase SQL
+  names through restricted compatibility views. Real items, orders, supplier
+  research, contacts, quotes, delivery dates, and request keys are preserved.
+- Tenant-scope triggers reject cross-office Company, Item, Supplier, Context,
+  order, and request-key links. The migration stops instead of guessing if a
+  workflow customer cannot map uniquely to a Company.
+- Verification passed on the complete 28-migration chain and on a second
+  disposable database shaped like the live Neon table list. Prisma validation,
+  client generation, TypeScript, Context unit and database tests, procurement
+  unit and restricted-role database tests, customer portal, commercial
+  strategy, document parsing, office export and item-scoped restore, unified
+  Neon cutover, exact same-name message restore, legacy pricing-policy restore,
+  second-hop document provenance, and optimized production build contracts
+  passed. CI now
+  rehearses the final migration against populated legacy rows, extra Bourne
+  reliability columns, and an independently granted worker role. The build has
+  the pre-existing CSS autoprefixer warning.
+- Production has not been mutated by this branch. The owner migration must run
+  during the maintenance procedure in
+  `docs/RUNBOOKS/MINIMAL_SCHEMA_CUTOVER.md` before application deployment, in
+  line with the no-DDL-during-build release boundary.
 
 ### Last selected company survives refresh
 

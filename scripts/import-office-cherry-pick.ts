@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 
@@ -42,6 +42,16 @@ function newPortalToken() {
 
 function metadataUrl(kind: string, oldId: string) {
   return `metadata-only://${kind}/${oldId}`;
+}
+
+function importedContextId(officeId: string, sourceId: string) {
+  return `import_${createHash("sha256").update(`${officeId}:${sourceId}`).digest("hex")}`;
+}
+
+function jsonObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 async function resolveTargetOffice() {
@@ -87,6 +97,8 @@ async function main() {
   }
 
   const companyMap: IdMap = new Map();
+  const itemMap: IdMap = new Map();
+  const supplierMap: IdMap = new Map();
   const inquiryMap: IdMap = new Map();
   const jobMap: IdMap = new Map();
   const forwarderMap: IdMap = new Map();
@@ -95,6 +107,27 @@ async function main() {
 
   const inc = (key: string) => { counts[key] = (counts[key] ?? 0) + 1; };
   const skip = (key: string) => { skipped[key] = (skipped[key] ?? 0) + 1; };
+
+  const sourceOffice = jsonObject(jsonObject(payload.source).office);
+  const hasOfficePricingTarget = Object.prototype.hasOwnProperty.call(sourceOffice, "pricingTargetMarginPct");
+  const legacyMarginTargets = asArray(data.marginProfiles)
+    .map((row) => row.marginPercent)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const rawPricingTarget = hasOfficePricingTarget
+    ? sourceOffice.pricingTargetMarginPct
+    : legacyMarginTargets.length
+      ? Math.min(...legacyMarginTargets)
+      : undefined;
+  if (rawPricingTarget !== undefined) {
+    if (rawPricingTarget !== null && (typeof rawPricingTarget !== "number" || !Number.isFinite(rawPricingTarget))) {
+      throw new Error("The exported Office pricing target is invalid.");
+    }
+    await prisma.office.update({
+      where: { id: targetOffice.id },
+      data: { pricingTargetMarginPct: rawPricingTarget as number | null },
+    });
+    inc("officePricingPolicy");
+  }
 
   const users = await prisma.user.findMany({
     where: { officeId: targetOffice.id },
@@ -126,6 +159,81 @@ async function main() {
     });
     companyMap.set(String(row.oldId), company.id);
     inc("companies");
+  }
+
+  for (const row of asArray(data.items)) {
+    const companyId = companyMap.get(String(row.oldCompanyId));
+    const name = String(row.name ?? "").trim();
+    if (!companyId || !name) { skip("items"); continue; }
+    const existing = row.sku
+      ? await prisma.item.findUnique({
+        where: { companyId_sku: { companyId, sku: String(row.sku) } },
+        select: { id: true },
+      })
+      : await prisma.item.findFirst({
+        where: { officeId: targetOffice.id, companyId, name, specification: row.specification ?? null },
+        select: { id: true },
+      });
+    const input = clean({
+      ...withoutOldFields(row, ["oldCompanyId"]),
+      officeId: targetOffice.id,
+      companyId,
+      workflowCustomerId: null,
+      name,
+      createdAt: date(row.createdAt),
+      updatedAt: date(row.updatedAt),
+    });
+    const item = existing
+      ? await prisma.item.update({ where: { id: existing.id }, data: input, select: { id: true } })
+      : await prisma.item.create({ data: input, select: { id: true } });
+    itemMap.set(String(row.oldId), item.id);
+    inc("items");
+  }
+
+  for (const row of asArray(data.suppliers)) {
+    const name = String(row.name ?? "").trim();
+    const normalizedName = String(row.normalizedName ?? name).trim().toLowerCase().replace(/\s+/g, " ");
+    if (!name || !normalizedName) { skip("suppliers"); continue; }
+    const supplier = await prisma.supplier.upsert({
+      where: { officeId_normalizedName: { officeId: targetOffice.id, normalizedName } },
+      update: clean({
+        name,
+        website: row.website ?? null,
+        domain: row.domain ?? null,
+        status: row.status,
+        sourceRefs: row.sourceRefs ?? null,
+      }),
+      create: clean({
+        ...withoutOldFields(row, []),
+        officeId: targetOffice.id,
+        name,
+        normalizedName,
+        createdAt: date(row.createdAt),
+        updatedAt: date(row.updatedAt),
+      }),
+      select: { id: true },
+    });
+    supplierMap.set(String(row.oldId), supplier.id);
+    inc("suppliers");
+  }
+
+  for (const row of asArray(data.companySuppliers)) {
+    const companyId = companyMap.get(String(row.oldCompanyId));
+    const supplierId = supplierMap.get(String(row.oldSupplierId));
+    if (!companyId || !supplierId) { skip("companySuppliers"); continue; }
+    await prisma.companySupplier.upsert({
+      where: { companyId_supplierId: { companyId, supplierId } },
+      update: clean({ status: row.status, notes: row.notes ?? null, sourceRefs: row.sourceRefs ?? null }),
+      create: clean({
+        ...withoutOldFields(row, ["oldCompanyId", "oldSupplierId"]),
+        officeId: targetOffice.id,
+        companyId,
+        supplierId,
+        createdAt: date(row.createdAt),
+        updatedAt: date(row.updatedAt),
+      }),
+    });
+    inc("companySuppliers");
   }
 
   for (const row of asArray(data.contacts)) {
@@ -293,27 +401,6 @@ async function main() {
     inc("laneRates");
   }
 
-  for (const row of asArray(data.marginProfiles)) {
-    const existing = await prisma.marginProfile.findFirst({
-      where: {
-        officeId: targetOffice.id,
-        label: row.label,
-        customerTier: row.customerTier ?? null,
-        urgency: row.urgency ?? null,
-      },
-      select: { id: true },
-    });
-    const input = clean({
-      ...withoutOldFields(row, []),
-      officeId: targetOffice.id,
-      createdAt: date(row.createdAt),
-      updatedAt: date(row.updatedAt),
-    });
-    if (existing) await prisma.marginProfile.update({ where: { id: existing.id }, data: input });
-    else await prisma.marginProfile.create({ data: input });
-    inc("marginProfiles");
-  }
-
   for (const row of asArray(data.inquiries)) {
     const companyId = row.oldCompanyId ? companyMap.get(String(row.oldCompanyId)) ?? null : null;
     const existing = await prisma.inquiry.findFirst({
@@ -422,26 +509,68 @@ async function main() {
     inc("milestones");
   }
 
-  for (const row of asArray(data.companyDocuments)) {
+  for (const row of asArray(data.companyContext ?? data.companyDocuments)) {
     const companyId = companyMap.get(String(row.oldCompanyId));
-    if (!companyId) { skip("companyDocuments"); continue; }
+    if (!companyId) { skip("companyContext"); continue; }
+    const sourceId = String(row.oldId ?? "").trim();
+    if (!sourceId) { skip("companyContext"); continue; }
+    const itemId = row.oldItemId ? itemMap.get(String(row.oldItemId)) ?? null : null;
+    if (row.oldItemId && !itemId) { skip("companyContext"); continue; }
     const uploadedBy = typeof row.uploadedByEmail === "string" ? userByEmail.get(row.uploadedByEmail.toLowerCase()) : null;
-    const existing = await prisma.companyDocument.findFirst({
-      where: { officeId: targetOffice.id, companyId, name: row.name, docType: row.docType ?? null },
-      select: { id: true },
+    const importId = importedContextId(targetOffice.id, sourceId);
+    const sourceContentHash = typeof row.contentHash === "string" && row.contentHash.trim()
+      ? row.contentHash.trim()
+      : null;
+    const existingByImportId = await prisma.companyContext.findUnique({
+      where: { id: importId },
+      select: { id: true, contentHash: true, storageUrl: true },
     });
+    const existingByContent = !existingByImportId && sourceContentHash
+      ? await prisma.companyContext.findFirst({
+        where: { officeId: targetOffice.id, companyId, contentHash: sourceContentHash },
+        select: { id: true, contentHash: true, storageUrl: true },
+      })
+      : null;
+    const existing = existingByImportId ?? existingByContent;
+    const hasLiveStorage = Boolean(
+      existing?.storageUrl && !existing.storageUrl.startsWith("metadata-only://"),
+    );
+    if (existingByContent && hasLiveStorage) {
+      inc("companyContext");
+      continue;
+    }
+    const hasUnavailableStorage = Boolean(row.hadStorage || row.hadUrl);
+    const importSource = {
+      id: sourceId,
+      contentHash: sourceContentHash,
+      storageState: hasUnavailableStorage ? "metadata_only" : "none",
+    };
     const input = clean({
       officeId: targetOffice.id,
       companyId,
+      itemId,
+      kind: row.kind ?? "DOCUMENT",
       name: row.name,
-      docType: row.docType ?? null,
-      url: metadataUrl("company-document", String(row.oldId)),
-      uploadedByUserId: uploadedBy?.id ?? null,
+      description: row.description ?? null,
+      storageUrl: hasLiveStorage
+        ? existing?.storageUrl
+        : hasUnavailableStorage
+          ? metadataUrl("company-context", sourceId)
+          : null,
+      mimeType: row.mimeType ?? null,
+      sizeBytes: row.sizeBytes ?? null,
+      contentHash: hasLiveStorage ? existing?.contentHash : hasUnavailableStorage ? null : sourceContentHash,
+      processingState: row.processingState ?? "READY",
+      processingError: row.processingError ?? null,
+      markdown: row.markdown ?? null,
+      payload: { ...jsonObject(row.payload), importSource },
+      createdByUserId: uploadedBy?.id ?? null,
       createdAt: date(row.createdAt),
+      updatedAt: date(row.updatedAt),
     });
-    if (existing) await prisma.companyDocument.update({ where: { id: existing.id }, data: input });
-    else await prisma.companyDocument.create({ data: input });
-    inc("companyDocuments");
+    if (existing) await prisma.companyContext.update({ where: { id: existing.id }, data: input });
+    else await prisma.companyContext.create({ data: { id: importId, ...input } });
+    inc("companyContext");
   }
 
   for (const row of asArray(data.jobDocuments)) {

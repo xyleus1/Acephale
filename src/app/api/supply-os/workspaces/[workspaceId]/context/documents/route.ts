@@ -33,6 +33,7 @@ export async function POST(request: NextRequest, route: { params: Promise<{ work
         fileName: form?.get("fileName"),
         fileType: form?.get("fileType"),
         fileSize: form?.get("fileSize"),
+        itemId: form?.get("itemId"),
         chunk: file,
       });
       return NextResponse.json(result, { status: result.complete ? 201 : 202 });
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest, route: { params: Promise<{ work
       context: supplyAccessContext(session),
       workspaceId,
       file,
+      itemId: form?.get("itemId"),
     });
     return NextResponse.json({ document }, { status: 201 });
   } catch (error) {

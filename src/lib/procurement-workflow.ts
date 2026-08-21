@@ -569,7 +569,20 @@ export async function getProcurementRequestFromDatabase(
         ON order_vendors.order_id = orders.id
       WHERE orders.id = $1::uuid
         AND orders.customer_id = $2::uuid
-      GROUP BY orders.id, bill_of_materials.id
+      GROUP BY
+        orders.id,
+        orders.status,
+        orders.progress,
+        orders.needed_by,
+        orders.quantity,
+        orders.unit,
+        orders.request_context,
+        orders.approval_requested_at,
+        orders.decision_snapshot,
+        orders.updated_at,
+        bill_of_materials.id,
+        bill_of_materials.material,
+        bill_of_materials.specification
       LIMIT 1
     `, orderId, customerId);
     return rows[0] ? normalizeOrder(rows[0]) : null;

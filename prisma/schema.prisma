@@ -82,6 +82,7 @@ enum EmailDirection {
 model Office {
   id        String   @id @default(cuid())
   name      String
+  pricingTargetMarginPct Float?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -90,9 +91,12 @@ model Office {
   activities           Activity[]
   quotes               Quote[]
   shipments            ShipmentRecord[]
-  documents            CompanyDocument[]
+  companyContext       CompanyContext[]
+  catalogItems         Item[]
+  suppliers            Supplier[]
+  companySuppliers     CompanySupplier[]
+  workflowAccounts     CompanyWorkflowAccount[]
   laneRates            LaneRate[]
-  marginProfiles       MarginProfile[]
   inquiries            Inquiry[]
   jobs                 Job[]
   jobDocuments         JobDocument[]
@@ -102,7 +106,6 @@ model Office {
   events               Event[]
   categories           CategoryOption[]
   tasks                Task[]
-  crmOpportunities     CrmOpportunity[]
   riskAlerts           RiskAlert[]
   savedViews           SavedView[]
   targetPriceHistory   TargetPriceHistory[]
@@ -238,6 +241,7 @@ model User {
   supplyApprovalsDecided   SupplyApproval[]        @relation("SupplyApprovalDecidedBy")
   supplyExecutionTasks     SupplyExecutionTask[]   @relation("SupplyExecutionTaskCreatedBy")
   supplyExecutionEvents    SupplyExecutionEvent[]  @relation("SupplyExecutionEventActor")
+  companyContextCreated    CompanyContext[]         @relation("CompanyContextCreatedBy")
 
   @@unique([officeId, email])
   @@index([officeId, role])
@@ -284,10 +288,12 @@ model Company {
   activities        Activity[]
   quotes            Quote[]
   shipments         ShipmentRecord[]
-  documents         CompanyDocument[]
+  companyContext    CompanyContext[]
+  catalogItems      Item[]
+  supplierLinks     CompanySupplier[]
+  workflowAccount   CompanyWorkflowAccount?
   assignmentChanges AssignmentChange[]
   tasks             Task[]
-  crmOpportunities  CrmOpportunity[]
   riskAlerts        RiskAlert[]
   jobs              Job[]
   inquiries         Inquiry[]
@@ -344,7 +350,6 @@ model Contact {
   company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   activities       Activity[]
   tasks            Task[]
-  crmOpportunities CrmOpportunity[]
   emailThreads     EmailThread[]
   outreachPlanItems OutreachPlanItem[]
 
@@ -404,7 +409,6 @@ model Activity {
   companyId  String
   contactId  String?
   inquiryId  String?
-  opportunityId String?
   type       ActivityType
   occurredAt DateTime     @default(now())
 
@@ -423,12 +427,10 @@ model Activity {
   company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contact     Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
   inquiry     Inquiry?        @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
-  opportunity CrmOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   createdBy   User?           @relation("ActivityCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([officeId, companyId, occurredAt])
   @@index([officeId, contactId, occurredAt])
-  @@index([officeId, opportunityId, occurredAt])
   @@index([officeId, inquiryId, occurredAt])
   @@index([officeId, type, occurredAt])
 }
@@ -871,7 +873,6 @@ model Task {
   companyId        String
   contactId        String?
   inquiryId        String?
-  opportunityId    String?
   title            String
   details          String?
   dueAt            DateTime?
@@ -889,52 +890,12 @@ model Task {
   company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contact     Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
   inquiry     Inquiry?        @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
-  opportunity CrmOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
 
   @@index([officeId, status, dueAt])
   @@index([officeId, priority, dueAt])
   @@index([officeId, contactId, status])
-  @@index([officeId, opportunityId, status])
   @@index([officeId, inquiryId, status])
   @@index([companyId, status])
-}
-
-model CrmOpportunity {
-  id              String   @id @default(cuid())
-  officeId        String
-  companyId       String
-  contactId       String?
-  inquiryId       String?
-  name            String
-  type            String   @default("customer_lead")
-  stage           String   @default("idea")
-  estimatedValue  Float?
-  currency        String?  @default("USD")
-  likelihood      Int?
-  priority        String   @default("medium")
-  nextAction      String?
-  nextActionAt    DateTime?
-  source          String   @default("manual")
-  sourceRefs      Json?
-  brainSlug       String?
-  notes           String?
-  createdByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  office     Office     @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  contact    Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  inquiry    Inquiry?   @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
-  activities Activity[]
-  tasks      Task[]
-
-  @@index([officeId, stage, priority])
-  @@index([officeId, type, stage])
-  @@index([officeId, nextActionAt])
-  @@index([officeId, companyId])
-  @@index([officeId, contactId])
-  @@index([officeId, inquiryId])
 }
 
 model RiskAlert {
@@ -955,21 +916,195 @@ model RiskAlert {
   @@index([companyId, isOpen])
 }
 
-model CompanyDocument {
-  id               String   @id @default(cuid())
-  officeId         String
-  companyId        String
-  name             String
-  url              String
-  docType          String? // contract / invoice / proposal / other
-  uploadedByUserId String?
-  createdAt        DateTime @default(now())
+// Hard item facts only. Customer-specific guidance and soft preferences belong
+// in CompanyContext with this item id, not in another preference table.
+model Item {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  officeId      String @map("office_id")
+  companyId     String @map("company_id")
+  workflowCustomerId String? @map("customer_id") @db.Uuid
+  name          String @map("material")
+  sku           String?
+  specification String?
+  manufacturer  String?
+  partNumber    String?
+  unit          String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workflowCustomer CompanyWorkflowAccount? @relation(fields: [workflowCustomerId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  context CompanyContext[]
+  procurementOrders ProcurementOrder[]
 
-  @@index([officeId, companyId, createdAt])
-  @@index([officeId, companyId, docType, createdAt])
+  @@unique([companyId, sku])
+  @@index([officeId, companyId, name])
+  @@index([workflowCustomerId])
+}
+
+// One office-wide supplier identity. Customer-specific status and notes are
+// held by CompanySupplier so supplier facts are not copied per order.
+model Supplier {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  officeId       String
+  name           String
+  normalizedName String
+  website        String?
+  domain         String?
+  status         String   @default("UNVERIFIED")
+  sourceRefs     Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  office       Office            @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companyLinks CompanySupplier[]
+  orderLinks   OrderSupplier[]
+
+  @@unique([officeId, normalizedName])
+  @@index([officeId, status, name])
+}
+
+model CompanySupplier {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  officeId   String
+  companyId  String
+  supplierId String   @db.Uuid
+  status     String   @default("CANDIDATE")
+  notes      String?
+  sourceRefs Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  office   Office   @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([companyId, supplierId])
+  @@index([officeId, companyId, status])
+  @@index([officeId, supplierId])
+}
+
+// The only customer-context table. A null itemId means company-generic
+// context. Original file metadata, extracted Markdown, explanation, messages,
+// and action payloads share one row instead of being split across tables.
+model CompanyContext {
+  id              String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  officeId        String
+  companyId       String
+  itemId          String?  @db.Uuid
+  kind            String   @default("DOCUMENT")
+  name            String
+  description     String?
+  storageUrl      String?
+  mimeType        String?
+  sizeBytes       Int?
+  contentHash     String?
+  markdown        String?
+  processingState String?  @default("READY")
+  processingError String?
+  payload         Json?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  office    Office @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  item      Item? @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  createdBy User? @relation("CompanyContextCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([officeId, companyId, contentHash])
+  @@index([officeId, companyId, itemId, kind, createdAt])
+  @@index([officeId, companyId, processingState, createdAt])
+}
+
+// Technical bridge for the procurement worker's UUID tenant key. Company is
+// still the only customer record and this table contains no customer profile.
+model CompanyWorkflowAccount {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  officeId  String   @map("office_id")
+  companyId String   @unique @map("company_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  office  Office  @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  items   Item[]
+  orders  ProcurementOrder[]
+  requestKeys ProcurementRequestKey[]
+
+  @@index([officeId, name])
+}
+
+model ProcurementOrder {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowCustomerId    String    @map("customer_id") @db.Uuid
+  itemId                String    @map("bom_id") @db.Uuid
+  quantity              Decimal   @db.Decimal
+  unit                  String
+  neededBy              DateTime? @map("needed_by") @db.Date
+  notes                 String?
+  requestContext        Json      @default("{}") @map("request_context")
+  status                String    @default("new")
+  progress              String?
+  approvalRequestedAt   DateTime? @map("approval_requested_at") @db.Timestamptz(6)
+  leaseOwner            String?   @map("lease_owner")
+  leaseExpiresAt        DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  decisionSnapshot      Json?     @map("decision_snapshot")
+  gmailThreadId         String?   @map("gmail_thread_id")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workflowCustomer CompanyWorkflowAccount @relation(fields: [workflowCustomerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  item             Item                   @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  suppliers        OrderSupplier[]
+  requestKeys      ProcurementRequestKey[]
+
+  @@index([workflowCustomerId, status, createdAt])
+  @@index([itemId])
+}
+
+// Request-specific supplier state. Reusable identity lives in Supplier and
+// customer-specific qualification lives in CompanySupplier.
+model OrderSupplier {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  supplierId     String?  @map("supplier_registry_id") @db.Uuid
+  name           String
+  website        String?
+  contactName    String?  @map("contact_name")
+  contactEmail   String?  @map("contact_email")
+  contactPhone   String?  @map("contact_phone")
+  contact        Json?
+  identity       Json?
+  status         String
+  research       Json     @default("{}")
+  quote          Json?
+  gmailMessageId String?  @map("gmail_message_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order    ProcurementOrder @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  supplier Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([orderId, status])
+  @@index([supplierId])
+}
+
+model ProcurementRequestKey {
+  workflowCustomerId String   @map("customer_id") @db.Uuid
+  idempotencyKey     String   @map("idempotency_key")
+  requestHash        String   @map("request_hash")
+  orderId            String?  @map("order_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workflowCustomer CompanyWorkflowAccount @relation(fields: [workflowCustomerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  order            ProcurementOrder?      @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([workflowCustomerId, idempotencyKey])
+  @@index([orderId])
 }
 
 // ── Pricing module ────────────────────────────────────────────────────────
@@ -992,21 +1127,6 @@ model LaneRate {
 
   @@index([officeId, origin, destination, mode])
 }
-model MarginProfile {
-  id            String   @id @default(cuid())
-  officeId      String
-  label         String // e.g. "New client", "Existing – standard", "Urgent"
-  customerTier  String? // new / existing / vip
-  urgency       String? // normal / asap / flexible
-  marginPercent Float
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
-
-  @@index([officeId])
-}
-
 // Cache of computed summaries per Inquiry. Avoids re-running the extraction
 // + sort + JSON shaping on every agent query. Keyed by inquiryId, with kind
 // distinguishing different summary shapes (e.g. supplier-shortlist).
@@ -1078,7 +1198,6 @@ model Inquiry {
   agentProposals      AgentProposal[]
   forwarderDrafts     ForwarderRequestDraft[]
   strategyAssessments StrategyAssessment[]
-  crmOpportunities    CrmOpportunity[]
   activities          Activity[]
   tasks               Task[]
   carrierBids         CarrierBid[]

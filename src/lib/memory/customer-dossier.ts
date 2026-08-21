@@ -212,11 +212,11 @@ export async function getCustomerDossier(input: CustomerDossierInput) {
       take: limit,
       select: { id: true, jobId: true, name: true, docType: true, status: true, aiSummary: true, aiFlags: true, updatedAt: true },
     }),
-    prisma.companyDocument.findMany({
+    prisma.companyContext.findMany({
       where: { officeId: input.officeId, companyId: company.id },
       orderBy: { createdAt: "desc" },
       take: limit,
-      select: { id: true, name: true, docType: true, url: true, createdAt: true },
+      select: { id: true, itemId: true, name: true, kind: true, description: true, createdAt: true },
     }),
     prisma.strategyAssessment.findMany({
       where: {

@@ -13,6 +13,7 @@
     "ai:handoff": "tsx scripts/generate-ai-handoff.ts",
     "check:product-copy": "tsx scripts/product-copy-policy.test.ts",
     "test:procurement-workflow": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/workflow-dashboard.test.ts",
+    "test:minimal-live-schema": "tsx scripts/minimal-live-schema.test.ts",
     "test:procurement-workflow-db": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-workflow-database.test.ts",
     "test:procurement-wake-reconciliation": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-wake-reconciliation.test.ts",
     "test:workflow-guild2": "node --import tsx scripts/workflow-guild2.test.ts",

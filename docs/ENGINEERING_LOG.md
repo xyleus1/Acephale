@@ -5992,3 +5992,56 @@ Use this file for chronological implementation notes that future agents should s
 - Caveat: Derya can guarantee that an accepted order stays discoverable and its
   wake is retried. Bourne must implement the handoff before end-to-end worker
   recovery and duplicate-email safety can be claimed.
+### 2026-08-21 - Consolidate customer and procurement context
+
+- Branch: `refactor/minimal-customer-context-schema`, based on current
+  `origin/main`.
+- Task: Simplify the live customer and procurement schema without deleting
+  real freight operations or losing historical context.
+- Canonical schema: Keep `Company` as customer identity; add hard-fact `Item`,
+  office-wide `Supplier`, company-specific `CompanySupplier`, and one
+  `CompanyContext` table with optional item scope. Rename the worker tables to
+  `CompanyWorkflowAccount`, `ProcurementOrder`, `OrderSupplier`, and
+  `ProcurementRequestKey` while retaining the old lowercase SQL contract as
+  restricted compatibility views.
+- Data preservation: Convert existing `CompanyDocument` records,
+  `CrmOpportunity` records, and procurement preference JSON to Context rows
+  before retiring their source tables or columns. Normalize existing
+  order-supplier identities into the general and company-specific supplier
+  lists. Keep order-specific research, contact, quote, delivery, and workflow
+  state intact.
+- Runtime work: Move upload, parsed Markdown, message, action, export, import,
+  dossier, and procurement-snapshot paths to `CompanyContext`. Collapse the
+  one active margin target to `Office.pricingTargetMarginPct` without changing
+  the pricing formula.
+- Backup compatibility: Export and restore the Office pricing target, derive
+  it from the minimum legacy `MarginProfile` in older version 1 artifacts, use
+  stable source IDs for repeated Context names, and retain unavailable-file
+  hashes across second-hop exports so a later upload can hydrate the same row.
+- Safety: Add tenant-scope triggers for Company, Item, Supplier, Context,
+  orders, supplier-order links, and request keys. Refuse ambiguous
+  workflow-customer mapping. Preserve separately granted Bourne roles and
+  reliability columns through the legacy views. Keep the application role out
+  of worker tables and give the dashboard role only its legacy view contract.
+  Test destructive behavior only in disposable PostgreSQL.
+- Verification: Full 28-migration chain; live-shaped migration rehearsal;
+  Prisma validate and generate; TypeScript; minimal-schema, Context, Context
+  document, database-backed Context, procurement workflow, restricted-role
+  procurement database, customer portal, commercial strategy, unified Neon,
+  item-scoped office export and restore, populated legacy migration with
+  preserved table and column worker grants, all reliability columns, exact
+  same-name message restore, legacy pricing restore, second-hop document
+  provenance, tenant-guard failures, and optimized production build contracts.
+  The build retains the pre-existing CSS autoprefixer warning.
+- Failed/skipped checks: `npm run test:supply-os-enterprise-design` still
+  fails on the pre-existing `box-shadow: inset` CSS rule; this branch changes
+  no CSS. Production Neon was not changed. Its owner migration is a separate
+  controlled release step and must complete before the matching application
+  deployment.
+- Release control: Because the worker-table renames hold exclusive locks until
+  the conversion commits, production requires the paused-worker maintenance
+  procedure in `docs/RUNBOOKS/MINIMAL_SCHEMA_CUTOVER.md`. A normal Vercel-only
+  deploy is not safe for this change.
+- Follow-up: Run the migration preflight against a current production backup,
+  apply it with the controlled owner connection, deploy the application, then
+  verify HypnoDreamz item, supplier, Context, and order counts.

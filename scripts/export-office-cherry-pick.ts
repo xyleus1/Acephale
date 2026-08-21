@@ -45,8 +45,14 @@ async function resolveOffice(prisma: PrismaClient) {
   if (!officeId && !officeName) throw new Error("Set OLD_OFFICE_ID or OLD_OFFICE_NAME.");
 
   const office = officeId
-    ? await prisma.office.findUnique({ where: { id: officeId }, select: { id: true, name: true } })
-    : await prisma.office.findUnique({ where: { name: officeName! }, select: { id: true, name: true } });
+    ? await prisma.office.findUnique({
+      where: { id: officeId },
+      select: { id: true, name: true, pricingTargetMarginPct: true },
+    })
+    : await prisma.office.findUnique({
+      where: { name: officeName! },
+      select: { id: true, name: true, pricingTargetMarginPct: true },
+    });
 
   if (!office) throw new Error("Old office was not found.");
   return office;
@@ -54,6 +60,12 @@ async function resolveOffice(prisma: PrismaClient) {
 
 function stripUndefined<T extends JsonObject>(row: T): T {
   return Object.fromEntries(Object.entries(row).filter(([, value]) => value !== undefined)) as T;
+}
+
+function jsonObject(value: unknown): JsonObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject
+    : {};
 }
 
 async function main() {
@@ -75,6 +87,9 @@ async function main() {
       companies,
       contacts,
       users,
+      items,
+      suppliers,
+      companySuppliers,
       companyOwners,
       activities,
       quotes,
@@ -82,12 +97,11 @@ async function main() {
       inquiries,
       jobs,
       milestones,
-      companyDocuments,
+      companyContext,
       jobDocuments,
       carrierQuotes,
       forwarders,
       laneRates,
-      marginProfiles,
       targetPriceHistory,
       emailThreads,
     ] = await Promise.all([
@@ -97,6 +111,9 @@ async function main() {
         where: { officeId: office.id },
         select: { id: true, email: true, fullName: true, role: true, isActive: true, canViewWholeOffice: true },
       }),
+      prisma.item.findMany({ where: { officeId: office.id }, orderBy: { createdAt: "asc" } }),
+      prisma.supplier.findMany({ where: { officeId: office.id }, orderBy: { name: "asc" } }),
+      prisma.companySupplier.findMany({ where: { officeId: office.id }, orderBy: { createdAt: "asc" } }),
       prisma.companyOwner.findMany({ where: { company: { officeId: office.id } }, orderBy: { createdAt: "asc" } }),
       prisma.activity.findMany({ where: { officeId: office.id }, orderBy: { occurredAt: "asc" } }),
       prisma.quote.findMany({ where: { officeId: office.id }, orderBy: { quotedAt: "asc" } }),
@@ -105,7 +122,7 @@ async function main() {
       prisma.job.findMany({ where: jobWhere, orderBy: { createdAt: "asc" } }),
       prisma.jobMilestone.findMany({ where: { job: jobWhere }, orderBy: { createdAt: "asc" } }),
       includeDocumentMetadata
-        ? prisma.companyDocument.findMany({ where: { officeId: office.id }, orderBy: { createdAt: "asc" } })
+        ? prisma.companyContext.findMany({ where: { officeId: office.id }, orderBy: { createdAt: "asc" } })
         : Promise.resolve([]),
       includeDocumentMetadata
         ? prisma.jobDocument.findMany({ where: { officeId: office.id, job: jobWhere }, orderBy: { createdAt: "asc" } })
@@ -113,7 +130,6 @@ async function main() {
       prisma.carrierQuote.findMany({ where: { inquiry: { officeId: office.id } }, orderBy: { createdAt: "asc" } }),
       prisma.forwarder.findMany({ where: { officeId: office.id }, orderBy: { name: "asc" } }),
       prisma.laneRate.findMany({ where: { officeId: office.id }, orderBy: { createdAt: "asc" } }),
-      prisma.marginProfile.findMany({ where: { officeId: office.id }, orderBy: { createdAt: "asc" } }),
       prisma.targetPriceHistory.findMany({ where: { officeId: office.id }, orderBy: { createdAt: "asc" } }),
       includeEmails
         ? prisma.emailThread.findMany({ where: { officeId: office.id }, include: { messages: true }, orderBy: { lastMessageAt: "asc" } })
@@ -148,16 +164,30 @@ async function main() {
       };
     });
 
-    const safeCompanyDocuments = companyDocuments.map((doc) => {
-      const user = doc.uploadedByUserId ? userById.get(doc.uploadedByUserId) : null;
+    const safeCompanyContext = companyContext.map((entry) => {
+      const user = entry.createdByUserId ? userById.get(entry.createdByUserId) : null;
+      const importSource = jsonObject(jsonObject(entry.payload).importSource);
+      const importedContentHash = typeof importSource.contentHash === "string"
+        ? importSource.contentHash.trim() || null
+        : null;
       return {
-        oldId: doc.id,
-        oldCompanyId: doc.companyId,
-        name: doc.name,
-        docType: doc.docType,
+        oldId: entry.id,
+        oldCompanyId: entry.companyId,
+        oldItemId: entry.itemId,
+        kind: entry.kind,
+        name: entry.name,
+        description: entry.description,
+        mimeType: entry.mimeType,
+        sizeBytes: entry.sizeBytes,
+        contentHash: entry.contentHash ?? importedContentHash,
+        processingState: entry.processingState,
+        processingError: entry.processingError,
+        markdown: entry.markdown,
+        payload: entry.payload,
         uploadedByEmail: user?.email ?? null,
-        hadUrl: Boolean(doc.url),
-        createdAt: doc.createdAt,
+        hadStorage: Boolean(entry.storageUrl),
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
       };
     });
 
@@ -249,6 +279,26 @@ async function main() {
       ],
       data: {
         companies: companies.map((row) => ({ ...row, oldId: row.id, id: undefined, officeId: undefined })),
+        items: items.map((row) => ({
+          ...row,
+          oldId: row.id,
+          oldCompanyId: row.companyId,
+          id: undefined,
+          officeId: undefined,
+          companyId: undefined,
+          workflowCustomerId: undefined,
+        })),
+        suppliers: suppliers.map((row) => ({ ...row, oldId: row.id, id: undefined, officeId: undefined })),
+        companySuppliers: companySuppliers.map((row) => ({
+          ...row,
+          oldId: row.id,
+          oldCompanyId: row.companyId,
+          oldSupplierId: row.supplierId,
+          id: undefined,
+          officeId: undefined,
+          companyId: undefined,
+          supplierId: undefined,
+        })),
         contacts: contacts.map((row) => ({ ...row, oldId: row.id, oldCompanyId: row.companyId, id: undefined, companyId: undefined })),
         companyOwners: safeCompanyOwners,
         activities: safeActivities,
@@ -271,12 +321,11 @@ async function main() {
           portalToken: undefined,
         })),
         milestones: milestones.map((row) => ({ ...row, oldId: row.id, oldJobId: row.jobId, id: undefined, jobId: undefined })),
-        companyDocuments: safeCompanyDocuments,
+        companyContext: safeCompanyContext,
         jobDocuments: safeJobDocuments,
         carrierQuotes: carrierQuotes.map((row) => ({ ...row, oldId: row.id, oldInquiryId: row.inquiryId, id: undefined, inquiryId: undefined })),
         forwarders: forwarders.map((row) => ({ ...row, oldId: row.id, id: undefined, officeId: undefined })),
         laneRates: laneRates.map((row) => ({ ...row, oldId: row.id, id: undefined, officeId: undefined })),
-        marginProfiles: marginProfiles.map((row) => ({ ...row, oldId: row.id, id: undefined, officeId: undefined })),
         targetPriceHistory: targetPriceHistory.map((row) => ({
           ...row,
           oldId: row.id,

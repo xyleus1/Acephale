@@ -57,6 +57,13 @@ assert.equal(
 const prismaModels = [...prismaSchema.matchAll(/^model\s+(\w+)\s*\{/gm)]
   .map((match) => match[1])
   .sort();
+const workerOwnedModels = new Set([
+  "CompanyWorkflowAccount",
+  "ProcurementOrder",
+  "OrderSupplier",
+  "ProcurementRequestKey",
+]);
+const applicationModels = prismaModels.filter((model) => !workerOwnedModels.has(model));
 const appTableBlock = appRoleSql.match(/app_tables text\[\] := ARRAY\[([\s\S]*?)\n  \];/);
 assert.ok(appTableBlock, "the application role must keep an explicit table allowlist");
 const appRoleTables = [...appTableBlock[1].matchAll(/'([^']+)'/g)]
@@ -64,9 +71,16 @@ const appRoleTables = [...appTableBlock[1].matchAll(/'([^']+)'/g)]
   .sort();
 assert.deepEqual(
   appRoleTables,
-  prismaModels,
-  "the derya_app allowlist must cover every Prisma model and nothing else",
+  applicationModels,
+  "the derya_app allowlist must cover every application-owned Prisma model and nothing else",
 );
+for (const model of workerOwnedModels) {
+  assert.match(
+    appRoleSql,
+    new RegExp(`'${model}'`),
+    `${model} must remain on the explicit derya_app denylist`,
+  );
+}
 assert.deepEqual(
   vercel.crons?.find((cron) => cron.path === "/api/cron/supply-os-connectors"),
   { path: "/api/cron/supply-os-connectors", schedule: "10 * * * *" },

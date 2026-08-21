@@ -59,19 +59,14 @@ REVOKE CREATE ON SCHEMA public FROM dashboard_api;
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM dashboard_api;
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM dashboard_api;
 
-CREATE TABLE IF NOT EXISTS procurement_api_idempotency (
-  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-  idempotency_key TEXT NOT NULL,
-  request_hash TEXT NOT NULL,
-  order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (customer_id, idempotency_key),
-  CONSTRAINT procurement_api_idempotency_key_length
-    CHECK (char_length(idempotency_key) BETWEEN 1 AND 200),
-  CONSTRAINT procurement_api_request_hash_length
-    CHECK (char_length(request_hash) = 64)
-);
+DO $$
+BEGIN
+  IF to_regclass('public."ProcurementRequestKey"') IS NULL
+    OR to_regclass('public.procurement_api_idempotency') IS NULL THEN
+    RAISE EXCEPTION 'canonical procurement request key schema is missing';
+  END IF;
+END
+$$;
 
 REVOKE ALL ON customers FROM dashboard_api;
 REVOKE ALL ON bill_of_materials FROM dashboard_api;

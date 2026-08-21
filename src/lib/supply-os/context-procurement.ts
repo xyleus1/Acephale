@@ -19,7 +19,6 @@ import {
   type SupplyAccessContext,
 } from "@/lib/supply-os/persistence";
 
-const ACTION_PREFIX = "company_context_procurement:";
 const MAX_ACTIONS = 50;
 const MAX_SPECIFIC_DOCUMENTS = 12;
 const MAX_SPECIFIC_DOCUMENT_CHARS = 24_000;
@@ -153,15 +152,9 @@ export function normalizeContextProcurementDraft(value: unknown): ContextProcure
   };
 }
 
-function dataUrlJson(value: unknown) {
-  return `data:application/json;base64,${Buffer.from(JSON.stringify(value), "utf8").toString("base64")}`;
-}
-
-function decodeAction(url: string) {
-  const match = /^data:application\/json;base64,([\s\S]+)$/i.exec(url);
-  if (!match) return null;
+function decodeAction(payload: unknown) {
   try {
-    const parsed = JSON.parse(Buffer.from(match[1].replace(/\s+/g, ""), "base64").toString("utf8")) as unknown;
+    const parsed = payload;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const value = parsed as Record<string, unknown>;
     const draft = normalizeContextProcurementDraft(value.draft);
@@ -220,8 +213,8 @@ async function companyWorkspace(context: SupplyAccessContext, workspaceId: strin
   return { ...workspace, companyId: workspace.companyId };
 }
 
-function actionFromRow(row: { id: string; url: string; createdAt: Date }) {
-  const stored = decodeAction(row.url);
+function actionFromRow(row: { id: string; payload: unknown; createdAt: Date }) {
+  const stored = decodeAction(row.payload);
   return stored ? { id: row.id, createdAt: row.createdAt, ...stored } : null;
 }
 
@@ -230,13 +223,13 @@ export async function listCompanyContextProcurementActions(
   workspaceId: string,
 ) {
   const workspace = await companyWorkspace(context, workspaceId, "view");
-  const rows = await prisma.companyDocument.findMany({
+  const rows = await prisma.companyContext.findMany({
     where: {
       officeId: context.officeId,
       companyId: workspace.companyId,
-      docType: { startsWith: ACTION_PREFIX },
+      kind: "ACTION",
     },
-    select: { id: true, url: true, createdAt: true },
+    select: { id: true, payload: true, createdAt: true },
     orderBy: { createdAt: "desc" },
     take: MAX_ACTIONS,
   });
@@ -288,16 +281,17 @@ export async function createCompanyContextProcurementActions(args: {
     confirmationStartedAt: null,
     order: null,
   }));
-  const rows = await prisma.$transaction(storedItems.map((stored) => prisma.companyDocument.create({
+  const rows = await prisma.$transaction(storedItems.map((stored) => prisma.companyContext.create({
     data: {
       officeId: args.context.officeId,
       companyId: workspace.companyId,
-      name: `Procurement request - ${stored.draft.material}.json`,
-      url: dataUrlJson(stored),
-      docType: `${ACTION_PREFIX}${stored.status}`,
-      uploadedByUserId: args.context.userId,
+      kind: "ACTION",
+      name: `Procurement request - ${stored.draft.material}`,
+      payload: stored,
+      processingState: stored.status,
+      createdByUserId: args.context.userId,
     },
-    select: { id: true, url: true, createdAt: true },
+    select: { id: true, payload: true, createdAt: true },
   })));
   const actions = rows.map((row) => actionFromRow(row));
   if (actions.some((action) => !action)) {
@@ -460,14 +454,14 @@ export async function confirmCompanyContextProcurementAction(args: {
   actionId: string;
 }, dependencies: ContextProcurementDependencies = defaultDependencies) {
   const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
-  const row = await prisma.companyDocument.findFirst({
+  const row = await prisma.companyContext.findFirst({
     where: {
       id: args.actionId,
       officeId: args.context.officeId,
       companyId: workspace.companyId,
-      docType: { startsWith: ACTION_PREFIX },
+      kind: "ACTION",
     },
-    select: { id: true, url: true, createdAt: true },
+    select: { id: true, payload: true, createdAt: true },
   });
   let action = row ? actionFromRow(row) : null;
   if (!action) throw new SupplyPersistenceError("Procurement confirmation not found.", "not_found");
@@ -488,20 +482,20 @@ export async function confirmCompanyContextProcurementAction(args: {
       confirmationStartedAt: new Date().toISOString(),
       order: null,
     };
-    const claimed = await prisma.companyDocument.updateMany({
+    const claimed = await prisma.companyContext.updateMany({
       where: {
         id: action.id,
         officeId: args.context.officeId,
         companyId: workspace.companyId,
-        docType: `${ACTION_PREFIX}PENDING`,
-        url: row!.url,
+        kind: "ACTION",
+        processingState: "PENDING",
       },
-      data: { url: dataUrlJson(creating), docType: `${ACTION_PREFIX}${creating.status}` },
+      data: { payload: creating, processingState: creating.status },
     });
     if (claimed.count !== 1) {
-      const currentRow = await prisma.companyDocument.findFirst({
+      const currentRow = await prisma.companyContext.findFirst({
         where: { id: action.id, officeId: args.context.officeId, companyId: workspace.companyId },
-        select: { id: true, url: true, createdAt: true },
+        select: { id: true, payload: true, createdAt: true },
       });
       const current = currentRow ? actionFromRow(currentRow) : null;
       if (current?.status === "CREATED" && current.order) return current;
@@ -561,19 +555,20 @@ export async function confirmCompanyContextProcurementAction(args: {
         workflowWakeRequested: order.workflowWakeRequested,
       },
     };
-    const updated = await prisma.companyDocument.updateMany({
+    const updated = await prisma.companyContext.updateMany({
       where: {
         id: action.id,
         officeId: args.context.officeId,
         companyId: workspace.companyId,
-        docType: `${ACTION_PREFIX}CREATING`,
+        kind: "ACTION",
+        processingState: "CREATING",
       },
-      data: { url: dataUrlJson(stored), docType: `${ACTION_PREFIX}${stored.status}` },
+      data: { payload: stored, processingState: stored.status },
     });
     if (updated.count !== 1) {
-      const currentRow = await prisma.companyDocument.findFirst({
+      const currentRow = await prisma.companyContext.findFirst({
         where: { id: action.id, officeId: args.context.officeId, companyId: workspace.companyId },
-        select: { id: true, url: true, createdAt: true },
+        select: { id: true, payload: true, createdAt: true },
       });
       const current = currentRow ? actionFromRow(currentRow) : null;
       if (current?.status === "CREATED" && current.order?.id === order.orderId) return current;
@@ -591,14 +586,14 @@ export async function dismissCompanyContextProcurementAction(args: {
   actionId: string;
 }) {
   const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
-  const row = await prisma.companyDocument.findFirst({
+  const row = await prisma.companyContext.findFirst({
     where: {
       id: args.actionId,
       officeId: args.context.officeId,
       companyId: workspace.companyId,
-      docType: { startsWith: ACTION_PREFIX },
+      kind: "ACTION",
     },
-    select: { id: true, url: true, createdAt: true },
+    select: { id: true, payload: true, createdAt: true },
   });
   const action = row ? actionFromRow(row) : null;
   if (!action) throw new SupplyPersistenceError("Procurement confirmation not found.", "not_found");
@@ -620,15 +615,15 @@ export async function dismissCompanyContextProcurementAction(args: {
     confirmationStartedAt: null,
     order: action.order,
   };
-  const updated = await prisma.companyDocument.updateMany({
+  const updated = await prisma.companyContext.updateMany({
     where: {
       id: action.id,
       officeId: args.context.officeId,
       companyId: workspace.companyId,
-      docType: `${ACTION_PREFIX}PENDING`,
-      url: row!.url,
+      kind: "ACTION",
+      processingState: "PENDING",
     },
-    data: { url: dataUrlJson(stored), docType: `${ACTION_PREFIX}${stored.status}` },
+    data: { payload: stored, processingState: stored.status },
   });
   if (updated.count !== 1) {
     throw new SupplyPersistenceError("This procurement confirmation changed before it could be dismissed.", "conflict");

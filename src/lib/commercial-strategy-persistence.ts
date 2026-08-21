@@ -72,12 +72,11 @@ function parseSourceEconomics(parsedData: string | null | undefined): StrategySo
 }
 
 async function loadMarginPolicy(officeId: string) {
-  const profile = await prisma.marginProfile.findFirst({
-    where: { officeId },
-    orderBy: { marginPercent: "asc" },
-    select: { marginPercent: true },
+  const office = await prisma.office.findUnique({
+    where: { id: officeId },
+    select: { pricingTargetMarginPct: true },
   });
-  const target = profile?.marginPercent ?? 18;
+  const target = office?.pricingTargetMarginPct ?? 18;
   return {
     targetMarginPct: target,
     minMarginPct: Math.max(10, Math.min(14, target * 0.7)),

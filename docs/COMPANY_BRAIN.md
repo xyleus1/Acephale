@@ -175,14 +175,15 @@ Allowed source types:
 
 ## Supply Context Memory Contract
 
-Supply Context has no separate memory schema. The existing `CompanyDocument`
-table is the only persistence boundary for original files, one-time parsed
-Markdown, operator messages, and agent replies.
+`CompanyContext` is the only customer-context table. It stores original file
+metadata, one-time parsed Markdown, processing explanations, operator messages,
+agent replies, and approval-gated action payloads. A null `itemId` is generic
+company context. A populated `itemId` scopes the same record to one `Item`.
 
 - Every query includes the authenticated `officeId` and the company resolved
   from the selected accessible `SupplyWorkspace`.
-- Original files and parsed Markdown remain paired records. The parsed copy is
-  reused for later agent requests instead of running extraction again.
+- Original file metadata and parsed Markdown remain on one row. The parsed copy
+  is reused for later agent requests instead of running extraction again.
 - File content is untrusted source material and cannot supply agent
   instructions.
 - Agent replies cite the exact eligible company files and conversation records.

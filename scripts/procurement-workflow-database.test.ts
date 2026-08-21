@@ -34,7 +34,7 @@ function requiredEnvironment(name: string) {
 async function permissionDenied(operation: () => Promise<unknown>) {
   await assert.rejects(operation, (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    return /permission denied/i.test(message);
+    return /permission denied|is not a table/i.test(message);
   });
 }
 
@@ -77,6 +77,7 @@ async function main() {
         canViewWholeOffice: true,
       },
     });
+    const companyA = await app.company.create({ data: { officeId, name: "Customer A" } });
     await app.office.create({ data: { id: officeBId, name: `Procurement DB B ${suffix}` } });
     await app.user.create({
       data: {
@@ -90,11 +91,16 @@ async function main() {
         canViewWholeOffice: true,
       },
     });
+    const companyB = await app.company.create({ data: { officeId: officeBId, name: "Customer B" } });
     await owner.$executeRawUnsafe(
-      "INSERT INTO customers (id, name, procurement_preferences) VALUES ($1::uuid, $2, '{}'::jsonb), ($3::uuid, $4, '{}'::jsonb)",
+      "INSERT INTO \"CompanyWorkflowAccount\" (id, office_id, company_id, name) VALUES ($1::uuid, $2, $3, $4), ($5::uuid, $6, $7, $8)",
       customerA,
+      officeId,
+      companyA.id,
       "Customer A",
       customerB,
+      officeBId,
+      companyB.id,
       "Customer B",
     );
     await owner.$executeRawUnsafe(
@@ -136,6 +142,15 @@ async function main() {
       customerA,
     );
     assert.equal(Number(count[0]?.count), 1);
+    const createdItemContext = await owner.$queryRawUnsafe<Array<{ count: bigint }>>(`
+      SELECT count(*) AS count
+      FROM "CompanyContext" context
+      JOIN "Item" item ON item.id = context."itemId"
+      WHERE item.customer_id = $1::uuid
+        AND context.kind = 'NOTE'
+        AND context.payload->>'source' = 'bill_of_materials compatibility view'
+    `, customerA);
+    assert.equal(Number(createdItemContext[0]?.count), 1, "Soft item guidance must become item-scoped Context.");
     const customerScopedDuplicate = await createProcurementRequestInDatabase(workflowDatabase, customerB, input);
     assert.notEqual(customerScopedDuplicate.orderId, created.orderId);
     assert.equal(customerScopedDuplicate.created, true);
@@ -266,6 +281,22 @@ async function main() {
       "Identity contact supplier",
       JSON.stringify({ contact_name: "Lin Vendor", contact_email: "lin@example.com", contact_phone: "+1 555 0102" }),
     );
+    const canonicalSupplierLinks = await owner.$queryRawUnsafe<Array<{
+      supplierCount: bigint;
+      companySupplierCount: bigint;
+      linkedOrderSupplierCount: bigint;
+    }>>(`
+      SELECT
+        (SELECT count(*) FROM "Supplier" WHERE "officeId" = $2) AS "supplierCount",
+        (SELECT count(*) FROM "CompanySupplier" WHERE "companyId" = $3) AS "companySupplierCount",
+        (SELECT count(*) FROM "OrderSupplier" WHERE order_id = $1::uuid AND supplier_registry_id IS NOT NULL)
+          AS "linkedOrderSupplierCount"
+    `, created.orderId, officeId, companyA.id);
+    assert.deepEqual(canonicalSupplierLinks.map((row) => ({
+      supplierCount: Number(row.supplierCount),
+      companySupplierCount: Number(row.companySupplierCount),
+      linkedOrderSupplierCount: Number(row.linkedOrderSupplierCount),
+    })), [{ supplierCount: 3, companySupplierCount: 3, linkedOrderSupplierCount: 3 }]);
     const detail = await getProcurementRequestFromDatabase(workflowDatabase, customerA, created.orderId);
     assert(detail);
     const vendorsByName = new Map(detail.vendors.map((vendor) => [vendor.name, vendor]));
@@ -648,7 +679,6 @@ async function main() {
     assert(!clientSource.includes("PROCUREMENT_CUSTOMER_MAP_JSON"));
     console.log("Procurement workflow database contract passed.");
   } finally {
-    await owner.$executeRawUnsafe("DELETE FROM customers WHERE id IN ($1::uuid, $2::uuid)", customerA, customerB).catch(() => undefined);
     await app.office.deleteMany({ where: { id: { in: [officeId, officeBId] } } }).catch(() => undefined);
     await Promise.all([
       app.$disconnect(),
