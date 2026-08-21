@@ -28,6 +28,8 @@ Use this file for chronological implementation notes that future agents should s
 - Files above 3 MB are uploaded in bounded chunks so the 10 MB product limit
   does not hit Vercel's 4.5 MB function request limit. Chunks use the existing
   `CompanyDocument` table and are deleted after assembly or expiry.
+- Original-file downloads use a 64 KB `ReadableStream` so the response path
+  remains valid for files above the platform's buffered response limit.
 - Files changed: Prisma schema and migration, company document ingestion,
   Context agent and authenticated routes, internal chat, portal removal,
   canonical memory taxonomy, app-role allowlist, focused tests, and release

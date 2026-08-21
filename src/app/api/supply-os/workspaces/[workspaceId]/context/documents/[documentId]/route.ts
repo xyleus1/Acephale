@@ -5,6 +5,23 @@ import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 
 export const runtime = "nodejs";
 
+const DOWNLOAD_CHUNK_BYTES = 64 * 1024;
+
+function streamDocument(bytes: Buffer) {
+  let offset = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= bytes.length) {
+        controller.close();
+        return;
+      }
+      const end = Math.min(offset + DOWNLOAD_CHUNK_BYTES, bytes.length);
+      controller.enqueue(new Uint8Array(bytes.subarray(offset, end)));
+      offset = end;
+    },
+  });
+}
+
 export async function GET(
   _request: Request,
   route: { params: Promise<{ workspaceId: string; documentId: string }> },
@@ -18,7 +35,7 @@ export async function GET(
       workspaceId,
       documentId,
     });
-    return new NextResponse(new Uint8Array(document.bytes), {
+    return new NextResponse(streamDocument(document.bytes), {
       headers: {
         "content-type": document.mimeType,
         "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(document.name)}`,

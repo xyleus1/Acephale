@@ -17,6 +17,8 @@
 - Browser uploads larger than 3 MB are split below Vercel's request limit,
   staged temporarily in `CompanyDocument`, assembled once, and cleaned up.
   The user-facing maximum remains 10 MB without another storage table.
+- Original files are returned as a 64 KB byte stream, so downloads do not hit
+  the non-streaming function response limit after a successful large upload.
 - CSV, TXT, Markdown, text PDFs, and STL geometry are parsed deterministically.
   Images, Word, and Excel use model extraction when configured. Every parsed
   result is saved as Markdown and reused by the agent.
