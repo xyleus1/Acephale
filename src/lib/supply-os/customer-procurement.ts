@@ -15,6 +15,9 @@ export type CustomerProcurementListItem = {
   material: string;
   specification: string | null;
   requestContext: Record<string, unknown>;
+  supplierCount: number;
+  contactedCount: number;
+  responseCount: number;
   updatedAt: string;
 };
 
@@ -120,6 +123,9 @@ export function customerProcurementDraftItem(
       source: { campaign: CUSTOMER_PROCUREMENT_CAMPAIGN, request_id: requestId },
       logistics: { destination: draft.deliveryLocation },
     },
+    supplierCount: 0,
+    contactedCount: 0,
+    responseCount: 0,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -143,7 +149,8 @@ export function customerProcurementMatchesWorkspace(
   const source = order.requestContext.source;
   if (!source || typeof source !== "object" || Array.isArray(source)) return false;
   const record = source as Record<string, unknown>;
-  if (record.campaign !== CUSTOMER_PROCUREMENT_CAMPAIGN) return false;
   if (workspaceId) return record.workspace_id === workspaceId;
-  return record.workspace_id === null && record.company_name === companyName;
+  return record.campaign === CUSTOMER_PROCUREMENT_CAMPAIGN
+    && record.workspace_id === null
+    && record.company_name === companyName;
 }

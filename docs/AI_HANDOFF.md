@@ -2,6 +2,33 @@
 
 ## Latest Update
 
+### Inventory and sourcing now has a supplier Messages view
+
+- A visible Inventory and Messages tab switch now separates BOM and request
+  intake from active supplier communication.
+- Messages aggregates active workspace-linked Neon procurement campaigns and
+  active historical Derya procurement records. It shows manufacturers found,
+  contacted receipts, responses, deterministic situation reads, and purchase
+  order readiness. Completed and canceled work is excluded.
+- Current workflow lists count contact only when `order_vendors` carries a
+  Gmail delivery reference, and count response only when a non-empty quote is
+  stored. Provider message IDs remain server-only.
+- Clicking a current manufacturer resolves the opaque workflow reference under
+  the authenticated customer, verifies the saved supplier email is in the
+  thread, and reads the exact conversation from a connected Gmail account in
+  the same office. Historical workstreams use their stored office-scoped email
+  records and exact approved draft text as a fallback.
+- Missing Gmail access is explicit. The page keeps the real counts but does not
+  invent a transcript.
+- Historical pagination is explicit. When older records remain, the page says
+  the totals cover loaded history and provides a Load older activity control.
+- Manufacturer purchase order readiness requires an exact selected supplier in
+  the workflow decision receipt. Order-level readiness is never copied onto
+  every manufacturer.
+- The surface is read-only. Supplier sends, workflow decisions, quote review,
+  approvals, and purchase order release keep their existing controls.
+
+
 ### Context chat can prepare confirmed procurement requests
 
 - An explicit request to create, add, start, or run procurement now produces a

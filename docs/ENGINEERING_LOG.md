@@ -5837,3 +5837,35 @@ Use this file for chronological implementation notes that future agents should s
 - Failed/skipped checks: A live model-created confirmation was not run because
   this isolated worktree has no `OPENAI_API_KEY`. Structured-output behavior is
   covered by the agent contract and the existing production model path.
+
+### 2026-08-21 - Add active supplier Messages and exact conversation reads
+
+- Branch: `feature/active-sourcing-conversations`, based on current
+  `origin/main` commit `e0dc36c`.
+- Task: Add the missing supplier activity view inside Inventory and sourcing so
+  operators can see outreach scale, responses, exact messages, situation, and
+  purchase order readiness without leaving the dashboard.
+- Files changed: Procurement workflow projections, tenant-scoped conversation
+  readers and routes, Inventory and Messages tabs, supplier activity table and
+  dossier, responsive styles, focused contracts, decisions, and handoff.
+- Safety: New workflow Gmail identifiers remain server-only. Conversation reads
+  require the authenticated customer order, exact manufacturer, same-office
+  Gmail account, and supplier email participant. Historical threads remain
+  office and workspace scoped. The feature adds no send, approval, status,
+  schema, or dependency mutation.
+- Review fixes: Polling is keyed to stable request and manufacturer IDs, current
+  counts exclude completed or canceled work, historical pagination is visible,
+  manually recorded responses cannot display as zero, long threads retain the
+  newest replies, and PO readiness requires an exact selected manufacturer.
+- Workspace, company fallback, and active-status filters execute in the Neon
+  query before its 50-row limit, so newer unrelated or completed orders cannot
+  hide an older active request.
+- Verification: Active sourcing contract, Atlas sourcing contract, procurement
+  workflow contract, GUILD2 workflow contract, operations UI contract, product
+  copy policy, TypeScript, production build, diff hygiene, and changed-file
+  forbidden-character scan.
+- Caveat: Exact current-workflow transcripts require the automation sender to
+  be connected to the same Derya office. The dashboard reports that gap instead
+  of fabricating message content.
+- Follow-up: Replace the live Gmail lookup when Bourne exposes a durable,
+  customer-scoped communication ledger with message bodies and reply lineage.

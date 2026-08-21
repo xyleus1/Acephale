@@ -30,6 +30,7 @@ assert.deepEqual(normalizeProcurementVendor({
   name: "Supplier One",
   website: "https://example.com/",
   contact: { name: "Ada Buyer", email: "ada@example.com", phone: "+1 555 0100" },
+  contacted: false,
   status: "shortlisted",
   research: { source: "public" },
   quote: { amount: 100 },
@@ -278,8 +279,10 @@ assert.equal(duplicate.retryWake, false);
 assert.equal(database.state.orders.size, 1, "A duplicate key must not create a second order.");
 
 const listQueryValues: unknown[][] = [];
+const listQueries: string[] = [];
 const listDatabase = {
-  async $queryRawUnsafe<T>(_query: string, ...values: unknown[]): Promise<T> {
+  async $queryRawUnsafe<T>(query: string, ...values: unknown[]): Promise<T> {
+    listQueries.push(query);
     listQueryValues.push(values);
     return [{
       id: first.orderId,
@@ -291,6 +294,9 @@ const listDatabase = {
       material: "6061-T651 aluminum plate",
       specification: "6.35 mm nominal, precision-sawn blanks",
       requestContext: { source: { source_sku: "GUILD2-001" } },
+      supplierCount: "6",
+      contactedCount: "4",
+      responseCount: "2",
       updatedAt: "2026-08-18T20:00:00.000Z",
     }] as T;
   },
@@ -298,10 +304,19 @@ const listDatabase = {
     return 0;
   },
 };
-const listed = await listProcurementRequestsFromDatabase(listDatabase, customerA, 75, "GUILD2");
-assert.deepEqual(listQueryValues, [[customerA, 50, "GUILD2"]], "List reads must remain customer-scoped, campaign-filtered, and capped at 50 rows.");
+const listed = await listProcurementRequestsFromDatabase(listDatabase, customerA, 75, "GUILD2", {
+  sourceWorkspaceId: "workspace-a",
+  activeOnly: true,
+});
+assert.deepEqual(listQueryValues, [[customerA, 50, "GUILD2", "workspace-a", null, true]], "List reads must filter customer, campaign, workspace, and active status before applying the 50-row cap.");
+assert.match(listQueries[0] ?? "", /workspace_id[\s\S]+orders\.status NOT IN[\s\S]+ORDER BY[\s\S]+LIMIT \$2/);
 assert.equal(listed[0]?.requestContext.source instanceof Object, true);
 assert.equal((listed[0]?.requestContext.source as Record<string, unknown>).source_sku, "GUILD2-001");
+assert.deepEqual({
+  suppliers: listed[0]?.supplierCount,
+  contacted: listed[0]?.contactedCount,
+  responses: listed[0]?.responseCount,
+}, { suppliers: 6, contacted: 4, responses: 2 });
 
 await assert.rejects(
   createProcurementRequestInDatabase(database, customerA, { ...validInput, quantity: 11 }),
@@ -439,6 +454,8 @@ assert(workflowSource.includes("claim.updated_at <= now() - interval '30 seconds
 assert(workflowSource.includes("orders.status = 'new'"), "Wake retries must only target queued orders.");
 assert(workflowSource.includes("AND orders.customer_id = $2::uuid"), "Order detail reads must scope by customer.");
 assert(workflowSource.includes('orders.request_context AS "requestContext"'), "Order lists must restore stored request context.");
+assert(workflowSource.includes('AS "contactedCount"'), "Order lists must expose a bounded supplier-contact count without leaking message IDs.");
+assert(workflowSource.includes('AS "responseCount"'), "Order lists must expose recorded supplier-response counts.");
 assert(workflowSource.includes("limit = 50"), "The recent order list must cover all 38 GUILD2 sourcing lines.");
 assert(workflowSource.includes("AND customer_id = $2::uuid"), "BOM reads must scope by customer.");
 assert(workflowSource.includes("AbortSignal.timeout(3_000)"), "The webhook must use a short timeout.");

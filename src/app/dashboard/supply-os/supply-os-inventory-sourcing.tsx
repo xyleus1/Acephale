@@ -1,11 +1,13 @@
 "use client";
 
+import * as Tabs from "@radix-ui/react-tabs";
 import {
   ArrowRight,
   CheckCircle2,
   ChevronUp,
   LoaderCircle,
   MapPin,
+  MessageSquare,
   PackageSearch,
   Sparkles,
   TriangleAlert,
@@ -53,6 +55,7 @@ import type {
   SupplyIntelligenceProfile,
   SupplierResearchCampaign,
 } from "./supply-os-sourcing-research-types";
+import { ActiveSourcingWorkspace } from "./supply-os-active-sourcing";
 import { SupplyOsSharedWorkspace } from "./supply-os-shared-workspace";
 
 export type PendingSourcingQueueItem = {
@@ -106,6 +109,8 @@ export function AtlasInventoryWorkspace({
   onOpenCustomerProcurement,
   researchRuns,
   procurementCases,
+  messageResearchRuns = [],
+  messageProcurementCases = [],
   intelligenceProfile,
   researchCampaign,
   researchCampaignState,
@@ -140,6 +145,8 @@ export function AtlasInventoryWorkspace({
   onOpenCustomerProcurement: (item: AtlasInventoryItem, order: Guild2ProcurementOrderState) => void;
   researchRuns: SavedSourcingResearchRun[];
   procurementCases: SavedProcurementCase[];
+  messageResearchRuns?: SavedSourcingResearchRun[];
+  messageProcurementCases?: SavedProcurementCase[];
   intelligenceProfile: SupplyIntelligenceProfile | null;
   researchCampaign?: SupplierResearchCampaign | null;
   researchCampaignState?: "idle" | "running" | "complete" | "error";
@@ -451,6 +458,12 @@ export function AtlasInventoryWorkspace({
       exit={reduceMotion ? undefined : { opacity: 0, x: -10 }}
       transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
     >
+      <Tabs.Root className={styles.inventoryTabs} defaultValue="inventory">
+        <Tabs.List className={styles.inventoryTabList} aria-label="Inventory and supplier activity views">
+          <Tabs.Trigger value="inventory">Inventory</Tabs.Trigger>
+          <Tabs.Trigger value="messages"><MessageSquare size={14} /> Messages</Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="inventory" className={styles.inventoryTabPanel}>
       {workspaceId && canImportSupplyData ? (
         <details className={styles.sourcingCsvImport}>
           <summary>Import parts CSV</summary>
@@ -846,6 +859,23 @@ export function AtlasInventoryWorkspace({
           </div>
         ) : null}
       </div>
+        </Tabs.Content>
+        <Tabs.Content value="messages" className={styles.inventoryTabPanel}>
+          <ActiveSourcingWorkspace
+            workflowRequests={customerProcurementOrders}
+            historicalRuns={messageResearchRuns}
+            historicalCases={messageProcurementCases}
+            onOpenWorkflowRequest={(request) => onOpenCustomerProcurement(
+              customerProcurementItem(request),
+              customerProcurementOrderState(request),
+            )}
+            onOpenHistoricalRun={onOpenSavedResearch}
+            hasMoreHistorical={hasMore}
+            historicalPageState={pageState}
+            onLoadOlderHistorical={onLoadMore}
+          />
+        </Tabs.Content>
+      </Tabs.Root>
     </motion.section>
   );
 }

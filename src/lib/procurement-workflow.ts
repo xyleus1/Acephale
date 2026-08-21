@@ -52,7 +52,11 @@ type OrderDetailRow = {
   updatedAt: Date | string;
 };
 
-type OrderListRow = Omit<OrderDetailRow, "approvalRequestedAt" | "decisionSnapshot" | "vendors">;
+type OrderListRow = Omit<OrderDetailRow, "approvalRequestedAt" | "decisionSnapshot" | "vendors"> & {
+  supplierCount: number | string;
+  contactedCount: number | string;
+  responseCount: number | string;
+};
 
 export type ProcurementOrderVendor = {
   id: string;
@@ -63,6 +67,7 @@ export type ProcurementOrderVendor = {
     email: string | null;
     phone: string | null;
   } | null;
+  contacted: boolean;
   status: string;
   research: Record<string, unknown>;
   quote: Record<string, unknown> | null;
@@ -82,6 +87,28 @@ export type ProcurementOrderDetail = {
   decisionSnapshot: Record<string, unknown> | null;
   vendors: ProcurementOrderVendor[];
   updatedAt: string;
+};
+
+export type ProcurementOrderSummary = Omit<
+  ProcurementOrderDetail,
+  "approvalRequestedAt" | "decisionSnapshot" | "vendors"
+> & {
+  supplierCount: number;
+  contactedCount: number;
+  responseCount: number;
+};
+
+export type ProcurementListFilters = {
+  sourceWorkspaceId?: string;
+  sourceCompanyName?: string;
+  activeOnly?: boolean;
+};
+
+export type ProcurementVendorConversationRef = {
+  vendorId: string;
+  vendorName: string;
+  contactEmail: string | null;
+  gmailMessageId: string | null;
 };
 
 export class ProcurementWorkflowError extends Error {
@@ -392,6 +419,7 @@ export function normalizeProcurementVendor(value: unknown): ProcurementOrderVend
     name: typeof value.name === "string" && value.name.trim() ? value.name : "Unknown supplier",
     website: safeWebsite(value.website),
     contact: contact && (contact.name || contact.email || contact.phone) ? contact : null,
+    contacted: value.contacted === true,
     status: typeof value.status === "string" ? value.status : "unknown",
     research: isObject(value.research) ? value.research : {},
     quote: isObject(value.quote) ? value.quote : null,
@@ -481,6 +509,7 @@ export async function getProcurementRequestFromDatabase(
                   to_jsonb(order_vendors)->'identity'->>'contact_phone'
                 )
               )),
+              'contacted', NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL,
               'status', COALESCE(to_jsonb(order_vendors)->>'status', 'unknown'),
               'research', COALESCE(
                 to_jsonb(order_vendors)->'research',
@@ -516,11 +545,77 @@ export async function getProcurementRequest(customerId: string, orderId: string)
   return getProcurementRequestFromDatabase(externalDatabase(), customerId, orderId);
 }
 
+export async function getProcurementVendorConversationRefFromDatabase(
+  database: RawDatabase,
+  customerId: string,
+  orderId: string,
+  vendorId: string,
+) {
+  if (!uuidSchema.safeParse(orderId).success || !uuidSchema.safeParse(vendorId).success) {
+    throw new ProcurementWorkflowError("Supplier conversation not found.", "not_found");
+  }
+  try {
+    const rows = await database.$queryRawUnsafe<Array<{
+      vendorId: string;
+      vendorName: string | null;
+      contactEmail: string | null;
+      gmailMessageId: string | null;
+    }>>(`
+      SELECT
+        order_vendors.id::text AS "vendorId",
+        COALESCE(
+          to_jsonb(order_vendors)->>'name',
+          to_jsonb(order_vendors)->>'vendor_name',
+          to_jsonb(order_vendors)->>'supplier_name',
+          to_jsonb(order_vendors)->'identity'->>'name'
+        ) AS "vendorName",
+        COALESCE(
+          to_jsonb(order_vendors)->>'contact_email',
+          to_jsonb(order_vendors)->'contact'->>'email',
+          to_jsonb(order_vendors)->'identity'->>'contact_email'
+        ) AS "contactEmail",
+        NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') AS "gmailMessageId"
+      FROM order_vendors
+      JOIN orders
+        ON orders.id = order_vendors.order_id
+      WHERE order_vendors.id = $1::uuid
+        AND orders.id = $2::uuid
+        AND orders.customer_id = $3::uuid
+      LIMIT 1
+    `, vendorId, orderId, customerId);
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      vendorId: row.vendorId,
+      vendorName: row.vendorName?.trim() || "Unknown supplier",
+      contactEmail: row.contactEmail?.trim().toLowerCase() || null,
+      gmailMessageId: row.gmailMessageId?.trim() || null,
+    } satisfies ProcurementVendorConversationRef;
+  } catch (error) {
+    if (error instanceof ProcurementWorkflowError) throw error;
+    throw new ProcurementWorkflowError("The supplier conversation reference is unavailable.", "unavailable");
+  }
+}
+
+export async function getProcurementVendorConversationRef(
+  customerId: string,
+  orderId: string,
+  vendorId: string,
+) {
+  return getProcurementVendorConversationRefFromDatabase(
+    externalDatabase(),
+    customerId,
+    orderId,
+    vendorId,
+  );
+}
+
 export async function listProcurementRequestsFromDatabase(
   database: RawDatabase,
   customerId: string,
   limit = 25,
   sourceCampaign?: string,
+  filters: ProcurementListFilters = {},
 ) {
   try {
     const rows = await database.$queryRawUnsafe<OrderListRow[]>(`
@@ -534,6 +629,24 @@ export async function listProcurementRequestsFromDatabase(
         bill_of_materials.material,
         bill_of_materials.specification,
         orders.request_context AS "requestContext",
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM order_vendors
+          WHERE order_vendors.order_id = orders.id
+        ), 0) AS "supplierCount",
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM order_vendors
+          WHERE order_vendors.order_id = orders.id
+            AND NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL
+        ), 0) AS "contactedCount",
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM order_vendors
+          WHERE order_vendors.order_id = orders.id
+            AND jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
+            AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
+        ), 0) AS "responseCount",
         orders.updated_at AS "updatedAt"
       FROM orders
       JOIN bill_of_materials
@@ -541,9 +654,25 @@ export async function listProcurementRequestsFromDatabase(
         AND bill_of_materials.customer_id = orders.customer_id
       WHERE orders.customer_id = $1::uuid
         AND ($3::text IS NULL OR orders.request_context #>> '{source,campaign}' = $3::text)
+        AND ($4::text IS NULL OR orders.request_context #>> '{source,workspace_id}' = $4::text)
+        AND (
+          $5::text IS NULL
+          OR (
+            orders.request_context #>> '{source,workspace_id}' IS NULL
+            AND orders.request_context #>> '{source,company_name}' = $5::text
+          )
+        )
+        AND ($6::boolean = false OR orders.status NOT IN ('ordered', 'cancelled'))
       ORDER BY orders.updated_at DESC, orders.id DESC
       LIMIT $2
-    `, customerId, Math.min(Math.max(limit, 1), 50), sourceCampaign ?? null);
+    `,
+    customerId,
+    Math.min(Math.max(limit, 1), 50),
+    sourceCampaign ?? null,
+    filters.sourceWorkspaceId ?? null,
+    filters.sourceCompanyName ?? null,
+    filters.activeOnly === true,
+    );
     return rows.map((row) => ({
       id: row.id,
       status: row.status,
@@ -554,6 +683,9 @@ export async function listProcurementRequestsFromDatabase(
       material: row.material,
       specification: row.specification,
       requestContext: isObject(row.requestContext) ? row.requestContext : {},
+      supplierCount: numberValue(row.supplierCount),
+      contactedCount: numberValue(row.contactedCount),
+      responseCount: numberValue(row.responseCount),
       updatedAt: isoTimestamp(row.updatedAt) ?? new Date(0).toISOString(),
     }));
   } catch (error) {
@@ -562,8 +694,13 @@ export async function listProcurementRequestsFromDatabase(
   }
 }
 
-export async function listProcurementRequests(customerId: string, limit = 50, sourceCampaign?: string) {
-  return listProcurementRequestsFromDatabase(externalDatabase(), customerId, limit, sourceCampaign);
+export async function listProcurementRequests(
+  customerId: string,
+  limit = 50,
+  sourceCampaign?: string,
+  filters: ProcurementListFilters = {},
+) {
+  return listProcurementRequestsFromDatabase(externalDatabase(), customerId, limit, sourceCampaign, filters);
 }
 
 export async function requestBourneWorkflowWake(

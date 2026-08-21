@@ -17,6 +17,7 @@ const responseHeaders = {
 };
 const MAX_REQUEST_BYTES = 64_000;
 const SOURCE_CAMPAIGN_PATTERN = /^[A-Z0-9_-]{1,64}$/;
+const SOURCE_WORKSPACE_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 type ProcurementRouteSession = {
   userId: string;
@@ -151,7 +152,12 @@ export async function handleProcurementPost(
 
 export async function handleProcurementList(
   dependencies: ProcurementRouteDependencies = defaultRouteDependencies,
-  options: { sourceCampaign?: string | null } = {},
+  options: {
+    sourceCampaign?: string | null;
+    sourceWorkspaceId?: string | null;
+    sourceCompanyName?: string | null;
+    activeOnly?: boolean;
+  } = {},
 ) {
   const session = await dependencies.session();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
@@ -159,9 +165,21 @@ export async function handleProcurementList(
   if (sourceCampaign && !SOURCE_CAMPAIGN_PATTERN.test(sourceCampaign)) {
     return Response.json({ error: "Invalid procurement source campaign." }, { status: 400, headers: responseHeaders });
   }
+  const sourceWorkspaceId = options.sourceWorkspaceId?.trim() || undefined;
+  if (sourceWorkspaceId && !SOURCE_WORKSPACE_PATTERN.test(sourceWorkspaceId)) {
+    return Response.json({ error: "Invalid procurement source workspace." }, { status: 400, headers: responseHeaders });
+  }
+  const sourceCompanyName = options.sourceCompanyName?.trim() || undefined;
+  if (sourceCompanyName && (sourceCompanyName.length > 200 || /[\u0000-\u001f\u007f]/.test(sourceCompanyName))) {
+    return Response.json({ error: "Invalid procurement source company." }, { status: 400, headers: responseHeaders });
+  }
   try {
     const customerId = await dependencies.resolveCustomerId(session);
-    const requests = await dependencies.list(customerId, 50, sourceCampaign);
+    const requests = await dependencies.list(customerId, 50, sourceCampaign, {
+      sourceWorkspaceId,
+      sourceCompanyName,
+      activeOnly: options.activeOnly === true,
+    });
     return Response.json({ requests }, { headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);

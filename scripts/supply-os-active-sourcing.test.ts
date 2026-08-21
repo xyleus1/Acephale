@@ -1,0 +1,171 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  externalPoState,
+  externalSelectedVendorId,
+  externalSourcingActive,
+  externalVendorPoReady,
+  externalVendorPoState,
+  groupActiveHistoricalSourcing,
+  groupHistoricalSourcing,
+  historicalPoState,
+  historicalPoReady,
+  historicalResponseCount,
+  historicalSourcingActive,
+  historicalSituation,
+  historicalSupplierContacted,
+  historicalSupplierResponded,
+} from "../src/app/dashboard/supply-os/supply-os-active-sourcing-model";
+import type { SavedProcurementCase } from "../src/app/dashboard/supply-os/supply-os-sourcing-research-types";
+import type { CustomerProcurementListItem } from "../src/lib/supply-os/customer-procurement";
+import type { Guild2ProcurementRequestDetail } from "../src/lib/supply-os/guild2-procurement";
+
+function sourcingCase(input: {
+  id: string;
+  supplier: string;
+  sent?: boolean;
+  replies?: number;
+  purchase?: "draft" | "pending" | "approved" | "released" | "acknowledged";
+}) {
+  return {
+    id: input.id,
+    status: "PLANNED",
+    taskKey: `case:${input.id}`,
+    input: {
+      researchRunId: "run-1",
+      researchInput: {
+        componentItemKey: "PART-1",
+        componentName: "Motor controller",
+        manufacturer: null,
+        mpn: null,
+        specification: "48 V",
+        targetCountry: null,
+        requestText: "Source 20 motor controllers",
+      },
+    },
+    result: {
+      stage: input.purchase === "pending" ? "APPROVAL_PENDING" : input.purchase ? "PURCHASE_READY" : "COMMERCIAL_CONFIRMATION",
+      selectedOption: { name: input.supplier },
+      purchaseRelease: input.purchase === "released" || input.purchase === "acknowledged"
+        ? { state: input.purchase === "acknowledged" ? "ACKNOWLEDGED" : "RELEASED" }
+        : undefined,
+    },
+    quoteCycle: {
+      result: {
+        release: input.sent ? { channel: "EMAIL" } : null,
+        responses: Array.from({ length: input.replies ?? 0 }, (_, index) => ({ responseHash: String(index) })),
+        connectedReplies: [],
+      },
+    },
+    supplierEmailAction: input.sent ? { result: { state: "SENT" } } : null,
+    purchaseDraft: input.purchase === "draft" ? { id: "draft" } : null,
+    purchaseAction: input.purchase === "approved" || input.purchase === "pending"
+      ? { approval: { status: input.purchase === "approved" ? "APPROVED" : "PENDING" } }
+      : null,
+    createdAt: "2026-08-21T00:00:00.000Z",
+    updatedAt: `2026-08-21T00:00:0${input.id}.000Z`,
+  } as unknown as SavedProcurementCase;
+}
+
+const contacted = sourcingCase({ id: "1", supplier: "Supplier one", sent: true });
+const responded = sourcingCase({ id: "2", supplier: "Supplier two", sent: true, replies: 1, purchase: "draft" });
+const released = sourcingCase({ id: "3", supplier: "Supplier three", sent: true, replies: 1, purchase: "released" });
+assert.equal(historicalSupplierContacted(contacted), true);
+assert.equal(historicalSupplierResponded(contacted), false);
+assert.equal(historicalSupplierResponded(responded), true);
+assert.equal(historicalResponseCount(responded), 1, "Stored responses must remain visible when connected replies is an empty array.");
+assert.equal(historicalPoState(responded), "PO draft ready");
+assert.equal(historicalPoState(released), "Purchase order sent");
+assert.equal(historicalPoReady(sourcingCase({ id: "4", supplier: "Pending supplier", purchase: "pending" })), false);
+assert.equal(historicalSourcingActive(released), true);
+assert.equal(historicalSourcingActive(sourcingCase({ id: "5", supplier: "Complete supplier", purchase: "acknowledged" })), false);
+assert.match(historicalSituation(contacted), /waiting for a supplier response/i);
+assert.equal(externalPoState("awaiting_order_approval"), "Ready for PO approval");
+
+const externalRequest = {
+  id: "request-1",
+  status: "awaiting_order_approval",
+  progress: null,
+  neededBy: null,
+  quantity: 20,
+  unit: "units",
+  material: "Controller",
+  specification: null,
+  requestContext: {},
+  supplierCount: 2,
+  contactedCount: 2,
+  responseCount: 2,
+  updatedAt: "2026-08-21T00:00:00.000Z",
+} satisfies CustomerProcurementListItem;
+const externalDetail = {
+  ...externalRequest,
+  approvalRequestedAt: "2026-08-21T00:00:00.000Z",
+  decisionSnapshot: { selection: { selected_vendor_id: "vendor-2" } },
+  vendors: [],
+} satisfies Guild2ProcurementRequestDetail;
+assert.equal(externalSelectedVendorId(externalDetail), "vendor-2");
+assert.equal(externalVendorPoReady(externalRequest, externalDetail, "vendor-1"), false);
+assert.equal(externalVendorPoReady(externalRequest, externalDetail, "vendor-2"), true);
+assert.equal(externalVendorPoState(externalRequest, externalDetail, "vendor-1"), "Not selected for PO");
+assert.equal(externalVendorPoState(externalRequest, { ...externalDetail, decisionSnapshot: null }, "vendor-1"), "PO approval pending, supplier selection not recorded");
+assert.equal(externalSourcingActive(externalRequest), true);
+assert.equal(externalSourcingActive({ ...externalRequest, status: "ordered" }), false);
+assert.equal(externalSourcingActive({ ...externalRequest, status: "cancelled" }), false);
+
+const grouped = groupHistoricalSourcing([], [contacted, responded, released]);
+assert.equal(grouped.length, 1);
+assert.deepEqual({
+  suppliers: grouped[0]?.supplierCount,
+  contacted: grouped[0]?.contactedCount,
+  responses: grouped[0]?.responseCount,
+  poReady: grouped[0]?.poReadyCount,
+}, { suppliers: 3, contacted: 3, responses: 2, poReady: 2 });
+const activeGrouped = groupActiveHistoricalSourcing([], [contacted, responded, released, sourcingCase({
+  id: "6",
+  supplier: "Completed supplier",
+  sent: true,
+  replies: 1,
+  purchase: "acknowledged",
+})]);
+assert.deepEqual({
+  suppliers: activeGrouped[0]?.supplierCount,
+  responses: activeGrouped[0]?.responseCount,
+  poReady: activeGrouped[0]?.poReadyCount,
+}, { suppliers: 3, responses: 2, poReady: 2 }, "Inactive suppliers must not inflate active sourcing totals.");
+
+const root = process.cwd();
+const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
+const inventory = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx"), "utf8");
+const active = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-active-sourcing.tsx"), "utf8");
+const workflow = readFileSync(resolve(root, "src/lib/procurement-workflow.ts"), "utf8");
+const conversation = readFileSync(resolve(root, "src/lib/procurement-conversation.ts"), "utf8");
+const conversationModel = readFileSync(resolve(root, "src/lib/procurement-conversation-model.ts"), "utf8");
+const workflowRoute = readFileSync(resolve(root, "src/app/api/procurement/requests/[orderId]/vendors/[vendorId]/conversation/route.ts"), "utf8");
+const historicalRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/[caseId]/conversation/route.ts"), "utf8");
+
+assert.match(inventory, /Tabs\.Trigger value="messages"[\s\S]*Messages/);
+assert.match(inventory, /<ActiveSourcingWorkspace/);
+assert.match(dashboard, /messageResearchRuns=\{researchRuns\}/);
+assert.match(dashboard, /messageProcurementCases=\{procurementCases\}/);
+assert.match(dashboard, /activeOnly: "true"/);
+assert.match(dashboard, /params\.set\("sourceWorkspaceId", sourcingWorkspaceId\)/);
+assert.match(active, /Reached out/);
+assert.match(active, /Responded/);
+assert.match(active, /Conversation/);
+assert.match(active, /Situation read/);
+assert.match(active, /Purchase order/);
+assert.match(active, /activeWorkflowRequests/);
+assert.match(active, /Historical totals cover loaded records/);
+assert.match(workflow, /AS "contactedCount"/);
+assert.match(workflow, /AS "responseCount"/);
+assert.match(workflow, /orders\.customer_id = \$3::uuid/);
+assert.match(conversation, /thread: \{ officeId \}/);
+assert.match(conversation, /officeId: args\.officeId/);
+assert.match(conversation, /procurementConversationParticipantEmails\(anchor\)\.includes\(contactEmail\)/);
+assert.match(conversationModel, /fromEmail\.toLowerCase\(\) === normalizedContact \? "INBOUND"/);
+assert.match(workflowRoute, /resolveProcurementCustomerId\(session\)/);
+assert.match(historicalRoute, /supplyAccessContext\(session\)/);
+assert.doesNotMatch(active, /gmailMessageId|gmail_message_id/);
+
+console.log("Supply OS active sourcing and conversation contract passed.");

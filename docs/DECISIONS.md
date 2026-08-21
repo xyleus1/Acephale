@@ -16,6 +16,44 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-21 - Supplier activity joins workflow receipts to connected Gmail
+
+- Status: accepted
+- Owner: product and engineering
+- Context: New sourcing requests execute in the customer-scoped Neon workflow,
+  while Derya still retains older supplier communication workstreams. Inventory
+  showed neither the new workflow outreach counts nor the historical exact
+  conversations, so operators had to inspect separate systems.
+- Decision: Add a Messages view inside Inventory and sourcing. Current workflow
+  requests expose only aggregate supplier, contacted, and response counts plus
+  a boolean contact receipt per manufacturer. The browser never receives the
+  workflow Gmail message ID. On a manufacturer click, the authenticated server
+  resolves that opaque ID inside the mapped customer order, requires the saved
+  supplier email to be a participant, and reads the exact thread only from an
+  active Gmail account in the same Derya office. Historical Derya procurement
+  cases read their existing office-scoped email threads.
+- Approval boundary: This view is read-only. It does not send email, change a
+  workflow status, approve a supplier, place an order, or convert an email into
+  commercial truth. Existing Bourne and Derya approval gates remain in force.
+- Failure boundary: Counts remain visible when the sending inbox is not
+  connected, but the transcript states that it is unavailable. Derya never
+  invents message text or infers contact from supplier discovery alone.
+- Completeness boundary: The active view excludes completed and canceled work.
+  It accepts any Neon campaign linked to the selected workspace. If older
+  historical pages remain, the UI labels the totals as loaded history and lets
+  the operator load the next page.
+- Purchase boundary: A manufacturer is PO-ready only when the order is at the
+  approval or ordered stage and the decision receipt names that exact supplier.
+  A missing supplier selection is reported as missing instead of copying the
+  order status to every manufacturer.
+- Consequences: Operators can see reached-out, responded, situation, and PO
+  readiness states from one page, then open the exact supplier thread when its
+  provenance is available. The historical engine remains audit-only and is not
+  reactivated for new sourcing work.
+- Revisit when: The procurement workflow stores a first-class, customer-scoped
+  communication ledger that can replace live Gmail lookup without exposing
+  provider identifiers to the browser.
+
 ### 2026-08-21 - Context procurement requires confirmation and layered evidence
 
 - Status: accepted

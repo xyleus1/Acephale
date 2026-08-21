@@ -1,0 +1,399 @@
+"use client";
+
+import {
+  ArrowRight,
+  ExternalLink,
+  LoaderCircle,
+  Mail,
+  MessageSquare,
+  PackageCheck,
+  RefreshCw,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
+import {
+  type CustomerProcurementListItem,
+} from "@/lib/supply-os/customer-procurement";
+import {
+  guild2CustomerProcurementStatusLabel,
+  guild2ProcurementContactSummary,
+  guild2ProcurementEvidenceSummary,
+  guild2ProcurementQuoteSummary,
+  type Guild2ProcurementRequestDetail,
+} from "@/lib/supply-os/guild2-procurement";
+import {
+  externalPoReady,
+  externalPoState,
+  externalSourcingActive,
+  externalVendorPoReady,
+  externalVendorPoState,
+  groupActiveHistoricalSourcing,
+  historicalPoReady,
+  historicalPoState,
+  historicalResponseCount,
+  historicalSituation,
+  historicalSupplierContacted,
+  historicalSupplierResponded,
+} from "./supply-os-active-sourcing-model";
+import type {
+  SavedProcurementCase,
+  SavedSourcingResearchRun,
+} from "./supply-os-sourcing-research-types";
+import styles from "./supply-os-logistics.module.css";
+
+type Selection = { kind: "workflow" | "historical"; id: string };
+type ConversationState = "idle" | "loading" | "ready" | "error";
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function responseCountLabel(responses: number) {
+  return `${responses} response${responses === 1 ? "" : "s"}`;
+}
+
+function outreachLabel(contacted: number, suppliers: number) {
+  return `${contacted} of ${suppliers} contacted`;
+}
+
+function workflowSituation(
+  request: CustomerProcurementListItem,
+  detail: Guild2ProcurementRequestDetail,
+  vendor: Guild2ProcurementRequestDetail["vendors"][number],
+) {
+  const poState = externalVendorPoState(request, detail, vendor.id);
+  if (poState === "Purchase order placed") return "The purchase order for this manufacturer was approved and placed.";
+  if (poState === "Ready for PO approval") return "This manufacturer is selected and ready for final purchase order approval.";
+  if (poState === "Not selected for PO") return "This manufacturer was not selected for the purchase order.";
+  if (poState.includes("supplier selection not recorded")) return "The order advanced, but the workflow did not record which manufacturer was selected.";
+  if (vendor.quote) return "The manufacturer responded and commercial terms are recorded for review.";
+  if (vendor.contacted) return "The manufacturer was contacted. The workflow is waiting for a response.";
+  return "The manufacturer was identified, but no supplier contact receipt is recorded yet.";
+}
+
+function historicalDraft(procurementCase: SavedProcurementCase | null) {
+  if (!procurementCase) return null;
+  const sent = procurementCase.supplierEmailAction?.input.message;
+  if (sent) return { ...sent, label: procurementCase.supplierEmailAction?.result?.state === "SENT" ? "Sent message record" : "Approved message" };
+  const draft = procurementCase.supplierEmailDraft?.result?.message;
+  return draft ? { ...draft, label: "Draft, not sent" } : null;
+}
+
+async function fetchJson<T>(url: string, signal?: AbortSignal) {
+  const response = await fetch(url, { cache: "no-store", signal, headers: { accept: "application/json" } });
+  const payload = await response.json().catch(() => null) as (T & { error?: string }) | null;
+  if (!response.ok) throw new Error(payload?.error ?? "The supplier activity could not be loaded.");
+  return payload as T;
+}
+
+function ConversationMessages({
+  conversation,
+  state,
+  error,
+  fallbackCase,
+}: {
+  conversation: ProcurementConversation | null;
+  state: ConversationState;
+  error: string | null;
+  fallbackCase: SavedProcurementCase | null;
+}) {
+  const draft = historicalDraft(fallbackCase);
+  if (state === "loading") return <div className={styles.activeConversationEmpty}><LoaderCircle size={17} /> Loading exact thread</div>;
+  if (state === "error") return <div className={styles.activeConversationEmpty}><MessageSquare size={17} /><span>{error ?? "Conversation unavailable."}</span></div>;
+  if (conversation?.available && conversation.messages.length) {
+    return (
+      <div className={styles.activeConversationMessages}>
+        {conversation.messages.map((message) => (
+          <article key={message.id} data-direction={message.direction.toLowerCase()}>
+            <header>
+              <span><strong>{message.direction === "OUTBOUND" ? "Derya" : message.fromName ?? message.fromEmail}</strong><small>{message.direction === "OUTBOUND" ? `To ${message.toEmails.join(", ") || "supplier"}` : message.fromEmail}</small></span>
+              <time>{formatDate(message.sentAt)}</time>
+            </header>
+            {message.subject ? <h4>{message.subject}</h4> : null}
+            <p>{message.body || "Message body unavailable."}</p>
+            {message.truncated ? <small>Message body truncated at the dashboard safety limit.</small> : null}
+          </article>
+        ))}
+      </div>
+    );
+  }
+  if (draft) {
+    return (
+      <div className={styles.activeConversationMessages}>
+        <article data-direction="outbound">
+          <header><span><strong>{draft.label}</strong><small>To {draft.recipient}</small></span></header>
+          <h4>{draft.subject}</h4>
+          <p>{draft.body}</p>
+        </article>
+        <div className={styles.activeConversationEmpty}><MessageSquare size={17} /><span>{conversation?.unavailableReason ?? "No connected thread is recorded."}</span></div>
+      </div>
+    );
+  }
+  return <div className={styles.activeConversationEmpty}><MessageSquare size={17} /><span>{conversation?.unavailableReason ?? "No message or connected conversation is recorded for this supplier."}</span></div>;
+}
+
+export function ActiveSourcingWorkspace({
+  workflowRequests,
+  historicalRuns,
+  historicalCases,
+  onOpenWorkflowRequest,
+  onOpenHistoricalRun,
+  hasMoreHistorical,
+  historicalPageState,
+  onLoadOlderHistorical,
+}: {
+  workflowRequests: CustomerProcurementListItem[];
+  historicalRuns: SavedSourcingResearchRun[];
+  historicalCases: SavedProcurementCase[];
+  onOpenWorkflowRequest: (request: CustomerProcurementListItem) => void;
+  onOpenHistoricalRun: (run: SavedSourcingResearchRun) => void;
+  hasMoreHistorical: boolean;
+  historicalPageState: "idle" | "loading" | "error";
+  onLoadOlderHistorical: () => void;
+}) {
+  const activeWorkflowRequests = useMemo(
+    () => workflowRequests.filter(externalSourcingActive),
+    [workflowRequests],
+  );
+  const historicalGroups = useMemo(
+    () => groupActiveHistoricalSourcing(historicalRuns, historicalCases),
+    [historicalCases, historicalRuns],
+  );
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [workflowDetail, setWorkflowDetail] = useState<Guild2ProcurementRequestDetail | null>(null);
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailRevision, setDetailRevision] = useState(0);
+  const [manufacturerId, setManufacturerId] = useState<string | null>(null);
+  const [conversation, setConversation] = useState<ProcurementConversation | null>(null);
+  const [conversationState, setConversationState] = useState<ConversationState>("idle");
+  const [conversationError, setConversationError] = useState<string | null>(null);
+
+  const workflowRequest = selection?.kind === "workflow"
+    ? activeWorkflowRequests.find((request) => request.id === selection.id) ?? null
+    : null;
+  const historicalGroup = selection?.kind === "historical"
+    ? historicalGroups.find((group) => group.id === selection.id) ?? null
+    : null;
+  const historicalCase = historicalGroup?.cases.find((procurementCase) => procurementCase.id === manufacturerId)
+    ?? historicalGroup?.cases[0]
+    ?? null;
+  const workflowVendor = workflowDetail?.vendors.find((vendor) => vendor.id === manufacturerId)
+    ?? workflowDetail?.vendors[0]
+    ?? null;
+  const workflowRequestId = workflowRequest?.id ?? null;
+  const workflowRequestUpdatedAt = workflowRequest?.updatedAt ?? null;
+  const workflowVendorId = workflowVendor?.id ?? null;
+  const historicalCaseId = historicalCase?.id ?? null;
+
+  useEffect(() => {
+    const selectionValid = selection?.kind === "workflow"
+      ? activeWorkflowRequests.some((request) => request.id === selection.id)
+      : selection?.kind === "historical"
+        ? historicalGroups.some((group) => group.id === selection.id)
+        : false;
+    if (selectionValid) return;
+    if (activeWorkflowRequests[0]) setSelection({ kind: "workflow", id: activeWorkflowRequests[0].id });
+    else if (historicalGroups[0]) setSelection({ kind: "historical", id: historicalGroups[0].id });
+    else if (selection) setSelection(null);
+  }, [activeWorkflowRequests, historicalGroups, selection]);
+
+  useEffect(() => {
+    setConversation(null);
+    setConversationState("idle");
+    setConversationError(null);
+    if (!workflowRequestId) {
+      setWorkflowDetail(null);
+      setDetailState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    setWorkflowDetail(null);
+    setDetailState("loading");
+    setDetailError(null);
+    void fetchJson<Guild2ProcurementRequestDetail>(
+      `/api/procurement/requests/${encodeURIComponent(workflowRequestId)}`,
+      controller.signal,
+    ).then((detail) => {
+      setWorkflowDetail(detail);
+      setManufacturerId((current) => detail.vendors.some((vendor) => vendor.id === current)
+        ? current
+        : detail.vendors[0]?.id ?? null);
+      setDetailState("ready");
+    }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setWorkflowDetail(null);
+      setDetailState("error");
+      setDetailError(error instanceof Error ? error.message : "Supplier detail unavailable.");
+    });
+    return () => controller.abort();
+  }, [detailRevision, workflowRequestId, workflowRequestUpdatedAt]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const url = workflowRequestId && workflowVendorId
+      ? `/api/procurement/requests/${encodeURIComponent(workflowRequestId)}/vendors/${encodeURIComponent(workflowVendorId)}/conversation`
+      : historicalCaseId
+        ? `/api/supply-os/procurement-cases/${encodeURIComponent(historicalCaseId)}/conversation`
+        : null;
+    if (!url) {
+      setConversation(null);
+      setConversationState("idle");
+      return () => controller.abort();
+    }
+    setConversation(null);
+    setConversationState("loading");
+    setConversationError(null);
+    void fetchJson<{ conversation: ProcurementConversation }>(url, controller.signal)
+      .then((payload) => {
+        setConversation(payload.conversation);
+        setConversationState("ready");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setConversationState("error");
+        setConversationError(error instanceof Error ? error.message : "Conversation unavailable.");
+      });
+    return () => controller.abort();
+  }, [historicalCaseId, workflowRequestId, workflowRequestUpdatedAt, workflowVendorId]);
+
+  const workflowContacted = activeWorkflowRequests.reduce((sum, request) => sum + request.contactedCount, 0);
+  const workflowResponses = activeWorkflowRequests.reduce((sum, request) => sum + request.responseCount, 0);
+  const historicalContacted = historicalGroups.reduce((sum, group) => sum + group.contactedCount, 0);
+  const historicalResponses = historicalGroups.reduce((sum, group) => sum + group.responseCount, 0);
+  const totalSuppliers = activeWorkflowRequests.reduce((sum, request) => sum + request.supplierCount, 0)
+    + historicalGroups.reduce((sum, group) => sum + group.supplierCount, 0);
+  const totalContacted = workflowContacted + historicalContacted;
+  const totalResponses = workflowResponses + historicalResponses;
+  const poReady = activeWorkflowRequests.filter(externalPoReady).length
+    + historicalGroups.reduce((sum, group) => sum + group.poReadyCount, 0);
+
+  const retryWorkflowDetail = () => {
+    if (!workflowRequest) return;
+    setDetailRevision((revision) => revision + 1);
+  };
+
+  return (
+    <section className={styles.activeSourcingWorkspace} aria-label="Active supplier messages">
+      <header className={styles.activeSourcingHeader}>
+        <span><small>Supplier activity</small><h2>Active sourcing</h2><p>Contact receipts, replies, exact threads, and purchase order readiness.</p></span>
+        <dl>
+          <div><dt>Reached out</dt><dd>{totalContacted}<small>of {totalSuppliers} manufacturers</small></dd></div>
+          <div><dt>Responded</dt><dd>{totalResponses}<small>supplier responses</small></dd></div>
+          <div><dt>PO ready</dt><dd>{poReady}<small>workstreams or orders</small></dd></div>
+        </dl>
+      </header>
+
+      <div className={styles.activeSourcingTableRegion}>
+        <table className={styles.activeSourcingTable}>
+          <thead><tr><th>Request</th><th>Outreach</th><th>Responses</th><th>Purchase order</th><th>Action</th></tr></thead>
+          <tbody>
+            {activeWorkflowRequests.map((request) => (
+              <tr key={`workflow:${request.id}`} data-active={selection?.kind === "workflow" && selection.id === request.id}>
+                <td><button type="button" onClick={() => setSelection({ kind: "workflow", id: request.id })}><span className={styles.inventoryStatusDot} /><span><small>Automated workflow</small><strong>{request.material}</strong><em>{request.quantity.toLocaleString("en-US")} {request.unit}</em></span></button></td>
+                <td>{outreachLabel(request.contactedCount, request.supplierCount)}</td>
+                <td>{responseCountLabel(request.responseCount)}</td>
+                <td>{externalPoState(request.status)}</td>
+                <td><button type="button" className={styles.sourcingQueueAction} onClick={() => setSelection({ kind: "workflow", id: request.id })}>Inspect <ArrowRight size={13} /></button></td>
+              </tr>
+            ))}
+            {historicalGroups.map((group) => (
+              <tr key={`historical:${group.id}`} data-active={selection?.kind === "historical" && selection.id === group.id}>
+                <td><button type="button" onClick={() => setSelection({ kind: "historical", id: group.id })}><span className={styles.inventoryStatusDot} /><span><small>Historical Derya workstream</small><strong>{group.title}</strong><em>{group.itemKey}</em></span></button></td>
+                <td>{outreachLabel(group.contactedCount, group.supplierCount)}</td>
+                <td>{responseCountLabel(group.responseCount)}</td>
+                <td>{group.poReadyCount ? `${group.poReadyCount} PO-ready` : "Not ready for PO"}</td>
+                <td><button type="button" className={styles.sourcingQueueAction} onClick={() => setSelection({ kind: "historical", id: group.id })}>Inspect <ArrowRight size={13} /></button></td>
+              </tr>
+            ))}
+            {!activeWorkflowRequests.length && !historicalGroups.length ? (
+              <tr data-empty="true"><td colSpan={5}><Mail size={18} /><strong>No active supplier outreach yet</strong><span>Start a sourcing request from Inventory. Contact and response receipts will appear here.</span></td></tr>
+            ) : null}
+          </tbody>
+        </table>
+        {hasMoreHistorical ? (
+          <div className={styles.activeSourcingLoadMore}>
+            <span>Historical totals cover loaded records. Load older activity to complete the historical view.</span>
+            <button type="button" onClick={onLoadOlderHistorical} disabled={historicalPageState === "loading"}>
+              {historicalPageState === "loading" ? <LoaderCircle size={13} /> : <RefreshCw size={13} />}
+              {historicalPageState === "loading" ? "Loading" : historicalPageState === "error" ? "Retry older activity" : "Load older activity"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {selection ? (
+        <section className={styles.activeSourcingDetail}>
+          <aside className={styles.activeManufacturerList}>
+            <header><small>Manufacturers</small><strong>{workflowRequest?.material ?? historicalGroup?.title}</strong></header>
+            {detailState === "loading" && workflowRequest ? <div className={styles.activeConversationEmpty}><LoaderCircle size={17} /> Loading manufacturers</div> : null}
+            {detailState === "error" && workflowRequest ? <div className={styles.activeConversationEmpty}><span>{detailError}</span><button type="button" onClick={retryWorkflowDetail}><RefreshCw size={13} /> Retry</button></div> : null}
+            {workflowDetail?.vendors.map((vendor) => (
+              <button key={vendor.id} type="button" data-active={workflowVendor?.id === vendor.id} onClick={() => setManufacturerId(vendor.id)}>
+                <span><strong>{vendor.name}</strong><small>{vendor.contact?.email ?? "Supplier email not saved"}</small></span>
+                <span><b>{vendor.quote ? "Responded" : vendor.contacted ? "Contacted" : "Identified"}</b><small>{guild2ProcurementQuoteSummary(vendor.quote)}</small></span>
+              </button>
+            ))}
+            {historicalGroup?.cases.map((procurementCase) => (
+              <button key={procurementCase.id} type="button" data-active={historicalCase?.id === procurementCase.id} onClick={() => setManufacturerId(procurementCase.id)}>
+                <span><strong>{procurementCase.result?.selectedOption.name ?? "Unknown supplier"}</strong><small>{procurementCase.supplierEmailAction?.input.message.recipient ?? "Supplier email not saved"}</small></span>
+                <span><b>{historicalSupplierResponded(procurementCase) ? "Responded" : historicalSupplierContacted(procurementCase) ? "Contacted" : "Not contacted"}</b><small>{historicalPoState(procurementCase)}</small></span>
+              </button>
+            ))}
+          </aside>
+
+          {workflowRequest && workflowDetail && workflowVendor ? (
+            <article className={styles.activeSupplierDossier}>
+              <header>
+                <span><small>Situation read</small><h3>{workflowVendor.name}</h3><p>{workflowSituation(workflowRequest, workflowDetail, workflowVendor)}</p></span>
+                <i data-ready={externalVendorPoReady(workflowRequest, workflowDetail, workflowVendor.id)}>{externalVendorPoState(workflowRequest, workflowDetail, workflowVendor.id)}</i>
+              </header>
+              <dl className={styles.activeSupplierFacts}>
+                <div><dt>Outreach</dt><dd>{workflowVendor.contacted ? "Gmail contact recorded" : "No contact receipt"}</dd></div>
+                <div><dt>Response</dt><dd>{workflowVendor.quote ? guild2ProcurementQuoteSummary(workflowVendor.quote) : "No quote recorded"}</dd></div>
+                <div><dt>Contact</dt><dd>{guild2ProcurementContactSummary(workflowVendor.contact).secondary}</dd></div>
+                <div><dt>Workflow</dt><dd>{guild2CustomerProcurementStatusLabel(workflowRequest.status)}</dd></div>
+              </dl>
+              <section className={styles.activeEvidenceRead}>
+                <small>Evidence read</small>
+                {guild2ProcurementEvidenceSummary(workflowVendor.research).map((entry) => <p key={entry}>{entry}</p>)}
+                {!guild2ProcurementEvidenceSummary(workflowVendor.research).length ? <p>No supplier evidence summary is available.</p> : null}
+              </section>
+              <section className={styles.activeConversationPanel}>
+                <header><span><MessageSquare size={16} /><strong>Conversation</strong></span>{conversation?.sourceUrl ? <a href={conversation.sourceUrl} target="_blank" rel="noreferrer">Open Gmail <ExternalLink size={12} /></a> : null}</header>
+                <ConversationMessages conversation={conversation} state={conversationState} error={conversationError} fallbackCase={null} />
+              </section>
+              <footer><button type="button" onClick={() => onOpenWorkflowRequest(workflowRequest)}>Open full sourcing request <ArrowRight size={13} /></button></footer>
+            </article>
+          ) : historicalGroup && historicalCase ? (
+            <article className={styles.activeSupplierDossier}>
+              <header>
+                <span><small>Situation read</small><h3>{historicalCase.result?.selectedOption.name ?? "Unknown supplier"}</h3><p>{historicalSituation(historicalCase)}</p></span>
+                <i data-ready={historicalPoReady(historicalCase)}>{historicalPoState(historicalCase)}</i>
+              </header>
+              <dl className={styles.activeSupplierFacts}>
+                <div><dt>Outreach</dt><dd>{historicalSupplierContacted(historicalCase) ? "Supplier contacted" : "Not contacted"}</dd></div>
+                <div><dt>Responses</dt><dd>{historicalResponseCount(historicalCase)}</dd></div>
+                <div><dt>Recipient</dt><dd>{historicalCase.supplierEmailAction?.input.message.recipient ?? historicalCase.supplierEmailDraft?.result?.message.recipient ?? "Not saved"}</dd></div>
+                <div><dt>PO state</dt><dd>{historicalPoState(historicalCase)}</dd></div>
+              </dl>
+              <section className={styles.activeConversationPanel}>
+                <header><span><MessageSquare size={16} /><strong>Conversation</strong></span>{conversation?.sourceUrl ? <a href={conversation.sourceUrl} target="_blank" rel="noreferrer">Open Gmail <ExternalLink size={12} /></a> : null}</header>
+                <ConversationMessages conversation={conversation} state={conversationState} error={conversationError} fallbackCase={historicalCase} />
+              </section>
+              {historicalGroup.run ? <footer><button type="button" onClick={() => onOpenHistoricalRun(historicalGroup.run!)}>Open full workstream <ArrowRight size={13} /></button></footer> : null}
+            </article>
+          ) : selection && detailState !== "loading" && detailState !== "error" ? (
+            <div className={styles.activeSourcingNoManufacturer}><PackageCheck size={22} /><strong>No manufacturer workstream yet</strong><p>Supplier research is still running. Contact receipts will appear after approved outreach.</p></div>
+          ) : null}
+        </section>
+      ) : null}
+    </section>
+  );
+}

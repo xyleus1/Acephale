@@ -61,6 +61,9 @@ const order = {
       company_name: "Dreamz",
     },
   },
+  supplierCount: 0,
+  contactedCount: 0,
+  responseCount: 0,
   updatedAt: "2026-08-18T00:00:00.000Z",
 } satisfies CustomerProcurementListItem;
 
@@ -69,6 +72,10 @@ assert.equal(customerProcurementMatchesWorkspace(order, "workspace-b", "Dreamz")
 assert.equal(customerProcurementMatchesWorkspace({
   ...order,
   requestContext: { source: { campaign: "GUILD2", workspace_id: "workspace-a" } },
-}, "workspace-a", "Dreamz"), false);
+}, "workspace-a", "Dreamz"), true, "Any customer-scoped workflow campaign linked to the selected workspace must be visible.");
+assert.equal(customerProcurementMatchesWorkspace({
+  ...order,
+  requestContext: { source: { campaign: "GUILD2", workspace_id: null, company_name: "Dreamz" } },
+}, null, "Dreamz"), false, "The company-name fallback remains limited to custom sourcing requests.");
 
 console.log("Customer procurement Bourne bridge checks passed.");

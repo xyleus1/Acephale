@@ -16,6 +16,7 @@ import {
 import {
   createProcurementRequestInDatabase,
   getProcurementRequestFromDatabase,
+  getProcurementVendorConversationRefFromDatabase,
   listProcurementRequestsFromDatabase,
   ProcurementWorkflowError,
   resolveProcurementCustomerId,
@@ -271,12 +272,44 @@ async function main() {
       email: "lin@example.com",
       phone: "+1 555 0102",
     });
+    assert.equal(vendorsByName.get("Example supplier")?.contacted, true);
+    assert.equal(vendorsByName.get("Nested contact supplier")?.contacted, false);
+    const exampleSupplierId = vendorsByName.get("Example supplier")?.id;
+    assert(exampleSupplierId);
+    assert.deepEqual(
+      await getProcurementVendorConversationRefFromDatabase(
+        workflowDatabase,
+        customerA,
+        created.orderId,
+        exampleSupplierId,
+      ),
+      {
+        vendorId: exampleSupplierId,
+        vendorName: "Example supplier",
+        contactEmail: "ada@example.com",
+        gmailMessageId: "must-not-leak",
+      },
+    );
+    assert.equal(
+      await getProcurementVendorConversationRefFromDatabase(
+        workflowDatabase,
+        customerB,
+        created.orderId,
+        exampleSupplierId,
+      ),
+      null,
+      "A foreign customer must not resolve the supplier message reference.",
+    );
     assert.equal("gmail_message_id" in detail, false);
     assert.equal("lease_owner" in detail, false);
     assert.equal("gmail_message_id" in (detail.vendors[0] ?? {}), false);
     const customerAOrders = await listProcurementRequestsFromDatabase(workflowDatabase, customerA);
     assert.equal(customerAOrders.length, 2);
     assert(customerAOrders.some((order) => order.id === created.orderId));
+    const listedCreatedOrder = customerAOrders.find((order) => order.id === created.orderId);
+    assert.equal(listedCreatedOrder?.supplierCount, 3);
+    assert.equal(listedCreatedOrder?.contactedCount, 1);
+    assert.equal(listedCreatedOrder?.responseCount, 1);
     assert(!customerAOrders.some((order) => order.id === customerScopedDuplicate.orderId));
     assert.equal(await getProcurementRequestFromDatabase(workflowDatabase, customerB, created.orderId), null);
 
@@ -363,8 +396,8 @@ async function main() {
         request,
         { database: workflowDatabase, fetchImplementation: previewFetch },
       ),
-      list: (customerId: string, limit = 50, sourceCampaign?: string) => (
-        listProcurementRequestsFromDatabase(workflowDatabase, customerId, limit, sourceCampaign)
+      list: (customerId: string, limit = 50, sourceCampaign?: string, filters = {}) => (
+        listProcurementRequestsFromDatabase(workflowDatabase, customerId, limit, sourceCampaign, filters)
       ),
     };
     const previewInput = {
@@ -566,7 +599,10 @@ async function main() {
       "Campaign filtering must not weaken customer isolation.",
     );
     assert(!filteredGuildOrders.some((order) => order.id === customerBGuildOrder.orderId));
-    const filteredRoute = await handleProcurementList(authenticatedDependencies, { sourceCampaign: "GUILD2" });
+    const filteredRoute = await handleProcurementList(authenticatedDependencies, {
+      sourceCampaign: "GUILD2",
+      activeOnly: true,
+    });
     assert.equal(filteredRoute.status, 200);
     assert.equal(((await filteredRoute.json()) as { requests: unknown[] }).requests.length, 38);
     let invalidCampaignListCalls = 0;
@@ -578,6 +614,17 @@ async function main() {
           return [];
         },
       }, { sourceCampaign: "GUILD2!" })).status,
+      400,
+    );
+    assert.equal(invalidCampaignListCalls, 0);
+    assert.equal(
+      (await handleProcurementList({
+        ...authenticatedDependencies,
+        list: async () => {
+          invalidCampaignListCalls += 1;
+          return [];
+        },
+      }, { sourceWorkspaceId: "bad workspace" })).status,
       400,
     );
     assert.equal(invalidCampaignListCalls, 0);

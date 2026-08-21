@@ -176,6 +176,7 @@ const vendor = {
   name: "Supplier One",
   website: "https://example.com",
   contact: null,
+  contacted: false,
   status: "shortlisted",
   research: { summary: "Evidence" },
   quote: null,

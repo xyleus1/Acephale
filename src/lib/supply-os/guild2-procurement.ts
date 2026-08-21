@@ -146,6 +146,7 @@ export type Guild2ProcurementVendor = {
     email: string | null;
     phone: string | null;
   } | null;
+  contacted: boolean;
   status: string;
   research: Record<string, unknown>;
   quote: Record<string, unknown> | null;

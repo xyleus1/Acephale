@@ -62,8 +62,8 @@ import {
 import { GUILD2_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
 import type { Guild2ProcurementOrderState } from "@/lib/supply-os/guild2-procurement";
 import {
-  CUSTOMER_PROCUREMENT_CAMPAIGN,
   customerProcurementDraftItem,
+  CUSTOMER_PROCUREMENT_CAMPAIGN,
   customerProcurementItem,
   customerProcurementMatchesWorkspace,
   customerProcurementOrderState,
@@ -694,7 +694,12 @@ function CaseCommandCenter({
   )), [companyName, customerProcurementOrders, sourcingWorkspaceId]);
 
   const refreshCustomerProcurementOrders = useCallback(async (signal?: AbortSignal) => {
-    const params = new URLSearchParams({ sourceCampaign: CUSTOMER_PROCUREMENT_CAMPAIGN });
+    const params = new URLSearchParams({ activeOnly: "true" });
+    if (sourcingWorkspaceId) params.set("sourceWorkspaceId", sourcingWorkspaceId);
+    else {
+      params.set("sourceCampaign", CUSTOMER_PROCUREMENT_CAMPAIGN);
+      params.set("sourceCompanyName", companyName);
+    }
     const response = await fetch(`/api/procurement/requests?${params.toString()}`, {
       cache: "no-store",
       signal,
@@ -704,7 +709,7 @@ function CaseCommandCenter({
     if (!response.ok) throw new Error(payload?.error ?? "Saved procurement requests are unavailable.");
     setCustomerProcurementOrders(payload?.requests ?? []);
     return payload?.requests ?? [];
-  }, []);
+  }, [companyName, sourcingWorkspaceId]);
 
   useEffect(() => {
     setInspectorMode(domain.defaultInspector);
@@ -1200,6 +1205,8 @@ function CaseCommandCenter({
             }}
             researchRuns={[]}
             procurementCases={[]}
+            messageResearchRuns={researchRuns}
+            messageProcurementCases={procurementCases}
             intelligenceProfile={intelligenceProfile}
             researchCampaign={demoCompanyId === "guild" ? supplierResearchCampaign : null}
             researchCampaignState={demoCompanyId === "guild" ? supplierResearchCampaignState : "idle"}

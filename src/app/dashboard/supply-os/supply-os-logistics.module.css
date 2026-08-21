@@ -930,13 +930,668 @@
 .inventoryWorkspace {
   min-width: 0;
   min-height: 0;
-  display: grid;
+  display: block;
   grid-area: materials;
-  grid-template-rows: repeat(4, auto) minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 16px;
   background: var(--panel);
+}
+
+.inventoryTabs {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+}
+
+.inventoryTabList {
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line-strong);
+  background: #fbfcfb;
+}
+
+.inventoryTabList button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.inventoryTabList button[data-state="active"] {
+  border-bottom-color: var(--navy);
+  color: var(--ink);
+}
+
+.inventoryTabList button:hover {
+  color: var(--navy);
+}
+
+.inventoryTabPanel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inventoryTabPanel[data-state="active"] {
+  display: grid;
+  grid-template-rows: repeat(4, auto) minmax(0, 1fr);
+}
+
+.activeSourcingWorkspace {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(120px, 0.7fr) minmax(280px, 1.3fr);
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.activeSourcingHeader {
+  min-height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.activeSourcingHeader > span {
+  min-width: 0;
+}
+
+.activeSourcingHeader small,
+.activeSourcingHeader h2,
+.activeSourcingHeader p,
+.activeSourcingHeader dl,
+.activeSourcingHeader dt,
+.activeSourcingHeader dd {
+  margin: 0;
+}
+
+.activeSourcingHeader > span > small,
+.activeSourcingHeader dt {
+  color: var(--ink-muted);
+  font: 550 9px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activeSourcingHeader h2 {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.activeSourcingHeader p {
+  margin-top: 5px;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.activeSourcingHeader dl {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 28px;
+}
+
+.activeSourcingHeader dl > div {
+  min-width: 96px;
+  display: grid;
+  gap: 4px;
+}
+
+.activeSourcingHeader dd {
+  display: grid;
+  color: var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.activeSourcingHeader dd small {
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font: 500 9px/1.3 "Instrument Sans", sans-serif;
+}
+
+.activeSourcingTableRegion {
+  min-height: 0;
+  overflow: auto;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.activeSourcingLoadMore {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: #fafbfa;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.activeSourcingLoadMore button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.activeSourcingLoadMore button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.activeSourcingTable {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  color: var(--ink-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+}
+
+.activeSourcingTable th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--ink-muted);
+  background: #f8faf9;
+  font-size: 8px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.activeSourcingTable th:first-child {
+  width: 38%;
+  padding-left: 22px;
+  text-align: left;
+}
+
+.activeSourcingTable td {
+  height: 62px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.activeSourcingTable tr[data-active="true"] td,
+.activeSourcingTable tr:hover td {
+  background: var(--panel-selected);
+}
+
+.activeSourcingTable td:first-child {
+  padding: 0;
+  font-family: "Instrument Sans", sans-serif;
+  text-align: left;
+}
+
+.activeSourcingTable td:first-child > button {
+  width: 100%;
+  min-height: 61px;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 7px 22px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.activeSourcingTable td:first-child span:last-child,
+.activeSourcingTable td:first-child small,
+.activeSourcingTable td:first-child strong,
+.activeSourcingTable td:first-child em {
+  min-width: 0;
+  display: block;
+}
+
+.activeSourcingTable td:first-child small {
+  color: var(--ink-muted);
+  font: 500 8px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.activeSourcingTable td:first-child strong {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 640;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeSourcingTable td:first-child em {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 9px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeSourcingTable tr[data-empty="true"] td {
+  height: 140px;
+  text-align: center;
+}
+
+.activeSourcingTable tr[data-empty="true"] td,
+.activeSourcingTable tr[data-empty="true"] strong,
+.activeSourcingTable tr[data-empty="true"] span {
+  display: block;
+  margin: 6px auto;
+}
+
+.activeSourcingDetail {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 2fr);
+  overflow: hidden;
+}
+
+.activeManufacturerList {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--line-strong);
+  background: #fafbfa;
+}
+
+.activeManufacturerList > header {
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.activeManufacturerList > header small,
+.activeManufacturerList > header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeManufacturerList > header small {
+  color: var(--ink-muted);
+  font: 550 8px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activeManufacturerList > header strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.activeManufacturerList > button {
+  width: 100%;
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.activeManufacturerList > button:hover,
+.activeManufacturerList > button[data-active="true"] {
+  background: var(--panel-selected);
+}
+
+.activeManufacturerList > button[data-active="true"] {
+  box-shadow: inset 3px 0 0 var(--navy);
+}
+
+.activeManufacturerList > button span,
+.activeManufacturerList > button strong,
+.activeManufacturerList > button small,
+.activeManufacturerList > button b {
+  min-width: 0;
+  display: block;
+}
+
+.activeManufacturerList > button strong,
+.activeManufacturerList > button b {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 630;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeManufacturerList > button small {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeManufacturerList > button > span:last-child {
+  max-width: 126px;
+  text-align: right;
+}
+
+.activeSupplierDossier {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 22px 28px;
+  background: var(--panel);
+}
+
+.activeSupplierDossier > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.activeSupplierDossier > header small,
+.activeSupplierDossier > header h3,
+.activeSupplierDossier > header p {
+  margin: 0;
+}
+
+.activeSupplierDossier > header small,
+.activeConversationPanel > header,
+.activeEvidenceRead > small {
+  color: var(--ink-muted);
+  font: 550 8px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activeSupplierDossier > header h3 {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.activeSupplierDossier > header p {
+  max-width: 680px;
+  margin-top: 6px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.activeSupplierDossier > header i {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid #d8bda9;
+  border-radius: 8px;
+  color: var(--decision);
+  background: var(--decision-soft);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.activeSupplierDossier > header i[data-ready="true"] {
+  border-color: #b9d2c3;
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.activeSupplierFacts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 0;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.activeSupplierFacts > div {
+  min-width: 0;
+  padding: 14px 14px 14px 0;
+}
+
+.activeSupplierFacts dt {
+  color: var(--ink-muted);
+  font: 550 8px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.activeSupplierFacts dd {
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 610;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeEvidenceRead {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.activeEvidenceRead p {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.activeConversationPanel {
+  padding-top: 18px;
+}
+
+.activeConversationPanel > header {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activeConversationPanel > header span,
+.activeConversationPanel > header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.activeConversationPanel > header strong {
+  color: var(--ink);
+  font: 640 11px/1.2 "Instrument Sans", sans-serif;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.activeConversationPanel > header a {
+  color: var(--navy);
+  font: 620 10px/1 "Instrument Sans", sans-serif;
+  letter-spacing: normal;
+  text-decoration: none;
+  text-transform: none;
+}
+
+.activeConversationMessages {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.activeConversationMessages article {
+  max-width: 86%;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fafbfa;
+}
+
+.activeConversationMessages article[data-direction="outbound"] {
+  justify-self: end;
+  border-color: #cad8de;
+  background: var(--navy-soft);
+}
+
+.activeConversationMessages article > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.activeConversationMessages article > header span,
+.activeConversationMessages article > header strong,
+.activeConversationMessages article > header small {
+  display: block;
+}
+
+.activeConversationMessages article > header strong {
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.activeConversationMessages article > header small,
+.activeConversationMessages article > header time,
+.activeConversationMessages article > small {
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font: 500 8px/1.3 "IBM Plex Mono", monospace;
+}
+
+.activeConversationMessages article h4 {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 640;
+}
+
+.activeConversationMessages article p {
+  margin: 7px 0 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.activeConversationEmpty,
+.activeSourcingNoManufacturer {
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.activeConversationEmpty button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--navy);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.activeSourcingNoManufacturer {
+  min-height: 0;
+  flex-direction: column;
+}
+
+.activeSourcingNoManufacturer strong,
+.activeSourcingNoManufacturer p {
+  margin: 0;
+}
+
+.activeSourcingNoManufacturer strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.activeSupplierDossier > footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 20px;
+}
+
+.activeSupplierDossier > footer button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--navy);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 630;
 }
 
 .sourcingCsvImport {
@@ -4366,6 +5021,25 @@
     overflow-y: auto;
   }
 
+  .activeSourcingHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .activeSourcingHeader dl {
+    width: 100%;
+    grid-auto-flow: column;
+  }
+
+  .activeSourcingDetail {
+    grid-template-columns: minmax(210px, 0.7fr) minmax(0, 1.6fr);
+  }
+
+  .activeSupplierFacts {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
   .scenarioWorkbench {
     height: calc(100% - 36px);
   }
@@ -4470,6 +5144,68 @@
 
   .sourcingQueueHeader {
     padding: 0 14px;
+  }
+
+  .inventoryTabList {
+    padding: 0 8px;
+  }
+
+  .inventoryTabList button {
+    flex: 1;
+  }
+
+  .activeSourcingWorkspace {
+    grid-template-rows: auto minmax(190px, auto) minmax(560px, auto);
+    overflow-y: auto;
+  }
+
+  .activeSourcingHeader {
+    padding: 16px;
+  }
+
+  .activeSourcingHeader dl {
+    gap: 12px;
+  }
+
+  .activeSourcingLoadMore {
+    min-width: 760px;
+  }
+
+  .activeSourcingHeader dl > div {
+    min-width: 0;
+  }
+
+  .activeSourcingHeader dd {
+    font-size: 18px;
+  }
+
+  .activeSourcingDetail {
+    display: block;
+    overflow: visible;
+  }
+
+  .activeManufacturerList {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  .activeSupplierDossier {
+    min-height: 420px;
+    overflow: visible;
+    padding: 18px 16px 24px;
+  }
+
+  .activeSupplierDossier > header {
+    flex-direction: column;
+  }
+
+  .activeSupplierFacts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activeConversationMessages article {
+    max-width: 100%;
   }
 
   .sourcingCampaignSummary {
