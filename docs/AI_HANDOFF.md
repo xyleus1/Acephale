@@ -2,6 +2,22 @@
 
 ## Latest Update
 
+### Last selected company survives refresh
+
+- Supply OS now stores only the selected workspace ID in browser storage. The
+  key is scoped by the authenticated office and user already passed as
+  `storageScope`.
+- On refresh, the company directory waits for the storage lookup, fetches the
+  current office-scoped workspace list, and reopens the saved company only when
+  that ID is still accessible.
+- Archived, deleted, or inaccessible workspace IDs are removed from storage.
+  Names, logos, snapshots, and permissions are never trusted from browser data.
+- The pending restore is consumed after opening, so the Companies control still
+  opens the directory during the current session.
+- No schema, dependency, or server authorization change was added.
+- Verification passed: company navigation regression contract, TypeScript,
+  diff hygiene, and forbidden-character scan.
+
 ### Blocked procurement requests now expose a recovery path
 
 - The guided sourcing workspace now uses the persisted workflow progress for

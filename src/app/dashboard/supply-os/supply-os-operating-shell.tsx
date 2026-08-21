@@ -54,6 +54,7 @@ export function SupplyOsOperatingShell({
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceSelection, setWorkspaceSelection] = useState<SupplyOsWorkspaceSelection>(null);
+  const [workspaceToRestore, setWorkspaceToRestore] = useState<string | null | undefined>(undefined);
   const [workspaceProfile, setWorkspaceProfile] = useState<{
     companyName: string;
     logoUrl: string | null;
@@ -61,11 +62,27 @@ export function SupplyOsOperatingShell({
     locationCount: number;
   } | null>(null);
   const panelNavRef = useRef<HTMLElement>(null);
+  const workspaceStorageKey = `derya:supply-os:last-workspace:${storageScope}`;
   const openWorkspace = useCallback((selection: SupplyOsWorkspaceSelection) => {
+    if (!selection) return;
+    try {
+      window.localStorage.setItem(workspaceStorageKey, selection.workspaceId);
+    } catch {
+      // Browser privacy settings can disable storage. The workspace still opens for this session.
+    }
+    setWorkspaceToRestore(null);
     setWorkspaceSelection(selection);
     setWorkspaceProfile(null);
     setCompanyIndexOpen(false);
-  }, []);
+  }, [workspaceStorageKey]);
+  const clearStoredWorkspace = useCallback(() => {
+    try {
+      window.localStorage.removeItem(workspaceStorageKey);
+    } catch {
+      // Storage may be unavailable. Clearing the in-memory restore target is sufficient.
+    }
+    setWorkspaceToRestore(null);
+  }, [workspaceStorageKey]);
   const companyName = workspaceProfile?.companyName
     ?? workspaceSelection?.workspaceName
     ?? "Company";
@@ -76,6 +93,14 @@ export function SupplyOsOperatingShell({
     () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
     [companyName],
   );
+
+  useEffect(() => {
+    try {
+      setWorkspaceToRestore(window.localStorage.getItem(workspaceStorageKey));
+    } catch {
+      setWorkspaceToRestore(null);
+    }
+  }, [workspaceStorageKey]);
 
   useEffect(() => {
     const syncPanelFromUrl = () => setActivePanel(panelFromCurrentUrl());
@@ -218,6 +243,8 @@ export function SupplyOsOperatingShell({
             {companyIndexOpen ? (
               <SupplyOsCompanyIndex
                 canCreateCompany={canCreateCompany}
+                preferredWorkspaceId={workspaceToRestore}
+                onPreferredWorkspaceUnavailable={clearStoredWorkspace}
                 autoOpenFirstWorkspace={
                   activePanel === "context"
                     && !workspaceSelection

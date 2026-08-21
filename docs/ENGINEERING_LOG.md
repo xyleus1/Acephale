@@ -5950,3 +5950,19 @@ Use this file for chronological implementation notes that future agents should s
 - Caveat: Existing combined orders remain blocked because the external workflow
   has no request-update contract. Open Context and confirm corrected separate
   requests rather than refreshing the old order.
+
+### 2026-08-21 - Persist the last selected Supply OS company
+
+- Branch: `fix/persist-last-company`, based on current production main.
+- Symptom: Refreshing Supply OS always returned an admin to Companies instead
+  of reopening the company they were working in.
+- Root cause: `workspaceSelection` and `companyIndexOpen` existed only in
+  React state. The existing office-and-user `storageScope` prop was never used
+  by the operating shell, so a remount necessarily discarded the selection.
+- Fix: Store only the selected workspace ID in local storage under the scoped
+  key. On mount, resolve that ID against the authenticated workspace list before
+  reopening it. Clear IDs that are no longer available.
+- Safety: Browser data never supplies company identity, permissions, snapshots,
+  or authorization. The server-scoped workspace list remains authoritative.
+- Verification: Company navigation regression contract, TypeScript, diff
+  hygiene, and forbidden-character scan.

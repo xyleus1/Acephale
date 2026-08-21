@@ -49,10 +49,14 @@ function updatedLabel(value: string) {
 export function SupplyOsCompanyIndex({
   canCreateCompany,
   autoOpenFirstWorkspace = false,
+  preferredWorkspaceId,
+  onPreferredWorkspaceUnavailable,
   onOpenWorkspace,
 }: {
   canCreateCompany: boolean;
   autoOpenFirstWorkspace?: boolean;
+  preferredWorkspaceId?: string | null;
+  onPreferredWorkspaceUnavailable?: () => void;
   onOpenWorkspace: (selection: SupplyOsWorkspaceSelection) => void;
 }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -74,12 +78,21 @@ export function SupplyOsCompanyIndex({
   }, []);
 
   const load = useCallback(async () => {
+    if (preferredWorkspaceId === undefined) return;
     setState("loading");
     setError("");
     try {
       const nextWorkspaces = await requestWorkspaces();
       setWorkspaces(nextWorkspaces);
       setState("ready");
+      const preferredWorkspace = preferredWorkspaceId
+        ? nextWorkspaces.find((workspace) => workspace.id === preferredWorkspaceId) ?? null
+        : null;
+      if (preferredWorkspace) {
+        onOpenWorkspace(selectionFor(preferredWorkspace));
+        return;
+      }
+      if (preferredWorkspaceId) onPreferredWorkspaceUnavailable?.();
       if (autoOpenFirstWorkspace && nextWorkspaces[0]) {
         onOpenWorkspace(selectionFor(nextWorkspaces[0]));
       }
@@ -87,7 +100,7 @@ export function SupplyOsCompanyIndex({
       setError(loadError instanceof Error ? loadError.message : "Companies could not be loaded.");
       setState("error");
     }
-  }, [autoOpenFirstWorkspace, onOpenWorkspace, requestWorkspaces]);
+  }, [autoOpenFirstWorkspace, onOpenWorkspace, onPreferredWorkspaceUnavailable, preferredWorkspaceId, requestWorkspaces]);
 
   useEffect(() => { void load(); }, [load]);
 

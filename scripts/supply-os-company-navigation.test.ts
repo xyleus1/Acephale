@@ -18,6 +18,14 @@ const latestEventRoute = readFileSync(resolve(root, "src/app/api/dashboard/event
 
 assert.match(shell, /className=\{styles\.operatingSidebar\}/, "left domain sidebar must remain persistent");
 assert.match(shell, /const \[companyIndexOpen, setCompanyIndexOpen\] = useState\(true\)/, "company list must be the clean entry state");
+assert.match(shell, /derya:supply-os:last-workspace:\$\{storageScope\}/, "last-company storage must be scoped to the signed-in office and user");
+assert.match(shell, /window\.localStorage\.getItem\(workspaceStorageKey\)/, "refresh must read the last selected company");
+assert.match(shell, /window\.localStorage\.setItem\(workspaceStorageKey, selection\.workspaceId\)/, "company selection must persist its opaque workspace ID");
+assert.match(shell, /preferredWorkspaceId=\{workspaceToRestore\}/, "the company directory must receive the pending restore target");
+assert.match(shell, /onPreferredWorkspaceUnavailable=\{clearStoredWorkspace\}/, "an archived or inaccessible saved company must be cleared");
+assert.match(index, /preferredWorkspaceId\?: string \| null/, "the company directory must accept a pending workspace restore");
+assert.match(index, /nextWorkspaces\.find\(\(workspace\) => workspace\.id === preferredWorkspaceId\)/, "saved workspace IDs must be revalidated against the authenticated company list");
+assert.match(index, /if \(preferredWorkspaceId\) onPreferredWorkspaceUnavailable\?\.\(\)/, "stale company IDs must not survive indefinitely");
 assert.doesNotMatch(shell, /autoOpenContextWorkspace/, "Context navigation must not add release-sensitive hook state");
 assert.match(shell, /autoOpenFirstWorkspace=\{[\s\S]*activePanel === "context"[\s\S]*!workspaceSelection/, "Context must derive real-workspace resolution without another hook");
 assert.doesNotMatch(index, /autoOpenedWorkspaceRef|useRef/, "the company index must not add an auto-open effect hook");
