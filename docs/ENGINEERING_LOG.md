@@ -17,6 +17,28 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-20 - Repair unified Neon schema and remove implicit Atlas fallback
+
+- Branch: `fix/remove-implicit-atlas-fallback`, based on production main.
+- Task: Keep production on the current Neon database, restore the missing app
+  schema, and stop unresolved workspace state from rendering Atlas Robotics.
+- Root cause: The production migration ledger marked all 27 migrations as
+  applied even though 82 quoted Prisma tables were absent. The live
+  `/api/supply-os/workspaces` route failed on the missing `SupplyWorkspace`
+  relation. Atlas was a client demo fallback, not a second database.
+- Database work: Captured a local custom-format backup, rehearsed the additive
+  schema repair inside a rollback transaction, then created only missing Prisma
+  tables, indexes, foreign keys, domain checks, and tenant-scope triggers. The
+  lowercase workflow tables were retained. Restored `derya_app` grants and
+  created the active HypnoDreamz workspace and OWNER membership.
+- Application work: Removed the automatic Atlas identity and inventory fallback
+  from normal loading. Presentation mode requests Atlas explicitly.
+- Verification: Prisma migration status, rollback rehearsal, restricted-role
+  grant checks, HypnoDreamz workspace query, company navigation contract,
+  TypeScript, production build, diff hygiene, and forbidden-character scan.
+- Caveat: The backup is local to the controlled workstation and should not be
+  treated as the long-term Neon backup policy.
+
 ### 2026-08-20 - Collapse Context to CompanyDocument and repair uploads
 
 - Branch: `fix/minimal-company-context-v2`, based on production main.

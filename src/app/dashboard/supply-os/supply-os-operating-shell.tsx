@@ -9,7 +9,7 @@ import {
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogoMark } from "@/components/logo-mark";
-import { SUPPLY_OS_DEMO_COMPANIES, SUPPLY_OS_DEMO_COMPANY } from "@/lib/supply-os/demo-company";
+import { SUPPLY_OS_DEMO_COMPANIES } from "@/lib/supply-os/demo-company";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
@@ -71,11 +71,16 @@ export function SupplyOsOperatingShell({
   }, []);
   const demoCompany = workspaceSelection?.demoCompanyId
     ? SUPPLY_OS_DEMO_COMPANIES[workspaceSelection.demoCompanyId]
-    : SUPPLY_OS_DEMO_COMPANY;
+    : null;
   const isDemoWorkspace = Boolean(workspaceSelection?.demoCompanyId);
-  const companyName = workspaceProfile?.companyName ?? workspaceSelection?.workspaceName ?? demoCompany.name;
+  const companyName = workspaceProfile?.companyName
+    ?? workspaceSelection?.workspaceName
+    ?? demoCompany?.name
+    ?? "Company";
   const companyLogoUrl = workspaceProfile?.logoUrl
-    ?? (workspaceSelection ? workspaceSelection.logoUrl : demoCompany.logoUrl);
+    ?? workspaceSelection?.logoUrl
+    ?? demoCompany?.logoUrl
+    ?? null;
   const companyInitials = useMemo(
     () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
     [companyName],
@@ -102,13 +107,13 @@ export function SupplyOsOperatingShell({
   const selectPanel = useCallback((panel: SupplyOsPanel) => {
     window.history.pushState({}, "", supplyOsPanelHref(window.location.href, panel));
     setActivePanel(panel);
-    const needsContextWorkspace = panel === "context"
-      && (!workspaceSelection || Boolean(workspaceSelection.demoCompanyId));
-    setCompanyIndexOpen(needsContextWorkspace);
+    const needsCompanySelection = !workspaceSelection
+      || (panel === "context" && Boolean(workspaceSelection.demoCompanyId));
+    setCompanyIndexOpen(needsCompanySelection);
   }, [workspaceSelection]);
 
   if (presentationMode) {
-    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} workspaceId={null} canImportSupplyData={canImportSupplyData} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
+    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} workspaceId={null} demoCompanyId="atlas-robotics" canImportSupplyData={canImportSupplyData} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
   }
 
   return (

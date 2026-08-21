@@ -458,8 +458,11 @@ export function SupplyOsDashboardWorkspace({
   const browserCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
     ? activeCase
     : visibleCases[0] ?? null;
-  const currentCase = workspaceId ? workspaceCase : browserCase;
-  const resolvedDemoCompanyId = workspaceId ? null : demoCompanyId ?? "atlas-robotics";
+  const demoEnabled = Boolean(demoCompanyId) || presentationMode;
+  const currentCase = workspaceId ? workspaceCase : demoEnabled ? browserCase : null;
+  const resolvedDemoCompanyId = workspaceId
+    ? null
+    : demoCompanyId ?? (presentationMode ? "atlas-robotics" : null);
 
   return (
     <div className={`${styles.workspace} ${styles.commandWorkspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>

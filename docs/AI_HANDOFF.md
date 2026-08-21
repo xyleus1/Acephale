@@ -2,6 +2,20 @@
 
 ## Latest Update
 
+### Production uses the real HypnoDreamz workspace without an Atlas fallback
+
+- Production was already connected to the intended unified Neon database, but
+  its migration ledger claimed the Prisma schema existed while 82 application
+  tables were absent. The workspace API failed because `SupplyWorkspace` did
+  not exist, and the client then rendered the implicit Atlas demo.
+- The same database was repaired additively from the current Prisma schema.
+  Lowercase workflow tables and their HypnoDreamz records were preserved.
+  Restricted `derya_app` grants and Supply OS tenant-scope guards were restored.
+- The HypnoDreamz Company now has one active `production:primary` workspace and
+  one OWNER membership for the existing active admin.
+- Normal workspace loading no longer defaults to Atlas. Atlas remains available
+  only when explicitly requested by presentation mode or a demo selection.
+
 ### Context is light and available to new custom supplier searches
 
 - The Context chat now uses the same white, light-gray, ink, and border tokens

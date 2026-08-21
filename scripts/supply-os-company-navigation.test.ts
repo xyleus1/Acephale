@@ -74,10 +74,16 @@ assert.doesNotMatch(workspaceRoute, /if \(result\.normalized\.website\)/, "profi
 assert.match(profileRoute, /export async function POST/, "existing companies need a profile research retry endpoint");
 assert.match(profileRoute, /requireSupplyWorkspace\(access, workspaceId, "edit"\)/, "profile research must enforce workspace edit access");
 assert.match(profileRoute, /researchCompany\(researchQuery\)/, "profile retries must use the attributable company research service");
-assert.match(dashboard, /const currentCase = workspaceId \? workspaceCase : browserCase/, "real workspaces must never render an unrelated browser demo case");
+assert.match(dashboard, /const currentCase = workspaceId \? workspaceCase : demoEnabled \? browserCase : null/, "real workspaces and unresolved company state must never render an unrelated browser demo case");
 assert.match(dashboard, /demoCompanyId === "atlas-robotics" \? ATLAS_ROBOTICS_INVENTORY : \[\]/, "real companies must start with empty inventory");
 assert.match(dashboard, /method: "POST"/, "a missing stored profile must trigger public research");
 assert.doesNotMatch(shell, /demoCompanyId=\{workspaceSelection\?\.demoCompanyId \?\? "atlas-robotics"\}/, "real workspaces must not default to Atlas");
+assert.doesNotMatch(shell, /SUPPLY_OS_DEMO_COMPANY/, "an unresolved workspace must not inherit the Atlas identity");
+assert.match(shell, /presentationMode[\s\S]*demoCompanyId="atlas-robotics"/, "Atlas remains available only through explicit presentation mode");
+assert.match(dashboard, /demoCompanyId \?\? \(presentationMode \? "atlas-robotics" : null\)/, "normal workspace loading must not silently resolve to Atlas");
+assert.doesNotMatch(dashboard, /demoCompanyId \?\? "atlas-robotics"/, "Atlas must not be the default dashboard company");
+assert.match(shell, /const needsCompanySelection = !workspaceSelection[\s\S]*setCompanyIndexOpen\(needsCompanySelection\)/, "panel navigation must keep company selection open until a workspace is selected");
+assert.match(dashboard, /const demoEnabled = Boolean\(demoCompanyId\) \|\| presentationMode/, "browser demo cases must require an explicit demo mode");
 assert.doesNotMatch(shell, /workspaceSelection \? "Published locations" : "Austin"/, "real workspaces must not display generic location copy");
 
 console.log("Supply OS company navigation contract passed.");
