@@ -16,6 +16,21 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-21 - Context uses a white work surface
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The Context conversation had already moved away from its old dark
+  treatment, but its canvas still used the app background token. The requested
+  product direction is a literal white conversation and file workspace.
+- Decision: Context uses `#ffffff` for its conversation canvas, file surface,
+  empty state, and upload overlay. Neutral hover, divider, provenance, status,
+  and focus tokens remain unchanged.
+- Consequences: Context is visually one white work surface while evidence,
+  processing state, and human approval boundaries remain visible.
+- Revisit when: A future app-wide visual system deliberately replaces the
+  authenticated work-surface palette.
+
 ### 2026-08-21 - Procurement wake delivery is reconciled from durable orders
 
 - Status: accepted

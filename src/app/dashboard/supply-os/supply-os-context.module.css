@@ -1,5 +1,5 @@
 .context {
-  --chat-canvas: #f7f8f7;
+  --chat-canvas: #ffffff;
   --chat-surface: #ffffff;
   --chat-surface-hover: #f1f3f2;
   --chat-line: #e0e4e2;
@@ -616,7 +616,7 @@
   gap: 12px;
   border: 2px dashed #747c78;
   border-radius: 18px;
-  background: rgba(247, 248, 247, 0.96);
+  background: rgba(255, 255, 255, 0.96);
   color: var(--chat-ink);
   pointer-events: none;
 }
@@ -630,7 +630,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: var(--chat-canvas, #f7f8f7);
+  background: var(--chat-canvas, #ffffff);
   color: var(--chat-muted, #747c78);
   text-align: center;
 }

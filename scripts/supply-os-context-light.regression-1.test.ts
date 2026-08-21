@@ -11,8 +11,10 @@ const css = readFileSync(
   "utf8",
 );
 
-assert.match(css, /--chat-canvas: #f7f8f7/);
+assert.match(css, /--chat-canvas: #ffffff/);
 assert.match(css, /--chat-surface: #ffffff/);
+assert.match(css, /background: rgba\(255, 255, 255, 0\.96\)/);
+assert.match(css, /background: var\(--chat-canvas, #ffffff\)/);
 assert.match(css, /--chat-ink: #1b1d1c/);
 assert.match(css, /--chat-muted: #747c78/);
 assert.match(css, /background: var\(--chat-surface\)/);

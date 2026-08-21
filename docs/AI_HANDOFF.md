@@ -2,6 +2,29 @@
 
 ## Latest Update
 
+### Minimal schema cutover is live
+
+- PR #201 is merged and Vercel deployed merge commit `f299dd5`.
+- The production migration completed against the unified Neon database after a
+  successful full-chain PostgreSQL rehearsal and a live-sized Neon branch
+  rehearsal. The exact pre-cutover restore branch is
+  `pre-minimal-schema-final-20260821-203948`, retained until 2026-09-20.
+- The controlled cleanup removed 20 synthetic GUILD2 or Atlas workflow orders
+  and their dependent rows. Two real Dreamz custom items were moved to the
+  HypnoDreamz workflow identity before the synthetic GUILD2 identity was
+  removed.
+- HypnoDreamz now has one workflow account, 4 real items, 4 orders, 11
+  company-specific suppliers, and 19 Context rows. The Context total includes
+  retained files, messages, actions, item notes, and one real company-level
+  preference note.
+- The `derya_app`, `dashboard_api`, and `bourne_supply_chain` roles are online.
+  The application role can read `CompanyContext` but not worker views. The
+  worker role can read and update the restricted lowercase compatibility
+  views. Tenant-scope negative checks still reject cross-company links.
+- Production health returns healthy, login loads, and unauthenticated Supply
+  OS access redirects to login. The Context canvas is a literal white work
+  surface in the follow-up UI release.
+
 ### Procurement wakes now recover without browser retries
 
 - Added a protected five-minute reconciliation cron for durable Bourne orders
@@ -72,10 +95,9 @@ Release requirement:
   rehearses the final migration against populated legacy rows, extra Bourne
   reliability columns, and an independently granted worker role. The build has
   the pre-existing CSS autoprefixer warning.
-- Production has not been mutated by this branch. The owner migration must run
-  during the maintenance procedure in
-  `docs/RUNBOOKS/MINIMAL_SCHEMA_CUTOVER.md` before application deployment, in
-  line with the no-DDL-during-build release boundary.
+- Production cutover completed through the maintenance procedure in
+  `docs/RUNBOOKS/MINIMAL_SCHEMA_CUTOVER.md`. Keep that runbook as the recovery
+  and future rehearsal record; Vercel builds still must not run owner DDL.
 
 ### Last selected company survives refresh
 

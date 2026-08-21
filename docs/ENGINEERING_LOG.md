@@ -6045,3 +6045,28 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Run the migration preflight against a current production backup,
   apply it with the controlled owner connection, deploy the application, then
   verify HypnoDreamz item, supplier, Context, and order counts.
+
+### 2026-08-21 - Complete the minimal schema production cutover
+
+- Release: Merged PR #201 as `f299dd5` and deployed it through Vercel after the
+  database migration completed.
+- Recovery: Created the exact pre-cutover Neon restore branch
+  `pre-minimal-schema-final-20260821-203948`, retained until 2026-09-20.
+- Rehearsal: Passed the complete 28-migration populated PostgreSQL contract and
+  a fresh live-sized Neon branch migration before production.
+- Cleanup: Removed 20 synthetic GUILD2 or Atlas orders and their dependent
+  workflow rows. Preserved and reassigned two real Dreamz custom items before
+  deleting the synthetic GUILD2 workflow customer.
+- Production result: HypnoDreamz has one workflow account, 4 items, 4 orders,
+  11 company-specific suppliers, and 19 Context rows. Legacy CRM opportunity,
+  margin-profile, and document tables are gone. Lowercase worker names are
+  restricted views over the canonical tables.
+- Access result: `derya_app` reads Context but not worker views;
+  `dashboard_api` remains read-only on orders; `bourne_supply_chain` updated an
+  order reliability field inside a rolled-back transaction. All runtime roles
+  are online.
+- Runtime result: The production login returns 200, unauthenticated Supply OS
+  redirects to login, and `/api/health` reports healthy.
+- UI correction: Changed the Context canvas, empty state, and upload overlay
+  from near-white to literal white. Updated `DESIGN.md` to record the intended
+  white Context work surface.

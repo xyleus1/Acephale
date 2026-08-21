@@ -133,12 +133,12 @@ Do not fill unused rail space for visual balance. Lower-rail utilities must be r
 
 ### Context conversation
 
-Context is a deliberate dark-surface exception inside the authenticated shell.
-It uses one full-height conversation, one bottom composer, and one right file
-rail on desktop. Do not expose the context hierarchy, fact database, source
-linker, or outbound drafts as competing panels on this screen. On mobile, the
-file rail becomes a full-screen sheet and the composer remains pinned above the
-safe area. Uploaded files must show their name, type, size, and processing state.
+Context uses a white full-height work surface inside the authenticated shell.
+It has one conversation, one bottom composer, and one right file rail on
+desktop. Do not expose the context hierarchy, fact database, source linker, or
+outbound drafts as competing panels on this screen. On mobile, the file rail
+becomes a full-screen sheet and the composer remains pinned above the safe
+area. Uploaded files must show their name, type, size, and processing state.
 
 ## Maps and operational workspaces
 
