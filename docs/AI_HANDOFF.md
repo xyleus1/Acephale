@@ -2,6 +2,25 @@
 
 ## Latest Update
 
+### Blocked procurement requests now expose a recovery path
+
+- The guided sourcing workspace now uses the persisted workflow progress for
+  `needs_attention` instead of replacing every reason with a fixed sentence.
+- Stored progress is whitespace-normalized and bounded. Stale lifecycle copy,
+  technical failures, URLs, and internal identifiers fall back to a safe
+  operator instruction instead of appearing as raw workflow output.
+- The workspace extracts unresolved clauses from the submitted specification.
+  Combined Task 1 and Task 2 requests explicitly instruct the operator to
+  create one sourcing request per item or manufacturing process.
+- The sourcing queue labels blocked work Resolve blocker. The detail view opens
+  the selected company's existing Context chat without losing the workspace,
+  where corrected requests still require separate confirmation.
+- This does not rewrite or restart historical combined orders. A blocked order
+  has no update contract, so correction creates new, independently confirmed
+  requests through the current split-item Context flow.
+- Verification: GUILD2 workflow, customer procurement bridge, procurement API,
+  shell routing, company navigation, product copy, and TypeScript passed.
+
 ### Context procurement now separates items and exposes failed starts
 
 - Context structured output now creates one independently cited confirmation

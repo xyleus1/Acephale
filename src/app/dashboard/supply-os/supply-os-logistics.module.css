@@ -3873,6 +3873,32 @@
   line-height: 1.5;
 }
 
+.procurementAttentionDetails {
+  width: min(620px, 100%);
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--panel-subtle);
+}
+
+.procurementAttentionDetails strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 640;
+}
+
+.procurementAttentionDetails ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .procurementUnknownActions {
   display: flex;
   flex-wrap: wrap;

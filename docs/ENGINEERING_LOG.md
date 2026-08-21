@@ -5926,3 +5926,27 @@ Use this file for chronological implementation notes that future agents should s
   `npm run test:customer-procurement-bourne`, and
   `npm run test:workflow-guild2` passed. The production build passed type
   checking with only the pre-existing CSS autoprefixer warning.
+
+### 2026-08-21 - Expose blocked procurement reasons and recovery
+
+- Branch: `fix/procurement-needs-attention-details`, based on current
+  `origin/main`.
+- Task: Replace the non-actionable needs-attention screen with the saved
+  workflow reason, deterministic correction hints, and a path back to Context.
+- Root cause: The procurement detail query already returned `orders.progress`,
+  but the customer workspace ignored it and always rendered a fixed sentence.
+  The historical HypnoDreamz request also combines PCBA and foam sourcing in a
+  single order, while its own specification leaves PCB finish and STL units
+  unresolved.
+- Files changed: Customer procurement status projection, guided sourcing UI,
+  sourcing queue copy, same-company Context navigation, responsive sourcing
+  styles, focused contract tests, and release documentation.
+- Safety: Progress is normalized and bounded before display. Technical failure
+  text falls back to safe copy. No order, supplier, purchase, schema, Context
+  record, or worker state is mutated.
+- Verification: GUILD2 workflow, customer procurement bridge, procurement API,
+  shell routing, company navigation, product copy, TypeScript, production build,
+  diff hygiene, and changed-file forbidden-character scan.
+- Caveat: Existing combined orders remain blocked because the external workflow
+  has no request-update contract. Open Context and confirm corrected separate
+  requests rather than refreshing the old order.

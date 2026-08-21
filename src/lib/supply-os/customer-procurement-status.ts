@@ -130,7 +130,46 @@ export function customerProcurementStatusLabel(status: string) {
   return STATUS_LABELS[status] ?? "In progress";
 }
 
-export function customerProcurementProgress(status: string, supplierCount: number) {
+const ATTENTION_FALLBACK = "The request could not continue. Correct the missing or conflicting details in Context, then confirm a new sourcing request.";
+
+export function customerProcurementAttentionReason(progress: string | null | undefined) {
+  const normalized = progress?.replace(/\s+/g, " ").trim() ?? "";
+  if (!normalized) return ATTENTION_FALLBACK;
+  const candidate = normalized.replace(/^(?:needs[ _-]?attention|blocked)\s*:\s*/i, "");
+  if (!candidate || /^(?:more|additional) information (?:is )?(?:needed|required)\.?$/i.test(candidate)) {
+    return ATTENTION_FALLBACK;
+  }
+  if (/^(?:(?:order|request) received|searching|researching|processing)\b/i.test(candidate)) {
+    return ATTENTION_FALLBACK;
+  }
+  const technicalFailure = /\b(?:bourne|neon|gmail|worker|webhook|database|sqlstate|exception|stack trace|timeout|lease|internal error|provider error)\b/i;
+  if (technicalFailure.test(candidate) || /https?:\/\/|\{["'][^}]+["']\}|[0-9a-f]{8}-[0-9a-f-]{27,}/i.test(candidate)) {
+    return ATTENTION_FALLBACK;
+  }
+  return candidate.slice(0, 320);
+}
+
+export function customerProcurementAttentionHints(specification: string | null | undefined) {
+  const normalized = specification?.replace(/\s+/g, " ").trim() ?? "";
+  if (!normalized) return [];
+  const hints: string[] = [];
+  if (/\b(?:task|item)\s*1\s*:[\s\S]*\b(?:task|item)\s*2\s*:/i.test(normalized)) {
+    hints.push("Split this combined request into one sourcing request per item or manufacturing process.");
+  }
+  const uncertainty = /\b(?:ambiguous|clarification|conflicting|missing|not provided|requires? confirmation|undeclared|unknown|unspecified)\b/i;
+  for (const sentence of normalized.split(/(?<=[.!?])\s+|;\s+/)) {
+    if (!uncertainty.test(sentence)) continue;
+    const trimmed = sentence.trim();
+    const uncertaintyIndex = trimmed.search(uncertainty);
+    const start = trimmed.length > 240 ? Math.max(0, uncertaintyIndex - 120) : 0;
+    const bounded = `${start ? "... " : ""}${trimmed.slice(start, start + 240)}`;
+    if (!hints.includes(bounded)) hints.push(bounded);
+    if (hints.length >= 3) break;
+  }
+  return hints;
+}
+
+export function customerProcurementProgress(status: string, supplierCount: number, storedProgress?: string | null) {
   switch (status) {
     case "new":
       return "Request received. Supplier research has not started yet.";
@@ -147,7 +186,7 @@ export function customerProcurementProgress(status: string, supplierCount: numbe
     case "ordered":
       return "The order has been approved and placed.";
     case "needs_attention":
-      return "The sourcing team needs additional information before work can continue.";
+      return customerProcurementAttentionReason(storedProgress);
     case "cancelled":
       return "This request was canceled.";
     default:

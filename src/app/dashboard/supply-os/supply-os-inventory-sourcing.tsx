@@ -440,10 +440,10 @@ export function SupplyInventoryWorkspace({
                   <td>{request.neededBy ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${request.neededBy}T12:00:00Z`)) : "Not set"}</td>
                   <td>{PROCUREMENT_APPROVAL_STATUSES.has(request.status)
                     ? "Shortlist under review"
-                    : `${customerProcurementStatusLabel(request.status)}: ${customerProcurementProgress(request.status, 0)}`}</td>
+                    : `${customerProcurementStatusLabel(request.status)}: ${customerProcurementProgress(request.status, 0, request.progress)}`}</td>
                   <td>
                     <button className={styles.sourcingQueueAction} type="button" onClick={() => onOpenCustomerProcurement(item, order)}>
-                      {request.status === "new" ? "Start sourcing" : ["researching", "sourcing"].includes(request.status) ? "View progress" : "View results"} <ArrowRight size={13} />
+                      {request.status === "new" ? "Start sourcing" : request.status === "needs_attention" ? "Resolve blocker" : ["researching", "sourcing"].includes(request.status) ? "View progress" : "View results"} <ArrowRight size={13} />
                     </button>
                   </td>
                 </tr>

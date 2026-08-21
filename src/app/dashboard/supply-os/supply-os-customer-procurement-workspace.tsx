@@ -16,6 +16,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS,
+  customerProcurementAttentionHints,
+  customerProcurementAttentionReason,
   customerProcurementProgress,
   customerProcurementStatusLabel,
   customerProcurementContactSummary,
@@ -71,11 +73,13 @@ export function CustomerProcurementWorkspace({
   item,
   initialOrder,
   onBack,
+  onOpenContext,
 }: {
   orderId: string;
   item: SupplyInventoryItem;
   initialOrder: CustomerProcurementOrderState;
   onBack: () => void;
+  onOpenContext: () => void;
 }) {
   const reduceMotion = useReducedMotion();
   const [detail, setDetail] = useState(() => detailFromInitialState(orderId, item, initialOrder));
@@ -172,7 +176,9 @@ export function CustomerProcurementWorkspace({
   }, [detail]);
 
   const currentStatus = customerProcurementStatusLabel(detail.status);
-  const visibleProgress = customerProcurementProgress(detail.status, detail.vendors.length);
+  const visibleProgress = customerProcurementProgress(detail.status, detail.vendors.length, detail.progress);
+  const attentionReason = customerProcurementAttentionReason(detail.progress);
+  const attentionHints = customerProcurementAttentionHints(item.specification);
   return (
     <motion.section
       className={`${styles.procurementWorkspace} ${styles.customerProcurementWorkspace}`}
@@ -241,9 +247,20 @@ export function CustomerProcurementWorkspace({
             transition={{ duration: 0.16 }}
           >
             <TriangleAlert size={28} />
-            <h3>{detail.status === "cancelled" ? "Request canceled" : "More information needed"}</h3>
-            <p>{refreshError ?? visibleProgress}</p>
-            <button type="button" onClick={() => void refresh().catch(() => undefined)}><RefreshCw size={14} /> Refresh status</button>
+            <h3>{detail.status === "cancelled" ? "Request canceled" : "Request blocked"}</h3>
+            <p>{refreshError ?? (detail.status === "cancelled" ? visibleProgress : attentionReason)}</p>
+            {detail.status === "needs_attention" && attentionHints.length ? (
+              <section className={styles.procurementAttentionDetails}>
+                <strong>Resolve before restarting</strong>
+                <ul>{attentionHints.map((hint) => <li key={hint}>{hint}</li>)}</ul>
+              </section>
+            ) : null}
+            <div className={styles.procurementUnknownActions}>
+              {detail.status === "needs_attention" ? (
+                <button type="button" data-primary="true" onClick={onOpenContext}>Open Context</button>
+              ) : null}
+              <button type="button" onClick={() => void refresh().catch(() => undefined)}><RefreshCw size={14} /> Refresh status</button>
+            </div>
           </motion.div>
         ) : phase === "compare" ? (
           <motion.div

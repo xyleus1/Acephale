@@ -308,6 +308,7 @@ export function SupplyOsDashboardWorkspace({
   canApproveProcurement = false,
   canAuthorizePurchase = false,
   onWorkspaceProfile,
+  onOpenContext,
 }: {
   storageScope: string;
   workspaceId?: string | null;
@@ -316,6 +317,7 @@ export function SupplyOsDashboardWorkspace({
   canImportSupplyData?: boolean;
   canApproveProcurement?: boolean;
   canAuthorizePurchase?: boolean;
+  onOpenContext: () => void;
   onWorkspaceProfile?: (profile: {
     companyName: string;
     logoUrl: string | null;
@@ -419,6 +421,7 @@ export function SupplyOsDashboardWorkspace({
             canImportSupplyData={canImportSupplyData}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
+            onOpenContext={onOpenContext}
           />
       ) : null}
     </div>
@@ -452,6 +455,7 @@ function CaseCommandCenter({
   canImportSupplyData,
   canApproveProcurement,
   canAuthorizePurchase,
+  onOpenContext,
 }: {
   dashboard: SupplyCaseDashboard;
   activePanel: SupplyOsPanel;
@@ -460,6 +464,7 @@ function CaseCommandCenter({
   canImportSupplyData: boolean;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
+  onOpenContext: () => void;
 }) {
   const companyName = dashboardName(dashboard);
   const modelDashboard = useMemo(() => {
@@ -1010,6 +1015,7 @@ function CaseCommandCenter({
             orderId={customerProcurementRequest.order.orderId}
             item={customerProcurementRequest.item}
             initialOrder={customerProcurementRequest.order}
+            onOpenContext={onOpenContext}
             onBack={() => {
               setCustomerProcurementRequest(null);
               void refreshCustomerProcurementOrders().catch(() => undefined);

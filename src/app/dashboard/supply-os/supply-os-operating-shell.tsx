@@ -233,6 +233,7 @@ export function SupplyOsOperatingShell({
                 canImportSupplyData={canImportSupplyData}
                 canApproveProcurement={canApproveProcurement}
                 canAuthorizePurchase={canAuthorizePurchase}
+                onOpenContext={() => selectPanel("context")}
                 onWorkspaceProfile={setWorkspaceProfile}
               />
             )}

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS,
+  customerProcurementAttentionHints,
+  customerProcurementAttentionReason,
   customerProcurementContactSummary,
   customerProcurementEvidenceSummary,
   customerProcurementPhase,
@@ -14,6 +16,8 @@ import {
 
 const workbench = readFileSync("src/app/dashboard/supply-os/supply-os-inventory-sourcing.tsx", "utf8");
 const guidedWorkspace = readFileSync("src/app/dashboard/supply-os/supply-os-customer-procurement-workspace.tsx", "utf8");
+const dashboard = readFileSync("src/app/dashboard/supply-os/supply-os-dashboard.tsx", "utf8");
+const operatingShell = readFileSync("src/app/dashboard/supply-os/supply-os-operating-shell.tsx", "utf8");
 const campaignRoute = readFileSync("src/app/api/supply-os/supplier-research/campaigns/route.ts", "utf8");
 const researchPersistence = readFileSync("src/lib/supply-os/sourcing-research-persistence.ts", "utf8");
 
@@ -23,12 +27,19 @@ assert.match(campaignRoute, /status: 410/);
 assert.doesNotMatch(campaignRoute, /pollGuildSupplierResearchCampaign|GUILD_SUPPLIER_CAMPAIGN_KEY/);
 assert.doesNotMatch(researchPersistence, /system:guild-procurement|demoSourcingWorkspace/);
 assert.match(workbench, /Start sourcing/);
+assert.match(workbench, /Resolve blocker/);
 assert.doesNotMatch(guidedWorkspace, /if \(!result\.workflowWakeRequested\)/);
 assert.match(guidedWorkspace, /Request<\/span>/);
 assert.match(guidedWorkspace, /Research<\/span>/);
 assert.match(guidedWorkspace, /Compare<\/span>/);
 assert.match(guidedWorkspace, /Procure<\/span>/);
 assert.doesNotMatch(guidedWorkspace, /Bourne|Neon|Gmail/);
+assert.match(guidedWorkspace, /customerProcurementAttentionReason\(detail\.progress\)/);
+assert.match(guidedWorkspace, /customerProcurementAttentionHints\(item\.specification\)/);
+assert.match(guidedWorkspace, /Open Context/);
+assert.match(guidedWorkspace, /detail\.status === "needs_attention" \? \(/);
+assert.match(dashboard, /onOpenContext=\{onOpenContext\}/);
+assert.match(operatingShell, /onOpenContext=\{\(\) => selectPanel\("context"\)\}/);
 
 assert.equal(CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS, 7_000);
 assert.equal(customerProcurementPhase("new", 0), "researching");
@@ -41,6 +52,60 @@ assert.equal(customerProcurementStatusLabel("researching"), "Researching supplie
 assert.equal(customerProcurementStatusLabel("internal_worker_state"), "In progress");
 assert.equal(customerProcurementProgress("new", 0), "Request received. Supplier research has not started yet.");
 assert.equal(customerProcurementProgress("researching", 1), "1 supplier candidate is being verified.");
+assert.equal(
+  customerProcurementAttentionReason("Missing STL measurement units and a confirmed PCB surface finish."),
+  "Missing STL measurement units and a confirmed PCB surface finish.",
+);
+assert.equal(
+  customerProcurementAttentionReason("Worker exception: database timeout in Bourne"),
+  "The request could not continue. Correct the missing or conflicting details in Context, then confirm a new sourcing request.",
+);
+assert.equal(
+  customerProcurementAttentionReason("Order received from dashboard"),
+  "The request could not continue. Correct the missing or conflicting details in Context, then confirm a new sourcing request.",
+);
+assert.equal(
+  customerProcurementProgress("needs_attention", 0, "Needs attention: Missing STL units."),
+  "Missing STL units.",
+);
+assert.equal(
+  customerProcurementAttentionReason("Blocked: PCB finish must be confirmed."),
+  "PCB finish must be confirmed.",
+);
+for (const unsafeReason of [
+  null,
+  "   ",
+  "Additional information is required.",
+  "See https://internal.example/request/123",
+  '{"error":"supplier worker failed"}',
+  "Failure 71a31ebe-2db3-4347-9945-a7a4b91f38d2",
+]) {
+  assert.equal(
+    customerProcurementAttentionReason(unsafeReason),
+    "The request could not continue. Correct the missing or conflicting details in Context, then confirm a new sourcing request.",
+  );
+}
+assert.equal(customerProcurementAttentionReason(`Missing ${"detail ".repeat(80)}`).length, 320);
+assert.deepEqual(customerProcurementAttentionHints(
+  "Task 1: PCBA surface finish requires clarification between leaded HASL and ENIG. Task 2: STL measurement unit is unspecified.",
+), [
+  "Split this combined request into one sourcing request per item or manufacturing process.",
+  "Task 1: PCBA surface finish requires clarification between leaded HASL and ENIG.",
+  "Task 2: STL measurement unit is unspecified.",
+]);
+assert.deepEqual(customerProcurementAttentionHints(null), []);
+assert.deepEqual(customerProcurementAttentionHints("The request contains a complete specification."), []);
+const repeatedHints = customerProcurementAttentionHints(
+  "The finish is unspecified. The finish is unspecified. Quantity is unknown. Tolerance is missing. Material is not provided.",
+);
+assert.deepEqual(repeatedHints, [
+  "The finish is unspecified.",
+  "Quantity is unknown.",
+  "Tolerance is missing.",
+]);
+const longHint = customerProcurementAttentionHints(`${"Background ".repeat(40)}The measurement unit is unspecified.`)[0];
+assert.ok(longHint?.startsWith("... "));
+assert.ok(longHint && longHint.length <= 244);
 assert.deepEqual(customerProcurementEvidenceSummary({
   summary: "Internal Neon details are hidden.",
   evidence: ["Public supplier capability page"],
