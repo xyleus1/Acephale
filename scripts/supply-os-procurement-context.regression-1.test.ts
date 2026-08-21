@@ -88,6 +88,27 @@ async function main() {
     snapshot.version,
   );
 
+  const prioritized = await contextualizeProcurementRequest({
+    session: { userId: "user-a", officeId: "office-a" },
+    input: procurementRequestSchema.parse({
+      ...input,
+      specification: "[Request-specific procurement context.]\nPart: PCB-01",
+      requestContext: {
+        ...input.requestContext,
+        procurement_context: { schema_version: 1, priority: "request_specific" },
+      },
+      idempotencyKey: "context-priority-regression",
+    }),
+  }, dependencies);
+  assert(
+    (prioritized.specification ?? "").indexOf("[Request-specific procurement context.")
+      < (prioritized.specification ?? "").indexOf("[Inherited company Context snapshot."),
+  );
+  assert.match(
+    (prioritized.requestContext.company_context as { handling: string }).handling,
+    /after request-specific procurement context/,
+  );
+
   let submitted: ProcurementRequestInput | null = null;
   const response = await handleProcurementPost(new Request("http://test.local/api/procurement/requests", {
     method: "POST",

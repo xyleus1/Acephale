@@ -2,6 +2,34 @@
 
 ## Latest Update
 
+### Context chat can prepare confirmed procurement requests
+
+- An explicit request to create, add, start, or run procurement now produces a
+  durable confirmation card in the company Context conversation. Missing item,
+  quantity, or unit stays conversational and does not produce a proposal.
+- Start procurement is the only creation boundary. It resolves the current
+  authenticated office, workspace, company, and server-side procurement
+  customer mapping, then submits the existing idempotent CUSTOM request. The
+  model cannot call procurement directly.
+- Each order freezes `request_context.procurement_context` from the exact
+  operator request and directly cited files. That part-specific evidence is
+  copied first into the BOM specification. The full eligible company snapshot
+  is frozen separately as inherited `request_context.company_context`.
+- Derya replies are excluded from evidence. Uploaded content remains untrusted.
+  Confirmation starts supplier research only and does not contact, select, or
+  purchase from a supplier.
+- Proposals, dismissals, and linked order state use the existing
+  `CompanyDocument` table. No schema, migration, dependency, or new Context
+  table was added.
+- Confirmation claims the existing proposal record atomically before workflow
+  submission. A second tab cannot dismiss a request after creation has started,
+  and the workflow idempotency key still prevents duplicate orders.
+- Verification passed: focused Context and procurement contracts, TypeScript,
+  product copy, procurement workflow contract, Prisma validation and generation,
+  optimized production build, complete migration chain in disposable
+  PostgreSQL, and the database-backed Context action lifecycle including the
+  confirmation-versus-dismissal race.
+
 ### Production uses the real HypnoDreamz workspace without an Atlas fallback
 
 - Production was already connected to the intended unified Neon database, but

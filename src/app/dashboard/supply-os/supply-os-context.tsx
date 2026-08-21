@@ -10,6 +10,7 @@ import {
   Files,
   LoaderCircle,
   Paperclip,
+  Search,
   X,
 } from "lucide-react";
 import {
@@ -45,10 +46,34 @@ type ContextDocument = {
   createdAt: string;
 };
 
+type ContextProcurementAction = {
+  id: string;
+  status: "PENDING" | "CREATING" | "CREATED" | "DISMISSED";
+  draft: {
+    material: string;
+    specification: string | null;
+    manufacturer: string | null;
+    partNumber: string | null;
+    quantity: number;
+    unit: string;
+    neededBy: string | null;
+    deliveryLocation: string | null;
+    notes: string | null;
+  };
+  citations: Array<{ id: string; label: string }>;
+  order: null | {
+    id: string;
+    status: string;
+    workflowWakeRequested: boolean;
+  };
+  createdAt: string;
+};
+
 type ContextPayload = {
   workspace: { id: string; name: string };
   messages: ContextMessage[];
   documents: ContextDocument[];
+  procurementActions: ContextProcurementAction[];
 };
 
 type OptimisticMessage = ContextMessage & { pending: true };
@@ -148,6 +173,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
   const [message, setMessage] = useState("");
   const [optimisticMessage, setOptimisticMessage] = useState<OptimisticMessage | null>(null);
   const [busy, setBusy] = useState(false);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [filesOpen, setFilesOpen] = useState(true);
   const [dragActive, setDragActive] = useState(false);
@@ -274,6 +300,29 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
     if (failures.length) setError(failures.join(" "));
   }
 
+  async function decideProcurementAction(actionId: string, decision: "confirm" | "dismiss") {
+    if (!workspaceId || actionBusyId) return;
+    setActionBusyId(actionId);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/supply-os/workspaces/${workspaceId}/context/procurement/${encodeURIComponent(actionId)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ decision }),
+        },
+      );
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || "The procurement decision did not finish.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The procurement decision did not finish.");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
   function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
@@ -356,6 +405,76 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
                   </div>
                 ) : null}
               </div>
+            </article>
+          ))}
+          {(data.procurementActions ?? []).filter((action) => action.status !== "DISMISSED").map((action) => (
+            <article className={styles.procurementAction} data-status={action.status} key={action.id}>
+              <header>
+                <span className={styles.procurementActionIcon}><Search size={18} aria-hidden="true" /></span>
+                <span>
+                  <strong>{action.status === "CREATED"
+                    ? "Procurement started"
+                    : action.status === "CREATING"
+                      ? "Procurement is starting"
+                      : "Start procurement?"}</strong>
+                  <small>{action.draft.material}</small>
+                </span>
+              </header>
+              <dl>
+                <div><dt>Quantity</dt><dd>{action.draft.quantity.toLocaleString("en-US")} {action.draft.unit}</dd></div>
+                {action.draft.partNumber ? <div><dt>Part</dt><dd>{action.draft.partNumber}</dd></div> : null}
+                {action.draft.manufacturer ? <div><dt>Manufacturer</dt><dd>{action.draft.manufacturer}</dd></div> : null}
+                {action.draft.neededBy ? <div><dt>Needed by</dt><dd>{action.draft.neededBy}</dd></div> : null}
+                {action.draft.deliveryLocation ? <div><dt>Deliver to</dt><dd>{action.draft.deliveryLocation}</dd></div> : null}
+              </dl>
+              {action.draft.specification ? <p className={styles.procurementSpecification}>{action.draft.specification}</p> : null}
+              {action.citations.length ? (
+                <div className={styles.citations} aria-label="Procurement sources">
+                  {action.citations.map((citation) => <span key={citation.id}>{citation.label}</span>)}
+                </div>
+              ) : null}
+              {action.status === "CREATED" && action.order ? (
+                <div className={styles.procurementResult}>
+                  <span>Order {action.order.id}</span>
+                  <strong>{action.order.workflowWakeRequested ? "Research requested" : "Queued"}</strong>
+                </div>
+              ) : action.status === "CREATING" ? (
+                <>
+                  <div className={styles.procurementResult}>
+                    <span>Confirmation accepted</span>
+                    <strong>Creating supplier research request</strong>
+                  </div>
+                  <div className={styles.procurementButtons}>
+                    <button
+                      type="button"
+                      className={styles.dismissProcurement}
+                      disabled={Boolean(actionBusyId)}
+                      onClick={() => void decideProcurementAction(action.id, "confirm")}
+                    >Retry if this remains for 30 seconds</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className={styles.approvalBoundary}>Creates one supplier research request. It does not contact or select a supplier.</p>
+                  <div className={styles.procurementButtons}>
+                    <button
+                      type="button"
+                      className={styles.confirmProcurement}
+                      disabled={Boolean(actionBusyId)}
+                      onClick={() => void decideProcurementAction(action.id, "confirm")}
+                    >
+                      {actionBusyId === action.id ? <LoaderCircle className={styles.spinner} size={17} /> : null}
+                      Start procurement
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.dismissProcurement}
+                      disabled={Boolean(actionBusyId)}
+                      onClick={() => void decideProcurementAction(action.id, "dismiss")}
+                    >Dismiss</button>
+                  </div>
+                </>
+              )}
             </article>
           ))}
           {busy ? (

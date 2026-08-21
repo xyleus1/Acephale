@@ -9,10 +9,12 @@ const files = {
   persistence: readFileSync(resolve(root, "src/lib/company-context.ts"), "utf8"),
   documents: readFileSync(resolve(root, "src/lib/supply-os/context-documents.ts"), "utf8"),
   agent: readFileSync(resolve(root, "src/lib/supply-os/context-agent.ts"), "utf8"),
+  procurement: readFileSync(resolve(root, "src/lib/supply-os/context-procurement.ts"), "utf8"),
   contextRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/route.ts"), "utf8"),
   uploadRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/documents/route.ts"), "utf8"),
   downloadRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/documents/[documentId]/route.ts"), "utf8"),
   chatRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/chat/route.ts"), "utf8"),
+  procurementRoute: readFileSync(resolve(root, "src/app/api/supply-os/workspaces/[workspaceId]/context/procurement/[actionId]/route.ts"), "utf8"),
   ui: readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-context.tsx"), "utf8"),
 };
 
@@ -49,6 +51,15 @@ assert.match(files.agent, /Prior Derya replies are conversation only, not eviden
 assert.match(files.agent, /message\.role !== "OPERATOR"/);
 assert.match(files.agent, /if \(!citationIds\.length\)/);
 assert.match(files.agent, /assembleCompanyContextForAgent/);
+assert.match(files.agent, /procurementDraft/);
+assert.match(files.agent, /createCompanyContextProcurementAction/);
+assert.match(files.agent, /confirmation is required/);
+assert.match(files.procurement, /company_context_procurement:/);
+assert.match(files.procurement, /priority: "request_specific"/);
+assert.match(files.procurement, /request_context|requestContext/);
+assert.match(files.procurement, /idempotencyKey/);
+assert.match(files.procurement, /confirmCompanyContextProcurementAction/);
+assert.match(files.procurementRoute, /decision !== "confirm" && decision !== "dismiss"/);
 assert.match(files.contextRoute, /loadCompanyContext/);
 assert.match(files.uploadRoute, /uploadCompanyContextDocument/);
 assert.match(files.uploadRoute, /uploadCompanyContextDocumentChunk/);
@@ -62,6 +73,9 @@ assert.match(files.ui, /Files in context/);
 assert.match(files.ui, /placeholder="Ask Derya"/);
 assert.match(files.ui, /\.md/);
 assert.match(files.ui, /UPLOAD_CHUNK_BYTES/);
+assert.match(files.ui, /Start procurement\?/);
+assert.match(files.ui, /Start procurement/);
+assert.match(files.ui, /It does not contact or select a supplier/);
 assert.doesNotMatch(files.ui, /selectedNodeId|context\/nodes|visibility/);
 
 for (const source of Object.values(files)) {

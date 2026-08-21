@@ -16,6 +16,37 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-21 - Context procurement requires confirmation and layered evidence
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Company Context already flowed into new custom procurement, but the
+  conversation could not prepare or start a request. A broad company snapshot
+  also did not identify which part, message, or files were the immediate reason
+  for one procurement run.
+- Decision: An explicit procurement instruction in Context may create a
+  persistent confirmation proposal in the existing `CompanyDocument` table.
+  It does not create an order. An authenticated operator must select Start
+  procurement before the server submits the existing idempotent CUSTOM request
+  and wakes the procurement workflow.
+- Evidence order: The confirmed order freezes
+  `request_context.procurement_context` from the exact operator request and
+  directly cited files. It also freezes the whole eligible company snapshot in
+  `request_context.company_context`. The request-specific snapshot and BOM
+  specification come first; company Context is inherited background. Generated
+  Derya replies are excluded from both evidence layers.
+- Approval boundary: Confirmation creates supplier research only. It does not
+  contact, select, negotiate with, or purchase from a supplier. Existing later
+  review and approval controls remain authoritative.
+- Consequences: Confirmation cards, dismissal, and the resulting order link
+  survive reload without another table. Repeated confirmation uses the same
+  action-derived idempotency key and cannot create a duplicate order. The
+  existing record moves atomically from pending to creating before workflow
+  submission, so a concurrent dismissal cannot race a confirmed creation.
+- Revisit when: The procurement worker supports first-class immutable evidence
+  references instead of the current request-context and BOM specification
+  compatibility copy.
+
 ### 2026-08-20 - Custom procurement freezes the selected company Context
 
 - Status: accepted

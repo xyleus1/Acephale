@@ -5810,3 +5810,30 @@ Use this file for chronological implementation notes that future agents should s
   production screenshot verifies ingestion before the change; final light-theme
   verification relies on the CSS regression and build until the release is
   opened in an authenticated browser.
+
+### 2026-08-21 - Add confirmed procurement actions to Context chat
+
+- Branch: `feat/context-procurement-confirmation`, based on current
+  `origin/main`.
+- Task: Let operators prepare a procurement request in the company chat, review
+  its exact part scope and sources, then explicitly confirm creation.
+- Persistence: Confirmation proposals, dismissal, and linked order state are
+  encoded in the existing company-scoped `CompanyDocument` table. No schema or
+  dependency change was required.
+- Execution: The confirmation endpoint derives office, workspace, company, and
+  workflow customer on the server. One action-derived idempotency key creates
+  at most one workflow order and one initial wake.
+- Concurrency: The existing proposal record moves atomically from `PENDING` to
+  `CREATING` before workflow submission. Dismissal can only claim `PENDING`, so
+  two tabs cannot dismiss and create the same request concurrently.
+- Retrieval: The order stores a request-specific snapshot containing the exact
+  operator request and cited files, then stores the full company snapshot as
+  inherited background. Request-specific evidence is first in the worker BOM
+  specification. Generated Derya replies remain ineligible evidence.
+- Verification: `npm run test:supply-os-context`, disposable PostgreSQL
+  migration chain and `npm run test:supply-os-context-db`, Prisma validation
+  and generation, `npm run test:procurement-workflow`, product copy, TypeScript,
+  optimized build, and diff hygiene passed.
+- Failed/skipped checks: A live model-created confirmation was not run because
+  this isolated worktree has no `OPENAI_API_KEY`. Structured-output behavior is
+  covered by the agent contract and the existing production model path.
