@@ -9,7 +9,7 @@ import {
   parseStoredSupplierResearchRetrievalCapture,
   type SupplierResearchRetrievalCapture,
 } from "../src/lib/supply-os/exa-supplier-research";
-import { GUILD_SOURCING_LINES, type GuildSourcingLine } from "../src/lib/supply-os/guild-sourcing-items";
+import { GUILD_SOURCING_LINES, type GuildSourcingLine } from "./fixtures/legacy-supply-os/guild-sourcing-items";
 import { parseSupplierResearchRouteBody } from "../src/lib/supply-os/supplier-research-route-contract";
 import {
   GUILD_SUPPLIER_CAMPAIGN_EVIDENCE_POLICY_VERSION,
@@ -23,7 +23,7 @@ import {
   guildSupplierResearchAttemptInput,
   type SupplierResearchCampaignAttempt,
   type SupplierResearchProvider,
-} from "../src/lib/supply-os/supplier-research-campaign";
+} from "./fixtures/legacy-supply-os/supplier-research-campaign";
 import type { SupplierCandidate, SupplierResearchResult } from "../src/lib/supply-os/research";
 
 const CHECKPOINT_SCHEMA_VERSION = 1;

@@ -78,7 +78,8 @@ assert.equal(
 );
 assert.match(procurement, /customerProcurementRequest/);
 assert.match(procurement, /\/api\/procurement\/requests/);
-assert.match(procurement, /workspaceId \? \[\] : buildProcurementOptions\(item\)/);
+assert.doesNotMatch(procurement, /buildProcurementOptions|DISCOVERED_OPTIONS|2026-08-09/, "procurement must not inject fixture suppliers or a fixed delivery-date base");
+assert.match(procurement, /publicResearchOptions\(publicResearch\)/, "procurement candidates must come from persisted or live research evidence");
 assert.match(persistence, /\{ maxWait: 5_000, timeout: 45_000 \}/, "research knowledge persistence needs an explicit transaction budget");
 assert.match(persistence, /pg_advisory_xact_lock\(hashtextextended\(\$\{`supply-research:/, "supplier profile expansion must serialize per workspace");
 

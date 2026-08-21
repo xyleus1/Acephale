@@ -365,7 +365,7 @@ assert.equal(directPartsSourcing[0]?.needByDate, null);
 assert.equal(directPartsSourcing[1]?.requiredQuantity, 300);
 assert.equal(directPartsSourcing[1]?.unitOfMeasure, "M");
 assert.equal(directPartsSourcing[2]?.requiredQuantity, null);
-assert.equal(directPartsSourcing[2]?.unitOfMeasure, undefined, "As req. must not inherit the storage fallback unit");
+assert.equal(directPartsSourcing[2]?.unitOfMeasure, null, "As req. must not inherit the storage fallback unit");
 
 const sharedWorkspaceSource = readFileSync(new URL("../src/app/dashboard/supply-os/supply-os-shared-workspace.tsx", import.meta.url), "utf8");
 const supplyOsPageSource = readFileSync(new URL("../src/app/dashboard/supply-os/page.tsx", import.meta.url), "utf8");

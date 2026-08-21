@@ -1,6 +1,6 @@
 import type { ProcurementRequestInput } from "@/lib/procurement-contract";
-import type { AtlasInventoryItem } from "./atlas-robotics-inventory";
-import type { Guild2ProcurementOrderState } from "./guild2-procurement";
+import type { SupplyInventoryItem } from "./inventory-item";
+import type { CustomerProcurementOrderState } from "./customer-procurement-status";
 import type { SourcingRequestDraft } from "./sourcing-request-contract";
 
 export const CUSTOMER_PROCUREMENT_CAMPAIGN = "CUSTOM";
@@ -73,7 +73,7 @@ export function customerProcurementRequest(args: {
   };
 }
 
-export function customerProcurementItem(order: CustomerProcurementListItem): AtlasInventoryItem {
+export function customerProcurementItem(order: CustomerProcurementListItem): SupplyInventoryItem {
   const source = order.requestContext.source;
   const requestId = source && typeof source === "object" && !Array.isArray(source)
     && typeof (source as Record<string, unknown>).request_id === "string"
@@ -109,15 +109,18 @@ export function customerProcurementItem(order: CustomerProcurementListItem): Atl
 export function customerProcurementDraftItem(
   requestId: string,
   draft: SourcingRequestDraft,
-): AtlasInventoryItem {
+): SupplyInventoryItem {
+  if (!draft.productName || !draft.quantity || !draft.unit) {
+    throw new Error("The submitted sourcing request is missing its item, quantity, or unit.");
+  }
   return customerProcurementItem({
     id: requestId,
     status: "new",
     progress: "Order received from dashboard",
     neededBy: draft.needByDate,
-    quantity: draft.quantity ?? 0,
-    unit: draft.unit ?? "units",
-    material: draft.productName ?? "Sourcing request",
+    quantity: draft.quantity,
+    unit: draft.unit,
+    material: draft.productName,
     specification: draft.specification ?? draft.partNumber,
     requestContext: {
       source: { campaign: CUSTOMER_PROCUREMENT_CAMPAIGN, request_id: requestId },
@@ -130,7 +133,7 @@ export function customerProcurementDraftItem(
   });
 }
 
-export function customerProcurementOrderState(order: CustomerProcurementListItem): Guild2ProcurementOrderState {
+export function customerProcurementOrderState(order: CustomerProcurementListItem): CustomerProcurementOrderState {
   return {
     orderId: order.id,
     status: order.status,

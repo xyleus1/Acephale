@@ -412,7 +412,7 @@ function slug(value: string, index: number) {
 }
 
 function allowedSupplierRoles(componentItemKey: string): readonly SupplierCandidateRole[] {
-  return componentItemKey.startsWith("request:") || componentItemKey.startsWith("GUILD-")
+  return componentItemKey.startsWith("request:")
     ? ["MANUFACTURER", "DISTRIBUTOR", "PRODUCER", "PROCESSOR", "EXPORTER", "TRADER", "SERVICE_PROVIDER"]
     : ["MANUFACTURER", "DISTRIBUTOR"];
 }

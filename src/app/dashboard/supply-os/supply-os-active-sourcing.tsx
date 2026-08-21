@@ -15,12 +15,12 @@ import {
   type CustomerProcurementListItem,
 } from "@/lib/supply-os/customer-procurement";
 import {
-  guild2CustomerProcurementStatusLabel,
-  guild2ProcurementContactSummary,
-  guild2ProcurementEvidenceSummary,
-  guild2ProcurementQuoteSummary,
-  type Guild2ProcurementRequestDetail,
-} from "@/lib/supply-os/guild2-procurement";
+  customerProcurementContactSummary,
+  customerProcurementEvidenceSummary,
+  customerProcurementQuoteSummary,
+  customerProcurementStatusLabel,
+  type CustomerProcurementRequestDetail,
+} from "@/lib/supply-os/customer-procurement-status";
 import {
   externalPoReady,
   externalPoState,
@@ -64,8 +64,8 @@ function outreachLabel(contacted: number, suppliers: number) {
 
 function workflowSituation(
   request: CustomerProcurementListItem,
-  detail: Guild2ProcurementRequestDetail,
-  vendor: Guild2ProcurementRequestDetail["vendors"][number],
+  detail: CustomerProcurementRequestDetail,
+  vendor: CustomerProcurementRequestDetail["vendors"][number],
 ) {
   const poState = externalVendorPoState(request, detail, vendor.id);
   if (poState === "Purchase order placed") return "The purchase order for this manufacturer was approved and placed.";
@@ -166,7 +166,7 @@ export function ActiveSourcingWorkspace({
     [historicalCases, historicalRuns],
   );
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [workflowDetail, setWorkflowDetail] = useState<Guild2ProcurementRequestDetail | null>(null);
+  const [workflowDetail, setWorkflowDetail] = useState<CustomerProcurementRequestDetail | null>(null);
   const [detailState, setDetailState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailRevision, setDetailRevision] = useState(0);
@@ -217,7 +217,7 @@ export function ActiveSourcingWorkspace({
     setWorkflowDetail(null);
     setDetailState("loading");
     setDetailError(null);
-    void fetchJson<Guild2ProcurementRequestDetail>(
+    void fetchJson<CustomerProcurementRequestDetail>(
       `/api/procurement/requests/${encodeURIComponent(workflowRequestId)}`,
       controller.signal,
     ).then((detail) => {
@@ -337,7 +337,7 @@ export function ActiveSourcingWorkspace({
             {workflowDetail?.vendors.map((vendor) => (
               <button key={vendor.id} type="button" data-active={workflowVendor?.id === vendor.id} onClick={() => setManufacturerId(vendor.id)}>
                 <span><strong>{vendor.name}</strong><small>{vendor.contact?.email ?? "Supplier email not saved"}</small></span>
-                <span><b>{vendor.quote ? "Responded" : vendor.contacted ? "Contacted" : "Identified"}</b><small>{guild2ProcurementQuoteSummary(vendor.quote)}</small></span>
+                <span><b>{vendor.quote ? "Responded" : vendor.contacted ? "Contacted" : "Identified"}</b><small>{customerProcurementQuoteSummary(vendor.quote)}</small></span>
               </button>
             ))}
             {historicalGroup?.cases.map((procurementCase) => (
@@ -356,14 +356,14 @@ export function ActiveSourcingWorkspace({
               </header>
               <dl className={styles.activeSupplierFacts}>
                 <div><dt>Outreach</dt><dd>{workflowVendor.contacted ? "Gmail contact recorded" : "No contact receipt"}</dd></div>
-                <div><dt>Response</dt><dd>{workflowVendor.quote ? guild2ProcurementQuoteSummary(workflowVendor.quote) : "No quote recorded"}</dd></div>
-                <div><dt>Contact</dt><dd>{guild2ProcurementContactSummary(workflowVendor.contact).secondary}</dd></div>
-                <div><dt>Workflow</dt><dd>{guild2CustomerProcurementStatusLabel(workflowRequest.status)}</dd></div>
+                <div><dt>Response</dt><dd>{workflowVendor.quote ? customerProcurementQuoteSummary(workflowVendor.quote) : "No quote recorded"}</dd></div>
+                <div><dt>Contact</dt><dd>{customerProcurementContactSummary(workflowVendor.contact).secondary}</dd></div>
+                <div><dt>Workflow</dt><dd>{customerProcurementStatusLabel(workflowRequest.status)}</dd></div>
               </dl>
               <section className={styles.activeEvidenceRead}>
                 <small>Evidence read</small>
-                {guild2ProcurementEvidenceSummary(workflowVendor.research).map((entry) => <p key={entry}>{entry}</p>)}
-                {!guild2ProcurementEvidenceSummary(workflowVendor.research).length ? <p>No supplier evidence summary is available.</p> : null}
+                {customerProcurementEvidenceSummary(workflowVendor.research).map((entry) => <p key={entry}>{entry}</p>)}
+                {!customerProcurementEvidenceSummary(workflowVendor.research).length ? <p>No supplier evidence summary is available.</p> : null}
               </section>
               <section className={styles.activeConversationPanel}>
                 <header><span><MessageSquare size={16} /><strong>Conversation</strong></span>{conversation?.sourceUrl ? <a href={conversation.sourceUrl} target="_blank" rel="noreferrer">Open Gmail <ExternalLink size={12} /></a> : null}</header>

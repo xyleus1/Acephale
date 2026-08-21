@@ -1,4 +1,4 @@
-import type { AtlasInventoryItem } from "./atlas-robotics-inventory";
+import type { SupplyInventoryItem } from "../../../src/lib/supply-os/inventory-item";
 
 export type GuildSourcingClassification = "SUPPLIER_SEARCH" | "CLARIFICATION_REQUIRED" | "REQUIREMENT_ONLY";
 
@@ -70,7 +70,7 @@ export const GUILD_SOURCING_LINES: GuildSourcingLine[] = GUILD_SOURCING_LINE_INP
       : "SUPPLIER_SEARCH",
 }));
 
-export const GUILD_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_LINES.map((line) => ({
+export const GUILD_SOURCING_ITEMS: SupplyInventoryItem[] = GUILD_SOURCING_LINES.map((line) => ({
   sku: line.sku,
   name: line.name,
   specification: line.specification,
@@ -92,7 +92,7 @@ export const GUILD_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_LINES.m
   deliveryLocation: "Austin, TX, United States",
 }));
 
-export const GUILD2_SOURCING_ITEMS: AtlasInventoryItem[] = GUILD_SOURCING_ITEMS.map((item) => ({
+export const GUILD2_SOURCING_ITEMS: SupplyInventoryItem[] = GUILD_SOURCING_ITEMS.map((item) => ({
   ...item,
   sku: item.sku.replace(/^GUILD-/, "GUILD2-"),
 }));

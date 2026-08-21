@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mergeSourcingRequestDraft, missingSourcingFields, normalizeSourcingRequestDraft } from "../src/lib/supply-os/sourcing-request-contract";
 import { adaptSupplyPartsCsv, normalizeSupplyCsvBundle } from "../src/lib/supply-os/csv-import";
-import { GUILD_SOURCING_LINES } from "../src/lib/supply-os/guild-sourcing-items";
+import { GUILD_SOURCING_LINES } from "./fixtures/legacy-supply-os/guild-sourcing-items";
 import { GUILD_PROCUREMENT_BOM, REPRESENTATIVE_LIVE_RESEARCH_IDS } from "./fixtures/guild-procurement-bom";
 
 assert.equal(GUILD_PROCUREMENT_BOM.length, 40, "the acceptance catalog must retain all 40 BOM lines");

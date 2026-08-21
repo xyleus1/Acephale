@@ -5,7 +5,7 @@ import {
   resolveMovementAssessment,
   resolveMovementOwnedRecord,
   SUPPLY_MOVEMENT_ORIGIN_COUNTRIES,
-} from "../src/lib/supply-os-command-model";
+} from "./fixtures/legacy-supply-os/supply-os-command-model";
 
 const assessments = [
   { id: "ex-101", movementId: "po-1048", title: "Broker hold" },

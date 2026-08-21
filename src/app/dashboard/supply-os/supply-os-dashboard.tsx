@@ -24,7 +24,6 @@ import {
 } from "recharts";
 import {
   generateSupplyCase,
-  SAMPLE_SUPPLY_CASE_PROMPT,
   type SupplyCaseDashboard,
   type SupplyCompanyResearch,
 } from "@/lib/supply-os-case-model";
@@ -46,21 +45,13 @@ import {
 } from "@/lib/supply-os/sourcing-request-contract";
 import { sourcingDraftFromResearchInput } from "@/lib/supply-os/sourcing-research-navigation";
 import {
-  loadSupplyCases,
-  removeLegacySupplyCaseStorage,
-  supplyCaseStorageKeys,
-  visibleSupplyCases,
-} from "./supply-os-storage";
-import {
-  ATLAS_ROBOTICS_INVENTORY,
   sourcingDeliveryLocation,
   sourcingNeedByDate,
   sourcingRequestQuantity,
   shortageQuantity,
-  type AtlasInventoryItem,
-} from "@/lib/supply-os/atlas-robotics-inventory";
-import { GUILD2_SOURCING_ITEMS } from "@/lib/supply-os/guild-sourcing-items";
-import type { Guild2ProcurementOrderState } from "@/lib/supply-os/guild2-procurement";
+  type SupplyInventoryItem,
+} from "@/lib/supply-os/inventory-item";
+import type { CustomerProcurementOrderState } from "@/lib/supply-os/customer-procurement-status";
 import {
   customerProcurementDraftItem,
   CUSTOMER_PROCUREMENT_CAMPAIGN,
@@ -69,25 +60,23 @@ import {
   customerProcurementOrderState,
   type CustomerProcurementListItem,
 } from "@/lib/supply-os/customer-procurement";
-import { SUPPLY_OS_DEMO_COMPANIES, type SupplyOsDemoCompanyId } from "@/lib/supply-os/demo-company";
 import { snapshotResponseToSourcingItems } from "@/lib/supply-os/snapshot-sourcing";
 import type { SupplyWorkspaceSnapshotResponse } from "@/lib/supply-os/snapshot-twin";
 import { SupplyOsCommandMap } from "./supply-os-command-map";
 import { SupplyOsContext } from "./supply-os-context";
 import { SupplyOsOpportunitiesPreview } from "./supply-os-opportunities-preview";
 import {
-  AtlasInventoryWorkspace,
-  AtlasSourcingInspector,
+  SupplyInventoryWorkspace,
+  SupplySourcingInspector,
   type PendingSourcingQueueItem,
 } from "./supply-os-inventory-sourcing";
-import { AtlasProcurementWorkspace } from "./supply-os-procurement-workspace";
+import { SupplyProcurementWorkspace } from "./supply-os-procurement-workspace";
 import { CustomerProcurementWorkspace } from "./supply-os-customer-procurement-workspace";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
   SupplyIntelligenceProfile,
   SourcingQueuePage,
-  SupplierResearchCampaign,
   SupplierSenderAccount,
 } from "./supply-os-sourcing-research-types";
 import styles from "./supply-os-logistics.module.css";
@@ -249,15 +238,6 @@ function workspaceForObject(
   return model.workspaces.find((workspace) => workspace.id === object.workstreamId) ?? null;
 }
 
-const ILLUSTRATIVE_NETWORK_DATE = new Date("2026-08-08T12:00:00.000Z");
-
-const PRODUCT_MEDIA = {
-  src: "/supply-os/demo/vector3dhd-amr.jpg",
-  sourcePage: "https://commons.wikimedia.org/wiki/File:Vector3DHD_autonomous_mobile_robot_and_EnZone_wireless_charging.jpg",
-  creator: "PattyK33",
-  license: "CC BY-SA 4.0",
-} as const;
-
 const DOMAIN_CONFIG: Record<SupplyOsPanel, {
   railTitle: string;
   railSummary: string;
@@ -319,31 +299,23 @@ function preferredPanelObject(panel: SupplyOsPanel, objects: SupplyCommandObject
   return objects[0] ?? null;
 }
 
-function illustrativeNetworkCase() {
-  return generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, ILLUSTRATIVE_NETWORK_DATE, "full_operation");
-}
-
 export function SupplyOsDashboardWorkspace({
   storageScope,
   workspaceId,
   workspaceName,
-  presentationMode = false,
   activePanel = "materials",
   canImportSupplyData = false,
   canApproveProcurement = false,
   canAuthorizePurchase = false,
-  demoCompanyId,
   onWorkspaceProfile,
 }: {
   storageScope: string;
   workspaceId?: string | null;
   workspaceName?: string | null;
-  presentationMode?: boolean;
   activePanel?: SupplyOsPanel;
   canImportSupplyData?: boolean;
   canApproveProcurement?: boolean;
   canAuthorizePurchase?: boolean;
-  demoCompanyId?: SupplyOsDemoCompanyId;
   onWorkspaceProfile?: (profile: {
     companyName: string;
     logoUrl: string | null;
@@ -351,36 +323,9 @@ export function SupplyOsDashboardWorkspace({
     locationCount: number;
   }) => void;
 }) {
-  const keys = useMemo(() => supplyCaseStorageKeys(storageScope), [storageScope]);
-  const [savedCases, setSavedCases] = useState<SupplyCaseDashboard[]>([]);
-  const [activeCase, setActiveCase] = useState<SupplyCaseDashboard | null>(null);
-  const [storageReady, setStorageReady] = useState(false);
   const [workspaceResearch, setWorkspaceResearch] = useState<SupplyCompanyResearch | null>(null);
   const [profileState, setProfileState] = useState<"idle" | "loading" | "researching" | "ready" | "error">("idle");
   const [profileRevision, setProfileRevision] = useState(0);
-
-  useEffect(() => {
-    function hydrate() {
-      const stored = loadSupplyCases(storageScope);
-      const cases = stored.cases.length ? stored.cases : [illustrativeNetworkCase()];
-      setSavedCases(cases);
-      setActiveCase(stored.selected ?? cases[0]);
-      setStorageReady(true);
-    }
-
-    function handleStorage(event: StorageEvent) {
-      if (event.key !== keys.cases && event.key !== keys.selected) return;
-      const stored = loadSupplyCases(storageScope);
-      const cases = stored.cases.length ? stored.cases : [illustrativeNetworkCase()];
-      setSavedCases(cases);
-      setActiveCase(stored.selected ?? cases[0]);
-    }
-
-    removeLegacySupplyCaseStorage();
-    hydrate();
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, [keys.cases, keys.selected, storageScope]);
 
   useEffect(() => {
     if (activePanel === "context" || activePanel === "scenarios") return;
@@ -434,18 +379,6 @@ export function SupplyOsDashboardWorkspace({
     return () => controller.abort();
   }, [activePanel, onWorkspaceProfile, profileRevision, workspaceId]);
 
-  useEffect(() => {
-    if (!presentationMode) return;
-    const agentDockWasOpen = document.documentElement.classList.contains("agent-dock-open");
-    document.documentElement.classList.remove("agent-dock-open");
-    document.body.classList.add("supply-os-presentation");
-    return () => {
-      document.body.classList.remove("supply-os-presentation");
-      if (agentDockWasOpen) document.documentElement.classList.add("agent-dock-open");
-    };
-  }, [presentationMode]);
-
-  const visibleCases = useMemo(() => visibleSupplyCases(savedCases), [savedCases]);
   const workspaceCase = useMemo(() => {
     if (!workspaceId || !workspaceName || profileState !== "ready" || !workspaceResearch) return null;
     return generateSupplyCase(
@@ -455,22 +388,15 @@ export function SupplyOsDashboardWorkspace({
       workspaceResearch,
     );
   }, [profileState, workspaceId, workspaceName, workspaceResearch]);
-  const browserCase = activeCase && visibleCases.some((item) => item.id === activeCase.id)
-    ? activeCase
-    : visibleCases[0] ?? null;
-  const demoEnabled = Boolean(demoCompanyId) || presentationMode;
-  const currentCase = workspaceId ? workspaceCase : demoEnabled ? browserCase : null;
-  const resolvedDemoCompanyId = workspaceId
-    ? null
-    : demoCompanyId ?? (presentationMode ? "atlas-robotics" : null);
+  const currentCase = workspaceId ? workspaceCase : null;
 
   return (
-    <div className={`${styles.workspace} ${styles.commandWorkspace} ${presentationMode ? styles.presentationWorkspace : ""} supply-os-workspace`}>
+    <div className={`${styles.workspace} ${styles.commandWorkspace} supply-os-workspace`}>
       {activePanel === "scenarios" ? (
         <SupplyOsOpportunitiesPreview />
       ) : activePanel === "context" ? (
         <SupplyOsContext workspaceId={workspaceId ?? null} />
-      ) : !storageReady || (workspaceId && ["loading", "researching"].includes(profileState)) ? (
+      ) : workspaceId && ["idle", "loading", "researching"].includes(profileState) ? (
         <CommandState
           title={profileState === "researching" ? "Researching company profile" : "Loading customer network"}
           detail={profileState === "researching"
@@ -485,16 +411,14 @@ export function SupplyOsDashboardWorkspace({
         />
       ) : currentCase ? (
           <CaseCommandCenter
-            key={`${currentCase.id}:${workspaceId ?? "demo"}`}
+            key={`${currentCase.id}:${workspaceId}`}
             dashboard={currentCase}
-            presentationMode={presentationMode}
             activePanel={activePanel}
             storageScope={storageScope}
             workspaceId={workspaceId}
             canImportSupplyData={canImportSupplyData}
             canApproveProcurement={canApproveProcurement}
             canAuthorizePurchase={canAuthorizePurchase}
-            demoCompanyId={resolvedDemoCompanyId}
           />
       ) : null}
     </div>
@@ -522,31 +446,22 @@ function CommandState({
 
 function CaseCommandCenter({
   dashboard,
-  presentationMode,
   activePanel,
   storageScope,
   workspaceId,
   canImportSupplyData,
   canApproveProcurement,
   canAuthorizePurchase,
-  demoCompanyId,
 }: {
   dashboard: SupplyCaseDashboard;
-  presentationMode: boolean;
   activePanel: SupplyOsPanel;
   storageScope: string;
   workspaceId?: string | null;
   canImportSupplyData: boolean;
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
-  demoCompanyId: SupplyOsDemoCompanyId | null;
 }) {
-  const demoInventoryItems = demoCompanyId === "guild"
-    ? GUILD2_SOURCING_ITEMS
-    : demoCompanyId === "atlas-robotics" ? ATLAS_ROBOTICS_INVENTORY : [];
-  const companyName = demoCompanyId
-    ? SUPPLY_OS_DEMO_COMPANIES[demoCompanyId].name
-    : dashboardName(dashboard);
+  const companyName = dashboardName(dashboard);
   const modelDashboard = useMemo(() => {
     const name = dashboardName(dashboard);
     return name === dashboard.companyName ? dashboard : { ...dashboard, companyName: name };
@@ -560,12 +475,8 @@ function CaseCommandCenter({
     ?? null;
   const [selection, setSelection] = useState({ panel: activePanel, objectId: initialObject?.id ?? "" });
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
-  const [selectedInventorySku, setSelectedInventorySku] = useState(
-    demoInventoryItems.find((item) => shortageQuantity(item) > 0)?.sku
-      ?? demoInventoryItems[0]?.sku
-      ?? "",
-  );
-  const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<AtlasInventoryItem[]>([]);
+  const [selectedInventorySku, setSelectedInventorySku] = useState("");
+  const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<SupplyInventoryItem[]>([]);
   const [workspaceSnapshotRevision, setWorkspaceSnapshotRevision] = useState(0);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
   const [sourceMapCandidateId, setSourceMapCandidateId] = useState<string | null>(null);
@@ -584,8 +495,8 @@ function CaseCommandCenter({
     savedCases?: SavedProcurementCase[];
   } | null>(null);
   const [customerProcurementRequest, setCustomerProcurementRequest] = useState<{
-    item: AtlasInventoryItem;
-    order: Guild2ProcurementOrderState;
+    item: SupplyInventoryItem;
+    order: CustomerProcurementOrderState;
   } | null>(null);
   const [customerProcurementOrders, setCustomerProcurementOrders] = useState<CustomerProcurementListItem[]>([]);
   const [researchRuns, setResearchRuns] = useState<SavedSourcingResearchRun[]>([]);
@@ -596,9 +507,6 @@ function CaseCommandCenter({
   const [sourcingNextCursor, setSourcingNextCursor] = useState<string | null>(null);
   const [sourcingPageState, setSourcingPageState] = useState<"idle" | "loading" | "error">("idle");
   const [sourcingLoadRevision, setSourcingLoadRevision] = useState(0);
-  const [supplierResearchCampaign, setSupplierResearchCampaign] = useState<SupplierResearchCampaign | null>(null);
-  const [supplierResearchCampaignState, setSupplierResearchCampaignState] = useState<"idle" | "running" | "complete" | "error">("idle");
-  const [supplierResearchCampaignError, setSupplierResearchCampaignError] = useState<string | null>(null);
   const commandStageRef = useRef<HTMLDivElement | null>(null);
   const activePendingRequestIdRef = useRef<string | null>(null);
   const pendingSourcingStorageKey = useMemo(
@@ -618,13 +526,8 @@ function CaseCommandCenter({
     : preferredObject ?? initialObject;
   const networkObjects = useMemo(() => orderedNetworkObjects(domainObjects), [domainObjects]);
   const transportObjects = useMemo(() => orderedTransportObjects(domainObjects), [domainObjects]);
-  const inventoryItems = workspaceId ? workspaceInventoryItems : demoInventoryItems;
-  const sourcingWorkspaceId = workspaceId
-    ?? (demoCompanyId === "guild" ? supplierResearchCampaign?.workspaceId ?? null : null);
-  const campaignAggregateRunIdsKey = useMemo(() => supplierResearchCampaign?.items
-    .flatMap((item) => item.aggregateRunId ? [item.aggregateRunId] : [])
-    .sort()
-    .join(",") ?? "", [supplierResearchCampaign]);
+  const inventoryItems = workspaceInventoryItems;
+  const sourcingWorkspaceId = workspaceId ?? null;
   const selectedInventoryItem = inventoryItems.find((item) => item.sku === selectedInventorySku)
     ?? inventoryItems[0];
   const selectedSourceCandidate = selectedInventoryItem?.candidates.find((candidate) => candidate.id === sourceMapCandidateId)
@@ -633,7 +536,7 @@ function CaseCommandCenter({
     if (!selectedInventoryItem || !selectedSourceCandidate) return null;
     const factory = commandMap.objects.find((object) => object.kind === "factory") ?? null;
     const supplier: SupplyCommandObject = {
-      id: `demo-source:${selectedSourceCandidate.id}`,
+      id: `source:${selectedSourceCandidate.id}`,
       kind: "supplier",
       label: selectedSourceCandidate.name,
       location: selectedSourceCandidate.location,
@@ -643,7 +546,7 @@ function CaseCommandCenter({
       basis: "inferred",
       confidence: "low",
       status: "review",
-      statusLabel: "Demo candidate",
+      statusLabel: "Candidate",
       nextAction: "Qualify technical fit and commercial terms before outreach.",
       workstreamId: "supplier_outreach",
       contacts: [],
@@ -653,8 +556,8 @@ function CaseCommandCenter({
     };
     const objects = factory ? [supplier, factory] : [supplier];
     const routes: SupplyCommandRoute[] = factory ? [{
-      id: `demo-source-route:${selectedSourceCandidate.id}`,
-      edgeId: `demo-source-edge:${selectedSourceCandidate.id}`,
+      id: `source-route:${selectedSourceCandidate.id}`,
+      edgeId: `source-edge:${selectedSourceCandidate.id}`,
       from: supplier.coordinates,
       to: factory.coordinates,
       fromLabel: supplier.label,
@@ -668,7 +571,7 @@ function CaseCommandCenter({
       priority: null,
       rateEstimate: null,
       segments: [{
-        id: `demo-source-segment:${selectedSourceCandidate.id}`,
+        id: `source-segment:${selectedSourceCandidate.id}`,
         sequence: 1,
         mode: supplier.location.includes("USA") || /, (CA|IL|TX)$/.test(supplier.location) ? "road" : "ocean",
         label: "Modeled source route",
@@ -813,19 +716,8 @@ function CaseCommandCenter({
   }, [procurementRequest]);
 
   useEffect(() => {
-    if (demoCompanyId === "guild" && !sourcingWorkspaceId) {
-      setResearchRuns([]);
-      setProcurementCases([]);
-      setSupplierSenderAccounts([]);
-      setIntelligenceProfile(null);
-      setSourcingNextCursor(null);
-      setSourcingPageState("idle");
-      setSourcingDataState("ready");
-      return;
-    }
     if (!shouldLoadSourcingHistory({
       workspaceId: sourcingWorkspaceId,
-      demoCompanyId: demoCompanyId === "guild" ? null : demoCompanyId,
     })) {
       setResearchRuns([]);
       setProcurementCases([]);
@@ -858,36 +750,7 @@ function CaseCommandCenter({
       if (!controller.signal.aborted) setSourcingDataState("error");
     });
     return () => controller.abort();
-  }, [demoCompanyId, sourcingLoadRevision, sourcingWorkspaceId]);
-
-  useEffect(() => {
-    setSupplierResearchCampaign(null);
-    setSupplierResearchCampaignState("idle");
-    setSupplierResearchCampaignError(null);
-  }, [demoCompanyId]);
-
-  useEffect(() => {
-    if (demoCompanyId !== "guild" || !sourcingWorkspaceId || !campaignAggregateRunIdsKey) return;
-    const controller = new AbortController();
-    const params = new URLSearchParams({ workspaceId: sourcingWorkspaceId });
-    for (const runId of campaignAggregateRunIdsKey.split(",")) params.append("includeRunId", runId);
-    void fetch(`/api/supply-os/supplier-research?${params.toString()}`, {
-      cache: "no-store",
-      signal: controller.signal,
-      headers: { accept: "application/json" },
-    }).then(async (response) => {
-      if (!response.ok) throw new Error("Saved procurement work is unavailable.");
-      const payload = await response.json() as { cases?: SavedProcurementCase[] };
-      setProcurementCases((current) => {
-        const byId = new Map(current.map((procurementCase) => [procurementCase.id, procurementCase]));
-        for (const procurementCase of payload.cases ?? []) byId.set(procurementCase.id, procurementCase);
-        return [...byId.values()];
-      });
-    }).catch(() => {
-      if (!controller.signal.aborted) setSourcingPageState("error");
-    });
-    return () => controller.abort();
-  }, [campaignAggregateRunIdsKey, demoCompanyId, sourcingWorkspaceId]);
+  }, [sourcingLoadRevision, sourcingWorkspaceId]);
 
   async function loadOlderSourcingWork() {
     if (!sourcingNextCursor || sourcingPageState === "loading") return;
@@ -969,7 +832,7 @@ function CaseCommandCenter({
   function showCandidateSource(candidateId: string) {
     setSelectedCandidateIds((current) => ({ ...current, [selectedInventoryItem.sku]: candidateId }));
     setSourceMapCandidateId(candidateId);
-    setSourceMapObjectId(`demo-source:${candidateId}`);
+    setSourceMapObjectId(`source:${candidateId}`);
   }
 
   function startProcurement(item: typeof selectedInventoryItem, requestText?: string) {
@@ -1136,7 +999,7 @@ function CaseCommandCenter({
       className={styles.commandCenter}
       aria-label={`${domain.railTitle} workspace`}
       data-domain={activePanel}
-      data-embedded={!presentationMode}
+      data-embedded="true"
       data-procurement={activePanel === "materials" && Boolean(procurementRequest || customerProcurementRequest)}
     >
       <div ref={commandStageRef} className={styles.commandMapStage}>
@@ -1153,7 +1016,7 @@ function CaseCommandCenter({
             }}
           />
         ) : activePanel === "materials" && procurementRequest ? (
-          <AtlasProcurementWorkspace
+          <SupplyProcurementWorkspace
             key={`procurement:${procurementRequest.savedRun?.id ?? procurementRequest.requestId ?? procurementRequest.itemSku ?? procurementRequest.requestText}`}
             item={procurementItem}
             requestId={procurementRequest.requestId}
@@ -1185,13 +1048,13 @@ function CaseCommandCenter({
             onBack={() => setProcurementRequest(null)}
           />
         ) : activePanel === "materials" ? (
-          <AtlasInventoryWorkspace
-            key={`sourcing-queue:${sourcingWorkspaceId ?? demoCompanyId ?? modelDashboard.id}`}
+          <SupplyInventoryWorkspace
+            key={`sourcing-queue:${sourcingWorkspaceId ?? modelDashboard.id}`}
             selectedSku={selectedInventoryItem?.sku ?? ""}
             items={inventoryItems}
             companyName={companyName}
             workspaceId={sourcingWorkspaceId}
-            canImportSupplyData={canImportSupplyData && demoCompanyId !== "guild"}
+            canImportSupplyData={canImportSupplyData}
             onSnapshotPublished={() => setWorkspaceSnapshotRevision((revision) => revision + 1)}
             onSelect={selectInventoryItem}
             onCreateRequest={createProcurementRequest}
@@ -1208,10 +1071,7 @@ function CaseCommandCenter({
             messageResearchRuns={researchRuns}
             messageProcurementCases={procurementCases}
             intelligenceProfile={intelligenceProfile}
-            researchCampaign={demoCompanyId === "guild" ? supplierResearchCampaign : null}
-            researchCampaignState={demoCompanyId === "guild" ? supplierResearchCampaignState : "idle"}
-            researchCampaignError={demoCompanyId === "guild" ? supplierResearchCampaignError : null}
-            researchWorkspaceReady={demoCompanyId !== "guild" || Boolean(sourcingWorkspaceId)}
+            researchWorkspaceReady={Boolean(sourcingWorkspaceId)}
             dataState={sourcingDataState}
             hasMore={Boolean(sourcingNextCursor)}
             pageState={sourcingPageState}
@@ -1219,11 +1079,6 @@ function CaseCommandCenter({
             onLoadMore={loadOlderSourcingWork}
             onStartItemResearch={(item) => startProcurement(item)}
             onOpenSavedResearch={openSavedResearch}
-            onOpenGuild2Procurement={(item, order) => {
-              setSelectedInventorySku(item.sku);
-              setProcurementRequest(null);
-              setCustomerProcurementRequest({ item, order });
-            }}
             sourceName={selectedSourceCandidate?.name}
             sourceLocation={selectedSourceCandidate?.location}
             onHideSourceMap={() => {
@@ -1324,7 +1179,7 @@ function CaseCommandCenter({
 
         <AnimatePresence initial={false}>
         {activePanel === "materials" && selectedInventoryItem && !procurementRequest && !customerProcurementRequest ? (
-          <AtlasSourcingInspector
+          <SupplySourcingInspector
             key={`sourcing-inspector:${selectedInventoryItem.sku}`}
             item={selectedInventoryItem}
             selectedCandidateId={selectedCandidateIds[selectedInventoryItem.sku] ?? null}
@@ -1335,7 +1190,7 @@ function CaseCommandCenter({
             }}
             onShowCandidateSource={showCandidateSource}
             onStartProcurement={() => startProcurement(selectedInventoryItem)}
-            canStartProcurement={demoCompanyId !== "guild" || Boolean(sourcingWorkspaceId)}
+            canStartProcurement={Boolean(sourcingWorkspaceId)}
           />
         ) : activePanel !== "materials" && selectedObject ? (
           <CommandInspector
@@ -1426,17 +1281,6 @@ function CommandInspector({
           </header>
 
           <div className={styles.inspectorBody}>
-            {activePanel === "materials" ? (
-              <figure className={styles.inspectorProductMedia}>
-                <img src={PRODUCT_MEDIA.src} alt="Autonomous mobile robot in an industrial workspace" />
-                <figcaption>
-                  Product reference
-                  <a href={PRODUCT_MEDIA.sourcePage} target="_blank" rel="noreferrer">
-                    {PRODUCT_MEDIA.creator}, {PRODUCT_MEDIA.license}
-                  </a>
-                </figcaption>
-              </figure>
-            ) : null}
             <p className={styles.inspectorLocation}>{object.location}</p>
             <p className={styles.inspectorDetail}>{object.detail}</p>
 
@@ -1503,7 +1347,7 @@ function CommandInspector({
           </div>
 
           {workspace ? (
-            <Link className={styles.inspectorWorkspaceLink} href={{ pathname: workspace.route, query: { case: dashboard.id } }}>
+            <Link className={styles.inspectorWorkspaceLink} href={workspace.route}>
               Open {workspace.shortLabel} <ArrowRight size={14} />
             </Link>
           ) : null}

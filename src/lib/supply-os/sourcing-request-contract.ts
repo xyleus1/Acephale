@@ -115,14 +115,13 @@ export function sourcingRequestStorageKey(args: {
   dashboardId: string;
   workspaceId?: string | null;
 }) {
-  return `derya:supply-os:${args.storageScope}:${args.dashboardId}:${args.workspaceId ?? "demo"}:sourcing-requests:v1`;
+  return `derya:supply-os:${args.storageScope}:${args.dashboardId}:${args.workspaceId ?? "unselected"}:sourcing-requests:v1`;
 }
 
 export function shouldLoadSourcingHistory(args: {
   workspaceId?: string | null;
-  demoCompanyId?: string | null;
 }) {
-  return Boolean(args.workspaceId) || args.demoCompanyId !== null;
+  return Boolean(args.workspaceId);
 }
 
 const FIELD_QUESTIONS: Record<SourcingRequiredField, string> = {

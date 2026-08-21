@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
-import { findSourcingSystemWorkspace, sourcingSystemWorkspace } from "./sourcing-research-persistence";
+import { sourcingSystemWorkspace } from "./sourcing-research-persistence";
 import {
   currentSupplierQualification,
   supplierQualificationValidOn,
@@ -618,9 +618,8 @@ async function listProcurementCasesMatching(
   options: { caseIds?: string[]; researchRunIds?: string[]; take?: number; workspaceId?: string } = {},
 ) {
   const accessContext = await currentAccessContext(context);
-  const workspace = options.workspaceId
-    ? await sourcingSystemWorkspace(accessContext, "view", options.workspaceId)
-    : await findSourcingSystemWorkspace(accessContext);
+  if (!options.workspaceId) return [];
+  const workspace = await sourcingSystemWorkspace(accessContext, "view", options.workspaceId);
   const researchRunIds = options.researchRunIds
     ? [...new Set(options.researchRunIds.map((id) => id.trim()).filter(Boolean))]
     : null;
@@ -632,7 +631,6 @@ async function listProcurementCasesMatching(
   if (researchRunIds && researchRunIds.length > 50) {
     throw new SupplyPersistenceError("A sourcing queue page cannot include more than 50 research runs.", "invalid_input");
   }
-  if (!workspace) return [];
   const cases = await prisma.supplyExecutionTask.findMany({
     where: {
       officeId: accessContext.officeId,
@@ -878,8 +876,8 @@ async function listProcurementCasesMatching(
   });
 }
 
-export async function listProcurementCases(context: SupplyAccessContext) {
-  return listProcurementCasesMatching(context, { take: 120 });
+export async function listProcurementCases(context: SupplyAccessContext, workspaceId?: string) {
+  return listProcurementCasesMatching(context, { take: 120, workspaceId });
 }
 
 export async function listProcurementCasesForResearchRuns(

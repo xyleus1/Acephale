@@ -17,7 +17,7 @@ import {
   selectedSupplierResearchQueryVariant,
   supplierCompanyMatchesDomain,
 } from "../src/lib/supply-os/research";
-import { GUILD_SOURCING_LINES } from "../src/lib/supply-os/guild-sourcing-items";
+import { GUILD_SOURCING_LINES } from "./fixtures/legacy-supply-os/guild-sourcing-items";
 
 const materialPlan = buildSupplierResearchQueryPlan({
   componentName: "Main cylindrical structural skin stock",
@@ -84,32 +84,32 @@ assert.equal(supplierCompanyMatchesDomain("Fake 3M", "https://www.3m.com/catalog
 assert.equal(supplierCompanyMatchesDomain("Fake HBK", "https://www.hbkworld.com/strain-gauges"), false, "a prefixed company must not steal an acronym brand domain");
 assert.equal(supplierCompanyMatchesDomain("Fake Texas Alloys", "https://www.texasalloys.com/aluminum.html"), false, "a prefixed company name must not steal a matching trailing domain alias");
 
-const guildOpenRoleUrl = "https://guildprocessor.example/capability";
-const guildOpenRole = normalizeSupplierResearch({
+const openRequestRoleUrl = "https://processor.example/capability";
+const openRequestRole = normalizeSupplierResearch({
   officeId: "office-test",
   workspaceId: "workspace-test",
-  componentItemKey: "GUILD-024",
-  providerSources: [{ url: guildOpenRoleUrl, sourceType: "PUBLIC" }],
-  validatedSupplierLeadSourceUrls: [guildOpenRoleUrl],
+  componentItemKey: "request:machined-enclosure",
+  providerSources: [{ url: openRequestRoleUrl, sourceType: "PUBLIC" }],
+  validatedSupplierLeadSourceUrls: [openRequestRoleUrl],
   raw: {
     candidates: [{
       id: "processor-1",
       companyName: "Guild Processor",
-      website: guildOpenRoleUrl,
+      website: openRequestRoleUrl,
       roles: ["PROCESSOR"],
-      sourceUrls: [guildOpenRoleUrl],
-      productCapability: { value: "Machined enclosure", state: "SUPPORTED", confidence: 1, sourceUrls: [guildOpenRoleUrl], observedAt: null },
+      sourceUrls: [openRequestRoleUrl],
+      productCapability: { value: "Machined enclosure", state: "SUPPORTED", confidence: 1, sourceUrls: [openRequestRoleUrl], observedAt: null },
       cautions: [],
     }],
     warnings: [],
   },
 });
-assert.deepEqual(guildOpenRole.candidates[0]?.roles, ["PROCESSOR"], "canonical GUILD requests must preserve validated open supplier roles");
+assert.deepEqual(openRequestRole.candidates[0]?.roles, ["PROCESSOR"], "custom requests must preserve validated open supplier roles");
 
 const openAiInput = {
   officeId: "office-test",
   workspaceId: "workspace-test",
-  componentItemKey: "GUILD-011",
+  componentItemKey: "request:bonding-epoxy",
   componentName: "Bonding epoxy",
 };
 const degraded = normalizeOpenAiSupplierResponse(openAiInput, {
@@ -361,7 +361,7 @@ assert.equal(validateExaPublicSupplierLeadReceipts(exaInput, {
 
 const machineShopInput: ExaSupplierResearchInput = {
   ...openAiInput,
-  componentItemKey: "GUILD-024",
+  componentItemKey: "request:machined-enclosure",
   componentName: "Internal electronics enclosure",
   specification: "Machined 6061-T6 aluminum enclosure, removable lid, conductive gasket provision",
 };
@@ -602,7 +602,7 @@ assert.equal(materialSupplierReceipt({
 
 const flameRetardantInput: ExaSupplierResearchInput = {
   ...materialInput,
-  componentItemKey: "GUILD-005",
+  componentItemKey: "request:laminate",
   componentName: "Non-flight nose-shell/mockup laminate",
   specification: "G10/FR-4 glass-epoxy laminate, 2.4 mm nominal, flame-retardant grade",
 };
@@ -715,7 +715,7 @@ assert.equal(brandedEquivalentReceipt({
 
 const dowsilEquivalentInput: ExaSupplierResearchInput = {
   ...exaInput,
-  componentItemKey: "GUILD-012",
+  componentItemKey: "request:flexible-electronics-adhesive",
   componentName: "Flexible electronics adhesive",
   manufacturer: undefined,
   mpn: undefined,

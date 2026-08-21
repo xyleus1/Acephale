@@ -83,7 +83,6 @@ export type SupplyOsWorkspaceSelection = {
   snapshotId: string | null;
   snapshotVersion: number | null;
   logoUrl: string | null;
-  demoCompanyId?: "atlas-robotics" | "guild";
 } | null;
 
 const FILE_LABELS: Record<CsvKind, { label: string; hint: string; required: boolean }> = {
@@ -402,7 +401,7 @@ export function SupplyOsSharedWorkspace({
         <div>
           <Database size={15} aria-hidden="true" />
           <p><strong>Shared:</strong> workspaces and published snapshots are office-scoped.</p>
-          <p><strong>Compatibility:</strong> views without a published snapshot may still use local or illustrative data.</p>
+          <p><strong>Boundary:</strong> views without a published snapshot stay empty.</p>
         </div>
         <div>
           <FileSpreadsheet size={15} aria-hidden="true" />
@@ -452,7 +451,6 @@ export function SupplyOsSharedWorkspace({
               autoComplete="off"
               required
               onChange={(event) => setNewWorkspaceName(event.target.value)}
-              placeholder="Atlas Robotics"
             />
           </label>
           {createError ? <div className={styles.dialogError} role="alert">{createError}</div> : null}

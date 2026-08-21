@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
-import { SupplyOsCaseGenerator } from "../supply-os-generator";
-import styles from "../supply-os-workspace.module.css";
 
 export const metadata: Metadata = {
   title: "New customer | Supply OS",
@@ -9,10 +8,6 @@ export const metadata: Metadata = {
 };
 
 export default async function NewSupplyOsCustomerPage() {
-  const session = await requireSession();
-  return (
-    <div className={styles.pageFrame}>
-      <SupplyOsCaseGenerator storageScope={`${session.officeId}:${session.userId}`} />
-    </div>
-  );
+  await requireSession();
+  redirect("/dashboard/supply-os");
 }

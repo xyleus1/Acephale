@@ -84,6 +84,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: The procurement worker supports first-class immutable evidence
   references instead of the current request-context and BOM specification
   compatibility copy.
+### 2026-08-20 - Authenticated customer workspaces never use synthetic fallbacks
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Atlas Robotics was compiled into the authenticated Supply OS as a
+  presentation company, inventory set, sample network, sourcing defaults, and
+  automatic procurement workspace. A failed or unresolved real workspace could
+  therefore show plausible but false customer data.
+- Decision: Authenticated company identity must resolve from a tenant-scoped
+  Company and SupplyWorkspace. Operational inventory, demand, requirements,
+  dates, and delivery locations must resolve from a published SupplySnapshot or
+  another explicit tenant record. Missing data stays empty. Reads may fail
+  closed, and writes must reject missing workspace context. Customer examples
+  are permitted only in test fixtures that production code does not import.
+- Consequences: The product cannot silently substitute a convincing customer
+  when Neon, authorization, or snapshot loading fails. Demo URLs and query
+  parameters, SKU matches, legacy campaign endpoints, and browser fixtures cannot
+  bypass the database boundary. Supplier options require research evidence, and
+  unknown quantities, units, dates, and locations remain unknown. Existing
+  synthetic database rows are not deleted automatically because cleanup must be
+  explicit and reviewed.
+- Revisit when: A separately deployed sandbox environment is created with an
+  isolated database and an unmistakable non-production hostname.
 
 ### 2026-08-20 - Custom procurement freezes the selected company Context
 

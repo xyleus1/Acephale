@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import {
   generateSupplyCase,
-  SAMPLE_SUPPLY_CASE_PROMPT,
 } from "../src/lib/supply-os-case-model";
 import {
   buildSupplyEngagementPlan,
   SUPPLY_ENGAGEMENT_OPTIONS,
 } from "../src/lib/supply-os-engagement-plan";
+import { SAMPLE_SUPPLY_CASE_PROMPT } from "./fixtures/supply-case";
 
 const fixedNow = new Date("2026-08-06T12:00:00.000Z");
 const dashboard = generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, fixedNow);

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default async function SupplyOsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ present?: string; panel?: string }>;
+  searchParams: Promise<{ panel?: string }>;
 }) {
   const session = await requireSession();
   const currentUser = await prisma.user.findFirst({
@@ -24,16 +24,15 @@ export default async function SupplyOsPage({
   const params = await searchParams;
   const contextEnabled = true;
   if (params.panel === "suppliers" || params.panel === "fulfillment" || params.panel === "tracking") {
-    redirect(params.present === "1" ? "/dashboard/supply-os?present=1" : "/dashboard/supply-os");
+    redirect("/dashboard/supply-os");
   }
   if (params.panel === "automations") {
-    redirect(params.present === "1" ? "/dashboard/supply-os?present=1&panel=context" : "/dashboard/supply-os?panel=context");
+    redirect("/dashboard/supply-os?panel=context");
   }
   return (
     <div className={styles.pageFrame}>
       <SupplyOsOperatingShell
         storageScope={`${session.officeId}:${session.userId}`}
-        presentationMode={params.present === "1"}
         initialPanel={params.panel}
         canCreateCompany={currentUser.role === "ADMIN"}
         canImportSupplyData={currentUser.role === "ADMIN" || currentUser.role === "MANAGER"}

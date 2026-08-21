@@ -1,9 +1,6 @@
 export const SUPPLY_CASE_SCHEMA_VERSION = 1 as const;
 export const SUPPLY_CASE_STORAGE_KEY = "derya:supply-case-dashboards:v1";
 
-export const SAMPLE_SUPPLY_CASE_PROMPT =
-  "Atlas Robotics builds warehouse robots in Austin, Texas. It sources servo motors, machine-vision cameras, and aluminum housings from Shenzhen, China, then ships finished systems to factories in Detroit, Michigan and Nashville, Tennessee.";
-
 export type SupplyCaseStatus = "ready" | "verify" | "needs_confirmation";
 export type SupplyEvidenceStatus = SupplyCaseStatus;
 export type SupplyEngagementScope =

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   calculateTwinBuildability,
@@ -102,24 +102,23 @@ assert.deepEqual(buildability, {
 
 const noBom = structuredClone(fixture);
 noBom.workspace.snapshots[0].bomVersions = [];
-assert.equal(snapshotResponseToTwinModel(noBom), null, "snapshots without a BOM must use the explicit fallback path");
+assert.equal(snapshotResponseToTwinModel(noBom), null, "snapshots without a BOM must stay empty");
 
 const root = process.cwd();
-const adapter = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-snapshot-twin.tsx"), "utf8");
 const shell = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-operating-shell.tsx"), "utf8");
 const shared = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-shared-workspace.tsx"), "utf8");
-const twin = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.tsx"), "utf8");
-const surface = `${adapter}\n${shell}\n${shared}\n${twin}`;
+const dashboard = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
+const surface = `${shell}\n${shared}\n${dashboard}`;
 
-assert.match(adapter, /\/api\/supply-os\/workspaces\//, "the adapter must use the existing authenticated workspace endpoint");
-assert.match(adapter, /body\.workspace\.id !== workspaceId/, "the adapter must reject a mismatched workspace response");
+assert.match(dashboard, /\/api\/supply-os\/workspaces\//, "the dashboard must use the authenticated workspace endpoint");
+assert.match(dashboard, /body\.workspace/, "the dashboard must require a workspace response before projecting inventory");
 assert.match(
   shell,
-  /workspaceId=\{workspaceSelection\?\.demoCompanyId \? null : workspaceSelection\?\.workspaceId \?\? null\}/,
-  "real company selections must drive the dashboard without passing demo IDs as workspace IDs",
+  /workspaceId=\{workspaceSelection\?\.workspaceId \?\? null\}/,
+  "real company selections must drive the dashboard directly",
 );
-assert.match(twin, /const selectedScenario = isPublishedSnapshot\s+\? null/, "published snapshots must not invent unavailable decision inputs");
-assert.match(twin, /item\.isOptional/, "optional parts must not constrain buildability");
+assert.equal(existsSync(resolve(root, "src/app/dashboard/supply-os/supply-os-snapshot-twin.tsx")), false, "the snapshot fallback adapter must stay removed");
+assert.equal(existsSync(resolve(root, "src/app/dashboard/supply-os/supply-os-product-twin.tsx")), false, "the compiled product fixture must stay removed");
 assert.equal(surface.includes("\u2014"), false, "the snapshot twin surface must not contain an em dash");
 
 console.log("Supply OS published snapshot twin contract passed.");

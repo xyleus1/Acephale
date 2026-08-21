@@ -1,4 +1,4 @@
-import type { AtlasInventoryItem } from "./atlas-robotics-inventory";
+import type { SupplyInventoryItem } from "./inventory-item";
 import type { SupplyWorkspaceSnapshotResponse } from "./snapshot-twin";
 
 function quantity(value: unknown) {
@@ -38,7 +38,7 @@ function partsRequestMetadata(value: unknown): PartsRequestMetadata | null {
 
 export function snapshotResponseToSourcingItems(
   input: SupplyWorkspaceSnapshotResponse,
-): AtlasInventoryItem[] {
+): SupplyInventoryItem[] {
   const workspace = input.workspace;
   const snapshot = workspace?.snapshots?.[0];
   if (!workspace?.id || !snapshot) return [];
@@ -148,7 +148,7 @@ export function snapshotResponseToSourcingItems(
       const itemDemand = demandByItem.get(item.id);
       return bomComponentIds.has(item.id) || Boolean(itemDemand?.hasDemand) || item.itemType !== "PRODUCT";
     })
-    .map((item): AtlasInventoryItem => {
+    .map((item): SupplyInventoryItem => {
       const inventory = inventoryByItem.get(item.id) ?? {
         onHand: 0,
         allocated: 0,
@@ -158,7 +158,7 @@ export function snapshotResponseToSourcingItems(
       const demand = demandByItem.get(item.id);
       const request = partsRequestMetadata(item.metadata);
       const requiredQuantity = demand?.hasDemand ? demand.required : request?.quantity ?? null;
-      const unitOfMeasure = demand?.unit ?? request?.unitOfMeasure ?? (request ? undefined : item.unitOfMeasure ?? "EA");
+      const unitOfMeasure = demand?.unit ?? request?.unitOfMeasure ?? (request ? null : item.unitOfMeasure ?? null);
       const deliveryLocation = demand?.deliveryLocations.size
         ? [...demand.deliveryLocations].join(", ")
         : request?.deliveryLocation ?? null;

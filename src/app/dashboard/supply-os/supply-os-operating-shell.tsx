@@ -9,7 +9,6 @@ import {
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogoMark } from "@/components/logo-mark";
-import { SUPPLY_OS_DEMO_COMPANIES } from "@/lib/supply-os/demo-company";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
@@ -36,7 +35,6 @@ function panelFromCurrentUrl() {
 
 export function SupplyOsOperatingShell({
   storageScope,
-  presentationMode,
   initialPanel,
   canCreateCompany,
   canImportSupplyData,
@@ -45,7 +43,6 @@ export function SupplyOsOperatingShell({
   contextEnabled,
 }: {
   storageScope: string;
-  presentationMode: boolean;
   initialPanel?: string;
   canCreateCompany: boolean;
   canImportSupplyData: boolean;
@@ -69,17 +66,11 @@ export function SupplyOsOperatingShell({
     setWorkspaceProfile(null);
     setCompanyIndexOpen(false);
   }, []);
-  const demoCompany = workspaceSelection?.demoCompanyId
-    ? SUPPLY_OS_DEMO_COMPANIES[workspaceSelection.demoCompanyId]
-    : null;
-  const isDemoWorkspace = Boolean(workspaceSelection?.demoCompanyId);
   const companyName = workspaceProfile?.companyName
     ?? workspaceSelection?.workspaceName
-    ?? demoCompany?.name
     ?? "Company";
   const companyLogoUrl = workspaceProfile?.logoUrl
     ?? workspaceSelection?.logoUrl
-    ?? demoCompany?.logoUrl
     ?? null;
   const companyInitials = useMemo(
     () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
@@ -107,14 +98,8 @@ export function SupplyOsOperatingShell({
   const selectPanel = useCallback((panel: SupplyOsPanel) => {
     window.history.pushState({}, "", supplyOsPanelHref(window.location.href, panel));
     setActivePanel(panel);
-    const needsCompanySelection = !workspaceSelection
-      || (panel === "context" && Boolean(workspaceSelection.demoCompanyId));
-    setCompanyIndexOpen(needsCompanySelection);
+    setCompanyIndexOpen(!workspaceSelection);
   }, [workspaceSelection]);
-
-  if (presentationMode) {
-    return <SupplyOsDashboardWorkspace storageScope={storageScope} presentationMode activePanel={activePanel} workspaceId={null} demoCompanyId="atlas-robotics" canImportSupplyData={canImportSupplyData} canApproveProcurement={canApproveProcurement} canAuthorizePurchase={canAuthorizePurchase} />;
-  }
 
   return (
     <MotionConfig reducedMotion="user" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
@@ -206,19 +191,15 @@ export function SupplyOsOperatingShell({
                   <dd>
                     {companyIndexOpen
                       ? "None selected"
-                      : isDemoWorkspace
-                        ? "Demo network"
-                        : workspaceProfile?.facilityLabel ?? "No verified location"}
+                      : workspaceProfile?.facilityLabel ?? "No verified location"}
                   </dd>
                 </div>
                 <div>
                   <dt>Data</dt>
                   <dd>
-                    {isDemoWorkspace
-                      ? "Demo"
-                      : workspaceSelection?.snapshotVersion
-                        ? `Snapshot v${workspaceSelection.snapshotVersion}`
-                        : workspaceProfile ? "Company profile" : "No inventory"}
+                    {workspaceSelection?.snapshotVersion
+                      ? `Snapshot v${workspaceSelection.snapshotVersion}`
+                      : workspaceProfile ? "Company profile" : "No inventory"}
                   </dd>
                 </div>
               </dl>
@@ -239,21 +220,19 @@ export function SupplyOsOperatingShell({
                 canCreateCompany={canCreateCompany}
                 autoOpenFirstWorkspace={
                   activePanel === "context"
-                    && (!workspaceSelection || Boolean(workspaceSelection.demoCompanyId))
+                    && !workspaceSelection
                 }
                 onOpenWorkspace={openWorkspace}
               />
             ) : (
               <SupplyOsDashboardWorkspace
                 storageScope={storageScope}
-                workspaceId={workspaceSelection?.demoCompanyId ? null : workspaceSelection?.workspaceId ?? null}
+                workspaceId={workspaceSelection?.workspaceId ?? null}
                 workspaceName={workspaceSelection?.workspaceName ?? null}
-                presentationMode={false}
                 activePanel={activePanel}
                 canImportSupplyData={canImportSupplyData}
                 canApproveProcurement={canApproveProcurement}
                 canAuthorizePurchase={canAuthorizePurchase}
-                demoCompanyId={workspaceSelection?.demoCompanyId}
                 onWorkspaceProfile={setWorkspaceProfile}
               />
             )}

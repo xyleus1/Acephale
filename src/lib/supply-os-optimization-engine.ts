@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import type {
   SupplyCaseDashboard,
   SupplyCoordinate,
@@ -63,7 +64,7 @@ export type SupplyOptimizationWorkspace = {
   label: string;
   shortLabel: string;
   description: string;
-  route: string;
+  route: Route;
 };
 
 export type SupplyOptimizationModel = {
@@ -104,35 +105,35 @@ export const SUPPLY_OPTIMIZATION_WORKSPACES: SupplyOptimizationWorkspace[] = [
     label: "Procurement and supplier selection",
     shortLabel: "Procurement",
     description: "Build the source market, compare landed cost, qualify alternates, and return supplier awards for approval.",
-    route: "/dashboard/supply-os/workstreams/procurement",
+    route: "/dashboard/supply-os?panel=materials",
   },
   {
     id: "supplier_outreach",
     label: "Supplier contact and readiness",
     shortLabel: "Supplier contact",
     description: "Run quote requests, production follow-ups, document collection, and cargo-ready confirmation.",
-    route: "/dashboard/supply-os/workstreams/supplier-outreach",
+    route: "/dashboard/supply-os?panel=materials",
   },
   {
     id: "shipment_planning",
     label: "Shipment planning and execution",
     shortLabel: "Shipments",
     description: "Compare modes and providers, consolidate releases, tender one scope, and manage every handoff.",
-    route: "/dashboard/supply-os/workstreams/shipment-planning",
+    route: "/dashboard/supply-os?panel=logistics",
   },
   {
     id: "customs",
     label: "Customs scope and broker coordination",
     shortLabel: "Customs",
     description: "Build the product and transaction packet, compare brokers, close document gaps, and coordinate release.",
-    route: "/dashboard/supply-os/workstreams/customs",
+    route: "/dashboard/supply-os?panel=logistics",
   },
   {
     id: "fulfillment",
     label: "Fulfillment, 3PL, and final delivery",
     shortLabel: "Fulfillment / 3PL",
     description: "Select the right storage and delivery model, coordinate appointments, and retain proof of delivery.",
-    route: "/dashboard/supply-os/workstreams/fulfillment",
+    route: "/dashboard/supply-os?panel=fulfillment",
   },
 ];
 
@@ -146,55 +147,21 @@ const PROFILES: OptimizationProfile[] = [
         label: "Domestic aerospace plate mills",
         location: "Iowa, West Virginia, and Washington",
         coordinates: { latitude: 40.6, longitude: -94.7 },
-        detail: "NOX stocks 7050, 7075, 6061, and heavy 5000-series plate. The closest product-capability match starts with U.S. rolling mills that publicly make aerospace, defense, and industrial plate, but actual mill approvals and allocations are not public.",
+        detail: "For aerospace or industrial plate requirements, start with mills whose published capabilities match the confirmed alloy, temper, thickness, origin, and certification scope. Actual approvals and allocations remain unverified until the company provides them.",
         cargo: "Mill-certified 7050, 7075, 6061, and 5000-series plate",
         mode: "Flatbed, dedicated truck, or scheduled LTL",
         confidence: "medium",
         confirmNext: "Match every alloy, temper, thickness, and domestic-origin promise to the approved mill, allocation, minimum order, lead time, and inbound lane.",
-        qualificationTargets: [
-          {
-            name: "Arconic Davenport Works",
-            fit: "Iowa mill producing aluminum sheet and plate for aerospace, automotive, and industrial applications.",
-            url: "https://www.arconic.com/about-us/-/asset_publisher/qkwp/content/arconic-celebrates-commissioning-of-57.5-million-project-to-expand-high-purity-aluminum-production-for-defense-aerospace-applications",
-          },
-          {
-            name: "Constellium Ravenswood",
-            fit: "West Virginia rolled-products facility producing aerospace, defense, marine, transportation, and industrial plate.",
-            url: "https://www.constellium.com/locations/ravenswood",
-          },
-          {
-            name: "Kaiser Aluminum Trentwood",
-            fit: "U.S. aerospace and general-engineering plate mill with public 7050 plate capability.",
-            url: "https://www.kaiseraluminum.com/end-markets/aerospace-and-high-strength/",
-          },
-        ],
       },
       {
         label: "Great Lakes service-center buffer stock",
         location: "Ohio, Michigan, and Western Pennsylvania",
         coordinates: { latitude: 41.3139, longitude: -81.6851 },
-        detail: "Regional service centers are plausible shortage-fill and low-volume sources when a direct mill release cannot protect NOX's next-day promise. They should be compared against direct-mill economics, cert traceability, and duplicate handling.",
+        detail: "Regional service centers may cover shortages or low-volume requirements when a direct mill release cannot protect the confirmed service target. Compare them against direct-mill economics, certificate traceability, and duplicate handling.",
         cargo: "Spot and buffer inventory in 6061, 7075, 7050, and 5000-series plate",
         mode: "Regional LTL, flatbed, or dedicated truck",
         confidence: "medium",
         confirmNext: "Identify which grades are bought mill-direct, which use distributor buffer stock, and where double-margin or extra handling erodes service-center economics.",
-        qualificationTargets: [
-          {
-            name: "ICI Metals",
-            fit: "Ohio supplier publicly stocking 6061 and 7075 plate for Midwest manufacturers.",
-            url: "https://www.icimetals.com/metals/aluminum-plate",
-          },
-          {
-            name: "Yarde Metals",
-            fit: "Service-center coverage for Ohio, Michigan, and Western Pennsylvania with aerospace plate capability.",
-            url: "https://www.yarde.com/",
-          },
-          {
-            name: "Samuel Service Center",
-            fit: "North American service-center network listing 5000, 6061, 7050, and 7075 plate products.",
-            url: "https://www.samuelservicecenter.com/en/service-center-products/aluminum",
-          },
-        ],
       },
       {
         label: "Southern Ontario cross-border supply",
@@ -205,17 +172,6 @@ const PROFILES: OptimizationProfile[] = [
         mode: "Cross-border truck or LTL",
         confidence: "low",
         confirmNext: "Verify supplier capability, melt and cast origin, tariff exposure, broker setup, and delivered cost before using this path.",
-        qualificationTargets: [
-          {
-            name: "Samuel Service Center Canada",
-            fit: "Canadian service-center network with a published alloy range matching several NOX stock families.",
-            url: "https://www.samuelservicecenter.com/en/service-center-products/aluminum",
-          },
-          {
-            name: "Southern Ontario plate distributors",
-            fit: "Emergency and alternate inventory pool to qualify only after origin, Section 232, broker, and delivered-cost review.",
-          },
-        ],
       },
     ],
     customerClusters: [
@@ -228,26 +184,16 @@ const PROFILES: OptimizationProfile[] = [
         mode: "Local courier, dedicated truck, flatbed, or LTL",
         confidence: "medium",
         confirmNext: "Confirm the top customer industries, ship-to ZIP codes, order sizes, delivery windows, and unloading constraints.",
-        qualificationTargets: [
-          { name: "Michigan precision machine shops", fit: "Small and mid-sized buyers of cut plate that value instant quotes and next-day availability." },
-          { name: "Tool-and-die and automation integrators", fit: "Buyers of 6061 and cast tool plate for fixtures, jigs, index tables, and prototypes." },
-          { name: "Automotive and defense tier suppliers", fit: "Programs that require cert packages, traceability, scheduled replenishment, and reliable delivery." },
-        ],
       },
       {
         label: "National aerospace, defense, and new-space buyers",
         location: "United States aerospace and advanced-manufacturing markets",
         coordinates: { latitude: 39.8283, longitude: -98.5795 },
-        detail: "NOX publishes nationwide shipping, DFARS and domestic options, mill certs, full traceability, and deep 7050/7075 coverage. That product and compliance posture points to national aerospace, defense, satellite, launch, and advanced-manufacturing demand.",
+        detail: "Published domestic-origin, certification, traceability, and alloy capabilities can support national aerospace, defense, satellite, launch, and advanced-manufacturing demand. Confirm the company's actual commitments before using them in a commercial plan.",
         cargo: "Certified cut-to-size aerospace plate, thick-section stock, tooling material, and replenishment orders",
         mode: "LTL, dedicated truck, flatbed, or expedited air for shortages",
         confidence: "medium",
         confirmNext: "Use CRM and order history to separate real national demand from target-market positioning, then identify recurring lanes, promised lead times, and cert requirements.",
-        qualificationTargets: [
-          { name: "Aerospace machine shops and contract manufacturers", fit: "Buyers machining 7050 and 7075 fittings, ribs, spars, tooling, and structural components." },
-          { name: "Commercial launch and satellite manufacturers", fit: "New-space programs competing for high-strength plate and short production lead times." },
-          { name: "Defense and UAS suppliers", fit: "Domestic programs where traceability, origin evidence, and resilient stock positions matter." },
-        ],
       },
     ],
     customerSegments: [

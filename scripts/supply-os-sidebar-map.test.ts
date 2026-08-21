@@ -39,7 +39,8 @@ assert.match(shellStyles, /@media \(max-width: 900px\)[\s\S]*grid-auto-columns: 
 assert.doesNotMatch(shellStyles, /\.navCopy,[\s\S]*display: none/, "responsive layouts must not hide section labels");
 assert.match(shellStyles, /\.panelNav button \{[\s\S]*min-height: 58px/, "desktop navigation targets must stay comfortably sized");
 assert.match(shell, /String\(index \+ 1\)\.padStart\(2, "0"\)/, "desktop navigation must retain numbered section indices");
-assert.match(dashboard, /generateSupplyCase\(SAMPLE_SUPPLY_CASE_PROMPT, ILLUSTRATIVE_NETWORK_DATE/);
+assert.match(dashboard, /const currentCase = workspaceId \? workspaceCase : null/);
+assert.doesNotMatch(dashboard, /SAMPLE_SUPPLY_CASE_PROMPT|ILLUSTRATIVE_NETWORK_DATE|presentationMode/);
 assert.doesNotMatch(dashboard, />Demo</, "the map workspace must not repeat fixture status in a second ribbon");
 assert.doesNotMatch(dashboard, /href="\/dashboard\/supply-os\/new"/);
 

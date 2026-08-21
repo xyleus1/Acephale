@@ -4,7 +4,6 @@ import {
   generateSupplyCase,
   parseStoredSupplyCases,
   resolveSelectedSupplyCase,
-  SAMPLE_SUPPLY_CASE_PROMPT,
   serializeSupplyCases,
   SUPPLY_CASE_SCHEMA_VERSION,
   SUPPLY_CASE_STORAGE_KEY,
@@ -12,6 +11,7 @@ import {
   validateSupplyCaseDashboard,
   type SupplyCaseDashboard,
 } from "../src/lib/supply-os-case-model";
+import { SAMPLE_SUPPLY_CASE_PROMPT } from "./fixtures/supply-case";
 
 const fixedNow = new Date("2026-08-06T12:00:00.000Z");
 const complete = generateSupplyCase(SAMPLE_SUPPLY_CASE_PROMPT, fixedNow);

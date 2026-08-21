@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { GUILD_SOURCING_ITEMS, GUILD_SOURCING_LINES } from "../src/lib/supply-os/guild-sourcing-items";
+import { GUILD_SOURCING_ITEMS, GUILD_SOURCING_LINES } from "./fixtures/legacy-supply-os/guild-sourcing-items";
 import {
   GUILD_SUPPLIER_CAMPAIGN_DAILY_ATTEMPT_CAP,
   GUILD_SUPPLIER_CAMPAIGN_EXPLORATION_EPOCH_ATTEMPTS,
@@ -32,7 +32,7 @@ import {
   supplierCandidateDomain,
   validateSupplierResearchCampaignAncestryWindow,
   type SupplierResearchCampaignAttempt,
-} from "../src/lib/supply-os/supplier-research-campaign";
+} from "./fixtures/legacy-supply-os/supplier-research-campaign";
 import {
   parseStoredSupplierResearchRetrievalCapture,
   validatePublicSupplierLeadReceipts,
@@ -40,10 +40,10 @@ import {
 } from "../src/lib/supply-os/exa-supplier-research";
 
 const root = process.cwd();
-const campaignSource = readFileSync(resolve(root, "src/lib/supply-os/supplier-research-campaign.ts"), "utf8");
+const campaignSource = readFileSync(resolve(root, "scripts/fixtures/legacy-supply-os/supplier-research-campaign.ts"), "utf8");
 const routeSource = readFileSync(resolve(root, "src/app/api/supply-os/supplier-research/campaigns/route.ts"), "utf8");
 const cronSource = readFileSync(resolve(root, "src/app/api/cron/supplier-research/route.ts"), "utf8");
-const guildSource = readFileSync(resolve(root, "src/lib/supply-os/guild-sourcing-items.ts"), "utf8");
+const guildSource = readFileSync(resolve(root, "scripts/fixtures/legacy-supply-os/guild-sourcing-items.ts"), "utf8");
 const persistenceSource = readFileSync(resolve(root, "src/lib/supply-os/sourcing-research-persistence.ts"), "utf8");
 
 assert.equal(GUILD_SOURCING_LINES.length, 40);
@@ -747,7 +747,8 @@ assert.equal(shouldPersistGuildSupplierResearchAggregate({
 
 assert.match(routeSource, /status: 410/, "legacy campaign creation must remain disabled");
 assert.doesNotMatch(routeSource, /startOrResumeGuildSupplierResearchCampaign/, "legacy campaign creation must not be reachable");
-assert.match(routeSource, /pollGuildSupplierResearchCampaign/);
+assert.doesNotMatch(routeSource, /pollGuildSupplierResearchCampaign|GUILD_SUPPLIER_CAMPAIGN_KEY/, "legacy campaign reads must not be reachable");
+assert.equal((routeSource.match(/status: 410/g) ?? []).length, 2, "both campaign API methods must stay disabled");
 assert.doesNotMatch(routeSource, /searchComponentSuppliers|runSourcingResearchWorker|OpenAI|Exa/);
 const pollSource = campaignSource.slice(
   campaignSource.indexOf("export async function pollGuildSupplierResearchCampaign"),
@@ -766,8 +767,7 @@ assert.match(campaignSource, /aggregateRunId/);
 assert.match(campaignSource, /dslName: AGGREGATE_DSL_NAME/);
 assert.match(campaignSource, /const ATTEMPT_DSL_NAME = "queued_supplier_research_child"/);
 assert.match(persistenceSource, /dslName: parentRunId \? "queued_supplier_research_child" : "interactive_supplier_research"/);
-assert.match(persistenceSource, /if \(mode === "view"\)/);
-assert.match(persistenceSource, /findGuildSourcingSystemWorkspace/);
+assert.doesNotMatch(persistenceSource, /findGuildSourcingSystemWorkspace|guildSourcingSystemWorkspace|system:guild-procurement|demoSourcingWorkspace/, "production persistence must not contain a synthetic campaign workspace path");
 assert.match(persistenceSource, /supplier-research-office-provider-budget:/);
 assert.match(campaignSource, /supplier-research-office-provider-budget:/, "campaign cutover shares the office claim lock before cancelling queued children");
 assert.match(persistenceSource, /clock_timestamp\(\)/, "the hard daily spend bound derives its UTC day after acquiring the office-stable lock");

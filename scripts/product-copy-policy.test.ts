@@ -15,9 +15,7 @@ const paths = [
   "src/app/dashboard/supply-os/supply-os-dashboard.tsx",
   "src/app/dashboard/supply-os/supply-os-decision-intelligence.tsx",
   "src/app/dashboard/supply-os/supply-os-operating-shell.tsx",
-  "src/app/dashboard/supply-os/supply-os-product-twin.tsx",
   "src/app/dashboard/supply-os/supply-os-shared-workspace.tsx",
-  "src/app/dashboard/supply-os/supply-os-snapshot-twin.tsx",
 ] as const;
 
 const sources = new Map(paths.map((path) => [path, readFileSync(resolve(root, path), "utf8")]));

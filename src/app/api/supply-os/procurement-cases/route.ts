@@ -66,11 +66,15 @@ function selection(value: unknown): ProcurementSelectionInput | null {
   };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const workspaceId = text(request.nextUrl.searchParams.get("workspaceId"), 220);
+  if (!workspaceId) {
+    return NextResponse.json({ error: "A company workspace is required." }, { status: 400 });
+  }
   try {
-    const cases = await listProcurementCases(supplyAccessContext(session));
+    const cases = await listProcurementCases(supplyAccessContext(session), workspaceId);
     return NextResponse.json({ cases }, {
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
     });

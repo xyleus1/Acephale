@@ -23,7 +23,7 @@ assert.doesNotMatch(
 assert.doesNotMatch(shell, /SteelSupplierFinder|SupplyOsSnapshotTwin|TrackingAndCostPanel/);
 assert.match(dashboard, /const DOMAIN_CONFIG: Record<SupplyOsPanel/);
 assert.match(dashboard, /data-domain=\{activePanel\}/);
-assert.match(dashboard, /data-embedded=\{!presentationMode\}/);
+assert.match(dashboard, /data-embedded="true"/);
 assert.match(map, /data-domain=\{activePanel\}/);
 assert.match(map, /line-dasharray/);
 assert.match(shellStyles, /\.panelStage\s*\{[\s\S]*overflow: hidden/);

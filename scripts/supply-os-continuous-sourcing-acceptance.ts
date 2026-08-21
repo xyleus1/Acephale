@@ -5,7 +5,7 @@ import type {
   SupplierResearchCampaignResponse,
   SupplierResearchCampaignStatus,
   SupplierResearchCampaignStatusResponse,
-} from "../src/lib/supply-os/supplier-research-campaign";
+} from "./fixtures/legacy-supply-os/supplier-research-campaign";
 import type { SupplierCandidate, SupplierResearchResult } from "../src/lib/supply-os/research";
 
 type CampaignStartPayload = Partial<SupplierResearchCampaignResponse> & { error?: string };

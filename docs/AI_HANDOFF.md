@@ -56,6 +56,42 @@
   optimized production build, complete migration chain in disposable
   PostgreSQL, and the database-backed Context action lifecycle including the
   confirmation-versus-dismissal race.
+### Authenticated Supply OS no longer contains an Atlas customer fallback
+
+- Atlas Robotics was a hardcoded presentation fixture, not another database.
+  The authenticated shell, dashboard, inventory, dates, delivery location, and
+  supplier candidates could fall back to that fixture when no real workspace
+  resolved.
+- Presentation mode, demo company selection, Atlas inventory, and the browser
+  sample-case fallback are removed. Company identity now comes only from a
+  tenant-scoped Company and SupplyWorkspace. Inventory and requirements come
+  only from the selected workspace's published SupplySnapshot.
+- Supplier research and procurement history no longer infer or provision the
+  `system:atlas-procurement` workspace. Missing workspace context returns an
+  empty read result, while new research rejects the request before writing.
+- Runtime inventory helpers no longer invent a 24-unit demand, Austin delivery
+  location, unit of measure, or need-by dates. Parser examples remain isolated
+  under `scripts/fixtures` and cannot be selected by the application.
+- The generic procurement workspace no longer injects compiled supplier names,
+  locations, prices, lead times, or a fixed delivery-date base. Candidate rows
+  now require attributable research evidence.
+- SKU matches can no longer activate the compiled GUILD2 campaign or create
+  workflow orders. Both campaign API methods return `410`, and persistence can
+  no longer provision a synthetic campaign workspace. The retired GUILD BOM,
+  dates, and locations now exist only under `scripts/fixtures`; production
+  source imports only the generic research contract.
+- The active sourcing Messages view now uses generic customer procurement
+  request and supplier types. It no longer imports the retired GUILD2 runtime
+  module to render supplier contact, response, or purchase-order state.
+- The browser-only customer generator, synthetic product twin, snapshot fallback
+  adapter, and unrelated robot image were removed from the authenticated source.
+  New companies enter through the tenant-scoped company and workspace API.
+- Legacy workstream URLs no longer render browser-stored customer cases. They
+  drop old presentation and case parameters, then redirect to the matching
+  tenant-backed Supply OS panel.
+- No database migration is required. Existing Atlas fixture rows, if any were
+  created by an older release, are inert and require a separate reviewed data
+  cleanup before deletion.
 
 ### Production uses the real HypnoDreamz workspace without an Atlas fallback
 
@@ -68,8 +104,9 @@
   Restricted `derya_app` grants and Supply OS tenant-scope guards were restored.
 - The HypnoDreamz Company now has one active `production:primary` workspace and
   one OWNER membership for the existing active admin.
-- Normal workspace loading no longer defaults to Atlas. Atlas remains available
-  only when explicitly requested by presentation mode or a demo selection.
+- That release removed the normal Atlas default but still retained an explicit
+  presentation path. The follow-up above removes that path from the authenticated
+  product entirely.
 
 ### Context is light and available to new custom supplier searches
 

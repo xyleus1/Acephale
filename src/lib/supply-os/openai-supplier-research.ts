@@ -709,7 +709,7 @@ export async function searchOpenAiComponentSuppliers(
     maxRetries: 0,
   });
   const createResponse = dependencies.createResponse ?? ((request, signal) => client!.responses.create(request, { signal }));
-  const openRequest = input.componentItemKey.startsWith("request:") || input.componentItemKey.startsWith("GUILD-");
+  const openRequest = input.componentItemKey.startsWith("request:");
   const request: Parameters<OpenAI["responses"]["create"]>[0] & { max_tool_calls: 1 } = {
     model: DERYA_AI_MODEL,
     tools: [{ type: "web_search" as const, search_context_size: "high" as const }],

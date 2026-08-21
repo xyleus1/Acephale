@@ -14,17 +14,15 @@ import {
   SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW,
   validateSupplierResearchCampaignAncestryWindow,
   type SupplierResearchCampaignAncestryRow,
-} from "./supplier-research-campaign";
+} from "./supplier-research-contract";
 
-const ATLAS_DEMO_WORKSPACE = { externalKey: "system:atlas-procurement", name: "Atlas Robotics procurement" } as const;
-const GUILD_DEMO_WORKSPACE = { externalKey: "system:guild-procurement", name: "GUILD procurement" } as const;
 export const SOURCING_RESEARCH_CAPABILITY_KEY = "research.supplier_candidates";
 const CAPABILITY_KEY = SOURCING_RESEARCH_CAPABILITY_KEY;
 const CAPABILITY_VERSION = "1";
 const PROVIDER_RUN_DSL_VERSION = "2";
 const PROVIDER_RUN_DSL_NAMES = ["interactive_supplier_research", "queued_supplier_research_child"] as const;
 const CAMPAIGN_CAPABILITY_KEY = "research.supplier_campaign";
-const CAMPAIGN_DSL_NAME = "guild_continuous_supplier_research";
+const CAMPAIGN_DSL_NAME = "queued_supplier_research_campaign";
 const CAMPAIGN_CAPABILITY_VERSION = "3";
 const RUN_STALE_AFTER_MS = 5 * 60 * 1_000;
 const OFFICE_DAILY_PROVIDER_CALL_CAP = 72;
@@ -33,92 +31,12 @@ function digest(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-async function demoSourcingWorkspace(
-  context: SupplyAccessContext,
-  mode: "view" | "edit",
-  demo: typeof ATLAS_DEMO_WORKSPACE | typeof GUILD_DEMO_WORKSPACE,
-) {
-  const accessContext = await currentSupplyAccessContext(context);
-  const existing = await prisma.supplyWorkspace.findUnique({
-    where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: demo.externalKey } },
-    select: { id: true },
-  });
-  if (existing) {
-    await requireSupplyWorkspace(accessContext, existing.id, mode);
-    return existing;
-  }
-  if (mode === "view") {
-    throw new SupplyPersistenceError("Supply workspace not found.", "not_found");
-  }
-  if (accessContext.role === "EMPLOYEE") {
-    throw new SupplyPersistenceError("You cannot create the procurement workspace.", "forbidden");
-  }
-  let workspace: { id: string };
-  try {
-    workspace = await prisma.supplyWorkspace.upsert({
-      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: demo.externalKey } },
-      update: { status: "ACTIVE" },
-      create: {
-        officeId: accessContext.officeId,
-        createdByUserId: accessContext.userId,
-        externalKey: demo.externalKey,
-        name: demo.name,
-        members: {
-          create: {
-            officeId: accessContext.officeId,
-            userId: accessContext.userId,
-            role: "OWNER",
-          },
-        },
-      },
-      select: { id: true },
-    });
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    workspace = await prisma.supplyWorkspace.findUniqueOrThrow({
-      where: { officeId_externalKey: { officeId: accessContext.officeId, externalKey: demo.externalKey } },
-      select: { id: true },
-    });
-  }
-  await requireSupplyWorkspace(accessContext, workspace.id, mode);
-  return workspace;
-}
-
 export async function sourcingSystemWorkspace(context: SupplyAccessContext, mode: "view" | "edit", workspaceId?: string) {
   const accessContext = await currentSupplyAccessContext(context);
-  if (workspaceId) return requireSupplyWorkspace(accessContext, workspaceId, mode);
-  return demoSourcingWorkspace(accessContext, mode, ATLAS_DEMO_WORKSPACE);
-}
-
-export async function guildSourcingSystemWorkspace(context: SupplyAccessContext, mode: "view" | "edit") {
-  return demoSourcingWorkspace(context, mode, GUILD_DEMO_WORKSPACE);
-}
-
-async function findDemoSourcingWorkspace(
-  context: SupplyAccessContext,
-  demo: typeof ATLAS_DEMO_WORKSPACE | typeof GUILD_DEMO_WORKSPACE,
-) {
-  const accessContext = await currentSupplyAccessContext(context);
-  const workspace = await prisma.supplyWorkspace.findUnique({
-    where: {
-      officeId_externalKey: {
-        officeId: accessContext.officeId,
-        externalKey: demo.externalKey,
-      },
-    },
-    select: { id: true },
-  });
-  if (!workspace) return null;
-  await requireSupplyWorkspace(accessContext, workspace.id, "view");
-  return workspace;
-}
-
-export async function findSourcingSystemWorkspace(context: SupplyAccessContext) {
-  return findDemoSourcingWorkspace(context, ATLAS_DEMO_WORKSPACE);
-}
-
-export async function findGuildSourcingSystemWorkspace(context: SupplyAccessContext) {
-  return findDemoSourcingWorkspace(context, GUILD_DEMO_WORKSPACE);
+  if (!workspaceId) {
+    throw new SupplyPersistenceError("A company workspace is required for supplier research.", "invalid_input");
+  }
+  return requireSupplyWorkspace(accessContext, workspaceId, mode);
 }
 
 export async function sourcingWorkspaceForTask(
@@ -197,12 +115,10 @@ export async function listSourcingResearchPage(
   context: SupplyAccessContext,
   options: { cursor?: string; limit?: number; workspaceId?: string } = {},
 ): Promise<SourcingResearchPage> {
-  const workspace = options.workspaceId
-    ? await sourcingSystemWorkspace(context, "view", options.workspaceId)
-    : await findSourcingSystemWorkspace(context);
   const cursor = decodeResearchCursor(options.cursor);
   const limit = pageSize(options.limit);
-  if (!workspace) return { runs: [], nextCursor: null };
+  if (!options.workspaceId) return { runs: [], nextCursor: null };
+  const workspace = await sourcingSystemWorkspace(context, "view", options.workspaceId);
   const where = {
     officeId: context.officeId,
     workspaceId: workspace.id,
@@ -241,16 +157,16 @@ export async function listSourcingResearchPage(
   };
 }
 
-export async function listSourcingResearchRuns(context: SupplyAccessContext, includeRunIds: string[] = []) {
-  const firstPage = await listSourcingResearchPage(context, { limit: 50 });
+export async function listSourcingResearchRuns(context: SupplyAccessContext, includeRunIds: string[] = [], workspaceId?: string) {
+  if (!workspaceId) return [];
+  const firstPage = await listSourcingResearchPage(context, { limit: 50, workspaceId });
   const secondPage = firstPage.nextCursor
-    ? await listSourcingResearchPage(context, { cursor: firstPage.nextCursor, limit: 10 })
+    ? await listSourcingResearchPage(context, { cursor: firstPage.nextCursor, limit: 10, workspaceId })
     : null;
   const recent = [...firstPage.runs, ...(secondPage?.runs ?? [])];
   const missingIds = [...new Set(includeRunIds)].filter((id) => !recent.some((run) => run.id === id));
   if (!missingIds.length) return recent;
-  const workspace = await findSourcingSystemWorkspace(context);
-  if (!workspace) return recent;
+  const workspace = await sourcingSystemWorkspace(context, "view", workspaceId);
   const where = {
     officeId: context.officeId,
     workspaceId: workspace.id,

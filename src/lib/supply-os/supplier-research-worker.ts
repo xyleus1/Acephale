@@ -18,7 +18,7 @@ import {
   type ClaimSourcingResearchRunResult,
   type QueuedSourcingResearchRunReference,
 } from "./sourcing-research-persistence";
-import type { SupplierResearchProvider } from "./supplier-research-campaign";
+import type { SupplierResearchProvider } from "./supplier-research-contract";
 
 type SupplierResearchWorkerResult =
   | { state: "succeeded"; runId: string }

@@ -19,7 +19,7 @@ import {
 } from "../src/app/dashboard/supply-os/supply-os-active-sourcing-model";
 import type { SavedProcurementCase } from "../src/app/dashboard/supply-os/supply-os-sourcing-research-types";
 import type { CustomerProcurementListItem } from "../src/lib/supply-os/customer-procurement";
-import type { Guild2ProcurementRequestDetail } from "../src/lib/supply-os/guild2-procurement";
+import type { CustomerProcurementRequestDetail } from "../src/lib/supply-os/customer-procurement-status";
 
 function sourcingCase(input: {
   id: string;
@@ -103,7 +103,7 @@ const externalDetail = {
   approvalRequestedAt: "2026-08-21T00:00:00.000Z",
   decisionSnapshot: { selection: { selected_vendor_id: "vendor-2" } },
   vendors: [],
-} satisfies Guild2ProcurementRequestDetail;
+} satisfies CustomerProcurementRequestDetail;
 assert.equal(externalSelectedVendorId(externalDetail), "vendor-2");
 assert.equal(externalVendorPoReady(externalRequest, externalDetail, "vendor-1"), false);
 assert.equal(externalVendorPoReady(externalRequest, externalDetail, "vendor-2"), true);

@@ -724,7 +724,6 @@ function supplierRole(value: unknown): SupplierCandidateRole | null {
 
 function roleAllowedForInput(input: ExaSupplierResearchInput, role: SupplierCandidateRole) {
   return input.componentItemKey.startsWith("request:")
-    || input.componentItemKey.startsWith("GUILD-")
     || role === "MANUFACTURER"
     || role === "DISTRIBUTOR";
 }

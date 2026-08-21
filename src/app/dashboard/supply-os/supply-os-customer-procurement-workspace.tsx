@@ -15,23 +15,23 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  GUILD2_PROCUREMENT_POLL_INTERVAL_MS,
-  guild2CustomerProcurementProgress,
-  guild2CustomerProcurementStatusLabel,
-  guild2ProcurementContactSummary,
-  guild2ProcurementEvidenceSummary,
-  guild2ProcurementPhase,
-  guild2ProcurementQuoteSummary,
-  guild2ProcurementResearchComplete,
-  startGuild2ProcurementPolling,
-  type Guild2ProcurementOrderState,
-  type Guild2ProcurementRequestDetail,
-} from "@/lib/supply-os/guild2-procurement";
+  CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS,
+  customerProcurementProgress,
+  customerProcurementStatusLabel,
+  customerProcurementContactSummary,
+  customerProcurementEvidenceSummary,
+  customerProcurementPhase,
+  customerProcurementQuoteSummary,
+  customerProcurementResearchComplete,
+  startCustomerProcurementPolling,
+  type CustomerProcurementOrderState,
+  type CustomerProcurementRequestDetail,
+} from "@/lib/supply-os/customer-procurement-status";
 import {
   PROCUREMENT_APPROVAL_STATUSES,
   PROCUREMENT_STATUS_LABELS,
 } from "@/lib/procurement-status";
-import type { AtlasInventoryItem } from "@/lib/supply-os/atlas-robotics-inventory";
+import type { SupplyInventoryItem } from "@/lib/supply-os/inventory-item";
 import styles from "./supply-os-logistics.module.css";
 
 function vendorStatusLabel(status: string) {
@@ -40,9 +40,9 @@ function vendorStatusLabel(status: string) {
 
 function detailFromInitialState(
   orderId: string,
-  item: AtlasInventoryItem,
-  initialOrder: Guild2ProcurementOrderState,
-): Guild2ProcurementRequestDetail {
+  item: SupplyInventoryItem,
+  initialOrder: CustomerProcurementOrderState,
+): CustomerProcurementRequestDetail {
   return {
     id: orderId,
     status: initialOrder.status,
@@ -73,8 +73,8 @@ export function CustomerProcurementWorkspace({
   onBack,
 }: {
   orderId: string;
-  item: AtlasInventoryItem;
-  initialOrder: Guild2ProcurementOrderState;
+  item: SupplyInventoryItem;
+  initialOrder: CustomerProcurementOrderState;
   onBack: () => void;
 }) {
   const reduceMotion = useReducedMotion();
@@ -82,9 +82,9 @@ export function CustomerProcurementWorkspace({
   const [refreshState, setRefreshState] = useState<"idle" | "running" | "error">("idle");
   const [startRetryState, setStartRetryState] = useState<"idle" | "running" | "requested" | "error">("idle");
   const [refreshError, setRefreshError] = useState<string | null>(null);
-  const refreshPromiseRef = useRef<Promise<Guild2ProcurementRequestDetail> | null>(null);
+  const refreshPromiseRef = useRef<Promise<CustomerProcurementRequestDetail> | null>(null);
   const automaticStartRetryRef = useRef(false);
-  const phase = guild2ProcurementPhase(detail.status, detail.vendors.length);
+  const phase = customerProcurementPhase(detail.status, detail.vendors.length);
   const approvalRequired = PROCUREMENT_APPROVAL_STATUSES.has(detail.status);
 
   const refresh = useCallback((signal?: AbortSignal) => {
@@ -96,7 +96,7 @@ export function CustomerProcurementWorkspace({
         signal,
         headers: { accept: "application/json" },
       });
-      const next = await responseJson<Guild2ProcurementRequestDetail>(response);
+      const next = await responseJson<CustomerProcurementRequestDetail>(response);
       setDetail(next);
       setRefreshError(null);
       setRefreshState("idle");
@@ -133,14 +133,14 @@ export function CustomerProcurementWorkspace({
 
   useEffect(() => {
     const controller = new AbortController();
-    const stop = startGuild2ProcurementPolling({
+    const stop = startCustomerProcurementPolling({
       initialStatus: detail.status,
       load: () => refresh(controller.signal),
       onDetail: () => undefined,
       onError: () => undefined,
       schedule: (callback, delay) => window.setTimeout(callback, delay),
       cancel: (handle) => window.clearTimeout(handle as number),
-      intervalMs: GUILD2_PROCUREMENT_POLL_INTERVAL_MS,
+      intervalMs: CUSTOMER_PROCUREMENT_POLL_INTERVAL_MS,
     });
     return () => {
       stop();
@@ -162,7 +162,7 @@ export function CustomerProcurementWorkspace({
 
   const researchSteps = useMemo(() => {
     const claimed = detail.status !== "new";
-    const suppliersFound = guild2ProcurementResearchComplete(detail.status, detail.vendors.length);
+    const suppliersFound = customerProcurementResearchComplete(detail.status, detail.vendors.length);
     return [
       { label: "Request received", detail: `${detail.quantity.toLocaleString("en-US")} ${detail.unit} confirmed`, complete: true, active: false },
       { label: "Processing start", detail: detail.status === "new" ? "Waiting to begin" : "Supplier research is active", complete: claimed, active: !claimed },
@@ -171,8 +171,8 @@ export function CustomerProcurementWorkspace({
     ];
   }, [detail]);
 
-  const currentStatus = guild2CustomerProcurementStatusLabel(detail.status);
-  const visibleProgress = guild2CustomerProcurementProgress(detail.status, detail.vendors.length);
+  const currentStatus = customerProcurementStatusLabel(detail.status);
+  const visibleProgress = customerProcurementProgress(detail.status, detail.vendors.length);
   return (
     <motion.section
       className={`${styles.procurementWorkspace} ${styles.customerProcurementWorkspace}`}
@@ -268,14 +268,14 @@ export function CustomerProcurementWorkspace({
                 <thead><tr><th>Supplier</th><th>Contact</th><th>Evidence</th><th>Quote</th><th>Source</th></tr></thead>
                 <tbody>
                   {detail.vendors.map((vendor) => {
-                    const evidence = guild2ProcurementEvidenceSummary(vendor.research);
-                    const contact = guild2ProcurementContactSummary(vendor.contact);
+                    const evidence = customerProcurementEvidenceSummary(vendor.research);
+                    const contact = customerProcurementContactSummary(vendor.contact);
                     return (
                       <tr key={vendor.id}>
                         <td><strong>{vendor.name}</strong><small>{vendorStatusLabel(vendor.status)}</small></td>
                         <td><strong>{contact.primary}</strong><small>{contact.secondary}</small></td>
                         <td><strong>{evidence[0] ?? "Evidence pending"}</strong><small>{evidence[1] ?? "Review the supplier source before approval"}</small></td>
-                        <td><strong>{guild2ProcurementQuoteSummary(vendor.quote)}</strong><small>{vendor.quote ? "Commercial terms saved" : "No commercial terms saved"}</small></td>
+                        <td><strong>{customerProcurementQuoteSummary(vendor.quote)}</strong><small>{vendor.quote ? "Commercial terms saved" : "No commercial terms saved"}</small></td>
                         <td>{vendor.website ? <a href={vendor.website} target="_blank" rel="noreferrer">Open site <ExternalLink size={12} /></a> : <small>Website unavailable</small>}</td>
                       </tr>
                     );

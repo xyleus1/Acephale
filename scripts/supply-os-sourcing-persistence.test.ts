@@ -70,11 +70,6 @@ import {
   validatePublicSupplierLeadReceipts,
   type OpenAiRetrievalCapture,
 } from "../src/lib/supply-os/exa-supplier-research";
-import {
-  SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW,
-  guildSupplierResearchCampaignIdempotencyKey,
-  startOrResumeGuildSupplierResearchCampaign,
-} from "../src/lib/supply-os/supplier-research-campaign";
 
 const suffix = randomUUID().slice(0, 8);
 let officeId = "";
@@ -116,130 +111,6 @@ async function main() {
   try {
     const context = await makeContext("owner");
     officeId = context.officeId;
-    let supersededCampaignChildId = "";
-    const priorExaApiKey = process.env.EXA_API_KEY;
-    try {
-      process.env.EXA_API_KEY = "supplier-campaign-trigger-contract";
-      const firstCampaign = await startOrResumeGuildSupplierResearchCampaign({ context, now: new Date("2026-08-12T12:00:00.000Z") });
-      const firstCampaignRow = await prisma.supplyCapabilityRun.findUniqueOrThrow({
-        where: { id: firstCampaign.campaign.id },
-        select: { id: true, status: true, idempotencyKey: true },
-      });
-      const firstCampaignChild = await prisma.supplyCapabilityRun.findFirstOrThrow({
-        where: {
-          officeId: context.officeId,
-          workspaceId: firstCampaign.campaign.workspaceId,
-          parentRunId: firstCampaignRow.id,
-          capabilityKey: "research.supplier_candidates",
-          dslName: "queued_supplier_research_child",
-          status: "QUEUED",
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, officeId: true, workspaceId: true },
-      });
-      supersededCampaignChildId = firstCampaignChild.id;
-      assert.equal(firstCampaignRow.status, "RUNNING", "campaign parent must pass QUEUED to RUNNING through the database state guard");
-      assert.equal(firstCampaignRow.idempotencyKey, guildSupplierResearchCampaignIdempotencyKey());
-      const mismatchedProviderInput = {
-        componentItemKey: "request:guild-provider-mismatch",
-        componentName: "Provider mismatch fixture",
-        requiredProvider: "OPENAI",
-      } as const;
-      const mismatchedProviderChild = await prisma.supplyCapabilityRun.create({
-        data: {
-          officeId: context.officeId,
-          workspaceId: firstCampaign.campaign.workspaceId,
-          invokedByUserId: context.userId,
-          parentRunId: firstCampaignRow.id,
-          capabilityKey: "research.supplier_candidates",
-          capabilityVersion: "1",
-          dslName: "queued_supplier_research_child",
-          dslVersion: "2",
-          input: mismatchedProviderInput,
-          inputHash: jsonDigest(mismatchedProviderInput),
-          idempotencyKey: `supplier-provider-mismatch-${suffix}`,
-        },
-        select: { id: true, officeId: true, workspaceId: true },
-      });
-      assert.equal(
-        (await listQueuedSourcingResearchRuns(10)).some((run) => run.id === mismatchedProviderChild.id),
-        false,
-        "a campaign child whose provider pin differs from its parent must never enter the worker queue",
-      );
-      assert.deepEqual(await claimSourcingResearchRun(mismatchedProviderChild), { state: "unavailable" });
-      assert.equal(
-        (await prisma.supplyCapabilityRun.findUniqueOrThrow({ where: { id: mismatchedProviderChild.id }, select: { status: true } })).status,
-        "CANCELLED",
-        "claim must cancel a provider-mismatched campaign child before any provider call",
-      );
-      await prisma.supplyCapabilityRun.update({
-        where: { id: firstCampaignRow.id },
-        data: { status: "FAILED", error: { message: "PROVIDER_AUTHENTICATION_FAILED: Test retry boundary." }, failedAt: new Date("2026-08-12T12:01:00.000Z") },
-      });
-      assert.equal(
-        (await listQueuedSourcingResearchRuns(10)).some((run) => run.id === firstCampaignChild.id),
-        false,
-        "a queued child of a terminal campaign must never be advertised to a worker",
-      );
-      assert.deepEqual(
-        await claimSourcingResearchRun(firstCampaignChild),
-        { state: "unavailable" },
-        "claim must recheck the campaign parent under lock before provider work starts",
-      );
-      const cancelledCampaignChild = await prisma.supplyCapabilityRun.findUniqueOrThrow({
-        where: { id: firstCampaignChild.id },
-        select: { status: true, startedAt: true, cancelledAt: true, error: true },
-      });
-      assert.equal(cancelledCampaignChild.status, "CANCELLED", "an orphaned queued campaign child must terminalize through the legal QUEUED to CANCELLED transition");
-      assert.equal(cancelledCampaignChild.startedAt, null, "a cancelled queued child must not consume provider-call quota");
-      assert.ok(cancelledCampaignChild.cancelledAt);
-      assert.match(String((cancelledCampaignChild.error as { message?: unknown } | null)?.message ?? ""), /CAMPAIGN_SCOPE_SUPERSEDED/);
-      const retriedCampaign = await startOrResumeGuildSupplierResearchCampaign({ context, now: new Date("2026-08-12T12:02:00.000Z") });
-      const retriedCampaignRow = await prisma.supplyCapabilityRun.findUniqueOrThrow({
-        where: { id: retriedCampaign.campaign.id },
-        select: { id: true, status: true, idempotencyKey: true, parentRunId: true },
-      });
-      assert.notEqual(retriedCampaignRow.id, firstCampaignRow.id, "retry must create a new immutable campaign generation");
-      assert.equal(retriedCampaignRow.parentRunId, firstCampaignRow.id, "retry generation must retain audit lineage to the terminal parent");
-      assert.equal(retriedCampaignRow.status, "RUNNING");
-      assert.equal(retriedCampaignRow.idempotencyKey, `${guildSupplierResearchCampaignIdempotencyKey()}:generation:2`);
-      let latestCampaignId = retriedCampaignRow.id;
-      const testedGeneration = SUPPLIER_RESEARCH_CAMPAIGN_ANCESTRY_WINDOW + 5;
-      for (let generation = 3; generation <= testedGeneration; generation += 1) {
-        const failedAt = new Date(Date.UTC(2026, 7, 12, 12, generation * 2));
-        await prisma.supplyCapabilityRun.update({
-          where: { id: latestCampaignId },
-          data: {
-            status: "FAILED",
-            error: { message: "CAMPAIGN_BLOCKED: Test bounded manual retry generation." },
-            failedAt,
-          },
-        });
-        const nextGeneration = await startOrResumeGuildSupplierResearchCampaign({
-          context,
-          now: new Date(failedAt.getTime() + 60_000),
-        });
-        latestCampaignId = nextGeneration.campaign.id;
-        assert.equal(
-          (await prisma.supplyCapabilityRun.findUniqueOrThrow({
-            where: { id: latestCampaignId },
-            select: { idempotencyKey: true },
-          })).idempotencyKey,
-          `${guildSupplierResearchCampaignIdempotencyKey()}:generation:${generation}`,
-        );
-      }
-      assert.equal(await prisma.supplyCapabilityRun.count({
-        where: {
-          officeId: context.officeId,
-          workspaceId: firstCampaign.campaign.workspaceId,
-          capabilityKey: "research.supplier_campaign",
-        },
-      }), testedGeneration, "campaign enqueue and quota accounting continue through a lineage deeper than the bounded validation window");
-    } finally {
-      if (priorExaApiKey === undefined) delete process.env.EXA_API_KEY;
-      else process.env.EXA_API_KEY = priorExaApiKey;
-    }
-    assert.ok(supersededCampaignChildId, "the superseded campaign child fixture must execute");
     const visibleWorkspace = await createSupplyWorkspace(context, { name: "Visible robotics workspace" });
     const input = {
       componentItemKey: "VIS-DPT-410",
@@ -334,8 +205,8 @@ async function main() {
         startedAt: { not: null },
       },
     }), providerStartsBeforeRevocation, "access-revoked queue entries must not consume the office provider budget");
-    const started = await startSourcingResearchRun(context, input);
-    const stale = await startSourcingResearchRun(context, { ...input, componentItemKey: "STALE-1" });
+    const started = await startSourcingResearchRun(context, input, visibleWorkspace.id);
+    const stale = await startSourcingResearchRun(context, { ...input, componentItemKey: "STALE-1" }, visibleWorkspace.id);
     const tiedResearchTime = new Date(Date.now() - 60_000);
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
@@ -672,36 +543,60 @@ async function main() {
       "a detached or tampered OpenAI receipt must not create or update a durable supplier profile",
     );
     const persistedIntelligence = await supplyIntelligenceProfile(context, started.workspaceId);
-    assert.equal(persistedIntelligence.customer.factCount, 1);
-    assert.equal(persistedIntelligence.supplierCount, 0, "unvalidated model candidates must not become durable supplier profiles");
+    assert.equal(persistedIntelligence.customer.factCount, 5, "the workspace intelligence projection must include every completed sourcing need");
+    assert.equal(persistedIntelligence.supplierCount, 2, "only suppliers backed by rebuilt retrieval receipts may enter workspace intelligence");
 
     await prisma.supplyCapabilityRun.update({
       where: { id: stale.id },
       data: { updatedAt: new Date(Date.now() - 10 * 60 * 1_000) },
     });
     await failStaleRunningSourcingResearchRuns();
-    const runs = await listSourcingResearchRuns(context);
+    const runs = (await listSourcingResearchRuns(context, [], visibleWorkspace.id))
+      .filter((run) => run.id === started.id || run.id === stale.id);
     assert.equal(runs.length, 2);
     const completed = runs.find((run) => run.id === started.id);
     assert.equal((completed?.input as typeof input).componentItemKey, "VIS-DPT-410");
     assert.equal(completed?.status, "SUCCEEDED");
     assert.equal(((completed?.output as { candidates?: unknown[] })?.candidates ?? []).length, 4);
     assert.equal(runs.find((run) => run.id === stale.id)?.status, "FAILED", "stale research must become retryable");
-    const firstResearchPage = await listSourcingResearchPage(context, { limit: 1 });
+    const paginationWorkspace = await createSupplyWorkspace(context, { name: "Research pagination contract" });
+    const olderPaginationRun = await startSourcingResearchRun(context, {
+      ...input,
+      componentItemKey: "PAGINATION-OLDER",
+      componentName: "Older pagination request",
+    }, paginationWorkspace.id);
+    const newerPaginationRun = await startSourcingResearchRun(context, {
+      ...input,
+      componentItemKey: "PAGINATION-NEWER",
+      componentName: "Newer pagination request",
+    }, paginationWorkspace.id);
+    const paginationTime = Date.now() - 30_000;
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL derya.allow_supply_provenance_mutation = 'on'");
+      await tx.supplyCapabilityRun.update({
+        where: { id: olderPaginationRun.id },
+        data: { createdAt: new Date(paginationTime - 1_000) },
+      });
+      await tx.supplyCapabilityRun.update({
+        where: { id: newerPaginationRun.id },
+        data: { createdAt: new Date(paginationTime) },
+      });
+    });
+    const firstResearchPage = await listSourcingResearchPage(context, { limit: 1, workspaceId: paginationWorkspace.id });
     assert.equal(firstResearchPage.runs.length, 1);
     assert.ok(firstResearchPage.nextCursor, "a full sourcing page must return an older-work cursor");
     const midPaginationRun = await startSourcingResearchRun(context, {
       ...input,
       componentItemKey: "MID-PAGINATION-1",
       componentName: "Newer mid-pagination request",
-    });
-    const secondResearchPage = await listSourcingResearchPage(context, { limit: 1, cursor: firstResearchPage.nextCursor! });
+    }, paginationWorkspace.id);
+    const secondResearchPage = await listSourcingResearchPage(context, { limit: 1, cursor: firstResearchPage.nextCursor!, workspaceId: paginationWorkspace.id });
     assert.equal(secondResearchPage.runs.length, 1);
     assert.notEqual(secondResearchPage.runs[0]?.id, firstResearchPage.runs[0]?.id, "cursor pages must not repeat research runs");
     assert.equal(secondResearchPage.nextCursor, null);
     assert.deepEqual(
       new Set([...firstResearchPage.runs, ...secondResearchPage.runs].map((run) => run.id)),
-      new Set([started.id, stale.id]),
+      new Set([olderPaginationRun.id, newerPaginationRun.id]),
       "pagination must keep every durable research run reachable",
     );
     assert.equal(
@@ -710,12 +605,12 @@ async function main() {
       "a run inserted above the cursor must not shift or duplicate the older page sequence",
     );
     assert.equal(
-      (await listSourcingResearchPage(context, { limit: 3 })).runs[0]?.id,
+      (await listSourcingResearchPage(context, { limit: 3, workspaceId: paginationWorkspace.id })).runs[0]?.id,
       midPaginationRun.id,
       "a fresh queue read must include the run inserted during the prior pagination session",
     );
     await assert.rejects(
-      () => listSourcingResearchPage(context, { cursor: "not-a-valid-cursor" }),
+      () => listSourcingResearchPage(context, { cursor: "not-a-valid-cursor", workspaceId: paginationWorkspace.id }),
       /cursor is invalid/i,
     );
     const stored = await prisma.supplyCapabilityRun.findUniqueOrThrow({ where: { id: started.id } });
@@ -793,7 +688,7 @@ async function main() {
     assert.equal(rejectedResult.gates.sourceEvidence, "BLOCKED");
     assert.equal(rejectedResult.reviews.sourceEvidence.outcome, "REJECTED");
     assert.equal(rejectedResult.reviews.sourceEvidence.rejectionReason, "AUTHORIZATION_UNRESOLVED");
-    const listedRejected = (await listProcurementCases(context)).find((candidate) => candidate.id === procurementCase.id);
+    const listedRejected = (await listProcurementCases(context, visibleWorkspace.id)).find((candidate) => candidate.id === procurementCase.id);
     assert.equal((listedRejected?.result as { stage?: string } | null)?.stage, "SUPPLIER_REJECTED", "rejected suppliers must remain visible and resumable");
 
     const sourceReviewed = await reviewProcurementGate({
@@ -830,7 +725,7 @@ async function main() {
       where: { id: procurementCase.id },
       data: { result: expiredQualificationResult, resultHash: jsonDigest(expiredQualificationResult) },
     });
-    const projectedExpiredQualification = (await listProcurementCasesForResearchRuns(context, [started.id]))
+    const projectedExpiredQualification = (await listProcurementCasesForResearchRuns(context, [started.id], visibleWorkspace.id))
       .find((candidate) => candidate.id === procurementCase.id);
     assert.equal((projectedExpiredQualification?.result as { stage?: string } | null)?.stage, "SOURCE_EVIDENCE", "expired qualifications must reopen Gate 1 in the sourcing queue");
     assert.equal(projectedExpiredQualification?.quoteCycle, null, "stale downstream work must not be exposed while qualification is expired");
@@ -866,7 +761,7 @@ async function main() {
     assert.equal((quoteDraft.quoteCycle.result as { revision: number; state: string; externalSideEffect: boolean }).revision, 1);
     assert.equal((quoteDraft.quoteCycle.result as { state: string }).state, "DRAFT");
     assert.equal((quoteDraft.quoteCycle.result as { externalSideEffect: boolean }).externalSideEffect, false);
-    assert.equal((await listProcurementCases(context))[0]?.quoteCycle?.id, quoteDraft.quoteCycle.id, "the sourcing queue must restore the quote-request draft");
+    assert.equal((await listProcurementCases(context, visibleWorkspace.id))[0]?.quoteCycle?.id, quoteDraft.quoteCycle.id, "the sourcing queue must restore the quote-request draft");
     const quoteDraftEvents = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id } });
     const repeatedQuoteDraft = await saveSupplierQuoteRequest({ context, caseId: procurementCase.id, input: quoteRequestInput });
     assert.equal((repeatedQuoteDraft.quoteCycle.result as { revision: number }).revision, 1);
@@ -983,7 +878,7 @@ async function main() {
     assert.ok(storedQuoteResponse.evidenceId, "every supplier quote response must create canonical evidence");
     assert.equal((await prisma.supplyEvidence.findUniqueOrThrow({ where: { id: storedQuoteResponse.evidenceId } })).contentHash, storedQuoteResponse.responseHash);
     assert.equal((quoteResponse.quoteCycle.result as { responses: unknown[] }).responses.length, 2, "quote revisions must remain available for comparison");
-    assert.equal(((await listProcurementCases(context))[0]?.result as { quoteCycle: { responseCount: number } }).quoteCycle.responseCount, 2);
+    assert.equal(((await listProcurementCases(context, visibleWorkspace.id))[0]?.result as { quoteCycle: { responseCount: number } }).quoteCycle.responseCount, 2);
     const responseEventCount = await prisma.supplyExecutionEvent.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_RESPONSE_RECORDED" } });
     const responseEvidenceCount = await prisma.supplyEvidence.count({ where: { executionTaskId: quoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_RESPONSE" } });
     await recordSupplierQuoteResponse({ context, quoteCycleId: quoteDraft.quoteCycle.id, input: quoteResponseInput });
@@ -1243,7 +1138,7 @@ async function main() {
     });
     assert.equal((updatedPurchaseDraft.purchaseDraft!.result as { revision: number }).revision, 2);
     assert.equal((updatedPurchaseDraft.purchaseDraft!.result as { totals: { materialSubtotal: string } }).totals.materialSubtotal, "1250");
-    assert.equal((await listProcurementCases(context))[0]?.purchaseDraft?.id, updatedPurchaseDraft.purchaseDraft!.id, "queue reads must restore the active order draft");
+    assert.equal((await listProcurementCases(context, visibleWorkspace.id))[0]?.purchaseDraft?.id, updatedPurchaseDraft.purchaseDraft!.id, "queue reads must restore the active order draft");
     await assert.rejects(() => savePurchaseOrderDraft({
       context,
       caseId: procurementCase.id,
@@ -1420,7 +1315,7 @@ async function main() {
     assert.equal(await prisma.supplyExecutionEvent.count({
       where: { executionTaskId: authorizedAction.purchaseAction.id, eventType: "PURCHASE_ACTION_AUTHORIZED" },
     }), authorizedEventCount, "an identical authorization retry must not append fake history");
-    const restoredAuthorizedCase = (await listProcurementCases(context))[0];
+    const restoredAuthorizedCase = (await listProcurementCases(context, visibleWorkspace.id))[0];
     assert.equal(restoredAuthorizedCase?.purchaseAction?.id, authorizedAction.purchaseAction.id, "the sourcing queue must restore the approved purchase action");
     assert.equal(restoredAuthorizedCase?.purchaseAction?.approval?.status, "APPROVED");
     await assert.rejects(() => savePurchaseOrderDraft({
@@ -1491,7 +1386,7 @@ async function main() {
     });
     assert.equal((revisedOrderEmailDraft.result as { revision: number }).revision, 2);
     assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: approvedOrderEmail.action.id } })).status, "CANCELLED", "changing the approved message must cancel its send action");
-    const restoredOrderEmailCase = (await listProcurementCases(context))[0];
+    const restoredOrderEmailCase = (await listProcurementCases(context, visibleWorkspace.id))[0];
     assert.equal(restoredOrderEmailCase?.purchaseOrderEmailDraft?.id, revisedOrderEmailDraft.id, "the queue must restore the active purchase order email draft");
     assert.equal(restoredOrderEmailCase?.purchaseOrderEmailAction, null, "a cancelled send action must not remain active in the queue");
 
@@ -1559,7 +1454,7 @@ async function main() {
     assert.equal((await prisma.supplyExecutionTask.findUniqueOrThrow({
       where: { id: authorizedAction.purchaseAction.id },
     })).status, "CANCELLED", "changing supplier scope must invalidate an approved but unexecuted purchase action");
-    assert.equal((await listProcurementCases(context))[0]?.purchaseDraft, null, "cancelled order drafts must leave the active sourcing queue");
+    assert.equal((await listProcurementCases(context, visibleWorkspace.id))[0]?.purchaseDraft, null, "cancelled order drafts must leave the active sourcing queue");
     await assert.rejects(() => saveProcurementSelection({
       context,
       researchRunId: started.id,
@@ -1721,7 +1616,7 @@ async function main() {
         body: "Please quote 14 EA calibrated stereo depth cameras for delivery to Austin.",
       },
     });
-    assert.equal((await listProcurementCases(context))[0]?.supplierEmailDraft?.id, supplierEmailDraft.id, "the sourcing queue must restore the connected email draft");
+    assert.equal((await listProcurementCases(context, visibleWorkspace.id))[0]?.supplierEmailDraft?.id, supplierEmailDraft.id, "the sourcing queue must restore the connected email draft");
     await prisma.supplyExecutionTask.update({
       where: { id: returnedCase.id },
       data: { result: expiredEmailCaseResult, resultHash: jsonDigest(expiredEmailCaseResult) },
@@ -1769,7 +1664,7 @@ async function main() {
         data: { scopeHash: legacyInputHash },
       });
     });
-    const legacyProjectedCase = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    const legacyProjectedCase = (await listProcurementCases(context, visibleWorkspace.id)).find((candidate) => candidate.id === returnedCase.id);
     assert.equal(legacyProjectedCase?.supplierEmailAction, null, "legacy unscoped approvals must reopen the request-approval path");
     emailApprovalRequest = await requestSupplierEmailApproval({
       context,
@@ -2183,7 +2078,7 @@ async function main() {
         completedAt: new Date(),
       },
     });
-    const legacyExtractionCase = (await listProcurementCases(context)).find((entry) => entry.id === returnedCase.id);
+    const legacyExtractionCase = (await listProcurementCases(context, visibleWorkspace.id)).find((entry) => entry.id === returnedCase.id);
     const legacyExtractionReply = (legacyExtractionCase?.quoteCycle?.result as { connectedReplies?: Array<{ evidenceId: string; quoteExtraction?: { proposal: { extractorVersion: string } } }> } | null)?.connectedReplies?.find((reply) => reply.evidenceId === replyEvidence.id);
     assert.equal(legacyExtractionReply?.quoteExtraction?.proposal.extractorVersion, "1", "version 1 proposals must remain visible before version 2 re-extraction");
     let extractionProviderCalls = 0;
@@ -2264,7 +2159,7 @@ async function main() {
     assert.equal(await prisma.supplyCapabilityRun.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms" } }), 2, "version 2 must preserve the prior version 1 capability run");
     assert.equal(await prisma.supplyEvidence.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, kind: "SUPPLIER_QUOTE_EXTRACTION_PROPOSAL" } }), 1);
     assert.equal(await prisma.supplyExecutionEvent.count({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, eventType: "SUPPLIER_QUOTE_TERMS_EXTRACTED" } }), 1);
-    const restoredExtractionCase = (await listProcurementCases(context)).find((entry) => entry.id === returnedCase.id);
+    const restoredExtractionCase = (await listProcurementCases(context, visibleWorkspace.id)).find((entry) => entry.id === returnedCase.id);
     const restoredExtractionReply = (restoredExtractionCase?.quoteCycle?.result as { connectedReplies?: Array<{ evidenceId: string; quoteExtraction?: { proposalHash: string; proposal: { extractorVersion: string } } }> } | null)?.connectedReplies?.find((reply) => reply.evidenceId === replyEvidence.id);
     assert.equal(restoredExtractionReply?.quoteExtraction?.proposalHash, extractionOutput.proposalHash, "quote extraction must survive sourcing queue reloads");
     assert.equal(restoredExtractionReply?.quoteExtraction?.proposal.extractorVersion, "2", "the queue must prefer the current extraction while retaining version 1 history");
@@ -2340,7 +2235,7 @@ async function main() {
     assert.equal(await prisma.supplyCapabilityRun.count({
       where: { executionTaskId: retryQuoteDraft.quoteCycle.id, capabilityKey: "extract.supplier_quote_terms", input: { path: ["sourceEvidenceId"], equals: followUpReplyEvidence.id } },
     }), 2, "a retry must preserve both immutable extraction attempts");
-    const restoredReplyCase = (await listProcurementCases(context))[0];
+    const restoredReplyCase = (await listProcurementCases(context, visibleWorkspace.id))[0];
     assert.equal(restoredReplyCase?.quoteCycle?.result && (restoredReplyCase.quoteCycle.result as { connectedReplies?: unknown[] }).connectedReplies?.length, 2, "captured replies must survive queue reloads");
     const connectedResponseInput = {
       expectedRequestHash: retryRequestHash,
@@ -2565,7 +2460,7 @@ async function main() {
     assert.equal(await prisma.supplyEvidence.count({
       where: { executionTaskId: releaseAction.purchaseAction.id, kind: "PURCHASE_ORDER_RELEASE" },
     }), purchaseReleaseEvidenceCount, "identical order-release retries must not duplicate evidence");
-    const restoredReleasedCase = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    const restoredReleasedCase = (await listProcurementCases(context, visibleWorkspace.id)).find((candidate) => candidate.id === returnedCase.id);
     assert.equal(restoredReleasedCase?.purchaseAction?.status, "RUNNING", "the active order release must restore with its purchase action");
     assert.equal((restoredReleasedCase?.result as { purchaseRelease?: { state: string } }).purchaseRelease?.state, "RELEASED", "the sourcing queue must preserve the awaiting-supplier state across reloads");
     await assert.rejects(() => recordPurchaseOrderRelease({
@@ -2716,7 +2611,7 @@ async function main() {
     const followUpRetry = await sendPurchaseOrderFollowUpAction({ context, actionId: followUpApproved.action.id, provider: sentFollowUpProvider });
     assert.equal((followUpRetry.result as { followUpHash: string }).followUpHash, sentFollowUpResult.followUpHash);
     assert.equal(followUpProviderCalls, 1, "a lost follow-up response must not contact the supplier twice");
-    const restoredFollowUpCase = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    const restoredFollowUpCase = (await listProcurementCases(context, visibleWorkspace.id)).find((candidate) => candidate.id === returnedCase.id);
     assert.equal(restoredFollowUpCase?.purchaseOrderFollowUpAction?.result?.state, "SENT", "the sourcing queue must restore the supplier follow-up receipt");
     assert.equal(restoredFollowUpCase?.result?.purchaseRelease?.followUps?.length, 1, "the released order projection must retain follow-up history");
     const secondFollowUpDraft = await savePurchaseOrderFollowUpDraft({
@@ -2745,7 +2640,7 @@ async function main() {
       },
     });
     assert.notEqual(revisedSecondFollowUpDraft.id, secondFollowUpDraft.id, "a rejected follow-up must reopen as a new draft revision");
-    const restoredRevisedFollowUp = (await listProcurementCases(context)).find((candidate) => candidate.id === returnedCase.id);
+    const restoredRevisedFollowUp = (await listProcurementCases(context, visibleWorkspace.id)).find((candidate) => candidate.id === returnedCase.id);
     assert.equal(restoredRevisedFollowUp?.purchaseOrderFollowUpDraft?.id, revisedSecondFollowUpDraft.id);
     assert.equal(restoredRevisedFollowUp?.purchaseOrderFollowUpAction, null, "a rejected action must not strand the revised follow-up behind the old decision");
     const fullAcknowledgment = await recordPurchaseOrderAcknowledgment({
@@ -2780,7 +2675,7 @@ async function main() {
       where: { id: retryQuoteDraft.quoteCycle.id },
       select: { status: true },
     })).status, "SUCCEEDED", "full supplier acknowledgment must close the selected quote cycle");
-    const restoredReleaseCase = (await listProcurementCases(context))[0];
+    const restoredReleaseCase = (await listProcurementCases(context, visibleWorkspace.id))[0];
     assert.equal(restoredReleaseCase?.purchaseAction?.status, "SUCCEEDED");
     assert.equal(restoredReleaseCase?.quoteCycle, null, "completed quote cycles must leave the active sourcing queue");
     assert.equal((restoredReleaseCase?.result as { purchaseRelease: { state: string } }).purchaseRelease.state, "ACKNOWLEDGED");
@@ -2815,7 +2710,7 @@ async function main() {
         quality: "Unverified",
       },
     }), /purchase order has been released/i, "released supplier scope must remain immutable");
-    assert.equal((await listProcurementCases(context)).length, 1);
+    assert.equal((await listProcurementCases(context, visibleWorkspace.id)).length, 1);
     const events = await prisma.supplyExecutionEvent.findMany({
       where: { executionTaskId: procurementCase.id },
       orderBy: { sequence: "asc" },
@@ -3068,7 +2963,7 @@ async function main() {
     assert.equal((deliveredPurchaseAction.result as { externalSideEffect: string }).externalSideEffect, "CONNECTED_PROVIDER");
     const deliveredOrderRetry = await sendPurchaseOrderEmailAction({ context, actionId: connectedOrderApproved.action.id, provider: uncertainOrderProvider });
     assert.equal((deliveredOrderRetry.result as { providerMessageId: string }).providerMessageId, `gmail-order-${suffix}`, "a lost client response must not send the purchase order twice");
-    const restoredConnectedOrderCase = (await listProcurementCases(context)).find((entry) => entry.id === clonedCase.id);
+    const restoredConnectedOrderCase = (await listProcurementCases(context, visibleWorkspace.id)).find((entry) => entry.id === clonedCase.id);
     assert.equal(restoredConnectedOrderCase?.purchaseOrderEmailAction?.status, "SUCCEEDED", "the queue must restore the connected order delivery receipt");
     assert.equal((restoredConnectedOrderCase?.result as { purchaseRelease: { state: string } }).purchaseRelease.state, "RELEASED");
     assert.equal((await findProcurementCaseByRelatedTaskId(context, connectedOrderApproved.action.id))?.id, clonedCase.id, "purchase order email actions must restore their exact procurement workstream");
@@ -3230,7 +3125,7 @@ async function main() {
         connectedReplyEvidenceId: orderReplyEvidence.id,
       },
     }), /already used for an acknowledgment/i, "one connected reply must not be counted twice toward accepted quantity");
-    const restoredPartialConnectedCase = (await listProcurementCases(context)).find((entry) => entry.id === clonedCase.id);
+    const restoredPartialConnectedCase = (await listProcurementCases(context, visibleWorkspace.id)).find((entry) => entry.id === clonedCase.id);
     assert.equal(restoredPartialConnectedCase?.purchaseAction?.result?.state, "PARTIALLY_ACKNOWLEDGED");
     assert.equal(restoredPartialConnectedCase?.purchaseAction?.result && "connectedAcknowledgmentReplies" in restoredPartialConnectedCase.purchaseAction.result
       ? restoredPartialConnectedCase.purchaseAction.result.connectedAcknowledgmentReplies?.length
@@ -3370,7 +3265,7 @@ async function main() {
       },
     });
     assert.equal(reauthorizationRequired.exception.status, "REVISION_REQUIRED");
-    const caseWithRevisionRequired = (await listProcurementCases(context)).find((entry) => entry.id === clonedCase.id);
+    const caseWithRevisionRequired = (await listProcurementCases(context, visibleWorkspace.id)).find((entry) => entry.id === clonedCase.id);
     assert.equal(caseWithRevisionRequired?.result?.purchaseRelease?.revisionRequiredCount, 1, "the sourcing queue must restore the required reauthorization checkpoint");
     await assert.rejects(() => recordPurchaseOrderAcknowledgment({
       context: managerContext,
@@ -4313,7 +4208,7 @@ async function main() {
     const resumedRejectedCase = await findProcurementCaseByRelatedTaskId(context, connectedReplacementAuthorized.purchaseAction.id);
     assert.equal((resumedRejectedCase?.result as { sourcingReturn?: { state?: string } } | null)?.sourcingReturn?.state, "REQUIRED");
 
-    const duplicateRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "DUPLICATE-ID" });
+    const duplicateRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "DUPLICATE-ID" }, visibleWorkspace.id);
     await completeSourcingResearchRun({
       context,
       runId: duplicateRun.id,
@@ -4353,7 +4248,7 @@ async function main() {
       },
     }), /ambiguous candidate identifier/, "duplicate research IDs must never select the wrong supplier");
 
-    const shortlistRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "MULTI-RFQ" });
+    const shortlistRun = await startSourcingResearchRun(context, { ...input, componentItemKey: "MULTI-RFQ" }, visibleWorkspace.id);
     await completeSourcingResearchRun({
       context,
       runId: shortlistRun.id,
@@ -4410,7 +4305,7 @@ async function main() {
     assert.equal(await prisma.supplyExecutionEvent.count({
       where: { executionTaskId: concurrent[0][0]!.id, eventType: "PROCUREMENT_CASE_CREATED" },
     }), 1, "concurrent first-time creation must append exactly one creation event");
-    const restoredShortlist = (await listProcurementCases(context))
+    const restoredShortlist = (await listProcurementCases(context, visibleWorkspace.id))
       .filter((procurementCase) => (procurementCase.input as { researchRunId: string }).researchRunId === shortlistRun.id);
     assert.equal(restoredShortlist.length, 4, "all supplier workstreams must restore from the sourcing queue");
     assert.deepEqual(new Set(restoredShortlist.map((procurementCase) => (procurementCase.result as { selectedOption: { id: string } }).selectedOption.id)), new Set([
@@ -4420,7 +4315,7 @@ async function main() {
       "public:shortlist-d",
     ]), "restored workstreams must preserve each supplier identity");
     assert.equal(
-      (await listProcurementCasesForResearchRuns(context, [shortlistRun.id])).length,
+      (await listProcurementCasesForResearchRuns(context, [shortlistRun.id], visibleWorkspace.id)).length,
       4,
       "a sourcing queue page must load every supplier workstream for its exact research runs",
     );
@@ -4487,7 +4382,7 @@ async function main() {
     assert.equal(concurrentAwards.filter((result) => result.status === "fulfilled").length, 1, "only one supplier can enter award approval");
     assert.equal(concurrentAwards.filter((result) => result.status === "rejected").length, 1, "a concurrent sibling award must be rejected");
     assert.match(String(concurrentAwards.find((result) => result.status === "rejected")?.reason), /another supplier is already pending or approved/i);
-    const awardStates = (await listProcurementCases(context))
+    const awardStates = (await listProcurementCases(context, visibleWorkspace.id))
       .filter((procurementCase) => (procurementCase.input as { researchRunId: string }).researchRunId === shortlistRun.id)
       .map((procurementCase) => (procurementCase.result as { gates: { purchaseApproval: string } }).gates.purchaseApproval);
     assert.equal(awardStates.filter((state) => state === "PENDING").length, 1, "the sourcing request must expose exactly one pending award");
@@ -4598,7 +4493,7 @@ async function main() {
       ...input,
       componentItemKey: "VIS-DPT-NEGOTIATION",
       componentName: "Stereo depth camera negotiation",
-    });
+    }, visibleWorkspace.id);
     await completeSourcingResearchRun({
       context,
       runId: negotiationRun.id,
@@ -4685,7 +4580,7 @@ async function main() {
     const closedNegotiationCycle = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: negotiationDraft.quoteCycle.id } });
     assert.equal(closedNegotiationCycle.status, "SUCCEEDED", "the prior quote round must close without being overwritten");
     assert.equal((closedNegotiationCycle.result as { state: string }).state, "REVISION_REQUESTED");
-    const restoredNegotiationCase = (await listProcurementCasesForResearchRuns(context, [negotiationRun.id]))[0];
+    const restoredNegotiationCase = (await listProcurementCasesForResearchRuns(context, [negotiationRun.id], visibleWorkspace.id))[0];
     assert.equal(restoredNegotiationCase?.quoteCycle?.id, revisedQuoteCycle.id, "the sourcing queue must resume the active negotiation round");
     assert.equal(restoredNegotiationCase?.quoteHistory?.[0]?.id, negotiationDraft.quoteCycle.id, "the sourcing queue must retain the closed quote round as negotiation history");
     assert.equal((restoredNegotiationCase?.quoteHistory?.[0]?.result as { responses: unknown[] }).responses.length, 1, "prior supplier responses must remain visible after a counter-request");
@@ -4702,8 +4597,8 @@ async function main() {
     });
     const restrictedContext = { ...context, userId: restrictedUser.id, role: restrictedUser.role, canViewWholeOffice: false };
     const stalePrivilegedContext = { ...restrictedContext, role: "ADMIN", canViewWholeOffice: true };
-    await assert.rejects(() => listProcurementCases(restrictedContext), /not found|cannot edit/i, "unassigned employees must not read office procurement cases");
-    await assert.rejects(() => listSourcingResearchPage(stalePrivilegedContext), /current user|not found|cannot edit/i, "a stale privileged session must not read the sourcing queue after demotion");
+    await assert.rejects(() => listProcurementCases(restrictedContext, visibleWorkspace.id), /not found|cannot edit/i, "unassigned employees must not read office procurement cases");
+    await assert.rejects(() => listSourcingResearchPage(stalePrivilegedContext, { workspaceId: visibleWorkspace.id }), /current user|not found|cannot edit/i, "a stale privileged session must not read the sourcing queue after demotion");
     await assert.rejects(() => captureConnectedSupplierReplies({
       context: stalePrivilegedContext,
       quoteCycleId: retryQuoteDraft.quoteCycle.id,
@@ -4852,6 +4747,21 @@ async function main() {
     assert.equal((await listSourcingResearchRuns(foreign)).length, 0, "another office must not see sourcing research runs");
     assert.equal((await listSourcingResearchPage(foreign)).runs.length, 0, "another office must not page through sourcing research runs");
     assert.equal((await listProcurementCases(foreign)).length, 0, "another office must not see procurement cases");
+    await assert.rejects(
+      () => startSourcingResearchRun(foreign, input),
+      /company workspace is required/i,
+      "supplier research must reject a missing workspace before writing",
+    );
+    await assert.rejects(
+      () => enqueueSourcingResearchRun({ context: foreign, input }),
+      /company workspace is required/i,
+      "queued supplier research must reject a missing workspace before writing",
+    );
+    assert.equal(
+      await prisma.supplyCapabilityRun.count({ where: { officeId: foreign.officeId } }),
+      0,
+      "missing-workspace research attempts must create no capability runs",
+    );
     assert.equal(
       await prisma.supplyWorkspace.count({ where: { officeId: foreign.officeId } }),
       0,
@@ -4923,7 +4833,7 @@ async function main() {
       })),
     });
     assert.equal(
-      (await listProcurementCases(context)).some((entry) => entry.id === returnedCase.id),
+      (await listProcurementCases(context, visibleWorkspace.id)).some((entry) => entry.id === returnedCase.id),
       false,
       "the legacy recent-case window must reproduce why targeted restoration is required",
     );

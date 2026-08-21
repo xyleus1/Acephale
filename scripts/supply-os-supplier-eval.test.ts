@@ -4,8 +4,8 @@ import { chmod, mkdtemp, readFile, readdir, stat, utimes, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ComponentSupplierResearchInput } from "../src/lib/supply-os/component-supplier-research";
-import type { GuildSourcingLine } from "../src/lib/supply-os/guild-sourcing-items";
-import type { SupplierResearchCampaignAttempt } from "../src/lib/supply-os/supplier-research-campaign";
+import type { GuildSourcingLine } from "./fixtures/legacy-supply-os/guild-sourcing-items";
+import type { SupplierResearchCampaignAttempt } from "./fixtures/legacy-supply-os/supplier-research-campaign";
 import type { SupplierCandidate, SupplierResearchResult } from "../src/lib/supply-os/research";
 import {
   formatSupplierEvalDoctorResult,

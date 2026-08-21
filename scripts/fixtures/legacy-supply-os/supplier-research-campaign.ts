@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import { Prisma } from "@prisma/client";
-import type { EvidenceSource, SupplierCandidate, SupplierResearchResult } from "./research";
-import type { SupplyAccessContext } from "./persistence";
+import type { EvidenceSource, SupplierCandidate, SupplierResearchResult } from "../../../src/lib/supply-os/research";
+import type { SupplyAccessContext } from "../../../src/lib/supply-os/persistence";
 import {
   parseStoredSupplierResearchRetrievalCapture,
   validatePublicSupplierLeadReceipts,
   type SupplierLeadValidationInput,
-} from "./exa-supplier-research";
+} from "../../../src/lib/supply-os/exa-supplier-research";
 import {
   GUILD_SOURCING_LINES,
   type GuildSourcingClassification,
@@ -1421,7 +1421,7 @@ async function reconcileCampaign(args: {
   const { prisma } = await import("@/lib/prisma");
   const requiredProvider = supplierResearchProviderFromInput(args.campaign.input);
   if (!requiredProvider) throw new Error("Supplier research campaign has no pinned provider.");
-  const persistence = await import("./sourcing-research-persistence") as unknown as {
+  const persistence = await import("../../../src/lib/supply-os/sourcing-research-persistence") as unknown as {
     enqueueSourcingResearchCampaignBatch: (args: {
       context: SupplyAccessContext;
       workspaceId: string;
@@ -1549,17 +1549,13 @@ async function reconcileCampaign(args: {
 }
 
 async function campaignWorkspace(context: SupplyAccessContext) {
-  const persistence = await import("./sourcing-research-persistence") as unknown as {
-    guildSourcingSystemWorkspace: (context: SupplyAccessContext, mode: "view" | "edit") => Promise<{ id: string }>;
-  };
-  return persistence.guildSourcingSystemWorkspace(context, "edit");
+  void context;
+  throw new Error("Legacy supplier research campaigns are disabled.");
 }
 
 async function findCampaignWorkspace(context: SupplyAccessContext) {
-  const persistence = await import("./sourcing-research-persistence") as unknown as {
-    findGuildSourcingSystemWorkspace: (context: SupplyAccessContext) => Promise<{ id: string } | null>;
-  };
-  return persistence.findGuildSourcingSystemWorkspace(context);
+  void context;
+  return null;
 }
 
 export async function startOrResumeGuildSupplierResearchCampaign(args: {
@@ -1568,7 +1564,7 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
 }): Promise<SupplierResearchCampaignResponse> {
   const configuredProvider = configuredSupplierResearchProvider();
   if (!configuredProvider) {
-    const { SupplyConnectorError } = await import("./connector-contract");
+    const { SupplyConnectorError } = await import("../../../src/lib/supply-os/connector-contract");
     throw new SupplyConnectorError(
       "CONNECTOR_DISABLED",
       "Bulk supplier research requires an EXA or OpenAI public-page validation provider.",
@@ -1620,7 +1616,7 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
     const providerRows = validRows.filter((entry) => entry.requiredProvider === configuredProvider);
     const previousGeneration = providerRows.reduce((latest, entry) => Math.max(latest, entry.generation), 0);
     if (previousGeneration >= Number.MAX_SAFE_INTEGER) {
-      const { SupplyPersistenceError } = await import("./persistence");
+      const { SupplyPersistenceError } = await import("../../../src/lib/supply-os/persistence");
       throw new SupplyPersistenceError(
         "Supplier research campaign generation cannot be represented safely. Create a revised campaign scope.",
         "conflict",
@@ -1695,7 +1691,7 @@ export async function startOrResumeGuildSupplierResearchCampaign(args: {
     ? Boolean(process.env.EXA_API_KEY?.trim())
     : Boolean(process.env.OPENAI_API_KEY?.trim());
   if (!selectedProviderConfigured) {
-    const { SupplyConnectorError } = await import("./connector-contract");
+    const { SupplyConnectorError } = await import("../../../src/lib/supply-os/connector-contract");
     throw new SupplyConnectorError(
       "CONNECTOR_DISABLED",
       `The active supplier research campaign is pinned to ${selected.requiredProvider}, but that provider is not configured.`,
@@ -2008,7 +2004,7 @@ export async function advanceSupplierResearchCampaigns(options: { limit?: number
         role: campaign.invokedBy.role,
         canViewWholeOffice: campaign.invokedBy.canViewWholeOffice,
       } satisfies SupplyAccessContext;
-      const { requireSupplyWorkspace } = await import("./persistence");
+      const { requireSupplyWorkspace } = await import("../../../src/lib/supply-os/persistence");
       await requireSupplyWorkspace(context, campaign.workspaceId, "edit");
       const activeCampaign = campaign.status === "FAILED"
         ? await createSafeLegacyCampaignSuccessor({ context, campaign, now })

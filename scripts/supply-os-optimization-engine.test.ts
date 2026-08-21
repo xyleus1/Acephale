@@ -75,12 +75,7 @@ assert.ok(model.nodes.some((node) => node.label.includes("National aerospace")))
 assert.equal(model.nodes.find((node) => node.kind === "processing_site")?.basis, "official");
 assert.ok(model.edges.every((edge) => edge.basis === "inferred"), "unobserved movements must stay inferred");
 const millTargets = model.nodes.find((node) => node.label.includes("Domestic aerospace plate mills"))?.qualificationTargets ?? [];
-assert.deepEqual(millTargets.map((target) => target.name), [
-  "Arconic Davenport Works",
-  "Constellium Ravenswood",
-  "Kaiser Aluminum Trentwood",
-]);
-assert.ok(millTargets.every((target) => target.url?.startsWith("https://")));
+assert.deepEqual(millTargets, [], "compiled supplier candidates must not appear without workspace research evidence");
 assert.ok(model.nodes.every((node) => Array.isArray(node.qualificationTargets)));
 
 assert.deepEqual(model.actions.map((action) => action.workstreamId), [

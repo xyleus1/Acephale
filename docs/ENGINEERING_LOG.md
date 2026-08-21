@@ -5869,3 +5869,38 @@ Use this file for chronological implementation notes that future agents should s
   of fabricating message content.
 - Follow-up: Replace the live Gmail lookup when Bourne exposes a durable,
   customer-scoped communication ledger with message bodies and reply lineage.
+### 2026-08-20 - Remove the Atlas runtime fixture
+
+- Branch: `fix/remove-hardcoded-demo-data`, based on current `origin/main`.
+- Task: Remove every authenticated Atlas fallback so a missing or failed
+  workspace cannot display another company's identity or operating data.
+- Root cause: Atlas existed in production code as a presentation company,
+  browser sample case, twelve-item inventory, default demand, need-by dates,
+  Austin delivery location, and automatic `system:atlas-procurement` workspace.
+- Files changed: Supply OS route, shell, dashboard, inventory and procurement
+  types, research persistence, focused contracts, test-only sample fixture, and
+  durable documentation.
+- Safety: Real company identity remains office-scoped. Inventory comes from the
+  selected workspace's published snapshot. Missing workspace reads return no
+  customer work, and new research without a workspace is rejected before any
+  database write.
+- Follow-up hardening: Removed compiled supplier options, the fixed delivery-date
+  base, the global robot image, SKU-triggered GUILD2 order creation, synthetic
+  campaign workspace provisioning, the browser customer generator, and the
+  product-twin fallback. Removed the remaining browser-stored workstream page;
+  old URLs now sanitize legacy case and presentation parameters before entering
+  a tenant-backed panel. Moved the retired GUILD campaign, BOM, dates, and
+  locations from production source into test fixtures. Unknown operational
+  facts now stay unknown. The concurrently added active sourcing Messages view
+  was moved from GUILD2 request types to the generic customer procurement
+  contract without changing its contact, response, or purchase-order states.
+- Verification: Focused navigation, sourcing, case, layout, snapshot, and copy
+  contracts; TypeScript; production build; diff hygiene; a production-source
+  scan that finds no Atlas customer literal; and the complete Supply OS
+  persistence and Context database gate against a disposable PostgreSQL
+  database all passed.
+- Failed/skipped checks: The destructive persistence suite was correctly not
+  run against production Neon. It ran against an isolated local database.
+- Follow-up: If an older release created a synthetic Atlas workspace row,
+  inspect its references and remove it with a separate reviewed cleanup. Do not
+  couple data deletion to the application release.

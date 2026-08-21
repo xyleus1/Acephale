@@ -5,14 +5,12 @@ import { join } from "node:path";
 const root = process.cwd();
 const dashboard = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
 const commandMap = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-command-map.tsx"), "utf8");
-const generator = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-generator.tsx"), "utf8");
+const operatingShell = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-operating-shell.tsx"), "utf8");
 const styles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-logistics.module.css"), "utf8");
-const workstreamShell = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream-shell.tsx"), "utf8");
-const workstreamStyles = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-workstream.module.css"), "utf8");
 const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
 const designSystem = readFileSync(join(root, "src/app/design-system.css"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
-const source = `${dashboard}\n${commandMap}\n${generator}\n${styles}\n${workstreamShell}\n${workstreamStyles}`;
+const source = `${dashboard}\n${commandMap}\n${operatingShell}\n${styles}`;
 
 for (const required of [
   ".commandWorkspace",
@@ -32,7 +30,6 @@ for (const required of [
   "Open {workspace.shortLabel}",
   "Carrier shortlist",
   "Modeled, not a live quote",
-  "Execution workspace reserved",
 ]) {
   assert.equal(source.includes(required), true, `Supply OS command surface is missing: ${required}`);
 }
@@ -129,7 +126,7 @@ assert.match(styles, /\.commandCenter \{[^}]*border-radius: 18px/s, "command wor
 assert.match(styles, /\.routeRail,[\s\S]*border-radius: 16px/s, "network panels must use the approved soft geometry");
 assert.equal(styles.includes("linear-gradient"), false, "Supply OS must not use decorative gradients");
 assert.equal(dashboard.includes("supply-os-workspace"), true, "dashboard needs a stable root for global style isolation");
-assert.equal(generator.includes("supply-os-workspace"), true, "generator needs a stable root for global style isolation");
+assert.equal(operatingShell.includes("supply-os-workspace"), true, "the tenant workspace shell needs a stable root for global style isolation");
 for (const control of ["button", "textarea"]) {
   assert.equal(
     globals.includes(`${control}:not(:where(.supply-os-workspace ${control}))`),

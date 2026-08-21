@@ -72,60 +72,6 @@ export type SourcingQueuePage = {
   nextCursor: string | null;
 };
 
-export type SupplierResearchCampaignItem = {
-  componentItemKey: string;
-  lineNumber: string;
-  name: string;
-  classification: "SUPPLIER_SEARCH" | "CLARIFICATION_REQUIRED" | "REQUIREMENT_ONLY";
-  state: "PENDING" | "QUEUED" | "RUNNING" | "RETRY_WAIT" | "COMPLETE" | "BLOCKED" | "CLARIFICATION_REQUIRED" | "REQUIREMENT_ONLY";
-  leadCount: number;
-  attemptCount: number;
-  activeRunId: string | null;
-  aggregateRunId: string | null;
-  aggregateRun: SavedSourcingResearchRun | null;
-  candidates: PublicResearchCandidate[];
-  sources: NonNullable<PublicResearchResult["sources"]>;
-  warnings: string[];
-  nextAttemptAt: string | null;
-  lastErrorCode: string | null;
-  blocker: string | null;
-  targetMinimum: number;
-  retainedMaximum: number;
-};
-
-export type SupplierResearchCampaign = {
-  id: string;
-  status: string;
-  state: "RUNNING" | "RETRY_WAIT" | "DAILY_CAP" | "COMPLETE" | "FAILED" | "NEEDS_REVIEW";
-  campaignKey: "guild-procurement";
-  workspaceId: string;
-  targetMinimum: number;
-  retainedMaximum: number;
-  totalLines: number;
-  searchableLines: number;
-  completedLines: number;
-  leadCount: number;
-  progressPercent: number;
-  queuedAttempts: number;
-  runningAttempts: number;
-  retryWaitingLines: number;
-  totals: {
-    items: number;
-    supplierSearchable: number;
-    targetMet: number;
-    needsClarification: number;
-    requirementOnly: number;
-    queued: number;
-    running: number;
-    backingOff: number;
-  };
-  items: SupplierResearchCampaignItem[];
-  error?: { message?: string } | null;
-  errorMessage?: string | null;
-  retryAfterMs: number;
-  updatedAt: string;
-};
-
 export type SupplyIntelligenceProfile = {
   customer: {
     workspaceId: string;

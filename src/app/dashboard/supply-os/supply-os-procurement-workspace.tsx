@@ -23,9 +23,8 @@ import {
   inventoryItemSourcingDraft,
   sourcingNeedByDate,
   sourcingRequestQuantity,
-  type AtlasInventoryItem,
-  type AtlasSourcingCandidate,
-} from "@/lib/supply-os/atlas-robotics-inventory";
+  type SupplyInventoryItem,
+} from "@/lib/supply-os/inventory-item";
 import { displayedSupplierQuote, supplierQuoteSignals } from "@/lib/supply-os/quote-comparison";
 import { isSupplierDiscoveryUrl } from "@/lib/supply-os/supplier-discovery-url";
 import {
@@ -36,7 +35,7 @@ import {
   type SourcingRequiredField,
 } from "@/lib/supply-os/sourcing-request-contract";
 import { customerProcurementRequest } from "@/lib/supply-os/customer-procurement";
-import type { Guild2ProcurementOrderState } from "@/lib/supply-os/guild2-procurement";
+import type { CustomerProcurementOrderState } from "@/lib/supply-os/customer-procurement-status";
 import {
   hasDirtyWorkstream,
   markWorkstreamDraft,
@@ -83,64 +82,6 @@ type ProcurementOption = {
 };
 
 type SupplierQuoteResponse = NonNullable<NonNullable<SavedProcurementCase["quoteCycle"]>["result"]>["responses"][number];
-
-const DISCOVERED_OPTIONS: Record<string, AtlasSourcingCandidate> = {
-  "SEN-LDR-220": {
-    id: "tristate-safety-automation",
-    name: "TriState Safety Automation",
-    location: "Pittsburgh, PA",
-    coordinates: { longitude: -79.9959, latitude: 40.4406 },
-    role: "Distributor",
-    leadTimeDays: 12,
-    minimumOrderQuantity: 2,
-    modeledUnitCostUsd: 2190,
-    fit: "Public catalog match; authorization, allocation, and safety-file coverage are unverified.",
-  },
-  "VIS-DPT-410": {
-    id: "opticore-industrial-vision",
-    name: "Opticore Industrial Vision",
-    location: "Boston, MA",
-    coordinates: { longitude: -71.0589, latitude: 42.3601 },
-    role: "Distributor",
-    leadTimeDays: 10,
-    minimumOrderQuantity: 4,
-    modeledUnitCostUsd: 512,
-    fit: "Public listing matches the mechanical envelope; calibration and lifecycle evidence are missing.",
-  },
-  "CMP-IPC-180": {
-    id: "frontier-edge-systems",
-    name: "Frontier Edge Systems",
-    location: "Denver, CO",
-    coordinates: { longitude: -104.9903, latitude: 39.7392 },
-    role: "Contract manufacturer",
-    leadTimeDays: 18,
-    minimumOrderQuantity: 3,
-    modeledUnitCostUsd: 1225,
-    fit: "Public capability match; thermal configuration and image-control process require review.",
-  },
-  "DRV-MCU-220": {
-    id: "nova-motion-supply",
-    name: "Nova Motion Supply",
-    location: "Charlotte, NC",
-    coordinates: { longitude: -80.8431, latitude: 35.2271 },
-    role: "Distributor",
-    leadTimeDays: 9,
-    minimumOrderQuantity: 2,
-    modeledUnitCostUsd: 845,
-    fit: "Public electrical match; firmware revision and manufacturer authorization are unverified.",
-  },
-  "PWR-BAT-512": {
-    id: "gulf-energy-integration",
-    name: "Gulf Energy Integration",
-    location: "New Orleans, LA",
-    coordinates: { longitude: -90.0715, latitude: 29.9511 },
-    role: "Contract manufacturer",
-    leadTimeDays: 17,
-    minimumOrderQuantity: 4,
-    modeledUnitCostUsd: 2290,
-    fit: "Public integration capability found; UN 38.3 evidence and cell traceability remain unresolved.",
-  },
-};
 
 const RESEARCH_STEPS = [
   { key: "scope", label: "Request scope", detail: "Product, quantity, geography, delivery, and timing", sourceClass: "Scope" },
@@ -233,14 +174,14 @@ function evidenceHref(evidenceId: string | undefined, sourceUrl: string) {
   return evidenceId ? `/api/supply-os/evidence/${encodeURIComponent(evidenceId)}` : sourceUrl;
 }
 
-function deliveryDate(leadTimeDays: number) {
-  const date = new Date("2026-08-09T12:00:00Z");
+function projectedDeliveryDate(leadTimeDays: number) {
+  const date = new Date();
   date.setUTCDate(date.getUTCDate() + leadTimeDays);
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(date);
 }
 
 function researchDeliveryDate(leadTimeDays: number | null) {
-  return leadTimeDays === null ? "Unknown" : deliveryDate(leadTimeDays);
+  return leadTimeDays === null ? "Unknown" : projectedDeliveryDate(leadTimeDays);
 }
 
 function isSourcedEvidence(value: { state: string; sources: unknown[]; freshness: string }) {
@@ -292,51 +233,11 @@ function supplierQualificationForm(procurementCase: SavedProcurementCase | null 
   };
 }
 
-function formatNeedBy(item: AtlasInventoryItem | null) {
+function formatNeedBy(item: SupplyInventoryItem | null) {
   if (!item) return "Not set";
   const value = sourcingNeedByDate(item);
   if (!value) return "Not set";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`));
-}
-
-function buildProcurementOptions(item: AtlasInventoryItem | null): ProcurementOption[] {
-  if (!item) return [];
-  const known = item.candidates.map((candidate, index): ProcurementOption => ({
-    ...candidate,
-    sourceClass: index === 0 ? "Official" : "Trusted",
-    sourceLabel: index === 0 ? "Manufacturer catalog" : "Approved source library",
-    quality: index === 0 ? "Strong" : "Conditional",
-    qualityEvidence: index === 0
-      ? "Technical match found in manufacturer documentation; sample validation remains open."
-      : "Prior source record found; current authorization and allocation require review.",
-    deliveryDate: deliveryDate(candidate.leadTimeDays),
-    currency: "USD",
-    priceType: "Modeled",
-    deliveryType: "Modeled",
-    sourceUrl: null,
-    priceSourceUrl: null,
-    priceUnit: null,
-    publicPriceClaim: null,
-    publicPriceCapturedAt: null,
-  }));
-  const discovered = DISCOVERED_OPTIONS[item.sku];
-  if (!discovered) return known;
-  return [...known, {
-    ...discovered,
-    sourceClass: "New",
-    sourceLabel: "Public supplier page",
-    quality: "Unverified",
-    qualityEvidence: "Public listing only; supplier identity, authorization, and technical fit require qualification.",
-    deliveryDate: deliveryDate(discovered.leadTimeDays),
-    currency: "USD",
-    priceType: "Modeled",
-    deliveryType: "Modeled",
-    sourceUrl: null,
-    priceSourceUrl: null,
-    priceUnit: null,
-    publicPriceClaim: null,
-    publicPriceCapturedAt: null,
-  }];
 }
 
 function publicResearchOptions(result: PublicResearchResult | null): ProcurementOption[] {
@@ -477,7 +378,7 @@ const QUOTE_EXTRACTION_FIELDS = [
   { key: "validUntil", label: "Valid until" },
 ] as const;
 
-export function AtlasProcurementWorkspace({
+export function SupplyProcurementWorkspace({
   item,
   requestId,
   requestText,
@@ -497,7 +398,7 @@ export function AtlasProcurementWorkspace({
   onWorkflowSubmitted,
   onBack,
 }: {
-  item: AtlasInventoryItem | null;
+  item: SupplyInventoryItem | null;
   requestId: string;
   requestText: string;
   workspaceId?: string | null;
@@ -521,7 +422,7 @@ export function AtlasProcurementWorkspace({
   }) => void;
   onWorkflowSubmitted: (result: {
     draft: SourcingRequestDraft;
-    order: Guild2ProcurementOrderState;
+    order: CustomerProcurementOrderState;
   }) => void;
   onBack: () => void;
 }) {
@@ -720,13 +621,8 @@ export function AtlasProcurementWorkspace({
           ? "degraded"
           : startingDraft && startingMissingFields.length === 0 ? "running" : "idle",
   );
-  const options = useMemo(() => [
-    ...(workspaceId ? [] : buildProcurementOptions(item)),
-    ...publicResearchOptions(publicResearch),
-  ], [item, publicResearch, workspaceId]);
-  const recommended = workspaceId
-    ? options.find(isEvidenceBackedRecommendation) ?? null
-    : options.find((option) => option.sourceClass === "Trusted") ?? options[0] ?? null;
+  const options = useMemo(() => publicResearchOptions(publicResearch), [publicResearch]);
+  const recommended = options.find(isEvidenceBackedRecommendation) ?? null;
   const checkedResearchSources = useMemo(() => researchSources(publicResearch), [publicResearch]);
   const [phase, setPhase] = useState<ProcurementPhase>(() => {
     if (initialCase?.result?.sourcingReturn?.state === "REQUIRED") return "compare";

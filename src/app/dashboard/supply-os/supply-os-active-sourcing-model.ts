@@ -1,5 +1,5 @@
 import type { CustomerProcurementListItem } from "@/lib/supply-os/customer-procurement";
-import type { Guild2ProcurementRequestDetail } from "@/lib/supply-os/guild2-procurement";
+import type { CustomerProcurementRequestDetail } from "@/lib/supply-os/customer-procurement-status";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
@@ -117,7 +117,7 @@ function explicitVendorId(value: unknown) {
   return typeof vendor?.id === "string" && vendor.id.trim() ? vendor.id.trim() : null;
 }
 
-export function externalSelectedVendorId(detail: Guild2ProcurementRequestDetail) {
+export function externalSelectedVendorId(detail: CustomerProcurementRequestDetail) {
   const snapshot = record(detail.decisionSnapshot);
   if (!snapshot) return null;
   for (const candidate of [
@@ -136,7 +136,7 @@ export function externalSelectedVendorId(detail: Guild2ProcurementRequestDetail)
 
 export function externalVendorPoState(
   request: CustomerProcurementListItem,
-  detail: Guild2ProcurementRequestDetail,
+  detail: CustomerProcurementRequestDetail,
   vendorId: string,
 ) {
   const selectedVendorId = externalSelectedVendorId(detail);
@@ -155,7 +155,7 @@ export function externalVendorPoState(
 
 export function externalVendorPoReady(
   request: CustomerProcurementListItem,
-  detail: Guild2ProcurementRequestDetail,
+  detail: CustomerProcurementRequestDetail,
   vendorId: string,
 ) {
   return externalPoReady(request) && externalSelectedVendorId(detail) === vendorId;

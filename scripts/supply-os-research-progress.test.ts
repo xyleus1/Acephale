@@ -13,9 +13,10 @@ import {
 
 const root = process.cwd();
 const researchClientSource = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-research-client.ts"), "utf8");
-const generatorSource = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-generator.tsx"), "utf8");
+const companyIndexSource = readFileSync(join(root, "src/app/dashboard/supply-os/supply-os-company-index.tsx"), "utf8");
 assert.match(researchClientSource, /RESEARCH_REQUEST_TIMEOUT_MS = 12_000/, "the browser must stop waiting before a hosted stream can strand the generator");
-assert.match(generatorSource, /setState\("fallback"\)[\s\S]*buildWithoutResearch\(\)/, "research cutoff must continue into a usable draft instead of a dead error state");
+assert.match(companyIndexSource, /fetch\("\/api\/supply-os\/workspaces"/, "the company index must load tenant workspaces from the server");
+assert.doesNotMatch(companyIndexSource, /buildWithoutResearch|localStorage|SUPPLY_CASE_STORAGE_KEY/, "the company index must not invent a browser-only customer when research is unavailable");
 
 assert.equal(
   extractWebsiteFromQuery("Research Atlas Robotics at atlasrobotics.com before building the dashboard"),

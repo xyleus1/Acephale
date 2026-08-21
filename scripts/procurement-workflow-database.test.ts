@@ -12,7 +12,7 @@ import {
   GUILD2_PROCUREMENT_PLAN,
   guild2ProcurementRequest,
   runWithBoundedConcurrency,
-} from "../src/lib/supply-os/guild2-procurement";
+} from "./fixtures/legacy-supply-os/guild2-procurement";
 import {
   createProcurementRequestInDatabase,
   getProcurementRequestFromDatabase,

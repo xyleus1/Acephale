@@ -186,13 +186,13 @@ assert.deepEqual({
   needBy: fallbackBySku.get("C-UNKNOWN-REQUEST")?.needByDate,
 }, {
   specification: "No technical specification was supplied in the published snapshot.",
-  unit: undefined,
+  unit: null,
   required: null,
   location: null,
   needBy: null,
 }, "unknown request facts must stay unknown instead of inheriting storage defaults");
 assert.equal(fallbackBySku.get("D-ITEM-UNIT")?.unitOfMeasure, "L", "non-parts metadata must not suppress a published unit");
-assert.equal(fallbackBySku.get("E-DEFAULT-UNIT")?.unitOfMeasure, "EA", "ordinary items without a unit must use the display fallback");
+assert.equal(fallbackBySku.get("E-DEFAULT-UNIT")?.unitOfMeasure, null, "ordinary items without a unit must stay unknown");
 
 const filtered = snapshotResponseToSourcingItems(response(emptySnapshot({
   items: [

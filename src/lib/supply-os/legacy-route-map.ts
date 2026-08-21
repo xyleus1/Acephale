@@ -39,6 +39,8 @@ function matchesRoute(pathname: string, route: string) {
 
 function destination(pathname: string, search: string, panel: SupplyOsPanel) {
   const params = new URLSearchParams(search);
+  params.delete("case");
+  params.delete("present");
   params.set("panel", panel);
   params.set("legacyPath", pathname);
   return `/dashboard/supply-os?${params.toString()}`;

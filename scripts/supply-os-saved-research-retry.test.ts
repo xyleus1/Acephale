@@ -57,15 +57,14 @@ assert.notEqual(
 );
 
 assert.equal(
-  shouldLoadSourcingHistory({ workspaceId: "workspace-a", demoCompanyId: null }),
+  shouldLoadSourcingHistory({ workspaceId: "workspace-a" }),
   true,
   "a real customer workspace must reload its saved research and procurement history",
 );
-assert.equal(shouldLoadSourcingHistory({ workspaceId: null, demoCompanyId: "guild" }), true);
 assert.equal(
-  shouldLoadSourcingHistory({ workspaceId: null, demoCompanyId: null }),
+  shouldLoadSourcingHistory({ workspaceId: null }),
   false,
-  "a surface with neither a workspace nor a demo company has no sourcing history to load",
+  "a surface without a selected workspace has no sourcing history to load",
 );
 
 console.log("Supply OS saved research retry restoration checks passed.");

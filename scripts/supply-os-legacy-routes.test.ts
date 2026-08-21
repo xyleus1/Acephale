@@ -30,14 +30,23 @@ const expectedPanels = new Map([
 ]);
 
 for (const [pathname, panel] of expectedPanels) {
-  const mapped = legacySupplyOsDestination(pathname, "?source=bookmark");
+  const mapped = legacySupplyOsDestination(pathname, "?source=bookmark&present=1&case=local-demo");
   assert.ok(mapped, `${pathname} should enter Supply OS`);
   const url = new URL(mapped, "https://derya.test");
   assert.equal(url.pathname, "/dashboard/supply-os");
   assert.equal(url.searchParams.get("panel"), panel);
   assert.equal(url.searchParams.get("source"), "bookmark");
   assert.equal(url.searchParams.get("legacyPath"), pathname);
+  assert.equal(url.searchParams.has("present"), false);
+  assert.equal(url.searchParams.has("case"), false);
 }
+
+const optimizationEngine = readFileSync(resolve(process.cwd(), "src/lib/supply-os-optimization-engine.ts"), "utf8");
+assert.doesNotMatch(optimizationEngine, /\/dashboard\/supply-os\/workstreams\//, "new links must target tenant-backed Supply OS panels directly");
+assert.doesNotMatch(optimizationEngine, /[?&]present=1/, "new links must not restore presentation mode");
+const dashboardSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/supply-os-dashboard.tsx"), "utf8");
+assert.doesNotMatch(dashboardSource, /loadSupplyCases|SUPPLY_CASE_STORAGE_KEY/, "the active dashboard must not load customer records from browser storage");
+assert.doesNotMatch(dashboardSource, /href=\{\{\s*pathname:\s*workspace\.route/, "workstream links must not carry browser-only customer identifiers");
 
 for (const preserved of [
   "/dashboard/supply-os",

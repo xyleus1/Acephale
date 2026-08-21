@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  ATLAS_ROBOTICS_INVENTORY,
-  atlasInventorySummary,
+  inventorySummary,
   inventoryItemSourcingDraft,
   projectedAvailable,
   shortageQuantity,
-} from "../src/lib/supply-os/atlas-robotics-inventory";
-import { GUILD_SOURCING_ITEMS } from "../src/lib/supply-os/guild-sourcing-items";
+  type SupplyInventoryItem,
+} from "../src/lib/supply-os/inventory-item";
+import { GUILD_SOURCING_ITEMS } from "./fixtures/legacy-supply-os/guild-sourcing-items";
 import { displayedSupplierQuote, supplierQuoteSignals } from "../src/lib/supply-os/quote-comparison";
 import { hasDirtyWorkstream, markWorkstreamDraft, resolveWorkstreamDraft } from "../src/lib/supply-os/workstream-drafts";
 import {
@@ -19,6 +19,33 @@ import {
 } from "../src/lib/supply-os/sourcing-request-contract";
 
 const root = process.cwd();
+const TEST_INVENTORY: SupplyInventoryItem[] = Array.from({ length: 10 }, (_, index) => ({
+  sku: `TEST-${index + 1}`,
+  name: `Test component ${index + 1}`,
+  specification: `Test specification ${index + 1}`,
+  quantityPerRobot: 1,
+  onHand: index < 4 ? 0 : 1,
+  allocated: 0,
+  confirmedInbound: 0,
+  location: "Test location",
+  targetStock: 1,
+  requiredQuantity: 1,
+  unitOfMeasure: "EA",
+  needByDate: "2026-09-30",
+  deliveryLocation: "Test destination",
+  source: "published-snapshot",
+  candidates: index < 4 ? [0, 1].map((candidateIndex) => ({
+    id: `candidate-${index}-${candidateIndex}`,
+    name: `Candidate ${index}-${candidateIndex}`,
+    location: "Test origin",
+    coordinates: { longitude: candidateIndex, latitude: index },
+    role: "Manufacturer" as const,
+    leadTimeDays: 10 + candidateIndex,
+    minimumOrderQuantity: 1,
+    modeledUnitCostUsd: 10 + candidateIndex,
+    fit: "Test-only candidate",
+  })) : [],
+}));
 assert.notEqual(
   sourcingRequestStorageKey({ storageScope: "office:user", dashboardId: "case", workspaceId: "customer-a" }),
   sourcingRequestStorageKey({ storageScope: "office:user", dashboardId: "case", workspaceId: "customer-b" }),
@@ -85,18 +112,18 @@ const illustrativeRowsSource = workbench.slice(
   workbench.indexOf('{customRuns.map((run) =>'),
 );
 
-assert.ok(ATLAS_ROBOTICS_INVENTORY.length >= 10, "the Atlas fixture should resemble a useful robotics component inventory");
-assert.equal(new Set(ATLAS_ROBOTICS_INVENTORY.map((item) => item.sku)).size, ATLAS_ROBOTICS_INVENTORY.length, "inventory SKUs must be unique");
+assert.ok(TEST_INVENTORY.length >= 10, "the inventory fixture should cover a useful item set");
+assert.equal(new Set(TEST_INVENTORY.map((item) => item.sku)).size, TEST_INVENTORY.length, "inventory SKUs must be unique");
 const guildDraft = inventoryItemSourcingDraft(GUILD_SOURCING_ITEMS[24]);
 assert.deepEqual(missingSourcingFields(guildDraft), [], "a Guild BOM row must retain enough request context to enter research");
 assert.equal(guildDraft.productName, "Printed circuit board carrier");
 assert.equal(guildDraft.quantity, 6);
 assert.equal(guildDraft.unit, "carriers");
-assert.ok(ATLAS_ROBOTICS_INVENTORY.every((item) => item.quantityPerRobot > 0 && item.onHand >= 0 && item.allocated >= 0 && item.confirmedInbound >= 0));
-assert.ok(ATLAS_ROBOTICS_INVENTORY.every((item) => projectedAvailable(item) >= 0));
+assert.ok(TEST_INVENTORY.every((item) => item.quantityPerRobot > 0 && item.onHand >= 0 && item.allocated >= 0 && item.confirmedInbound >= 0));
+assert.ok(TEST_INVENTORY.every((item) => projectedAvailable(item) >= 0));
 
-const shortages = ATLAS_ROBOTICS_INVENTORY.filter((item) => shortageQuantity(item) > 0);
-assert.ok(shortages.length >= 4, "the demo needs multiple actionable shortages");
+const shortages = TEST_INVENTORY.filter((item) => shortageQuantity(item) > 0);
+assert.ok(shortages.length >= 4, "the fixture needs multiple actionable shortages");
 
 const quoteA = { responseHash: "older", price: "12", currency: "USD", unitOfMeasure: "EA", deliveryDate: "2026-09-20" };
 const quoteB = { responseHash: "selected", price: "14", currency: "USD", unitOfMeasure: "EA", deliveryDate: "2026-09-18" };
@@ -146,10 +173,9 @@ assert.ok(shortages.every((item) => item.candidates.every((candidate) => (
   && Number.isFinite(candidate.coordinates.latitude)
 ))));
 
-const summary = atlasInventorySummary();
-assert.equal(summary.itemCount, ATLAS_ROBOTICS_INVENTORY.length);
+const summary = inventorySummary(TEST_INVENTORY);
+assert.equal(summary.itemCount, TEST_INVENTORY.length);
 assert.equal(summary.shortageCount, shortages.length);
-assert.ok(summary.buildableWithInbound < summary.demandUnits, "the fixture should expose a real build constraint");
 
 const incompleteRequest = normalizeSourcingRequestDraft({ productName: "Iron ore", sourceRegion: "South America" });
 assert.deepEqual(missingSourcingFields(incompleteRequest), ["quantity", "unit", "technicalIdentity", "deliveryLocation", "needByDate"]);
@@ -167,22 +193,20 @@ const completeRequest = normalizeSourcingRequestDraft({
 });
 assert.deepEqual(missingSourcingFields(completeRequest), []);
 
-assert.match(dashboard, /activePanel === "materials"[\s\S]*AtlasInventoryWorkspace/);
-assert.match(dashboard, /activePanel === "materials" && selectedInventoryItem[\s\S]*AtlasSourcingInspector/);
-assert.match(dashboard, /procurementRequest[\s\S]*AtlasProcurementWorkspace/);
+assert.match(dashboard, /activePanel === "materials"[\s\S]*SupplyInventoryWorkspace/);
+assert.match(dashboard, /activePanel === "materials" && selectedInventoryItem[\s\S]*SupplySourcingInspector/);
+assert.match(dashboard, /procurementRequest[\s\S]*SupplyProcurementWorkspace/);
 assert.match(dashboard, /pendingSourcingRequests/);
 assert.match(dashboard, /openPendingSourcingRequest/);
 assert.match(dashboard, /sourceMap=\{sourceMapContext[\s\S]*SupplyOsCommandMap/);
-assert.doesNotMatch(dashboard, /\/api\/supply-os\/supplier-research\/campaigns/, "GUILD2 must not start the primary-database campaign");
-assert.match(workbench, /\/api\/procurement\/requests/, "GUILD2 row actions must create customer-scoped workflow orders");
-assert.match(workbench, /runWithBoundedConcurrency\(GUILD2_PROCUREMENT_PLAN\.searchable/, "GUILD2 bulk creation must use the classified 38-line plan");
-assert.match(workbench, /7_000/, "active workflow orders must refresh every seven seconds");
+assert.doesNotMatch(dashboard, /\/api\/supply-os\/supplier-research\/campaigns/, "legacy campaigns must not start from the customer dashboard");
+assert.doesNotMatch(workbench, /GUILD2|guild2|sourceCampaign=GUILD2|runWithBoundedConcurrency/, "customer inventory must not activate a compiled campaign from SKU matches");
+assert.doesNotMatch(researchPersistence, /system:guild-procurement|demoSourcingWorkspace/, "persistence must not provision a synthetic campaign workspace");
 assert.doesNotMatch(dashboard, /\/api\/supply-os\/external-sourcing\/guild2/, "the obsolete runtime-schema workflow bridge must stay removed");
-assert.match(dashboard, /if \(demoCompanyId === "guild" && !sourcingWorkspaceId\)[\s\S]*setResearchRuns\(\[\]\)[\s\S]*return;/, "GUILD must not fall through to default Atlas sourcing history while its dedicated workspace is unresolved");
-assert.match(dashboard, /new URLSearchParams\(\{ workspaceId: sourcingWorkspaceId \}\)/, "GUILD history must use the campaign workspace");
-assert.match(dashboard, /campaignAggregateRunIdsKey[\s\S]*params\.append\("includeRunId", runId\)[\s\S]*setProcurementCases/, "GUILD reload must recover cases for the bounded campaign aggregate run set");
+assert.match(dashboard, /new URLSearchParams\(\{ workspaceId: sourcingWorkspaceId \}\)/, "sourcing history must use the selected workspace");
 assert.match(dashboard, /workspaceId=\{sourcingWorkspaceId\}/, "manual research and procurement must use the resolved sourcing workspace");
-assert.match(dashboard, /canStartProcurement=\{demoCompanyId !== "guild" \|\| Boolean\(sourcingWorkspaceId\)\}/, "the GUILD inspector must not open procurement against the default workspace");
+assert.match(dashboard, /canStartProcurement=\{Boolean\(sourcingWorkspaceId\)\}/, "procurement must require a selected durable workspace");
+assert.doesNotMatch(dashboard, /demoCompanyId|ATLAS_ROBOTICS_INVENTORY|SAMPLE_SUPPLY_CASE_PROMPT/, "production sourcing must not load hardcoded company data");
 assert.match(dashboard, /filter\(visibleSourcingRun\)/, "campaign child attempts must be removed at the history boundary");
 assert.match(workbench, /Show source/);
 assert.match(workbench, /Hide map/);
@@ -227,21 +251,10 @@ assert.match(workbench, /Saved research/);
 assert.match(workbench, /Load older requests/);
 assert.match(workbench, /Retry older work/);
 assert.match(workbench, /Office-shared work/);
-assert.match(workbench, /Source-backed candidates/);
 assert.match(workbench, /source-backed candidate.*unqualified/);
-assert.match(workbench, /researchCampaignError \?\? "Supplier research stopped/, "terminal campaign errors must be rendered instead of replaced by a generic status failure");
-assert.match(workbench, /researchCampaignState === "error" \? "Supplier research unavailable" : "Starting 38 sourceable lines"/, "terminal startup failure must not keep the campaign heading in a loading state");
-assert.match(workbench, /researchWorkspaceReady/, "GUILD manual research must wait for its dedicated workspace");
-assert.match(workbench, /if \(!researchWorkspaceReady\) return;/, "form submission must fail closed until the GUILD workspace is ready");
-assert.match(
-  workbench,
-  /const retryUnavailableCampaign = !researchWorkspaceReady && researchCampaignState === "error"[\s\S]*?onRetryResearchCampaign/,
-  "a terminal campaign startup failure must stop presenting the unresolved workspace as active preparation",
-);
-assert.match(illustrativeRowsSource, /retryUnavailableCampaign\s*\?\s*"Research unavailable"/, "failed campaign rows must render a terminal source state");
-assert.match(illustrativeRowsSource, /retryUnavailableCampaign\s*\?\s*"Retry research"/, "every failed campaign row must expose the existing campaign retry action");
-assert.match(illustrativeRowsSource, /: !retryUnavailableCampaign && \(campaignInProgress \|\| campaignRequirementOnly \|\| !researchWorkspaceReady\)/, "failed campaign row retries must remain enabled");
-assert.match(illustrativeRowsSource, /if \(retryUnavailableCampaign\) \{[\s\S]*?retryUnavailableCampaign\(\);[\s\S]*?return;/, "failed row actions must retry the campaign instead of falling through to an unscoped manual research request");
+assert.match(workbench, /if \(!researchWorkspaceReady\) return;/, "manual research must fail closed until a company workspace is selected");
+assert.match(illustrativeRowsSource, /disabled=\{!researchWorkspaceReady\}/, "inventory research actions must require a selected company workspace");
+assert.doesNotMatch(workbench, /researchCampaign|GUILD2|guild2|Starting 38|Item 027|Item 039/, "the generic customer queue must not contain a compiled campaign");
 assert.doesNotMatch(workbench, /<th>Next step<\/th>/);
 assert.doesNotMatch(workbench, /<th>On hand<\/th>|<th>Allocated<\/th>|<th>Inbound<\/th>|<th>Projected<\/th>/);
 assert.doesNotMatch(workbench, /inventoryRailList/);
@@ -421,12 +434,15 @@ assert.match(researchPersistence, /encodeResearchCursor/);
 assert.match(researchPersistence, /take: limit \+ 1/);
 assert.match(
   researchPersistence,
-  /options\.workspaceId[\s\S]*?sourcingSystemWorkspace\(context, "view", options\.workspaceId\)[\s\S]*?findSourcingSystemWorkspace\(context\)[\s\S]*?if \(!workspace\) return \{ runs: \[\], nextCursor: null \};/,
-  "default research history must be empty without provisioning, while explicit workspace reads remain strict",
+  /if \(!options\.workspaceId\) return \{ runs: \[\], nextCursor: null \};[\s\S]*?sourcingSystemWorkspace\(context, "view", options\.workspaceId\)/,
+  "research history must fail closed without provisioning and require a selected workspace for database reads",
 );
+assert.doesNotMatch(researchPersistence, /ATLAS_DEMO_WORKSPACE|findSourcingSystemWorkspace|system:atlas-procurement/);
 assert.match(procurementCasesRoute, /getSession/);
 assert.match(procurementCasesRoute, /saveProcurementShortlist/);
 assert.match(procurementCasesRoute, /procurementCases/);
+assert.match(procurementCasesRoute, /searchParams\.get\("workspaceId"\)/, "procurement reads must require an explicit customer workspace");
+assert.match(procurementCasesRoute, /listProcurementCases\(supplyAccessContext\(session\), workspaceId\)/, "procurement reads must stay in the selected workspace");
 assert.doesNotMatch(procurementCasesRoute, /saveProcurementSelection/);
 assert.match(procurementReviewRoute, /getSession/);
 assert.match(procurementReviewRoute, /reviewProcurementGate/);
@@ -513,8 +529,8 @@ assert.match(procurementPersistence, /sameWebDomain\(source\.url, url\)[\s\S]*so
 assert.match(procurementPersistence, /attributableSourceUrl \? "Public" as const : "New" as const/, "public research evidence must stay Public when procurement is persisted");
 assert.match(
   procurementPersistence,
-  /options\.workspaceId[\s\S]*?sourcingSystemWorkspace\(accessContext, "view", options\.workspaceId\)[\s\S]*?findSourcingSystemWorkspace\(accessContext\)[\s\S]*?if \(!workspace\) return \[\];/,
-  "default procurement history must be empty without provisioning, while explicit workspace reads remain strict",
+  /if \(!options\.workspaceId\) return \[\];[\s\S]*?sourcingSystemWorkspace\(accessContext, "view", options\.workspaceId\)/,
+  "procurement history must fail closed without provisioning and require a selected workspace for database reads",
 );
 assert.match(procurementPersistence, /"SERVICE_PROVIDER"/, "qualified inspection services must not be mislabeled as manufacturers");
 assert.match(procurementCasesRoute, /\["Official", "Public", "Trusted", "New"\]/, "the procurement API must preserve Public evidence provenance");
