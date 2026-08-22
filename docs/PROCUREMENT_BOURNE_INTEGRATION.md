@@ -70,8 +70,12 @@ dropping unknown worker columns. It is safe to rerun. It does not send email,
 change an order status, create a quote, or approve a supplier.
 
 The workflow is restricted to the GitHub `Production` environment and `main`.
-It verifies the exact production database and owner role, records the migration
-through Prisma, and runs the matching committed read-only verification script.
+Its `WORKFLOW_DATABASE_OWNER_URL` secret must point to Neon project
+`plain-shape-01606176`, branch `br-long-rice-aud6ho2m`, database `neondb`, on
+the direct `ep-summer-cake-audzi8ve` endpoint. It must not point to Derya's
+separate `derya_production` application database. The workflow pins that
+endpoint, database, and owner role, records the migration through Prisma, and
+runs the matching committed read-only verification script.
 
 After applying it, verify the affected order with the restricted dashboard
 role:

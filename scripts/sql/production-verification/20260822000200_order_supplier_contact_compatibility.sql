@@ -50,8 +50,8 @@ BEGIN
   FROM public.order_vendors
   WHERE order_id = '3f98d54d-7ed2-4e73-9bb3-0f2b3355f198'::uuid;
 
-  IF supplier_count <> 3 THEN
-    RAISE EXCEPTION 'affected order does not have exactly three suppliers';
+  IF supplier_count < 4 THEN
+    RAISE EXCEPTION 'affected order is missing one or more expected suppliers';
   END IF;
 
   SELECT count(*)
@@ -60,25 +60,34 @@ BEGIN
     VALUES
       ('Ellsworth Adhesives', 'info@ellsworth.com'),
       ('The Binding Source', 'info@bindingsource.com'),
-      ('Hisco', 'websupport@hiscoinc.com')
+      ('Hisco', 'websupport@hiscoinc.com'),
+      ('Strobels Supply', 'orders@strobelssupply.com')
   ) AS expected(name, email)
   JOIN public.order_vendors actual
     ON actual.name = expected.name
    AND actual.contact_email = expected.email
   WHERE actual.order_id = '3f98d54d-7ed2-4e73-9bb3-0f2b3355f198'::uuid;
 
-  IF matched_contact_count <> 3 THEN
+  IF matched_contact_count <> 4 THEN
     RAISE EXCEPTION 'expected supplier contacts were not backfilled';
   END IF;
 
   IF EXISTS (
     SELECT 1
-    FROM public.order_vendors
-    WHERE order_id = '3f98d54d-7ed2-4e73-9bb3-0f2b3355f198'::uuid
-      AND (
-        contact_email IS NULL
-        OR contact->>'email' IS DISTINCT FROM contact_email
-        OR jsonb_typeof(identity) IS DISTINCT FROM 'object'
+    FROM (
+      VALUES
+        ('Ellsworth Adhesives', 'info@ellsworth.com'),
+        ('The Binding Source', 'info@bindingsource.com'),
+        ('Hisco', 'websupport@hiscoinc.com'),
+        ('Strobels Supply', 'orders@strobelssupply.com')
+    ) AS expected(name, email)
+    JOIN public.order_vendors actual
+      ON actual.name = expected.name
+     AND actual.order_id = '3f98d54d-7ed2-4e73-9bb3-0f2b3355f198'::uuid
+    WHERE (
+        actual.contact_email IS DISTINCT FROM expected.email
+        OR actual.contact->>'email' IS DISTINCT FROM expected.email
+        OR jsonb_typeof(actual.identity) IS DISTINCT FROM 'object'
       )
   ) THEN
     RAISE EXCEPTION 'canonical supplier contact projection is incomplete';

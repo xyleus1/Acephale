@@ -3735,3 +3735,20 @@ Use this log for durable product and engineering decisions. Do not put every imp
   stage. GitHub's current private-repository plan cannot enforce a required
   reviewer, so the main-only environment rule, exact phrase, and committed
   verification contract are the available gates.
+
+### 2026-08-22 - Workflow migrations pin the Bourne production endpoint
+
+- Status: accepted
+- Owner: engineering
+- Context: The first protected supplier-contact run used a valid owner URL for
+  `derya_production`, but the live procurement records are in Bourne's `neondb`
+  database. Checking only the database name and role did not prove the Neon
+  branch was the one served through `WORKFLOW_DATABASE_URL`.
+- Decision: `WORKFLOW_DATABASE_OWNER_URL` points only to Neon project
+  `plain-shape-01606176`, branch `br-long-rice-aud6ho2m`, and its direct
+  `ep-summer-cake-audzi8ve` endpoint. The release workflow checks the endpoint,
+  database `neondb`, and role `neondb_owner` before running Prisma.
+- Safety: The owner credential remains a GitHub Production environment secret
+  and is unavailable to dependency lifecycle scripts. A changed Neon endpoint
+  requires an explicit code review and secret update instead of silently
+  migrating a different branch.

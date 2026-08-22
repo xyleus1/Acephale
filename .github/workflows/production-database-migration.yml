@@ -81,6 +81,19 @@ jobs:
           set -euo pipefail
           command -v psql >/dev/null
 
+          database_host="$(
+            DATABASE_URL="$WORKFLOW_DATABASE_OWNER_URL" node --input-type=module --eval='
+              const value = process.env.DATABASE_URL;
+              if (!value) process.exit(1);
+              process.stdout.write(new URL(value).hostname);
+            '
+          )"
+
+          if [[ "$database_host" != "ep-summer-cake-audzi8ve.c-10.us-east-1.aws.neon.tech" ]]; then
+            echo "Refusing to migrate an unexpected Neon endpoint." >&2
+            exit 1
+          fi
+
           database_identity="$(
             psql "$WORKFLOW_DATABASE_OWNER_URL" \
               --no-psqlrc \
@@ -91,12 +104,12 @@ jobs:
               --command='SELECT current_database(), session_user;'
           )"
 
-          if [[ "$database_identity" != "derya_production|neondb_owner" ]]; then
+          if [[ "$database_identity" != "neondb|neondb_owner" ]]; then
             echo "Refusing to migrate an unexpected database or role." >&2
             exit 1
           fi
 
-          echo "Verified target: derya_production as neondb_owner."
+          echo "Verified Bourne workflow target: neondb as neondb_owner at the pinned Neon endpoint."
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:

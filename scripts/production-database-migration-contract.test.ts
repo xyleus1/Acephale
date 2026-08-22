@@ -37,7 +37,8 @@ assert.doesNotMatch(
   /WORKFLOW_DATABASE_OWNER_URL|secrets\.WORKFLOW_DATABASE_OWNER_URL/,
   "dependency lifecycle scripts must not receive the production owner credential",
 );
-assert.match(workflow, /derya_production\|neondb_owner/);
+assert.match(workflow, /ep-summer-cake-audzi8ve\.c-10\.us-east-1\.aws\.neon\.tech/);
+assert.match(workflow, /neondb\|neondb_owner/);
 assert.match(workflow, /npm run deploy:migrations/);
 assert.match(workflow, /scripts\/sql\/production-verification\/\$REQUESTED_MIGRATION_ID\.sql/);
 
@@ -45,6 +46,7 @@ assert.match(verification, /BEGIN READ ONLY;/);
 assert.match(verification, /public\."_prisma_migrations"/);
 assert.match(verification, /dashboard_api/);
 assert.match(verification, /contact_email_count/);
+assert.match(verification, /Strobels Supply/);
 assert.doesNotMatch(
   verification,
   /^\s*(INSERT\s+INTO|UPDATE\s+["a-z]|DELETE\s+FROM|TRUNCATE\s+)/im,

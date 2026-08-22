@@ -9623,3 +9623,19 @@ Verification caveat:
 - Production secret values are never committed or printed. The owner URL lives
   only in the GitHub `Production` environment and is scoped to the target check,
   migration, and verification steps.
+
+## 2026-08-22: Correct the production workflow migration target
+
+- Authenticated Derya returned the live Dreamz order with four approved
+  suppliers, while the first protected migration target contained zero rows for
+  that order. Neon inspection proved the copied URL targeted the separate
+  `broad-cloud-67682012` database instead of Bourne production.
+- Replaced the GitHub Production owner secret without printing it. It now uses
+  project `plain-shape-01606176`, branch `br-long-rice-aud6ho2m`, database
+  `neondb`, and role `neondb_owner`.
+- Pinned the workflow to Bourne's direct endpoint as well as its database and
+  role. Updated verification for the current four-supplier shortlist, including
+  Strobels Supply.
+- Next release step: merge this correction, create a recovery branch, dispatch
+  the same migration, and confirm all four canonical contact emails through the
+  restricted authenticated Derya path.

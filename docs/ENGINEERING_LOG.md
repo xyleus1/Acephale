@@ -6135,3 +6135,20 @@ Use this file for chronological implementation notes that future agents should s
   the three database steps that need it.
 - Added a static workflow safety contract to the procurement CI job and
   documented deployment detection in `CLAUDE.md`.
+
+### 2026-08-22 - Pin the migration runner to Bourne production
+
+- The first protected run applied the pending migrations to project
+  `broad-cloud-67682012`, database `derya_production`. That database had zero
+  rows for the affected procurement order, so the read-only acceptance check
+  failed after migration application.
+- The authenticated production API returned the same order with four suppliers.
+  Neon branch inspection located those rows in project `plain-shape-01606176`,
+  branch `br-long-rice-aud6ho2m`, database `neondb`.
+- Replaced the protected owner secret through the authenticated Neon and GitHub
+  CLIs without printing the connection string. The workflow now pins Bourne's
+  direct endpoint, database, and owner role.
+- Updated the production verification from the stale three-supplier snapshot to
+  the current four approved suppliers. It validates Ellsworth Adhesives, Hisco,
+  The Binding Source, and Strobels Supply without requiring the overall order to
+  remain frozen at exactly four rows.
