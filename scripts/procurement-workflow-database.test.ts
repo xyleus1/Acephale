@@ -279,7 +279,7 @@ async function main() {
       JSON.stringify({ name: "Grace Seller", email: "grace@example.com", phone: "+1 555 0101" }),
       "shortlisted",
       "Identity contact supplier",
-      JSON.stringify({ contact_name: "Lin Vendor", contact_email: "lin@example.com", contact_phone: "+1 555 0102" }),
+      JSON.stringify({ contact_name: "Lin Vendor", email: "lin@example.com", contact_phone: "+1 555 0102" }),
     );
     const canonicalSupplierLinks = await owner.$queryRawUnsafe<Array<{
       supplierCount: bigint;

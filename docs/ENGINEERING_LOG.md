@@ -6070,3 +6070,25 @@ Use this file for chronological implementation notes that future agents should s
 - UI correction: Changed the Context canvas, empty state, and upload overlay
   from near-white to literal white. Updated `DESIGN.md` to record the intended
   white Context work surface.
+
+### 2026-08-22 - Preserve supplier research details in the Derya shortlist
+
+- Branch: `fix/supplier-evidence-and-approval`, based on production
+  `origin/main` at `46f28ccf`.
+- Root cause: The detail API recognized only a narrow set of supplier email
+  aliases, while the UI treated `quote` as the only commercial display source.
+  Bourne correctly kept public listings in `research`, so useful contact and
+  pricing evidence disappeared from Derya.
+- Fix: Added bounded contact-email fallbacks for identity and research JSON,
+  displayed public listing evidence separately from confirmed quotes, skipped
+  draft and message containers, and kept generic candidate labels from hiding
+  useful evidence excerpts.
+- Safety: No schema, migration, workflow-state write, supplier contact, email,
+  approval, or purchasing behavior changed. Public prices remain explicitly
+  unconfirmed research.
+- Verification: `npm run test:workflow-guild2`,
+  `npm run test:procurement-workflow`,
+  `npm run test:customer-procurement-bourne`, TypeScript, diff hygiene, and the
+  changed-source forbidden-character scan passed.
+- Remaining blocker: Bourne must make the human shortlist approval task
+  reachable after the optional Inbox notification failed actor resolution.

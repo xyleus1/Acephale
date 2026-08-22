@@ -8,7 +8,9 @@ import {
   customerProcurementEvidenceSummary,
   customerProcurementPhase,
   customerProcurementProgress,
+  customerProcurementPublicPriceSummary,
   customerProcurementQuoteSummary,
+  customerProcurementResearchEmail,
   customerProcurementResearchComplete,
   customerProcurementStatusLabel,
   startCustomerProcurementPolling,
@@ -110,11 +112,30 @@ assert.deepEqual(customerProcurementEvidenceSummary({
   summary: "Internal Neon details are hidden.",
   evidence: ["Public supplier capability page"],
 }), ["Public supplier capability page"]);
+assert.deepEqual(customerProcurementEvidenceSummary({
+  qualification: { status: "CANDIDATE", summary: "POTENTIAL MATCH - GAPS REMAIN" },
+  evidence: ["Exact DP420NS Black 50 mL Duo-Pak product page"],
+}), ["Exact DP420NS Black 50 mL Duo-Pak product page"]);
 assert.equal(customerProcurementQuoteSummary(null), "Not received");
 assert.equal(customerProcurementQuoteSummary({ amount: 1250, currency: "usd", unit: "lot" }), "USD 1,250 / lot");
+assert.equal(customerProcurementResearchEmail({ identity: { email: " Info@Example.com " } }), "info@example.com");
+assert.equal(customerProcurementResearchEmail({ notes: "Email fake@example.com" }), null);
+assert.equal(customerProcurementResearchEmail({ draft: { email: "draft@example.com" } }), null);
+assert.equal(customerProcurementPublicPriceSummary({
+  public_listing: { price: 46.18, currency: "usd", unit: "each" },
+}), "USD 46.18 / each");
+assert.equal(customerProcurementPublicPriceSummary({
+  evidence: ["Public listing: $48.60 at quantity 6; $41.98 at quantity 12."],
+}), "Public listing: $48.60 at quantity 6; $41.98 at quantity 12.");
+assert.equal(customerProcurementPublicPriceSummary({ draft: { body: "Offer $1.00 in the draft." } }), null);
+assert.equal(customerProcurementPublicPriceSummary({ quantity: { amount: 4, unit: "units" } }), null);
 assert.deepEqual(customerProcurementContactSummary({ name: "Ada", email: "ada@example.com", phone: null }), {
   primary: "Ada",
   secondary: "ada@example.com",
+});
+assert.deepEqual(customerProcurementContactSummary(null, { contact: { email: "sales@example.com" } }), {
+  primary: "Public research contact",
+  secondary: "sales@example.com",
 });
 
 async function main() {

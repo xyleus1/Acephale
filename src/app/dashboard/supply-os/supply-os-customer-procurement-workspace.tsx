@@ -23,6 +23,7 @@ import {
   customerProcurementContactSummary,
   customerProcurementEvidenceSummary,
   customerProcurementPhase,
+  customerProcurementPublicPriceSummary,
   customerProcurementQuoteSummary,
   customerProcurementResearchComplete,
   startCustomerProcurementPolling,
@@ -286,13 +287,17 @@ export function CustomerProcurementWorkspace({
                 <tbody>
                   {detail.vendors.map((vendor) => {
                     const evidence = customerProcurementEvidenceSummary(vendor.research);
-                    const contact = customerProcurementContactSummary(vendor.contact);
+                    const contact = customerProcurementContactSummary(vendor.contact, vendor.research);
+                    const publicPrice = customerProcurementPublicPriceSummary(vendor.research);
                     return (
                       <tr key={vendor.id}>
                         <td><strong>{vendor.name}</strong><small>{vendorStatusLabel(vendor.status)}</small></td>
                         <td><strong>{contact.primary}</strong><small>{contact.secondary}</small></td>
                         <td><strong>{evidence[0] ?? "Evidence pending"}</strong><small>{evidence[1] ?? "Review the supplier source before approval"}</small></td>
-                        <td><strong>{customerProcurementQuoteSummary(vendor.quote)}</strong><small>{vendor.quote ? "Commercial terms saved" : "No commercial terms saved"}</small></td>
+                        <td>
+                          <strong>{vendor.quote ? customerProcurementQuoteSummary(vendor.quote) : publicPrice ?? "Not received"}</strong>
+                          <small>{vendor.quote ? "Supplier-confirmed quote" : publicPrice ? "Public research, not a supplier quote" : "No commercial terms saved"}</small>
+                        </td>
                         <td>{vendor.website ? <a href={vendor.website} target="_blank" rel="noreferrer">Open site <ExternalLink size={12} /></a> : <small>Website unavailable</small>}</td>
                       </tr>
                     );

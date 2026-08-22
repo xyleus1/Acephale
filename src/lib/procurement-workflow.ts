@@ -539,7 +539,11 @@ export async function getProcurementRequestFromDatabase(
                 'email', COALESCE(
                   to_jsonb(order_vendors)->>'contact_email',
                   to_jsonb(order_vendors)->'contact'->>'email',
-                  to_jsonb(order_vendors)->'identity'->>'contact_email'
+                  to_jsonb(order_vendors)->'identity'->>'contact_email',
+                  to_jsonb(order_vendors)->'identity'->>'email',
+                  to_jsonb(order_vendors)->'research'->>'contact_email',
+                  to_jsonb(order_vendors)->'research'->'contact'->>'email',
+                  to_jsonb(order_vendors)->'research'->'identity'->>'email'
                 ),
                 'phone', COALESCE(
                   to_jsonb(order_vendors)->>'contact_phone',
@@ -623,7 +627,11 @@ export async function getProcurementVendorConversationRefFromDatabase(
         COALESCE(
           to_jsonb(order_vendors)->>'contact_email',
           to_jsonb(order_vendors)->'contact'->>'email',
-          to_jsonb(order_vendors)->'identity'->>'contact_email'
+          to_jsonb(order_vendors)->'identity'->>'contact_email',
+          to_jsonb(order_vendors)->'identity'->>'email',
+          to_jsonb(order_vendors)->'research'->>'contact_email',
+          to_jsonb(order_vendors)->'research'->'contact'->>'email',
+          to_jsonb(order_vendors)->'research'->'identity'->>'email'
         ) AS "contactEmail",
         NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') AS "gmailMessageId"
       FROM order_vendors

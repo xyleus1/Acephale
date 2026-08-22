@@ -9557,3 +9557,25 @@ Verification caveat:
   skeleton comparison cards for current and alternative choices.
 - Cost, transit, and margin results stay hidden until verified evidence exists.
 - Retired Fulfillment and Tracking URLs redirect to Inventory and sourcing.
+
+## 2026-08-22: Show Bourne supplier contact and public-price evidence
+
+- Confirmed the refreshed Derya shortlist loaded the three durable suppliers,
+  but the comparison table discarded useful research fields. Contact rendered
+  only the normalized contact object, and the commercial cell rendered only a
+  supplier-confirmed quote.
+- The workflow projection now accepts bounded email aliases from supplier
+  identity and research records. The customer view also finds a structured
+  research email when the normalized contact object is empty.
+- Public listing prices now appear in the commercial cell with the explicit
+  label `Public research, not a supplier quote`. Draft bodies, RFQ text,
+  messages, instructions, and quote objects are excluded from this fallback.
+- Generic qualification labels no longer consume both evidence lines when a
+  more useful product or capability excerpt exists.
+- Shortlist approval remains read-only in Derya. Bourne still needs to expose
+  or repair the operator approval task after its optional Inbox notification
+  returned `Tool actor identity is required`.
+- Verification passed: customer procurement workflow, procurement workflow,
+  customer-to-Bourne bridge, TypeScript, diff hygiene, and the changed-source
+  forbidden-character scan. The database-backed alias assertion remains for
+  CI because this worktree has no disposable PostgreSQL service.

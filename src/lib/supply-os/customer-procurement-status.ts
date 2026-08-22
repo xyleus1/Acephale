@@ -195,14 +195,25 @@ export function customerProcurementProgress(status: string, supplierCount: numbe
 }
 
 export function customerProcurementEvidenceSummary(research: Record<string, unknown>) {
-  const preferredKeys = ["summary", "evidence", "sources", "source", "qualification", "notes"];
+  const preferredKeys = ["summary", "product_match", "productMatch", "capability", "evidence", "sources", "source", "qualification", "notes"];
   const snippets: string[] = [];
+  const genericLabel = (value: string) => {
+    const normalized = value.toLowerCase();
+    return normalized === "candidate"
+      || normalized === "shortlisted"
+      || (normalized.includes("potential match") && normalized.includes("gaps remain"));
+  };
   function collect(value: unknown, depth = 0) {
     if (snippets.length >= 2 || depth > 2 || value === null || value === undefined) return;
     if (typeof value === "string") {
       const normalized = value.replace(/\s+/g, " ").trim();
       const bounded = normalized.slice(0, 180);
-      if (bounded && !/\b(?:bourne|neon|gmail)\b/i.test(bounded) && !snippets.includes(bounded)) snippets.push(bounded);
+      if (
+        bounded
+        && !genericLabel(bounded)
+        && !/\b(?:bourne|neon|gmail)\b/i.test(bounded)
+        && !snippets.includes(bounded)
+      ) snippets.push(bounded);
       return;
     }
     if (typeof value === "number" || typeof value === "boolean") {
@@ -230,6 +241,113 @@ export function customerProcurementEvidenceSummary(research: Record<string, unkn
   return snippets.slice(0, 2);
 }
 
+function normalizedResearchKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function boundedResearchText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized || /\b(?:bourne|neon|gmail)\b/i.test(normalized)) return null;
+  return normalized.slice(0, 180);
+}
+
+function safeResearchEmail(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return null;
+  return normalized;
+}
+
+export function customerProcurementResearchEmail(research: Record<string, unknown>) {
+  const emailKeys = new Set(["email", "contactemail", "supplieremail", "publicemail"]);
+  const excludedContainers = new Set(["body", "draft", "instructions", "message", "quote", "rfq"]);
+  function find(value: unknown, depth = 0): string | null {
+    if (depth > 4 || !value || typeof value !== "object") return null;
+    if (Array.isArray(value)) {
+      for (const child of value.slice(0, 8)) {
+        const found = find(child, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+    const entries = Object.entries(value as Record<string, unknown>).slice(0, 40);
+    for (const [key, child] of entries) {
+      if (!emailKeys.has(normalizedResearchKey(key))) continue;
+      const email = safeResearchEmail(child);
+      if (email) return email;
+    }
+    for (const [key, child] of entries) {
+      if (excludedContainers.has(normalizedResearchKey(key))) continue;
+      const found = find(child, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  return find(research);
+}
+
+function formattedResearchPrice(value: Record<string, unknown>) {
+  const amount = typeof value.amount === "number"
+    ? value.amount
+    : typeof value.price === "number"
+      ? value.price
+      : typeof value.unit_price === "number"
+        ? value.unit_price
+        : null;
+  if (amount === null || !Number.isFinite(amount)) return null;
+  const currency = typeof value.currency === "string" && /^[A-Za-z]{3}$/.test(value.currency.trim())
+    ? value.currency.trim().toUpperCase()
+    : null;
+  const unitValue = typeof value.unit === "string"
+    ? value.unit
+    : typeof value.unit_of_measure === "string"
+      ? value.unit_of_measure
+      : null;
+  const unit = boundedResearchText(unitValue)?.slice(0, 40) ?? null;
+  return `${currency ? `${currency} ` : ""}${amount.toLocaleString("en-US")}${unit ? ` / ${unit}` : ""}`;
+}
+
+export function customerProcurementPublicPriceSummary(research: Record<string, unknown>) {
+  const priceKey = (key: string) => /(?:price|pricing|listing|commercial)/.test(normalizedResearchKey(key));
+  const excludedContainers = new Set(["body", "draft", "instructions", "message", "quote", "rfq"]);
+  const explicitPrice = /(?:[$€£¥]\s?\d|\b(?:USD|EUR|GBP|CAD|AUD|JPY|CNY)\s?\d|\b\d+(?:\.\d+)?\s?(?:USD|EUR|GBP|CAD|AUD|JPY|CNY)\b)/i;
+  function find(value: unknown, depth = 0, priceContext = false): string | null {
+    if (depth > 4 || !value) return null;
+    const directText = boundedResearchText(value);
+    if (directText && explicitPrice.test(directText)) return directText;
+    if (typeof value !== "object") return null;
+    if (Array.isArray(value)) {
+      for (const child of value.slice(0, 8)) {
+        const found = find(child, depth + 1, priceContext);
+        if (found) return found;
+      }
+      return null;
+    }
+    const record = value as Record<string, unknown>;
+    const formatted = priceContext ? formattedResearchPrice(record) : null;
+    if (formatted) return formatted;
+    const entries = Object.entries(record).slice(0, 40);
+    for (const [key, child] of entries) {
+      if (!priceKey(key)) continue;
+      const text = boundedResearchText(child);
+      if (text) return text;
+      if (typeof child === "number" && Number.isFinite(child)) return child.toLocaleString("en-US");
+      const nested = find(child, depth + 1, true);
+      if (nested) return nested;
+    }
+    for (const [key, child] of entries) {
+      if (excludedContainers.has(normalizedResearchKey(key))) continue;
+      const text = boundedResearchText(child);
+      if (text && explicitPrice.test(text)) return text;
+      const found = find(child, depth + 1, false);
+      if (found) return found;
+    }
+    return null;
+  }
+  return find(research);
+}
+
 export function customerProcurementQuoteSummary(quote: Record<string, unknown> | null) {
   if (!quote) return "Not received";
   const amount = typeof quote.amount === "number"
@@ -254,9 +372,13 @@ export function customerProcurementQuoteSummary(quote: Record<string, unknown> |
   return reference ? `Received: ${reference}` : "Received";
 }
 
-export function customerProcurementContactSummary(contact: CustomerProcurementVendor["contact"]) {
+export function customerProcurementContactSummary(
+  contact: CustomerProcurementVendor["contact"],
+  research: Record<string, unknown> = {},
+) {
+  const researchEmail = customerProcurementResearchEmail(research);
   return {
-    primary: contact?.name ?? "Not identified",
-    secondary: contact?.email ?? contact?.phone ?? "No contact saved",
+    primary: contact?.name ?? (contact?.email ? "Email available" : researchEmail ? "Public research contact" : "Not identified"),
+    secondary: contact?.email ?? contact?.phone ?? researchEmail ?? "No contact saved",
   };
 }
