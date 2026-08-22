@@ -9636,6 +9636,12 @@ Verification caveat:
 - Pinned the workflow to Bourne's direct endpoint as well as its database and
   role. Updated verification for the current four-supplier shortlist, including
   Strobels Supply.
-- Next release step: merge this correction, create a recovery branch, dispatch
-  the same migration, and confirm all four canonical contact emails through the
-  restricted authenticated Derya path.
+- Release result: PR #209 merged as `2ffcc64`. Recovery snapshot
+  `snap-sweet-snow-aug7tn04` preserves Bourne production before the migration
+  until 2026-09-19. Workflow run `32605771210` applied the migration and passed
+  with four suppliers, four canonical contact emails, and read-only
+  `dashboard_api` access.
+- Authenticated production verification returned all four contacts through the
+  Derya API and rendered them in the Dreamz sourcing comparison. A
+  `bourne_supply_chain` insert populated canonical email fields in a rolled-back
+  transaction; no supplier or order-vendor probe rows remain.

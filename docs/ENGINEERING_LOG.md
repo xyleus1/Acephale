@@ -6152,3 +6152,28 @@ Use this file for chronological implementation notes that future agents should s
   the current four approved suppliers. It validates Ellsworth Adhesives, Hisco,
   The Binding Source, and Strobels Supply without requiring the overall order to
   remain frozen at exactly four rows.
+
+### 2026-08-22 - Complete the Bourne supplier-contact production migration
+
+- Merged target correction PR #209 as `2ffcc64` after procurement CI and Vercel
+  checks passed.
+- Neon branch creation was blocked by the project branch limit, so a recovery
+  snapshot was used instead. Snapshot `snap-sweet-snow-aug7tn04` captures
+  `br-long-rice-aud6ho2m` immediately before migration and expires on
+  2026-09-19.
+- The first corrected dispatch stopped before connecting because the `--body -`
+  flag with `gh secret set` had stored the literal hyphen. Generated the direct
+  owner URL again, validated its host, database, and role without printing it,
+  and piped it to `gh secret set` through standard input with no `--body` flag.
+- Production workflow run `32605771210` passed. It applied
+  `20260822000200_order_supplier_contact_compatibility`, reported four suppliers
+  and four canonical contact emails, and confirmed `dashboard_api` read-only
+  access.
+- The authenticated Derya API returned Strobels Supply, Hisco, The Binding
+  Source, and Ellsworth Adhesives with their saved email contacts. The rendered
+  Dreamz comparison showed `Email available` for all four.
+- A production `bourne_supply_chain` insert test populated `contact_email`,
+  `contact.email`, and `identity.contact_email` inside a rolled-back transaction.
+  Follow-up owner queries found zero probe rows in both `order_vendors` and
+  `Supplier`. No email, approval, quote, order-status change, or commercial
+  action occurred.
