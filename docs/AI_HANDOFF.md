@@ -9608,3 +9608,18 @@ Verification caveat:
   customer-to-Bourne bridge, TypeScript, diff hygiene, and the changed-source
   forbidden-character scan. The database-backed alias assertion remains for
   CI because this worktree has no disposable PostgreSQL service.
+
+## 2026-08-22: Add a protected production database migration stage
+
+- Added a manually dispatched, `main`-only GitHub workflow using the existing
+  `Production` environment.
+- The workflow refuses unexpected migration IDs, databases, or roles. It runs
+  Prisma migration deployment so `_prisma_migrations` remains authoritative.
+- Every selected migration requires a committed read-only production
+  verification file. The supplier-contact verification checks the exact three
+  durable supplier contacts and confirms `dashboard_api` remains read-only.
+- Added a static workflow contract to procurement CI and recorded the Vercel
+  deployment configuration in `CLAUDE.md`.
+- Production secret values are never committed or printed. The owner URL lives
+  only in the GitHub `Production` environment and is scoped to the target check,
+  migration, and verification steps.

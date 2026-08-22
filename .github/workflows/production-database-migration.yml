@@ -1,0 +1,131 @@
+name: Production database migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration_id:
+        description: Latest committed Prisma migration directory to apply
+        required: true
+        type: string
+      confirmation:
+        description: Type APPLY_PRODUCTION_MIGRATION
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Production
+    env:
+      REQUESTED_MIGRATION_ID: ${{ inputs.migration_id }}
+      REQUEST_CONFIRMATION: ${{ inputs.confirmation }}
+      PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=120000 -c idle_in_transaction_session_timeout=120000
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate production migration request
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$REQUEST_CONFIRMATION" != "APPLY_PRODUCTION_MIGRATION" ]]; then
+            echo "The confirmation phrase is incorrect." >&2
+            exit 1
+          fi
+
+          if [[ ! "$REQUESTED_MIGRATION_ID" =~ ^[0-9]{14}_[a-z0-9_]+$ ]]; then
+            echo "The migration ID is invalid." >&2
+            exit 1
+          fi
+
+          latest_migration="$(
+            find prisma/migrations -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+              | LC_ALL=C sort \
+              | tail -n 1
+          )"
+          if [[ "$REQUESTED_MIGRATION_ID" != "$latest_migration" ]]; then
+            echo "The requested migration must be the latest migration on main." >&2
+            exit 1
+          fi
+
+          migration_file="prisma/migrations/$REQUESTED_MIGRATION_ID/migration.sql"
+          verification_file="scripts/sql/production-verification/$REQUESTED_MIGRATION_ID.sql"
+          git ls-files --error-unmatch "$migration_file" >/dev/null
+          git ls-files --error-unmatch "$verification_file" >/dev/null
+          test -f "$migration_file"
+          test ! -L "$migration_file"
+          test -f "$verification_file"
+          test ! -L "$verification_file"
+
+          echo "Migration ID: $REQUESTED_MIGRATION_ID"
+          sha256sum "$migration_file"
+          sha256sum "$verification_file"
+
+      - name: Verify exact production database target
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null
+
+          database_identity="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --field-separator='|' \
+              --command='SELECT current_database(), session_user;'
+          )"
+
+          if [[ "$database_identity" != "derya_production|neondb_owner" ]]; then
+            echo "Refusing to migrate an unexpected database or role." >&2
+            exit 1
+          fi
+
+          echo "Verified target: derya_production as neondb_owner."
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        env:
+          DATABASE_URL: postgresql://unused:unused@127.0.0.1:9/unused
+          DATABASE_URL_UNPOOLED: postgresql://unused:unused@127.0.0.1:9/unused
+        run: npm ci
+
+      - name: Apply committed Prisma migrations
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          npm run deploy:migrations
+
+      - name: Verify migrated production state
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          verification_file="scripts/sql/production-verification/$REQUESTED_MIGRATION_ID.sql"
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --file="$verification_file"

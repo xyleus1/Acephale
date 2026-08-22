@@ -3713,3 +3713,25 @@ Use this log for durable product and engineering decisions. Do not put every imp
   communicates its intended shape without inventing operational outcomes.
 - Revisit when: Verified comparison inputs and deterministic impact calculations
   are available for a real customer workspace.
+
+### 2026-08-22 - Production database migrations use a protected release job
+
+- Status: accepted
+- Owner: engineering
+- Context: Routine Vercel builds intentionally use a restricted application
+  role and cannot run DDL. Manual local migration commands depended on a
+  credential in one operator session and did not provide a durable audit path.
+- Decision: Production migrations run only through the manually dispatched
+  GitHub workflow on `main`. The job uses the `Production` environment owner
+  secret, requires an exact confirmation phrase and the latest committed
+  migration ID, verifies `derya_production` and `neondb_owner`, runs
+  `prisma migrate deploy`, and requires a committed read-only verification SQL
+  file for the selected migration.
+- Safety: The workflow token is read-only, concurrent migrations serialize,
+  migration and verification paths cannot come from arbitrary input, and
+  dependency lifecycle scripts cannot read the owner credential. Routine
+  application builds remain unable to mutate schema.
+- Consequences: Future schema releases have an observable, repeatable migration
+  stage. GitHub's current private-repository plan cannot enforce a required
+  reviewer, so the main-only environment rule, exact phrase, and committed
+  verification contract are the available gates.

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/procurement-workflow-tests.yml"
+      - ".github/workflows/production-database-migration.yml"
       - "src/app/api/procurement/**"
       - "src/app/login/**"
       - "src/app/dashboard/supply-os/**"
@@ -15,10 +16,12 @@ on:
       - "prisma/schema.prisma"
       - "prisma/migrations/**"
       - "scripts/procurement-workflow-database.test.ts"
+      - "scripts/production-database-migration-contract.test.ts"
       - "scripts/minimal-live-schema.test.ts"
       - "scripts/create-production-office.ts"
       - "scripts/unified-neon-cutover.test.ts"
       - "scripts/sql/procurement-**"
+      - "scripts/sql/production-verification/**"
       - "scripts/sql/derya-app-role.sql"
       - "scripts/sql/minimal-schema-**"
       - "scripts/workflow-dashboard.test.ts"
@@ -404,6 +407,7 @@ jobs:
           SQL
       - name: Run procurement security contracts
         run: |
+          npm run test:production-database-migration
           npm run test:minimal-live-schema
           npm run test:procurement-workflow
           npm run test:workflow-guild2

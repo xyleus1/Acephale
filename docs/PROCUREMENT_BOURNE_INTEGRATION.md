@@ -56,9 +56,11 @@ Production databases that had a legacy `order_vendors.email` column before the
 minimal schema cutover must apply the additive contact migration as owner:
 
 ```bash
-psql "$WORKFLOW_DATABASE_OWNER_URL" \
-  --set=ON_ERROR_STOP=1 \
-  --file=prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql
+gh workflow run production-database-migration.yml \
+  --repo mmturna/derya-crm \
+  --ref main \
+  --field migration_id=20260822000200_order_supplier_contact_compatibility \
+  --field confirmation=APPLY_PRODUCTION_MIGRATION
 ```
 
 The migration adds the canonical contact columns, exposes them through the
@@ -66,6 +68,10 @@ compatibility view, backfills explicit legacy `email` and
 `research.identity` contact values, and updates the insert trigger without
 dropping unknown worker columns. It is safe to rerun. It does not send email,
 change an order status, create a quote, or approve a supplier.
+
+The workflow is restricted to the GitHub `Production` environment and `main`.
+It verifies the exact production database and owner role, records the migration
+through Prisma, and runs the matching committed read-only verification script.
 
 After applying it, verify the affected order with the restricted dashboard
 role:

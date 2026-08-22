@@ -7,6 +7,7 @@
     "prebuild": "tsx scripts/supply-os-deployment-boundary.test.ts",
     "build": "prisma generate && next build",
     "deploy:migrations": "prisma migrate deploy && prisma migrate status",
+    "test:production-database-migration": "tsx scripts/production-database-migration-contract.test.ts",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",

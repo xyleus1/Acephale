@@ -6121,3 +6121,17 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Merge the migration, apply it to production Neon as owner, rerun
   the affected order query as `dashboard_api`, then refresh the authenticated
   Derya shortlist and confirm all three supplier emails render.
+
+### 2026-08-22 - Make owner-run production migrations repeatable
+
+- Added `.github/workflows/production-database-migration.yml` as the explicit
+  production schema release stage outside Vercel builds.
+- Restricted dispatches to `main`, the `Production` environment, the latest
+  committed migration directory, and the exact confirmation phrase.
+- Added exact target checks for `derya_production` and `neondb_owner`, serialized
+  execution, Prisma migration ledger updates, and committed read-only
+  verification SQL.
+- Scoped the production owner secret away from dependency installation and into
+  the three database steps that need it.
+- Added a static workflow safety contract to the procurement CI job and
+  documented deployment detection in `CLAUDE.md`.
