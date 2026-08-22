@@ -53,6 +53,29 @@ BEGIN
     RAISE EXCEPTION 'supplier identities were not normalized';
   END IF;
 
+  IF (
+    SELECT count(*)
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'order_vendors'
+      AND column_name IN ('contact_name', 'contact_email', 'contact_phone', 'contact', 'identity')
+  ) <> 5
+    OR NOT EXISTS (
+      SELECT 1
+      FROM "OrderSupplier"
+      WHERE id = '44444444-4444-4444-8444-444444444444'
+        AND email = 'sales@acme.example'
+        AND contact_name = 'Ada Buyer'
+        AND contact_email = 'sales@acme.example'
+        AND contact_phone = '+1 555 0100'
+        AND contact->>'email' = 'sales@acme.example'
+        AND identity->>'email' = 'sales@acme.example'
+    ) OR NOT has_column_privilege(
+      'dashboard_api', 'public.order_vendors', 'contact_email', 'SELECT'
+    ) THEN
+    RAISE EXCEPTION 'legacy supplier contact was not projected into the canonical contract';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM "CompanyContext"
     WHERE id = 'legacy-ordinary-document'
@@ -147,6 +170,42 @@ BEGIN
         AND completed_at = '2026-08-22T02:10:00Z'::timestamptz
     ) THEN
     RAISE EXCEPTION 'Bourne role grants or reliability columns were not preserved';
+  END IF;
+END
+$$;
+
+SET ROLE legacy_bourne_worker;
+INSERT INTO order_vendors (
+  id, order_id, name, website, email, status, research
+) VALUES (
+  '12121212-1212-4212-8212-121212121212',
+  '33333333-3333-4333-8333-333333333333',
+  'Beta Parts',
+  'https://beta.example',
+  'QUOTES@BETA.EXAMPLE',
+  'shortlisted',
+  '{"identity":{"contact":{"name":"Grace Seller","phone":"+1 555 0101"}}}'::jsonb
+);
+RESET ROLE;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM "OrderSupplier"
+    WHERE id = '12121212-1212-4212-8212-121212121212'
+      AND email = 'QUOTES@BETA.EXAMPLE'
+      AND contact_name = 'Grace Seller'
+      AND contact_email = 'quotes@beta.example'
+      AND contact_phone = '+1 555 0101'
+      AND contact->>'email' = 'quotes@beta.example'
+      AND supplier_registry_id IS NOT NULL
+  ) OR (
+    SELECT count(*)
+    FROM "CompanySupplier"
+    WHERE "companyId" = 'legacy-company'
+  ) <> 2 THEN
+    RAISE EXCEPTION 'Bourne insert did not preserve legacy fields and canonical contacts';
   END IF;
 END
 $$;

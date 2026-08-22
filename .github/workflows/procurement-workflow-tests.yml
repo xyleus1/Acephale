@@ -168,7 +168,8 @@ jobs:
           find prisma/migrations -mindepth 2 -maxdepth 2 -name migration.sql -print0 \
             | sort -z \
             | while IFS= read -r -d '' migration; do
-                if [[ "$migration" == *"20260821000100_minimal_customer_procurement_schema"* ]]; then
+                if [[ "$migration" == *"20260821000100_minimal_customer_procurement_schema"* \
+                  || "$migration" == *"20260822000200_order_supplier_contact_compatibility"* ]]; then
                   continue
                 fi
                 psql "$LEGACY_MIGRATION_DATABASE_URL" --set=ON_ERROR_STOP=1 --file="$migration"
@@ -213,7 +214,13 @@ jobs:
           cat /tmp/derya-legacy-ambiguous.log
           grep -q 'Workflow customers do not map uniquely' /tmp/derya-legacy-ambiguous.log
           psql "$LEGACY_MIGRATION_DATABASE_URL" \
+            --set=ON_ERROR_STOP=1 \
             --file=prisma/migrations/20260821000100_minimal_customer_procurement_schema/migration.sql
+          for pass in 1 2; do
+            psql "$LEGACY_MIGRATION_DATABASE_URL" \
+              --set=ON_ERROR_STOP=1 \
+              --file=prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql
+          done
           psql "$LEGACY_MIGRATION_DATABASE_URL" --file=scripts/sql/minimal-schema-legacy-verify.sql
       - name: Verify office export and repeat import
         run: |

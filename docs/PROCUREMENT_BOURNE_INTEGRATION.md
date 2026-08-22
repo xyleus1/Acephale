@@ -50,6 +50,37 @@ configured for the Vercel schedule.
    `*/5 * * * *`. It reissues bounded wake requests only for mapped customer
    orders that remain `new` after the durable thirty-second claim window.
 
+### Supplier contact compatibility
+
+Production databases that had a legacy `order_vendors.email` column before the
+minimal schema cutover must apply the additive contact migration as owner:
+
+```bash
+psql "$WORKFLOW_DATABASE_OWNER_URL" \
+  --set=ON_ERROR_STOP=1 \
+  --file=prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql
+```
+
+The migration adds the canonical contact columns, exposes them through the
+compatibility view, backfills explicit legacy `email` and
+`research.identity` contact values, and updates the insert trigger without
+dropping unknown worker columns. It is safe to rerun. It does not send email,
+change an order status, create a quote, or approve a supplier.
+
+After applying it, verify the affected order with the restricted dashboard
+role:
+
+```sql
+SELECT id, name, contact_name, contact_email, contact_phone, contact, identity
+FROM public.order_vendors
+WHERE order_id = '<order UUID>'::uuid
+ORDER BY id;
+```
+
+Bourne must use `contact_email` for new writes. The legacy `email` field remains
+available only for worker compatibility. Research JSON remains evidence and is
+not Derya's operational contact source.
+
 While the automation is draft, new orders correctly remain in `new` status.
 
 ## GUILD2 sourcing

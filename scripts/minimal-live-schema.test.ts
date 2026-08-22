@@ -8,11 +8,18 @@ const migration = readFileSync(
   resolve(root, "prisma/migrations/20260821000100_minimal_customer_procurement_schema/migration.sql"),
   "utf8",
 );
+const contactCompatibilityMigration = readFileSync(
+  resolve(root, "prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql"),
+  "utf8",
+);
 const context = readFileSync(resolve(root, "src/lib/company-context.ts"), "utf8");
 const officeExport = readFileSync(resolve(root, "scripts/export-office-cherry-pick.ts"), "utf8");
 const officeImport = readFileSync(resolve(root, "scripts/import-office-cherry-pick.ts"), "utf8");
 const databaseWorkflow = readFileSync(resolve(root, ".github/workflows/procurement-workflow-tests.yml"), "utf8");
 const legacyVerification = readFileSync(resolve(root, "scripts/sql/minimal-schema-legacy-verify.sql"), "utf8");
+const legacyFixture = readFileSync(resolve(root, "scripts/sql/minimal-schema-legacy-fixture.sql"), "utf8");
+const bourneHandoff = readFileSync(resolve(root, "docs/BOURNE_WORKER_RELIABILITY_HANDOFF.md"), "utf8");
+const bourneIntegration = readFileSync(resolve(root, "docs/PROCUREMENT_BOURNE_INTEGRATION.md"), "utf8");
 
 for (const model of [
   "Item",
@@ -64,11 +71,25 @@ assert.match(migration, /minimal_legacy_workflow_grants_20260821/);
 assert.match(migration, /SELECT \* FROM "ProcurementOrder"/);
 assert.match(migration, /'citations', citation_data\.citations/);
 assert.match(migration, /legacy_order_supplier_insert/);
+assert.match(contactCompatibilityMigration, /ADD COLUMN IF NOT EXISTS contact_email TEXT/);
+assert.match(contactCompatibilityMigration, /to_jsonb\(supplier\)->>'email'/);
+assert.match(contactCompatibilityMigration, /research->'identity'->>'email'/);
+assert.match(contactCompatibilityMigration, /CREATE OR REPLACE VIEW order_vendors/);
+assert.match(contactCompatibilityMigration, /INSERT INTO "OrderSupplier" SELECT \(NEW\)\.\*/);
+assert.doesNotMatch(legacyFixture, /contact_email TEXT/);
+assert.match(legacyFixture, /email TEXT/);
+assert.match(legacyFixture, /"identity":\{"email":"sales@acme\.example"/);
 assert.match(databaseWorkflow, /Rehearse populated legacy migration/);
+assert.match(databaseWorkflow, /20260822000200_order_supplier_contact_compatibility/);
+assert.match(databaseWorkflow, /for pass in 1 2/);
 assert.match(databaseWorkflow, /Verify office export and repeat import/);
 assert.match(databaseWorkflow, /office export\/import round trip is not scoped and idempotent/);
 assert.match(legacyVerification, /Bourne role grants or reliability columns were not preserved/);
 assert.match(legacyVerification, /cross-company order was accepted/);
+assert.match(legacyVerification, /legacy supplier contact was not projected into the canonical contract/);
+assert.match(legacyVerification, /Bourne insert did not preserve legacy fields and canonical contacts/);
+assert.match(bourneHandoff, /Bourne must write\s+`contact_email`/);
+assert.match(bourneIntegration, /Supplier contact compatibility/);
 
 assert.match(context, /prisma\.companyContext/);
 assert.match(context, /prisma\.item\.findFirst/);
@@ -84,7 +105,7 @@ assert.match(officeImport, /payload: \{ \.\.\.jsonObject\(row\.payload\), import
 assert.match(context, /storageUrl: \{ startsWith: "metadata-only:\/\/" \}/);
 assert.match(context, /payload: \{ path: \["importSource", "contentHash"\], equals: contentHash \}/);
 
-for (const source of [schema, migration, context]) {
+for (const source of [schema, migration, contactCompatibilityMigration, context]) {
   assert.equal(source.includes("\u2014"), false, "Minimal schema files must not contain the forbidden character");
 }
 

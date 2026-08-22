@@ -39,6 +39,35 @@ Use existing equivalents if available:
 Do not add these fields to Derya's Prisma schema. They belong to the
 Bourne-owned lowercase workflow schema.
 
+## Supplier result contract
+
+Persist every candidate in `public.order_vendors`. New writes must use these
+canonical fields:
+
+- `name`: required supplier name.
+- `website`: attributable supplier or product URL when available.
+- `contact_name`: named person only when the evidence identifies one.
+- `contact_email`: explicit supplier address used by Derya's shortlist and
+  conversation binding.
+- `contact_phone`: explicit supplier phone when available.
+- `contact`: optional JSON object with `name`, `email`, and `phone` keys.
+- `identity`: optional structured supplier identity copied from accepted
+  research evidence.
+- `research`: evidence, qualification, source URLs, and draft-only controls.
+- `quote`: supplier-confirmed commercial terms only. Public list prices stay in
+  `research` until confirmed by the supplier.
+
+Do not store the only usable address inside `research`. Derya intentionally
+does not search arbitrary evidence JSON for operational contact details. The
+compatibility migration accepts the legacy `email` field and explicit
+`research.identity` contact values for backfill, but Bourne must write
+`contact_email` for every new result that has an address.
+
+Apply
+`prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql`
+as the Neon owner before relying on this contract. The migration is safe to
+rerun and preserves legacy worker columns and view grants.
+
 ## Claim shape
 
 The exact names may differ, but the transition must have these semantics:
@@ -97,3 +126,7 @@ in-place rewrite of an immutable request snapshot.
 - Missing STL units or conflicting PCB finish may produce `needs_attention`
   with the exact missing input.
 - A completed order is never claimed again.
+- A supplier inserted with legacy `email` remains readable through that field
+  and also exposes the normalized address as `contact_email`.
+- An authenticated Derya detail refresh renders the saved supplier email from
+  `order_vendors`; it does not require parsing `research` in the browser.

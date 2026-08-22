@@ -2,6 +2,35 @@
 
 ## Latest Update
 
+### Legacy Bourne supplier contacts now have a canonical projection
+
+- Root cause: production `public.order_vendors` still had the legacy `email`
+  field, but the minimal-schema migration assumed `contact_name`,
+  `contact_email`, `contact_phone`, `contact`, and `identity` already existed.
+  Derya therefore received `contact: null` even though Bourne had saved explicit
+  supplier addresses in legacy fields and research identity evidence.
+- Added an additive owner migration at
+  `prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql`.
+  It adds the missing columns, refreshes the compatibility view, backfills only
+  explicit contact facts, and replaces the supplier insert trigger.
+- The new trigger inserts the complete compatibility row after overriding the
+  canonical supplier and contact fields. Existing Bourne-specific columns are
+  preserved instead of being silently dropped.
+- The populated-legacy rehearsal now starts from the production-shaped schema:
+  legacy `email`, no canonical contact columns, and contact details under
+  `research.identity`. CI applies the migration twice, verifies the backfill,
+  verifies restricted-role inserts, and confirms both legacy and canonical
+  fields remain readable.
+- Bourne's durable contract now requires `contact_email` on new supplier rows.
+  Research remains evidence and is not searched by the Derya browser for an
+  operational address.
+- Local static procurement contracts and Prisma validation pass. This sandbox
+  cannot start PostgreSQL because System V shared memory is blocked, so the
+  database-backed migration rehearsal remains a required CI and Neon-owner
+  release gate.
+- No email was sent, no quote was promoted, and no supplier or order approval
+  state changed.
+
 ### Minimal schema cutover is live
 
 - PR #201 is merged and Vercel deployed merge commit `f299dd5`.

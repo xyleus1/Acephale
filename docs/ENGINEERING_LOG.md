@@ -6092,3 +6092,32 @@ Use this file for chronological implementation notes that future agents should s
   changed-source forbidden-character scan passed.
 - Remaining blocker: Bourne must make the human shortlist approval task
   reachable after the optional Inbox notification failed actor resolution.
+
+### 2026-08-22 - Restore canonical contacts on legacy Bourne suppliers
+
+- Branch: `fix/order-supplier-contact-compatibility`, based on current main.
+- Commit: see branch history.
+- Task: Add the missing production migration and Bourne write contract after an
+  authenticated query proved `public.order_vendors` had legacy `email` but no
+  canonical contact columns.
+- Root cause: The minimal-schema cutover renamed the existing supplier table
+  and used `CREATE TABLE IF NOT EXISTS`, but it added only
+  `supplier_registry_id` to an existing table. Its view and insert trigger then
+  assumed five contact columns that were never added to the live legacy shape.
+- Files changed: additive supplier-contact migration, production-shaped legacy
+  fixture and verification, migration CI, static schema contract, Bourne worker
+  contract, integration runbook, and handoff.
+- Verification: Prisma schema validation, minimal live-schema contract,
+  procurement workflow contract, customer procurement Bourne bridge, active
+  sourcing contract, workflow YAML parsing, diff hygiene, and forbidden
+  character checks.
+- Failed/skipped checks: Local PostgreSQL initialization failed because the
+  sandbox blocks System V shared memory. The updated PostgreSQL CI rehearsal
+  must apply the migration twice and run the restricted-role assertions before
+  merge. No production migration was applied from this workspace.
+- Caveats: The migration backfills only explicit legacy `email`, canonical
+  contact objects, and explicit `research.identity` contact keys. It does not
+  infer an address from arbitrary research text.
+- Follow-up: Merge the migration, apply it to production Neon as owner, rerun
+  the affected order query as `dashboard_api`, then refresh the authenticated
+  Derya shortlist and confirm all three supplier emails render.

@@ -49,11 +49,7 @@ CREATE TABLE order_vendors (
   order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   website TEXT,
-  contact_name TEXT,
-  contact_email TEXT,
-  contact_phone TEXT,
-  contact JSONB,
-  identity JSONB,
+  email TEXT,
   status TEXT NOT NULL,
   research JSONB NOT NULL DEFAULT '{}'::jsonb,
   quote JSONB,
@@ -151,7 +147,7 @@ SET attempt_count = 2,
 WHERE id = '33333333-3333-4333-8333-333333333333';
 
 INSERT INTO order_vendors (
-  id, order_id, name, website, contact_email, status, research, quote
+  id, order_id, name, website, email, status, research, quote
 ) VALUES
   (
     '44444444-4444-4444-8444-444444444444',
@@ -160,7 +156,7 @@ INSERT INTO order_vendors (
     'https://acme.example',
     'sales@acme.example',
     'shortlisted',
-    '{"source":"public"}'::jsonb,
+    '{"source":"public","identity":{"email":"sales@acme.example","contact":{"name":"Ada Buyer","phone":"+1 555 0100"}}}'::jsonb,
     '{"amount":1250}'::jsonb
   ),
   (
