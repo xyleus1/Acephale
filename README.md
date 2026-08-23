@@ -56,7 +56,7 @@ npm run dev
 - `/dashboard/rfq/[id]` — RFQ qualification and maturity gate
 - `/dashboard/settings/email` — Gmail/Outlook/IMAP setup
 - `/dashboard/customers` — CRM
-- `/dashboard/customer-portal`: staff access management and read-only customer workspace preview
-- `/portal`: customer sign-in and authenticated company shipment workspace
+- `/dashboard/customer-portal`: staff company and customer-user management with scoped workspace preview
+- `/portal`: customer username and password sign-in to the company-scoped Supply OS
 - `/customer`: public design sandbox with fictional data only, never live customer records
 - `/api/jobs/[id]/quote-pdf` — printable customer quote

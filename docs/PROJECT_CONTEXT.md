@@ -40,7 +40,7 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 ### 4. Customer workspace (the shared state layer)
 
 - Email-first intake for RFQs, changes, and exceptions
-- Passwordless, company-scoped customer access separated from internal users
+- Admin-managed username and password access scoped to explicit company workspaces
 - A customer control tower for active and completed shipments, RFQs, action
   requests, and dedicated milestone-based shipment detail pages
 - Quote lines, requested uploads, and approved customer-visible documents
