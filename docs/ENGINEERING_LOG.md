@@ -6448,11 +6448,11 @@ Use this file for chronological implementation notes that future agents should s
   reply draft route behavior, conversation, Bourne bridge, TypeScript, product
   copy policy, and the production Next.js build passed. The independent
   pre-ship coverage audit scored the change at 77 percent.
-- Failed/skipped checks: The database-backed workflow test requires an
-  unavailable `WORKFLOW_DATABASE_OWNER_URL`; CI retains the exact inbound-only
-  and outbound-only vendor assertions.
-- Follow-up: Ship through CI, then verify Bay Area Circuits plus the draft-only
-  reply panel in the authenticated production UI.
+- Local limitation: The database-backed workflow test requires
+  `WORKFLOW_DATABASE_OWNER_URL`. PR #218 ran the same inbound-only and
+  outbound-only vendor assertions in the passing `database-contracts` check.
+- Release: PR #218 merged as `82cea1f0`. Its PR checks, post-merge Supply OS
+  run `32617601258`, Vercel deployment, and authenticated production UI passed.
 
 ### 2026-08-22 - Replace customer email codes with passwords
 
@@ -6498,7 +6498,12 @@ Use this file for chronological implementation notes that future agents should s
   the record does not support a next step.
 - Normalized helpdesk subjects to one `Re:` prefix and plain punctuation.
 - Verification: Reply draft domain, reply route, Active Sourcing, TypeScript,
-  product copy, and the production Next.js build passed. Live redraft remains.
+  product copy, and the production Next.js build passed.
+- Release: PR #221 merged as `e9a861dc`. Database security and Vercel passed.
+  An authenticated production redraft used one normalized subject, preserved
+  the stated capability-confirmation sequence, remained editable, showed the
+  draft-only warning, and exposed no send control. The page had no console
+  errors and loaded in 1.214 seconds. No email was sent or persisted.
 
 ### 2026-08-22 - Stage Gmail app-password schema before application release
 

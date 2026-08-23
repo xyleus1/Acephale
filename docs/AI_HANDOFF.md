@@ -100,12 +100,23 @@ Verification completed:
 - Product copy policy
 - Production Next.js build
 - Authenticated PR #218 production response-state and draft-only UI
+- Database projection contract in the PR #218 `database-contracts` check
+- Authenticated PR #221 grounded live redraft
 
-Verification pending:
+Release status:
 
-- Database projection contract requires `WORKFLOW_DATABASE_OWNER_URL` in CI.
-- The draft-grounding follow-up still requires release checks and one new live
-  draft before the complete workflow is considered verified.
+- PR #218 merged as `82cea1f0`. PR checks, post-merge Supply OS run
+  `32617601258`, and the Vercel production deployment passed.
+- PR #221 merged as `e9a861dc`. Database security and Vercel production checks
+  passed.
+- Authenticated production testing showed Bay Area Circuits as `Responded`
+  with one response while the other three PCBA suppliers remained contacted
+  with no response. The detail showed one response and no recorded quote.
+- The final live draft used one normalized subject, preserved the stated
+  capability-confirmation sequence for sharing technical files, remained
+  editable, showed the draft-only warning, and exposed no send control.
+  Production had no console errors and loaded in 1.214 seconds.
+- No email was sent, copied to Gmail, or persisted by this workflow.
 
 ### Relink Bourne-backed orders to the active Supply OS workspace
 
