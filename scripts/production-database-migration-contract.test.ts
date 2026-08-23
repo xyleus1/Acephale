@@ -32,6 +32,9 @@ const workspaceRelinkVerification = verifications.get(
 const emailAccountVerification = verifications.get(
   "20260822000400_email_account_sending_config.sql",
 );
+const customerPasswordVerification = verifications.get(
+  "20260822000600_customer_portal_password_auth.sql",
+);
 
 assert.match(workflow, /^on:\n  workflow_dispatch:/m, "production migration must be manually dispatched");
 assert.doesNotMatch(
@@ -64,6 +67,7 @@ assert.ok(supplierVerification, "supplier production verification is missing");
 assert.ok(customerContextVerification, "customer Context production verification is missing");
 assert.ok(workspaceRelinkVerification, "workspace relink production verification is missing");
 assert.ok(emailAccountVerification, "email account production verification is missing");
+assert.ok(customerPasswordVerification, "customer password production verification is missing");
 for (const [name, verification] of verifications) {
   assert.match(verification, /BEGIN READ ONLY;/, `${name} must use a read-only transaction`);
   if (/^[0-9]{14}_[a-z0-9_]+\.sql$/.test(name)) {
@@ -110,5 +114,13 @@ assert.match(workspaceRelinkVerification, /bay_area_inbound_count <> 1/);
 assert.match(emailAccountVerification, /sendEnabled/);
 assert.match(emailAccountVerification, /isDefaultSender/);
 assert.match(emailAccountVerification, /EmailAccount_officeId_default_sender_key/);
+assert.match(customerPasswordVerification, /CustomerPortalUser_password_state_check/);
+assert.match(customerPasswordVerification, /accounts_with_password/);
+assert.match(customerPasswordVerification, /accounts_requiring_password/);
+assert.match(customerPasswordVerification, /locked_accounts/);
+assert.match(customerPasswordVerification, /CustomerPortalLoginThrottle_attempt_count_check/);
+assert.match(customerPasswordVerification, /CustomerPortalLoginThrottle_expiresAt_idx/);
+assert.match(customerPasswordVerification, /login_throttle_rows/);
+assert.match(customerPasswordVerification, /derya application role cannot use the customer login throttle/);
 
 console.log("Production database migration contract passed.");
