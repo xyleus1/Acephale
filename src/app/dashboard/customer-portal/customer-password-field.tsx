@@ -3,12 +3,17 @@
 import { useState } from "react";
 import styles from "./customer-portal-admin.module.css";
 
-const PASSWORD_LENGTH = 20;
-const LOWER = "abcdefghijkmnopqrstuvwxyz";
-const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DIGITS = "23456789";
-const SYMBOLS = "!@#$%";
-const ALL = `${LOWER}${UPPER}${DIGITS}${SYMBOLS}`;
+const WORDS = [
+  "Amber", "Anchor", "Atlas", "Bay", "Birch", "Blue", "Bridge", "Cargo",
+  "Cedar", "Cloud", "Coast", "Copper", "Crane", "Creek", "Delta", "Dock",
+  "Dune", "East", "Ember", "Field", "Fleet", "Forest", "Gate", "Gold",
+  "Harbor", "Hill", "Iron", "Jade", "Lake", "Lane", "Lime", "Maple",
+  "Mesa", "Moon", "North", "Ocean", "Olive", "Orchid", "Pine", "Port",
+  "Rail", "Reef", "River", "Road", "Sage", "Sand", "Silver", "Slate",
+  "South", "Spring", "Stone", "Summit", "Tide", "Timber", "Trail", "Vale",
+  "Wave", "West", "Willow", "Wind", "Wood", "Yard", "Yellow", "Zinc",
+];
 
 function secureIndex(length: number) {
   const values = new Uint32Array(1);
@@ -21,13 +26,9 @@ function pick(chars: string) {
 }
 
 function generatePassword() {
-  const characters = [pick(LOWER), pick(UPPER), pick(DIGITS), pick(SYMBOLS)];
-  while (characters.length < PASSWORD_LENGTH) characters.push(pick(ALL));
-  for (let index = characters.length - 1; index > 0; index -= 1) {
-    const swapIndex = secureIndex(index + 1);
-    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
-  }
-  return characters.join("");
+  const words = Array.from({ length: 4 }, () => WORDS[secureIndex(WORDS.length)]);
+  const digits = Array.from({ length: 8 }, () => pick(DIGITS)).join("");
+  return `${words.join("-")}-${digits}!`;
 }
 
 export function CustomerPasswordField({

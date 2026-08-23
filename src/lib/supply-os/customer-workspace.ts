@@ -328,7 +328,7 @@ export async function grantSupplyCustomerPortalAccess(args: {
       officeId: args.officeId,
       username: args.username,
       email: args.email,
-      fullName: args.fullName,
+      fullName: args.fullName || company.name,
       passwordHash: hasPassword ? args.passwordHash : null,
       passwordEncrypted: hasPassword ? args.passwordEncrypted : null,
       passwordVersion: hasPassword ? 1 : 0,
@@ -352,7 +352,7 @@ export async function grantSupplyCustomerPortalAccess(args: {
       update: {
         isActive: true,
         username: args.username,
-        ...(args.fullName ? { fullName: args.fullName } : {}),
+        fullName: args.fullName || company.name,
         ...(hasPassword ? {
           passwordHash: args.passwordHash,
           passwordEncrypted: args.passwordEncrypted,

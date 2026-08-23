@@ -6,6 +6,16 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { encryptCustomerPassword } from "@/lib/customer-password-vault";
 import {
+  customerPortalUsernameIsAllowed,
+  managedCustomerEmail,
+} from "@/lib/customer-portal-account";
+import {
+  CustomerPortalAccountAdminError,
+  removeCustomerPortalAccountRecord,
+  updateCustomerPortalAccountRecord,
+} from "@/lib/customer-portal-account-admin";
+import { requireCustomerManagementOperator } from "@/lib/customer-portal-admin-auth";
+import {
   normalizeCustomerPortalEmail,
   normalizeCustomerPortalUsername,
 } from "@/lib/customer-portal-security";
@@ -27,10 +37,11 @@ const ENABLED_STATUSES = new Set(["ACTIVE", "DISABLED"]);
 const CUSTOMER_SETTINGS_PATH = "/dashboard/settings/customers";
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 128;
-const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,79}$/;
 
-function customerSettingsUrl(notice: string): Route {
-  return `${CUSTOMER_SETTINGS_PATH}?notice=${encodeURIComponent(notice)}` as Route;
+function customerSettingsUrl(notice: string, companyId?: string | null): Route {
+  const params = new URLSearchParams({ notice });
+  if (companyId) params.set("company", companyId);
+  return `${CUSTOMER_SETTINGS_PATH}?${params.toString()}` as Route;
 }
 
 function hasPrismaCode(error: unknown, code: string) {
@@ -39,26 +50,13 @@ function hasPrismaCode(error: unknown, code: string) {
 
 async function requirePortalManager() {
   const session = await requireSession();
-  const currentUser = await prisma.user.findFirst({
-    where: {
-      id: session.userId,
-      officeId: session.officeId,
-      isActive: true,
-      role: { in: ["ADMIN", "MANAGER"] },
-    },
-    select: { role: true, canViewWholeOffice: true },
-  });
-  if (!currentUser) throw new Error("Not authorized.");
+  const currentUser = await requireCustomerManagementOperator(session, ["ADMIN", "MANAGER"]);
   return { ...session, ...currentUser };
 }
 
 async function requireCompanyAdmin() {
   const session = await requireSession();
-  const currentUser = await prisma.user.findFirst({
-    where: { id: session.userId, officeId: session.officeId, isActive: true, role: "ADMIN" },
-    select: { role: true, canViewWholeOffice: true },
-  });
-  if (!currentUser) throw new Error("Not authorized.");
+  const currentUser = await requireCustomerManagementOperator(session, ["ADMIN"]);
   return { ...session, ...currentUser };
 }
 
@@ -78,20 +76,23 @@ function refreshCustomerManagement() {
 export async function createCustomerCompany(formData: FormData): Promise<void> {
   const session = await requireCompanyAdmin();
   let notice = "company-created";
+  let companyId: string | null = null;
   try {
-    await createSupplyCustomerWorkspace(supplyAccessContext(session), {
+    const result = await createSupplyCustomerWorkspace(supplyAccessContext(session), {
       name: String(formData.get("name") ?? ""),
       website: String(formData.get("website") ?? "") || null,
     });
+    companyId = result.company.id;
   } catch (error) {
     notice = companyErrorNotice(error);
   }
   refreshCustomerManagement();
-  redirect(customerSettingsUrl(notice));
+  redirect(customerSettingsUrl(notice, companyId));
 }
 
 export async function updateCustomerCompany(workspaceId: string, formData: FormData): Promise<void> {
   const session = await requireCompanyAdmin();
+  const companyId = String(formData.get("companyId") ?? "").trim() || null;
   let notice = "company-updated";
   try {
     await updateSupplyCustomerWorkspace(supplyAccessContext(session), workspaceId, {
@@ -102,13 +103,14 @@ export async function updateCustomerCompany(workspaceId: string, formData: FormD
     notice = companyErrorNotice(error);
   }
   refreshCustomerManagement();
-  redirect(customerSettingsUrl(notice));
+  redirect(customerSettingsUrl(notice, companyId));
 }
 
 export async function archiveCustomerCompany(workspaceId: string, formData: FormData): Promise<void> {
   const session = await requireCompanyAdmin();
+  const companyId = String(formData.get("companyId") ?? "").trim() || null;
   if (String(formData.get("confirmArchive") ?? "") !== "ARCHIVE") {
-    redirect(customerSettingsUrl("confirm-company-archive"));
+    redirect(customerSettingsUrl("confirm-company-archive", companyId));
   }
   let notice = "company-archived";
   try {
@@ -125,16 +127,21 @@ export async function grantCustomerPortalAccess(formData: FormData): Promise<voi
   const session = await requireCompanyAdmin();
   const companyId = String(formData.get("companyId") ?? "").trim();
   const username = normalizeCustomerPortalUsername(String(formData.get("username") ?? ""));
-  const email = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
+  const providedEmail = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
+  const email = providedEmail || managedCustomerEmail(username);
   const fullName = String(formData.get("fullName") ?? "").trim().slice(0, 160) || null;
   const requestedRole = String(formData.get("role") ?? "MEMBER").toUpperCase();
   const role = PORTAL_ROLES.has(requestedRole) ? requestedRole : "MEMBER";
   const password = String(formData.get("password") ?? "");
-  if (!companyId || !USERNAME_PATTERN.test(username) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    redirect(customerSettingsUrl("invalid-account"));
+  if (
+    !companyId
+    || !customerPortalUsernameIsAllowed(username)
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+    redirect(customerSettingsUrl("invalid-account", companyId));
   }
   if (password && (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH)) {
-    redirect(customerSettingsUrl("invalid-password"));
+    redirect(customerSettingsUrl("invalid-password", companyId));
   }
 
   const passwordHash = password ? await hashPassword(password) : null;
@@ -154,11 +161,11 @@ export async function grantCustomerPortalAccess(formData: FormData): Promise<voi
     });
   } catch (error) {
     if (hasPrismaCode(error, "P2002") || (error instanceof SupplyPersistenceError && error.code === "conflict")) {
-      redirect(customerSettingsUrl("account-exists"));
+      redirect(customerSettingsUrl("account-exists", companyId));
     }
     throw error;
   }
-  if (!result) redirect(customerSettingsUrl("company-not-found"));
+  if (!result) redirect(customerSettingsUrl("company-not-found", companyId));
 
   await recordMemoryEvent({
     officeId: session.officeId,
@@ -196,7 +203,7 @@ export async function grantCustomerPortalAccess(formData: FormData): Promise<voi
   refreshCustomerManagement();
   revalidatePath("/portal");
   revalidatePath("/portal/workspace");
-  redirect(customerSettingsUrl("account-created"));
+  redirect(customerSettingsUrl(passwordHash ? "account-created" : "account-created-no-password", companyId));
 }
 
 export async function revokeCustomerPortalAccess(membershipId: string): Promise<void> {
@@ -274,81 +281,51 @@ export async function revokeCustomerPortalAccess(membershipId: string): Promise<
   revalidatePath("/portal/workspace");
 }
 
-export async function updateCustomerPortalAccount(userId: string, formData: FormData): Promise<void> {
+export async function updateCustomerPortalAccount(
+  userId: string,
+  companyId: string,
+  formData: FormData,
+): Promise<void> {
   const session = await requireCompanyAdmin();
   const username = normalizeCustomerPortalUsername(String(formData.get("username") ?? ""));
-  const email = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
-  const fullName = String(formData.get("fullName") ?? "").trim().slice(0, 160) || null;
+  const providedEmail = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
+  const email = providedEmail || managedCustomerEmail(username);
+  const requestedFullName = String(formData.get("fullName") ?? "").trim().slice(0, 160);
   const accountStatus = String(formData.get("accountStatus") ?? "").toUpperCase();
   const isActive = accountStatus === "ACTIVE";
   const password = String(formData.get("password") ?? "");
-  if (!USERNAME_PATTERN.test(username) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !ENABLED_STATUSES.has(accountStatus)) {
-    redirect(customerSettingsUrl("invalid-account"));
+  if (
+    !customerPortalUsernameIsAllowed(username)
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    || !ENABLED_STATUSES.has(accountStatus)
+  ) {
+    redirect(customerSettingsUrl("invalid-account", companyId));
   }
   if (password && (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH)) {
-    redirect(customerSettingsUrl("invalid-password"));
+    redirect(customerSettingsUrl("invalid-password", companyId));
   }
-
-  const [user, emailOwner, usernameOwner] = await Promise.all([
-    prisma.customerPortalUser.findFirst({
-      where: { id: userId, officeId: session.officeId },
-      select: { id: true, internalUserId: true, username: true, email: true, fullName: true, isActive: true },
-    }),
-    prisma.customerPortalUser.findFirst({
-      where: { officeId: session.officeId, email, id: { not: userId } },
-      select: { id: true },
-    }),
-    prisma.customerPortalUser.findFirst({
-      where: { officeId: session.officeId, username, id: { not: userId } },
-      select: { id: true },
-    }),
-  ]);
-  if (!user) redirect(customerSettingsUrl("account-not-found"));
-  if (emailOwner || usernameOwner) redirect(customerSettingsUrl("account-in-use"));
 
   const passwordHash = password ? await hashPassword(password) : null;
   const passwordEncrypted = password ? encryptCustomerPassword(password) : null;
-  const revokeSessions = Boolean(passwordHash) || user.isActive !== isActive;
+  let result;
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.customerPortalUser.updateMany({
-        where: { id: user.id, officeId: session.officeId },
-        data: {
-          username,
-          email,
-          fullName,
-          isActive,
-          ...(revokeSessions ? { passwordVersion: { increment: 1 } } : {}),
-          ...(passwordHash ? {
-            passwordHash,
-            passwordEncrypted,
-            passwordUpdatedAt: new Date(),
-            failedLoginAttempts: 0,
-            lastFailedLoginAt: null,
-            lockedUntil: null,
-          } : {}),
-        },
-      });
-      if (user.internalUserId) {
-        await tx.user.updateMany({
-          where: { id: user.internalUserId, officeId: session.officeId },
-          data: { fullName: fullName || username, isActive },
-        });
-      }
-      if (user.username !== username || user.email !== email || user.isActive !== isActive || passwordHash) {
-        await tx.customerPortalLoginCode.updateMany({
-          where: {
-            userId: user.id,
-            officeId: session.officeId,
-            consumedAt: null,
-          },
-          data: { consumedAt: new Date() },
-        });
-      }
+    result = await updateCustomerPortalAccountRecord({
+      officeId: session.officeId,
+      userId,
+      companyId,
+      username,
+      email,
+      fullName: requestedFullName || null,
+      isActive,
+      passwordHash,
+      passwordEncrypted,
     });
   } catch (error) {
-    if (hasPrismaCode(error, "P2002")) {
-      redirect(customerSettingsUrl("account-in-use"));
+    if (hasPrismaCode(error, "P2002") || (error instanceof CustomerPortalAccountAdminError && error.code === "conflict")) {
+      redirect(customerSettingsUrl("account-in-use", companyId));
+    }
+    if (error instanceof CustomerPortalAccountAdminError && error.code === "not_found") {
+      redirect(customerSettingsUrl("account-not-found", companyId));
     }
     throw error;
   }
@@ -356,42 +333,101 @@ export async function updateCustomerPortalAccount(userId: string, formData: Form
   await recordMemoryEvent({
     officeId: session.officeId,
     sourceType: "CRM",
-    sourceExternalId: `customer_portal_user:${user.id}`,
+    sourceExternalId: `customer_portal_user:${result.userId}`,
     eventType: "customer_portal.account_updated",
     entityType: "customer_portal_user",
-    entityId: user.id,
+    entityId: result.userId,
     actorType: "user",
     actorId: session.userId,
     occurredAt: new Date(),
     payloadVersion: 1,
     payload: {
-      portalUserId: user.id,
-      previousEmail: user.email,
-      email,
-      previousUsername: user.username,
-      username,
-      previousFullName: user.fullName,
-      fullName,
-      previousIsActive: user.isActive,
-      isActive,
-      passwordReset: Boolean(passwordHash),
+      portalUserId: result.userId,
+      previousEmail: result.previousEmail,
+      email: result.email,
+      previousUsername: result.previousUsername,
+      username: result.username,
+      previousFullName: result.previousFullName,
+      fullName: result.fullName,
+      previousIsActive: result.previousIsActive,
+      isActive: result.isActive,
+      passwordReset: result.passwordReset,
     },
     provenance: {
       source: "customer_portal_admin",
       operation: "update_account",
       path: "src/app/dashboard/customer-portal/actions.ts",
       function: "updateCustomerPortalAccount",
-      sourceRecordId: user.id,
+      sourceRecordId: result.userId,
       actorType: "user",
       actorId: session.userId,
     },
-    idempotencyKey: `customer_portal_user:${user.id}:update:${Date.now()}`,
+    idempotencyKey: `customer_portal_user:${result.userId}:update:${Date.now()}`,
   }).catch(() => null);
 
   refreshCustomerManagement();
   revalidatePath("/portal");
   revalidatePath("/portal/workspace");
-  redirect(customerSettingsUrl("account-updated"));
+  redirect(customerSettingsUrl("account-updated", companyId));
+}
+
+export async function removeCustomerPortalAccount(
+  userId: string,
+  companyId: string,
+  formData: FormData,
+): Promise<void> {
+  const session = await requireCompanyAdmin();
+  if (String(formData.get("confirmRemove") ?? "") !== "REMOVE") {
+    redirect(customerSettingsUrl("confirm-account-remove", companyId));
+  }
+
+  let result;
+  try {
+    result = await removeCustomerPortalAccountRecord({
+      officeId: session.officeId,
+      userId,
+      companyId,
+    });
+  } catch (error) {
+    if (error instanceof CustomerPortalAccountAdminError && error.code === "not_found") {
+      redirect(customerSettingsUrl("account-not-found", companyId));
+    }
+    throw error;
+  }
+
+  await recordMemoryEvent({
+    officeId: session.officeId,
+    sourceType: "CRM",
+    sourceExternalId: `customer_portal_user:${result.userId}`,
+    eventType: "customer_portal.account_removed",
+    entityType: "customer_portal_user",
+    entityId: result.userId,
+    actorType: "user",
+    actorId: session.userId,
+    occurredAt: new Date(),
+    payloadVersion: 1,
+    payload: {
+      portalUserId: result.userId,
+      companyId,
+      previousEmail: result.previousEmail,
+      previousUsername: result.previousUsername,
+    },
+    provenance: {
+      source: "customer_portal_admin",
+      operation: "remove_account",
+      path: "src/app/dashboard/customer-portal/actions.ts",
+      function: "removeCustomerPortalAccount",
+      sourceRecordId: result.userId,
+      actorType: "user",
+      actorId: session.userId,
+    },
+    idempotencyKey: `customer_portal_user:${result.userId}:remove:${Date.now()}`,
+  }).catch(() => null);
+
+  refreshCustomerManagement();
+  revalidatePath("/portal");
+  revalidatePath("/portal/workspace");
+  redirect(customerSettingsUrl("account-removed", companyId));
 }
 
 export async function updateCustomerPortalMembership(
@@ -433,7 +469,7 @@ export async function updateCustomerPortalMembership(
     isActive
     && (membership.company.crmStage === "archived" || membership.company.supplyWorkspaces.length === 0)
   ) {
-    redirect(customerSettingsUrl("archived-company-access"));
+    redirect(customerSettingsUrl("archived-company-access", membership.companyId));
   }
 
   const accessChanged = membership.role !== role || membership.isActive !== isActive;
@@ -478,7 +514,7 @@ export async function updateCustomerPortalMembership(
     }
     return result;
   });
-  if (updated.count === 0) redirect(customerSettingsUrl("archived-company-access"));
+  if (updated.count === 0) redirect(customerSettingsUrl("archived-company-access", membership.companyId));
   await recordMemoryEvent({
     officeId: session.officeId,
     sourceType: "CRM",
@@ -515,7 +551,7 @@ export async function updateCustomerPortalMembership(
 
   refreshCustomerManagement();
   revalidatePath("/portal/workspace");
-  redirect(customerSettingsUrl("access-updated"));
+  redirect(customerSettingsUrl("access-updated", membership.companyId));
 }
 
 export async function reviewCustomerPortalAction(actionId: string, nextStatus: string): Promise<void> {

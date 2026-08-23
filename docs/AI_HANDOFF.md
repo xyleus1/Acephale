@@ -2,6 +2,33 @@
 
 ## Latest Update
 
+### Customer users are managed inside their company
+
+- Admin Settings labels the signed-in admin separately from customer users.
+- Companies render as one expandable list. The selected company opens by
+  default and every other company remains available in the same page.
+- Each company contains its own customer users, visible usernames and saved
+  passwords, optional contact email, role, access, last sign-in, and controls
+  to add, edit, reset a password, disable, or delete a user.
+- Blank contact emails receive a private managed address. They are not tied to
+  an operator email and are not shown as customer contact details.
+- Delete user revokes all workspace access, invalidates sessions, disables the
+  linked app identity, removes the credential, and hides the user. Audit
+  records remain intact.
+- Generated passwords use a readable four-word format with random digits.
+- Customer-linked internal users are rejected by every management action even
+  though their restricted app identity uses an internal admin-shaped role.
+- Account update and removal share one database lock. Identity changes revoke
+  old sessions, and a stale edit cannot restore a removed user.
+
+Verification completed:
+
+- Customer portal contract
+- Database account lifecycle contract on the complete migration chain
+- TypeScript
+- Product copy policy
+- Diff hygiene and forbidden-character scan
+
 ### Materials uses the full canvas when no sourcing inspector exists
 
 - The command center now calculates whether the inventory sourcing inspector

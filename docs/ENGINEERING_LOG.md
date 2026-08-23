@@ -6671,3 +6671,26 @@ Use this file for chronological implementation notes that future agents should s
 - Release: The Vercel preview, database contracts, and database security checks
   passed. Merge, production deployment, and authenticated production UI
   verification remain pending.
+
+### 2026-08-23 - Put customer users inside expandable companies
+
+- Branch: `customer-admin-accordions-20260823`, based on `a875ccb9`.
+- Task: Separate the visible admin identity from customer logins and make the
+  customer directory usable for multiple companies and users.
+- UI: Companies are expandable, one company opens by default, and each company
+  contains its user credentials and add, edit, password, access, preview, and
+  delete controls. Saved passwords remain visible only to admins.
+- Identity: Contact email is optional and blank values use an internal managed
+  address. Customer display names default to the company name.
+- Deletion: Removing a user revokes all company workspace access, invalidates
+  sessions, clears credentials, disables the linked app identity, and retains
+  audit history.
+- Security: Every page load and mutation revalidates an active operator and
+  rejects customer-linked internal users. Account edits and removals share a
+  database lock, identity edits revoke sessions, and tombstones cannot be
+  restored by stale forms.
+- Verification: `npm run test:customer-portal`, `npx tsc --noEmit --pretty
+  false --incremental false`, `npm run check:product-copy`, `git diff --check`,
+  the changed-source forbidden-character scan, and the customer account admin
+  database lifecycle regression on the complete migration chain passed. The
+  database regression also runs in the protected CI database job.

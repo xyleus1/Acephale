@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { requireSession } from "@/lib/auth";
 import { decryptCustomerPassword } from "@/lib/customer-password-vault";
+import { customerContactEmail, isRemovedCustomerUsername } from "@/lib/customer-portal-account";
+import { resolveCustomerManagementOperator } from "@/lib/customer-portal-admin-auth";
 import { prisma } from "@/lib/prisma";
 import { SettingsHeader } from "../settings/settings-header";
 import settingsStyles from "../settings/integrations/integrations-settings.module.css";
@@ -9,6 +11,7 @@ import {
   archiveCustomerCompany,
   createCustomerCompany,
   grantCustomerPortalAccess,
+  removeCustomerPortalAccount,
   reviewCustomerPortalAction,
   updateCustomerCompany,
   updateCustomerPortalAccount,
@@ -43,6 +46,8 @@ function roleLabel(role: string) {
 
 const NOTICE_TEXT: Record<string, string> = {
   "account-created": "Customer account created.",
+  "account-created-no-password": "Customer account created. Set a password before sign-in.",
+  "account-removed": "Customer user removed. Sign-in and company access are disabled.",
   "account-exists": "That username or email already has a customer account. Edit the existing account instead.",
   "account-updated": "Customer account updated.",
   "access-updated": "Company access updated.",
@@ -50,7 +55,8 @@ const NOTICE_TEXT: Record<string, string> = {
   "company-updated": "Company updated.",
   "company-archived": "Company archived and customer access revoked.",
   "confirm-company-archive": "Confirm the archive before deleting the company.",
-  "invalid-account": "Enter a username and valid customer email.",
+  "confirm-account-remove": "Confirm removal before deleting the customer user.",
+  "invalid-account": "Enter a valid username and contact email, or leave the contact email blank.",
   "invalid-password": "Password must contain 12 to 128 characters.",
   "invalid-access": "Choose a valid role and access status.",
   "invalid-company": "Enter a valid company name and public website.",
@@ -66,14 +72,16 @@ const NOTICE_TEXT: Record<string, string> = {
 export default async function CustomerPortalAdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ notice?: string }>;
+  searchParams: Promise<{ notice?: string; company?: string }>;
 }) {
   const session = await requireSession();
   if (session.role !== "ADMIN" && session.role !== "MANAGER") redirect("/dashboard");
   const query = await searchParams;
-  const isAdmin = session.role === "ADMIN";
+  const currentOperator = await resolveCustomerManagementOperator(session, ["ADMIN", "MANAGER"]);
+  if (!currentOperator) redirect("/dashboard");
+  const isAdmin = currentOperator.role === "ADMIN";
 
-  const [companyRows, customerAccounts, customerActions] = await Promise.all([
+  const [companyRows, customerActions] = await Promise.all([
     prisma.company.findMany({
       where: {
         officeId: session.officeId,
@@ -106,7 +114,10 @@ export default async function CustomerPortalAdminPage({
                 email: true,
                 fullName: true,
                 isActive: true,
+                lastLoginAt: true,
+                passwordUpdatedAt: true,
                 passwordEncrypted: true,
+                lockedUntil: true,
               },
             },
           },
@@ -114,47 +125,6 @@ export default async function CustomerPortalAdminPage({
         },
       },
       orderBy: { name: "asc" },
-      take: 300,
-    }),
-    prisma.customerPortalUser.findMany({
-      where: {
-        officeId: session.officeId,
-        memberships: { some: { officeId: session.officeId } },
-      },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        fullName: true,
-        isActive: true,
-        lastLoginAt: true,
-        passwordUpdatedAt: true,
-        passwordEncrypted: true,
-        lockedUntil: true,
-        createdAt: true,
-        memberships: {
-          where: { officeId: session.officeId },
-          select: {
-            id: true,
-            role: true,
-            isActive: true,
-            company: {
-              select: {
-                id: true,
-                name: true,
-                crmStage: true,
-                supplyWorkspaces: {
-                  where: { officeId: session.officeId, status: "ACTIVE" },
-                  select: { id: true },
-                  take: 1,
-                },
-              },
-            },
-          },
-          orderBy: { company: { name: "asc" } },
-        },
-      },
-      orderBy: { createdAt: "desc" },
       take: 300,
     }),
     prisma.customerPortalAction.findMany({
@@ -181,23 +151,9 @@ export default async function CustomerPortalAdminPage({
     const workspace = company.supplyWorkspaces[0];
     return workspace ? [{ ...company, workspaceId: workspace.id }] : [];
   });
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
-  const portalUrl = `${baseUrl}/portal`;
-  const previewCompany = companies.find((company) => company._count.jobs > 0) ?? companies[0];
-  const activeMembershipCount = customerAccounts.reduce(
-    (count, account) => count + (account.isActive
-      ? account.memberships.filter((membership) => (
-        membership.isActive
-        && membership.company.crmStage !== "archived"
-        && membership.company.supplyWorkspaces.length > 0
-      )).length
-      : 0),
-    0,
-  );
-  const visiblePasswords = new Map(customerAccounts.map((account) => [
-    account.id,
-    isAdmin ? decryptCustomerPassword(account.passwordEncrypted) : null,
-  ]));
+  const activeCompanyId = companies.some((company) => company.id === query.company)
+    ? query.company
+    : companies[0]?.id;
 
   return (
     <main className={settingsStyles.page}>
@@ -209,30 +165,9 @@ export default async function CustomerPortalAdminPage({
         ) : null}
 
         <section className={styles.passwordNote}>
-          <strong>Customer credentials</strong>
-          <span>Usernames and saved passwords are visible to admins. Passwords are encrypted before storage.</span>
-        </section>
-
-        <section className={`${styles.card} ${styles.previewCard}`}>
-          <div className={styles.previewCopy}>
-            <h2>Customer preview</h2>
-            <p>Open the real app limited to one customer company.</p>
-          </div>
-          {previewCompany ? (
-            <form className={styles.previewForm} action="/dashboard/supply-os" method="get" target="_blank">
-              <label htmlFor="preview-company">Company</label>
-              <select className={styles.select} id="preview-company" name="previewWorkspace" required defaultValue={previewCompany.workspaceId}>
-                {companies.map((company) => (
-                  <option value={company.workspaceId} key={company.id}>
-                    {company.name} ({company._count.jobs} loads, {company._count.inquiries} RFQs)
-                  </option>
-                ))}
-              </select>
-              <button className="btn" type="submit">View as customer</button>
-            </form>
-          ) : (
-            <div className={styles.previewEmpty}>Create a company before opening a customer preview.</div>
-          )}
+          <strong>{isAdmin ? "Admin account" : "Staff account"}</strong>
+          <span>{currentOperator.email}</span>
+          <span>Customer users below are separate accounts limited to their company.</span>
         </section>
 
         <section className={styles.card}>
@@ -255,24 +190,37 @@ export default async function CustomerPortalAdminPage({
           ) : null}
           <div className={styles.companyRows}>
             {companies.map((company) => {
-              const activeAccounts = company.customerPortalMemberships.filter(
+              const memberships = company.customerPortalMemberships.filter(
+                (membership) => !isRemovedCustomerUsername(membership.user.username),
+              );
+              const activeAccounts = memberships.filter(
                 (membership) => membership.isActive && membership.user.isActive,
               );
               return (
-                <section className={styles.company} key={company.id}>
-                  <header className={styles.companyHeader}>
+                <details className={styles.company} key={company.id} open={company.id === activeCompanyId}>
+                  <summary className={styles.companySummary}>
                     <div>
                       <div className={styles.rowTitle}>{company.name}</div>
                       <div className={styles.rowMeta}>{company.website || "No website"}</div>
-                      <div className={styles.rowMeta}>
-                        {activeAccounts.length} active account{activeAccounts.length === 1 ? "" : "s"}, {company._count.jobs} loads, {company._count.inquiries} RFQs
-                      </div>
                     </div>
+                    <span>{activeAccounts.length} active user{activeAccounts.length === 1 ? "" : "s"}, {company._count.jobs} loads, {company._count.inquiries} RFQs</span>
+                  </summary>
+
+                  <div className={styles.companyBody}>
                     <div className={styles.companyTools}>
+                      <a
+                        className="btn btn-secondary btn-sm"
+                        href={`/dashboard/supply-os?previewWorkspace=${encodeURIComponent(company.workspaceId)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Preview
+                      </a>
                       {isAdmin ? (
                         <details className={styles.editorInline}>
-                          <summary>Edit</summary>
+                          <summary>Edit company</summary>
                           <form className={styles.companyForm} action={updateCustomerCompany.bind(null, company.workspaceId)}>
+                            <input type="hidden" name="companyId" value={company.id} />
                             <label className={styles.field}>
                               <span>Company name</span>
                               <input className={styles.input} name="name" defaultValue={company.name} minLength={2} maxLength={160} required />
@@ -286,16 +234,16 @@ export default async function CustomerPortalAdminPage({
                         </details>
                       ) : null}
                       {isAdmin ? <details className={styles.editorInline}>
-                        <summary>Add account</summary>
+                        <summary>Add user</summary>
                         <form className={styles.companyAccountForm} action={grantCustomerPortalAccess}>
                           <input type="hidden" name="companyId" value={company.id} />
                           <label className={styles.field}>
-                            <span>Name</span>
-                            <input className={styles.input} name="fullName" autoComplete="name" />
+                            <span>Display name</span>
+                            <input className={styles.input} name="fullName" defaultValue={company.name} autoComplete="name" />
                           </label>
                           <label className={styles.field}>
-                            <span>Email</span>
-                            <input className={styles.input} name="email" type="email" autoComplete="email" required />
+                            <span>Contact email (optional)</span>
+                            <input className={styles.input} name="email" type="email" autoComplete="email" />
                           </label>
                           <label className={styles.field}>
                             <span>Username</span>
@@ -312,9 +260,9 @@ export default async function CustomerPortalAdminPage({
                           <div className={styles.passwordSaveRow}>
                             <CustomerPasswordField
                               label="Password"
-                              help="Optional. Leave blank until the customer should be able to sign in."
+                              help="Optional. Without a password, this user cannot sign in."
                             />
-                            <SubmitButton className="btn btn-sm" pendingLabel="Adding...">Add account</SubmitButton>
+                            <SubmitButton className="btn btn-sm" pendingLabel="Adding...">Add user</SubmitButton>
                           </div>
                         </form>
                       </details> : null}
@@ -322,6 +270,7 @@ export default async function CustomerPortalAdminPage({
                         <details className={`${styles.editorInline} ${styles.dangerEditor}`}>
                           <summary>Delete</summary>
                           <form className={styles.archiveForm} action={archiveCustomerCompany.bind(null, company.workspaceId)}>
+                            <input type="hidden" name="companyId" value={company.id} />
                             <p>This archives the company, removes it from the dashboard, and revokes customer access. Freight history stays in the database.</p>
                             <label className={styles.confirmField}>
                               <input type="checkbox" name="confirmArchive" value="ARCHIVE" required />
@@ -332,156 +281,127 @@ export default async function CustomerPortalAdminPage({
                         </details>
                       ) : null}
                     </div>
-                  </header>
-                  <div className={styles.companyAccounts}>
-                    {company.customerPortalMemberships.length > 0 ? company.customerPortalMemberships.map((membership) => (
-                      <div className={styles.companyAccount} key={membership.id}>
-                        <span>{company.name} account</span>
-                        <small>Username: {membership.user.username}</small>
-                        <small>Password: {isAdmin ? decryptCustomerPassword(membership.user.passwordEncrypted) ?? "Not set" : "Hidden"}</small>
-                        <small>{membership.user.isActive && membership.isActive ? roleLabel(membership.role) : "Disabled"}</small>
-                      </div>
-                    )) : <div className={styles.emptyCompact}>No customer accounts.</div>}
+                    <section className={styles.companyUsers}>
+                      <header className={styles.usersHeader}>
+                        <h3>Users</h3>
+                        <span>{memberships.length}</span>
+                      </header>
+                      {memberships.length > 0 ? memberships.map((membership) => {
+                        const account = membership.user;
+                        const password = isAdmin ? decryptCustomerPassword(account.passwordEncrypted) : null;
+                        const passwordLabel = isAdmin ? password || "Not set" : "Hidden";
+                        const contactEmail = customerContactEmail(account.email);
+                        const accountActive = account.isActive && membership.isActive;
+                        return (
+                          <article className={styles.account} key={membership.id}>
+                            <header className={styles.accountHeader}>
+                              <div>
+                                <div className={styles.rowTitle}>{account.fullName || company.name}</div>
+                                <div className={styles.accountCredentials}>
+                                  <span><strong>Username</strong> {account.username || "Not set"}</span>
+                                  <span><strong>Password</strong> <code>{passwordLabel}</code></span>
+                                  {contactEmail ? <span><strong>Contact</strong> {contactEmail}</span> : null}
+                                </div>
+                                <div className={styles.rowMeta}>
+                                  {account.lastLoginAt ? `Last sign-in ${fmtDate(account.lastLoginAt)}` : "Has not signed in"}
+                                  {account.lockedUntil && account.lockedUntil > new Date()
+                                    ? `, locked until ${fmtDate(account.lockedUntil)}`
+                                    : ""}
+                                </div>
+                              </div>
+                              <div className={styles.accountActions}>
+                                <span className={styles.badge}>{accountActive ? roleLabel(membership.role) : "Disabled"}</span>
+                                {account.username && password && accountActive ? (
+                                  <a
+                                    className="btn btn-secondary btn-sm"
+                                    href={`/portal?office=${encodeURIComponent(session.officeId)}&username=${encodeURIComponent(account.username)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Sign in
+                                  </a>
+                                ) : null}
+                              </div>
+                            </header>
+
+                            {isAdmin ? (
+                              <div className={styles.userControls}>
+                                <details className={styles.editor} open={!password}>
+                                  <summary>Edit user</summary>
+                                  <form
+                                    className={styles.accountForm}
+                                    action={updateCustomerPortalAccount.bind(null, account.id, company.id)}
+                                  >
+                                    <label className={styles.field}>
+                                      <span>Display name</span>
+                                      <input className={styles.input} name="fullName" defaultValue={account.fullName || company.name} autoComplete="name" />
+                                    </label>
+                                    <label className={styles.field}>
+                                      <span>Contact email (optional)</span>
+                                      <input className={styles.input} name="email" type="email" defaultValue={contactEmail} autoComplete="email" />
+                                    </label>
+                                    <label className={styles.field}>
+                                      <span>Username</span>
+                                      <input className={styles.input} name="username" defaultValue={account.username ?? ""} minLength={3} maxLength={80} autoComplete="username" required />
+                                    </label>
+                                    <label className={styles.field}>
+                                      <span>Status</span>
+                                      <select className={styles.select} name="accountStatus" defaultValue={account.isActive ? "ACTIVE" : "DISABLED"}>
+                                        <option value="ACTIVE">Active</option>
+                                        <option value="DISABLED">Disabled</option>
+                                      </select>
+                                    </label>
+                                    <div className={styles.passwordSaveRow}>
+                                      <CustomerPasswordField label="New password (optional)" />
+                                      <SubmitButton className="btn btn-sm" pendingLabel="Saving...">Save user</SubmitButton>
+                                    </div>
+                                  </form>
+                                </details>
+
+                                <form className={styles.accessControls} action={updateCustomerPortalMembership.bind(null, membership.id)}>
+                                  <label className={styles.compactField}>
+                                    <span>Role</span>
+                                    <select className={styles.select} name="role" defaultValue={membership.role}>
+                                      <option value="MEMBER">Member</option>
+                                      <option value="VIEWER">Viewer</option>
+                                      <option value="ADMIN">Customer admin</option>
+                                    </select>
+                                  </label>
+                                  <label className={styles.compactField}>
+                                    <span>Access</span>
+                                    <select className={styles.select} name="accessStatus" defaultValue={membership.isActive ? "ACTIVE" : "DISABLED"}>
+                                      <option value="ACTIVE">Active</option>
+                                      <option value="DISABLED">Disabled</option>
+                                    </select>
+                                  </label>
+                                  <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="Saving...">Save access</SubmitButton>
+                                </form>
+
+                                <details className={`${styles.editorInline} ${styles.dangerEditor}`}>
+                                  <summary>Delete user</summary>
+                                  <form
+                                    className={styles.removeUserForm}
+                                    action={removeCustomerPortalAccount.bind(null, account.id, company.id)}
+                                  >
+                                    <p>This deletes the user from every company, disables sign-in, and keeps audit history.</p>
+                                    <label className={styles.confirmField}>
+                                      <input type="checkbox" name="confirmRemove" value="REMOVE" required />
+                                      Confirm removal
+                                    </label>
+                                    <SubmitButton className="btn btn-sm" pendingLabel="Deleting...">Delete user</SubmitButton>
+                                  </form>
+                                </details>
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      }) : <div className={styles.emptyCompact}>No customer users.</div>}
+                    </section>
                   </div>
-                </section>
+                </details>
               );
             })}
             {companies.length === 0 ? <div className={styles.empty}>No companies yet.</div> : null}
-          </div>
-        </section>
-
-        <section className={styles.card}>
-          <header className={styles.cardHeader}>
-            <h2>Customer accounts</h2>
-            <span className={styles.count}>{customerAccounts.length} accounts, {activeMembershipCount} active access</span>
-          </header>
-          <div className={styles.inviteHint}>
-            Customer sign-in: <a href={portalUrl} target="_blank" rel="noreferrer">{portalUrl || "/portal"}</a>. Give the customer their username and password.
-          </div>
-          <div className={styles.accounts}>
-            {customerAccounts.length > 0 ? customerAccounts.map((account) => (
-              <section className={styles.account} key={account.id}>
-                <div className={styles.accountHeader}>
-                  <div>
-                    <div className={styles.rowTitle}>{account.fullName ?? account.email}</div>
-                    <div className={styles.rowMeta}>Username: {account.username ?? "Not set"}</div>
-                    <div className={styles.rowMeta}>Password: {visiblePasswords.get(account.id) ?? "Not set"}</div>
-                    <div className={styles.rowMeta}>{account.email}</div>
-                    <div className={styles.rowMeta}>
-                      {account.lastLoginAt ? `Last sign-in ${fmtDate(account.lastLoginAt)}` : "Has not signed in"}
-                    </div>
-                    <div className={styles.rowMeta}>
-                      {account.passwordUpdatedAt ? `Password set ${fmtDate(account.passwordUpdatedAt)}` : "Password required"}
-                    </div>
-                    {account.lockedUntil && account.lockedUntil > new Date() ? (
-                      <div className={styles.rowMeta}>Locked until {fmtDate(account.lockedUntil)}. Reset the password to unlock now.</div>
-                    ) : null}
-                  </div>
-                  <div className={styles.accountActions}>
-                    <span className={styles.badge}>{account.isActive ? "Active" : "Disabled"}</span>
-                    {account.username && account.passwordUpdatedAt && account.isActive && account.memberships.some((membership) => (
-                      membership.isActive
-                      && membership.company.crmStage !== "archived"
-                      && membership.company.supplyWorkspaces.length > 0
-                    )) ? (
-                      <a
-                        className="btn btn-secondary btn-sm"
-                        href={`/portal?office=${encodeURIComponent(session.officeId)}&username=${encodeURIComponent(account.username)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Customer sign-in
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-
-                {isAdmin ? <details className={styles.editor}>
-                  <summary>Edit account</summary>
-                  <form className={styles.accountForm} action={updateCustomerPortalAccount.bind(null, account.id)}>
-                    <label className={styles.field}>
-                      <span>Customer name</span>
-                      <input className={styles.input} name="fullName" defaultValue={account.fullName ?? ""} autoComplete="name" />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Email</span>
-                      <input className={styles.input} name="email" type="email" defaultValue={account.email} autoComplete="email" required />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Username</span>
-                      <input className={styles.input} name="username" defaultValue={account.username ?? ""} minLength={3} maxLength={80} autoComplete="username" required />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Account status</span>
-                      <select className={styles.select} name="accountStatus" defaultValue={account.isActive ? "ACTIVE" : "DISABLED"}>
-                        <option value="ACTIVE">Active</option>
-                        <option value="DISABLED">Disabled</option>
-                      </select>
-                    </label>
-                    <div className={styles.passwordSaveRow}>
-                      <CustomerPasswordField label="New password (optional)" />
-                      <SubmitButton className="btn btn-sm" pendingLabel="Saving...">Save account</SubmitButton>
-                    </div>
-                  </form>
-                </details> : null}
-
-                <div className={styles.accessList}>
-                  <div className={styles.accessHeading}>Company access</div>
-                  {account.memberships.map((membership) => {
-                    const companyIsActive = membership.company.crmStage !== "archived"
-                      && membership.company.supplyWorkspaces.length > 0;
-                    return (
-                      <form
-                        className={styles.accessRow}
-                        action={updateCustomerPortalMembership.bind(null, membership.id)}
-                        key={membership.id}
-                      >
-                      <div>
-                        <div className={styles.rowTitle}>{membership.company.name}</div>
-                        <div className={styles.rowMeta}>
-                          {!companyIsActive
-                            ? "Company archived"
-                            : membership.isActive
-                              ? roleLabel(membership.role)
-                              : "Access disabled"}
-                        </div>
-                      </div>
-                      {companyIsActive ? (
-                        <>
-                          <label className={styles.compactField}>
-                            <span>Role</span>
-                            <select className={styles.select} name="role" defaultValue={membership.role}>
-                              <option value="MEMBER">Member</option>
-                              <option value="VIEWER">Viewer</option>
-                              <option value="ADMIN">Customer admin</option>
-                            </select>
-                          </label>
-                          <label className={styles.compactField}>
-                            <span>Access</span>
-                            <select className={styles.select} name="accessStatus" defaultValue={membership.isActive ? "ACTIVE" : "DISABLED"}>
-                              <option value="ACTIVE">Active</option>
-                              <option value="DISABLED">Disabled</option>
-                            </select>
-                          </label>
-                          <div className={styles.actions}>
-                            <a
-                              className="btn btn-secondary btn-sm"
-                              href={`/dashboard/supply-os?previewWorkspace=${encodeURIComponent(membership.company.supplyWorkspaces[0]!.id)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Preview
-                            </a>
-                            <SubmitButton className="btn btn-secondary btn-sm" pendingLabel="Saving...">Save access</SubmitButton>
-                          </div>
-                        </>
-                      ) : <div className={styles.rowMeta}>Access is permanently revoked.</div>}
-                      </form>
-                    );
-                  })}
-                </div>
-              </section>
-            )) : <div className={styles.empty}>No customer accounts yet.</div>}
           </div>
         </section>
 
