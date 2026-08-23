@@ -242,6 +242,7 @@ model User {
   supplyExecutionTasks     SupplyExecutionTask[]   @relation("SupplyExecutionTaskCreatedBy")
   supplyExecutionEvents    SupplyExecutionEvent[]  @relation("SupplyExecutionEventActor")
   companyContextCreated    CompanyContext[]         @relation("CompanyContextCreatedBy")
+  customerPortalIdentity   CustomerPortalUser?      @relation("CustomerPortalInternalUser")
 
   @@unique([officeId, email])
   @@index([officeId, role])
@@ -1955,10 +1956,13 @@ model LoginCode {
 model CustomerPortalUser {
   id                String   @id @default(cuid())
   officeId          String
+  internalUserId    String?  @unique
+  username          String?
   email             String
   fullName          String?
   isActive          Boolean  @default(true)
   passwordHash      String?
+  passwordEncrypted String?
   passwordVersion   Int      @default(0)
   passwordUpdatedAt DateTime?
   failedLoginAttempts Int    @default(0)
@@ -1970,6 +1974,7 @@ model CustomerPortalUser {
   updatedAt   DateTime @updatedAt
 
   office      Office                     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  internalUser User?                     @relation("CustomerPortalInternalUser", fields: [internalUserId], references: [id], onDelete: SetNull)
   memberships CustomerPortalMembership[]
   loginCodes  CustomerPortalLoginCode[]
   actions     CustomerPortalAction[]
@@ -1977,6 +1982,7 @@ model CustomerPortalUser {
   contextEntries CompanyContext[] @relation("CompanyContextCreatedByPortalUser")
 
   @@unique([officeId, email])
+  @@unique([officeId, username])
   @@index([officeId, isActive])
 }
 
