@@ -6561,3 +6561,6 @@ Use this file for chronological implementation notes that future agents should s
   product copy policy, and the production Next.js build passed. Authenticated
   rendered QA and a live mailbox round trip require connected production
   accounts and were not run in this branch.
+- Release: PR #227 merged as `598e50ff`. Vercel production deployed the merge
+  commit, `/api/health` returned healthy, and the new route redirected
+  unauthenticated requests to login.
