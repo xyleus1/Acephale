@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import styles from "./integrations/integrations-settings.module.css";
 
-export type SettingsSection = "customers" | "integrations" | "channels";
+export type SettingsSection = "customers" | "integrations" | "connected-emails" | "channels";
 
 export function SettingsHeader({
   active,
@@ -39,9 +39,16 @@ export function SettingsHeader({
         <a href="/dashboard/settings/integrations" aria-current={active === "integrations" ? "page" : undefined}>
           Integrations
         </a>
-        <a href="/dashboard/settings/email" aria-current={active === "channels" ? "page" : undefined}>
-          Email accounts
-        </a>
+        {isAdmin ? (
+          <>
+            <a href="/dashboard/settings/connected-emails" aria-current={active === "connected-emails" ? "page" : undefined}>
+              Connected emails
+            </a>
+            <a href="/dashboard/settings/email" aria-current={active === "channels" ? "page" : undefined}>
+              Channels
+            </a>
+          </>
+        ) : null}
       </nav>
     </>
   );

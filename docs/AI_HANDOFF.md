@@ -2,6 +2,28 @@
 
 ## Latest Update
 
+### Connected emails is ready for release
+
+- Admin Settings has a dedicated `/dashboard/settings/connected-emails` tab.
+  Channels remains separate for WhatsApp, Sheets, RFQ inbox, and environment
+  setup details.
+- The page lists every active and paused email account with provider, sending
+  state, default sender, incoming and outgoing counts, last activity, sync,
+  pause, resume, and sender controls.
+- A round-trip test sends from one enabled account to a second account, syncs
+  and proves delivery, sends a real threaded reply from the second account,
+  then syncs and proves the first account received the reply.
+- Account creation stays on the same page through Gmail OAuth or the encrypted
+  Gmail app-password form. No mailbox credential was added to code, docs,
+  deployment configuration, or seed data.
+
+Verification completed:
+
+- Email account and Gmail app-password contracts
+- TypeScript
+- Product copy policy
+- Production Next.js build
+
 ### Gmail app-password schema is deployed before application release
 
 - Migration `20260822000700_gmail_app_password_accounts` adds nullable display

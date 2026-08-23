@@ -619,6 +619,7 @@ export async function disconnectEmailAccount(accountId: string): Promise<void> {
     data: { isActive: false, sendEnabled: false, isDefaultSender: false },
   });
   revalidatePath("/dashboard/settings/email");
+  revalidatePath("/dashboard/settings/connected-emails");
   revalidatePath("/dashboard/inbox");
 }
 
@@ -630,6 +631,7 @@ export async function resumeEmailAccount(accountId: string): Promise<void> {
     data: { isActive: true },
   });
   revalidatePath("/dashboard/settings/email");
+  revalidatePath("/dashboard/settings/connected-emails");
   revalidatePath("/dashboard/inbox");
 }
 
