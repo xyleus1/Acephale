@@ -375,7 +375,8 @@ const dashboardSource = readFileSync(new URL("../src/app/dashboard/supply-os/sup
 const persistenceSource = readFileSync(new URL("../src/lib/supply-os/persistence.ts", import.meta.url), "utf8");
 assert.match(sharedWorkspaceSource, /One parts CSV/);
 assert.match(sharedWorkspaceSource, /\/api\/supply-os\/templates\/parts/);
-assert.match(supplyOsPageSource, /canImportSupplyData=\{currentUser\.role === "ADMIN" \|\| currentUser\.role === "MANAGER"\}/);
+assert.match(supplyOsPageSource, /const customerCanEdit = isCustomer && session\.customerRole !== "VIEWER"/);
+assert.match(supplyOsPageSource, /canImportSupplyData=\{!previewMode && \(customerCanEdit \|\| \(!isCustomer && \(currentUser\.role === "ADMIN" \|\| currentUser\.role === "MANAGER"\)\)\)\}/);
 assert.match(operatingShellSource, /canImportSupplyData=\{canImportSupplyData\}/);
 assert.match(inventorySource, /Import parts CSV/);
 assert.match(inventorySource, /workspaceId && canImportSupplyData/);
