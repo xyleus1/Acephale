@@ -19,6 +19,16 @@ const supplierVerification = verifications.get(
 const customerContextVerification = verifications.get(
   "20260822000300_customer_portal_context_access.sql",
 );
+const workspaceRelinkMigration = readFileSync(
+  join(
+    root,
+    "prisma/migrations/20260822000500_procurement_workspace_context_relink/migration.sql",
+  ),
+  "utf8",
+);
+const workspaceRelinkVerification = verifications.get(
+  "20260822000500_procurement_workspace_context_relink.sql",
+);
 const emailAccountVerification = verifications.get(
   "20260822000400_email_account_sending_config.sql",
 );
@@ -52,6 +62,7 @@ assert.match(workflow, /scripts\/sql\/production-verification\/\$REQUESTED_MIGRA
 
 assert.ok(supplierVerification, "supplier production verification is missing");
 assert.ok(customerContextVerification, "customer Context production verification is missing");
+assert.ok(workspaceRelinkVerification, "workspace relink production verification is missing");
 assert.ok(emailAccountVerification, "email account production verification is missing");
 for (const [name, verification] of verifications) {
   assert.match(verification, /BEGIN READ ONLY;/, `${name} must use a read-only transaction`);
@@ -74,6 +85,28 @@ assert.match(supplierVerification, /Strobels Supply/);
 assert.match(customerContextVerification, /createdByPortalUserId/);
 assert.match(customerContextVerification, /customerVisible/);
 assert.match(customerContextVerification, /company_context_scope_guard/);
+assert.match(workspaceRelinkMigration, /legacy_workspace_id/);
+assert.match(workspaceRelinkMigration, /Derya Supply OS/);
+assert.match(workspaceRelinkMigration, /\{source,campaign\}'.*= 'CUSTOM'/);
+assert.match(workspaceRelinkMigration, /active_workspace_count = 1/);
+assert.match(workspaceRelinkMigration, /original_workspace\.id IS NULL/);
+assert.match(workspaceRelinkMigration, /required procurement workspace schema is missing/);
+assert.match(workspaceRelinkMigration, /SET LOCAL lock_timeout = '5s'/);
+assert.match(workspaceRelinkMigration, /SET LOCAL statement_timeout = '30s'/);
+assert.doesNotMatch(workspaceRelinkMigration, /SET\s+updated_at\s*=/i);
+assert.doesNotMatch(workspaceRelinkMigration, /procurement_communication_messages/);
+assert.match(workspaceRelinkVerification, /24cb31bd-d974-4040-939c-cd8e76dd8967/);
+assert.match(workspaceRelinkVerification, /e3f6cacc-ca34-4d01-a787-c09da6805bce/);
+assert.match(workspaceRelinkVerification, /cmt1rgth70006rn8tvneq4dha/);
+assert.match(workspaceRelinkVerification, /cmszhzq3c0003l804g5qf9yv8/);
+assert.match(workspaceRelinkVerification, /ledger_count <> 9/);
+assert.match(workspaceRelinkVerification, /outbound_count <> 7/);
+assert.match(workspaceRelinkVerification, /inbound_count <> 2/);
+assert.match(workspaceRelinkVerification, /c01a827c-e736-475e-a085-e7e665035af9/);
+assert.match(workspaceRelinkVerification, /2026-08-19 09:04:33\+00/);
+assert.match(workspaceRelinkVerification, /2026-08-19 17:15:20\+00/);
+assert.match(workspaceRelinkVerification, /bay_area_outbound_count <> 1/);
+assert.match(workspaceRelinkVerification, /bay_area_inbound_count <> 1/);
 assert.match(emailAccountVerification, /sendEnabled/);
 assert.match(emailAccountVerification, /isDefaultSender/);
 assert.match(emailAccountVerification, /EmailAccount_officeId_default_sender_key/);

@@ -2,6 +2,41 @@
 
 ## Latest Update
 
+### Relink Bourne-backed orders to the active Supply OS workspace
+
+- Authenticated production testing proved the Bourne communication ledger is
+  healthy. The two legacy Dreamz orders return seven outbound and two inbound
+  messages, including the Bay Area Circuits send and reply, when queried by
+  their exact order and vendor IDs.
+- Active Sourcing hid those orders because their CUSTOM request context still
+  named a deleted workspace from before the HypnoDreamz cutover. The list
+  route correctly scopes to the current workspace, so repeating the Bourne
+  backfill cannot repair this Derya routing error.
+- Migration `20260822000500_procurement_workspace_context_relink` updates only
+  CUSTOM Derya orders whose source workspace no longer exists and whose
+  workflow customer has exactly one active, non-archived workspace. Ambiguous
+  companies and non-CUSTOM orders remain unchanged.
+- The migration stores the retired ID as `source.legacy_workspace_id`, updates
+  the canonical company name, preserves all other request context, and does
+  not change operational timestamps, suppliers, messages, status, or quotes.
+- The production acceptance query requires both affected HypnoDreamz orders,
+  all nine ledger rows, the seven outbound and two inbound direction totals,
+  and the exact Bay Area Circuits timestamp pair.
+
+Verification completed:
+
+- Protected production migration static contract
+- Disposable PostgreSQL apply and repeat-apply test
+- Safe no-op coverage for non-CUSTOM, missing-workspace, and ambiguous-workspace
+  orders
+- Provenance preservation and unchanged operational timestamp assertion
+
+Release requirement:
+
+- Merge the migration to `main`, run the protected production migration, then
+  hard-refresh authenticated Active Sourcing and open the Bay Area Circuits
+  conversation. No test email is required.
+
 ### Administrator email accounts are ready for release
 
 - `/dashboard/settings/email` is restricted to active Office users whose

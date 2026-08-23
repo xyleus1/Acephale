@@ -218,7 +218,8 @@ jobs:
             | while IFS= read -r -d '' migration; do
                 if [[ "$migration" == *"20260821000100_minimal_customer_procurement_schema"* \
                   || "$migration" == *"20260822000300_customer_portal_context_access"* \
-                  || "$migration" == *"20260822000200_order_supplier_contact_compatibility"* ]]; then
+                  || "$migration" == *"20260822000200_order_supplier_contact_compatibility"* \
+                  || "$migration" == *"20260822000500_procurement_workspace_context_relink"* ]]; then
                   continue
                 fi
                 psql "$LEGACY_MIGRATION_DATABASE_URL" --set=ON_ERROR_STOP=1 --file="$migration"
@@ -273,6 +274,15 @@ jobs:
               --set=ON_ERROR_STOP=1 \
               --file=prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql
           done
+          psql "$LEGACY_MIGRATION_DATABASE_URL" \
+            --file=scripts/sql/procurement-workspace-relink-fixture.sql
+          for pass in 1 2; do
+            psql "$LEGACY_MIGRATION_DATABASE_URL" \
+              --set=ON_ERROR_STOP=1 \
+              --file=prisma/migrations/20260822000500_procurement_workspace_context_relink/migration.sql
+          done
+          psql "$LEGACY_MIGRATION_DATABASE_URL" \
+            --file=scripts/sql/procurement-workspace-relink-verify.sql
           psql "$LEGACY_MIGRATION_DATABASE_URL" --file=scripts/sql/minimal-schema-legacy-verify.sql
       - name: Verify office export and repeat import
         run: |

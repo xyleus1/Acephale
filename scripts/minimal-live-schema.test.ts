@@ -12,6 +12,18 @@ const contactCompatibilityMigration = readFileSync(
   resolve(root, "prisma/migrations/20260822000200_order_supplier_contact_compatibility/migration.sql"),
   "utf8",
 );
+const workspaceRelinkMigration = readFileSync(
+  resolve(root, "prisma/migrations/20260822000500_procurement_workspace_context_relink/migration.sql"),
+  "utf8",
+);
+const workspaceRelinkFixture = readFileSync(
+  resolve(root, "scripts/sql/procurement-workspace-relink-fixture.sql"),
+  "utf8",
+);
+const workspaceRelinkVerification = readFileSync(
+  resolve(root, "scripts/sql/procurement-workspace-relink-verify.sql"),
+  "utf8",
+);
 const context = readFileSync(resolve(root, "src/lib/company-context.ts"), "utf8");
 const officeExport = readFileSync(resolve(root, "scripts/export-office-cherry-pick.ts"), "utf8");
 const officeImport = readFileSync(resolve(root, "scripts/import-office-cherry-pick.ts"), "utf8");
@@ -81,7 +93,14 @@ assert.match(legacyFixture, /email TEXT/);
 assert.match(legacyFixture, /"identity":\{"email":"sales@acme\.example"/);
 assert.match(databaseWorkflow, /Rehearse populated legacy migration/);
 assert.match(databaseWorkflow, /20260822000200_order_supplier_contact_compatibility/);
+assert.match(databaseWorkflow, /procurement-workspace-relink-fixture\.sql/);
+assert.match(databaseWorkflow, /20260822000500_procurement_workspace_context_relink/);
+assert.match(databaseWorkflow, /procurement-workspace-relink-verify\.sql/);
 assert.match(databaseWorkflow, /for pass in 1 2/);
+assert.match(workspaceRelinkMigration, /legacy_workspace_id/);
+assert.match(workspaceRelinkFixture, /workspace-relink-ambiguous-retired/);
+assert.match(workspaceRelinkVerification, /existing workspace provenance was overwritten/);
+assert.match(workspaceRelinkVerification, /an unsafe or out-of-scope workspace order was relinked/);
 assert.match(databaseWorkflow, /Verify office export and repeat import/);
 assert.match(databaseWorkflow, /office export\/import round trip is not scoped and idempotent/);
 assert.match(legacyVerification, /Bourne role grants or reliability columns were not preserved/);

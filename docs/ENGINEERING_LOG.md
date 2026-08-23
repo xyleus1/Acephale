@@ -6388,6 +6388,31 @@ Use this file for chronological implementation notes that future agents should s
   backfill only unambiguous existing threads, then provide one outbound and
   inbound pair for authenticated Active Sourcing verification.
 
+### 2026-08-22 - Relink legacy procurement orders to HypnoDreamz
+
+- Branch: `fix/bourne-ledger-active-order`, based on current `origin/main`.
+- Task: Make Bourne's completed supplier-message backfill visible in Derya
+  Active Sourcing without reconnecting Gmail or copying message data.
+- Root cause: The minimal customer cutover moved the live company and Supply OS
+  items to HypnoDreamz but left two CUSTOM procurement orders pointing at the
+  deleted Dreamz workspace in `request_context.source.workspace_id`. Exact
+  order APIs and ledger reads worked, while the current-workspace list correctly
+  excluded both orders.
+- Repair: Added a data-only migration that relinks an orphaned CUSTOM source
+  only when the workflow company has exactly one active workspace. It records
+  the retired workspace ID as provenance and leaves ambiguous or unrelated
+  orders untouched.
+- Production guard: The read-only acceptance query requires the two expected
+  orders under the active HypnoDreamz workspace and confirms that the Bourne
+  ledger still contains nine messages, split into seven outbound and two
+  inbound, including the exact Bay Area Circuits pair.
+- Verification: Static migration runner contract and two consecutive applies
+  against disposable PostgreSQL passed. The fixture also proved request
+  provenance, request ID, and operational timestamps are preserved and unsafe
+  candidates do not move.
+- Follow-up: Merge, run the protected migration, and verify the exact Bay Area
+  thread in authenticated production. No email send or Bourne rerun is needed.
+
 ### 2026-08-22 - Stage email sender policy schema before application release
 
 - Branch: `codex/email-account-schema-release`, based on current `origin/main`.
