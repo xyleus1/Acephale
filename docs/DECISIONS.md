@@ -3946,3 +3946,23 @@ Use this log for durable product and engineering decisions. Do not put every imp
   and is unavailable to dependency lifecycle scripts. A changed Neon endpoint
   requires an explicit code review and secret update instead of silently
   migrating a different branch.
+
+### 2026-08-22 - Customers use the shared Supply OS with explicit workspace scope
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Customer login previously opened a separate shipment summary. That
+  made a valid account look like a different, reduced product.
+- Decision: Customer sign-in opens the shared Supply OS. Each customer account
+  has a linked app identity and explicit Supply workspace membership. Customer
+  sessions carry role `CUSTOMER` and freshly resolved allowed workspace IDs.
+- Admin boundary: Customers may use their assigned company workspace but may
+  not create companies, manage accounts, configure connectors, or access admin
+  settings. Their Settings page is intentionally empty apart from navigation.
+- Credential boundary: Admins may set an optional customer password and read it
+  later. The retrievable value is encrypted at rest with `AUTH_SECRET`; the
+  login verifier remains a separate one-way scrypt hash. Secret rotation
+  requires customer password resets.
+- Consequences: The separate summary portal is no longer the primary customer
+  product. New Supply OS routes must use scoped access instead of assuming
+  every authenticated app identity has office-wide access.

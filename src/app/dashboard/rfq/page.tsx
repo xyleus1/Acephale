@@ -247,7 +247,7 @@ export default async function RFQPage({
           where: { ...whereBase, ...usLeadsFilter, officeId: session.officeId },
         }),
     prisma.user.findMany({
-      where: { officeId: session.officeId, isActive: true },
+      where: { officeId: session.officeId, isActive: true, customerPortalIdentity: { is: null } },
       select: { id: true, fullName: true },
       orderBy: { fullName: "asc" },
     }),

@@ -174,7 +174,7 @@ export default async function RFQDetailPage({
       take: 500,
     }),
     prisma.user.findMany({
-      where: { officeId: session.officeId, isActive: true },
+      where: { officeId: session.officeId, isActive: true, customerPortalIdentity: { is: null } },
       select: { id: true, fullName: true },
       orderBy: { fullName: "asc" },
     }),

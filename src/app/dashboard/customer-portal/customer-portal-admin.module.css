@@ -272,7 +272,7 @@
 
 .companyAccount {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
   gap: 14px;
   align-items: center;
   min-height: 46px;
@@ -400,7 +400,7 @@
 
 .accountForm {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(150px, .55fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(150px, .55fr);
   gap: 10px;
   align-items: end;
   padding: 14px;

@@ -5,14 +5,23 @@ import {
   loadCustomerPortalPrincipal,
 } from "../src/lib/customer-portal-password";
 import { consumeCustomerPortalLoginAttempt } from "../src/lib/customer-portal-login-rate-limit";
+import {
+  decryptCustomerPassword,
+  encryptCustomerPassword,
+} from "../src/lib/customer-password-vault";
 import { hashPassword } from "../src/lib/password";
 import { prisma } from "../src/lib/prisma";
 import { grantSupplyCustomerPortalAccess } from "../src/lib/supply-os/customer-workspace";
+import {
+  currentSupplyAccessContext,
+  listSupplyWorkspaces,
+} from "../src/lib/supply-os/persistence";
 
 async function main() {
   process.env.AUTH_SECRET = "customer-portal-password-database-test";
   const runId = `customer-password-${Date.now()}`;
   const email = `${runId}@example.com`;
+  const username = runId;
   const initialPassword = "Initial-Customer-Password!27";
   const replacementPassword = "Replacement-Customer-Password!54";
   const office = await prisma.office.create({ data: { name: runId } });
@@ -34,25 +43,40 @@ async function main() {
     });
 
     const initialHash = await hashPassword(initialPassword);
+    const initialEncrypted = encryptCustomerPassword(initialPassword);
     await grantSupplyCustomerPortalAccess({
       officeId: office.id,
       companyId: company.id,
+      username,
       email,
       fullName: "Password Test Customer",
       role: "MEMBER",
       passwordHash: initialHash,
+      passwordEncrypted: initialEncrypted,
     });
     const created = await prisma.customerPortalUser.findUniqueOrThrow({
       where: { officeId_email: { officeId: office.id, email } },
     });
     assert.notEqual(created.passwordHash, initialPassword, "plaintext password must never be stored");
+    assert.notEqual(created.passwordEncrypted, initialPassword, "readable passwords must be encrypted at rest");
+    assert.equal(decryptCustomerPassword(created.passwordEncrypted), initialPassword);
+    assert.ok(created.internalUserId);
     assert.equal(created.passwordVersion, 1);
     assert.ok(created.passwordUpdatedAt);
 
-    assert.equal((await authenticateCustomerPortal(email, initialPassword, office.id)).ok, true);
+    assert.equal((await authenticateCustomerPortal(username, initialPassword, office.id)).ok, true);
+    const customerAccess = await currentSupplyAccessContext({
+      officeId: office.id,
+      userId: created.internalUserId!,
+      role: "ADMIN",
+      canViewWholeOffice: false,
+    });
+    const customerWorkspaces = await listSupplyWorkspaces(customerAccess);
+    assert.deepEqual(customerWorkspaces.map((workspace) => workspace.companyId), [company.id]);
     const originalSession = {
       portalUserId: created.id,
       officeId: office.id,
+      username,
       email,
       passwordVersion: 1,
       expiresAt: Date.now() + 60_000,
@@ -79,13 +103,16 @@ async function main() {
     );
 
     const replacementHash = await hashPassword(replacementPassword);
+    const replacementEncrypted = encryptCustomerPassword(replacementPassword);
     await grantSupplyCustomerPortalAccess({
       officeId: office.id,
       companyId: company.id,
+      username,
       email,
       fullName: "Password Test Customer",
       role: "MEMBER",
       passwordHash: replacementHash,
+      passwordEncrypted: replacementEncrypted,
     });
     const reset = await prisma.customerPortalUser.findUniqueOrThrow({ where: { id: created.id } });
     assert.equal(reset.passwordVersion, 2);
@@ -97,8 +124,8 @@ async function main() {
       "a password reset must invalidate sessions issued under the old version",
     );
     assert.ok(await loadCustomerPortalPrincipal({ ...originalSession, passwordVersion: 2 }));
-    assert.equal((await authenticateCustomerPortal(email, initialPassword, office.id)).ok, false);
-    assert.equal((await authenticateCustomerPortal(email, replacementPassword, office.id)).ok, true);
+    assert.equal((await authenticateCustomerPortal(username, initialPassword, office.id)).ok, false);
+    assert.equal((await authenticateCustomerPortal(username, replacementPassword, office.id)).ok, true);
 
     const recovered = await prisma.customerPortalUser.findUniqueOrThrow({ where: { id: created.id } });
     assert.equal(recovered.failedLoginAttempts, 0);

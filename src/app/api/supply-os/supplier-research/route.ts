@@ -26,6 +26,12 @@ export async function GET(request: NextRequest) {
     const rawRunId = request.nextUrl.searchParams.get("runId");
     const rawIncludeRunIds = request.nextUrl.searchParams.getAll("includeRunId");
     const workspaceId = requiredText(request.nextUrl.searchParams.get("workspaceId"), 220) ?? undefined;
+    if (session.accessKind === "customer" && (!workspaceId || !session.restrictedWorkspaceIds?.includes(workspaceId))) {
+      return NextResponse.json(
+        { error: "A permitted company workspace is required." },
+        { status: 403 },
+      );
+    }
     if (rawRunId !== null) {
       const runId = requiredText(rawRunId, 220);
       if (!runId) return NextResponse.json({ error: "A valid supplier research run is required." }, { status: 400 });

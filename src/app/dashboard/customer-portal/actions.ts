@@ -4,7 +4,11 @@ import type { Route } from "next";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
-import { normalizeCustomerPortalEmail } from "@/lib/customer-portal-security";
+import { encryptCustomerPassword } from "@/lib/customer-password-vault";
+import {
+  normalizeCustomerPortalEmail,
+  normalizeCustomerPortalUsername,
+} from "@/lib/customer-portal-security";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -23,6 +27,7 @@ const ENABLED_STATUSES = new Set(["ACTIVE", "DISABLED"]);
 const CUSTOMER_SETTINGS_PATH = "/dashboard/settings/customers";
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 128;
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,79}$/;
 
 function customerSettingsUrl(notice: string): Route {
   return `${CUSTOMER_SETTINGS_PATH}?notice=${encodeURIComponent(notice)}` as Route;
@@ -119,28 +124,32 @@ export async function archiveCustomerCompany(workspaceId: string, formData: Form
 export async function grantCustomerPortalAccess(formData: FormData): Promise<void> {
   const session = await requireCompanyAdmin();
   const companyId = String(formData.get("companyId") ?? "").trim();
+  const username = normalizeCustomerPortalUsername(String(formData.get("username") ?? ""));
   const email = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
   const fullName = String(formData.get("fullName") ?? "").trim().slice(0, 160) || null;
   const requestedRole = String(formData.get("role") ?? "MEMBER").toUpperCase();
   const role = PORTAL_ROLES.has(requestedRole) ? requestedRole : "MEMBER";
   const password = String(formData.get("password") ?? "");
-  if (!companyId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!companyId || !USERNAME_PATTERN.test(username) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     redirect(customerSettingsUrl("invalid-account"));
   }
-  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+  if (password && (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH)) {
     redirect(customerSettingsUrl("invalid-password"));
   }
 
-  const passwordHash = await hashPassword(password);
+  const passwordHash = password ? await hashPassword(password) : null;
+  const passwordEncrypted = password ? encryptCustomerPassword(password) : null;
   let result;
   try {
     result = await grantSupplyCustomerPortalAccess({
       officeId: session.officeId,
       companyId,
+      username,
       email,
       fullName,
       role,
       passwordHash,
+      passwordEncrypted,
       existingUser: "reject",
     });
   } catch (error) {
@@ -168,8 +177,9 @@ export async function grantCustomerPortalAccess(formData: FormData): Promise<voi
       portalUserId: result.userId,
       membershipId: result.membershipId,
       email,
+      username,
       role,
-      passwordReset: true,
+      passwordReset: Boolean(passwordHash),
     },
     provenance: {
       source: "customer_portal_admin",
@@ -197,7 +207,15 @@ export async function revokeCustomerPortalAccess(membershipId: string): Promise<
       id: true,
       userId: true,
       companyId: true,
-      user: { select: { email: true } },
+      user: { select: { email: true, internalUserId: true } },
+      company: {
+        select: {
+          supplyWorkspaces: {
+            where: { officeId: session.officeId, status: "ACTIVE" },
+            select: { id: true },
+          },
+        },
+      },
     },
   });
   if (!membership) return;
@@ -212,6 +230,16 @@ export async function revokeCustomerPortalAccess(membershipId: string): Promise<
         where: { id: membership.userId, officeId: session.officeId },
         data: { passwordVersion: { increment: 1 } },
       });
+      if (membership.user.internalUserId) {
+        await tx.supplyWorkspaceMember.updateMany({
+          where: {
+            officeId: session.officeId,
+            userId: membership.user.internalUserId,
+            workspaceId: { in: membership.company.supplyWorkspaces.map((workspace) => workspace.id) },
+          },
+          data: { isActive: false },
+        });
+      }
     }
   });
   await recordMemoryEvent({
@@ -248,68 +276,79 @@ export async function revokeCustomerPortalAccess(membershipId: string): Promise<
 
 export async function updateCustomerPortalAccount(userId: string, formData: FormData): Promise<void> {
   const session = await requireCompanyAdmin();
+  const username = normalizeCustomerPortalUsername(String(formData.get("username") ?? ""));
   const email = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
   const fullName = String(formData.get("fullName") ?? "").trim().slice(0, 160) || null;
   const accountStatus = String(formData.get("accountStatus") ?? "").toUpperCase();
   const isActive = accountStatus === "ACTIVE";
   const password = String(formData.get("password") ?? "");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !ENABLED_STATUSES.has(accountStatus)) {
+  if (!USERNAME_PATTERN.test(username) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !ENABLED_STATUSES.has(accountStatus)) {
     redirect(customerSettingsUrl("invalid-account"));
   }
   if (password && (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH)) {
     redirect(customerSettingsUrl("invalid-password"));
   }
 
-  const [user, emailOwner] = await Promise.all([
+  const [user, emailOwner, usernameOwner] = await Promise.all([
     prisma.customerPortalUser.findFirst({
       where: { id: userId, officeId: session.officeId },
-      select: { id: true, email: true, fullName: true, isActive: true },
+      select: { id: true, internalUserId: true, username: true, email: true, fullName: true, isActive: true },
     }),
     prisma.customerPortalUser.findFirst({
       where: { officeId: session.officeId, email, id: { not: userId } },
       select: { id: true },
     }),
+    prisma.customerPortalUser.findFirst({
+      where: { officeId: session.officeId, username, id: { not: userId } },
+      select: { id: true },
+    }),
   ]);
   if (!user) redirect(customerSettingsUrl("account-not-found"));
-  if (emailOwner) redirect(customerSettingsUrl("email-in-use"));
+  if (emailOwner || usernameOwner) redirect(customerSettingsUrl("account-in-use"));
 
   const passwordHash = password ? await hashPassword(password) : null;
+  const passwordEncrypted = password ? encryptCustomerPassword(password) : null;
   const revokeSessions = Boolean(passwordHash) || user.isActive !== isActive;
-  const updateAccount = prisma.customerPortalUser.updateMany({
-    where: { id: user.id, officeId: session.officeId },
-    data: {
-      email,
-      fullName,
-      isActive,
-      ...(revokeSessions ? { passwordVersion: { increment: 1 } } : {}),
-      ...(passwordHash ? {
-        passwordHash,
-        passwordUpdatedAt: new Date(),
-        failedLoginAttempts: 0,
-        lastFailedLoginAt: null,
-        lockedUntil: null,
-      } : {}),
-    },
-  });
   try {
-    if (user.email !== email || user.isActive !== isActive || passwordHash) {
-      await prisma.$transaction([
-        updateAccount,
-        prisma.customerPortalLoginCode.updateMany({
+    await prisma.$transaction(async (tx) => {
+      await tx.customerPortalUser.updateMany({
+        where: { id: user.id, officeId: session.officeId },
+        data: {
+          username,
+          email,
+          fullName,
+          isActive,
+          ...(revokeSessions ? { passwordVersion: { increment: 1 } } : {}),
+          ...(passwordHash ? {
+            passwordHash,
+            passwordEncrypted,
+            passwordUpdatedAt: new Date(),
+            failedLoginAttempts: 0,
+            lastFailedLoginAt: null,
+            lockedUntil: null,
+          } : {}),
+        },
+      });
+      if (user.internalUserId) {
+        await tx.user.updateMany({
+          where: { id: user.internalUserId, officeId: session.officeId },
+          data: { fullName: fullName || username, isActive },
+        });
+      }
+      if (user.username !== username || user.email !== email || user.isActive !== isActive || passwordHash) {
+        await tx.customerPortalLoginCode.updateMany({
           where: {
             userId: user.id,
             officeId: session.officeId,
             consumedAt: null,
           },
           data: { consumedAt: new Date() },
-        }),
-      ]);
-    } else {
-      await updateAccount;
-    }
+        });
+      }
+    });
   } catch (error) {
     if (hasPrismaCode(error, "P2002")) {
-      redirect(customerSettingsUrl("email-in-use"));
+      redirect(customerSettingsUrl("account-in-use"));
     }
     throw error;
   }
@@ -329,6 +368,8 @@ export async function updateCustomerPortalAccount(userId: string, formData: Form
       portalUserId: user.id,
       previousEmail: user.email,
       email,
+      previousUsername: user.username,
+      username,
       previousFullName: user.fullName,
       fullName,
       previousIsActive: user.isActive,
@@ -373,7 +414,7 @@ export async function updateCustomerPortalMembership(
       companyId: true,
       role: true,
       isActive: true,
-      user: { select: { email: true } },
+      user: { select: { email: true, internalUserId: true } },
       company: {
         select: {
           name: true,
@@ -418,6 +459,22 @@ export async function updateCustomerPortalMembership(
         where: { id: membership.userId, officeId: session.officeId },
         data: { passwordVersion: { increment: 1 } },
       });
+      const internalUserId = membership.user.internalUserId;
+      const workspaceId = membership.company.supplyWorkspaces[0]?.id;
+      if (internalUserId && workspaceId) {
+        const workspaceRole = role === "ADMIN" ? "OWNER" : role === "VIEWER" ? "VIEWER" : "EDITOR";
+        await tx.supplyWorkspaceMember.upsert({
+          where: { workspaceId_userId: { workspaceId, userId: internalUserId } },
+          create: {
+            officeId: session.officeId,
+            workspaceId,
+            userId: internalUserId,
+            role: workspaceRole,
+            isActive,
+          },
+          update: { role: workspaceRole, isActive },
+        });
+      }
     }
     return result;
   });

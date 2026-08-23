@@ -136,7 +136,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   const [users, companyOwners, recentActivities, openTasks, pendingQuotes, categories, agentRunEvents, backgroundJobs, backgroundJobCounts, staleRunningBackgroundJobs, brainJobs, activeBrainAssessments, auditLogs] = await Promise.all([
     prisma.user.findMany({
-      where: { officeId: session.officeId, isActive: true },
+      where: { officeId: session.officeId, isActive: true, customerPortalIdentity: { is: null } },
       orderBy: { fullName: "asc" }
     }),
     prisma.companyOwner.findMany({

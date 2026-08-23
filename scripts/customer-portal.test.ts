@@ -6,6 +6,7 @@ import {
   encodeCustomerPortalSession,
   isCustomerPortalDocumentSource,
   normalizeCustomerPortalEmail,
+  normalizeCustomerPortalUsername,
 } from "../src/lib/customer-portal-security";
 import {
   buildCustomerPortalOperationsBrief,
@@ -48,11 +49,21 @@ const supplyShellSource = readFileSync(resolve(process.cwd(), "src/app/dashboard
 const customerDevelopmentPreviewSource = readFileSync(resolve(process.cwd(), "src/app/customer/page.tsx"), "utf8");
 const customerWorkspaceSource = readFileSync(resolve(process.cwd(), "src/app/portal/workspace/page.tsx"), "utf8");
 const customerProcurementSource = readFileSync(resolve(process.cwd(), "src/app/portal/procurement/page.tsx"), "utf8");
+const appAuthSource = readFileSync(resolve(process.cwd(), "src/lib/auth.ts"), "utf8");
+const supplyPersistenceSource = readFileSync(resolve(process.cwd(), "src/lib/supply-os/persistence.ts"), "utf8");
+const supplyPageSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/page.tsx"), "utf8");
+const middlewareSource = readFileSync(resolve(process.cwd(), "src/middleware.ts"), "utf8");
+const schemaSource = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
+const fullAppMigrationSource = readFileSync(
+  resolve(process.cwd(), "prisma/migrations/20260823000100_customer_full_app_access/migration.sql"),
+  "utf8",
+);
 
 assert.match(customerLoginSource, /href="\/login">Team sign in/);
 assert.match(customerLoginSource, /href="mailto:rfq@usederya\.com">Start shipment/);
 assert.match(staffLoginSource, /Customer\? <a href="\/portal">Sign in to your shipment workspace<\/a>/);
-assert.match(staffPortalSource, /customerPortalWorkspaceHref\(membership\.company\.id, true\)/);
+assert.match(staffPortalSource, /action="\/dashboard\/supply-os"/);
+assert.match(staffPortalSource, /name="previewWorkspace"/);
 assert.match(staffPortalSource, /Customer sign-in:/);
 assert.match(staffPortalSource, />View as customer</);
 assert.match(staffPortalSource, />Customer accounts</);
@@ -60,8 +71,9 @@ assert.match(staffPortalSource, /updateCustomerPortalAccount\.bind\(null, accoun
 assert.match(staffPortalSource, /updateCustomerPortalMembership\.bind\(null, membership\.id\)/);
 assert.match(staffPortalSource, />Account status</);
 assert.match(staffPortalSource, />Company access</);
-assert.match(staffPortalSource, /Customer passwords/);
-assert.match(staffPortalSource, /label="Password"/);
+assert.match(staffPortalSource, /Customer credentials/);
+assert.match(staffPortalSource, /name="username"/);
+assert.match(staffPortalSource, /Password: \{visiblePasswords\.get\(account\.id\)/);
 assert.match(staffPortalSource, /CustomerPasswordField label="New password \(optional\)"/);
 assert.doesNotMatch(staffPortalSource, /passwordHash/);
 assert.match(staffPortalSource, /createCustomerCompany/);
@@ -76,7 +88,7 @@ assert.match(settingsIndexSource, /session\.role === "ADMIN"[\s\S]*\/dashboard\/
 assert.match(settingsHeaderSource, />\s*Customers\s*</);
 assert.match(settingsHeaderSource, /active === "customers"/);
 assert.match(supplyShellSource, /const settingsLabel = `[\s\S]*accountRole/);
-assert.match(supplyShellSource, /href="\/dashboard\/settings"/);
+assert.match(supplyShellSource, /previewMode \? "\/dashboard\/settings\?preview=customer" : "\/dashboard\/settings"/);
 assert.match(staffPortalActionsSource, /where: \{ id: userId, officeId: session\.officeId \}/);
 assert.match(staffPortalActionsSource, /grantCustomerPortalAccess[\s\S]*requireCompanyAdmin\(\)/);
 assert.match(staffPortalActionsSource, /updateCustomerPortalAccount[\s\S]*requireCompanyAdmin\(\)/);
@@ -102,7 +114,10 @@ assert.match(customerPortalPasswordSource, /MAX_FAILED_LOGIN_ATTEMPTS = 5/);
 assert.match(customerPortalPasswordSource, /lockedUntil: new Date\(now\.getTime\(\) \+ LOGIN_LOCK_MS\)/);
 assert.doesNotMatch(customerPortalAuthSource, /sendEmail|requestCustomerPortalCode|verifyCustomerPortalCode/);
 assert.match(customerLoginSource, /name="password"/);
+assert.match(customerLoginSource, /name="username"/);
 assert.match(customerLoginSource, /authenticateCustomerPortal/);
+assert.match(customerLoginSource, /issueCustomerAppSession/);
+assert.match(customerLoginSource, /redirect\("\/dashboard\/supply-os"\)/);
 assert.match(customerLoginSource, /await consumeCustomerPortalLoginAttempt\(clientAddress\)/);
 assert.doesNotMatch(customerLoginSource, /six-digit|sign-in code|requestCodeAction/);
 assert.match(customerDevelopmentPreviewSource, /robots: \{ index: false, follow: false \}/);
@@ -119,8 +134,20 @@ assert.match(customerWorkspaceSource, /customerPortalProcurementHref/);
 assert.match(customerProcurementSource, /resolveCustomerContextWorkspace/);
 assert.match(customerProcurementSource, /apiBasePath=\{`\/api\/portal\/procurement/);
 assert.match(customerProcurementSource, /readOnly=\{!customerContextCanEditRole/);
+assert.match(appAuthSource, /accessKind\?: "operator" \| "customer"/);
+assert.match(appAuthSource, /restrictedWorkspaceIds/);
+assert.match(appAuthSource, /passwordVersion: session\.customerPasswordVersion/);
+assert.match(supplyPersistenceSource, /context\.accessKind === "customer"/);
+assert.match(supplyPersistenceSource, /restrictedWorkspaceIds\.includes\(workspaceId\)/);
+assert.match(supplyPageSource, /accountRole=\{isCustomer \|\| previewMode \? "CUSTOMER"/);
+assert.match(supplyPageSource, /allowedWorkspaceIds=\{allowedWorkspaceIds\}/);
+assert.match(middlewareSource, /role === "CUSTOMER" && !isCustomerAllowedPath/);
+assert.match(schemaSource, /username\s+String/);
+assert.match(schemaSource, /passwordEncrypted\s+String\?/);
+assert.match(fullAppMigrationSource, /INSERT INTO "SupplyWorkspaceMember"/);
 
 assert.strictEqual(normalizeCustomerPortalEmail("  Ops@Customer.COM "), "ops@customer.com");
+assert.strictEqual(normalizeCustomerPortalUsername("  HypnoDreamz "), "hypnodreamz");
 
 
 const secret = "portal-test-secret";
@@ -128,6 +155,7 @@ const now = Date.parse("2026-07-29T12:00:00.000Z");
 const token = encodeCustomerPortalSession(secret, {
   portalUserId: "portal-user-1",
   officeId: "office-1",
+  username: "hypnodreamz",
   email: "ops@customer.com",
   passwordVersion: 3,
 }, now);
@@ -136,6 +164,7 @@ assert.deepStrictEqual(
   {
     portalUserId: "portal-user-1",
     officeId: "office-1",
+    username: "hypnodreamz",
     email: "ops@customer.com",
     passwordVersion: 3,
     expiresAt: now + 30 * 24 * 60 * 60 * 1000,

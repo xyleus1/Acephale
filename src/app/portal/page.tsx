@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LogoMark } from "@/components/logo-mark";
+import { issueCustomerAppSession } from "@/lib/auth";
 import {
   authenticateCustomerPortal,
   getCustomerPortalPrincipal,
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 type PortalLoginParams = {
-  email?: string;
+  username?: string;
   office?: string;
   error?: string;
 };
@@ -26,12 +27,12 @@ export default async function CustomerPortalLoginPage({
   searchParams: Promise<PortalLoginParams>;
 }) {
   const principal = await getCustomerPortalPrincipal();
-  if (principal) redirect("/portal/workspace");
+  if (principal) redirect("/dashboard/supply-os");
   const query = await searchParams;
 
   async function loginAction(formData: FormData) {
     "use server";
-    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const username = String(formData.get("username") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
     const office = String(formData.get("office") ?? "").trim() || null;
     const requestHeaders = await headers();
@@ -39,19 +40,27 @@ export default async function CustomerPortalLoginPage({
       || requestHeaders.get("x-real-ip")
       || "unknown";
     if (!await consumeCustomerPortalLoginAttempt(clientAddress)) {
-      redirect(`/portal?error=limited&email=${encodeURIComponent(email)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
+      redirect(`/portal?error=limited&username=${encodeURIComponent(username)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
     }
-    const result = await authenticateCustomerPortal(email, password, office);
+    const result = await authenticateCustomerPortal(username, password, office);
     if (!result.ok) {
-      redirect(`/portal?error=invalid&email=${encodeURIComponent(email)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
+      redirect(`/portal?error=invalid&username=${encodeURIComponent(username)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
     }
     await issueCustomerPortalSession({
       userId: result.userId,
       officeId: result.officeId,
+      username: result.username,
       email: result.email,
       passwordVersion: result.passwordVersion,
     });
-    redirect("/portal/workspace");
+    await issueCustomerAppSession({
+      internalUserId: result.internalUserId,
+      portalUserId: result.userId,
+      officeId: result.officeId,
+      username: result.username,
+      passwordVersion: result.passwordVersion,
+    });
+    redirect("/dashboard/supply-os");
   }
 
   return (
@@ -81,22 +90,21 @@ export default async function CustomerPortalLoginPage({
             <div className={styles.error}>
               {query.error === "limited"
                 ? "Too many sign-in attempts. Wait 15 minutes or contact your Derya operator."
-                : "Sign-in failed. Check your email and password, or contact your Derya operator if the account is locked."}
+                : "Sign-in failed. Check your username and password, or contact your Derya operator if the account is locked."}
             </div>
           ) : null}
 
           <form action={loginAction} className={styles.form}>
             <input type="hidden" name="office" value={query.office ?? ""} />
             <label className={styles.label}>
-              Work email
+              Username or email
               <input
                 className={styles.input}
-                name="email"
-                type="email"
+                name="username"
+                type="text"
                 required
-                autoComplete="email"
-                defaultValue={query.email ?? ""}
-                placeholder="you@company.com"
+                autoComplete="username"
+                defaultValue={query.username ?? ""}
               />
             </label>
             <label className={styles.label}>

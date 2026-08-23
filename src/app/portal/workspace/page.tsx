@@ -38,9 +38,11 @@ export default async function CustomerPortalWorkspacePage({
 }) {
   const query = await searchParams;
   const isPreview = query.preview === "1";
-  const principal = isPreview
-    ? await requireCustomerPortalPreviewPrincipal(query.company)
-    : await requireCustomerPortalPrincipal();
+  if (!isPreview) {
+    await requireCustomerPortalPrincipal();
+    redirect("/dashboard/supply-os");
+  }
+  const principal = await requireCustomerPortalPreviewPrincipal(query.company);
   if (!principal) notFound();
 
   const data = await loadCustomerPortalWorkspace(principal as CustomerPortalPrincipal, query.company);

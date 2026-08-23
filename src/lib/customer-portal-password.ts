@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   normalizeCustomerPortalEmail,
+  normalizeCustomerPortalUsername,
   type CustomerPortalSessionPayload,
 } from "@/lib/customer-portal-security";
 import { verifyPassword } from "@/lib/password";
@@ -11,10 +12,13 @@ const DUMMY_CUSTOMER_PASSWORD_HASH = "customer-portal-dummy-salt:1bf0e717add5182
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
-async function findPortalUser(email: string, officeId?: string | null) {
+async function findPortalUser(identifier: string, officeId?: string | null) {
   const users = await prisma.customerPortalUser.findMany({
     where: {
-      email,
+      OR: [
+        { username: normalizeCustomerPortalUsername(identifier) },
+        { email: normalizeCustomerPortalEmail(identifier) },
+      ],
       isActive: true,
       ...(officeId ? { officeId } : {}),
       memberships: {
@@ -37,6 +41,8 @@ async function findPortalUser(email: string, officeId?: string | null) {
     select: {
       id: true,
       officeId: true,
+      internalUserId: true,
+      username: true,
       email: true,
       passwordHash: true,
       passwordVersion: true,
@@ -52,30 +58,33 @@ export type AuthenticateCustomerPortalResult =
   | {
       ok: true;
       userId: string;
+      internalUserId: string;
       officeId: string;
+      username: string;
       email: string;
       passwordVersion: number;
     }
   | { ok: false; error: "invalid" };
 
 export async function authenticateCustomerPortal(
-  rawEmail: string,
+  rawIdentifier: string,
   rawPassword: string,
   officeId?: string | null,
 ): Promise<AuthenticateCustomerPortalResult> {
-  const email = normalizeCustomerPortalEmail(rawEmail);
+  const identifier = normalizeCustomerPortalUsername(rawIdentifier);
   const password = rawPassword.slice(0, 128);
-  const validInput = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  const validInput = (/^[a-z0-9][a-z0-9._-]{2,79}$/.test(identifier)
+      || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeCustomerPortalEmail(rawIdentifier)))
     && rawPassword.length >= 12
     && rawPassword.length <= 128;
 
-  const user = validInput ? await findPortalUser(email, officeId) : null;
+  const user = validInput ? await findPortalUser(identifier, officeId) : null;
   const now = new Date();
   const accountLocked = Boolean(user?.lockedUntil && user.lockedUntil > now);
   const passwordMatches = accountLocked
     ? false
     : await verifyPassword(password, user?.passwordHash ?? DUMMY_CUSTOMER_PASSWORD_HASH);
-  if (!validInput || !user?.passwordHash || !passwordMatches || accountLocked) {
+  if (!validInput || !user?.internalUserId || !user?.username || !user?.passwordHash || !passwordMatches || accountLocked) {
     if (validInput && user?.passwordHash && !passwordMatches && !accountLocked) {
       await prisma.$transaction(async (tx) => {
         await tx.customerPortalUser.updateMany({
@@ -112,7 +121,9 @@ export async function authenticateCustomerPortal(
   return {
     ok: true,
     userId: user.id,
+    internalUserId: user.internalUserId,
     officeId: user.officeId,
+    username: user.username,
     email: user.email,
     passwordVersion: user.passwordVersion,
   };
@@ -123,6 +134,7 @@ export async function loadCustomerPortalPrincipal(payload: CustomerPortalSession
     where: {
       id: payload.portalUserId,
       officeId: payload.officeId,
+      username: payload.username,
       email: payload.email,
       isActive: true,
       passwordHash: { not: null },
@@ -130,7 +142,9 @@ export async function loadCustomerPortalPrincipal(payload: CustomerPortalSession
     },
     select: {
       id: true,
+      internalUserId: true,
       officeId: true,
+      username: true,
       email: true,
       fullName: true,
       memberships: {
@@ -155,6 +169,6 @@ export async function loadCustomerPortalPrincipal(payload: CustomerPortalSession
       },
     },
   });
-  if (!user || user.memberships.length === 0) return null;
+  if (!user?.username || user.memberships.length === 0) return null;
   return user;
 }

@@ -11,6 +11,8 @@ export function supplyAccessContext(session: SupplyAccessContext): SupplyAccessC
     userId: session.userId,
     role: session.role,
     canViewWholeOffice: session.canViewWholeOffice,
+    accessKind: session.accessKind,
+    restrictedWorkspaceIds: session.restrictedWorkspaceIds,
   };
 }
 

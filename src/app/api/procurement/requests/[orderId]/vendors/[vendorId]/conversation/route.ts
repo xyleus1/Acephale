@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
-import { handleProcurementReplyDraft } from "@/lib/procurement-route-handlers";
 import {
+  customerCanAccessProcurementOrder,
+  handleProcurementReplyDraft,
+} from "@/lib/procurement-route-handlers";
+import {
+  getProcurementRequest,
   ProcurementWorkflowError,
   resolveProcurementCustomerId,
 } from "@/lib/procurement-workflow";
@@ -24,6 +28,13 @@ export async function GET(
   try {
     const { orderId, vendorId } = await context.params;
     const customerId = await resolveProcurementCustomerId(session);
+    const order = await getProcurementRequest(customerId, orderId);
+    if (!customerCanAccessProcurementOrder(session, order)) {
+      return NextResponse.json(
+        { error: "Supplier conversation not found." },
+        { status: 404, headers: responseHeaders },
+      );
+    }
     const conversation = await procurementVendorConversation({
       officeId: session.officeId,
       customerId,

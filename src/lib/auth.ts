@@ -12,12 +12,17 @@ const ONE_DAY = 60 * 60 * 24;
 // this is effectively "until you log out" without a server-side expiry check.
 const SESSION_MAX_AGE = ONE_DAY * 400;
 
-type SessionPayload = {
+export type SessionPayload = {
   userId: string;
   officeId: string;
   email: string;
   role: string;
   canViewWholeOffice: boolean;
+  accessKind?: "operator" | "customer";
+  customerPortalUserId?: string;
+  customerPasswordVersion?: number;
+  customerRole?: string;
+  restrictedWorkspaceIds?: string[];
 };
 
 function getSecret() {
@@ -57,6 +62,9 @@ async function issueSessionCookie(user: {
   officeId: string;
   role: string;
   canViewWholeOffice: boolean;
+  accessKind?: "operator" | "customer";
+  customerPortalUserId?: string;
+  customerPasswordVersion?: number;
 }) {
   const token = encodeSession({
     userId: user.id,
@@ -64,6 +72,11 @@ async function issueSessionCookie(user: {
     email: user.email,
     role: user.role,
     canViewWholeOffice: user.canViewWholeOffice,
+    accessKind: user.accessKind ?? "operator",
+    ...(user.customerPortalUserId ? { customerPortalUserId: user.customerPortalUserId } : {}),
+    ...(user.customerPasswordVersion !== undefined
+      ? { customerPasswordVersion: user.customerPasswordVersion }
+      : {}),
   });
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
@@ -72,6 +85,25 @@ async function issueSessionCookie(user: {
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: SESSION_MAX_AGE,
+  });
+}
+
+export async function issueCustomerAppSession(input: {
+  internalUserId: string;
+  portalUserId: string;
+  officeId: string;
+  username: string;
+  passwordVersion: number;
+}) {
+  await issueSessionCookie({
+    id: input.internalUserId,
+    email: input.username,
+    officeId: input.officeId,
+    role: "CUSTOMER",
+    canViewWholeOffice: false,
+    accessKind: "customer",
+    customerPortalUserId: input.portalUserId,
+    customerPasswordVersion: input.passwordVersion,
   });
 }
 
@@ -204,13 +236,66 @@ export async function signupWithCredentials(args: {
 export async function logout() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+  cookieStore.delete("derya_customer_portal_session");
 }
 
 export async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return decodeSession(token);
+  const session = decodeSession(token);
+  if (!session || session.accessKind !== "customer") return session;
+  if (!session.customerPortalUserId || session.customerPasswordVersion === undefined) return null;
+
+  const customer = await prisma.customerPortalUser.findFirst({
+    where: {
+      id: session.customerPortalUserId,
+      internalUserId: session.userId,
+      officeId: session.officeId,
+      isActive: true,
+      passwordHash: { not: null },
+      passwordVersion: session.customerPasswordVersion,
+    },
+    select: {
+      username: true,
+      internalUser: { select: { id: true, isActive: true } },
+      memberships: {
+        where: {
+          officeId: session.officeId,
+          isActive: true,
+          company: { officeId: session.officeId, crmStage: { not: "archived" } },
+        },
+        select: {
+          role: true,
+          company: {
+            select: {
+              supplyWorkspaces: {
+                where: { officeId: session.officeId, status: "ACTIVE" },
+                select: { id: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!customer?.username || !customer.internalUser?.isActive) return null;
+  const restrictedWorkspaceIds = [...new Set(customer.memberships.flatMap((membership) =>
+    membership.company.supplyWorkspaces.map((workspace) => workspace.id))
+  )];
+  if (restrictedWorkspaceIds.length === 0) return null;
+  const roleRank: Record<string, number> = { VIEWER: 0, MEMBER: 1, ADMIN: 2 };
+  const customerRole = customer.memberships
+    .map((membership) => membership.role)
+    .sort((left, right) => (roleRank[right] ?? 0) - (roleRank[left] ?? 0))[0] ?? "VIEWER";
+  return {
+    ...session,
+    email: customer.username,
+    role: "CUSTOMER",
+    canViewWholeOffice: false,
+    customerRole,
+    restrictedWorkspaceIds,
+  };
 }
 
 export async function requireSession() {
@@ -220,4 +305,3 @@ export async function requireSession() {
   }
   return session;
 }
-

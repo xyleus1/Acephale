@@ -42,6 +42,8 @@ export function SupplyOsOperatingShell({
   canApproveProcurement,
   canAuthorizePurchase,
   contextEnabled,
+  allowedWorkspaceIds,
+  previewMode = false,
 }: {
   storageScope: string;
   accountRole: string;
@@ -51,6 +53,8 @@ export function SupplyOsOperatingShell({
   canApproveProcurement: boolean;
   canAuthorizePurchase: boolean;
   contextEnabled: boolean;
+  allowedWorkspaceIds?: string[];
+  previewMode?: boolean;
 }) {
   const settingsLabel = `${accountRole.slice(0, 1)}${accountRole.slice(1).toLowerCase()} settings`;
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
@@ -189,7 +193,7 @@ export function SupplyOsOperatingShell({
           <div className={styles.sidebarUtilityArea}>
             <a
               className={styles.sidebarUtility}
-              href="/dashboard/settings"
+              href={previewMode ? "/dashboard/settings?preview=customer" : "/dashboard/settings"}
               aria-label={settingsLabel}
               title={settingsLabel}
             >
@@ -199,7 +203,13 @@ export function SupplyOsOperatingShell({
           </div>
         </motion.aside>
 
-        <section className={styles.workspace}>
+        <section className={styles.workspace} data-preview={previewMode}>
+          {previewMode ? (
+            <div className={styles.previewBar}>
+              <span>Customer preview</span>
+              <a href="/dashboard/settings/customers">Exit preview</a>
+            </div>
+          ) : null}
           <header className={styles.commandHeader}>
             <div className={styles.identity}>
               <span className={styles.companyAvatar} aria-hidden="true">
@@ -246,10 +256,11 @@ export function SupplyOsOperatingShell({
             {companyIndexOpen ? (
               <SupplyOsCompanyIndex
                 canCreateCompany={canCreateCompany}
+                allowedWorkspaceIds={allowedWorkspaceIds}
                 preferredWorkspaceId={workspaceToRestore}
                 onPreferredWorkspaceUnavailable={clearStoredWorkspace}
                 autoOpenFirstWorkspace={
-                  activePanel === "context"
+                  (activePanel === "context" || allowedWorkspaceIds !== undefined)
                     && !workspaceSelection
                 }
                 onOpenWorkspace={openWorkspace}

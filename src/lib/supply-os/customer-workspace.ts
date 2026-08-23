@@ -24,7 +24,11 @@ function contentHash(value: unknown) {
 async function currentAdmin(context: SupplyAccessContext) {
   const user = await prisma.user.findFirst({
     where: { id: context.userId, officeId: context.officeId, isActive: true },
-    select: { id: true, role: true },
+    select: {
+      id: true,
+      role: true,
+      customerPortalIdentity: { select: { id: true } },
+    },
   });
   if (!user) {
     throw new SupplyPersistenceError(
@@ -32,7 +36,7 @@ async function currentAdmin(context: SupplyAccessContext) {
       "forbidden",
     );
   }
-  if (user.role !== "ADMIN") {
+  if (user.role !== "ADMIN" || user.customerPortalIdentity) {
     throw new SupplyPersistenceError("Only admins can manage companies.", "forbidden");
   }
   return user;
@@ -242,7 +246,7 @@ export async function archiveSupplyCustomerWorkspace(context: SupplyAccessContex
     });
     const affectedPortalUsers = await tx.customerPortalMembership.findMany({
       where: { officeId: context.officeId, companyId: workspace.company.id, isActive: true },
-      select: { userId: true },
+      select: { userId: true, user: { select: { internalUserId: true } } },
       distinct: ["userId"],
     });
     await tx.customerPortalMembership.updateMany({
@@ -257,6 +261,17 @@ export async function archiveSupplyCustomerWorkspace(context: SupplyAccessContex
         },
         data: { passwordVersion: { increment: 1 } },
       });
+      await tx.supplyWorkspaceMember.updateMany({
+        where: {
+          officeId: context.officeId,
+          workspaceId: workspace.id,
+          userId: {
+            in: affectedPortalUsers.flatMap((user) =>
+              user.user.internalUserId ? [user.user.internalUserId] : []),
+          },
+        },
+        data: { isActive: false },
+      });
     }
   });
 
@@ -270,10 +285,12 @@ export function customerWorkspaceAccessLockKey(officeId: string, companyId: stri
 export async function grantSupplyCustomerPortalAccess(args: {
   officeId: string;
   companyId: string;
+  username: string;
   email: string;
   fullName: string | null;
   role: string;
-  passwordHash: string;
+  passwordHash: string | null;
+  passwordEncrypted: string | null;
   existingUser?: "reset" | "reject";
 }) {
   return prisma.$transaction(async (tx) => {
@@ -292,16 +309,30 @@ export async function grantSupplyCustomerPortalAccess(args: {
           some: { officeId: args.officeId, status: "ACTIVE" },
         },
       },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        supplyWorkspaces: {
+          where: { officeId: args.officeId, status: "ACTIVE" },
+          select: { id: true },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+        },
+      },
     });
     if (!company) return null;
+    const workspaceId = company.supplyWorkspaces[0]?.id;
+    if (!workspaceId) return null;
+    const hasPassword = Boolean(args.passwordHash && args.passwordEncrypted);
     const createUser = {
       officeId: args.officeId,
+      username: args.username,
       email: args.email,
       fullName: args.fullName,
-      passwordHash: args.passwordHash,
-      passwordVersion: 1,
-      passwordUpdatedAt,
+      passwordHash: hasPassword ? args.passwordHash : null,
+      passwordEncrypted: hasPassword ? args.passwordEncrypted : null,
+      passwordVersion: hasPassword ? 1 : 0,
+      passwordUpdatedAt: hasPassword ? passwordUpdatedAt : null,
       failedLoginAttempts: 0,
       lastFailedLoginAt: null,
       lockedUntil: null,
@@ -314,22 +345,50 @@ export async function grantSupplyCustomerPortalAccess(args: {
       : null;
     if (existingUser) throw new SupplyPersistenceError("Customer account already exists.", "conflict");
     const user = args.existingUser === "reject"
-      ? await tx.customerPortalUser.create({ data: createUser, select: { id: true } })
+      ? await tx.customerPortalUser.create({ data: createUser, select: { id: true, internalUserId: true } })
       : await tx.customerPortalUser.upsert({
       where: { officeId_email: { officeId: args.officeId, email: args.email } },
       create: createUser,
       update: {
         isActive: true,
+        username: args.username,
         ...(args.fullName ? { fullName: args.fullName } : {}),
-        passwordHash: args.passwordHash,
-        passwordVersion: { increment: 1 },
-        passwordUpdatedAt,
+        ...(hasPassword ? {
+          passwordHash: args.passwordHash,
+          passwordEncrypted: args.passwordEncrypted,
+          passwordVersion: { increment: 1 },
+          passwordUpdatedAt,
+        } : {}),
         failedLoginAttempts: 0,
         lastFailedLoginAt: null,
         lockedUntil: null,
       },
-      select: { id: true },
+      select: { id: true, internalUserId: true },
     });
+    const internalUser = user.internalUserId
+      ? await tx.user.update({
+          where: { id: user.internalUserId },
+          data: { isActive: true, fullName: args.fullName || company.name },
+          select: { id: true },
+        })
+      : await tx.user.create({
+          data: {
+            officeId: args.officeId,
+            email: `customer+${user.id}@internal.derya.invalid`,
+            passwordHash: "customer-portal-managed",
+            fullName: args.fullName || company.name,
+            role: "ADMIN",
+            isActive: true,
+            canViewWholeOffice: false,
+          },
+          select: { id: true },
+        });
+    if (!user.internalUserId) {
+      await tx.customerPortalUser.update({
+        where: { id: user.id },
+        data: { internalUserId: internalUser.id },
+      });
+    }
     const membership = await tx.customerPortalMembership.upsert({
       where: { userId_companyId: { userId: user.id, companyId: company.id } },
       create: {
@@ -345,7 +404,23 @@ export async function grantSupplyCustomerPortalAccess(args: {
       },
       select: { id: true },
     });
-    return { userId: user.id, membershipId: membership.id, company };
+    const workspaceRole = args.role === "ADMIN" ? "OWNER" : args.role === "VIEWER" ? "VIEWER" : "EDITOR";
+    await tx.supplyWorkspaceMember.upsert({
+      where: { workspaceId_userId: { workspaceId, userId: internalUser.id } },
+      create: {
+        officeId: args.officeId,
+        workspaceId,
+        userId: internalUser.id,
+        role: workspaceRole,
+      },
+      update: { role: workspaceRole, isActive: true },
+    });
+    return {
+      userId: user.id,
+      internalUserId: internalUser.id,
+      membershipId: membership.id,
+      company,
+    };
   });
 }
 

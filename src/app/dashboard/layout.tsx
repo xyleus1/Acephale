@@ -7,6 +7,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await requireSession();
   const initials = session.email.slice(0, 2).toUpperCase();
   const isEmployee = session.role === "EMPLOYEE";
+  const isCustomer = session.accessKind === "customer";
 
   return (
     <div className="app-shell app-shell-single-surface">
@@ -37,7 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </section>
 
-      {!isEmployee && <LiveEventToast />}
+      {!isEmployee && !isCustomer && <LiveEventToast />}
     </div>
   );
 }

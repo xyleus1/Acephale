@@ -55,8 +55,8 @@ assert.match(index, /<Pencil size=\{14\} \/> Edit/, "the row menu must expose Ed
 assert.match(index, /<Trash2 size=\{14\} \/>[\s\S]*Delete/, "the row menu must expose Delete");
 assert.match(index, /This archives the company[\s\S]*data stays in the database/, "Delete must explain archival before confirmation");
 assert.match(page, /where: \{ id: session\.userId, officeId: session\.officeId, isActive: true \}/, "page permissions must use the current database user, not a stale cookie role");
-assert.match(page, /canCreateCompany=\{currentUser\.role === "ADMIN"\}/, "company creation must be limited to current admins in the UI");
-assert.match(page, /canApproveProcurement=\{currentUser\.role === "ADMIN" \|\| currentUser\.role === "MANAGER"\}/, "procurement decisions must be limited to current managers and admins in the UI");
+assert.match(page, /canCreateCompany=\{!isCustomer && !previewMode && currentUser\.role === "ADMIN"\}/, "company creation must be limited to current admins in the UI");
+assert.match(page, /canApproveProcurement=\{!previewMode && \(customerCanEdit \|\| \(!isCustomer && \(currentUser\.role === "ADMIN" \|\| currentUser\.role === "MANAGER"\)\)\)\}/, "procurement decisions must allow scoped customer members but remain disabled in preview");
 assert.match(customerWorkspace, /user\.role !== "ADMIN"/, "company creation must be limited to current admins on the server");
 assert.match(customerWorkspace, /updateSupplyCustomerWorkspace/, "company edits must use the tenant-scoped company service");
 assert.match(customerWorkspace, /data: \{ name: normalized\.name, externalKey, version: \{ increment: 1 \} \}/, "company edits must keep the workspace key aligned with the edited website");
