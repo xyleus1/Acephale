@@ -51,11 +51,17 @@ async function main() {
       },
     });
     const portalUser = await prisma.customerPortalUser.create({
-      data: { officeId: officeA.id, email: `${runId}@example.com`, fullName: "Context Test Customer" },
+      data: {
+        officeId: officeA.id,
+        username: `${runId}-customer`,
+        email: `${runId}@example.com`,
+        fullName: "Context Test Customer",
+      },
     });
     const portalUserB = await prisma.customerPortalUser.create({
       data: {
         officeId: officeB.id,
+        username: `${runId}-other-office`,
         email: `${runId}-other-office@example.com`,
         fullName: "Other Office Customer",
       },
@@ -201,10 +207,12 @@ async function main() {
       grantSupplyCustomerPortalAccess({
         officeId: officeA.id,
         companyId: companyA.id,
+        username: `${runId}-race`,
         email: raceEmail,
         fullName: "Archive Race Customer",
         role: "MEMBER",
-        passwordHash: "test-salt:test-hash",
+        passwordHash: null,
+        passwordEncrypted: null,
       }),
       archiveSupplyCustomerWorkspace({
         officeId: officeA.id,

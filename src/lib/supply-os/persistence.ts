@@ -17,6 +17,8 @@ export type SupplyAccessContext = {
   userId: string;
   role: string;
   canViewWholeOffice: boolean;
+  accessKind?: "operator" | "customer";
+  restrictedWorkspaceIds?: string[];
 };
 
 export class SupplyPersistenceError extends Error {
@@ -33,25 +35,75 @@ export class SupplyPersistenceError extends Error {
 export async function currentSupplyAccessContext(context: SupplyAccessContext): Promise<SupplyAccessContext> {
   const user = await prisma.user.findFirst({
     where: { id: context.userId, officeId: context.officeId, isActive: true },
-    select: { role: true, canViewWholeOffice: true },
+    select: {
+      role: true,
+      canViewWholeOffice: true,
+      customerPortalIdentity: {
+        select: {
+          isActive: true,
+          memberships: {
+            where: {
+              officeId: context.officeId,
+              isActive: true,
+              company: { officeId: context.officeId, crmStage: { not: "archived" } },
+            },
+            select: {
+              company: {
+                select: {
+                  supplyWorkspaces: {
+                    where: { officeId: context.officeId, status: "ACTIVE" },
+                    select: { id: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   });
   if (!user) throw new SupplyPersistenceError("Your current user no longer has access to this office.", "forbidden");
+  if (user.customerPortalIdentity) {
+    const restrictedWorkspaceIds = [...new Set(user.customerPortalIdentity.memberships.flatMap((membership) =>
+      membership.company.supplyWorkspaces.map((workspace) => workspace.id))
+    )];
+    if (!user.customerPortalIdentity.isActive || restrictedWorkspaceIds.length === 0) {
+      throw new SupplyPersistenceError("This customer account no longer has company access.", "forbidden");
+    }
+    return {
+      ...context,
+      role: user.role,
+      canViewWholeOffice: false,
+      accessKind: "customer",
+      restrictedWorkspaceIds,
+    };
+  }
   return { ...context, role: user.role, canViewWholeOffice: user.canViewWholeOffice };
 }
 
 function hasOfficeWideAccess(context: SupplyAccessContext) {
+  if (context.accessKind === "customer" || context.restrictedWorkspaceIds !== undefined) return false;
   if (context.role === "EMPLOYEE") return false;
   return context.canViewWholeOffice || context.role === "ADMIN" || context.role === "MANAGER";
 }
 
 function canCreateWorkspace(context: SupplyAccessContext) {
-  return context.role !== "EMPLOYEE";
+  return context.accessKind !== "customer" && context.role !== "EMPLOYEE";
 }
 
 function workspaceAccessWhere(context: SupplyAccessContext, workspaceId?: string): Prisma.SupplyWorkspaceWhereInput {
+  const restrictedWorkspaceIds = context.restrictedWorkspaceIds;
   return {
     officeId: context.officeId,
-    ...(workspaceId ? { id: workspaceId } : {}),
+    ...(restrictedWorkspaceIds !== undefined
+      ? {
+          id: {
+            in: workspaceId && restrictedWorkspaceIds.includes(workspaceId)
+              ? [workspaceId]
+              : workspaceId ? [] : restrictedWorkspaceIds,
+          },
+        }
+      : workspaceId ? { id: workspaceId } : {}),
     status: "ACTIVE",
     ...(hasOfficeWideAccess(context)
       ? {}

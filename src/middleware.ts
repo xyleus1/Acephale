@@ -20,6 +20,12 @@ function isEmployeeAllowedPath(pathname: string) {
   return false;
 }
 
+function isCustomerAllowedPath(pathname: string) {
+  return pathname === "/dashboard/supply-os"
+    || pathname.startsWith("/dashboard/supply-os/")
+    || pathname === "/dashboard/settings";
+}
+
 // Mirror of decodeSession in src/lib/auth.ts for the edge runtime (WebCrypto
 // instead of node crypto). Used only for routing; pages and server actions
 // still verify the cookie themselves via requireSession().
@@ -67,6 +73,9 @@ export async function middleware(req: NextRequest) {
   }
 
   const role = await sessionRoleFromCookie(req.cookies.get("crm_session")?.value);
+  if (role === "CUSTOMER" && !isCustomerAllowedPath(pathname)) {
+    return NextResponse.redirect(new URL("/dashboard/supply-os", req.url));
+  }
   if (role === "EMPLOYEE" && !isEmployeeAllowedPath(pathname)) {
     return NextResponse.redirect(new URL(EMPLOYEE_HOME, req.url));
   }

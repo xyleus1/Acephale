@@ -30,6 +30,8 @@ const SOURCE_WORKSPACE_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 type ProcurementRouteSession = {
   userId: string;
   officeId: string;
+  accessKind?: "operator" | "customer";
+  restrictedWorkspaceIds?: string[];
 };
 
 export type ProcurementRouteDependencies = {
@@ -49,6 +51,7 @@ export type ProcurementDetailDependencies = {
 export type ProcurementWakeDependencies = {
   session: () => Promise<ProcurementRouteSession | null>;
   resolveCustomerId: typeof resolveProcurementCustomerId;
+  getRequest?: typeof getProcurementRequest;
   wake: typeof retryProcurementWorkflowWake;
 };
 
@@ -90,6 +93,7 @@ const defaultDetailDependencies: ProcurementDetailDependencies = {
 const defaultWakeDependencies: ProcurementWakeDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
+  getRequest: getProcurementRequest,
   wake: retryProcurementWorkflowWake,
 };
 
@@ -112,6 +116,28 @@ const defaultReplySendDependencies: ProcurementReplySendDependencies = {
 const procurementReplyDraftRequestSchema = z.object({
   sourceMessageId: z.string().trim().min(1).max(512),
 }).strict();
+
+function requestWorkspaceId(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = (value as Record<string, unknown>).source;
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  const workspaceId = (source as Record<string, unknown>).workspace_id;
+  return typeof workspaceId === "string" && workspaceId.trim() ? workspaceId.trim() : null;
+}
+
+function customerWorkspaceIds(session: ProcurementRouteSession) {
+  return session.accessKind === "customer" ? (session.restrictedWorkspaceIds ?? []) : null;
+}
+
+export function customerCanAccessProcurementOrder(
+  session: ProcurementRouteSession,
+  order: { requestContext: Record<string, unknown> } | null,
+) {
+  const allowed = customerWorkspaceIds(session);
+  if (!allowed) return true;
+  const workspaceId = order ? requestWorkspaceId(order.requestContext) : null;
+  return Boolean(workspaceId && allowed.includes(workspaceId));
+}
 
 const procurementReplySendRequestSchema = z.object({
   confirmed: z.literal(true),
@@ -213,6 +239,15 @@ export async function handleProcurementPost(
     );
   }
 
+  const allowedWorkspaces = customerWorkspaceIds(session);
+  const submittedWorkspaceId = requestWorkspaceId(parsed.data.requestContext);
+  if (allowedWorkspaces && (!submittedWorkspaceId || !allowedWorkspaces.includes(submittedWorkspaceId))) {
+    return Response.json(
+      { error: "This customer account cannot use that company workspace." },
+      { status: 403, headers: responseHeaders },
+    );
+  }
+
   try {
     const contextualized = await (dependencies.contextualize ?? contextualizeProcurementRequest)({
       session,
@@ -256,11 +291,26 @@ export async function handleProcurementList(
   }
   try {
     const customerId = await dependencies.resolveCustomerId(session);
-    const requests = await dependencies.list(customerId, 50, sourceCampaign, {
-      sourceWorkspaceId,
-      sourceCompanyName,
-      activeOnly: options.activeOnly === true,
-    });
+    const allowedWorkspaces = customerWorkspaceIds(session);
+    if (allowedWorkspaces && sourceWorkspaceId && !allowedWorkspaces.includes(sourceWorkspaceId)) {
+      return Response.json(
+        { error: "This customer account cannot use that company workspace." },
+        { status: 403, headers: responseHeaders },
+      );
+    }
+    const workspaceFilters = allowedWorkspaces
+      ? sourceWorkspaceId ? [sourceWorkspaceId] : allowedWorkspaces
+      : [sourceWorkspaceId];
+    const requestSets = await Promise.all(workspaceFilters.map((workspaceId) =>
+      dependencies.list(customerId, 50, sourceCampaign, {
+        sourceWorkspaceId: workspaceId,
+        sourceCompanyName: allowedWorkspaces ? undefined : sourceCompanyName,
+        activeOnly: options.activeOnly === true,
+      })
+    ));
+    const requests = [...new Map(requestSets.flat().map((request) => [request.id, request])).values()]
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, 50);
     return Response.json({ requests }, { headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);
@@ -277,6 +327,9 @@ export async function handleProcurementDetail(
   try {
     const customerId = await dependencies.resolveCustomerId(session);
     const order = await dependencies.getRequest(customerId, orderId);
+    if (!customerCanAccessProcurementOrder(session, order)) {
+      return Response.json({ error: "Procurement request not found." }, { status: 404, headers: responseHeaders });
+    }
     if (!order) {
       return Response.json({ error: "Procurement request not found." }, { status: 404, headers: responseHeaders });
     }
@@ -294,6 +347,12 @@ export async function handleProcurementWake(
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
   try {
     const customerId = await dependencies.resolveCustomerId(session);
+    if (customerWorkspaceIds(session)) {
+      const order = await (dependencies.getRequest ?? getProcurementRequest)(customerId, orderId);
+      if (!customerCanAccessProcurementOrder(session, order)) {
+        return Response.json({ error: "Procurement request not found." }, { status: 404, headers: responseHeaders });
+      }
+    }
     const result = await dependencies.wake(customerId, orderId);
     if (result.claimed && !result.workflowWakeRequested) {
       return Response.json({
@@ -330,15 +389,16 @@ export async function handleProcurementReplyDraft(
 
   try {
     const customerId = await dependencies.resolveCustomerId(session);
-    const [order, conversation] = await Promise.all([
-      dependencies.getRequest(customerId, orderId),
-      dependencies.conversation({
-        officeId: session.officeId,
-        customerId,
-        orderId,
-        vendorId,
-      }),
-    ]);
+    const order = await dependencies.getRequest(customerId, orderId);
+    if (!customerCanAccessProcurementOrder(session, order)) {
+      return Response.json({ error: "Supplier conversation not found." }, { status: 404, headers: responseHeaders });
+    }
+    const conversation = await dependencies.conversation({
+      officeId: session.officeId,
+      customerId,
+      orderId,
+      vendorId,
+    });
     const vendor = order?.vendors.find((candidate) => candidate.id === vendorId) ?? null;
     if (!order || !vendor) {
       return Response.json({ error: "Supplier conversation not found." }, { status: 404, headers: responseHeaders });

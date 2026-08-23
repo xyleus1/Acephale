@@ -5,6 +5,7 @@ export const CUSTOMER_PORTAL_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 export type CustomerPortalSessionPayload = {
   portalUserId: string;
   officeId: string;
+  username: string;
   email: string;
   passwordVersion: number;
   expiresAt: number;
@@ -12,6 +13,10 @@ export type CustomerPortalSessionPayload = {
 
 export function normalizeCustomerPortalEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+export function normalizeCustomerPortalUsername(username: string) {
+  return username.trim().toLowerCase();
 }
 
 export function isCustomerPortalDocumentSource(url: string) {
@@ -67,6 +72,7 @@ export function decodeCustomerPortalSession(
     if (
       typeof payload.portalUserId !== "string"
       || typeof payload.officeId !== "string"
+      || typeof payload.username !== "string"
       || typeof payload.email !== "string"
       || !Number.isInteger(payload.passwordVersion)
       || payload.passwordVersion < 0

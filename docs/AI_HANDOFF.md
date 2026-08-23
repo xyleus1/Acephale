@@ -2,6 +2,30 @@
 
 ## Latest Update
 
+### Customer accounts now open the company-scoped full application
+
+- Customer sign-in accepts a unique username or email and opens the real
+  Supply OS instead of the separate shipment summary portal.
+- Each account is linked to an app identity and explicit Supply workspace
+  membership. Server-side checks recalculate active company scope on every
+  request, so a customer cannot read another company.
+- Admin Settings shows the company name, username, and administrator-readable
+  password. Passwords are encrypted at rest with `AUTH_SECRET`; a blank
+  password leaves the account unable to sign in until an admin sets one.
+- Customer Settings contains no admin controls. Company, connector, account,
+  and office management remain admin-only.
+- Migration `20260823000100_customer_full_app_access` backfills existing
+  accounts, creates restricted app identities, and grants their active company
+  workspace access.
+
+Verification completed before release:
+
+- Customer auth, password vault, procurement boundary, and company Context
+  contracts
+- Complete migration chain, repeat deploy, populated-account backfill, and
+  restricted database role checks on disposable PostgreSQL
+- Prisma validation, TypeScript, product copy, and production build
+
 ### Bulk Gmail setup is deployed
 
 - Connected emails accepts up to 10 Gmail app-password accounts in one paste.

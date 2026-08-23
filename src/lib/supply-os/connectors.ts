@@ -140,7 +140,7 @@ export async function createConnectorInstallation(
   input: CreateConnectorInstallationInput,
 ) {
   await requireSupplyWorkspace(context, workspaceId, "edit");
-  if (context.role !== "ADMIN") throw new SupplyPersistenceError("Only admins can configure client connectors.", "forbidden");
+  if (context.accessKind === "customer" || context.role !== "ADMIN") throw new SupplyPersistenceError("Only admins can configure client connectors.", "forbidden");
   const adapterKey = input.adapterKey?.trim() || "CUSTOM_REST_V1";
   const adapter = getSupplyConnectorAdapter(adapterKey);
   if (!adapter) throw new SupplyPersistenceError("Connector adapter is not supported.", "invalid_input");
@@ -222,7 +222,7 @@ async function connectorForContext(context: SupplyAccessContext, connectorId: st
 
 export async function testConnectorInstallation(context: SupplyAccessContext, connectorId: string) {
   const installation = await connectorForContext(context, connectorId, "edit");
-  if (context.role !== "ADMIN") throw new SupplyPersistenceError("Only admins can test client connectors.", "forbidden");
+  if (context.accessKind === "customer" || context.role !== "ADMIN") throw new SupplyPersistenceError("Only admins can test client connectors.", "forbidden");
   const adapter = getSupplyConnectorAdapter(installation.adapterKey);
   if (!adapter) throw new SupplyPersistenceError("Connector adapter is not supported.", "invalid_input");
   const traceId = randomUUID();
@@ -254,7 +254,7 @@ export async function testConnectorInstallation(context: SupplyAccessContext, co
 
 export async function setConnectorEnabled(context: SupplyAccessContext, connectorId: string, enabled: boolean) {
   const installation = await connectorForContext(context, connectorId, "edit");
-  if (context.role !== "ADMIN") throw new SupplyPersistenceError("Only admins can change connector status.", "forbidden");
+  if (context.accessKind === "customer" || context.role !== "ADMIN") throw new SupplyPersistenceError("Only admins can change connector status.", "forbidden");
   if (enabled && (!installation.lastTestedAt || installation.lastErrorCode)) {
     throw new SupplyPersistenceError("Pass a connection test before enabling scheduled sync.", "conflict");
   }

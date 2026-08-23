@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { requireSession } from "@/lib/auth";
-import { customerPortalWorkspaceHref } from "@/lib/customer-portal-navigation";
+import { decryptCustomerPassword } from "@/lib/customer-password-vault";
 import { prisma } from "@/lib/prisma";
 import { SettingsHeader } from "../settings/settings-header";
 import settingsStyles from "../settings/integrations/integrations-settings.module.css";
@@ -42,15 +42,15 @@ function roleLabel(role: string) {
 }
 
 const NOTICE_TEXT: Record<string, string> = {
-  "account-created": "Customer account created and password set.",
-  "account-exists": "That email already has a customer account. Edit the existing account to reset its password.",
+  "account-created": "Customer account created.",
+  "account-exists": "That username or email already has a customer account. Edit the existing account instead.",
   "account-updated": "Customer account updated.",
   "access-updated": "Company access updated.",
   "company-created": "Company created.",
   "company-updated": "Company updated.",
   "company-archived": "Company archived and customer access revoked.",
   "confirm-company-archive": "Confirm the archive before deleting the company.",
-  "invalid-account": "Enter a valid customer email.",
+  "invalid-account": "Enter a username and valid customer email.",
   "invalid-password": "Password must contain 12 to 128 characters.",
   "invalid-access": "Choose a valid role and access status.",
   "invalid-company": "Enter a valid company name and public website.",
@@ -60,7 +60,7 @@ const NOTICE_TEXT: Record<string, string> = {
   "account-not-found": "Customer account was not found.",
   "access-not-found": "Company access was not found.",
   "archived-company-access": "Archived companies cannot receive customer access.",
-  "email-in-use": "That email already belongs to another customer account.",
+  "account-in-use": "That username or email belongs to another customer account.",
 };
 
 export default async function CustomerPortalAdminPage({
@@ -100,7 +100,14 @@ export default async function CustomerPortalAdminPage({
             role: true,
             isActive: true,
             user: {
-              select: { id: true, email: true, fullName: true, isActive: true },
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                fullName: true,
+                isActive: true,
+                passwordEncrypted: true,
+              },
             },
           },
           orderBy: { createdAt: "asc" },
@@ -116,11 +123,13 @@ export default async function CustomerPortalAdminPage({
       },
       select: {
         id: true,
+        username: true,
         email: true,
         fullName: true,
         isActive: true,
         lastLoginAt: true,
         passwordUpdatedAt: true,
+        passwordEncrypted: true,
         lockedUntil: true,
         createdAt: true,
         memberships: {
@@ -185,6 +194,10 @@ export default async function CustomerPortalAdminPage({
       : 0),
     0,
   );
+  const visiblePasswords = new Map(customerAccounts.map((account) => [
+    account.id,
+    isAdmin ? decryptCustomerPassword(account.passwordEncrypted) : null,
+  ]));
 
   return (
     <main className={settingsStyles.page}>
@@ -196,22 +209,21 @@ export default async function CustomerPortalAdminPage({
         ) : null}
 
         <section className={styles.passwordNote}>
-          <strong>Customer passwords</strong>
-          <span>Set or reset a password here. It is visible before saving, then only a secure hash is stored.</span>
+          <strong>Customer credentials</strong>
+          <span>Usernames and saved passwords are visible to admins. Passwords are encrypted before storage.</span>
         </section>
 
         <section className={`${styles.card} ${styles.previewCard}`}>
           <div className={styles.previewCopy}>
             <h2>Customer preview</h2>
-            <p>Customer actions are disabled in preview.</p>
+            <p>Open the real app limited to one customer company.</p>
           </div>
           {previewCompany ? (
-            <form className={styles.previewForm} action="/portal/workspace" method="get" target="_blank">
-              <input type="hidden" name="preview" value="1" />
+            <form className={styles.previewForm} action="/dashboard/supply-os" method="get" target="_blank">
               <label htmlFor="preview-company">Company</label>
-              <select className={styles.select} id="preview-company" name="company" required defaultValue={previewCompany.id}>
+              <select className={styles.select} id="preview-company" name="previewWorkspace" required defaultValue={previewCompany.workspaceId}>
                 {companies.map((company) => (
-                  <option value={company.id} key={company.id}>
+                  <option value={company.workspaceId} key={company.id}>
                     {company.name} ({company._count.jobs} loads, {company._count.inquiries} RFQs)
                   </option>
                 ))}
@@ -286,6 +298,10 @@ export default async function CustomerPortalAdminPage({
                             <input className={styles.input} name="email" type="email" autoComplete="email" required />
                           </label>
                           <label className={styles.field}>
+                            <span>Username</span>
+                            <input className={styles.input} name="username" minLength={3} maxLength={80} autoComplete="username" required />
+                          </label>
+                          <label className={styles.field}>
                             <span>Access</span>
                             <select className={styles.select} name="role" defaultValue="MEMBER">
                               <option value="MEMBER">Member</option>
@@ -296,8 +312,7 @@ export default async function CustomerPortalAdminPage({
                           <div className={styles.passwordSaveRow}>
                             <CustomerPasswordField
                               label="Password"
-                              required
-                              help="Copy it before saving. Use Edit account to reset an existing customer's password."
+                              help="Optional. Leave blank until the customer should be able to sign in."
                             />
                             <SubmitButton className="btn btn-sm" pendingLabel="Adding...">Add account</SubmitButton>
                           </div>
@@ -321,8 +336,9 @@ export default async function CustomerPortalAdminPage({
                   <div className={styles.companyAccounts}>
                     {company.customerPortalMemberships.length > 0 ? company.customerPortalMemberships.map((membership) => (
                       <div className={styles.companyAccount} key={membership.id}>
-                        <span>{membership.user.fullName ?? membership.user.email}</span>
-                        <small>{membership.user.email}</small>
+                        <span>{company.name} account</span>
+                        <small>Username: {membership.user.username}</small>
+                        <small>Password: {isAdmin ? decryptCustomerPassword(membership.user.passwordEncrypted) ?? "Not set" : "Hidden"}</small>
                         <small>{membership.user.isActive && membership.isActive ? roleLabel(membership.role) : "Disabled"}</small>
                       </div>
                     )) : <div className={styles.emptyCompact}>No customer accounts.</div>}
@@ -340,7 +356,7 @@ export default async function CustomerPortalAdminPage({
             <span className={styles.count}>{customerAccounts.length} accounts, {activeMembershipCount} active access</span>
           </header>
           <div className={styles.inviteHint}>
-            Customer sign-in: <a href={portalUrl} target="_blank" rel="noreferrer">{portalUrl || "/portal"}</a>. Give the customer their email and the password you set.
+            Customer sign-in: <a href={portalUrl} target="_blank" rel="noreferrer">{portalUrl || "/portal"}</a>. Give the customer their username and password.
           </div>
           <div className={styles.accounts}>
             {customerAccounts.length > 0 ? customerAccounts.map((account) => (
@@ -348,6 +364,8 @@ export default async function CustomerPortalAdminPage({
                 <div className={styles.accountHeader}>
                   <div>
                     <div className={styles.rowTitle}>{account.fullName ?? account.email}</div>
+                    <div className={styles.rowMeta}>Username: {account.username ?? "Not set"}</div>
+                    <div className={styles.rowMeta}>Password: {visiblePasswords.get(account.id) ?? "Not set"}</div>
                     <div className={styles.rowMeta}>{account.email}</div>
                     <div className={styles.rowMeta}>
                       {account.lastLoginAt ? `Last sign-in ${fmtDate(account.lastLoginAt)}` : "Has not signed in"}
@@ -361,14 +379,14 @@ export default async function CustomerPortalAdminPage({
                   </div>
                   <div className={styles.accountActions}>
                     <span className={styles.badge}>{account.isActive ? "Active" : "Disabled"}</span>
-                    {account.passwordUpdatedAt && account.isActive && account.memberships.some((membership) => (
+                    {account.username && account.passwordUpdatedAt && account.isActive && account.memberships.some((membership) => (
                       membership.isActive
                       && membership.company.crmStage !== "archived"
                       && membership.company.supplyWorkspaces.length > 0
                     )) ? (
                       <a
                         className="btn btn-secondary btn-sm"
-                        href={`/portal?office=${encodeURIComponent(session.officeId)}&email=${encodeURIComponent(account.email)}`}
+                        href={`/portal?office=${encodeURIComponent(session.officeId)}&username=${encodeURIComponent(account.username)}`}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -388,6 +406,10 @@ export default async function CustomerPortalAdminPage({
                     <label className={styles.field}>
                       <span>Email</span>
                       <input className={styles.input} name="email" type="email" defaultValue={account.email} autoComplete="email" required />
+                    </label>
+                    <label className={styles.field}>
+                      <span>Username</span>
+                      <input className={styles.input} name="username" defaultValue={account.username ?? ""} minLength={3} maxLength={80} autoComplete="username" required />
                     </label>
                     <label className={styles.field}>
                       <span>Account status</span>
@@ -444,7 +466,7 @@ export default async function CustomerPortalAdminPage({
                           <div className={styles.actions}>
                             <a
                               className="btn btn-secondary btn-sm"
-                              href={customerPortalWorkspaceHref(membership.company.id, true)}
+                              href={`/dashboard/supply-os?previewWorkspace=${encodeURIComponent(membership.company.supplyWorkspaces[0]!.id)}`}
                               target="_blank"
                               rel="noreferrer"
                             >

@@ -33,7 +33,7 @@ function generatePassword() {
 export function CustomerPasswordField({
   label,
   required = false,
-  help = "Copy it before saving. Derya stores only a secure hash.",
+  help = "Leave blank to keep the current password.",
 }: {
   label: string;
   required?: boolean;

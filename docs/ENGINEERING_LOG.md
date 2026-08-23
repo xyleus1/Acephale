@@ -17,6 +17,27 @@ Use this file for chronological implementation notes that future agents should s
 
 ## Log
 
+### 2026-08-22 - Move customers into the company-scoped full app
+
+- Branch: `customer-full-app-access-clean-20260822`, based on current main.
+- Task: Replace the separate customer summary as the primary experience with
+  the real Supply OS, while preserving strict company scope and removing admin
+  settings from customer sessions.
+- Data model: Added unique customer usernames, encrypted administrator-readable
+  passwords, linked app identities, and Supply workspace memberships.
+- Security: Customer sessions are revalidated against active portal and
+  workspace memberships. Customer API access is restricted to assigned
+  workspaces, admin mutations stay blocked, and connector management is denied.
+- Migration: Existing accounts are backfilled from company names. A populated
+  HypnoDreamz fixture migrated to username `hypnodreamz`, a linked restricted
+  app identity, and active editor workspace access.
+- Verification: Focused auth and procurement contracts, database tests under
+  the restricted app role, full migration chain and repeat deploy, populated
+  backfill, Prisma validation, TypeScript, product copy, and production build.
+- Caveat: An admin must set a password after migration before an existing
+  account can sign in. Rotating `AUTH_SECRET` makes saved readable passwords
+  unavailable and requires an admin reset.
+
 ### 2026-08-20 - Repair unified Neon schema and remove implicit Atlas fallback
 
 - Branch: `fix/remove-implicit-atlas-fallback`, based on production main.

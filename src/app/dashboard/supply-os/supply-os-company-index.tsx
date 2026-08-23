@@ -11,7 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
 import styles from "./supply-os-company-index.module.css";
 
@@ -48,12 +48,14 @@ function updatedLabel(value: string) {
 
 export function SupplyOsCompanyIndex({
   canCreateCompany,
+  allowedWorkspaceIds,
   autoOpenFirstWorkspace = false,
   preferredWorkspaceId,
   onPreferredWorkspaceUnavailable,
   onOpenWorkspace,
 }: {
   canCreateCompany: boolean;
+  allowedWorkspaceIds?: string[];
   autoOpenFirstWorkspace?: boolean;
   preferredWorkspaceId?: string | null;
   onPreferredWorkspaceUnavailable?: () => void;
@@ -69,13 +71,21 @@ export function SupplyOsCompanyIndex({
   const [editing, setEditing] = useState<{ id: string; name: string; website: string } | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const allowedWorkspaceKey = allowedWorkspaceIds?.slice().sort().join("|") ?? "";
+  const allowedWorkspaceSet = useMemo(
+    () => allowedWorkspaceIds === undefined ? null : new Set(allowedWorkspaceIds),
+    [allowedWorkspaceKey],
+  );
 
   const requestWorkspaces = useCallback(async () => {
     const response = await fetch("/api/supply-os/workspaces", { cache: "no-store", headers: { accept: "application/json" } });
     const body = await response.json().catch(() => ({})) as { workspaces?: Workspace[]; error?: string };
     if (!response.ok) throw new Error(body.error || "Companies could not be loaded.");
-    return body.workspaces ?? [];
-  }, []);
+    const rows = body.workspaces ?? [];
+    return allowedWorkspaceSet
+      ? rows.filter((workspace) => allowedWorkspaceSet.has(workspace.id))
+      : rows;
+  }, [allowedWorkspaceSet]);
 
   const load = useCallback(async () => {
     if (preferredWorkspaceId === undefined) return;

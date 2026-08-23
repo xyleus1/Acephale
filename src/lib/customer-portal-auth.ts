@@ -23,12 +23,14 @@ function authSecret() {
 export async function issueCustomerPortalSession(input: {
   userId: string;
   officeId: string;
+  username: string;
   email: string;
   passwordVersion: number;
 }) {
   const token = encodeCustomerPortalSession(authSecret(), {
     portalUserId: input.userId,
     officeId: input.officeId,
+    username: input.username,
     email: normalizeCustomerPortalEmail(input.email),
     passwordVersion: input.passwordVersion,
   });
