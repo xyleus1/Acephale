@@ -6,6 +6,7 @@ import { DisconnectAccountButton } from "@/components/disconnect-account-button"
 import { ResumeAccountButton } from "@/components/resume-account-button";
 import { EmailAccountControls } from "@/components/email-account-controls";
 import { EmailSenderTest } from "@/components/email-sender-test";
+import { GmailAppPasswordForm } from "@/components/gmail-app-password-form";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 import { AppearanceToggle } from "@/components/appearance-toggle";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
@@ -13,10 +14,21 @@ import { CheckWhatsAppStatusButton } from "@/components/check-whatsapp-status-bu
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
 import { whatsAppProvider, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { whatsAppAccountLabel } from "@/lib/whatsapp-display";
+import { isSecretEncryptionConfigured } from "@/lib/security/crypto";
 import { SettingsHeader } from "../settings-header";
 import settingsStyles from "../integrations/integrations-settings.module.css";
 
 export const metadata = { title: "Email accounts" };
+
+function isManagedEmailProvider(provider: string) {
+  return provider === "GMAIL" || provider === "GMAIL_APP_PASSWORD";
+}
+
+function emailProviderLabel(provider: string) {
+  if (provider === "GMAIL") return "Gmail OAuth";
+  if (provider === "GMAIL_APP_PASSWORD") return "Gmail app password";
+  return provider;
+}
 
 function timeAgo(d: Date | null | undefined) {
   if (!d) return "Never";
@@ -83,9 +95,12 @@ export default async function EmailSettingsPage({
 
   const active = accounts.filter((a) => a.isActive);
   const paused = accounts.filter((a) => !a.isActive);
-  const monitoredGmail = active.filter((a) => a.provider === "GMAIL" && Boolean(a.refreshToken));
-  const sendingGmail = monitoredGmail.filter((a) => a.sendEnabled);
-  const defaultSender = sendingGmail.find((a) => a.isDefaultSender) ?? null;
+  const monitoredEmailAccounts = active.filter((account) => (
+    (account.provider === "GMAIL" && Boolean(account.refreshToken))
+    || (account.provider === "GMAIL_APP_PASSWORD" && Boolean(account.credentialSecret))
+  ));
+  const sendingEmailAccounts = monitoredEmailAccounts.filter((account) => account.sendEnabled);
+  const defaultSender = sendingEmailAccounts.find((account) => account.isDefaultSender) ?? null;
   const connectedAllowedSenderEmails = active
     .filter((a) => a.provider === "GMAIL" && DERYA_LOAD_RFQ_INBOX_EMAILS.includes(a.email.toLowerCase()))
     .map((a) => a.email.toLowerCase());
@@ -150,6 +165,7 @@ export default async function EmailSettingsPage({
       ];
   const sheetId = process.env.DERYA_GOOGLE_SHEET_ID ?? "1CFmfSdFJKOCThss5xzglHb5GihPRlK3pRxLCmpuFUHg";
   const sheetsAuthConfigured = !!process.env.GOOGLE_SHEETS_API_KEY || !!(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
+  const credentialEncryptionConfigured = isSecretEncryptionConfigured();
   const documentStorageDriver = (process.env.DOCUMENT_STORAGE_DRIVER ?? "local").toLowerCase();
   const productionDocumentStorageConfigured = documentStorageDriver === "s3"
     && !!process.env.DOCUMENT_STORAGE_S3_BUCKET
@@ -157,13 +173,20 @@ export default async function EmailSettingsPage({
     && !!process.env.DOCUMENT_STORAGE_S3_SECRET_ACCESS_KEY;
   const setupGates = [
     {
+      label: "Credential encryption",
+      status: credentialEncryptionConfigured ? "ready" : "blocked",
+      detail: credentialEncryptionConfigured
+        ? "Encrypted mailbox credential storage is configured."
+        : "Set TOKEN_ENCRYPTION_KEY before adding a Gmail app-password account.",
+    },
+    {
       label: "Default sender",
-      status: defaultSender ? "ready" : sendingGmail.length > 0 ? "setup required" : "blocked",
+      status: defaultSender ? "ready" : sendingEmailAccounts.length > 0 ? "setup required" : "blocked",
       detail: defaultSender
         ? `${defaultSender.email} is the default for approved outbound email.`
-        : sendingGmail.length > 0
-          ? "Choose one enabled Gmail account as the default sender."
-          : "Connect Gmail and explicitly enable sending before outbound email can use an account.",
+        : sendingEmailAccounts.length > 0
+          ? "Choose one enabled email account as the default sender."
+          : "Connect an email account and explicitly enable sending before outbound email can use it.",
     },
     {
       label: "Derya load/RFQ inboxes",
@@ -216,7 +239,7 @@ export default async function EmailSettingsPage({
   // predates the scope rollout.
   const SCOPE_ROLLOUT = new Date("2026-05-02T22:00:00Z");
   // Gmail-scope prompt only - a quiet WhatsApp line is not a reauth problem.
-  const needsReauth = active.filter((a) => a.provider !== "WHATSAPP" && (!a.lastSyncAt || new Date(a.lastSyncAt) < SCOPE_ROLLOUT));
+  const needsReauth = active.filter((a) => a.provider === "GMAIL" && (!a.lastSyncAt || new Date(a.lastSyncAt) < SCOPE_ROLLOUT));
 
   return (
     <main className={settingsStyles.page}>
@@ -226,11 +249,11 @@ export default async function EmailSettingsPage({
         <div className="card-body" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 18 }}>
           <div>
             <div style={{ color: "var(--text-3)", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Monitoring</div>
-            <div style={{ marginTop: 5, color: "var(--text)", fontSize: 16, fontWeight: 650 }}>{monitoredGmail.length} active</div>
+            <div style={{ marginTop: 5, color: "var(--text)", fontSize: 16, fontWeight: 650 }}>{monitoredEmailAccounts.length} active</div>
           </div>
           <div>
             <div style={{ color: "var(--text-3)", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Sending</div>
-            <div style={{ marginTop: 5, color: "var(--text)", fontSize: 16, fontWeight: 650 }}>{sendingGmail.length} enabled</div>
+            <div style={{ marginTop: 5, color: "var(--text)", fontSize: 16, fontWeight: 650 }}>{sendingEmailAccounts.length} enabled</div>
           </div>
           <div>
             <div style={{ color: "var(--text-3)", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Default sender</div>
@@ -543,8 +566,11 @@ export default async function EmailSettingsPage({
             )}
           </div>
           <p style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 10, marginBottom: 0 }}>
-            New accounts start with monitoring on and sending off. An administrator must enable sending and choose the default account separately.
+            OAuth is preferred when available. New accounts start with monitoring on and sending off.
           </p>
+          <div style={{ margin: "18px 0", borderTop: "1px solid var(--border)" }} />
+          <div className="section-title" style={{ marginBottom: 12 }}>Gmail app password</div>
+          <GmailAppPasswordForm encryptionConfigured={credentialEncryptionConfigured} />
         </div>
       </div>
 
@@ -553,7 +579,7 @@ export default async function EmailSettingsPage({
           <div className="section-title" style={{ marginBottom: 12 }}>Test sending</div>
           <EmailSenderTest
             recipient={session.email}
-            accounts={sendingGmail.map((account) => ({
+            accounts={sendingEmailAccounts.map((account) => ({
               id: account.id,
               email: account.email,
               isDefaultSender: account.isDefaultSender,
@@ -583,13 +609,13 @@ export default async function EmailSettingsPage({
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 12, fontWeight: 700, color: "var(--text-2)",
                     }}>
-                      {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
+                      {isManagedEmailProvider(account.provider) ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
                     </div>
                   )}
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{whatsAppAccountLabel(account.email)}</span>
-                      {account.provider === "GMAIL" ? (
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{account.displayName || whatsAppAccountLabel(account.email)}</span>
+                      {isManagedEmailProvider(account.provider) ? (
                         <>
                           <span className={`badge ${account.sendEnabled ? "badge-good" : "badge-neutral"}`}>
                             {account.sendEnabled ? "sending on" : "sending off"}
@@ -601,9 +627,9 @@ export default async function EmailSettingsPage({
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>
                       {account.provider === "WHATSAPP"
                         ? `${waProviderLabel} · ${countByAccount[account.id] ?? 0} message${(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} · last inbound ${timeAgo(account.lastSyncAt)}`
-                        : `${account.provider} · ${countByAccount[account.id] ?? 0} message${(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} synced · last sync ${timeAgo(account.lastSyncAt)}`}
+                        : `${emailProviderLabel(account.provider)} · ${account.email} · ${countByAccount[account.id] ?? 0} message${(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} synced · last sync ${timeAgo(account.lastSyncAt)}`}
                     </div>
-                    {account.provider === "GMAIL" ? (
+                    {isManagedEmailProvider(account.provider) ? (
                       <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 3 }}>
                         {activityByAccount.get(account.id)?.inbound ?? 0} inbound, last {timeAgo(activityByAccount.get(account.id)?.lastInboundAt)} · {activityByAccount.get(account.id)?.outbound ?? 0} outbound, last {timeAgo(activityByAccount.get(account.id)?.lastOutboundAt)}
                       </div>
@@ -611,7 +637,7 @@ export default async function EmailSettingsPage({
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                  {account.provider === "GMAIL" ? (
+                  {isManagedEmailProvider(account.provider) ? (
                     <EmailAccountControls
                       accountId={account.id}
                       active={account.isActive}
@@ -619,7 +645,7 @@ export default async function EmailSettingsPage({
                       isDefaultSender={account.isDefaultSender}
                     />
                   ) : null}
-                  {account.provider === "GMAIL" && <SyncAccountButton accountId={account.id} />}
+                  {isManagedEmailProvider(account.provider) && <SyncAccountButton accountId={account.id} />}
                   <DisconnectAccountButton accountId={account.id} />
                 </div>
               </div>
@@ -630,7 +656,7 @@ export default async function EmailSettingsPage({
         <div className="card" style={{ textAlign: "center", padding: "40px 24px", marginBottom: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>No connected inboxes</div>
           <p style={{ fontSize: 13, color: "var(--text-3)" }}>
-            Connect Gmail above, then enable sending only on accounts approved for outbound use.
+            Add an email account above, then enable sending only after testing it.
           </p>
         </div>
       )}
@@ -659,7 +685,7 @@ export default async function EmailSettingsPage({
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 12, fontWeight: 700, color: "var(--text-2)",
                     }}>
-                      {account.provider === "GMAIL" ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
+                      {isManagedEmailProvider(account.provider) ? "G" : account.provider === "OUTLOOK" ? "O" : "M"}
                     </div>
                   )}
                   <div>

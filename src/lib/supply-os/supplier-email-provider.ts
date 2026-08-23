@@ -2,6 +2,13 @@ import "server-only";
 
 import { stripEmDashes } from "@/lib/no-em-dash";
 import { prisma } from "@/lib/prisma";
+import {
+  GMAIL_APP_PASSWORD_PROVIDER,
+  gmailImapClient,
+  readGmailAppPasswordAccount,
+  sendGmailAppPasswordMail,
+} from "@/lib/gmail-app-password";
+import { imapThreadExternalId } from "@/lib/imap-identifiers";
 
 export type SupplierEmailSendInput = {
   officeId: string;
@@ -96,6 +103,10 @@ async function gmailToken(accountId: string) {
 
 function gmailSourceUrl(accountEmail: string, threadId: string) {
   return `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#sent/${encodeURIComponent(threadId)}`;
+}
+
+function gmailMessageSearchUrl(accountEmail: string, rfcMessageId: string) {
+  return `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#search/${encodeURIComponent(`rfc822msgid:${rfcMessageId}`)}`;
 }
 
 export function createGmailSupplierEmailProvider(
@@ -211,4 +222,150 @@ export function createGmailSupplierEmailProvider(
   };
 }
 
-export const gmailSupplierEmailProvider = createGmailSupplierEmailProvider();
+const oauthGmailSupplierEmailProvider = createGmailSupplierEmailProvider();
+
+async function gmailAppPasswordAccount(input: {
+  officeId: string;
+  accountId: string;
+  expectedEmail: string;
+  requireSendEnabled: boolean;
+}) {
+  const account = await prisma.emailAccount.findFirst({
+    where: {
+      id: input.accountId,
+      officeId: input.officeId,
+      provider: GMAIL_APP_PASSWORD_PROVIDER,
+      isActive: true,
+      credentialSecret: { not: null },
+    },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      credentialSecret: true,
+      sendEnabled: true,
+    },
+  });
+  if (!account) throw new Error("The selected Gmail app-password sender is missing or inactive.");
+  if (input.requireSendEnabled && !account.sendEnabled) {
+    throw new Error("The selected Gmail app-password sender is disabled for sending.");
+  }
+  if (account.email.trim().toLowerCase() !== input.expectedEmail.trim().toLowerCase()) {
+    throw new Error("The connected Gmail sender changed after approval. Save and approve a new email draft.");
+  }
+  return account;
+}
+
+const gmailAppPasswordSupplierEmailProvider: SupplierEmailProvider = {
+  async send(input) {
+    let account;
+    try {
+      account = await gmailAppPasswordAccount({
+        officeId: input.officeId,
+        accountId: input.accountId,
+        expectedEmail: input.senderEmail,
+        requireSendEnabled: true,
+      });
+    } catch (caught) {
+      return {
+        state: "REJECTED",
+        error: caught instanceof Error ? caught.message : "The Gmail sender is unavailable.",
+      };
+    }
+
+    const references = input.inReplyToRfcMessageId ? [input.inReplyToRfcMessageId] : [];
+    const sent = await sendGmailAppPasswordMail({
+      account,
+      to: cleanHeader(input.recipient),
+      subject: cleanHeader(input.subject),
+      text: stripEmDashes(input.body),
+      messageId: cleanHeader(input.rfcMessageId),
+      inReplyTo: input.inReplyToRfcMessageId ? cleanHeader(input.inReplyToRfcMessageId) : null,
+      references,
+    });
+    if (!sent.ok) {
+      const authFailure = /authentication|app password/i.test(sent.error);
+      return {
+        state: authFailure ? "REJECTED" : "UNKNOWN",
+        error: sent.error,
+        ...(authFailure ? { needsReauth: true } : {}),
+      };
+    }
+    const providerThreadId = input.providerThreadId || imapThreadExternalId({
+      accountId: account.id,
+      messageId: input.rfcMessageId,
+      references: input.inReplyToRfcMessageId,
+      subject: input.subject,
+    });
+    return {
+      state: "SENT",
+      provider: "GMAIL",
+      providerMessageId: input.rfcMessageId,
+      providerThreadId,
+      sourceUrl: gmailMessageSearchUrl(account.email, input.rfcMessageId),
+    };
+  },
+
+  async reconcile(input) {
+    let account;
+    try {
+      account = await gmailAppPasswordAccount({
+        officeId: input.officeId,
+        accountId: input.accountId,
+        expectedEmail: input.senderEmail,
+        requireSendEnabled: false,
+      });
+    } catch (caught) {
+      return { state: "UNKNOWN", error: caught instanceof Error ? caught.message : "The Gmail sender is unavailable." };
+    }
+
+    let credentials;
+    try {
+      credentials = readGmailAppPasswordAccount(account);
+    } catch (caught) {
+      return { state: "UNKNOWN", error: caught instanceof Error ? caught.message : "The Gmail credential is unavailable." };
+    }
+    const client = gmailImapClient(credentials);
+    try {
+      await client.connect();
+      const mailboxes = await client.list();
+      const sentMailbox = mailboxes.find((mailbox) => mailbox.specialUse?.toLowerCase() === "\\sent")
+        ?? mailboxes.find((mailbox) => /(^|\/)sent( mail)?$/i.test(mailbox.path));
+      if (!sentMailbox) return { state: "UNKNOWN", error: "Gmail Sent Mail was not found." };
+      await client.mailboxOpen(sentMailbox.path, { readOnly: true });
+      const matches = await client.search({ header: { "Message-ID": input.rfcMessageId } }, { uid: true });
+      if (!matches || matches.length === 0) return { state: "NOT_FOUND" };
+      return {
+        state: "SENT",
+        provider: "GMAIL",
+        providerMessageId: input.rfcMessageId,
+        providerThreadId: imapThreadExternalId({ accountId: account.id, messageId: input.rfcMessageId }),
+        sourceUrl: gmailMessageSearchUrl(account.email, input.rfcMessageId),
+      };
+    } catch {
+      return { state: "UNKNOWN", error: "Gmail reconciliation did not finish." };
+    } finally {
+      if (client.usable) await client.logout().catch(() => undefined);
+      else client.close();
+    }
+  },
+};
+
+async function configuredSupplierEmailProvider(input: Pick<SupplierEmailSendInput, "officeId" | "accountId">) {
+  const account = await prisma.emailAccount.findFirst({
+    where: { id: input.accountId, officeId: input.officeId },
+    select: { provider: true },
+  });
+  return account?.provider === GMAIL_APP_PASSWORD_PROVIDER
+    ? gmailAppPasswordSupplierEmailProvider
+    : oauthGmailSupplierEmailProvider;
+}
+
+export const gmailSupplierEmailProvider: SupplierEmailProvider = {
+  async send(input) {
+    return (await configuredSupplierEmailProvider(input)).send(input);
+  },
+  async reconcile(input) {
+    return (await configuredSupplierEmailProvider(input)).reconcile(input);
+  },
+};

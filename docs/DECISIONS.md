@@ -40,6 +40,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Revisit when: Self-service password reset or a managed identity provider is
   needed.
 
+### 2026-08-22 - Gmail app passwords are an encrypted Derya connector
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Six demo Google Workspace mailboxes have Gmail app passwords but no
+  mailbox-specific OAuth setup. They still need administrator-controlled
+  sending and reply monitoring inside Derya.
+- Decision: Add a fixed Gmail connector that verifies SMTP on port 587 with
+  required STARTTLS and IMAP on port 993 with TLS before saving. Store the app
+  password only as an AES-256-GCM encrypted secret under the Office account.
+  Do not support administrator-supplied mail hosts. New accounts start with
+  sending disabled and use the same default-sender and pause controls as OAuth
+  accounts.
+- Safety boundary: Credentials disclosed in chat are not copied into code,
+  documentation, deployment configuration, seed data, or tests. They must be
+  revoked and replaced before account setup. This connector does not authorize
+  Bourne campaigns or remove human approval.
+- Consequences: Administrators can add each demo mailbox from Email accounts,
+  send a test to themselves, and sync a bounded seven-day IMAP window. Cron can
+  sync both OAuth and app-password Gmail accounts.
+- Revisit when: Google OAuth is available for these mailboxes or the product
+  needs providers other than Gmail.
+
 ### 2026-08-22 - Supplier replies and supplier quotes are separate facts
 
 - Status: accepted

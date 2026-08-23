@@ -2,19 +2,18 @@
 
 ## Latest Update
 
-### Gmail app-password schema is staged before application release
+### Gmail app-password schema is deployed before application release
 
 - Migration `20260822000700_gmail_app_password_accounts` adds nullable display
   name and encrypted credential storage to `EmailAccount`, plus RFC Message-ID
   storage to `EmailMessage`.
-- The schema release contains no Gmail connection, send, sync, or UI behavior.
-  It must reach production before the application connector is merged so
-  Vercel cannot deploy code that selects columns missing from PostgreSQL.
+- Schema PR #223 merged as `43ca547c`. Protected production run `32618577033`
+  applied and verified the migration before the application connector release.
 - The committed read-only production query verifies the column shapes,
   migration ledger, encrypted `enc:v1:` credential state, provider isolation,
   and absence of OAuth tokens on app-password accounts.
-- No production database, application, Gmail mailbox, or Bourne state has been
-  changed by this branch.
+- No Gmail mailbox, credential, sender state, message, or Bourne record was
+  created by the schema release.
 
 ### Customer portal now uses administrator-set passwords
 
@@ -56,6 +55,33 @@ Release status:
   account password through admin Settings. A wrong password was rejected, the
   correct password opened the scoped HypnoDreamz workspace, and both pages had
   no new console errors. The plaintext password was not written to repo docs.
+### Gmail app-password accounts are implemented but not deployed
+
+- Administrators can add a Gmail mailbox with a display name, email, and fresh
+  16-character app password from `/dashboard/settings/email`.
+- Setup verifies Gmail SMTP with required STARTTLS and secure IMAP before it
+  stores the password with the existing AES-256-GCM server encryption key.
+- App-password accounts use the same Office scope, sending switch, default
+  sender, self-test, pause, activity, reply, and cron-sync controls as OAuth
+  Gmail accounts.
+- Existing approved Supply OS RFQ delivery can use these accounts. IMAP reply
+  sync stores attachment metadata, but automated attachment-content extraction
+  still requires Gmail OAuth or manual file review.
+- IMAP sync scans a bounded seven-day window on first use, caps each run at 200
+  messages, deduplicates by account and RFC Message-ID, preserves SMTP reply
+  threading, classifies inbound mail, and records message provenance.
+- The six credentials previously disclosed in chat were not copied into the
+  repository or deployment. They must be revoked and regenerated before setup.
+- Migration `20260822000700_gmail_app_password_accounts` is deployed. Deploy
+  this application branch before adding accounts. No Gmail mailbox credential,
+  sender state, message, or Bourne record has been created.
+
+Verification completed:
+
+- Complete migration chain and repeat deploy on disposable PostgreSQL
+- Read-only production verification query
+- Prisma validation and generation, TypeScript, security hardening, product
+  copy, focused email and Supply OS contracts, and production Next.js build
 
 ### Identify exact supplier replies and draft a safe response
 

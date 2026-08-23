@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
 import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import {
@@ -228,23 +229,29 @@ async function loadExtractionSnapshot(args: {
   let connectedMessage: ExtractionSnapshot["connectedMessage"] = null;
   if (names.length) {
     const localMessageId = requiredText(payload.localMessageId, "Connected supplier reply message", 220);
-    const providerMessageId = requiredText(payload.providerMessageId, "Connected supplier provider message", 220);
+    const providerMessageId = typeof payload.providerMessageId === "string" && payload.providerMessageId.trim()
+      ? payload.providerMessageId.trim().slice(0, 220)
+      : null;
     const message = await prisma.emailMessage.findFirst({
       where: {
         id: localMessageId,
-        gmailMessageId: providerMessageId,
-        account: { officeId: args.context.officeId, provider: "GMAIL", isActive: true },
+        account: { officeId: args.context.officeId, isActive: true, ...CONNECTED_GMAIL_ACCOUNT_FILTER },
       },
-      select: { accountId: true, gmailMessageId: true, attachments: true },
+      select: { accountId: true, gmailMessageId: true, attachments: true, account: { select: { provider: true } } },
     });
-    if (!message?.accountId || !message.gmailMessageId) {
+    if (!message?.accountId) {
       throw new SupplyPersistenceError("The connected supplier attachment message is unavailable or its Gmail account is inactive.", "conflict");
     }
-    connectedMessage = {
-      accountId: message.accountId,
-      gmailMessageId: message.gmailMessageId,
-      attachments: attachmentMetadata(message.attachments).filter((attachment) => names.includes(attachment.name)),
-    };
+    if (message.account?.provider === "GMAIL") {
+      if (!providerMessageId || message.gmailMessageId !== providerMessageId) {
+        throw new SupplyPersistenceError("The connected supplier attachment message is missing its Gmail provider ID.", "conflict");
+      }
+      connectedMessage = {
+        accountId: message.accountId,
+        gmailMessageId: providerMessageId,
+        attachments: attachmentMetadata(message.attachments).filter((attachment) => names.includes(attachment.name)),
+      };
+    }
   }
   const supplier = record(cycleInput.supplier);
   return {
@@ -406,7 +413,12 @@ export async function extractConnectedSupplierQuoteTerms(args: {
   const claimed = await claimRun({ context: accessContext, workspaceId: workspace.id, snapshot });
   if (!claimed.claimed) return claimed.run;
 
-  let attachmentRead = { sources: [], warnings: [] } as Awaited<ReturnType<SupplierQuoteAttachmentReader>>;
+  let attachmentRead = {
+    sources: [],
+    warnings: snapshot.attachmentNames.length && !snapshot.connectedMessage
+      ? ["Attachment content is unavailable through this IMAP connection. Review the files manually."]
+      : [],
+  } as Awaited<ReturnType<SupplierQuoteAttachmentReader>>;
   if (snapshot.connectedMessage?.attachments.length) {
     try {
       attachmentRead = await (args.attachmentReader ?? readConnectedSupplierQuoteAttachments)(snapshot.connectedMessage);
