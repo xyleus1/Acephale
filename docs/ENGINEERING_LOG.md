@@ -6136,6 +6136,25 @@ Use this file for chronological implementation notes that future agents should s
 - Added a static workflow safety contract to the procurement CI job and
   documented deployment detection in `CLAUDE.md`.
 
+### 2026-08-22 - Stage customer Context schema before application release
+
+- Branch: `codex/customer-context-migration-release`, based on current main.
+- Task: Land the additive customer Context schema before customer-facing code
+  can depend on it.
+- Files changed: Customer Context migration, populated legacy migration order,
+  protected production verification, migration workflow contract, handoff, and
+  this log.
+- Safety: The migration replaces the existing Context tenant guard so a portal
+  creator must belong to the same office. The production check is read-only
+  and exposes only schema state and row counts. The Prisma client stays
+  unchanged until the application release, so the automatic Vercel deploy
+  cannot query the new columns before migration.
+- Verification: Full migration deploy, migration status, repeat deploy,
+  cross-office portal creator rejection, production verification SQL, static
+  migration runner contract, and diff hygiene passed on disposable PostgreSQL.
+- Follow-up: Merge this schema-only PR, run the protected production migration,
+  then merge and deploy the customer-management application PR.
+
 ### 2026-08-22 - Pin the migration runner to Bourne production
 
 - The first protected run applied the pending migrations to project

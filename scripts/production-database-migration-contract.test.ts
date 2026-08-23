@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -7,12 +7,17 @@ const workflow = readFileSync(
   join(root, ".github/workflows/production-database-migration.yml"),
   "utf8",
 );
-const verification = readFileSync(
-  join(
-    root,
-    "scripts/sql/production-verification/20260822000200_order_supplier_contact_compatibility.sql",
-  ),
-  "utf8",
+const verificationDirectory = join(root, "scripts/sql/production-verification");
+const verifications = new Map(
+  readdirSync(verificationDirectory)
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => [name, readFileSync(join(verificationDirectory, name), "utf8")]),
+);
+const supplierVerification = verifications.get(
+  "20260822000200_order_supplier_contact_compatibility.sql",
+);
+const customerContextVerification = verifications.get(
+  "20260822000300_customer_portal_context_access.sql",
 );
 
 assert.match(workflow, /^on:\n  workflow_dispatch:/m, "production migration must be manually dispatched");
@@ -42,15 +47,28 @@ assert.match(workflow, /neondb\|neondb_owner/);
 assert.match(workflow, /npm run deploy:migrations/);
 assert.match(workflow, /scripts\/sql\/production-verification\/\$REQUESTED_MIGRATION_ID\.sql/);
 
-assert.match(verification, /BEGIN READ ONLY;/);
-assert.match(verification, /public\."_prisma_migrations"/);
-assert.match(verification, /dashboard_api/);
-assert.match(verification, /contact_email_count/);
-assert.match(verification, /Strobels Supply/);
-assert.doesNotMatch(
-  verification,
-  /^\s*(INSERT\s+INTO|UPDATE\s+["a-z]|DELETE\s+FROM|TRUNCATE\s+)/im,
-  "production verification must remain read-only",
-);
+assert.ok(supplierVerification, "supplier production verification is missing");
+assert.ok(customerContextVerification, "customer Context production verification is missing");
+for (const [name, verification] of verifications) {
+  assert.match(verification, /BEGIN READ ONLY;/, `${name} must use a read-only transaction`);
+  if (/^[0-9]{14}_[a-z0-9_]+\.sql$/.test(name)) {
+    assert.match(
+      verification,
+      /public\."_prisma_migrations"/,
+      `${name} must verify the migration ledger`,
+    );
+  }
+  assert.doesNotMatch(
+    verification,
+    /^\s*(INSERT\s+INTO|UPDATE\s+["a-z]|DELETE\s+FROM|TRUNCATE\s+)/im,
+    `${name} must remain read-only`,
+  );
+}
+assert.match(supplierVerification, /dashboard_api/);
+assert.match(supplierVerification, /contact_email_count/);
+assert.match(supplierVerification, /Strobels Supply/);
+assert.match(customerContextVerification, /createdByPortalUserId/);
+assert.match(customerContextVerification, /customerVisible/);
+assert.match(customerContextVerification, /company_context_scope_guard/);
 
 console.log("Production database migration contract passed.");

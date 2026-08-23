@@ -2,6 +2,20 @@
 
 ## Latest Update
 
+### Customer Context schema is staged separately from the application
+
+- Added the customer Context visibility and portal-creator migration as a
+  schema-only release before the customer-management application deploy.
+- The migration extends the existing CompanyContext tenant trigger, so a
+  portal identity from another office cannot be recorded as the creator.
+- Added read-only production verification for the columns, foreign key,
+  indexes, migration ledger, and tenant guard.
+- The full migration chain, repeat deployment, database tenant rejection, and
+  production verification SQL pass on disposable PostgreSQL.
+- No Prisma client or application behavior changes in this release. Run the
+  protected production migration workflow before merging the customer
+  application PR.
+
 ### Bourne supplier messages have a direct return path
 
 - Added the Bourne-owned `procurement_communication_messages` ledger to the

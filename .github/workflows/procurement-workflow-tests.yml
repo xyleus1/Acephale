@@ -217,6 +217,7 @@ jobs:
             | sort -z \
             | while IFS= read -r -d '' migration; do
                 if [[ "$migration" == *"20260821000100_minimal_customer_procurement_schema"* \
+                  || "$migration" == *"20260822000300_customer_portal_context_access"* \
                   || "$migration" == *"20260822000200_order_supplier_contact_compatibility"* ]]; then
                   continue
                 fi
@@ -264,6 +265,9 @@ jobs:
           psql "$LEGACY_MIGRATION_DATABASE_URL" \
             --set=ON_ERROR_STOP=1 \
             --file=prisma/migrations/20260821000100_minimal_customer_procurement_schema/migration.sql
+          psql "$LEGACY_MIGRATION_DATABASE_URL" \
+            --set=ON_ERROR_STOP=1 \
+            --file=prisma/migrations/20260822000300_customer_portal_context_access/migration.sql
           for pass in 1 2; do
             psql "$LEGACY_MIGRATION_DATABASE_URL" \
               --set=ON_ERROR_STOP=1 \
