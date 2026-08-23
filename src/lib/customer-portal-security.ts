@@ -6,15 +6,12 @@ export type CustomerPortalSessionPayload = {
   portalUserId: string;
   officeId: string;
   email: string;
+  passwordVersion: number;
   expiresAt: number;
 };
 
 export function normalizeCustomerPortalEmail(email: string) {
   return email.trim().toLowerCase();
-}
-
-export function generateCustomerPortalCode() {
-  return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
 }
 
 export function isCustomerPortalDocumentSource(url: string) {
@@ -35,13 +32,6 @@ export function isCustomerPortalDocumentSource(url: string) {
   } catch {
     return false;
   }
-}
-
-export function hashCustomerPortalCode(secret: string, officeId: string, email: string, code: string) {
-  return crypto
-    .createHmac("sha256", secret)
-    .update(`${officeId}:${normalizeCustomerPortalEmail(email)}:${code}`)
-    .digest("hex");
 }
 
 function signSession(secret: string, base: string) {
@@ -78,6 +68,8 @@ export function decodeCustomerPortalSession(
       typeof payload.portalUserId !== "string"
       || typeof payload.officeId !== "string"
       || typeof payload.email !== "string"
+      || !Number.isInteger(payload.passwordVersion)
+      || payload.passwordVersion < 0
       || typeof payload.expiresAt !== "number"
       || payload.expiresAt <= now
     ) {

@@ -468,6 +468,7 @@ jobs:
         run: |
           npm run test:production-database-migration
           npm run test:production-bourne-ledger
+          npm run test:customer-portal
           npm run test:minimal-live-schema
           npm run test:procurement-conversation
           npm run test:procurement-workflow
@@ -475,3 +476,4 @@ jobs:
           npm run test:workflow-guild2
           npm run prebuild
           npm run test:procurement-workflow-db
+          npm run test:customer-portal-password-db

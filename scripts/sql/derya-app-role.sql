@@ -48,6 +48,7 @@ DECLARE
     'StrategyAssessment', 'RouteOption', 'PriceRecommendation', 'RiskAssessment',
     'StrategyAction', 'JobDocument', 'JobMilestone', 'EmailAccount',
     'EmailThread', 'EmailMessage', 'LoginCode', 'CustomerPortalUser',
+    'CustomerPortalLoginThrottle',
     'CustomerPortalMembership', 'CustomerPortalLoginCode', 'CustomerPortalAction',
     'SupplyWorkspace', 'SupplyWorkspaceMember', 'ConnectorInstallation',
     'SupplyImportRun', 'SupplySnapshot', 'SupplyLocation', 'SupplyItem',
@@ -102,7 +103,11 @@ BEGIN
   IF NOT has_table_privilege('derya_app', 'public."Office"', 'SELECT')
     OR NOT has_table_privilege('derya_app', 'public."User"', 'SELECT')
     OR NOT has_table_privilege('derya_app', 'public."Company"', 'SELECT')
-    OR NOT has_table_privilege('derya_app', 'public."SupplyWorkspace"', 'SELECT') THEN
+    OR NOT has_table_privilege('derya_app', 'public."SupplyWorkspace"', 'SELECT')
+    OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'SELECT')
+    OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'INSERT')
+    OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'UPDATE')
+    OR NOT has_table_privilege('derya_app', 'public."CustomerPortalLoginThrottle"', 'DELETE') THEN
     RAISE EXCEPTION 'derya_app is missing required application table privileges';
   END IF;
 

@@ -1950,11 +1950,17 @@ model LoginCode {
 // External customer identity. This is intentionally separate from the
 // internal User model and its founder/operator allowlist.
 model CustomerPortalUser {
-  id        String  @id @default(cuid())
-  officeId  String
-  email     String
-  fullName  String?
-  isActive  Boolean @default(true)
+  id                String   @id @default(cuid())
+  officeId          String
+  email             String
+  fullName          String?
+  isActive          Boolean  @default(true)
+  passwordHash      String?
+  passwordVersion   Int      @default(0)
+  passwordUpdatedAt DateTime?
+  failedLoginAttempts Int    @default(0)
+  lastFailedLoginAt DateTime?
+  lockedUntil       DateTime?
 
   lastLoginAt DateTime?
   createdAt   DateTime @default(now())
@@ -1969,6 +1975,18 @@ model CustomerPortalUser {
 
   @@unique([officeId, email])
   @@index([officeId, isActive])
+}
+
+// Global public-login throttle. The key is an HMAC of the client address, so
+// raw network identifiers are not stored and the limit works across instances.
+model CustomerPortalLoginThrottle {
+  keyHash         String   @id
+  windowStartedAt DateTime
+  attemptCount    Int      @default(0)
+  expiresAt       DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
 }
 
 // Company access is explicit and revocable. It is never inferred from CRM

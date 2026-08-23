@@ -6,7 +6,7 @@
   padding-bottom: 48px;
 }
 
-.passwordlessNote {
+.passwordNote {
   display: flex;
   align-items: baseline;
   gap: 12px;
@@ -18,11 +18,11 @@
   font-size: 13px;
 }
 
-.passwordlessNote strong {
+.passwordNote strong {
   flex: 0 0 auto;
 }
 
-.passwordlessNote span {
+.passwordNote span {
   color: var(--text-2);
 }
 
@@ -240,7 +240,8 @@
 }
 
 .companyAccountForm {
-  grid-template-columns: 1fr 1.2fr .8fr auto;
+  width: min(760px, 88vw);
+  grid-template-columns: 1fr 1.2fr .8fr;
 }
 
 .archiveForm {
@@ -307,6 +308,27 @@
   color: var(--text-2);
   font-size: 12px;
   font-weight: 700;
+}
+
+.passwordField {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 6px 8px;
+  align-items: end;
+}
+
+.passwordField small {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.passwordControls {
+  display: flex;
+  gap: 6px;
 }
 
 .formSubmit {
@@ -378,10 +400,20 @@
 
 .accountForm {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(150px, .55fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(150px, .55fr);
   gap: 10px;
   align-items: end;
   padding: 14px;
+}
+
+.passwordSaveRow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
 }
 
 .accessList {
@@ -527,7 +559,7 @@
     margin-top: 24px;
   }
 
-  .passwordlessNote,
+  .passwordNote,
   .companyHeader {
     align-items: flex-start;
     flex-direction: column;
@@ -583,6 +615,15 @@
 
   .actions {
     justify-content: flex-start;
+  }
+
+  .passwordField,
+  .passwordSaveRow {
+    grid-template-columns: 1fr;
+  }
+
+  .passwordControls button {
+    min-height: 44px;
   }
 
   .accountHeader {

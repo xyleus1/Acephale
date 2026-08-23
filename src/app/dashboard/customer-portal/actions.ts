@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { normalizeCustomerPortalEmail } from "@/lib/customer-portal-security";
 import { recordMemoryEvent } from "@/lib/memory/record-event";
+import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
   archiveSupplyCustomerWorkspace,
@@ -20,6 +21,8 @@ const PORTAL_ROLES = new Set(["ADMIN", "MEMBER", "VIEWER"]);
 const ACTION_STATUSES = new Set(["ACKNOWLEDGED", "RESOLVED", "REJECTED"]);
 const ENABLED_STATUSES = new Set(["ACTIVE", "DISABLED"]);
 const CUSTOMER_SETTINGS_PATH = "/dashboard/settings/customers";
+const MIN_PASSWORD_LENGTH = 12;
+const MAX_PASSWORD_LENGTH = 128;
 
 function customerSettingsUrl(notice: string): Route {
   return `${CUSTOMER_SETTINGS_PATH}?notice=${encodeURIComponent(notice)}` as Route;
@@ -31,16 +34,27 @@ function hasPrismaCode(error: unknown, code: string) {
 
 async function requirePortalManager() {
   const session = await requireSession();
-  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
-    throw new Error("Not authorized.");
-  }
-  return session;
+  const currentUser = await prisma.user.findFirst({
+    where: {
+      id: session.userId,
+      officeId: session.officeId,
+      isActive: true,
+      role: { in: ["ADMIN", "MANAGER"] },
+    },
+    select: { role: true, canViewWholeOffice: true },
+  });
+  if (!currentUser) throw new Error("Not authorized.");
+  return { ...session, ...currentUser };
 }
 
 async function requireCompanyAdmin() {
   const session = await requireSession();
-  if (session.role !== "ADMIN") throw new Error("Not authorized.");
-  return session;
+  const currentUser = await prisma.user.findFirst({
+    where: { id: session.userId, officeId: session.officeId, isActive: true, role: "ADMIN" },
+    select: { role: true, canViewWholeOffice: true },
+  });
+  if (!currentUser) throw new Error("Not authorized.");
+  return { ...session, ...currentUser };
 }
 
 function companyErrorNotice(error: unknown) {
@@ -103,24 +117,39 @@ export async function archiveCustomerCompany(workspaceId: string, formData: Form
 }
 
 export async function grantCustomerPortalAccess(formData: FormData): Promise<void> {
-  const session = await requirePortalManager();
+  const session = await requireCompanyAdmin();
   const companyId = String(formData.get("companyId") ?? "").trim();
   const email = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
   const fullName = String(formData.get("fullName") ?? "").trim().slice(0, 160) || null;
   const requestedRole = String(formData.get("role") ?? "MEMBER").toUpperCase();
   const role = PORTAL_ROLES.has(requestedRole) ? requestedRole : "MEMBER";
+  const password = String(formData.get("password") ?? "");
   if (!companyId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return;
+    redirect(customerSettingsUrl("invalid-account"));
+  }
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    redirect(customerSettingsUrl("invalid-password"));
   }
 
-  const result = await grantSupplyCustomerPortalAccess({
-    officeId: session.officeId,
-    companyId,
-    email,
-    fullName,
-    role,
-  });
-  if (!result) return;
+  const passwordHash = await hashPassword(password);
+  let result;
+  try {
+    result = await grantSupplyCustomerPortalAccess({
+      officeId: session.officeId,
+      companyId,
+      email,
+      fullName,
+      role,
+      passwordHash,
+      existingUser: "reject",
+    });
+  } catch (error) {
+    if (hasPrismaCode(error, "P2002") || (error instanceof SupplyPersistenceError && error.code === "conflict")) {
+      redirect(customerSettingsUrl("account-exists"));
+    }
+    throw error;
+  }
+  if (!result) redirect(customerSettingsUrl("company-not-found"));
 
   await recordMemoryEvent({
     officeId: session.officeId,
@@ -140,6 +169,7 @@ export async function grantCustomerPortalAccess(formData: FormData): Promise<voi
       membershipId: result.membershipId,
       email,
       role,
+      passwordReset: true,
     },
     provenance: {
       source: "customer_portal_admin",
@@ -154,6 +184,9 @@ export async function grantCustomerPortalAccess(formData: FormData): Promise<voi
   }).catch(() => null);
 
   refreshCustomerManagement();
+  revalidatePath("/portal");
+  revalidatePath("/portal/workspace");
+  redirect(customerSettingsUrl("account-created"));
 }
 
 export async function revokeCustomerPortalAccess(membershipId: string): Promise<void> {
@@ -169,9 +202,17 @@ export async function revokeCustomerPortalAccess(membershipId: string): Promise<
   });
   if (!membership) return;
 
-  await prisma.customerPortalMembership.updateMany({
-    where: { id: membership.id, officeId: session.officeId },
-    data: { isActive: false },
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.customerPortalMembership.updateMany({
+      where: { id: membership.id, officeId: session.officeId, isActive: true },
+      data: { isActive: false },
+    });
+    if (updated.count > 0) {
+      await tx.customerPortalUser.updateMany({
+        where: { id: membership.userId, officeId: session.officeId },
+        data: { passwordVersion: { increment: 1 } },
+      });
+    }
   });
   await recordMemoryEvent({
     officeId: session.officeId,
@@ -206,13 +247,17 @@ export async function revokeCustomerPortalAccess(membershipId: string): Promise<
 }
 
 export async function updateCustomerPortalAccount(userId: string, formData: FormData): Promise<void> {
-  const session = await requirePortalManager();
+  const session = await requireCompanyAdmin();
   const email = normalizeCustomerPortalEmail(String(formData.get("email") ?? ""));
   const fullName = String(formData.get("fullName") ?? "").trim().slice(0, 160) || null;
   const accountStatus = String(formData.get("accountStatus") ?? "").toUpperCase();
   const isActive = accountStatus === "ACTIVE";
+  const password = String(formData.get("password") ?? "");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !ENABLED_STATUSES.has(accountStatus)) {
     redirect(customerSettingsUrl("invalid-account"));
+  }
+  if (password && (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH)) {
+    redirect(customerSettingsUrl("invalid-password"));
   }
 
   const [user, emailOwner] = await Promise.all([
@@ -228,12 +273,26 @@ export async function updateCustomerPortalAccount(userId: string, formData: Form
   if (!user) redirect(customerSettingsUrl("account-not-found"));
   if (emailOwner) redirect(customerSettingsUrl("email-in-use"));
 
+  const passwordHash = password ? await hashPassword(password) : null;
+  const revokeSessions = Boolean(passwordHash) || user.isActive !== isActive;
   const updateAccount = prisma.customerPortalUser.updateMany({
     where: { id: user.id, officeId: session.officeId },
-    data: { email, fullName, isActive },
+    data: {
+      email,
+      fullName,
+      isActive,
+      ...(revokeSessions ? { passwordVersion: { increment: 1 } } : {}),
+      ...(passwordHash ? {
+        passwordHash,
+        passwordUpdatedAt: new Date(),
+        failedLoginAttempts: 0,
+        lastFailedLoginAt: null,
+        lockedUntil: null,
+      } : {}),
+    },
   });
   try {
-    if (user.email !== email || user.isActive !== isActive) {
+    if (user.email !== email || user.isActive !== isActive || passwordHash) {
       await prisma.$transaction([
         updateAccount,
         prisma.customerPortalLoginCode.updateMany({
@@ -274,6 +333,7 @@ export async function updateCustomerPortalAccount(userId: string, formData: Form
       fullName,
       previousIsActive: user.isActive,
       isActive,
+      passwordReset: Boolean(passwordHash),
     },
     provenance: {
       source: "customer_portal_admin",
@@ -335,21 +395,31 @@ export async function updateCustomerPortalMembership(
     redirect(customerSettingsUrl("archived-company-access"));
   }
 
-  const updated = await prisma.customerPortalMembership.updateMany({
-    where: {
-      id: membership.id,
-      officeId: session.officeId,
-      ...(isActive ? {
-        company: {
-          officeId: session.officeId,
-          crmStage: { not: "archived" },
-          supplyWorkspaces: {
-            some: { officeId: session.officeId, status: "ACTIVE" },
+  const accessChanged = membership.role !== role || membership.isActive !== isActive;
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.customerPortalMembership.updateMany({
+      where: {
+        id: membership.id,
+        officeId: session.officeId,
+        ...(isActive ? {
+          company: {
+            officeId: session.officeId,
+            crmStage: { not: "archived" },
+            supplyWorkspaces: {
+              some: { officeId: session.officeId, status: "ACTIVE" },
+            },
           },
-        },
-      } : {}),
-    },
-    data: { role, isActive },
+        } : {}),
+      },
+      data: { role, isActive },
+    });
+    if (result.count > 0 && accessChanged) {
+      await tx.customerPortalUser.updateMany({
+        where: { id: membership.userId, officeId: session.officeId },
+        data: { passwordVersion: { increment: 1 } },
+      });
+    }
+    return result;
   });
   if (updated.count === 0) redirect(customerSettingsUrl("archived-company-access"));
   await recordMemoryEvent({

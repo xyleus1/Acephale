@@ -240,10 +240,24 @@ export async function archiveSupplyCustomerWorkspace(context: SupplyAccessContex
       where: { id: workspace.company.id, officeId: context.officeId },
       data: { crmStage: "archived" },
     });
+    const affectedPortalUsers = await tx.customerPortalMembership.findMany({
+      where: { officeId: context.officeId, companyId: workspace.company.id, isActive: true },
+      select: { userId: true },
+      distinct: ["userId"],
+    });
     await tx.customerPortalMembership.updateMany({
       where: { officeId: context.officeId, companyId: workspace.company.id, isActive: true },
       data: { isActive: false },
     });
+    if (affectedPortalUsers.length > 0) {
+      await tx.customerPortalUser.updateMany({
+        where: {
+          officeId: context.officeId,
+          id: { in: affectedPortalUsers.map((user) => user.userId) },
+        },
+        data: { passwordVersion: { increment: 1 } },
+      });
+    }
   });
 
   return { companyId: workspace.company.id, archivedAt: now };
@@ -259,8 +273,11 @@ export async function grantSupplyCustomerPortalAccess(args: {
   email: string;
   fullName: string | null;
   role: string;
+  passwordHash: string;
+  existingUser?: "reset" | "reject";
 }) {
   return prisma.$transaction(async (tx) => {
+    const passwordUpdatedAt = new Date();
     const accessLockKey = customerWorkspaceAccessLockKey(args.officeId, args.companyId);
     await tx.$queryRaw<Array<{ locked: number }>>`
       SELECT 1::integer AS "locked"
@@ -278,16 +295,38 @@ export async function grantSupplyCustomerPortalAccess(args: {
       select: { id: true, name: true },
     });
     if (!company) return null;
-    const user = await tx.customerPortalUser.upsert({
+    const createUser = {
+      officeId: args.officeId,
+      email: args.email,
+      fullName: args.fullName,
+      passwordHash: args.passwordHash,
+      passwordVersion: 1,
+      passwordUpdatedAt,
+      failedLoginAttempts: 0,
+      lastFailedLoginAt: null,
+      lockedUntil: null,
+    };
+    const existingUser = args.existingUser === "reject"
+      ? await tx.customerPortalUser.findUnique({
+          where: { officeId_email: { officeId: args.officeId, email: args.email } },
+          select: { id: true },
+        })
+      : null;
+    if (existingUser) throw new SupplyPersistenceError("Customer account already exists.", "conflict");
+    const user = args.existingUser === "reject"
+      ? await tx.customerPortalUser.create({ data: createUser, select: { id: true } })
+      : await tx.customerPortalUser.upsert({
       where: { officeId_email: { officeId: args.officeId, email: args.email } },
-      create: {
-        officeId: args.officeId,
-        email: args.email,
-        fullName: args.fullName,
-      },
+      create: createUser,
       update: {
         isActive: true,
         ...(args.fullName ? { fullName: args.fullName } : {}),
+        passwordHash: args.passwordHash,
+        passwordVersion: { increment: 1 },
+        passwordUpdatedAt,
+        failedLoginAttempts: 0,
+        lastFailedLoginAt: null,
+        lockedUntil: null,
       },
       select: { id: true },
     });

@@ -14,6 +14,7 @@ import {
   updateCustomerPortalAccount,
   updateCustomerPortalMembership,
 } from "./actions";
+import { CustomerPasswordField } from "./customer-password-field";
 import styles from "./customer-portal-admin.module.css";
 
 export const metadata = { title: "Customer management" };
@@ -41,6 +42,8 @@ function roleLabel(role: string) {
 }
 
 const NOTICE_TEXT: Record<string, string> = {
+  "account-created": "Customer account created and password set.",
+  "account-exists": "That email already has a customer account. Edit the existing account to reset its password.",
   "account-updated": "Customer account updated.",
   "access-updated": "Company access updated.",
   "company-created": "Company created.",
@@ -48,6 +51,7 @@ const NOTICE_TEXT: Record<string, string> = {
   "company-archived": "Company archived and customer access revoked.",
   "confirm-company-archive": "Confirm the archive before deleting the company.",
   "invalid-account": "Enter a valid customer email.",
+  "invalid-password": "Password must contain 12 to 128 characters.",
   "invalid-access": "Choose a valid role and access status.",
   "invalid-company": "Enter a valid company name and public website.",
   "company-conflict": "Another active or archived company already uses that name or website.",
@@ -116,6 +120,8 @@ export default async function CustomerPortalAdminPage({
         fullName: true,
         isActive: true,
         lastLoginAt: true,
+        passwordUpdatedAt: true,
+        lockedUntil: true,
         createdAt: true,
         memberships: {
           where: { officeId: session.officeId },
@@ -189,9 +195,9 @@ export default async function CustomerPortalAdminPage({
           <div className={styles.notice} role="status">{NOTICE_TEXT[query.notice]}</div>
         ) : null}
 
-        <section className={styles.passwordlessNote}>
-          <strong>Passwordless customer login</strong>
-          <span>No password exists to view or reset. Customers receive a six-digit code at their approved email.</span>
+        <section className={styles.passwordNote}>
+          <strong>Customer passwords</strong>
+          <span>Set or reset a password here. It is visible before saving, then only a secure hash is stored.</span>
         </section>
 
         <section className={`${styles.card} ${styles.previewCard}`}>
@@ -267,7 +273,7 @@ export default async function CustomerPortalAdminPage({
                           </form>
                         </details>
                       ) : null}
-                      <details className={styles.editorInline}>
+                      {isAdmin ? <details className={styles.editorInline}>
                         <summary>Add account</summary>
                         <form className={styles.companyAccountForm} action={grantCustomerPortalAccess}>
                           <input type="hidden" name="companyId" value={company.id} />
@@ -287,9 +293,16 @@ export default async function CustomerPortalAdminPage({
                               <option value="ADMIN">Customer admin</option>
                             </select>
                           </label>
-                          <SubmitButton className="btn btn-sm" pendingLabel="Adding...">Add account</SubmitButton>
+                          <div className={styles.passwordSaveRow}>
+                            <CustomerPasswordField
+                              label="Password"
+                              required
+                              help="Copy it before saving. Use Edit account to reset an existing customer's password."
+                            />
+                            <SubmitButton className="btn btn-sm" pendingLabel="Adding...">Add account</SubmitButton>
+                          </div>
                         </form>
-                      </details>
+                      </details> : null}
                       {isAdmin ? (
                         <details className={`${styles.editorInline} ${styles.dangerEditor}`}>
                           <summary>Delete</summary>
@@ -327,7 +340,7 @@ export default async function CustomerPortalAdminPage({
             <span className={styles.count}>{customerAccounts.length} accounts, {activeMembershipCount} active access</span>
           </header>
           <div className={styles.inviteHint}>
-            Customer sign-in: <a href={portalUrl} target="_blank" rel="noreferrer">{portalUrl || "/portal"}</a>. Codes only go to active accounts with active company access.
+            Customer sign-in: <a href={portalUrl} target="_blank" rel="noreferrer">{portalUrl || "/portal"}</a>. Give the customer their email and the password you set.
           </div>
           <div className={styles.accounts}>
             {customerAccounts.length > 0 ? customerAccounts.map((account) => (
@@ -339,10 +352,16 @@ export default async function CustomerPortalAdminPage({
                     <div className={styles.rowMeta}>
                       {account.lastLoginAt ? `Last sign-in ${fmtDate(account.lastLoginAt)}` : "Has not signed in"}
                     </div>
+                    <div className={styles.rowMeta}>
+                      {account.passwordUpdatedAt ? `Password set ${fmtDate(account.passwordUpdatedAt)}` : "Password required"}
+                    </div>
+                    {account.lockedUntil && account.lockedUntil > new Date() ? (
+                      <div className={styles.rowMeta}>Locked until {fmtDate(account.lockedUntil)}. Reset the password to unlock now.</div>
+                    ) : null}
                   </div>
                   <div className={styles.accountActions}>
                     <span className={styles.badge}>{account.isActive ? "Active" : "Disabled"}</span>
-                    {account.isActive && account.memberships.some((membership) => (
+                    {account.passwordUpdatedAt && account.isActive && account.memberships.some((membership) => (
                       membership.isActive
                       && membership.company.crmStage !== "archived"
                       && membership.company.supplyWorkspaces.length > 0
@@ -359,7 +378,7 @@ export default async function CustomerPortalAdminPage({
                   </div>
                 </div>
 
-                <details className={styles.editor}>
+                {isAdmin ? <details className={styles.editor}>
                   <summary>Edit account</summary>
                   <form className={styles.accountForm} action={updateCustomerPortalAccount.bind(null, account.id)}>
                     <label className={styles.field}>
@@ -377,9 +396,12 @@ export default async function CustomerPortalAdminPage({
                         <option value="DISABLED">Disabled</option>
                       </select>
                     </label>
-                    <SubmitButton className="btn btn-sm" pendingLabel="Saving...">Save account</SubmitButton>
+                    <div className={styles.passwordSaveRow}>
+                      <CustomerPasswordField label="New password (optional)" />
+                      <SubmitButton className="btn btn-sm" pendingLabel="Saving...">Save account</SubmitButton>
+                    </div>
                   </form>
-                </details>
+                </details> : null}
 
                 <div className={styles.accessList}>
                   <div className={styles.accessHeading}>Company access</div>

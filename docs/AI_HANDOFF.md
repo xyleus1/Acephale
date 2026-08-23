@@ -2,6 +2,40 @@
 
 ## Latest Update
 
+### Customer portal now uses administrator-set passwords
+
+- Replaced the customer email-code flow with email and password sign-in.
+- Customer account creation now requires a 12 to 128 character
+  password. Administrators can generate, show, and copy it before saving.
+- Saved passwords are scrypt hashes and are never returned to the browser or
+  written to memory events. The admin page shows only whether and when a
+  password was set.
+- Editing an account can set a new password. Every reset increments a
+  password version so older customer sessions stop working immediately.
+- Five failed attempts lock an account for 15 minutes. A database-backed IP
+  throttle limits public login work across app instances and removes expired
+  rows in bounded batches. The admin page shows an active lock and a password
+  reset clears it.
+- Existing customer accounts remain active but require an administrator to set
+  a password before customer sign-in.
+- Added additive migration
+  `20260822000600_customer_portal_password_auth` and a read-only production
+  verification for columns, constraints, migration state, and account counts.
+
+Verification completed:
+
+- Customer portal contract
+- Production migration contract
+- Customer password database authentication and lockout contract
+- Prisma validation and client generation
+- TypeScript
+
+Release status:
+
+- Schema PR #219 merged as `751ff786`. Protected production run `32617721486`
+  applied and verified migration `20260822000600_customer_portal_password_auth`.
+- The application release and authenticated production UI test are pending.
+
 ### Identify exact supplier replies and draft a safe response
 
 - Root cause: The request list counted inbound Bourne ledger rows, but the
@@ -96,7 +130,7 @@ Release status:
   The additive migration enables existing active Gmail accounts and selects one
   deterministic default per Office so current delivery paths do not silently
   stop after deployment.
-- Gmail sends, customer portal codes, and the legacy RFQ SMTP path honor the
+- Gmail sends and the legacy RFQ SMTP path honor the
   administrator sending switch. Login codes prefer an enabled Office Gmail
   sender, but retain the server-only SMTP bootstrap path so a missing mailbox
   record cannot lock every operator out. Pausing monitoring also disables
@@ -140,9 +174,9 @@ Release status:
   creates and edits company workspaces, archives companies through the
   existing safe-delete lifecycle, and manages customer accounts under each
   company.
-- Customer identities remain passwordless. Admins can edit the customer name,
-  email, account status, company role, and access status. There is no password
-  to expose or reset.
+- Customer account controls described here originally shipped with email-code
+  login. The newer password decision above supersedes that authentication
+  detail.
 - Company archival preserves freight history, removes the company from the
   active directory, revokes memberships, deletes no operational records, and
   cannot be bypassed by re-enabling an archived membership.

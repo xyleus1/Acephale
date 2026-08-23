@@ -4,8 +4,6 @@ import { resolve } from "path";
 import {
   decodeCustomerPortalSession,
   encodeCustomerPortalSession,
-  generateCustomerPortalCode,
-  hashCustomerPortalCode,
   isCustomerPortalDocumentSource,
   normalizeCustomerPortalEmail,
 } from "../src/lib/customer-portal-security";
@@ -42,6 +40,7 @@ const staffLoginSource = readFileSync(resolve(process.cwd(), "src/app/login/page
 const staffPortalSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/page.tsx"), "utf8");
 const staffPortalActionsSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/actions.ts"), "utf8");
 const customerPortalAuthSource = readFileSync(resolve(process.cwd(), "src/lib/customer-portal-auth.ts"), "utf8");
+const customerPortalPasswordSource = readFileSync(resolve(process.cwd(), "src/lib/customer-portal-password.ts"), "utf8");
 const customerSettingsSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/settings/customers/page.tsx"), "utf8");
 const settingsIndexSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/settings/page.tsx"), "utf8");
 const settingsHeaderSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/settings/settings-header.tsx"), "utf8");
@@ -61,9 +60,10 @@ assert.match(staffPortalSource, /updateCustomerPortalAccount\.bind\(null, accoun
 assert.match(staffPortalSource, /updateCustomerPortalMembership\.bind\(null, membership\.id\)/);
 assert.match(staffPortalSource, />Account status</);
 assert.match(staffPortalSource, />Company access</);
-assert.match(staffPortalSource, /Passwordless customer login/);
-assert.match(staffPortalSource, /No password exists to view or reset/);
-assert.doesNotMatch(staffPortalSource, /type="password"|passwordHash/);
+assert.match(staffPortalSource, /Customer passwords/);
+assert.match(staffPortalSource, /label="Password"/);
+assert.match(staffPortalSource, /CustomerPasswordField label="New password \(optional\)"/);
+assert.doesNotMatch(staffPortalSource, /passwordHash/);
 assert.match(staffPortalSource, /createCustomerCompany/);
 assert.match(staffPortalSource, /updateCustomerCompany\.bind\(null, company\.workspaceId\)/);
 assert.match(staffPortalSource, /archiveCustomerCompany\.bind\(null, company\.workspaceId\)/);
@@ -78,6 +78,11 @@ assert.match(settingsHeaderSource, /active === "customers"/);
 assert.match(supplyShellSource, /const settingsLabel = `[\s\S]*accountRole/);
 assert.match(supplyShellSource, /href="\/dashboard\/settings"/);
 assert.match(staffPortalActionsSource, /where: \{ id: userId, officeId: session\.officeId \}/);
+assert.match(staffPortalActionsSource, /grantCustomerPortalAccess[\s\S]*requireCompanyAdmin\(\)/);
+assert.match(staffPortalActionsSource, /updateCustomerPortalAccount[\s\S]*requireCompanyAdmin\(\)/);
+assert.match(staffPortalActionsSource, /role: "ADMIN"/);
+assert.match(staffPortalActionsSource, /existingUser: "reject"/);
+assert.match(staffPortalActionsSource, /const revokeSessions = Boolean\(passwordHash\) \|\| user\.isActive !== isActive/);
 assert.match(staffPortalActionsSource, /where: \{ id: membershipId, officeId: session\.officeId \}/);
 assert.match(staffPortalActionsSource, /email, id: \{ not: userId \}/);
 assert.match(staffPortalActionsSource, /customerPortalLoginCode\.updateMany/);
@@ -87,10 +92,19 @@ assert.match(staffPortalActionsSource, /archiveSupplyCustomerWorkspace\(supplyAc
 assert.match(staffPortalActionsSource, /formData\.get\("confirmArchive"\)/);
 assert.match(staffPortalActionsSource, /crmStage: \{ not: "archived" \}/);
 assert.match(staffPortalActionsSource, /archived-company-access/);
-assert.match(staffPortalActionsSource, /const updated = await prisma\.customerPortalMembership\.updateMany/);
+assert.match(staffPortalActionsSource, /const updated = await prisma\.\$transaction/);
 assert.match(staffPortalActionsSource, /if \(updated\.count === 0\) redirect\(customerSettingsUrl\("archived-company-access"\)\)/);
-assert.match(customerPortalAuthSource, /crmStage: \{ not: "archived" \}/);
-assert.match(customerPortalAuthSource, /status: "ACTIVE"/);
+assert.match(customerPortalPasswordSource, /crmStage: \{ not: "archived" \}/);
+assert.match(customerPortalPasswordSource, /status: "ACTIVE"/);
+assert.match(customerPortalPasswordSource, /verifyPassword/);
+assert.match(customerPortalPasswordSource, /passwordVersion: payload\.passwordVersion/);
+assert.match(customerPortalPasswordSource, /MAX_FAILED_LOGIN_ATTEMPTS = 5/);
+assert.match(customerPortalPasswordSource, /lockedUntil: new Date\(now\.getTime\(\) \+ LOGIN_LOCK_MS\)/);
+assert.doesNotMatch(customerPortalAuthSource, /sendEmail|requestCustomerPortalCode|verifyCustomerPortalCode/);
+assert.match(customerLoginSource, /name="password"/);
+assert.match(customerLoginSource, /authenticateCustomerPortal/);
+assert.match(customerLoginSource, /await consumeCustomerPortalLoginAttempt\(clientAddress\)/);
+assert.doesNotMatch(customerLoginSource, /six-digit|sign-in code|requestCodeAction/);
 assert.match(customerDevelopmentPreviewSource, /robots: \{ index: false, follow: false \}/);
 assert.match(customerDevelopmentPreviewSource, /Development preview with fictional data/);
 assert.match(customerDevelopmentPreviewSource, /buildCustomerPortalShipment/);
@@ -107,9 +121,7 @@ assert.match(customerProcurementSource, /apiBasePath=\{`\/api\/portal\/procureme
 assert.match(customerProcurementSource, /readOnly=\{!customerContextCanEditRole/);
 
 assert.strictEqual(normalizeCustomerPortalEmail("  Ops@Customer.COM "), "ops@customer.com");
-for (let index = 0; index < 100; index += 1) {
-  assert.match(generateCustomerPortalCode(), /^\d{6}$/);
-}
+
 
 const secret = "portal-test-secret";
 const now = Date.parse("2026-07-29T12:00:00.000Z");
@@ -117,6 +129,7 @@ const token = encodeCustomerPortalSession(secret, {
   portalUserId: "portal-user-1",
   officeId: "office-1",
   email: "ops@customer.com",
+  passwordVersion: 3,
 }, now);
 assert.deepStrictEqual(
   decodeCustomerPortalSession(secret, token, now + 1000),
@@ -124,6 +137,7 @@ assert.deepStrictEqual(
     portalUserId: "portal-user-1",
     officeId: "office-1",
     email: "ops@customer.com",
+    passwordVersion: 3,
     expiresAt: now + 30 * 24 * 60 * 60 * 1000,
   },
 );
@@ -134,12 +148,6 @@ assert.strictEqual(
   null,
 );
 
-const codeHash = hashCustomerPortalCode(secret, "office-1", "ops@customer.com", "123456");
-assert.notStrictEqual(
-  codeHash,
-  hashCustomerPortalCode(secret, "office-2", "ops@customer.com", "123456"),
-  "login codes must be tenant-scoped",
-);
 assert.strictEqual(isCustomerPortalDocumentSource("local-upload://job-documents/office/job/file.pdf"), true);
 assert.strictEqual(isCustomerPortalDocumentSource("local-upload://context-documents/office/workspace/file.pdf"), true);
 assert.strictEqual(isCustomerPortalDocumentSource("s3://bucket/job-documents/office/job/file.pdf"), true);

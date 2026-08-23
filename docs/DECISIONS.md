@@ -16,6 +16,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-22 - Customer portal uses admin-managed passwords
+
+- Status: accepted, supersedes the passwordless customer portal login decision
+- Owner: product and engineering
+- Context: Administrators need to create a customer account, hand the customer
+  a known credential, and reset access without depending on email delivery.
+- Decision: Customer portal accounts authenticate with an office-scoped email
+  and password. Administrators set a password when adding access and
+  may replace it later. The password is visible only in the unsaved form.
+  Derya stores an scrypt hash, never recoverable plaintext. Existing accounts
+  without a hash cannot sign in until an administrator sets a password.
+- Session boundary: Every session carries the account password version. A
+  password reset increments that version and invalidates every older session.
+  Active company membership and workspace checks still run on every request.
+- Abuse boundary: Five failed attempts lock the account for 15 minutes. A
+  database-backed IP throttle also limits public attempts across app instances.
+  A password reset clears the account lock. Login errors do not reveal whether
+  an account exists.
+- Consequences: Customer sign-in no longer sends or accepts email codes. The
+  administrator can see when a password was last set, but cannot retrieve the
+  saved password. Lost credentials require a reset.
+- Revisit when: Self-service password reset or a managed identity provider is
+  needed.
+
 ### 2026-08-22 - Supplier replies and supplier quotes are separate facts
 
 - Status: accepted

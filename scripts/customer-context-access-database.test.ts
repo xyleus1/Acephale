@@ -204,6 +204,7 @@ async function main() {
         email: raceEmail,
         fullName: "Archive Race Customer",
         role: "MEMBER",
+        passwordHash: "test-salt:test-hash",
       }),
       archiveSupplyCustomerWorkspace({
         officeId: officeA.id,

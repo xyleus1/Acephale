@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LogoMark } from "@/components/logo-mark";
 import {
+  authenticateCustomerPortal,
   getCustomerPortalPrincipal,
   issueCustomerPortalSession,
-  requestCustomerPortalCode,
-  verifyCustomerPortalCode,
 } from "@/lib/customer-portal-auth";
+import { consumeCustomerPortalLoginAttempt } from "@/lib/customer-portal-login-rate-limit";
 import styles from "./portal-workspace.module.css";
 
 export const metadata: Metadata = {
@@ -14,16 +15,9 @@ export const metadata: Metadata = {
 };
 
 type PortalLoginParams = {
-  sent?: string;
   email?: string;
   office?: string;
   error?: string;
-};
-
-const ERROR_TEXT: Record<string, string> = {
-  rate_limited: "Too many codes were requested. Wait 15 minutes and try again.",
-  send_failed: "The code could not be sent. Contact your Derya operator.",
-  badcode: "That code is incorrect or expired.",
 };
 
 export default async function CustomerPortalLoginPage({
@@ -34,32 +28,28 @@ export default async function CustomerPortalLoginPage({
   const principal = await getCustomerPortalPrincipal();
   if (principal) redirect("/portal/workspace");
   const query = await searchParams;
-  const codeSent = query.sent === "1" && !!query.email;
 
-  async function requestCodeAction(formData: FormData) {
+  async function loginAction(formData: FormData) {
     "use server";
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const password = String(formData.get("password") ?? "");
     const office = String(formData.get("office") ?? "").trim() || null;
-    const result = await requestCustomerPortalCode(email, office);
-    if (!result.ok) {
-      redirect(`/portal?error=${result.error}&email=${encodeURIComponent(email)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
+    const requestHeaders = await headers();
+    const clientAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || requestHeaders.get("x-real-ip")
+      || "unknown";
+    if (!await consumeCustomerPortalLoginAttempt(clientAddress)) {
+      redirect(`/portal?error=limited&email=${encodeURIComponent(email)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
     }
-    redirect(`/portal?sent=1&email=${encodeURIComponent(email)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
-  }
-
-  async function verifyCodeAction(formData: FormData) {
-    "use server";
-    const email = String(formData.get("email") ?? "").trim().toLowerCase();
-    const code = String(formData.get("code") ?? "").trim();
-    const office = String(formData.get("office") ?? "").trim() || null;
-    const verified = await verifyCustomerPortalCode(email, code, office);
-    if (!verified.ok) {
-      redirect(`/portal?sent=1&error=badcode&email=${encodeURIComponent(email)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
+    const result = await authenticateCustomerPortal(email, password, office);
+    if (!result.ok) {
+      redirect(`/portal?error=invalid&email=${encodeURIComponent(email)}${office ? `&office=${encodeURIComponent(office)}` : ""}`);
     }
     await issueCustomerPortalSession({
-      userId: verified.userId,
-      officeId: verified.officeId,
-      email: verified.email,
+      userId: result.userId,
+      officeId: result.officeId,
+      email: result.email,
+      passwordVersion: result.passwordVersion,
     });
     redirect("/portal/workspace");
   }
@@ -84,15 +74,18 @@ export default async function CustomerPortalLoginPage({
         <section className={styles.loginPanel} aria-labelledby="customer-sign-in-heading">
           <div className={styles.loginPanelHeader}>
             <h2 id="customer-sign-in-heading">Customer sign in</h2>
-            <p>Use an email approved by your Derya operator.</p>
+            <p>Use the account created by your Derya operator.</p>
           </div>
 
-        {query.error && (
-          <div className={styles.error}>{ERROR_TEXT[query.error] ?? "Something went wrong. Try again."}</div>
-        )}
+          {query.error ? (
+            <div className={styles.error}>
+              {query.error === "limited"
+                ? "Too many sign-in attempts. Wait 15 minutes or contact your Derya operator."
+                : "Sign-in failed. Check your email and password, or contact your Derya operator if the account is locked."}
+            </div>
+          ) : null}
 
-        {!codeSent ? (
-          <form action={requestCodeAction} className={styles.form}>
+          <form action={loginAction} className={styles.form}>
             <input type="hidden" name="office" value={query.office ?? ""} />
             <label className={styles.label}>
               Work email
@@ -106,42 +99,24 @@ export default async function CustomerPortalLoginPage({
                 placeholder="you@company.com"
               />
             </label>
-            <button className={styles.button} type="submit">Email me a sign-in code</button>
-          </form>
-        ) : (
-          <form action={verifyCodeAction} className={styles.form}>
-            <input type="hidden" name="email" value={query.email ?? ""} />
-            <input type="hidden" name="office" value={query.office ?? ""} />
-            <div className={styles.notice}>
-              If {query.email} has portal access, a six-digit code was sent. It expires in 10 minutes.
-            </div>
             <label className={styles.label}>
-              Six-digit code
+              Password
               <input
                 className={styles.input}
-                name="code"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                maxLength={6}
+                name="password"
+                type="password"
+                minLength={12}
+                maxLength={128}
                 required
-                autoComplete="one-time-code"
-                placeholder="123456"
-                autoFocus
+                autoComplete="current-password"
               />
             </label>
             <button className={styles.button} type="submit">Sign in</button>
-            <a
-              className={styles.linkButton}
-              href={`/portal?email=${encodeURIComponent(query.email ?? "")}${query.office ? `&office=${encodeURIComponent(query.office)}` : ""}`}
-            >
-              Request another code
-            </a>
           </form>
-        )}
 
-        <div className={styles.loginFoot}>
-          Need access? Contact your Derya operator.
-        </div>
+          <div className={styles.loginFoot}>
+            Need access or a new password? Contact your Derya operator.
+          </div>
         </section>
       </div>
     </main>

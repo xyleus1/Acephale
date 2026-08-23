@@ -6453,3 +6453,27 @@ Use this file for chronological implementation notes that future agents should s
   and outbound-only vendor assertions.
 - Follow-up: Ship through CI, then verify Bay Area Circuits plus the draft-only
   reply panel in the authenticated production UI.
+
+### 2026-08-22 - Replace customer email codes with passwords
+
+- Branch: `codex/customer-password-auth-20260822`, based on current
+  `origin/main` when work began.
+- Task: Let an administrator create a customer login with a known
+  password and reset it later without email delivery.
+- Security: Passwords are scrypt-hashed, never stored or displayed after save,
+  and never included in memory events. Password, status, and access changes
+  increment the session version so old sessions are rejected. Five failed
+  attempts lock the account for 15 minutes, and a persistent IP throttle limits
+  public login work across app instances. Each attempt removes up to 100 expired
+  throttle rows through the expiry index.
+- Schema: Added nullable password hash and update time fields plus a nonnegative
+  password version. Existing accounts require a password reset before sign-in.
+- UI: Replaced the two-step email-code page with email and password login.
+  Customer management can generate, show, copy, and set a password,
+  then shows only when it was last set.
+- Verification: Customer portal contract, production migration contract,
+  password database authentication and lockout contract, Prisma validation and
+  generation, TypeScript, product copy, and the production build passed locally.
+- Release: Schema PR #219 merged as `751ff786`. Protected production run
+  `32617721486` applied and verified the migration. Application deploy and
+  authenticated production UI testing remain pending.
