@@ -1,109 +1,106 @@
-# Email connection setup (Gmail)
+# Gmail account setup
 
-Step-by-step to wire up real Gmail OAuth so the app can pull inbound mail and AI-classify it per load.
+`/dashboard/settings/email` is the administrator surface for connected Gmail
+accounts. It stores each account under the authenticated Office, monitors
+inbound mail, and controls which accounts may send through Derya.
 
-## What you'll get
+## Account states
 
-Once set up, on `/dashboard/settings/email` you can:
-- Click **"Connect a Gmail inbox"** to authorize any number of Gmail accounts (one at a time)
-- Click **"Sync now"** on any connected inbox to fetch the last 7 days of mail
-- Inbound emails are classified by AI:
-  - **RFQ** → creates a new `Inquiry` record with parsed origin/destination/mode/etc.
-  - **Carrier reply** → updates the matching `CarrierQuote` with rate, transit, validity
-  - **Customer reply** → attaches to the matching job's email thread
-  - **Other** → stored as a plain `EmailMessage` for record
-- All messages threaded by `In-Reply-To` / `References` headers, fallback to subject match
+- Connected: OAuth tokens exist and Gmail monitoring can run.
+- Paused: monitoring is stopped, the account cannot send, and its messages are
+  hidden from the active Inbox. Existing records are retained.
+- Sending enabled: approved Derya send paths may use the account.
+- Default sender: the first-choice account for system email paths that do not
+  already bind an exact conversation account.
 
-## What you need to do (10 minutes)
+Connecting Gmail does not enable sending automatically. An administrator must
+enable sending and may then choose one default sender. Existing connected Gmail
+accounts are enabled during the migration so current delivery behavior does not
+silently break.
 
-### 1. Create a Google Cloud project
+## Google Cloud configuration
 
-1. Go to <https://console.cloud.google.com>
-2. Create a new project (or use an existing one). Top-left dropdown → **New Project** → name it `Derya Freight OS`.
+1. Create or select a Google Cloud project.
+2. Enable the Gmail API.
+3. Configure the OAuth consent screen.
+4. Add the Gmail accounts as test users while the application remains
+   unverified.
+5. Create a Web application OAuth client.
+6. Register the exact callback URLs used by each environment, for example:
 
-### 2. Enable the Gmail API
-
-1. In the project, go to **APIs & Services → Library**
-2. Search for **Gmail API**, click it, click **Enable**
-
-### 3. Configure the OAuth consent screen
-
-1. **APIs & Services → OAuth consent screen**
-2. User type: **External** (unless you're on Workspace; then Internal is fine and skips the verification step)
-3. Fill in:
-   - App name: `Derya Freight OS` (or whatever)
-   - User support email: your email
-   - Developer contact: your email
-4. **Scopes** → Add or remove scopes → check:
-   - `https://www.googleapis.com/auth/gmail.readonly`
-   - `https://www.googleapis.com/auth/userinfo.email`
-5. **Test users** → add the Gmail addresses you'll use to connect (until the app is verified, only test users can authorize). For demo, add your own + any team emails you'll connect.
-
-### 4. Create OAuth 2.0 credentials
-
-1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
-2. Application type: **Web application**
-3. Name: `Derya OAuth`
-4. **Authorized redirect URIs** — add **both** of these (exactly):
-   - `https://app.derya.ai/api/auth/gmail/callback`
-   - `http://localhost:3000/api/auth/gmail/callback` *(for local dev)*
-5. Click **Create**. A modal pops up with the **Client ID** and **Client Secret** — copy both.
-
-### 5. Add env vars to Vercel
-
-In **Vercel project → Settings → Environment Variables**, add (Production + Preview scope):
-
-| Key | Value |
-|---|---|
-| `GOOGLE_CLIENT_ID` | the Client ID from step 4 |
-| `GOOGLE_CLIENT_SECRET` | the Client Secret from step 4 |
-| `GOOGLE_REDIRECT_URI` | `https://app.derya.ai/api/auth/gmail/callback` |
-
-> **Important:** The `GOOGLE_REDIRECT_URI` value must match **exactly** what you put in step 4's "Authorized redirect URIs" — same protocol, host, path. A trailing slash mismatch will fail.
-
-For local dev (optional), put the same in your local `.env`:
-```
-GOOGLE_CLIENT_ID="..."
-GOOGLE_CLIENT_SECRET="..."
-GOOGLE_REDIRECT_URI="http://localhost:3000/api/auth/gmail/callback"
+```text
+https://app.derya.ai/api/auth/gmail/callback
+http://localhost:3000/api/auth/gmail/callback
 ```
 
-### 6. Redeploy
+The consent screen must allow these scopes:
 
-Vercel project → Deployments → **Redeploy** the latest. Env var changes don't apply to existing deployments.
+```text
+https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/gmail.send
+https://www.googleapis.com/auth/userinfo.email
+```
 
-### 7. Connect your first inbox
+## Server configuration
 
-1. Go to `https://app.derya.ai/dashboard/settings/email`
-2. Click **"Connect a Gmail inbox"**
-3. Google asks you to choose an account → choose, click through consent
-4. You'll be redirected back with a green confirmation banner
-5. Click **"Sync now"** — first sync grabs the last 7 days
-6. Check `/dashboard` and `/dashboard/rfq` — new RFQs and threads should appear
+Set these server-only variables in the deployment environment:
 
-### 8. Connect a second (third, fourth...) inbox
+```text
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI
+TOKEN_ENCRYPTION_KEY
+```
 
-Same flow. Each authorization creates a separate `EmailAccount` record. When the consent screen shows, you can switch Google accounts via "Use another account".
+`GOOGLE_REDIRECT_URI` must match the registered callback exactly.
+`TOKEN_ENCRYPTION_KEY` protects stored OAuth tokens. Do not use a
+`NEXT_PUBLIC_` variable for any credential.
 
-## Costs
+Redeploy after changing environment variables.
 
-- **Google Cloud / Gmail API:** free for the volumes any single forwarding office will hit
-- **OpenAI GPT-5.6 classifier:** usage depends on input, output, and reasoning tokens. Check current OpenAI pricing before estimating production sync cost.
+## Connect and verify an account
 
-## Limitations of the current MVP
+1. Sign in as an active Office user whose operational role is `ADMIN`.
+2. Open `/dashboard/settings/email`.
+3. Select **Connect Gmail** and complete Google consent.
+4. Select **Sync now** to verify monitoring and queue bounded backfill work.
+5. Select **Enable sending** only if the account is approved for outbound use.
+6. Select **Make default** if system email should prefer this account.
+7. Use **Send test**. The test recipient is the signed-in administrator, not a
+   browser-supplied address.
 
-- **No automatic background sync yet** — you click "Sync now" manually. Cron job is on the roadmap.
-- **Read-only** — we don't send via the connected account yet. Outbound emails are still logged to `EmailMessage` only. Adding `gmail.send` scope + send button is a small follow-up.
-- **No attachment handling** — message bodies only. PDFs / docs ignored. (Document drag-drop classifier is on the ideas list.)
-- **Outlook / IMAP** — not yet implemented. Gmail only for now.
-- **Unverified app limit** — Google caps unverified OAuth apps to 100 users. Fine for any forwarder; if you need to scale further, submit for verification (takes a week, free).
+The settings page shows message counts, last inbound and outbound activity,
+last sync time, monitoring state, sending state, and the default sender.
+
+## Automation boundary
+
+Derya owns Gmail authorization, encrypted tokens, account policy, message sync,
+and the local email ledger. Bourne owns sourcing campaigns, supplier selection,
+campaign scheduling, and approval state.
+
+The legacy RFQ SMTP fallback also requires its matching Gmail account to be
+connected, monitored, and enabled here. SMTP credentials alone cannot bypass
+the administrator sending switch or reply-monitoring requirement.
+
+Login codes are the deliberate exception. They prefer an enabled Office Gmail
+account, but may use the server-only RFQ SMTP bootstrap when no usable account
+exists. This prevents the account settings dependency from locking every
+operator out of the application.
+
+Do not copy Gmail refresh tokens into Bourne. A future Bourne delivery bridge
+must use an authenticated server-to-server request, a Derya account reference,
+an exact approved message, a tenant binding, and an idempotency key. Until that
+contract exists, connecting or enabling an account in Derya does not authorize
+Bourne to send a campaign.
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---|---|
-| "redirect_uri_mismatch" | Check the URI in Google Cloud (step 4) matches `GOOGLE_REDIRECT_URI` env var exactly |
-| "Access blocked: this app is not verified" | Add yourself as a Test User in step 3 |
-| `OAuth error: state_mismatch` after callback | Cookies blocked or session expired — retry |
-| Sync returns "0 new" | The account already has those messages (de-duped by Gmail message-id). Send yourself a new test email and try again |
-| `Gmail list failed: 401` | Token refresh failed — disconnect and reconnect the account |
+| Symptom | Correction |
+| --- | --- |
+| `redirect_uri_mismatch` | Match the Google Cloud callback and `GOOGLE_REDIRECT_URI` exactly. |
+| Google blocks the account | Add the account as an OAuth test user or complete app verification. |
+| `state_mismatch` | Restart the connection from the authenticated settings page. |
+| Send permission error | Reconnect the account so Google grants `gmail.send`. |
+| No refresh token | Reconnect with the Google consent prompt. |
+| Sync returns zero | Send a new message or inspect the last sync time. Existing Gmail message IDs are deduplicated. |
+| Sending disabled | An administrator must enable the account after connection. |

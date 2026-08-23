@@ -9,10 +9,9 @@ import { buildLeadFollowUpContent, buildLeadRevivalContent, leadQualifierQuestio
 import { US_LEAD_PARSED_MARKER } from "./meta-leads";
 import { stripEmDashes } from "./no-em-dash";
 
-// Outbound RFQ mail from the rfq@usederya.com desk address. This account is
-// not OAuth-connected (no refresh token), so delivery goes over Gmail SMTP
-// with an app password. Nothing sends automatically - every send sits behind
-// an explicit operator button with a preview.
+// Outbound RFQ mail from the rfq@usederya.com desk address. Legacy delivery
+// uses Gmail SMTP with an app password, but the matching OAuth account must be
+// connected, monitored, and enabled so replies and bounces remain observable.
 
 const DEFAULT_MAIL_USER = "rfq@usederya.com";
 const DEFAULT_FORWARD_TO = "oguzhan@usederya.com";
@@ -300,6 +299,20 @@ export async function sendRfqMail(args: {
   const config = rfqMailConfig();
   if (!rfqMailConfigured()) {
     return { error: "RFQ mail is not configured (set RFQ_MAIL_APP_PASSWORD)." };
+  }
+  const approvedSender = await prisma.emailAccount.findFirst({
+    where: {
+      officeId: args.officeId,
+      email: { equals: config.user, mode: "insensitive" },
+      provider: "GMAIL",
+      isActive: true,
+      sendEnabled: true,
+      refreshToken: { not: null },
+    },
+    select: { id: true },
+  });
+  if (!approvedSender) {
+    return { error: "RFQ sender is not connected, monitored, and enabled in Email accounts." };
   }
 
   const transporter = nodemailer.createTransport({

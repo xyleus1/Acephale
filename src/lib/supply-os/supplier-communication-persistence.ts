@@ -48,9 +48,10 @@ export async function listSupplierSenderAccounts(context: SupplyAccessContext) {
       officeId: context.officeId,
       provider: "GMAIL",
       isActive: true,
+      sendEnabled: true,
       OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
     },
-    orderBy: { email: "asc" },
+    orderBy: [{ isDefaultSender: "desc" }, { email: "asc" }],
     select: { id: true, email: true, provider: true },
   });
 }
@@ -102,11 +103,12 @@ export async function saveSupplierEmailDraft(args: {
       officeId: args.context.officeId,
       provider: "GMAIL",
       isActive: true,
+      sendEnabled: true,
       OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
     },
     select: { id: true, email: true },
   });
-  if (!sender) throw new SupplyPersistenceError("The selected Gmail sender is missing, inactive, or disconnected.", "invalid_input");
+  if (!sender) throw new SupplyPersistenceError("The selected Gmail sender is missing, inactive, disconnected, or disabled for sending.", "invalid_input");
   const quoteLookup = await prisma.supplyExecutionTask.findFirst({
     where: {
       id: args.quoteCycleId,

@@ -2,7 +2,40 @@
 
 ## Latest Update
 
-### Email sender policy schema is staged before the application release
+### Administrator email accounts are ready for release
+
+- `/dashboard/settings/email` is restricted to active Office users whose
+  operational role is `ADMIN`.
+- Administrators can connect Gmail, enable or disable outbound use per account,
+  choose one default sender per Office, send a test message to themselves, and
+  monitor inbound and outbound activity.
+- Newly connected accounts start with monitoring active and sending disabled.
+  The additive migration enables existing active Gmail accounts and selects one
+  deterministic default per Office so current delivery paths do not silently
+  stop after deployment.
+- Gmail sends, customer portal codes, and the legacy RFQ SMTP path honor the
+  administrator sending switch. Login codes prefer an enabled Office Gmail
+  sender, but retain the server-only SMTP bootstrap path so a missing mailbox
+  record cannot lock every operator out. Pausing monitoring also disables
+  sending and clears the default sender.
+- Derya owns credentials, account policy, delivery, and the message ledger.
+  Bourne still owns campaign planning, supplier selection, approval, schedule,
+  and retry. No generic campaign relay or text-triggered send was introduced.
+
+Release status:
+
+- PR #208 is open. Its first PostgreSQL run applied every migration, then found
+  two stale Supply OS sender fixtures that inherited the new send-disabled
+  default. Those fixtures now explicitly enable only the test senders that are
+  expected to deliver mail. The repeat PostgreSQL run passed the full migration
+  and persistence suites.
+- Production run `32614578311` applied and verified
+  `20260822000400_email_account_sending_config` before the app release.
+- Run Prisma validation and generation, the email account settings contract,
+  Gmail OAuth configuration tests, TypeScript, the production build, and an
+  authenticated production check of both settings routes.
+
+### Email sender policy schema is live
 
 - Added the additive `20260822000400_email_account_sending_config` migration as
   the latest migration on `main`.
@@ -12,9 +45,9 @@
 - Added a committed read-only production verification for both columns, the
   partial unique index, migration ledger state, backfill completeness, and one
   default sender per eligible Office.
-- This schema-only release does not change the Prisma client or application
-  behavior. Apply it through the protected production migration workflow before
-  merging PR #208.
+- Schema-only PR #215 merged before the application release. Protected
+  production run `32614578311` passed target validation, migration deployment,
+  and read-only verification.
 
 ### Admin Settings now manages customer companies and accounts
 

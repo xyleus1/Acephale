@@ -1,9 +1,11 @@
-import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireEmailAccountAdminSession } from "@/lib/email-account-access";
 import { Icon } from "@/components/icon";
 import { SyncAccountButton } from "@/components/sync-account-button";
 import { DisconnectAccountButton } from "@/components/disconnect-account-button";
 import { ResumeAccountButton } from "@/components/resume-account-button";
+import { EmailAccountControls } from "@/components/email-account-controls";
+import { EmailSenderTest } from "@/components/email-sender-test";
 import { SyncGoogleSheetButton } from "@/components/sync-google-sheet-button";
 import { AppearanceToggle } from "@/components/appearance-toggle";
 import { SyncDeryaInboxesButton } from "@/components/sync-derya-inboxes-button";
@@ -14,7 +16,7 @@ import { whatsAppAccountLabel } from "@/lib/whatsapp-display";
 import { SettingsHeader } from "../settings-header";
 import settingsStyles from "../integrations/integrations-settings.module.css";
 
-export const metadata = { title: "Channels" };
+export const metadata = { title: "Email accounts" };
 
 function timeAgo(d: Date | null | undefined) {
   if (!d) return "Never";
@@ -32,7 +34,7 @@ export default async function EmailSettingsPage({
 }: {
   searchParams: Promise<{ oauth_success?: string; oauth_error?: string }>;
 }) {
-  const session = await requireSession();
+  const session = await requireEmailAccountAdminSession();
   const sp = await searchParams;
 
   const accounts = await prisma.emailAccount.findMany({
@@ -45,13 +47,45 @@ export default async function EmailSettingsPage({
     where: { account: { officeId: session.officeId } },
     _count: true,
   });
+  const messageActivity = await prisma.emailMessage.groupBy({
+    by: ["accountId", "direction"],
+    where: { account: { officeId: session.officeId } },
+    _count: true,
+    _max: { sentAt: true },
+  });
   const activeForwarderCount = await prisma.forwarder.count({
     where: { officeId: session.officeId, active: true },
   });
   const countByAccount = Object.fromEntries(messageCounts.map((c) => [c.accountId, c._count]));
+  const activityByAccount = new Map<string, {
+    inbound: number;
+    outbound: number;
+    lastInboundAt: Date | null;
+    lastOutboundAt: Date | null;
+  }>();
+  for (const row of messageActivity) {
+    if (!row.accountId) continue;
+    const activity = activityByAccount.get(row.accountId) ?? {
+      inbound: 0,
+      outbound: 0,
+      lastInboundAt: null,
+      lastOutboundAt: null,
+    };
+    if (row.direction === "INBOUND") {
+      activity.inbound = row._count;
+      activity.lastInboundAt = row._max.sentAt;
+    } else {
+      activity.outbound = row._count;
+      activity.lastOutboundAt = row._max.sentAt;
+    }
+    activityByAccount.set(row.accountId, activity);
+  }
 
   const active = accounts.filter((a) => a.isActive);
   const paused = accounts.filter((a) => !a.isActive);
+  const monitoredGmail = active.filter((a) => a.provider === "GMAIL" && Boolean(a.refreshToken));
+  const sendingGmail = monitoredGmail.filter((a) => a.sendEnabled);
+  const defaultSender = sendingGmail.find((a) => a.isDefaultSender) ?? null;
   const connectedAllowedSenderEmails = active
     .filter((a) => a.provider === "GMAIL" && DERYA_LOAD_RFQ_INBOX_EMAILS.includes(a.email.toLowerCase()))
     .map((a) => a.email.toLowerCase());
@@ -123,6 +157,15 @@ export default async function EmailSettingsPage({
     && !!process.env.DOCUMENT_STORAGE_S3_SECRET_ACCESS_KEY;
   const setupGates = [
     {
+      label: "Default sender",
+      status: defaultSender ? "ready" : sendingGmail.length > 0 ? "setup required" : "blocked",
+      detail: defaultSender
+        ? `${defaultSender.email} is the default for approved outbound email.`
+        : sendingGmail.length > 0
+          ? "Choose one enabled Gmail account as the default sender."
+          : "Connect Gmail and explicitly enable sending before outbound email can use an account.",
+    },
+    {
       label: "Derya load/RFQ inboxes",
       status: missingAllowedSenderEmails.length === 0 ? "ready" : oauthConfigured ? "setup required" : "blocked",
       detail: missingAllowedSenderEmails.length === 0
@@ -179,6 +222,22 @@ export default async function EmailSettingsPage({
     <main className={settingsStyles.page}>
       <SettingsHeader active="channels" isAdmin={session.role === "ADMIN"} />
       <div style={{ maxWidth: 1180, margin: "34px auto 0" }}>
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-body" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 18 }}>
+          <div>
+            <div style={{ color: "var(--text-3)", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Monitoring</div>
+            <div style={{ marginTop: 5, color: "var(--text)", fontSize: 16, fontWeight: 650 }}>{monitoredGmail.length} active</div>
+          </div>
+          <div>
+            <div style={{ color: "var(--text-3)", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Sending</div>
+            <div style={{ marginTop: 5, color: "var(--text)", fontSize: 16, fontWeight: 650 }}>{sendingGmail.length} enabled</div>
+          </div>
+          <div>
+            <div style={{ color: "var(--text-3)", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Default sender</div>
+            <div style={{ marginTop: 5, overflow: "hidden", color: "var(--text)", fontSize: 13, fontWeight: 650, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{defaultSender?.email ?? "Not set"}</div>
+          </div>
+        </div>
+      </div>
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body appearance-card-body">
           <div>
@@ -466,7 +525,7 @@ export default async function EmailSettingsPage({
 
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body">
-          <div className="section-title" style={{ marginBottom: 12 }}>Connect a new inbox</div>
+          <div className="section-title" style={{ marginBottom: 12 }}>Add email account</div>
           <div style={{ display: "flex", gap: 10 }}>
             {oauthConfigured ? (
               <a
@@ -475,7 +534,7 @@ export default async function EmailSettingsPage({
                 style={{ flex: 1, justifyContent: "center", gap: 10, padding: "12px 16px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}
               >
                 <span style={{ width: 20, height: 20, borderRadius: 4, background: "var(--derya-navy, var(--derya-ink))", border: "1px solid var(--derya-walnut, var(--border-strong))", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 }}>G</span>
-                Connect a Gmail inbox
+                Connect Gmail
               </a>
             ) : (
               <div style={{ flex: 1, padding: "12px 16px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 12.5, color: "var(--text-2)" }}>
@@ -484,8 +543,22 @@ export default async function EmailSettingsPage({
             )}
           </div>
           <p style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 10, marginBottom: 0 }}>
-            You can connect as many inboxes as you want - each one gets its own account record. Google will ask you to choose an account in the consent flow; use the targeted Derya inbox rows above for Mert and Oguzhan.
+            New accounts start with monitoring on and sending off. An administrator must enable sending and choose the default account separately.
           </p>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-body">
+          <div className="section-title" style={{ marginBottom: 12 }}>Test sending</div>
+          <EmailSenderTest
+            recipient={session.email}
+            accounts={sendingGmail.map((account) => ({
+              id: account.id,
+              email: account.email,
+              isDefaultSender: account.isDefaultSender,
+            }))}
+          />
         </div>
       </div>
 
@@ -514,15 +587,38 @@ export default async function EmailSettingsPage({
                     </div>
                   )}
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{whatsAppAccountLabel(account.email)}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{whatsAppAccountLabel(account.email)}</span>
+                      {account.provider === "GMAIL" ? (
+                        <>
+                          <span className={`badge ${account.sendEnabled ? "badge-good" : "badge-neutral"}`}>
+                            {account.sendEnabled ? "sending on" : "sending off"}
+                          </span>
+                          {account.isDefaultSender ? <span className="badge badge-info">default</span> : null}
+                        </>
+                      ) : null}
+                    </div>
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>
                       {account.provider === "WHATSAPP"
                         ? `${waProviderLabel} · ${countByAccount[account.id] ?? 0} message${(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} · last inbound ${timeAgo(account.lastSyncAt)}`
                         : `${account.provider} · ${countByAccount[account.id] ?? 0} message${(countByAccount[account.id] ?? 0) === 1 ? "" : "s"} synced · last sync ${timeAgo(account.lastSyncAt)}`}
                     </div>
+                    {account.provider === "GMAIL" ? (
+                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 3 }}>
+                        {activityByAccount.get(account.id)?.inbound ?? 0} inbound, last {timeAgo(activityByAccount.get(account.id)?.lastInboundAt)} · {activityByAccount.get(account.id)?.outbound ?? 0} outbound, last {timeAgo(activityByAccount.get(account.id)?.lastOutboundAt)}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  {account.provider === "GMAIL" ? (
+                    <EmailAccountControls
+                      accountId={account.id}
+                      active={account.isActive}
+                      sendEnabled={account.sendEnabled}
+                      isDefaultSender={account.isDefaultSender}
+                    />
+                  ) : null}
                   {account.provider === "GMAIL" && <SyncAccountButton accountId={account.id} />}
                   <DisconnectAccountButton accountId={account.id} />
                 </div>
@@ -534,7 +630,7 @@ export default async function EmailSettingsPage({
         <div className="card" style={{ textAlign: "center", padding: "40px 24px", marginBottom: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>No connected inboxes</div>
           <p style={{ fontSize: 13, color: "var(--text-3)" }}>
-            Click <em>Connect a Gmail inbox</em> above to authorize. After that, click <em>Sync now</em> to pull recent mail and queue older backfill.
+            Connect Gmail above, then enable sending only on accounts approved for outbound use.
           </p>
         </div>
       )}

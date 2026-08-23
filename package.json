@@ -97,6 +97,7 @@
     "test:gpt56-runtime": "tsx scripts/gpt56-runtime.test.ts",
     "test:email-labels": "tsx scripts/email-workflow-labels.test.ts",
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",
+    "test:email-account-settings": "node --import tsx scripts/email-account-settings.test.ts",
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
     "test:rfq-load-draft": "tsx scripts/rfq-load-draft.test.ts",
     "test:rfq-whatsapp": "tsx scripts/rfq-whatsapp.test.ts",

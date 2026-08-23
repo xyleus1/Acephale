@@ -60,12 +60,12 @@ export type RequestCodeResult =
 
 async function pickSenderAccount(officeId: string, preferEmail: string) {
   const own = await prisma.emailAccount.findFirst({
-    where: { officeId, email: preferEmail, provider: "GMAIL", isActive: true },
+    where: { officeId, email: preferEmail, provider: "GMAIL", isActive: true, sendEnabled: true },
   });
   if (own) return own;
   return prisma.emailAccount.findFirst({
-    where: { officeId, provider: "GMAIL", isActive: true },
-    orderBy: { createdAt: "asc" },
+    where: { officeId, provider: "GMAIL", isActive: true, sendEnabled: true },
+    orderBy: [{ isDefaultSender: "desc" }, { createdAt: "asc" }],
   });
 }
 

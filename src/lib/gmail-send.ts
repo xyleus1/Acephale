@@ -29,9 +29,9 @@ export async function sendNewEmailFromAccount(args: {
   jobId?: string | null;
 }): Promise<{ ok: true; messageId: string; threadId: string; localThreadId: string } | { error: string; needsReauth?: boolean }> {
   const account = await prisma.emailAccount.findFirst({
-    where: { id: args.accountId, officeId: args.officeId, isActive: true },
+    where: { id: args.accountId, officeId: args.officeId, isActive: true, sendEnabled: true },
   });
-  if (!account) return { error: "Sender account not found or inactive." };
+  if (!account) return { error: "Sender account not found, inactive, or disabled for sending." };
   if (account.provider !== "GMAIL") return { error: "Only Gmail send is supported." };
 
   let token: string;
@@ -151,9 +151,9 @@ export async function sendReplyToThread(args: {
   if (!acct) return { error: "No account associated with this thread" };
 
   const account = await prisma.emailAccount.findFirst({
-    where: { id: acct, officeId: session.officeId },
+    where: { id: acct, officeId: session.officeId, isActive: true, sendEnabled: true },
   });
-  if (!account) return { error: "Email account not found" };
+  if (!account) return { error: "Email account not found, inactive, or disabled for sending" };
   if (account.provider !== "GMAIL") return { error: "Only Gmail send is supported" };
 
   let token: string;

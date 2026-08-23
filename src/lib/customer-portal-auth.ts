@@ -87,13 +87,9 @@ async function findPortalUser(email: string, officeId?: string | null) {
 }
 
 async function pickSenderAccount(officeId: string) {
-  const rfqDesk = await prisma.emailAccount.findFirst({
-    where: { officeId, email: "rfq@usederya.com", provider: "GMAIL", isActive: true },
-  });
-  if (rfqDesk) return rfqDesk;
   return prisma.emailAccount.findFirst({
-    where: { officeId, provider: "GMAIL", isActive: true },
-    orderBy: { createdAt: "asc" },
+    where: { officeId, provider: "GMAIL", isActive: true, sendEnabled: true },
+    orderBy: [{ isDefaultSender: "desc" }, { createdAt: "asc" }],
   });
 }
 

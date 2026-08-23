@@ -6232,6 +6232,42 @@ Use this file for chronological implementation notes that future agents should s
 - Added a static workflow safety contract to the procurement CI job and
   documented deployment detection in `CLAUDE.md`.
 
+### 2026-08-22 - Add administrator email account controls
+
+- Branch: `codex/email-account-settings`, merged with current `origin/main` at
+  `832430de` before the application release.
+- Task: Let administrators connect Gmail accounts, control outbound use, choose
+  a default sender, send a safe test message, and monitor account activity from
+  settings.
+- Files changed: EmailAccount schema model, separately staged migration,
+  administrator policy, Gmail OAuth routes, sending and sync gates, settings
+  actions and UI, focused contract test, email setup guide, decision record,
+  and handoff.
+- Safety: Every action resolves the active Office user from the database and
+  requires operational role `ADMIN`. Reads and writes are Office-scoped. The test
+  recipient is always the signed-in administrator. No browser-supplied test
+  recipient, Gmail token export, campaign endpoint, or automatic supplier send
+  was added.
+- Verification: Prisma validation and generation, focused email account,
+  Gmail OAuth, login-code, customer portal, integrations, supplier provider,
+  product copy, and deployment-boundary contracts; TypeScript; production
+  build; diff hygiene; and the changed-line U+2014 scan passed. The production
+  build retained the pre-existing Supply OS CSS autoprefixer warning.
+- CI follow-up: GitHub applied the full migration chain successfully. The first
+  Supply OS persistence run then exposed two sender fixtures that relied on the
+  old implicit sending behavior. The fixtures now set `sendEnabled: true` only
+  for accounts used to deliver test mail. The focused provider contract, email
+  settings contract, and TypeScript passed locally. Repeat PostgreSQL CI passed
+  the full migration, persistence, Context, deterministic sourcing, and
+  procurement security suites.
+- Release prerequisite: Schema-only PR #215 staged the renumbered migration.
+  Protected production run `32614578311` applied it to the pinned Neon target
+  and passed the committed read-only verification before the app deploy.
+- Failed/skipped checks: Authenticated production behavior and live Gmail
+  delivery still require the deployed OAuth configuration.
+- Follow-up: After deployment, connect or reconnect each approved mailbox,
+  verify sync, enable outbound use, choose the default sender, send the admin
+  test message, and confirm the resulting outbound activity appears.
 ### 2026-08-22 - Stage customer Context schema before application release
 
 - Branch: `codex/customer-context-migration-release`, based on current main.

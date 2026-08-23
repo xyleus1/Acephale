@@ -43,6 +43,7 @@ type GmailAccountIdentity = { id: string; email: string };
 
 type GmailSupplierEmailProviderDependencies = {
   account: (officeId: string, accountId: string, expectedEmail: string) => Promise<GmailAccountIdentity>;
+  sendAccount: (officeId: string, accountId: string, expectedEmail: string) => Promise<GmailAccountIdentity>;
   token: (accountId: string) => Promise<string>;
   request: typeof fetch;
 };
@@ -71,6 +72,19 @@ async function gmailAccount(officeId: string, accountId: string, expectedEmail: 
   return account;
 }
 
+async function gmailSendAccount(officeId: string, accountId: string, expectedEmail: string) {
+  const account = await prisma.emailAccount.findFirst({
+    where: { id: accountId, officeId, provider: "GMAIL", isActive: true },
+    select: { id: true, email: true, sendEnabled: true },
+  });
+  if (!account) throw new Error("The selected Gmail sender is missing or inactive.");
+  if (!account.sendEnabled) throw new Error("The selected Gmail sender is disabled for sending.");
+  if (account.email.trim().toLowerCase() !== expectedEmail.trim().toLowerCase()) {
+    throw new Error("The connected Gmail sender changed after approval. Save and approve a new email draft.");
+  }
+  return account;
+}
+
 async function gmailToken(accountId: string) {
   try {
     const { getValidAccessToken } = await import("@/lib/gmail-oauth");
@@ -87,7 +101,8 @@ function gmailSourceUrl(accountEmail: string, threadId: string) {
 export function createGmailSupplierEmailProvider(
   dependencies: Partial<GmailSupplierEmailProviderDependencies> = {},
 ): SupplierEmailProvider {
-  const accountFor = dependencies.account ?? gmailAccount;
+  const accountForSend = dependencies.sendAccount ?? dependencies.account ?? gmailSendAccount;
+  const accountForReconcile = dependencies.account ?? gmailAccount;
   const tokenFor = dependencies.token ?? gmailToken;
   const request = dependencies.request ?? fetch;
   return {
@@ -95,10 +110,15 @@ export function createGmailSupplierEmailProvider(
     let account: GmailAccountIdentity;
     let token: string;
     try {
-      account = await accountFor(input.officeId, input.accountId, input.senderEmail);
+      account = await accountForSend(input.officeId, input.accountId, input.senderEmail);
       token = await tokenFor(account.id);
     } catch (error) {
-      return { state: "REJECTED", error: error instanceof Error ? error.message : "The Gmail sender is unavailable.", needsReauth: true };
+      const message = error instanceof Error ? error.message : "The Gmail sender is unavailable.";
+      return {
+        state: "REJECTED",
+        error: message,
+        ...(message.includes("disabled for sending") ? {} : { needsReauth: true }),
+      };
     }
 
     const headers = [
@@ -155,7 +175,7 @@ export function createGmailSupplierEmailProvider(
     let account: GmailAccountIdentity;
     let token: string;
     try {
-      account = await accountFor(input.officeId, input.accountId, input.senderEmail);
+      account = await accountForReconcile(input.officeId, input.accountId, input.senderEmail);
       token = await tokenFor(account.id);
     } catch (error) {
       return { state: "UNKNOWN", error: error instanceof Error ? error.message : "The Gmail sender is unavailable." };

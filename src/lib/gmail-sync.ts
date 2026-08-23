@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { requireSession } from "./auth";
+import { requireEmailAccountAdminSession } from "./email-account-access";
 import { getValidAccessToken } from "./gmail-oauth";
 import { classifyInboundEmail } from "./email-classifier";
 import { classifyEmailAttachments } from "./doc-classify";
@@ -124,7 +125,7 @@ export async function syncEmailAccount(accountId: string): Promise<
   | GmailSyncResult
   | { error: string }
 > {
-  const session = await requireSession();
+  const session = await requireEmailAccountAdminSession();
   const result = await _syncEmailAccountInternal({ accountId, officeId: session.officeId });
   if ("error" in result) return result;
   const backfill = await enqueueGmailBackfillJobsForAccount({ accountId, officeId: session.officeId });
@@ -527,7 +528,7 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
     }
   | { error: string }
 > {
-  const session = await requireSession();
+  const session = await requireEmailAccountAdminSession();
   const accounts = await prisma.emailAccount.findMany({
     where: {
       officeId: session.officeId,
@@ -580,10 +581,10 @@ export async function syncDeryaLoadRfqInboxes(): Promise<
 }
 
 export async function disconnectEmailAccount(accountId: string): Promise<void> {
-  const session = await requireSession();
+  const session = await requireEmailAccountAdminSession();
   await prisma.emailAccount.update({
     where: { id: accountId, officeId: session.officeId },
-    data: { isActive: false },
+    data: { isActive: false, sendEnabled: false, isDefaultSender: false },
   });
   revalidatePath("/dashboard/settings/email");
   revalidatePath("/dashboard/inbox");
@@ -591,7 +592,7 @@ export async function disconnectEmailAccount(accountId: string): Promise<void> {
 
 // Re-enable a paused account: sync resumes and its threads reappear in the inbox.
 export async function resumeEmailAccount(accountId: string): Promise<void> {
-  const session = await requireSession();
+  const session = await requireEmailAccountAdminSession();
   await prisma.emailAccount.update({
     where: { id: accountId, officeId: session.officeId },
     data: { isActive: true },

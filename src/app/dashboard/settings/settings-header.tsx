@@ -12,7 +12,9 @@ export function SettingsHeader({
 }) {
   const action = active === "integrations"
     ? { href: "/integrations", label: "Client page" }
-    : { href: "/portal", label: "Customer sign-in" };
+    : active === "customers"
+      ? { href: "/portal", label: "Customer sign-in" }
+      : null;
 
   return (
     <>
@@ -20,9 +22,11 @@ export function SettingsHeader({
         <a href="/dashboard/supply-os">Back to workspace</a>
         <div>
           <h1>Settings</h1>
-          <a href={action.href} target="_blank" rel="noreferrer">
-            {action.label} <ExternalLink size={14} aria-hidden="true" />
-          </a>
+          {action ? (
+            <a href={action.href} target="_blank" rel="noreferrer">
+              {action.label} <ExternalLink size={14} aria-hidden="true" />
+            </a>
+          ) : null}
         </div>
       </header>
 
@@ -36,7 +40,7 @@ export function SettingsHeader({
           Integrations
         </a>
         <a href="/dashboard/settings/email" aria-current={active === "channels" ? "page" : undefined}>
-          Channels
+          Email accounts
         </a>
       </nav>
     </>

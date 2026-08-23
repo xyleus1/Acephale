@@ -16,6 +16,29 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-22 - Derya owns email accounts and Bourne owns campaigns
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Operators need one administrator surface to authorize senders,
+  monitor replies, and control which connected accounts may send. Bourne needs
+  campaign orchestration without receiving raw Gmail credentials or bypassing
+  human approval.
+- Decision: Derya owns Gmail OAuth, encrypted tokens, account monitoring, the
+  per-account sending switch, the Office default sender, actual delivery, and
+  the local message ledger. Bourne owns recipient selection, campaign drafts,
+  scheduling, approval state, retry, and campaign progress.
+- Safety boundary: Enabling an account does not authorize a Bourne campaign. A
+  future bridge must bind the Office, Derya account ID, exact approved message,
+  recipient, and idempotency key through authenticated server-to-server calls.
+  Text instructions may prepare drafts, but they may not directly trigger mass
+  outbound email.
+- Consequences: Administrators manage email accounts inside Derya. Gmail tokens
+  stay in Derya. Existing active Gmail senders remain enabled during migration,
+  while newly connected accounts require explicit enablement.
+- Revisit when: Bourne has an authenticated, approval-bearing delivery contract
+  with tenant binding and idempotent message execution.
+
 ### 2026-08-22 - Customer portal may start scoped supplier research from Context
 
 - Status: accepted, supersedes only the customer-portal exclusion and

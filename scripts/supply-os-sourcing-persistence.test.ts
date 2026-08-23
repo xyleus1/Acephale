@@ -1330,6 +1330,7 @@ async function main() {
         email: `orders-${suffix}@example.test`,
         provider: "GMAIL",
         accessToken: "test-only-order-token",
+        sendEnabled: true,
       },
     });
     const orderEmailInput = {
@@ -1576,6 +1577,7 @@ async function main() {
         email: `buyer-${suffix}@example.test`,
         provider: "GMAIL",
         accessToken: "test-only-token",
+        sendEnabled: true,
       },
     });
     const qualifiedEmailCase = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: returnedCase.id }, select: { result: true } });

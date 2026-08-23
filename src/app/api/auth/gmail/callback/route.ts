@@ -4,9 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { exchangeCodeForTokens, getUserEmail, verifyOAuthState } from "@/lib/gmail-oauth";
 import { encryptOAuthTokenForStorage } from "@/lib/security/crypto";
+import { isEmailAccountAdminSession } from "@/lib/email-account-access";
 
 export async function GET(request: NextRequest) {
   const session = await requireSession();
+  if (!(await isEmailAccountAdminSession(session))) {
+    return new NextResponse("Admin access required.", { status: 403 });
+  }
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");

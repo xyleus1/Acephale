@@ -179,11 +179,12 @@ export async function savePurchaseOrderEmailDraft(args: {
       officeId: accessContext.officeId,
       provider: "GMAIL",
       isActive: true,
+      sendEnabled: true,
       OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
     },
     select: { id: true, email: true },
   });
-  if (!sender) throw new SupplyPersistenceError("The selected Gmail sender is missing, inactive, or disconnected.", "invalid_input");
+  if (!sender) throw new SupplyPersistenceError("The selected Gmail sender is missing, inactive, disconnected, or disabled for sending.", "invalid_input");
   const lookup = await prisma.supplyExecutionTask.findFirst({
     where: { id: args.purchaseActionId, officeId: accessContext.officeId, workspaceId: workspace.id, taskType: PURCHASE_ACTION_TASK_TYPE },
     select: { parentTaskId: true, parentTask: { select: { parentTaskId: true } } },

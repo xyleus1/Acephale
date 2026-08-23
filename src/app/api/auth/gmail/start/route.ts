@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGmailAuthUrl } from "@/lib/gmail-oauth";
 import { isDeryaLoadRfqInbox, isDeryaRfqSourceSender, normalizeEmailAddress } from "@/lib/derya-inboxes";
+import { requireSession } from "@/lib/auth";
+import { isEmailAccountAdminSession } from "@/lib/email-account-access";
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await requireSession();
+    if (!(await isEmailAccountAdminSession(session))) {
+      return new NextResponse("Admin access required.", { status: 403 });
+    }
     const requestedEmail = normalizeEmailAddress(request.nextUrl.searchParams.get("email"));
     // Known mailboxes preselect the right Google account: the load/RFQ
     // inboxes and the rfq@ desk address (US lead replies land there).

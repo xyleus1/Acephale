@@ -103,6 +103,20 @@ async function main() {
   assert.equal((await unavailable.reconcile(input)).state, "UNKNOWN");
   assert.equal(requestCalled, false, "Gmail must not be called when sender identity validation fails");
 
+  let disabledRequestCalled = false;
+  const disabled = createGmailSupplierEmailProvider({
+    account: async () => ({ id: input.accountId, email: input.senderEmail }),
+    sendAccount: async () => { throw new Error("sender disabled for sending"); },
+    token: async () => "access-token",
+    request: async () => {
+      disabledRequestCalled = true;
+      return response(200, { messages: [{ id: "gmail-message-3", threadId: "gmail-thread-3" }] });
+    },
+  });
+  assert.deepEqual(await disabled.send(input), { state: "REJECTED", error: "sender disabled for sending" });
+  assert.equal(disabledRequestCalled, false, "A disabled sender must not reach Gmail delivery.");
+  assert.equal((await disabled.reconcile(input)).state, "SENT", "Disabling delivery must not block reconciliation or reply monitoring.");
+
   console.log("Supply OS supplier email provider checks passed.");
 }
 
