@@ -35,6 +35,10 @@
   and backfill updates remain release steps outside the Derya runtime role. A
   protected `main`-only workflow now pins the exact Bourne Neon endpoint,
   database, and owner role so the schema step can be executed after merge.
+- The first protected production run reached the pinned Bourne database and
+  stopped before DDL because the existing runtime role retained PostgreSQL's
+  default `INHERIT` flag. The migration now narrows both runtime roles to
+  `NOINHERIT`; actual memberships and elevated attributes still stop the run.
 - No email send, supplier approval, quote promotion, or purchase behavior was
   added.
 

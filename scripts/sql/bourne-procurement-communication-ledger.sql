@@ -25,7 +25,6 @@ BEGIN
         rolsuper
         OR rolcreatedb
         OR rolcreaterole
-        OR rolinherit
         OR rolreplication
         OR rolbypassrls
         OR NOT rolcanlogin
@@ -49,7 +48,6 @@ BEGIN
         rolsuper
         OR rolcreatedb
         OR rolcreaterole
-        OR rolinherit
         OR rolreplication
         OR rolbypassrls
         OR NOT rolcanlogin
@@ -64,6 +62,11 @@ BEGIN
   END IF;
 END
 $$;
+
+-- PostgreSQL roles default to INHERIT. The owner can safely narrow that flag,
+-- while memberships and elevated attributes still stop the migration above.
+ALTER ROLE dashboard_api NOINHERIT;
+ALTER ROLE bourne_supply_chain NOINHERIT;
 
 SELECT format('DROP INDEX CONCURRENTLY IF EXISTS %I.%I', namespace.nspname, index_class.relname)
 FROM pg_index

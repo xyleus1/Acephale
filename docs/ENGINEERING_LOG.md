@@ -6209,3 +6209,15 @@ Use this file for chronological implementation notes that future agents should s
   sent. The protected `main`-only production workflow pins the Bourne Neon
   endpoint, database, and owner role and must apply the migration before Bourne
   can write or backfill messages.
+
+### 2026-08-22 - Normalize the existing Bourne runtime role during provisioning
+
+- Protected run `32607117269` verified the pinned Bourne endpoint, database,
+  and owner role, then stopped before DDL because `bourne_supply_chain` retained
+  PostgreSQL's default `INHERIT` flag.
+- `INHERIT` is safely narrowable by the owner and is not an independent grant.
+  The migration now changes both runtime roles to `NOINHERIT`, while any actual
+  membership, elevated role attribute, or unsafe table privilege still fails.
+- CI now proves the real failure case with a temporary role membership, then
+  proves that an otherwise safe `INHERIT` role is normalized during the next
+  migration attempt.

@@ -81,7 +81,9 @@ jobs:
           psql "$WORKFLOW_DATABASE_OWNER_URL" --file=scripts/sql/procurement-workflow-test-schema.sql
           psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE dashboard_api LOGIN NOINHERIT PASSWORD 'dashboard_test_password';
+          CREATE ROLE unsafe_bourne_parent NOLOGIN;
           CREATE ROLE bourne_supply_chain LOGIN INHERIT PASSWORD 'bourne_test_password';
+          GRANT unsafe_bourne_parent TO bourne_supply_chain;
           SQL
           if psql "$WORKFLOW_DATABASE_OWNER_URL" \
             --file=scripts/sql/bourne-procurement-communication-ledger.sql \
@@ -93,7 +95,8 @@ jobs:
           grep -q 'bourne_supply_chain has unsafe role attributes or memberships' \
             /tmp/unsafe-bourne-ledger.log
           psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 <<'SQL'
-          ALTER ROLE bourne_supply_chain NOINHERIT;
+          REVOKE unsafe_bourne_parent FROM bourne_supply_chain;
+          DROP ROLE unsafe_bourne_parent;
           CREATE TABLE procurement_communication_messages (customer_id uuid);
           SQL
           if psql "$WORKFLOW_DATABASE_OWNER_URL" \
