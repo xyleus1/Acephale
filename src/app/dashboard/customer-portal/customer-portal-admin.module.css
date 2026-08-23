@@ -2,7 +2,7 @@
   display: grid;
   gap: 32px;
   max-width: 1180px;
-  margin: 34px auto 0;
+  margin: 32px auto 0;
   padding-bottom: 48px;
 }
 
@@ -10,7 +10,7 @@
   display: flex;
   align-items: baseline;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 16px 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-selected, #eaf0f2);
@@ -26,24 +26,6 @@
   color: var(--text-2);
 }
 
-.hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.title {
-  margin: 0;
-  color: var(--text);
-  font-size: 30px;
-  letter-spacing: -.03em;
-}
-
-.portalLink {
-  flex: 0 0 auto;
-}
-
 .notice {
   margin-top: -16px;
   padding: 12px 16px;
@@ -52,59 +34,6 @@
   background: var(--surface-selected, #eaf0f2);
   color: var(--text);
   font-size: 13px;
-}
-
-.previewCard {
-  padding: 28px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, .7fr);
-  gap: 32px;
-  align-items: center;
-  border-color: var(--border-strong, var(--border));
-  background: var(--surface);
-}
-
-.previewCopy {
-  min-width: 0;
-}
-
-.previewCopy h2 {
-  margin: 0 0 5px;
-  color: var(--text);
-  font-size: 18px;
-  letter-spacing: -.02em;
-}
-
-.previewCopy p {
-  max-width: 660px;
-  margin: 0;
-  color: var(--text-2);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.previewForm {
-  padding-left: 24px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 9px;
-  border-left: 1px solid var(--border);
-}
-
-.previewForm label {
-  grid-column: 1 / -1;
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.previewEmpty {
-  padding: 16px;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  color: var(--text-2);
-  font-size: 13px;
-  text-align: center;
 }
 
 .grid {
@@ -125,7 +54,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 15px 18px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -139,20 +68,12 @@
   font-size: 12px;
 }
 
-.form {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1.25fr .75fr auto;
-  gap: 9px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
 .companyCreateForm {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.3fr) auto;
-  gap: 10px;
+  gap: 12px;
   align-items: end;
-  padding: 16px 18px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
@@ -169,13 +90,41 @@
   border-bottom: 0;
 }
 
-.companyHeader {
+.companySummary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  min-height: 76px;
-  padding: 14px 18px;
+  min-height: 64px;
+  padding: 16px 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.companySummary::-webkit-details-marker {
+  display: none;
+}
+
+.companySummary > span {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.companySummary::after {
+  content: "Open";
+  min-width: 42px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.company[open] > .companySummary::after {
+  content: "Close";
+}
+
+.companyBody {
+  border-top: 1px solid var(--border);
 }
 
 .companyTools {
@@ -184,6 +133,7 @@
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+  padding: 12px 20px;
 }
 
 .editorInline {
@@ -194,7 +144,7 @@
   min-height: 42px;
   display: inline-flex;
   align-items: center;
-  padding: 0 11px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
@@ -219,16 +169,17 @@
 
 .companyForm,
 .companyAccountForm,
-.archiveForm {
+.archiveForm,
+.removeUserForm {
   position: absolute;
   z-index: 5;
   top: calc(100% + 8px);
   right: 0;
   width: min(620px, 82vw);
   display: grid;
-  gap: 10px;
+  gap: 12px;
   align-items: end;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: 12px;
   background: var(--surface);
@@ -248,7 +199,8 @@
   width: min(440px, 82vw);
 }
 
-.archiveForm p {
+.archiveForm p,
+.removeUserForm p {
   margin: 0;
   color: var(--text-2);
   font-size: 12px;
@@ -264,39 +216,8 @@
   font-weight: 700;
 }
 
-.companyAccounts {
-  display: grid;
-  border-top: 1px solid var(--border);
-  background: var(--surface-2);
-}
-
-.companyAccount {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
-  gap: 14px;
-  align-items: center;
-  min-height: 46px;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-
-.companyAccount:last-child {
-  border-bottom: 0;
-}
-
-.companyAccount span {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.companyAccount small {
-  color: var(--text-2);
-  font-size: 11px;
-}
-
 .emptyCompact {
-  padding: 12px 18px;
+  padding: 12px 20px;
   color: var(--text-2);
   font-size: 12px;
 }
@@ -304,7 +225,7 @@
 .field {
   min-width: 0;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-2);
   font-size: 12px;
   font-weight: 700;
@@ -314,7 +235,7 @@
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto;
-  gap: 6px 8px;
+  gap: 8px;
   align-items: end;
 }
 
@@ -328,18 +249,14 @@
 
 .passwordControls {
   display: flex;
-  gap: 6px;
-}
-
-.formSubmit {
-  align-self: end;
+  gap: 8px;
 }
 
 .input,
 .select {
   min-width: 0;
   height: 42px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
@@ -351,8 +268,27 @@
   display: grid;
 }
 
-.accounts {
-  display: grid;
+.companyUsers {
+  border-top: 1px solid var(--border);
+}
+
+.usersHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.usersHeader h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.usersHeader span {
+  color: var(--text-2);
+  font-size: 12px;
 }
 
 .account {
@@ -368,7 +304,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 18px;
+  padding: 20px;
 }
 
 .accountActions {
@@ -379,15 +315,36 @@
   flex-wrap: wrap;
 }
 
+.accountCredentials {
+  display: flex;
+  align-items: center;
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.accountCredentials strong {
+  margin-right: 4px;
+  color: var(--text);
+}
+
+.accountCredentials code {
+  color: var(--text);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
 .editor {
-  margin: 0 18px 16px;
+  margin: 0 20px 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
 }
 
 .editor summary {
-  padding: 11px 13px;
+  padding: 12px 16px;
   color: var(--text);
   cursor: pointer;
   font-size: 13px;
@@ -401,44 +358,42 @@
 .accountForm {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(150px, .55fr);
-  gap: 10px;
+  gap: 12px;
   align-items: end;
-  padding: 14px;
+  padding: 16px;
+}
+
+.userControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 0 20px 16px;
+}
+
+.userControls .editor {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.accessControls {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.removeUserForm {
+  width: min(420px, 82vw);
 }
 
 .passwordSaveRow {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 12px;
   align-items: end;
   padding-top: 4px;
-  border-top: 1px solid var(--border);
-}
-
-.accessList {
-  border-top: 1px solid var(--border);
-  background: var(--surface-2);
-}
-
-.accessHeading {
-  padding: 12px 18px 4px;
-  color: var(--text-2);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.accessRow {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(140px, .45fr) minmax(140px, .45fr) auto;
-  gap: 10px;
-  align-items: end;
-  padding: 10px 18px 14px;
-}
-
-.accessRow + .accessRow {
   border-top: 1px solid var(--border);
 }
 
@@ -454,9 +409,9 @@
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 16px;
   align-items: center;
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -481,7 +436,7 @@
   display: inline-flex;
   width: fit-content;
   margin-top: 5px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--text-2);
@@ -494,19 +449,19 @@
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .empty {
-  padding: 28px 18px;
+  padding: 28px 20px;
   color: var(--text-2);
   font-size: 13px;
   text-align: center;
 }
 
 .inviteHint {
-  padding: 12px 18px;
+  padding: 12px 20px;
   background: var(--surface-2);
   color: var(--text-2);
   font-size: 12px;
@@ -521,22 +476,8 @@
 }
 
 @media (max-width: 1050px) {
-  .previewCard {
-    grid-template-columns: 1fr;
-  }
-
-  .previewForm {
-    padding: 18px 0 0;
-    border-top: 1px solid var(--border);
-    border-left: 0;
-  }
-
   .grid {
     grid-template-columns: 1fr;
-  }
-
-  .form {
-    grid-template-columns: 1fr 1fr;
   }
 
   .companyCreateForm {
@@ -548,7 +489,7 @@
   }
 
   .accountForm,
-  .accessRow {
+  .accessControls {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -560,24 +501,19 @@
   }
 
   .passwordNote,
-  .companyHeader {
+  .companySummary {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .form,
   .companyCreateForm,
   .companyForm,
   .companyAccountForm,
+  .removeUserForm,
   .row,
-  .previewForm,
   .accountForm,
-  .accessRow {
+  .accessControls,
+  .userControls {
     grid-template-columns: 1fr;
   }
 
@@ -602,15 +538,11 @@
     box-shadow: none;
   }
 
-  .companyAccount {
-    grid-template-columns: 1fr;
-    gap: 2px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
-
-  .previewForm label {
-    grid-column: auto;
+  .removeUserForm {
+    position: static;
+    width: 100%;
+    margin-top: 8px;
+    box-shadow: none;
   }
 
   .actions {
@@ -626,6 +558,10 @@
     min-height: 44px;
   }
 
+  .page :global(.btn) {
+    min-height: 44px;
+  }
+
   .accountHeader {
     align-items: flex-start;
     flex-direction: column;
@@ -633,5 +569,11 @@
 
   .accountActions {
     justify-content: flex-start;
+  }
+
+  .accountCredentials {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 }

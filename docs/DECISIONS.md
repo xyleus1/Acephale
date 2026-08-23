@@ -3966,3 +3966,34 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Consequences: The separate summary portal is no longer the primary customer
   product. New Supply OS routes must use scoped access instead of assuming
   every authenticated app identity has office-wide access.
+
+### 2026-08-23 - Customer identities live under companies, not operator accounts
+
+- Status: accepted
+- Owner: product and engineering
+- Context: The first admin surface listed a migrated customer identity using
+  the operator's name and email in a second top-level account section. That
+  made the admin account look like a customer login and separated credentials
+  from the company they actually authorize.
+- Decision: Admin Settings shows one expandable company directory. Customer
+  users, credentials, role, access, and user actions live inside their company.
+  The signed-in operator is labeled separately and is never presented as a
+  customer user.
+- Identity boundary: Customer contact email is optional. When omitted, the
+  server stores a unique address under `customers.derya.invalid`; this address
+  is an internal identifier and is hidden as a contact field. Display name
+  defaults to the company name.
+- Removal boundary: Delete user is an audit-preserving removal. It revokes all
+  portal and workspace access, invalidates sessions, clears credentials,
+  disables the linked app identity, and hides the user. Historical customer
+  actions and provenance remain stored.
+- Authorization boundary: Customer-linked internal users never qualify as
+  operators, even though their restricted app record uses an internal
+  admin-shaped role. The management page and every mutation re-read active
+  operator state and reject linked customer identities.
+- Concurrency boundary: Account update and removal serialize on one
+  office-and-user lock. Removed usernames are tombstones and cannot be restored
+  by a stale edit.
+- Consequences: Admins can manage every company and its users in one place
+  without confusing an operator login with a customer identity. Customers
+  remain restricted to explicit company workspace membership.

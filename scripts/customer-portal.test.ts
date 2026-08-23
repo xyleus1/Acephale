@@ -9,6 +9,15 @@ import {
   normalizeCustomerPortalUsername,
 } from "../src/lib/customer-portal-security";
 import {
+  customerContactEmail,
+  customerPortalUsernameIsAllowed,
+  isManagedCustomerEmail,
+  isRemovedCustomerUsername,
+  managedCustomerEmail,
+  removedCustomerEmail,
+  removedCustomerUsername,
+} from "../src/lib/customer-portal-account";
+import {
   buildCustomerPortalOperationsBrief,
   buildCustomerPortalShipment,
   customerPortalCanRespondToQuote,
@@ -40,6 +49,8 @@ const customerLoginSource = readFileSync(resolve(process.cwd(), "src/app/portal/
 const staffLoginSource = readFileSync(resolve(process.cwd(), "src/app/login/page.tsx"), "utf8");
 const staffPortalSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/page.tsx"), "utf8");
 const staffPortalActionsSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/actions.ts"), "utf8");
+const customerPortalAccountAdminSource = readFileSync(resolve(process.cwd(), "src/lib/customer-portal-account-admin.ts"), "utf8");
+const customerPortalAdminAuthSource = readFileSync(resolve(process.cwd(), "src/lib/customer-portal-admin-auth.ts"), "utf8");
 const customerPortalAuthSource = readFileSync(resolve(process.cwd(), "src/lib/customer-portal-auth.ts"), "utf8");
 const customerPortalPasswordSource = readFileSync(resolve(process.cwd(), "src/lib/customer-portal-password.ts"), "utf8");
 const customerSettingsSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/settings/customers/page.tsx"), "utf8");
@@ -62,18 +73,20 @@ const fullAppMigrationSource = readFileSync(
 assert.match(customerLoginSource, /href="\/login">Team sign in/);
 assert.match(customerLoginSource, /href="mailto:rfq@usederya\.com">Start shipment/);
 assert.match(staffLoginSource, /Customer\? <a href="\/portal">Sign in to your shipment workspace<\/a>/);
-assert.match(staffPortalSource, /action="\/dashboard\/supply-os"/);
-assert.match(staffPortalSource, /name="previewWorkspace"/);
-assert.match(staffPortalSource, /Customer sign-in:/);
-assert.match(staffPortalSource, />View as customer</);
-assert.match(staffPortalSource, />Customer accounts</);
-assert.match(staffPortalSource, /updateCustomerPortalAccount\.bind\(null, account\.id\)/);
+assert.match(staffPortalSource, /previewWorkspace=/);
+assert.match(staffPortalSource, />\s*Preview\s*</);
+assert.match(staffPortalSource, /isAdmin \? "Admin account" : "Staff account"/);
+assert.match(staffPortalSource, /Customer users below are separate accounts limited to their company/);
+assert.match(staffPortalSource, /<details className=\{styles\.company\} key=\{company\.id\} open=\{company\.id === activeCompanyId\}>/);
+assert.match(staffPortalSource, /updateCustomerPortalAccount\.bind\(null, account\.id, company\.id\)/);
 assert.match(staffPortalSource, /updateCustomerPortalMembership\.bind\(null, membership\.id\)/);
-assert.match(staffPortalSource, />Account status</);
-assert.match(staffPortalSource, />Company access</);
-assert.match(staffPortalSource, /Customer credentials/);
+assert.match(staffPortalSource, />Status</);
+assert.match(staffPortalSource, />Users</);
+assert.match(staffPortalSource, />Delete user</);
+assert.match(staffPortalSource, /deletes the user from every company/);
 assert.match(staffPortalSource, /name="username"/);
-assert.match(staffPortalSource, /Password: \{visiblePasswords\.get\(account\.id\)/);
+assert.match(staffPortalSource, /const passwordLabel = isAdmin \? password \|\| "Not set" : "Hidden"/);
+assert.match(staffPortalSource, /<strong>Password<\/strong> <code>\{passwordLabel\}<\/code>/);
 assert.match(staffPortalSource, /CustomerPasswordField label="New password \(optional\)"/);
 assert.doesNotMatch(staffPortalSource, /passwordHash/);
 assert.match(staffPortalSource, /createCustomerCompany/);
@@ -81,23 +94,33 @@ assert.match(staffPortalSource, /updateCustomerCompany\.bind\(null, company\.wor
 assert.match(staffPortalSource, /archiveCustomerCompany\.bind\(null, company\.workspaceId\)/);
 assert.match(staffPortalSource, /name="confirmArchive" value="ARCHIVE" required/);
 assert.match(staffPortalSource, /name="companyId" value=\{company\.id\}/);
-assert.match(staffPortalSource, /Company archived/);
-assert.match(staffPortalSource, /Access is permanently revoked/);
+assert.match(staffPortalSource, /keeps audit history/);
+assert.match(staffPortalSource, /resolveCustomerManagementOperator\(session, \["ADMIN", "MANAGER"\]\)/);
 assert.match(customerSettingsSource, /from "\.\.\/\.\.\/customer-portal\/page"/);
 assert.match(settingsIndexSource, /session\.role === "ADMIN"[\s\S]*\/dashboard\/settings\/customers/);
 assert.match(settingsHeaderSource, />\s*Customers\s*</);
 assert.match(settingsHeaderSource, /active === "customers"/);
 assert.match(supplyShellSource, /const settingsLabel = `[\s\S]*accountRole/);
 assert.match(supplyShellSource, /previewMode \? "\/dashboard\/settings\?preview=customer" : "\/dashboard\/settings"/);
-assert.match(staffPortalActionsSource, /where: \{ id: userId, officeId: session\.officeId \}/);
+assert.match(customerPortalAccountAdminSource, /id: args\.userId,[\s\S]*officeId: args\.officeId,[\s\S]*memberships: \{ some: \{ companyId: args\.companyId, officeId: args\.officeId \} \}/);
 assert.match(staffPortalActionsSource, /grantCustomerPortalAccess[\s\S]*requireCompanyAdmin\(\)/);
 assert.match(staffPortalActionsSource, /updateCustomerPortalAccount[\s\S]*requireCompanyAdmin\(\)/);
-assert.match(staffPortalActionsSource, /role: "ADMIN"/);
+assert.match(staffPortalActionsSource, /removeCustomerPortalAccount[\s\S]*requireCompanyAdmin\(\)/);
+assert.match(staffPortalActionsSource, /requireCustomerManagementOperator\(session, \["ADMIN", "MANAGER"\]\)/);
+assert.match(staffPortalActionsSource, /requireCustomerManagementOperator\(session, \["ADMIN"\]\)/);
+assert.match(customerPortalAdminAuthSource, /session\.accessKind === "customer" \|\| session\.role === "CUSTOMER"/);
+assert.match(customerPortalAdminAuthSource, /operator && !operator\.customerPortalIdentity/);
+assert.match(staffPortalActionsSource, /confirmRemove/);
+assert.match(customerPortalAccountAdminSource, /passwordHash: null/);
+assert.match(customerPortalAccountAdminSource, /passwordEncrypted: null/);
+assert.match(customerPortalAccountAdminSource, /supplyWorkspaceMember\.updateMany/);
+assert.match(staffPortalActionsSource, /managedCustomerEmail\(username\)/);
 assert.match(staffPortalActionsSource, /existingUser: "reject"/);
-assert.match(staffPortalActionsSource, /const revokeSessions = Boolean\(passwordHash\) \|\| user\.isActive !== isActive/);
+assert.match(customerPortalAccountAdminSource, /const revokeSessions = passwordReset \|\| identityChanged \|\| user\.isActive !== args\.isActive/);
+assert.match(customerPortalAccountAdminSource, /pg_advisory_xact_lock/);
 assert.match(staffPortalActionsSource, /where: \{ id: membershipId, officeId: session\.officeId \}/);
-assert.match(staffPortalActionsSource, /email, id: \{ not: userId \}/);
-assert.match(staffPortalActionsSource, /customerPortalLoginCode\.updateMany/);
+assert.match(customerPortalAccountAdminSource, /email: args\.email, id: \{ not: args\.userId \}/);
+assert.match(customerPortalAccountAdminSource, /customerPortalLoginCode\.updateMany/);
 assert.match(staffPortalActionsSource, /createSupplyCustomerWorkspace\(supplyAccessContext\(session\)/);
 assert.match(staffPortalActionsSource, /updateSupplyCustomerWorkspace\(supplyAccessContext\(session\), workspaceId/);
 assert.match(staffPortalActionsSource, /archiveSupplyCustomerWorkspace\(supplyAccessContext\(session\), workspaceId\)/);
@@ -105,7 +128,7 @@ assert.match(staffPortalActionsSource, /formData\.get\("confirmArchive"\)/);
 assert.match(staffPortalActionsSource, /crmStage: \{ not: "archived" \}/);
 assert.match(staffPortalActionsSource, /archived-company-access/);
 assert.match(staffPortalActionsSource, /const updated = await prisma\.\$transaction/);
-assert.match(staffPortalActionsSource, /if \(updated\.count === 0\) redirect\(customerSettingsUrl\("archived-company-access"\)\)/);
+assert.match(staffPortalActionsSource, /if \(updated\.count === 0\) redirect\(customerSettingsUrl\("archived-company-access", membership\.companyId\)\)/);
 assert.match(customerPortalPasswordSource, /crmStage: \{ not: "archived" \}/);
 assert.match(customerPortalPasswordSource, /status: "ACTIVE"/);
 assert.match(customerPortalPasswordSource, /verifyPassword/);
@@ -148,6 +171,16 @@ assert.match(fullAppMigrationSource, /INSERT INTO "SupplyWorkspaceMember"/);
 
 assert.strictEqual(normalizeCustomerPortalEmail("  Ops@Customer.COM "), "ops@customer.com");
 assert.strictEqual(normalizeCustomerPortalUsername("  HypnoDreamz "), "hypnodreamz");
+assert.strictEqual(managedCustomerEmail("hypnodreamz"), "hypnodreamz@customers.derya.invalid");
+assert.strictEqual(isManagedCustomerEmail("hypnodreamz@customers.derya.invalid"), true);
+assert.strictEqual(customerContactEmail("hypnodreamz@customers.derya.invalid"), "");
+assert.strictEqual(customerContactEmail("ops@hypnodreamz.com"), "ops@hypnodreamz.com");
+assert.match(removedCustomerUsername("portal-user-1"), /^removed_/);
+assert.match(removedCustomerEmail("portal-user-1"), /^removed\+.*@customers\.derya\.invalid$/);
+assert.strictEqual(isRemovedCustomerUsername("removed_portal-user-1"), true);
+assert.strictEqual(isRemovedCustomerUsername("hypnodreamz"), false);
+assert.strictEqual(customerPortalUsernameIsAllowed("hypnodreamz"), true);
+assert.strictEqual(customerPortalUsernameIsAllowed("removed_customer"), false);
 
 
 const secret = "portal-test-secret";
