@@ -46,6 +46,9 @@ Derya automates the parsing, supplier outreach, comparison, and operations track
 - Quote lines, requested uploads, and approved customer-visible documents
 - Quote responses and requested document uploads recorded as operator-review
   actions, with no automatic booking or status change
+- Customer-scoped procurement Context for messages, files, and confirmation of
+  supplier research only. Supplier contact, selection, and spend remain under
+  Derya operator control.
 - Existing one-load guest link retained for read-only shipment sharing
 
 ## Confirmed Product Decisions

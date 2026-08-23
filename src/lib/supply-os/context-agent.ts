@@ -1,17 +1,22 @@
 import "server-only";
 
 import OpenAI from "openai";
+import {
+  isCustomerContextAccess,
+  type CompanyContextAccess,
+} from "@/lib/customer-context-access";
 import { DERYA_AI_MODEL } from "@/lib/gpt56-client";
 import {
   appendCompanyContextMessage,
+  appendRateLimitedCustomerContextMessage,
   assembleCompanyContextForAgent,
+  CompanyContextLimitError,
   type CompanyContextCitation,
 } from "@/lib/company-context";
 import {
   createCompanyContextProcurementActions,
   normalizeContextProcurementDraft,
 } from "@/lib/supply-os/context-procurement";
-import type { SupplyAccessContext } from "./persistence";
 
 const CONTEXT_REPLY_SCHEMA = {
   type: "object",
@@ -60,7 +65,7 @@ export class ContextAgentError extends Error {
 
   constructor(
     message: string,
-    public readonly code: "invalid_input" | "unavailable" | "invalid_response",
+    public readonly code: "invalid_input" | "unavailable" | "invalid_response" | "rate_limited",
     messageSaved = false,
   ) {
     super(message);
@@ -76,18 +81,34 @@ function cleanAnswer(value: unknown) {
 }
 
 export async function chatWithCompanyContext(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   instruction: unknown;
 }) {
   const instruction = cleanAnswer(args.instruction).slice(0, 4_000);
   if (!instruction) throw new ContextAgentError("Ask a question about this company context.", "invalid_input");
-  const operatorMessage = await appendCompanyContextMessage({
-    context: args.context,
-    workspaceId: args.workspaceId,
-    role: "OPERATOR",
-    body: instruction,
-  });
+  let operatorMessage;
+  try {
+    operatorMessage = isCustomerContextAccess(args.context)
+      ? await appendRateLimitedCustomerContextMessage({
+          context: args.context,
+          workspaceId: args.workspaceId,
+          body: instruction,
+          maxMessages: 20,
+          windowMs: 15 * 60 * 1000,
+        })
+      : await appendCompanyContextMessage({
+          context: args.context,
+          workspaceId: args.workspaceId,
+          role: "OPERATOR",
+          body: instruction,
+        });
+  } catch (error) {
+    if (error instanceof CompanyContextLimitError && error.code === "message_rate") {
+      throw new ContextAgentError(error.message, "rate_limited");
+    }
+    throw error;
+  }
   if (!process.env.OPENAI_API_KEY) {
     throw new ContextAgentError("AI replies are not configured for this environment.", "unavailable", true);
   }
@@ -98,10 +119,10 @@ export async function chatWithCompanyContext(args: {
     allowedCitations.set(document.citationId, { id: document.citationId, label: document.name });
   }
   for (const message of packet.messages) {
-    if (message.role !== "OPERATOR") continue;
+    if (message.role === "AGENT") continue;
     allowedCitations.set(message.citationId, {
       id: message.citationId,
-      label: "Operator message",
+      label: message.role === "CUSTOMER" ? "Customer request" : "Operator message",
     });
   }
 
@@ -178,7 +199,7 @@ export async function chatWithCompanyContext(args: {
   })).values()];
   const procurementActionItems = uniqueDrafts.map(({ draft, draftCitationIds }) => {
     const actionCitations = [
-      { id: requestCitationId, label: "Operator request" },
+      { id: requestCitationId, label: isCustomerContextAccess(args.context) ? "Customer request" : "Operator request" },
       ...draftCitationIds
         .filter((id) => id !== requestCitationId)
         .map((id) => allowedCitations.get(id)!),

@@ -16,6 +16,7 @@ import {
 } from "../src/lib/customer-portal-view";
 import {
   customerPortalDocumentHref,
+  customerPortalProcurementHref,
   customerPortalShipmentHref,
   customerPortalWorkspaceHref,
 } from "../src/lib/customer-portal-navigation";
@@ -34,12 +35,20 @@ assert.strictEqual(
 );
 assert.strictEqual(customerPortalDocumentHref("doc/a", true), "/api/jobs/document/doc%2Fa");
 assert.strictEqual(customerPortalDocumentHref("doc/a"), "/api/portal/documents/doc%2Fa");
+assert.strictEqual(customerPortalProcurementHref("company/a"), "/portal/procurement?company=company%2Fa");
 
 const customerLoginSource = readFileSync(resolve(process.cwd(), "src/app/portal/page.tsx"), "utf8");
 const staffLoginSource = readFileSync(resolve(process.cwd(), "src/app/login/page.tsx"), "utf8");
 const staffPortalSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/page.tsx"), "utf8");
+const staffPortalActionsSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/customer-portal/actions.ts"), "utf8");
+const customerPortalAuthSource = readFileSync(resolve(process.cwd(), "src/lib/customer-portal-auth.ts"), "utf8");
+const customerSettingsSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/settings/customers/page.tsx"), "utf8");
+const settingsIndexSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/settings/page.tsx"), "utf8");
+const settingsHeaderSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/settings/settings-header.tsx"), "utf8");
+const supplyShellSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/supply-os-operating-shell.tsx"), "utf8");
 const customerDevelopmentPreviewSource = readFileSync(resolve(process.cwd(), "src/app/customer/page.tsx"), "utf8");
 const customerWorkspaceSource = readFileSync(resolve(process.cwd(), "src/app/portal/workspace/page.tsx"), "utf8");
+const customerProcurementSource = readFileSync(resolve(process.cwd(), "src/app/portal/procurement/page.tsx"), "utf8");
 
 assert.match(customerLoginSource, /href="\/login">Team sign in/);
 assert.match(customerLoginSource, /href="mailto:rfq@usederya\.com">Start shipment/);
@@ -47,6 +56,41 @@ assert.match(staffLoginSource, /Customer\? <a href="\/portal">Sign in to your sh
 assert.match(staffPortalSource, /customerPortalWorkspaceHref\(membership\.company\.id, true\)/);
 assert.match(staffPortalSource, /Customer sign-in:/);
 assert.match(staffPortalSource, />View as customer</);
+assert.match(staffPortalSource, />Customer accounts</);
+assert.match(staffPortalSource, /updateCustomerPortalAccount\.bind\(null, account\.id\)/);
+assert.match(staffPortalSource, /updateCustomerPortalMembership\.bind\(null, membership\.id\)/);
+assert.match(staffPortalSource, />Account status</);
+assert.match(staffPortalSource, />Company access</);
+assert.match(staffPortalSource, /Passwordless customer login/);
+assert.match(staffPortalSource, /No password exists to view or reset/);
+assert.doesNotMatch(staffPortalSource, /type="password"|passwordHash/);
+assert.match(staffPortalSource, /createCustomerCompany/);
+assert.match(staffPortalSource, /updateCustomerCompany\.bind\(null, company\.workspaceId\)/);
+assert.match(staffPortalSource, /archiveCustomerCompany\.bind\(null, company\.workspaceId\)/);
+assert.match(staffPortalSource, /name="confirmArchive" value="ARCHIVE" required/);
+assert.match(staffPortalSource, /name="companyId" value=\{company\.id\}/);
+assert.match(staffPortalSource, /Company archived/);
+assert.match(staffPortalSource, /Access is permanently revoked/);
+assert.match(customerSettingsSource, /from "\.\.\/\.\.\/customer-portal\/page"/);
+assert.match(settingsIndexSource, /session\.role === "ADMIN"[\s\S]*\/dashboard\/settings\/customers/);
+assert.match(settingsHeaderSource, />\s*Customers\s*</);
+assert.match(settingsHeaderSource, /active === "customers"/);
+assert.match(supplyShellSource, /const settingsLabel = `[\s\S]*accountRole/);
+assert.match(supplyShellSource, /href="\/dashboard\/settings"/);
+assert.match(staffPortalActionsSource, /where: \{ id: userId, officeId: session\.officeId \}/);
+assert.match(staffPortalActionsSource, /where: \{ id: membershipId, officeId: session\.officeId \}/);
+assert.match(staffPortalActionsSource, /email, id: \{ not: userId \}/);
+assert.match(staffPortalActionsSource, /customerPortalLoginCode\.updateMany/);
+assert.match(staffPortalActionsSource, /createSupplyCustomerWorkspace\(supplyAccessContext\(session\)/);
+assert.match(staffPortalActionsSource, /updateSupplyCustomerWorkspace\(supplyAccessContext\(session\), workspaceId/);
+assert.match(staffPortalActionsSource, /archiveSupplyCustomerWorkspace\(supplyAccessContext\(session\), workspaceId\)/);
+assert.match(staffPortalActionsSource, /formData\.get\("confirmArchive"\)/);
+assert.match(staffPortalActionsSource, /crmStage: \{ not: "archived" \}/);
+assert.match(staffPortalActionsSource, /archived-company-access/);
+assert.match(staffPortalActionsSource, /const updated = await prisma\.customerPortalMembership\.updateMany/);
+assert.match(staffPortalActionsSource, /if \(updated\.count === 0\) redirect\(customerSettingsUrl\("archived-company-access"\)\)/);
+assert.match(customerPortalAuthSource, /crmStage: \{ not: "archived" \}/);
+assert.match(customerPortalAuthSource, /status: "ACTIVE"/);
 assert.match(customerDevelopmentPreviewSource, /robots: \{ index: false, follow: false \}/);
 assert.match(customerDevelopmentPreviewSource, /Development preview with fictional data/);
 assert.match(customerDevelopmentPreviewSource, /buildCustomerPortalShipment/);
@@ -57,6 +101,10 @@ assert.doesNotMatch(customerDevelopmentPreviewSource, /loadCustomerPortalWorkspa
 assert.match(customerWorkspaceSource, /CustomerOperationsOverview/);
 assert.match(customerWorkspaceSource, /Freight operations \| Derya/);
 assert.doesNotMatch(customerWorkspaceSource, />Context</);
+assert.match(customerWorkspaceSource, /customerPortalProcurementHref/);
+assert.match(customerProcurementSource, /resolveCustomerContextWorkspace/);
+assert.match(customerProcurementSource, /apiBasePath=\{`\/api\/portal\/procurement/);
+assert.match(customerProcurementSource, /readOnly=\{!customerContextCanEditRole/);
 
 assert.strictEqual(normalizeCustomerPortalEmail("  Ops@Customer.COM "), "ops@customer.com");
 for (let index = 0; index < 100; index += 1) {

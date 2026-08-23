@@ -153,6 +153,8 @@
     "test:scheduled-market-ingestion": "tsx scripts/scheduled-market-ingestion.test.ts",
     "test:security": "tsx scripts/security-hardening.test.ts",
     "test:customer-portal": "tsx scripts/customer-portal.test.ts",
+    "test:customer-context-access": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/customer-context-access.test.ts",
+    "test:customer-context-access-db": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/customer-context-access-database.test.ts",
     "test:brain": "tsx scripts/brain-ops.test.ts",
     "test:docs": "tsx scripts/check-docs-fresh.test.ts",
     "check:docs": "tsx scripts/check-docs-fresh.ts",

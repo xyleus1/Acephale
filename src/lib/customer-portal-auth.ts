@@ -63,7 +63,22 @@ async function findPortalUser(email: string, officeId?: string | null) {
       email,
       isActive: true,
       ...(officeId ? { officeId } : {}),
-      memberships: { some: { isActive: true } },
+      memberships: {
+        some: {
+          isActive: true,
+          ...(officeId ? { officeId } : {}),
+          company: {
+            crmStage: { not: "archived" },
+            ...(officeId ? { officeId } : {}),
+            supplyWorkspaces: {
+              some: {
+                status: "ACTIVE",
+                ...(officeId ? { officeId } : {}),
+              },
+            },
+          },
+        },
+      },
     },
     select: { id: true, officeId: true, email: true },
     take: 2,
@@ -230,7 +245,13 @@ export async function getCustomerPortalPrincipal() {
         where: {
           officeId: payload.officeId,
           isActive: true,
-          company: { officeId: payload.officeId },
+          company: {
+            officeId: payload.officeId,
+            crmStage: { not: "archived" },
+            supplyWorkspaces: {
+              some: { officeId: payload.officeId, status: "ACTIVE" },
+            },
+          },
         },
         select: {
           id: true,

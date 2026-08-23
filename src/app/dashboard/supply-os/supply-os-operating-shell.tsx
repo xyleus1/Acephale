@@ -35,6 +35,7 @@ function panelFromCurrentUrl() {
 
 export function SupplyOsOperatingShell({
   storageScope,
+  accountRole,
   initialPanel,
   canCreateCompany,
   canImportSupplyData,
@@ -43,6 +44,7 @@ export function SupplyOsOperatingShell({
   contextEnabled,
 }: {
   storageScope: string;
+  accountRole: string;
   initialPanel?: string;
   canCreateCompany: boolean;
   canImportSupplyData: boolean;
@@ -50,6 +52,7 @@ export function SupplyOsOperatingShell({
   canAuthorizePurchase: boolean;
   contextEnabled: boolean;
 }) {
+  const settingsLabel = `${accountRole.slice(0, 1)}${accountRole.slice(1).toLowerCase()} settings`;
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
   const [companyIndexOpen, setCompanyIndexOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -186,12 +189,12 @@ export function SupplyOsOperatingShell({
           <div className={styles.sidebarUtilityArea}>
             <a
               className={styles.sidebarUtility}
-              href="/dashboard/settings/integrations"
-              aria-label="Settings"
-              title="Settings"
+              href="/dashboard/settings"
+              aria-label={settingsLabel}
+              title={settingsLabel}
             >
               <Settings size={18} aria-hidden="true" />
-              <span>Settings</span>
+              <span>{settingsLabel}</span>
             </a>
           </div>
         </motion.aside>

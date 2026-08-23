@@ -11,6 +11,8 @@ import { CheckWhatsAppStatusButton } from "@/components/check-whatsapp-status-bu
 import { DERYA_LOAD_RFQ_INBOX_EMAILS, DERYA_LOAD_RFQ_INBOXES, DERYA_RFQ_SOURCE_EMAILS, gmailConnectHrefForInbox } from "@/lib/derya-inboxes";
 import { whatsAppProvider, whatsAppSendConfigured } from "@/lib/whatsapp";
 import { whatsAppAccountLabel } from "@/lib/whatsapp-display";
+import { SettingsHeader } from "../settings-header";
+import settingsStyles from "../integrations/integrations-settings.module.css";
 
 export const metadata = { title: "Channels" };
 
@@ -174,22 +176,9 @@ export default async function EmailSettingsPage({
   const needsReauth = active.filter((a) => a.provider !== "WHATSAPP" && (!a.lastSyncAt || new Date(a.lastSyncAt) < SCOPE_ROLLOUT));
 
   return (
-    <div style={{ maxWidth: 760 }}>
-      <div style={{ marginBottom: 16 }}>
-        <a href="/dashboard" className="back-link">
-          <Icon name="chevron-left" size={14} strokeWidth={2} /> Workbench
-        </a>
-      </div>
-
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <div>
-          <h1 className="page-title">Email & WhatsApp</h1>
-          <p className="page-subtitle">
-            Connect customer channels. Inbound messages get classified and attached to the right RFQ automatically.
-          </p>
-        </div>
-      </div>
-
+    <main className={settingsStyles.page}>
+      <SettingsHeader active="channels" isAdmin={session.role === "ADMIN"} />
+      <div style={{ maxWidth: 1180, margin: "34px auto 0" }}>
       <div className="card" style={{ marginBottom: 18 }}>
         <div className="card-body appearance-card-body">
           <div>
@@ -590,6 +579,7 @@ export default async function EmailSettingsPage({
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </main>
   );
 }

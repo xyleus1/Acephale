@@ -159,6 +159,39 @@
   padding: 34px 24px 72px;
 }
 
+.procurementMain {
+  padding-top: 24px;
+}
+
+.procurementFrame {
+  height: min(820px, calc(100dvh - 144px));
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid #e0e4e2;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.procurementUnavailable {
+  min-height: 320px;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  border: 1px solid #e0e4e2;
+  border-radius: 16px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.procurementUnavailable strong {
+  font-size: 16px;
+}
+
+.procurementUnavailable span {
+  color: #747c78;
+  font-size: 13px;
+}
+
 .previewBanner {
   margin-bottom: 26px;
   padding: 12px 0;
@@ -2407,8 +2440,21 @@
     display: none;
   }
 
+  .topbarInner {
+    flex-wrap: wrap;
+  }
+
   .portalNav {
-    display: none;
+    width: 100%;
+    height: 44px;
+    order: 3;
+    gap: 22px;
+    overflow-x: auto;
+  }
+
+  .procurementFrame {
+    height: calc(100dvh - 190px);
+    min-height: 520px;
   }
 
   .previewBanner {

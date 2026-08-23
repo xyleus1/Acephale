@@ -33,6 +33,7 @@ export default async function SupplyOsPage({
     <div className={styles.pageFrame}>
       <SupplyOsOperatingShell
         storageScope={`${session.officeId}:${session.userId}`}
+        accountRole={currentUser.role}
         initialPanel={params.panel}
         canCreateCompany={currentUser.role === "ADMIN"}
         canImportSupplyData={currentUser.role === "ADMIN" || currentUser.role === "MANAGER"}

@@ -4,12 +4,12 @@ import {
   Check,
   CircleAlert,
   DatabaseZap,
-  ExternalLink,
   Link2,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { SettingsHeader } from "../settings-header";
 import styles from "./integrations-settings.module.css";
 
 type Workspace = {
@@ -158,20 +158,7 @@ export function IntegrationsSettings({ canConfigure }: { canConfigure: boolean }
 
   return (
     <main className={styles.page}>
-      <header className={styles.pageHeader}>
-        <a href="/dashboard/supply-os">Back to workspace</a>
-        <div>
-          <h1>Settings</h1>
-          <a href="/integrations" target="_blank" rel="noreferrer">
-            Client page <ExternalLink size={14} aria-hidden="true" />
-          </a>
-        </div>
-      </header>
-
-      <nav className={styles.settingsNav} aria-label="Settings sections">
-        <a href="/dashboard/settings/integrations" aria-current="page">Integrations</a>
-        <a href="/dashboard/settings/email">Channels</a>
-      </nav>
+      <SettingsHeader active="integrations" isAdmin={canConfigure} />
 
       <section className={styles.settingsPanel}>
         <header className={styles.panelHeader}>

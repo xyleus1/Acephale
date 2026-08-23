@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { assembleCompanyContextForAgent } from "@/lib/company-context";
+import type { CompanyContextAccess } from "@/lib/customer-context-access";
 import type { ProcurementRequestInput } from "@/lib/procurement-contract";
 import { ProcurementWorkflowError } from "@/lib/procurement-workflow";
 import {
@@ -99,7 +100,7 @@ export function buildProcurementCompanyContextSnapshot(
 
   let messageCharsRemaining = MAX_OPERATOR_MESSAGE_CHARS_TOTAL;
   const eligibleMessages = packet.messages
-    .filter((message) => message.role === "OPERATOR")
+    .filter((message) => message.role !== "AGENT")
     .slice(-MAX_OPERATOR_MESSAGES);
   const messageDates: Array<string | null> = [];
   const operatorMessages = eligibleMessages.flatMap((message) => {
@@ -184,7 +185,29 @@ export async function contextualizeProcurementRequest(args: {
       role: "",
       canViewWholeOffice: false,
     });
-    const packet = await dependencies.assemble(access, workspaceId);
+    return contextualizeProcurementRequestForAccess(
+      { access, input: args.input },
+      { assemble: dependencies.assemble },
+    );
+  } catch (error) {
+    if (error instanceof SupplyPersistenceError) throw workflowError(error);
+    throw error;
+  }
+}
+
+type AccessContextDependencies = {
+  assemble: typeof assembleCompanyContextForAgent;
+};
+
+export async function contextualizeProcurementRequestForAccess(args: {
+  access: CompanyContextAccess;
+  input: ProcurementRequestInput;
+}, dependencies: AccessContextDependencies = { assemble: assembleCompanyContextForAgent }): Promise<ProcurementRequestInput> {
+  const workspaceId = customWorkspaceId(args.input);
+  if (!workspaceId) return args.input;
+
+  try {
+    const packet = await dependencies.assemble(args.access, workspaceId);
     const snapshot = buildProcurementCompanyContextSnapshot(packet);
     if (!snapshot) return args.input;
     const hasRequestSpecificContext = Boolean(recordValue(args.input.requestContext.procurement_context));

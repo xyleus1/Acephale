@@ -182,6 +182,9 @@ company context. A populated `itemId` scopes the same record to one `Item`.
 
 - Every query includes the authenticated `officeId` and the company resolved
   from the selected accessible `SupplyWorkspace`.
+- Customer portal Context also requires an active, explicit company membership.
+  It reads only `customerVisible=true` rows and records the exact portal user on
+  each customer-created row. Internal Context rows remain hidden by default.
 - Original file metadata and parsed Markdown remain on one row. The parsed copy
   is reused for later agent requests instead of running extraction again.
 - File content is untrusted source material and cannot supply agent
@@ -189,6 +192,9 @@ company context. A populated `itemId` scopes the same record to one `Item`.
 - Agent replies cite the exact eligible company files and conversation records.
 - Context provides no external draft or send action. Supplier, purchasing,
   booking, customs, and spending actions remain outside this surface.
+- Customer ADMIN and MEMBER roles may confirm supplier research from their own
+  visible Context. VIEWER is read-only. Research confirmation creates no
+  supplier contact, selection, negotiation, purchase, or payment.
 - New CUSTOM procurement requests freeze the selected company's ready parsed
   documents and operator messages into the workflow request. Generated replies
   stay excluded. The snapshot is stored in workflow `request_context` and
@@ -1069,6 +1075,12 @@ Customer surfaces may expose only fields selected by the customer portal view
 model. Never expose buy cost, margin, internal notes, supplier messages, agent
 reasoning, risk deliberation, or draft operational data.
 
+Customer procurement Context is a separate visibility slice over
+`CompanyContext`. Customer routes return only `customerVisible=true` rows.
+Customer messages, files, agent replies, and research confirmation records are
+visible to the customer and internal operators. Internal rows remain hidden
+unless a future explicit publication control changes that row.
+
 A job document is customer-visible only when:
 
 1. its status is `APPROVED`
@@ -1088,6 +1100,9 @@ them.
   `customerVisible=false`.
 - Portal writes never change job status, book or tender freight, send a quote,
   approve a file, or overwrite operational truth.
+- Customer Context may create an idempotent supplier research request after the
+  customer confirms the exact item, quantity, and unit. It cannot contact,
+  select, negotiate with, purchase from, or pay a supplier.
 - Internal operators acknowledge, resolve, or reject each portal action.
 - Portal writes and operator review decisions create provenance-backed
   `MemoryEvent` records for audit and retrieval.

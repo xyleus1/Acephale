@@ -11,6 +11,10 @@ export function customerPortalWorkspaceHref(
   return isPreview ? `${href}&preview=1` : href;
 }
 
+export function customerPortalProcurementHref(companyId: string) {
+  return `/portal/procurement?company=${encodeURIComponent(companyId)}`;
+}
+
 export function customerPortalShipmentHref(
   jobId: string,
   context?: CustomerPortalNavigationContext,

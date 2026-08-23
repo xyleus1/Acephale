@@ -3,12 +3,13 @@ import { readFileSync } from "node:fs";
 
 const shell = readFileSync("src/app/dashboard/supply-os/supply-os-operating-shell.tsx", "utf8");
 const settingsPage = readFileSync("src/app/dashboard/settings/integrations/integrations-settings.tsx", "utf8");
+const settingsHeader = readFileSync("src/app/dashboard/settings/settings-header.tsx", "utf8");
 const publicPage = readFileSync("src/app/integrations/page.tsx", "utf8");
 const connector = readFileSync("src/lib/supply-os/connector-custom-rest.ts", "utf8");
 
-assert.match(shell, /href="\/dashboard\/settings\/integrations"/);
-assert.match(shell, />Settings<\/span>/);
-assert.match(settingsPage, /href="\/integrations"/);
+assert.match(shell, /href="\/dashboard\/settings"/);
+assert.match(shell, /<span>\{settingsLabel\}<\/span>/);
+assert.match(settingsHeader, /href: "\/integrations", label: "Client page"/);
 assert.match(settingsPage, /adapterKey: "CUSTOM_REST_V1"/);
 assert.match(settingsPage, /config: \{ tokenUrl, scope:/);
 assert.match(publicPage, /Client integration contract/);
@@ -19,7 +20,7 @@ assert.match(publicPage, /Credentials should follow the agreed secure setup proc
 assert.match(connector, /const DEFAULT_PATHS = \{/);
 assert.match(connector, /nextCursor/);
 
-for (const [name, source] of [["shell", shell], ["settings", settingsPage], ["public", publicPage]] as const) {
+for (const [name, source] of [["shell", shell], ["settings", settingsPage], ["settings header", settingsHeader], ["public", publicPage]] as const) {
   assert.equal(source.includes("\u2014"), false, `${name} must not contain U+2014.`);
 }
 

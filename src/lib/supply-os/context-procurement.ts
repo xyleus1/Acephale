@@ -4,19 +4,28 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { procurementRequestSchema, type ProcurementRequestInput } from "@/lib/procurement-contract";
 import {
+  procurementCustomerIdFromServerMetadata,
   resolveProcurementCustomerId,
   submitProcurementRequest,
   ProcurementWorkflowError,
 } from "@/lib/procurement-workflow";
 import {
+  companyContextActorData,
+  companyContextVisibilityWhere,
+  isCustomerContextAccess,
+  requireCompanyContextWorkspace,
+  type CompanyContextAccess,
+} from "@/lib/customer-context-access";
+import {
   assembleCompanyContextForAgent,
   type CompanyContextCitation,
 } from "@/lib/company-context";
-import { contextualizeProcurementRequest } from "@/lib/supply-os/procurement-company-context";
 import {
-  requireSupplyWorkspace,
+  contextualizeProcurementRequest,
+  contextualizeProcurementRequestForAccess,
+} from "@/lib/supply-os/procurement-company-context";
+import {
   SupplyPersistenceError,
-  type SupplyAccessContext,
 } from "@/lib/supply-os/persistence";
 
 const MAX_ACTIONS = 50;
@@ -62,6 +71,26 @@ export type ContextProcurementAction = StoredContextProcurementAction & {
   id: string;
   createdAt: Date;
 };
+
+export type CustomerContextProcurementAction = Pick<
+  ContextProcurementAction,
+  "id" | "status" | "draft" | "citations" | "createdAt"
+> & {
+  order: null | { status: string };
+};
+
+export function projectCompanyContextProcurementActionForCustomer(
+  action: ContextProcurementAction,
+): CustomerContextProcurementAction {
+  return {
+    id: action.id,
+    status: action.status,
+    draft: action.draft,
+    citations: action.citations,
+    createdAt: action.createdAt,
+    order: action.order ? { status: action.order.status } : null,
+  };
+}
 
 type CompanyContextPacket = Awaited<ReturnType<typeof assembleCompanyContextForAgent>>;
 
@@ -205,8 +234,8 @@ function decodeAction(payload: unknown) {
   }
 }
 
-async function companyWorkspace(context: SupplyAccessContext, workspaceId: string, mode: "view" | "edit") {
-  const workspace = await requireSupplyWorkspace(context, workspaceId, mode);
+async function companyWorkspace(context: CompanyContextAccess, workspaceId: string, mode: "view" | "edit") {
+  const workspace = await requireCompanyContextWorkspace(context, workspaceId, mode);
   if (!workspace.companyId) {
     throw new SupplyPersistenceError("Context requires a company-linked workspace.", "invalid_input");
   }
@@ -219,7 +248,7 @@ function actionFromRow(row: { id: string; payload: unknown; createdAt: Date }) {
 }
 
 export async function listCompanyContextProcurementActions(
-  context: SupplyAccessContext,
+  context: CompanyContextAccess,
   workspaceId: string,
 ) {
   const workspace = await companyWorkspace(context, workspaceId, "view");
@@ -228,6 +257,7 @@ export async function listCompanyContextProcurementActions(
       officeId: context.officeId,
       companyId: workspace.companyId,
       kind: "ACTION",
+      ...companyContextVisibilityWhere(context),
     },
     select: { id: true, payload: true, createdAt: true },
     orderBy: { createdAt: "desc" },
@@ -237,7 +267,7 @@ export async function listCompanyContextProcurementActions(
 }
 
 export async function createCompanyContextProcurementAction(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   draft: ContextProcurementDraft;
   citations: CompanyContextCitation[];
@@ -258,7 +288,7 @@ export async function createCompanyContextProcurementAction(args: {
 }
 
 export async function createCompanyContextProcurementActions(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   items: Array<{
     draft: ContextProcurementDraft;
@@ -289,7 +319,7 @@ export async function createCompanyContextProcurementActions(args: {
       name: `Procurement request - ${stored.draft.material}`,
       payload: stored,
       processingState: stored.status,
-      createdByUserId: args.context.userId,
+      ...companyContextActorData(args.context),
     },
     select: { id: true, payload: true, createdAt: true },
   })));
@@ -329,7 +359,7 @@ export function buildProcurementRequestSpecificContextSnapshot(args: {
 
   let messageCharsRemaining = MAX_SPECIFIC_MESSAGE_CHARS_TOTAL;
   const operatorMessages = args.packet.messages
-    .filter((message) => message.role === "OPERATOR" && citationIds.has(message.citationId))
+    .filter((message) => message.role !== "AGENT" && citationIds.has(message.citationId))
     .slice(-MAX_SPECIFIC_MESSAGES)
     .flatMap((message) => {
       if (messageCharsRemaining <= 0) return [];
@@ -449,7 +479,7 @@ function workflowError(error: unknown) {
 }
 
 export async function confirmCompanyContextProcurementAction(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   actionId: string;
 }, dependencies: ContextProcurementDependencies = defaultDependencies) {
@@ -460,6 +490,7 @@ export async function confirmCompanyContextProcurementAction(args: {
       officeId: args.context.officeId,
       companyId: workspace.companyId,
       kind: "ACTION",
+      ...companyContextVisibilityWhere(args.context),
     },
     select: { id: true, payload: true, createdAt: true },
   });
@@ -489,12 +520,18 @@ export async function confirmCompanyContextProcurementAction(args: {
         companyId: workspace.companyId,
         kind: "ACTION",
         processingState: "PENDING",
+        ...companyContextVisibilityWhere(args.context),
       },
       data: { payload: creating, processingState: creating.status },
     });
     if (claimed.count !== 1) {
       const currentRow = await prisma.companyContext.findFirst({
-        where: { id: action.id, officeId: args.context.officeId, companyId: workspace.companyId },
+        where: {
+          id: action.id,
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          ...companyContextVisibilityWhere(args.context),
+        },
         select: { id: true, payload: true, createdAt: true },
       });
       const current = currentRow ? actionFromRow(currentRow) : null;
@@ -531,14 +568,18 @@ export async function confirmCompanyContextProcurementAction(args: {
       draft: action.draft,
       specificContext,
     });
-    const contextualized = await dependencies.contextualize({
-      session: { userId: args.context.userId, officeId: args.context.officeId },
-      input,
-    });
-    const customerId = await dependencies.resolveCustomerId({
-      userId: args.context.userId,
-      officeId: args.context.officeId,
-    });
+    const contextualized = isCustomerContextAccess(args.context)
+      ? await contextualizeProcurementRequestForAccess({ access: args.context, input })
+      : await dependencies.contextualize({
+          session: { userId: args.context.userId, officeId: args.context.officeId },
+          input,
+        });
+    const customerId = isCustomerContextAccess(args.context)
+      ? procurementCustomerIdFromServerMetadata(args.context.officeId)
+      : await dependencies.resolveCustomerId({
+          userId: args.context.userId,
+          officeId: args.context.officeId,
+        });
     const order = await dependencies.submit(customerId, contextualized);
     const stored: StoredContextProcurementAction = {
       schemaVersion: 1,
@@ -562,12 +603,18 @@ export async function confirmCompanyContextProcurementAction(args: {
         companyId: workspace.companyId,
         kind: "ACTION",
         processingState: "CREATING",
+        ...companyContextVisibilityWhere(args.context),
       },
       data: { payload: stored, processingState: stored.status },
     });
     if (updated.count !== 1) {
       const currentRow = await prisma.companyContext.findFirst({
-        where: { id: action.id, officeId: args.context.officeId, companyId: workspace.companyId },
+        where: {
+          id: action.id,
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          ...companyContextVisibilityWhere(args.context),
+        },
         select: { id: true, payload: true, createdAt: true },
       });
       const current = currentRow ? actionFromRow(currentRow) : null;
@@ -581,7 +628,7 @@ export async function confirmCompanyContextProcurementAction(args: {
 }
 
 export async function dismissCompanyContextProcurementAction(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   actionId: string;
 }) {
@@ -592,6 +639,7 @@ export async function dismissCompanyContextProcurementAction(args: {
       officeId: args.context.officeId,
       companyId: workspace.companyId,
       kind: "ACTION",
+      ...companyContextVisibilityWhere(args.context),
     },
     select: { id: true, payload: true, createdAt: true },
   });
@@ -622,6 +670,7 @@ export async function dismissCompanyContextProcurementAction(args: {
       companyId: workspace.companyId,
       kind: "ACTION",
       processingState: "PENDING",
+      ...companyContextVisibilityWhere(args.context),
     },
     data: { payload: stored, processingState: stored.status },
   });

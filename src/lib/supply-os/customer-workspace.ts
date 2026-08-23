@@ -215,8 +215,23 @@ export async function updateSupplyCustomerWorkspace(
 export async function archiveSupplyCustomerWorkspace(context: SupplyAccessContext, workspaceId: string) {
   const workspace = await activeManagedWorkspace(context, workspaceId);
   const now = new Date();
+  const accessLockKey = customerWorkspaceAccessLockKey(context.officeId, workspace.company.id);
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ locked: number }>>`
+      SELECT 1::integer AS "locked"
+      FROM pg_advisory_xact_lock(hashtextextended(${accessLockKey}, 0))
+    `;
+    const activeWorkspace = await tx.supplyWorkspace.findFirst({
+      where: {
+        id: workspace.id,
+        officeId: context.officeId,
+        companyId: workspace.company.id,
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+    if (!activeWorkspace) throw new SupplyPersistenceError("Customer workspace not found.", "not_found");
     await tx.supplyWorkspace.updateMany({
       where: { officeId: context.officeId, companyId: workspace.company.id, status: "ACTIVE" },
       data: { status: "ARCHIVED", archivedAt: now, version: { increment: 1 } },
@@ -232,6 +247,67 @@ export async function archiveSupplyCustomerWorkspace(context: SupplyAccessContex
   });
 
   return { companyId: workspace.company.id, archivedAt: now };
+}
+
+export function customerWorkspaceAccessLockKey(officeId: string, companyId: string) {
+  return `customer-workspace-access:${officeId}:${companyId}`;
+}
+
+export async function grantSupplyCustomerPortalAccess(args: {
+  officeId: string;
+  companyId: string;
+  email: string;
+  fullName: string | null;
+  role: string;
+}) {
+  return prisma.$transaction(async (tx) => {
+    const accessLockKey = customerWorkspaceAccessLockKey(args.officeId, args.companyId);
+    await tx.$queryRaw<Array<{ locked: number }>>`
+      SELECT 1::integer AS "locked"
+      FROM pg_advisory_xact_lock(hashtextextended(${accessLockKey}, 0))
+    `;
+    const company = await tx.company.findFirst({
+      where: {
+        id: args.companyId,
+        officeId: args.officeId,
+        crmStage: { not: "archived" },
+        supplyWorkspaces: {
+          some: { officeId: args.officeId, status: "ACTIVE" },
+        },
+      },
+      select: { id: true, name: true },
+    });
+    if (!company) return null;
+    const user = await tx.customerPortalUser.upsert({
+      where: { officeId_email: { officeId: args.officeId, email: args.email } },
+      create: {
+        officeId: args.officeId,
+        email: args.email,
+        fullName: args.fullName,
+      },
+      update: {
+        isActive: true,
+        ...(args.fullName ? { fullName: args.fullName } : {}),
+      },
+      select: { id: true },
+    });
+    const membership = await tx.customerPortalMembership.upsert({
+      where: { userId_companyId: { userId: user.id, companyId: company.id } },
+      create: {
+        officeId: args.officeId,
+        userId: user.id,
+        companyId: company.id,
+        role: args.role,
+      },
+      update: {
+        officeId: args.officeId,
+        role: args.role,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    return { userId: user.id, membershipId: membership.id, company };
+  });
 }
 
 export async function storeSupplyCompanyResearch(args: {

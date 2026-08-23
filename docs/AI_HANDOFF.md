@@ -2,9 +2,127 @@
 
 ## Latest Update
 
-### Customer Context schema is staged separately from the application
+### Admin Settings now manages customer companies and accounts
 
-- Added the customer Context visibility and portal-creator migration as a
+- The Supply OS sidebar now labels Settings by the signed-in operator role,
+  including `Admin settings` for admins.
+- Admin Settings now opens a Customers section that lists active companies,
+  creates and edits company workspaces, archives companies through the
+  existing safe-delete lifecycle, and manages customer accounts under each
+  company.
+- Customer identities remain passwordless. Admins can edit the customer name,
+  email, account status, company role, and access status. There is no password
+  to expose or reset.
+- Company archival preserves freight history, removes the company from the
+  active directory, revokes memberships, deletes no operational records, and
+  cannot be bypassed by re-enabling an archived membership.
+- Portal authentication now requires an active membership, active company,
+  active workspace, and matching `officeId` before issuing or resolving a
+  customer session.
+- Customer AI messages now reserve the 20-message limit atomically before an
+  OpenAI call. Customer uploads reserve a company-wide daily request quota and
+  a 50-document, 50 MB storage quota before document processing.
+- Customer procurement responses are projected on the server and do not
+  expose internal order IDs, request message IDs, or workflow wake state.
+- Company archival and customer access grants share a database lock, so an
+  access grant cannot race an archive and silently return after restoration.
+- The production migration now runs after the supplier compatibility release,
+  verifies its schema through the protected migration runner, and rejects a
+  Context creator whose portal identity belongs to another office.
+
+Verification completed:
+
+- Focused customer portal, sidebar, company navigation, customer Context, and
+  product-copy checks
+- Database concurrency checks for message limits, upload limits, archive versus
+  grant ordering, role enforcement, tenant denial, and archived workspaces
+- TypeScript, Prisma migration deploy and repeat-deploy on disposable
+  PostgreSQL, and changed-line hygiene checks
+- Read-only production verification SQL against the migrated disposable
+  database
+- Authenticated browser flow for admin login, company create/edit/archive,
+  account add/edit, membership disable/enable, role-aware Settings label, and
+  customer six-digit-code login into the company-scoped portal
+- Desktop and mobile visual inspection
+
+Release and test requirement:
+
+- Local customer email delivery was not attempted because the disposable
+  office has no Gmail sender. The login verifier was tested with a known code
+  inserted only into the disposable database.
+- A real production customer account still requires the recipient email and a
+  connected office Gmail sender after the production migration and app deploy.
+
+### Customer accounts are editable from the admin page
+
+- `/dashboard/customer-portal` now lists customer identities once, including
+  disabled accounts and inactive company access, instead of showing only
+  active membership rows.
+- Admins and managers can edit a customer name, email, and account status, then
+  change the role and active status of each explicit company membership.
+- Email conflicts are rejected inside the current office. Email or account
+  status changes consume outstanding customer login codes, and existing portal
+  sessions stop resolving when the saved identity no longer matches.
+- Every read and write keeps the authenticated `officeId` boundary. Account and
+  company-access changes emit attributable memory events.
+- Company assignment remains explicit. Add access to the new company, then
+  disable the old membership. The editor does not silently move an account.
+
+Verification completed:
+
+- customer portal and customer Context contracts
+- product copy policy, TypeScript, production build, and diff hygiene
+- changed-file U+2014 scan
+
+Release and test requirement:
+
+- This branch is not deployed, and no production customer account was created.
+- A real test account still needs the recipient email, an active company
+  membership, and a connected office Gmail sender for the six-digit code.
+- The sandbox blocked PostgreSQL and browser control because local sockets and
+  shared memory are unavailable. Test account edits and the passwordless
+  roundtrip in a deployed preview or production after merge.
+
+### Customer portal now has scoped procurement Context
+
+- The existing passwordless customer portal now links to Procurement for each
+  explicitly assigned company. No customer is added to the internal `User`
+  table or founder allowlist.
+- Customer routes recheck portal user, office, membership, company, and active
+  SupplyWorkspace on every request. ADMIN and MEMBER can chat, upload files,
+  and confirm supplier research. VIEWER is read-only.
+- Customer Context returns only `customerVisible=true` rows. Internal Context
+  stays hidden, customer-created rows retain portal-user provenance, and
+  internal operators can distinguish customer messages from operator messages.
+- Confirmation creates supplier research only. Supplier contact, selection,
+  negotiation, purchase, and spend remain blocked behind existing operator
+  controls.
+- The customer surface hides workflow IDs and configuration errors, excludes
+  internal preview sessions, and limits each portal user to 20 messages per 15
+  minutes.
+- Migration `20260822000300_customer_portal_context_access` adds the customer
+  visibility flag and portal creator relation to `CompanyContext`.
+
+Verification completed:
+
+- Prisma validation and client generation
+- customer Context access and customer portal contracts
+- Supply OS Context and customer procurement bridge contracts
+- product copy policy, deployment boundary, TypeScript, and production build
+- tenant audit with no new finding from this change; 12 pre-existing findings
+  remain outside this scope
+
+Release requirement:
+
+- Production migration run `32613960784` applied and verified the customer
+  Context schema before the application merge.
+- Provision access through `/dashboard/customer-portal`, then test with two
+  customer companies and a real passwordless portal session.
+- No supplier email was sent and no purchase behavior changed.
+
+### Customer Context schema is live
+
+- Applied the customer Context visibility and portal-creator migration as a
   schema-only release before the customer-management application deploy.
 - The migration extends the existing CompanyContext tenant trigger, so a
   portal identity from another office cannot be recorded as the creator.
@@ -12,9 +130,8 @@
   indexes, migration ledger, and tenant guard.
 - The full migration chain, repeat deployment, database tenant rejection, and
   production verification SQL pass on disposable PostgreSQL.
-- No Prisma client or application behavior changes in this release. Run the
-  protected production migration workflow before merging the customer
-  application PR.
+- Production migration run `32613960784` passed target validation, migration
+  application, and read-only production verification.
 
 ### Bourne supplier messages have a direct return path
 

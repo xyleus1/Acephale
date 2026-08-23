@@ -13,6 +13,7 @@ import {
   type CustomerPortalPrincipal,
 } from "@/lib/customer-portal-data";
 import {
+  customerPortalProcurementHref,
   customerPortalShipmentHref,
   customerPortalWorkspaceHref,
 } from "@/lib/customer-portal-navigation";
@@ -84,6 +85,7 @@ export default async function CustomerPortalWorkspacePage({
           <nav className={styles.portalNav} aria-label="Customer workspace">
             <a aria-current="page" className={styles.portalNavActive} href={customerPortalWorkspaceHref(data.company.id, isPreview)}>Overview</a>
             <a className={styles.portalNavLink} href="#shipments">Shipments</a>
+            {!isPreview ? <a className={styles.portalNavLink} href={customerPortalProcurementHref(data.company.id)}>Procurement</a> : null}
             <a className={styles.portalNavLink} href="mailto:rfq@usederya.com">New request</a>
           </nav>
           <div className={styles.userNav}>

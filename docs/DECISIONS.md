@@ -16,6 +16,36 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-22 - Customer portal may start scoped supplier research from Context
+
+- Status: accepted, supersedes only the customer-portal exclusion and
+  operator-only research confirmation in the 2026-08-20 Context decisions
+- Owner: product and engineering
+- Context: Customers need to describe a procurement requirement in chat and
+  confirm supplier research without receiving internal dashboard access.
+- Decision: Keep external `CustomerPortalUser` identities separate from
+  internal `User` accounts. A current, explicit `CustomerPortalMembership`
+  grants access only to the matching office, company, and active
+  `SupplyWorkspace`. Customer ADMIN and MEMBER roles may add customer-visible
+  Context messages and files and confirm supplier research. VIEWER remains
+  read-only. Every route rechecks the current membership.
+- Visibility boundary: Existing and future internal Context rows default to
+  hidden. Customer routes read only `customerVisible=true` rows. Customer
+  writes and their Derya replies are marked customer-visible and retain the
+  exact portal user as creator. Customer answers cannot retrieve or cite hidden
+  operator files or messages.
+- Approval boundary: Customer confirmation creates one idempotent supplier
+  research request. It does not contact, select, negotiate with, purchase from,
+  or pay a supplier. Supplier communication and spend remain operator-owned.
+- Consequences: The existing passwordless portal login is the customer front
+  door. No customer account enters the internal founder allowlist or dashboard
+  role model. Portal chat is bounded to 20 messages per user per 15 minutes,
+  internal preview cannot call customer Context routes, and customer UI hides
+  workflow identifiers and configuration errors.
+- Revisit when: Derya adds an explicit operator control for publishing selected
+  internal Context rows to customers, or approves a customer supplier-contact
+  policy.
+
 ### 2026-08-21 - Context uses a white work surface
 
 - Status: accepted

@@ -6071,6 +6071,58 @@ Use this file for chronological implementation notes that future agents should s
   from near-white to literal white. Updated `DESIGN.md` to record the intended
   white Context work surface.
 
+### 2026-08-22 - Add customer-scoped procurement Context
+
+- Branch: `codex/customer-context-access-current`, based on `46f28ccf`.
+- Task: Let an explicitly provisioned customer use passwordless portal login to
+  describe a procurement need, attach files, and confirm supplier research for
+  only their assigned company.
+- Files changed: `CompanyContext` schema and migration, customer Context access
+  policy, portal APIs and Procurement page, shared Context UI, focused tests,
+  and durable product documentation.
+- Safety: External identities remain separate from internal users. Every route
+  rechecks office, portal user, membership, company, and active workspace.
+  Customer reads require `customerVisible=true`; hidden internal Context never
+  enters the customer agent packet. VIEWER cannot write. Supplier contact,
+  selection, negotiation, purchase, and spend remain unavailable.
+- Verification: Prisma validation and generation, customer Context access,
+  customer portal, Supply OS Context, customer procurement bridge, product
+  copy, deployment boundary, TypeScript, production build, diff hygiene, and
+  forbidden-character checks. Tenant audit added no finding from this work;
+  12 pre-existing findings remain.
+- Failed/skipped checks: No database migration, deployment, authenticated
+  browser pass, supplier email, or live Bourne workflow was run in this pass.
+  The database-backed security suite could not run without a database URL.
+- Follow-up: Apply the migration, deploy, provision two customer companies,
+  and run the cross-company browser acceptance described in the handoff.
+
+### 2026-08-22 - Add customer account administration
+
+- Branch: `codex/customer-context-access-current`, continuing from `232cb60b`.
+- Task: Make external customer accounts visible and editable from the customer
+  portal admin page, then test the customer login experience.
+- Files changed: Customer portal admin query, account and membership actions,
+  admin UI styles, portal contract, handoff, and engineering log.
+- Behavior: Admins and managers can edit customer name, email, and account
+  status and can change each explicit company membership role and status.
+  Disabled records remain visible for recovery. Company reassignment stays an
+  explicit grant plus disable operation.
+- Safety: All lookups and updates include the current `officeId`. Duplicate
+  emails are rejected per office, identity changes consume outstanding codes,
+  and account or membership updates are recorded as attributable events.
+- Verification: Customer portal and customer Context contracts, product copy
+  policy, TypeScript, optimized production build, diff hygiene, and changed
+  U+2014 scan passed. The build retained the pre-existing Supply OS CSS
+  autoprefixer warning.
+- Failed/skipped checks: The normal `tsx` wrapper cannot open its IPC pipe in
+  this sandbox, so tests used `node --import tsx`. Disposable PostgreSQL failed
+  because System V shared memory is blocked. Both browser runners failed
+  because localhost control sockets are blocked or no in-app browser is
+  attached. No deployed admin or passwordless email roundtrip was claimed.
+- Follow-up: Merge and deploy, provision the supplied real email under one test
+  company, then verify code delivery, account edits, role enforcement, disable
+  behavior, and cross-company isolation.
+
 ### 2026-08-22 - Preserve supplier research details in the Derya shortlist
 
 - Branch: `fix/supplier-evidence-and-approval`, based on production
@@ -6121,6 +6173,50 @@ Use this file for chronological implementation notes that future agents should s
 - Follow-up: Merge the migration, apply it to production Neon as owner, rerun
   the affected order query as `dashboard_api`, then refresh the authenticated
   Derya shortlist and confirm all three supplier emails render.
+
+### 2026-08-22 - Add customer company management to Admin Settings
+
+- Branch: `codex/customer-context-access-current`, merged with current
+  `origin/main` at `4e90e576`.
+- Task: Identify the signed-in account beside Settings and give admins one
+  place to create, edit, archive, and access customer companies and accounts.
+- Files changed: Shared Settings navigation, customer management page and
+  actions, Supply OS role label, customer portal authentication guard, focused
+  contracts, handoff, and this log.
+- Behavior: Admin Settings opens Customers by default. Admins can create and
+  edit companies, safely archive them, add customer accounts, edit identity and
+  status, change company roles and access, preview a customer workspace, and
+  open the customer sign-in page. The UI explicitly explains that customer
+  login uses email codes and has no password to view or reset.
+- Safety: Company Delete uses the existing archive lifecycle, retains freight
+  history, and revokes customer access. Portal login and session resolution
+  now reject archived companies and inactive workspaces. Archived memberships
+  are visible for history but cannot be re-enabled. All new reads and writes
+  remain scoped to the authenticated `officeId`.
+- Review hardening: Customer AI message limits and upload quotas are now
+  reserved under PostgreSQL advisory locks before paid processing. Company
+  Context is capped at 40 upload requests per day, 50 documents, and 50 MB.
+  Customer procurement JSON now omits internal workflow identifiers. Access
+  grants and company archival share a lock, closing the restore-time access
+  race.
+- Release hardening: The customer Context migration now sorts after the
+  supplier compatibility migration, has a committed read-only production
+  verification, and extends the database tenant guard to reject a portal
+  creator from another office.
+- Verification: Focused portal, sidebar, company-navigation, customer Context,
+  and product-copy contracts passed. TypeScript and diff hygiene passed. A
+  disposable PostgreSQL database applied all migrations and seeded cleanly.
+  Database tests exercised concurrent message and upload limits, the archive
+  versus grant race, current membership roles, tenant denial, and storage
+  rejection before document processing.
+  Authenticated browser testing covered company create/edit/archive, account
+  add/edit, access disable/enable, `Admin settings`, a known-code customer
+  login, forced logout after archive, and desktop/mobile visual inspection.
+- Not verified: Real customer email delivery because the disposable office had
+  no Gmail sender. No production customer account was created.
+- Follow-up: Land the branch, apply the pending additive migration before the
+  app release, verify production health, then provision a real recipient email
+  through Settings and confirm code delivery.
 
 ### 2026-08-22 - Make owner-run production migrations repeatable
 

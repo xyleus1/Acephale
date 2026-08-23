@@ -3,15 +3,20 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { readStoredDocument } from "@/lib/document-storage";
 import {
+  companyContextActorData,
+  companyContextActorWhere,
+  companyContextVisibilityWhere,
+  isCustomerContextAccess,
+  requireCompanyContextWorkspace,
+  type CompanyContextAccess,
+  type CustomerContextAccess,
+} from "@/lib/customer-context-access";
+import {
   contextDocumentHash,
   ingestContextDocument,
   validateContextDocumentUpload,
 } from "@/lib/supply-os/context-documents";
-import {
-  requireSupplyWorkspace,
-  SupplyPersistenceError,
-  type SupplyAccessContext,
-} from "@/lib/supply-os/persistence";
+import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
 
 const MAX_MESSAGE_CHARS = 12_000;
 const MAX_AGENT_DOCUMENT_CHARS = 120_000;
@@ -19,6 +24,12 @@ const MAX_AGENT_DOCUMENT_CHARS_PER_FILE = 40_000;
 const MAX_UPLOAD_CHUNKS = 4;
 const UPLOAD_CHUNK_TTL_MS = 24 * 60 * 60 * 1_000;
 const UPLOAD_CHUNK_PREFIX = "upload:";
+const UPLOAD_REQUEST_KIND = "UPLOAD_REQUEST";
+const UPLOAD_RESERVATION_KIND = "UPLOAD_RESERVATION";
+const UPLOAD_RESERVATION_TTL_MS = 30 * 60 * 1_000;
+export const CUSTOMER_CONTEXT_UPLOADS_PER_DAY = 40;
+export const CUSTOMER_CONTEXT_DOCUMENTS_MAX = 50;
+export const CUSTOMER_CONTEXT_STORAGE_MAX_BYTES = 50 * 1024 * 1024;
 export const CONTEXT_DOCUMENT_CHUNK_BYTES = 3 * 1024 * 1024;
 
 type ProcessingState = "READY" | "UNSUPPORTED" | "FAILED";
@@ -27,6 +38,16 @@ export type CompanyContextCitation = {
   id: string;
   label: string;
 };
+
+export class CompanyContextLimitError extends Error {
+  constructor(
+    message: string,
+    public readonly code: "message_rate" | "upload_rate" | "document_storage" | "document_count",
+  ) {
+    super(message);
+    this.name = "CompanyContextLimitError";
+  }
+}
 
 function cleanMarkdown(value: unknown, maxLength = MAX_MESSAGE_CHARS) {
   return typeof value === "string"
@@ -66,8 +87,18 @@ function citationsFromPayload(payload: unknown) {
   return citations.length ? citations : null;
 }
 
-function parseMessage(row: { id: string; markdown: string | null; payload: unknown; createdAt: Date }) {
-  const role = isObject(row.payload) && row.payload.role === "AGENT" ? "AGENT" : "OPERATOR";
+function parseMessage(row: {
+  id: string;
+  markdown: string | null;
+  payload: unknown;
+  createdAt: Date;
+  createdByPortalUserId: string | null;
+}) {
+  const role = isObject(row.payload) && row.payload.role === "AGENT"
+    ? "AGENT"
+    : row.createdByPortalUserId
+      ? "CUSTOMER"
+      : "OPERATOR";
   return {
     id: row.id,
     role,
@@ -77,8 +108,8 @@ function parseMessage(row: { id: string; markdown: string | null; payload: unkno
   };
 }
 
-async function contextWorkspace(context: SupplyAccessContext, workspaceId: string, mode: "view" | "edit") {
-  const workspace = await requireSupplyWorkspace(context, workspaceId, mode);
+async function contextWorkspace(context: CompanyContextAccess, workspaceId: string, mode: "view" | "edit") {
+  const workspace = await requireCompanyContextWorkspace(context, workspaceId, mode);
   if (!workspace.companyId) {
     throw new SupplyPersistenceError("Context requires a company-linked workspace.", "invalid_input");
   }
@@ -98,13 +129,142 @@ async function itemScope(officeId: string, companyId: string, value: unknown) {
   return item;
 }
 
-export async function loadCompanyContext(context: SupplyAccessContext, workspaceId: string) {
+function customerUploadQuotaLockKey(officeId: string, companyId: string) {
+  return `customer-context-upload:${officeId}:${companyId}`;
+}
+
+export async function reserveCustomerContextUploadRequest(args: {
+  context: CustomerContextAccess;
+  workspaceId: string;
+}) {
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+  const lockKey = customerUploadQuotaLockKey(args.context.officeId, workspace.companyId);
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ locked: number }>>`
+      SELECT 1::integer AS "locked"
+      FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    `;
+    await tx.companyContext.deleteMany({
+      where: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: UPLOAD_REQUEST_KIND,
+        createdAt: { lt: cutoff },
+      },
+    });
+    const recentRequests = await tx.companyContext.count({
+      where: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: UPLOAD_REQUEST_KIND,
+        createdAt: { gte: cutoff },
+      },
+    });
+    if (recentRequests >= CUSTOMER_CONTEXT_UPLOADS_PER_DAY) {
+      throw new CompanyContextLimitError("Too many document uploads. Try again tomorrow.", "upload_rate");
+    }
+    await tx.companyContext.create({
+      data: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: UPLOAD_REQUEST_KIND,
+        name: "Document upload request",
+        processingState: "READY",
+        ...companyContextActorData(args.context),
+      },
+    });
+  });
+}
+
+async function reserveCustomerContextDocumentStorage(args: {
+  context: CustomerContextAccess;
+  companyId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  contentHash: string;
+}) {
+  const quotaLockKey = customerUploadQuotaLockKey(args.context.officeId, args.companyId);
+  const contentLockKey = `${args.context.officeId}:${args.companyId}:${args.contentHash}`;
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ locked: number }>>`
+      SELECT 1::integer AS "locked"
+      FROM pg_advisory_xact_lock(hashtextextended(${quotaLockKey}, 0))
+    `;
+    await tx.$queryRaw<Array<{ locked: number }>>`
+      SELECT 1::integer AS "locked"
+      FROM pg_advisory_xact_lock(hashtextextended(${contentLockKey}, 0))
+    `;
+    await tx.companyContext.deleteMany({
+      where: {
+        officeId: args.context.officeId,
+        companyId: args.companyId,
+        kind: UPLOAD_RESERVATION_KIND,
+        createdAt: { lt: new Date(Date.now() - UPLOAD_RESERVATION_TTL_MS) },
+      },
+    });
+    const duplicate = await tx.companyContext.findFirst({
+      where: {
+        officeId: args.context.officeId,
+        companyId: args.companyId,
+        contentHash: args.contentHash,
+      },
+      select: { id: true },
+    });
+    if (duplicate) throw new SupplyPersistenceError("This document is already attached to the company.", "conflict");
+    const [storage, documentCount] = await Promise.all([
+      tx.companyContext.aggregate({
+        where: {
+          officeId: args.context.officeId,
+          companyId: args.companyId,
+          kind: { in: ["DOCUMENT", "UPLOAD_CHUNK", UPLOAD_RESERVATION_KIND] },
+        },
+        _sum: { sizeBytes: true },
+      }),
+      tx.companyContext.count({
+        where: {
+          officeId: args.context.officeId,
+          companyId: args.companyId,
+          kind: { in: ["DOCUMENT", UPLOAD_RESERVATION_KIND] },
+        },
+      }),
+    ]);
+    if (documentCount >= CUSTOMER_CONTEXT_DOCUMENTS_MAX) {
+      throw new CompanyContextLimitError(
+        `Companies can store up to ${CUSTOMER_CONTEXT_DOCUMENTS_MAX} context documents.`,
+        "document_count",
+      );
+    }
+    if ((storage._sum.sizeBytes ?? 0) + args.sizeBytes > CUSTOMER_CONTEXT_STORAGE_MAX_BYTES) {
+      throw new CompanyContextLimitError("Company context storage is limited to 50 MB.", "document_storage");
+    }
+    return tx.companyContext.create({
+      data: {
+        officeId: args.context.officeId,
+        companyId: args.companyId,
+        kind: UPLOAD_RESERVATION_KIND,
+        name: args.name,
+        mimeType: args.mimeType,
+        sizeBytes: args.sizeBytes,
+        contentHash: args.contentHash,
+        processingState: "PENDING",
+        payload: { quotaReservation: true },
+        ...companyContextActorData(args.context),
+      },
+      select: { id: true },
+    });
+  });
+}
+
+export async function loadCompanyContext(context: CompanyContextAccess, workspaceId: string) {
   const workspace = await contextWorkspace(context, workspaceId, "view");
   const rows = await prisma.companyContext.findMany({
     where: {
       officeId: context.officeId,
       companyId: workspace.companyId,
       kind: { in: ["DOCUMENT", "MESSAGE"] },
+      ...companyContextVisibilityWhere(context),
     },
     select: {
       id: true,
@@ -119,6 +279,7 @@ export async function loadCompanyContext(context: SupplyAccessContext, workspace
       processingState: true,
       processingError: true,
       payload: true,
+      createdByPortalUserId: true,
       createdAt: true,
       item: { select: { name: true } },
     },
@@ -146,13 +307,17 @@ export async function loadCompanyContext(context: SupplyAccessContext, workspace
 }
 
 export async function uploadCompanyContextDocument(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   file: File;
   itemId?: unknown;
 }) {
   const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
-  const item = await itemScope(args.context.officeId, workspace.companyId, args.itemId);
+  const item = await itemScope(
+    args.context.officeId,
+    workspace.companyId,
+    isCustomerContextAccess(args.context) ? null : args.itemId,
+  );
   let metadata: ReturnType<typeof validateContextDocumentUpload>;
   try {
     metadata = validateContextDocumentUpload(args.file);
@@ -161,6 +326,16 @@ export async function uploadCompanyContextDocument(args: {
   }
   const bytes = Buffer.from(await args.file.arrayBuffer());
   const contentHash = contextDocumentHash(bytes);
+  const reservation = isCustomerContextAccess(args.context)
+    ? await reserveCustomerContextDocumentStorage({
+        context: args.context,
+        companyId: workspace.companyId,
+        name: metadata.name,
+        mimeType: metadata.mimeType,
+        sizeBytes: metadata.sizeBytes,
+        contentHash,
+      })
+    : null;
   const result = await ingestContextDocument(bytes, metadata.mimeType, metadata.name).catch(() => ({
     state: "FAILED" as const,
     markdown: null,
@@ -174,61 +349,80 @@ export async function uploadCompanyContextDocument(args: {
       ? "UNSUPPORTED"
       : "FAILED";
 
-  const document = await prisma.$transaction(async (tx) => {
-    const lockKey = `${args.context.officeId}:${workspace.companyId}:${contentHash}`;
-    await tx.$queryRaw<Array<{ locked: number }>>`
-      SELECT 1::integer AS "locked"
-      FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
-    `;
-    const duplicate = await tx.companyContext.findFirst({
-      where: {
-        officeId: args.context.officeId,
-        companyId: workspace.companyId,
-        kind: "DOCUMENT",
-        contentHash,
-      },
-      select: { id: true },
-    });
-    if (duplicate) throw new SupplyPersistenceError("This document is already attached to the company.", "conflict");
-    const placeholder = await tx.companyContext.findFirst({
-      where: {
-        officeId: args.context.officeId,
-        companyId: workspace.companyId,
-        kind: "DOCUMENT",
-        contentHash: null,
-        storageUrl: { startsWith: "metadata-only://" },
-        payload: { path: ["importSource", "contentHash"], equals: contentHash },
-      },
-      select: { id: true, itemId: true },
-    });
-    const data = {
-      officeId: args.context.officeId,
-      companyId: workspace.companyId,
-      itemId: item?.id ?? placeholder?.itemId ?? null,
-      kind: "DOCUMENT",
-      name: metadata.name,
-      description: result.summary,
-      storageUrl: dataUrl(bytes, metadata.mimeType),
-      mimeType: metadata.mimeType,
-      sizeBytes: metadata.sizeBytes,
-      contentHash,
-      markdown: result.markdown,
-      processingState,
-      processingError: result.error,
-      payload: { extractionVersion: result.version },
-      createdByUserId: args.context.userId,
-    };
-    return placeholder
-      ? tx.companyContext.update({
-        where: { id: placeholder.id },
-        data,
-        select: { id: true, itemId: true, name: true, createdAt: true, item: { select: { name: true } } },
-      })
-      : tx.companyContext.create({
-        data,
-        select: { id: true, itemId: true, name: true, createdAt: true, item: { select: { name: true } } },
+  let document;
+  try {
+    document = await prisma.$transaction(async (tx) => {
+      const lockKey = `${args.context.officeId}:${workspace.companyId}:${contentHash}`;
+      await tx.$queryRaw<Array<{ locked: number }>>`
+        SELECT 1::integer AS "locked"
+        FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+      `;
+      const duplicate = await tx.companyContext.findFirst({
+        where: {
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          contentHash,
+          ...(reservation ? { id: { not: reservation.id } } : {}),
+        },
+        select: { id: true },
       });
-  });
+      if (duplicate) throw new SupplyPersistenceError("This document is already attached to the company.", "conflict");
+      const placeholder = await tx.companyContext.findFirst({
+        where: {
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          kind: "DOCUMENT",
+          contentHash: null,
+          storageUrl: { startsWith: "metadata-only://" },
+          payload: { path: ["importSource", "contentHash"], equals: contentHash },
+          ...companyContextVisibilityWhere(args.context),
+        },
+        select: { id: true, itemId: true },
+      });
+      const data = {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        itemId: item?.id ?? placeholder?.itemId ?? null,
+        kind: "DOCUMENT",
+        name: metadata.name,
+        description: result.summary,
+        storageUrl: dataUrl(bytes, metadata.mimeType),
+        mimeType: metadata.mimeType,
+        sizeBytes: metadata.sizeBytes,
+        contentHash,
+        markdown: result.markdown,
+        processingState,
+        processingError: result.error,
+        payload: { extractionVersion: result.version },
+        ...companyContextActorData(args.context),
+      };
+      if (reservation) {
+        if (placeholder) await tx.companyContext.delete({ where: { id: placeholder.id } });
+        return tx.companyContext.update({
+          where: { id: reservation.id },
+          data,
+          select: { id: true, itemId: true, name: true, createdAt: true, item: { select: { name: true } } },
+        });
+      }
+      return placeholder
+        ? tx.companyContext.update({
+          where: { id: placeholder.id },
+          data,
+          select: { id: true, itemId: true, name: true, createdAt: true, item: { select: { name: true } } },
+        })
+        : tx.companyContext.create({
+          data,
+          select: { id: true, itemId: true, name: true, createdAt: true, item: { select: { name: true } } },
+        });
+    });
+  } catch (error) {
+    if (reservation) {
+      await prisma.companyContext.deleteMany({
+        where: { id: reservation.id, kind: UPLOAD_RESERVATION_KIND },
+      }).catch(() => undefined);
+    }
+    throw error;
+  }
 
   const { item: linkedItem, ...safeDocument } = document;
 
@@ -245,7 +439,7 @@ export async function uploadCompanyContextDocument(args: {
 }
 
 export async function uploadCompanyContextDocumentChunk(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   uploadId: unknown;
   chunkIndex: unknown;
@@ -257,7 +451,11 @@ export async function uploadCompanyContextDocumentChunk(args: {
   itemId?: unknown;
 }) {
   const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
-  const item = await itemScope(args.context.officeId, workspace.companyId, args.itemId);
+  const item = await itemScope(
+    args.context.officeId,
+    workspace.companyId,
+    isCustomerContextAccess(args.context) ? null : args.itemId,
+  );
   const uploadId = typeof args.uploadId === "string" && /^[a-zA-Z0-9_-]{16,80}$/.test(args.uploadId)
     ? args.uploadId
     : null;
@@ -280,15 +478,44 @@ export async function uploadCompanyContextDocumentChunk(args: {
   const chunkKey = `${prefix}${chunkIndex}:${chunkCount}`;
   const bytes = Buffer.from(await args.chunk.arrayBuffer());
   await prisma.$transaction(async (tx) => {
+    if (isCustomerContextAccess(args.context)) {
+      const lockKey = customerUploadQuotaLockKey(args.context.officeId, workspace.companyId);
+      await tx.$queryRaw<Array<{ locked: number }>>`
+        SELECT 1::integer AS "locked"
+        FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+      `;
+    }
     await tx.companyContext.deleteMany({
       where: {
         officeId: args.context.officeId,
         companyId: workspace.companyId,
-        createdByUserId: args.context.userId,
+        ...companyContextActorWhere(args.context),
+        kind: "UPLOAD_CHUNK",
+        createdAt: { lt: new Date(Date.now() - UPLOAD_CHUNK_TTL_MS) },
+      },
+    });
+    await tx.companyContext.deleteMany({
+      where: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        ...companyContextActorWhere(args.context),
         kind: "UPLOAD_CHUNK",
         contentHash: chunkKey,
       },
     });
+    if (isCustomerContextAccess(args.context)) {
+      const storage = await tx.companyContext.aggregate({
+        where: {
+          officeId: args.context.officeId,
+          companyId: workspace.companyId,
+          kind: { in: ["DOCUMENT", "UPLOAD_CHUNK", UPLOAD_RESERVATION_KIND] },
+        },
+        _sum: { sizeBytes: true },
+      });
+      if ((storage._sum.sizeBytes ?? 0) + bytes.length > CUSTOMER_CONTEXT_STORAGE_MAX_BYTES) {
+        throw new CompanyContextLimitError("Company context storage is limited to 50 MB.", "document_storage");
+      }
+    }
     await tx.companyContext.create({
       data: {
         officeId: args.context.officeId,
@@ -301,16 +528,7 @@ export async function uploadCompanyContextDocumentChunk(args: {
         sizeBytes: bytes.length,
         contentHash: chunkKey,
         processingState: "PENDING",
-        createdByUserId: args.context.userId,
-      },
-    });
-    await tx.companyContext.deleteMany({
-      where: {
-        officeId: args.context.officeId,
-        companyId: workspace.companyId,
-        createdByUserId: args.context.userId,
-        kind: "UPLOAD_CHUNK",
-        createdAt: { lt: new Date(Date.now() - UPLOAD_CHUNK_TTL_MS) },
+        ...companyContextActorData(args.context),
       },
     });
   });
@@ -319,7 +537,7 @@ export async function uploadCompanyContextDocumentChunk(args: {
     where: {
       officeId: args.context.officeId,
       companyId: workspace.companyId,
-      createdByUserId: args.context.userId,
+      ...companyContextActorWhere(args.context),
       kind: "UPLOAD_CHUNK",
       contentHash: { startsWith: prefix },
     },
@@ -343,6 +561,15 @@ export async function uploadCompanyContextDocumentChunk(args: {
     if (assembled.length !== fileSize) {
       throw new SupplyPersistenceError("The uploaded document size changed during transfer.", "invalid_input");
     }
+    await prisma.companyContext.deleteMany({
+      where: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        ...companyContextActorWhere(args.context),
+        kind: "UPLOAD_CHUNK",
+        contentHash: { startsWith: prefix },
+      },
+    });
     const document = await uploadCompanyContextDocument({
       context: args.context,
       workspaceId: args.workspaceId,
@@ -355,7 +582,7 @@ export async function uploadCompanyContextDocumentChunk(args: {
       where: {
         officeId: args.context.officeId,
         companyId: workspace.companyId,
-        createdByUserId: args.context.userId,
+        ...companyContextActorWhere(args.context),
         kind: "UPLOAD_CHUNK",
         contentHash: { startsWith: prefix },
       },
@@ -364,7 +591,7 @@ export async function uploadCompanyContextDocumentChunk(args: {
 }
 
 export async function readCompanyContextDocument(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   documentId: string;
 }) {
@@ -375,6 +602,7 @@ export async function readCompanyContextDocument(args: {
       officeId: args.context.officeId,
       companyId: workspace.companyId,
       kind: "DOCUMENT",
+      ...companyContextVisibilityWhere(args.context),
     },
     select: { name: true, mimeType: true, storageUrl: true },
   });
@@ -397,7 +625,7 @@ export async function readCompanyContextDocument(args: {
 }
 
 export async function appendCompanyContextMessage(args: {
-  context: SupplyAccessContext;
+  context: CompanyContextAccess;
   workspaceId: string;
   role: "OPERATOR" | "AGENT";
   body: unknown;
@@ -405,7 +633,11 @@ export async function appendCompanyContextMessage(args: {
   itemId?: unknown;
 }) {
   const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
-  const item = await itemScope(args.context.officeId, workspace.companyId, args.itemId);
+  const item = await itemScope(
+    args.context.officeId,
+    workspace.companyId,
+    isCustomerContextAccess(args.context) ? null : args.itemId,
+  );
   const body = cleanMarkdown(args.body);
   if (!body) throw new SupplyPersistenceError("Message is required.", "invalid_input");
   const citations = args.citations?.slice(0, 20) ?? [];
@@ -419,20 +651,69 @@ export async function appendCompanyContextMessage(args: {
       markdown: body,
       processingState: "READY",
       payload: { role: args.role, citations },
-      createdByUserId: args.context.userId,
+      ...companyContextActorData(args.context),
     },
-    select: { id: true, markdown: true, payload: true, createdAt: true },
+    select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },
   });
   return parseMessage(row);
 }
 
-export async function assembleCompanyContextForAgent(context: SupplyAccessContext, workspaceId: string) {
+export async function appendRateLimitedCustomerContextMessage(args: {
+  context: CustomerContextAccess;
+  workspaceId: string;
+  body: unknown;
+  maxMessages: number;
+  windowMs: number;
+}) {
+  const workspace = await contextWorkspace(args.context, args.workspaceId, "edit");
+  const body = cleanMarkdown(args.body);
+  if (!body) throw new SupplyPersistenceError("Message is required.", "invalid_input");
+  const windowStart = new Date(Date.now() - args.windowMs);
+  const lockKey = `customer-context-message:${args.context.officeId}:${workspace.companyId}:${args.context.portalUserId}`;
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ locked: number }>>`
+      SELECT 1::integer AS "locked"
+      FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    `;
+    const recentMessages = await tx.companyContext.count({
+      where: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        createdByPortalUserId: args.context.portalUserId,
+        customerVisible: true,
+        kind: "MESSAGE",
+        createdAt: { gte: windowStart },
+        payload: { path: ["role"], equals: "OPERATOR" },
+      },
+    });
+    if (recentMessages >= args.maxMessages) {
+      throw new CompanyContextLimitError("Too many messages. Try again later.", "message_rate");
+    }
+    const row = await tx.companyContext.create({
+      data: {
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "MESSAGE",
+        name: "Operator message",
+        markdown: body,
+        processingState: "READY",
+        payload: { role: "OPERATOR", citations: [] },
+        ...companyContextActorData(args.context),
+      },
+      select: { id: true, markdown: true, payload: true, createdByPortalUserId: true, createdAt: true },
+    });
+    return parseMessage(row);
+  });
+}
+
+export async function assembleCompanyContextForAgent(context: CompanyContextAccess, workspaceId: string) {
   const workspace = await contextWorkspace(context, workspaceId, "view");
   const rows = await prisma.companyContext.findMany({
     where: {
       officeId: context.officeId,
       companyId: workspace.companyId,
       kind: { in: ["DOCUMENT", "MESSAGE"] },
+      ...companyContextVisibilityWhere(context),
     },
     select: {
       id: true,
@@ -443,6 +724,7 @@ export async function assembleCompanyContextForAgent(context: SupplyAccessContex
       markdown: true,
       processingState: true,
       payload: true,
+      createdByPortalUserId: true,
       createdAt: true,
       item: { select: { name: true } },
     },

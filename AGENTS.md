@@ -34,6 +34,7 @@
 
 ## Handoff And Verification
 
+- After completing coding work, explain what was built and what to test in one short, simple summary by default. Give more detail only when the user asks or a material failure or risk requires it.
 - Update `docs/AI_HANDOFF.md` and `docs/ENGINEERING_LOG.md` after meaningful implementation tasks.
 - Add a `docs/DECISIONS.md` entry for architecture decisions that future agents should treat as durable.
 - Run the verification commands requested by the task. Report exact failures instead of fixing unrelated code.

@@ -62,9 +62,9 @@ type ContextProcurementAction = {
   };
   citations: Array<{ id: string; label: string }>;
   order: null | {
-    id: string;
+    id?: string;
     status: string;
-    workflowWakeRequested: boolean;
+    workflowWakeRequested?: boolean;
   };
   createdAt: string;
 };
@@ -168,7 +168,19 @@ function MessageBody({ body }: { body: string }) {
   return <div className={styles.messageBody}>{blocks}</div>;
 }
 
-export function SupplyOsContext({ workspaceId }: { workspaceId: string | null }) {
+export function SupplyOsContext({
+  workspaceId,
+  apiBasePath,
+  readOnly = false,
+  messageRole = "OPERATOR",
+  showOrderId = true,
+}: {
+  workspaceId: string | null;
+  apiBasePath?: string;
+  readOnly?: boolean;
+  messageRole?: "OPERATOR" | "CUSTOMER";
+  showOrderId?: boolean;
+}) {
   const [data, setData] = useState<ContextPayload | null>(null);
   const [message, setMessage] = useState("");
   const [optimisticMessage, setOptimisticMessage] = useState<OptimisticMessage | null>(null);
@@ -182,15 +194,17 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamEndRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
+  const contextApiBasePath = apiBasePath
+    ?? `/api/supply-os/workspaces/${workspaceId ?? ""}/context`;
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
-    const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context`, { cache: "no-store" });
+    const response = await fetch(contextApiBasePath, { cache: "no-store" });
     const payload = await response.json().catch(() => null) as { context?: ContextPayload; error?: string } | null;
     if (!response.ok || !payload?.context) throw new Error(payload?.error || "Context could not be loaded.");
     setData(payload.context);
     return payload.context;
-  }, [workspaceId]);
+  }, [contextApiBasePath, workspaceId]);
 
   useEffect(() => {
     setError(null);
@@ -203,9 +217,9 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
 
   const messages = useMemo(() => {
     if (!optimisticMessage) return data?.messages ?? [];
-    const persisted = data?.messages.some((entry) => entry.body === optimisticMessage.body && entry.role === "OPERATOR");
+    const persisted = data?.messages.some((entry) => entry.body === optimisticMessage.body && entry.role === messageRole);
     return persisted ? data?.messages ?? [] : [...(data?.messages ?? []), optimisticMessage];
-  }, [data?.messages, optimisticMessage]);
+  }, [data?.messages, messageRole, optimisticMessage]);
 
   useEffect(() => {
     streamEndRef.current?.scrollIntoView({ block: "end" });
@@ -220,14 +234,14 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
 
   async function submitMessage(event?: FormEvent) {
     event?.preventDefault();
-    if (!workspaceId || !message.trim() || busy) return;
+    if (!workspaceId || readOnly || !message.trim() || busy) return;
     const instruction = message.trim();
     setMessage("");
     setError(null);
     setBusy(true);
     setOptimisticMessage({
       id: `pending:${Date.now()}`,
-      role: "OPERATOR",
+      role: messageRole,
       body: instruction,
       citations: null,
       createdAt: new Date().toISOString(),
@@ -235,7 +249,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
     });
     let messageSaved = false;
     try {
-      const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context/chat`, {
+      const response = await fetch(`${contextApiBasePath}/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ instruction }),
@@ -247,7 +261,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
       setOptimisticMessage(null);
     } catch (cause) {
       const refreshed = await load().catch(() => null);
-      const persisted = messageSaved || refreshed?.messages.some((entry) => entry.role === "OPERATOR" && entry.body === instruction);
+      const persisted = messageSaved || refreshed?.messages.some((entry) => entry.role === messageRole && entry.body === instruction);
       if (!persisted) setMessage(instruction);
       setOptimisticMessage(null);
       setError(cause instanceof Error ? cause.message : "The reply did not finish.");
@@ -258,7 +272,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
   }
 
   async function uploadFiles(files: File[]) {
-    if (!workspaceId || !files.length) return;
+    if (!workspaceId || readOnly || !files.length) return;
     setError(null);
     setFilesOpen(true);
     setUploadingNames(files.map((file) => file.name));
@@ -282,7 +296,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
             form.set("fileType", file.type);
             form.set("fileSize", String(file.size));
           }
-          const response = await fetch(`/api/supply-os/workspaces/${workspaceId}/context/documents`, {
+          const response = await fetch(`${contextApiBasePath}/documents`, {
             method: "POST",
             body: form,
           });
@@ -301,12 +315,12 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
   }
 
   async function decideProcurementAction(actionId: string, decision: "confirm" | "dismiss") {
-    if (!workspaceId || actionBusyId) return;
+    if (!workspaceId || readOnly || actionBusyId) return;
     setActionBusyId(actionId);
     setError(null);
     try {
       const response = await fetch(
-        `/api/supply-os/workspaces/${workspaceId}/context/procurement/${encodeURIComponent(actionId)}`,
+        `${contextApiBasePath}/procurement/${encodeURIComponent(actionId)}`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -367,10 +381,10 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
       className={`${styles.context} supply-os-workspace`}
       data-files-open={filesOpen}
       aria-label="Context chat"
-      onDragEnter={onDragEnter}
-      onDragOver={(event) => event.preventDefault()}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      onDragEnter={readOnly ? undefined : onDragEnter}
+      onDragOver={readOnly ? undefined : (event) => event.preventDefault()}
+      onDragLeave={readOnly ? undefined : onDragLeave}
+      onDrop={readOnly ? undefined : onDrop}
     >
       <section className={styles.chatPane} aria-label={`${data.workspace.name} context conversation`}>
         <header className={styles.chatHeader}>
@@ -398,6 +412,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
             <article key={entry.id} className={styles.message} data-role={entry.role}>
               <div className={styles.messageInner}>
                 {entry.role === "AGENT" ? <strong className={styles.messageAuthor}>Derya</strong> : null}
+                {entry.role === "CUSTOMER" ? <strong className={styles.messageAuthor}>Customer</strong> : null}
                 <MessageBody body={entry.body} />
                 {Array.isArray(entry.citations) && entry.citations.length ? (
                   <div className={styles.citations} aria-label="Sources">
@@ -435,9 +450,11 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
               ) : null}
               {action.status === "CREATED" && action.order ? (
                 <div className={styles.procurementResult}>
-                  <span>Order {action.order.id}</span>
-                  <strong>{action.order.workflowWakeRequested ? "Research requested" : "Queued"}</strong>
+                  <span>{showOrderId && action.order.id ? `Order ${action.order.id}` : "Supplier research"}</span>
+                  <strong>{action.order.workflowWakeRequested === false ? "Queued" : "Research requested"}</strong>
                 </div>
+              ) : readOnly ? (
+                <p className={styles.approvalBoundary}>View-only access.</p>
               ) : action.status === "CREATING" ? (
                 <>
                   <div className={styles.procurementResult}>
@@ -486,7 +503,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
           <div ref={streamEndRef} />
         </div>
 
-        <form className={styles.composerArea} onSubmit={submitMessage}>
+        {!readOnly ? <form className={styles.composerArea} onSubmit={submitMessage}>
           <div className={styles.composer}>
             <button className={styles.attachButton} type="button" onClick={() => fileRef.current?.click()} aria-label="Add files" title="Add files">
               <Paperclip size={20} aria-hidden="true" />
@@ -512,7 +529,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
             </button>
           </div>
           {error ? <p className={styles.error} role="alert">{error}</p> : null}
-        </form>
+        </form> : error ? <p className={styles.error} role="alert">{error}</p> : null}
       </section>
 
       <aside className={filesOpen ? styles.fileDrawerOpen : styles.fileDrawerClosed} aria-label="Files in context">
@@ -531,7 +548,7 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
             <a
               className={styles.fileRow}
               key={document.id}
-              href={`/api/supply-os/workspaces/${workspaceId}/context/documents/${document.id}`}
+              href={`${contextApiBasePath}/documents/${encodeURIComponent(document.id)}`}
               title={document.processingError || document.summary || document.name}
             >
               <FileKindIcon document={document} />
@@ -542,12 +559,12 @@ export function SupplyOsContext({ workspaceId }: { workspaceId: string | null })
             </a>
           ))}
           {!uploadingNames.length && !data.documents.length ? (
-            <div className={styles.filesEmpty}><span>No files</span><button type="button" onClick={() => fileRef.current?.click()}>Add files</button></div>
+            <div className={styles.filesEmpty}><span>No files</span>{!readOnly ? <button type="button" onClick={() => fileRef.current?.click()}>Add files</button> : null}</div>
           ) : null}
         </div>
       </aside>
 
-      {dragActive ? (
+      {dragActive && !readOnly ? (
         <div className={styles.dropTarget} role="status">
           <Paperclip size={25} />
           <strong>Drop files here</strong>
