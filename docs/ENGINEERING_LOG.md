@@ -6177,3 +6177,35 @@ Use this file for chronological implementation notes that future agents should s
   Follow-up owner queries found zero probe rows in both `order_vendors` and
   `Supplier`. No email, approval, quote, order-status change, or commercial
   action occurred.
+
+### 2026-08-22 - Add the Bourne supplier communication ledger
+
+- Branch: `feature/active-sourcing-bourne-ledger`, based on current
+  `origin/main`.
+- Task: Return Bourne-owned outbound and inbound supplier messages to Derya's
+  existing Active Sourcing Messages view without connecting the mailbox twice.
+- Database boundary: Added an append-only ledger with composite foreign keys to
+  canonical `ProcurementOrder` and `OrderSupplier` rows. The owner migration
+  grants `bourne_supply_chain` only `SELECT` and `INSERT`, grants
+  `dashboard_api` only `SELECT`, revokes schema and database creation from both
+  runtime roles, validates existing schema and constraints, uses concurrent
+  indexes with bounded timeouts, and keeps `derya_app` outside the table.
+- Runtime behavior: Derya reads tenant, order, and vendor-scoped ledger rows
+  before its connected-Gmail compatibility path. It hashes provider message
+  IDs, validates the supplier participant, marks outbound suppliers contacted,
+  counts inbound messages as supplier responses, bounds bodies in SQL, and
+  computes list metrics through one aggregate.
+- Verification: Conversation normalization, Active Sourcing, procurement
+  workflow, GUILD2 boundary, customer procurement bridge, deployment boundary,
+  product copy, TypeScript, workflow YAML parsing, production build, diff
+  hygiene, and changed-line forbidden-character checks passed. A disposable
+  PostgreSQL 14 rehearsal applied the complete migration chain, applied the
+  ledger provisioning twice, rejected unsafe roles and malformed schema, and
+  passed cross-tenant, cross-order, cross-vendor, idempotency, body-bound, and
+  restricted-role database contracts.
+- Build caveat: The production build retains the pre-existing autoprefixer
+  warning for `align-items: end` in `supply-os-logistics.module.css`.
+- Production boundary: No production database was changed and no email was
+  sent. The protected `main`-only production workflow pins the Bourne Neon
+  endpoint, database, and owner role and must apply the migration before Bourne
+  can write or backfill messages.

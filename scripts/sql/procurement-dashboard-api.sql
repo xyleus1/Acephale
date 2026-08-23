@@ -2,6 +2,7 @@
 
 -- Run this against the Bourne workflow database as an owner. Supply the
 -- password as a psql variable so it is not written into this repository:
+-- The restricted bourne_supply_chain runtime role must already exist.
 --
 -- psql "$OWNER_DATABASE_URL" \
 --   --set=dashboard_api_password='generated-secret' \
@@ -68,6 +69,8 @@ BEGIN
 END
 $$;
 
+\ir bourne-procurement-communication-ledger.sql
+
 REVOKE ALL ON customers FROM dashboard_api;
 REVOKE ALL ON bill_of_materials FROM dashboard_api;
 REVOKE ALL ON orders FROM dashboard_api;
@@ -125,7 +128,11 @@ BEGIN
     OR has_table_privilege('dashboard_api', 'order_vendors', 'DELETE')
     OR has_table_privilege('dashboard_api', 'order_vendors', 'TRUNCATE')
     OR has_table_privilege('dashboard_api', 'procurement_api_idempotency', 'DELETE')
-    OR has_table_privilege('dashboard_api', 'procurement_api_idempotency', 'TRUNCATE') THEN
+    OR has_table_privilege('dashboard_api', 'procurement_api_idempotency', 'TRUNCATE')
+    OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'INSERT')
+    OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'UPDATE')
+    OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'DELETE')
+    OR has_table_privilege('dashboard_api', 'procurement_communication_messages', 'TRUNCATE') THEN
     RAISE EXCEPTION 'dashboard_api has unsafe workflow privileges';
   END IF;
 END

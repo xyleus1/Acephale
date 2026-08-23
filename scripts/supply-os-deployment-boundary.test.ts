@@ -81,6 +81,11 @@ for (const model of workerOwnedModels) {
     `${model} must remain on the explicit derya_app denylist`,
   );
 }
+assert.match(
+  appRoleSql,
+  /'procurement_communication_messages'/,
+  "the application role must explicitly reject access to the Bourne communication ledger",
+);
 assert.deepEqual(
   vercel.crons?.find((cron) => cron.path === "/api/cron/supply-os-connectors"),
   { path: "/api/cron/supply-os-connectors", schedule: "10 * * * *" },

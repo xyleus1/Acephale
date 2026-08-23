@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/procurement-workflow-tests.yml"
       - ".github/workflows/production-database-migration.yml"
+      - ".github/workflows/production-bourne-ledger.yml"
       - "src/app/api/procurement/**"
       - "src/app/login/**"
       - "src/app/dashboard/supply-os/**"
@@ -17,11 +18,16 @@ on:
       - "prisma/migrations/**"
       - "scripts/procurement-workflow-database.test.ts"
       - "scripts/production-database-migration-contract.test.ts"
+      - "scripts/production-bourne-ledger-contract.test.ts"
+      - "scripts/procurement-conversation.test.ts"
+      - "scripts/supply-os-active-sourcing.test.ts"
+      - "scripts/supply-os-deployment-boundary.test.ts"
       - "scripts/minimal-live-schema.test.ts"
       - "scripts/create-production-office.ts"
       - "scripts/unified-neon-cutover.test.ts"
       - "scripts/sql/procurement-**"
       - "scripts/sql/production-verification/**"
+      - "scripts/sql/bourne-procurement-communication-ledger.sql"
       - "scripts/sql/derya-app-role.sql"
       - "scripts/sql/minimal-schema-**"
       - "scripts/workflow-dashboard.test.ts"
@@ -56,6 +62,7 @@ jobs:
       WORKFLOW_DATABASE_OWNER_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_unified
       WORKFLOW_DATABASE_URL: postgresql://dashboard_api:dashboard_test_password@workflow.invalid/neondb?sslmode=require
       WORKFLOW_DATABASE_TEST_URL: postgresql://dashboard_api:dashboard_test_password@127.0.0.1:5432/derya_unified?schema=public
+      WORKFLOW_BOURNE_TEST_URL: postgresql://bourne_supply_chain:bourne_test_password@127.0.0.1:5432/derya_unified?schema=public
       LEGACY_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/derya_legacy_migration
       PGPASSWORD: postgres
     steps:
@@ -72,7 +79,42 @@ jobs:
           createdb -h 127.0.0.1 -U postgres derya_unified
           DATABASE_URL="$DATABASE_OWNER_URL" DATABASE_URL_UNPOOLED="$DATABASE_OWNER_URL" npx prisma migrate deploy
           psql "$WORKFLOW_DATABASE_OWNER_URL" --file=scripts/sql/procurement-workflow-test-schema.sql
-          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=dashboard_api_password=dashboard_test_password --file=scripts/sql/procurement-dashboard-api.sql
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE dashboard_api LOGIN NOINHERIT PASSWORD 'dashboard_test_password';
+          CREATE ROLE bourne_supply_chain LOGIN INHERIT PASSWORD 'bourne_test_password';
+          SQL
+          if psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --file=scripts/sql/bourne-procurement-communication-ledger.sql \
+            >/tmp/unsafe-bourne-ledger.log 2>&1; then
+            echo 'Expected unsafe Bourne role provisioning to fail.' >&2
+            exit 1
+          fi
+          cat /tmp/unsafe-bourne-ledger.log
+          grep -q 'bourne_supply_chain has unsafe role attributes or memberships' \
+            /tmp/unsafe-bourne-ledger.log
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 <<'SQL'
+          ALTER ROLE bourne_supply_chain NOINHERIT;
+          CREATE TABLE procurement_communication_messages (customer_id uuid);
+          SQL
+          if psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --file=scripts/sql/bourne-procurement-communication-ledger.sql \
+            >/tmp/unsafe-ledger-shape.log 2>&1; then
+            echo 'Expected malformed ledger schema provisioning to fail.' >&2
+            exit 1
+          fi
+          cat /tmp/unsafe-ledger-shape.log
+          grep -q 'procurement communication columns are missing or unsafe' \
+            /tmp/unsafe-ledger-shape.log
+          psql "$WORKFLOW_DATABASE_OWNER_URL" --set=ON_ERROR_STOP=1 <<'SQL'
+          DROP TABLE procurement_communication_messages;
+          GRANT CREATE ON DATABASE derya_unified TO dashboard_api, bourne_supply_chain;
+          GRANT CREATE ON SCHEMA public TO dashboard_api, bourne_supply_chain;
+          SQL
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --file=scripts/sql/bourne-procurement-communication-ledger.sql
+          for pass in 1 2; do
+            psql "$WORKFLOW_DATABASE_OWNER_URL" --set=dashboard_api_password=dashboard_test_password --file=scripts/sql/procurement-dashboard-api.sql
+          done
           psql "$WORKFLOW_DATABASE_OWNER_URL" --set=derya_app_password=app_test_password --file=scripts/sql/derya-app-role.sql
           ALLOW_PRODUCTION_OFFICE_SEED=1 \
             PRODUCTION_OFFICE_NAME=Dreamz \
@@ -408,7 +450,11 @@ jobs:
       - name: Run procurement security contracts
         run: |
           npm run test:production-database-migration
+          npm run test:production-bourne-ledger
           npm run test:minimal-live-schema
+          npm run test:procurement-conversation
           npm run test:procurement-workflow
+          npm run test:supply-os-active-sourcing
           npm run test:workflow-guild2
+          npm run prebuild
           npm run test:procurement-workflow-db

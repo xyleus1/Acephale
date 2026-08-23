@@ -141,6 +141,7 @@ const active = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os
 const workflow = readFileSync(resolve(root, "src/lib/procurement-workflow.ts"), "utf8");
 const conversation = readFileSync(resolve(root, "src/lib/procurement-conversation.ts"), "utf8");
 const conversationModel = readFileSync(resolve(root, "src/lib/procurement-conversation-model.ts"), "utf8");
+const communicationLedgerSql = readFileSync(resolve(root, "scripts/sql/bourne-procurement-communication-ledger.sql"), "utf8");
 const workflowRoute = readFileSync(resolve(root, "src/app/api/procurement/requests/[orderId]/vendors/[vendorId]/conversation/route.ts"), "utf8");
 const historicalRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/[caseId]/conversation/route.ts"), "utf8");
 
@@ -160,10 +161,19 @@ assert.match(active, /Historical totals cover loaded records/);
 assert.match(workflow, /AS "contactedCount"/);
 assert.match(workflow, /AS "responseCount"/);
 assert.match(workflow, /orders\.customer_id = \$3::uuid/);
+assert.match(workflow, /getProcurementCommunicationMessagesFromDatabase/);
+assert.match(workflow, /communication\.customer_id = \$1::uuid/);
+assert.match(workflow, /communication\.order_id = \$2::uuid/);
+assert.match(workflow, /communication\.vendor_id = \$3::uuid/);
 assert.match(conversation, /thread: \{ officeId \}/);
 assert.match(conversation, /officeId: args\.officeId/);
+assert.match(conversationModel, /source: "BOURNE_LEDGER"/);
+assert.match(conversationModel, /if \(ledgerMessages\?\.length\) return procurementConversationFromLedgerMessages\(ledgerMessages\)/);
+assert.match(conversation, /return resolveProcurementVendorConversation\(args/);
 assert.match(conversation, /procurementConversationParticipantEmails\(anchor\)\.includes\(contactEmail\)/);
 assert.match(conversationModel, /fromEmail\.toLowerCase\(\) === normalizedContact \? "INBOUND"/);
+assert.match(communicationLedgerSql, /PRIMARY KEY \(customer_id, provider, account_email, provider_message_id\)/);
+assert.match(communicationLedgerSql, /GRANT SELECT ON public\.procurement_communication_messages TO dashboard_api/);
 assert.match(workflowRoute, /resolveProcurementCustomerId\(session\)/);
 assert.match(historicalRoute, /supplyAccessContext\(session\)/);
 assert.doesNotMatch(active, /gmailMessageId|gmail_message_id/);

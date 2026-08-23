@@ -5,6 +5,10 @@ import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { ProcurementRequestInput } from "@/lib/procurement-contract";
+import {
+  MAX_PROCUREMENT_CONVERSATION_MESSAGE_BODY,
+  type ProcurementLedgerConversationMessage,
+} from "@/lib/procurement-conversation-model";
 
 const uuidSchema = z.string().uuid();
 const SSL_MODES = new Set(["require", "verify-ca", "verify-full"]);
@@ -61,6 +65,23 @@ type OrderListRow = Omit<OrderDetailRow, "approvalRequestedAt" | "decisionSnapsh
   supplierCount: number | string;
   contactedCount: number | string;
   responseCount: number | string;
+};
+
+type CommunicationLedgerRow = {
+  provider: string;
+  accountEmail: string;
+  counterpartyEmail: string;
+  providerMessageId: string;
+  providerThreadId: string | null;
+  direction: string;
+  fromEmail: string;
+  fromName: string | null;
+  toEmails: unknown;
+  ccEmails: unknown;
+  subject: string | null;
+  bodyText: string | null;
+  bodyTruncated: boolean;
+  sentAt: Date | string;
 };
 
 export type ProcurementOrderVendor = {
@@ -195,6 +216,112 @@ function dateOnly(value: Date | string | null) {
 function numberValue(value: number | string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function stringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean))];
+}
+
+function postgresErrorCode(error: unknown): string | null {
+  if (!isObject(error)) return null;
+  if (typeof error.code === "string" && /^\d{2}[A-Z0-9]{3}$/.test(error.code)) return error.code;
+  if (isObject(error.meta) && typeof error.meta.code === "string") return error.meta.code;
+  return postgresErrorCode(error.cause);
+}
+
+async function procurementCommunicationLedgerAvailable(database: RawDatabase) {
+  try {
+    const rows = await database.$queryRawUnsafe<Array<{ available: boolean }>>(
+      "SELECT to_regclass('public.procurement_communication_messages') IS NOT NULL AS available",
+    );
+    return rows[0]?.available === true;
+  } catch (error) {
+    if (postgresErrorCode(error) === "42P01") return false;
+    throw error;
+  }
+}
+
+function vendorContactEmailSql(ledgerAvailable: boolean) {
+  const ledgerFallback = ledgerAvailable ? `,
+    (
+      SELECT communication.counterparty_email
+      FROM procurement_communication_messages AS communication
+      WHERE communication.customer_id = orders.customer_id
+        AND communication.order_id = orders.id
+        AND communication.vendor_id = order_vendors.id
+      ORDER BY communication.sent_at ASC, communication.provider_message_id ASC
+      LIMIT 1
+    )` : "";
+  return `COALESCE(
+    to_jsonb(order_vendors)->>'contact_email',
+    to_jsonb(order_vendors)->'contact'->>'email',
+    to_jsonb(order_vendors)->'identity'->>'contact_email',
+    to_jsonb(order_vendors)->'identity'->>'email',
+    to_jsonb(order_vendors)->'research'->>'contact_email',
+    to_jsonb(order_vendors)->'research'->'contact'->>'email',
+    to_jsonb(order_vendors)->'research'->'identity'->>'email'
+    ${ledgerFallback}
+  )`;
+}
+
+function vendorMessageIdSql(ledgerAvailable: boolean) {
+  if (!ledgerAvailable) return "NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '')";
+  const ledgerFallback = `,
+    (
+      SELECT communication.provider_message_id
+      FROM procurement_communication_messages AS communication
+      WHERE communication.customer_id = orders.customer_id
+        AND communication.order_id = orders.id
+        AND communication.vendor_id = order_vendors.id
+        AND communication.provider = 'GMAIL'
+      ORDER BY communication.sent_at ASC, communication.provider_message_id ASC
+      LIMIT 1
+    )`;
+  return `COALESCE(
+    NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '')
+    ${ledgerFallback}
+  )`;
+}
+
+function vendorContactedSql(ledgerAvailable: boolean) {
+  const ledgerFallback = ledgerAvailable ? ` OR EXISTS (
+    SELECT 1
+    FROM procurement_communication_messages AS communication
+    WHERE communication.customer_id = orders.customer_id
+      AND communication.order_id = orders.id
+      AND communication.vendor_id = order_vendors.id
+      AND communication.direction = 'OUTBOUND'
+  )` : "";
+  return `(NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL${ledgerFallback})`;
+}
+
+function supplierMetricsSql(ledgerAvailable: boolean) {
+  const communicationJoin = ledgerAvailable ? `
+    LEFT JOIN procurement_communication_messages AS communication
+      ON communication.customer_id = orders.customer_id
+      AND communication.order_id = orders.id
+      AND communication.vendor_id = order_vendors.id` : "";
+  const outbound = ledgerAvailable ? " OR communication.direction = 'OUTBOUND'" : "";
+  const inbound = ledgerAvailable ? " OR communication.direction = 'INBOUND'" : "";
+  return `
+    SELECT
+      COUNT(DISTINCT order_vendors.id)::int AS "supplierCount",
+      COUNT(DISTINCT order_vendors.id) FILTER (
+        WHERE NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL${outbound}
+      )::int AS "contactedCount",
+      COUNT(DISTINCT order_vendors.id) FILTER (
+        WHERE (
+          jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
+          AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
+        )${inbound}
+      )::int AS "responseCount"
+    FROM order_vendors${communicationJoin}
+    WHERE order_vendors.order_id = orders.id
+  `;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -502,6 +629,7 @@ export async function getProcurementRequestFromDatabase(
     throw new ProcurementWorkflowError("Procurement request not found.", "not_found");
   }
   try {
+    const ledgerAvailable = await procurementCommunicationLedgerAvailable(database);
     const rows = await database.$queryRawUnsafe<OrderDetailRow[]>(`
       SELECT
         orders.id::text AS id,
@@ -536,22 +664,14 @@ export async function getProcurementRequestFromDatabase(
                   to_jsonb(order_vendors)->'contact'->>'name',
                   to_jsonb(order_vendors)->'identity'->>'contact_name'
                 ),
-                'email', COALESCE(
-                  to_jsonb(order_vendors)->>'contact_email',
-                  to_jsonb(order_vendors)->'contact'->>'email',
-                  to_jsonb(order_vendors)->'identity'->>'contact_email',
-                  to_jsonb(order_vendors)->'identity'->>'email',
-                  to_jsonb(order_vendors)->'research'->>'contact_email',
-                  to_jsonb(order_vendors)->'research'->'contact'->>'email',
-                  to_jsonb(order_vendors)->'research'->'identity'->>'email'
-                ),
+                'email', ${vendorContactEmailSql(ledgerAvailable)},
                 'phone', COALESCE(
                   to_jsonb(order_vendors)->>'contact_phone',
                   to_jsonb(order_vendors)->'contact'->>'phone',
                   to_jsonb(order_vendors)->'identity'->>'contact_phone'
                 )
               )),
-              'contacted', NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL,
+              'contacted', ${vendorContactedSql(ledgerAvailable)},
               'status', COALESCE(to_jsonb(order_vendors)->>'status', 'unknown'),
               'research', COALESCE(
                 to_jsonb(order_vendors)->'research',
@@ -610,6 +730,7 @@ export async function getProcurementVendorConversationRefFromDatabase(
     throw new ProcurementWorkflowError("Supplier conversation not found.", "not_found");
   }
   try {
+    const ledgerAvailable = await procurementCommunicationLedgerAvailable(database);
     const rows = await database.$queryRawUnsafe<Array<{
       vendorId: string;
       vendorName: string | null;
@@ -624,16 +745,8 @@ export async function getProcurementVendorConversationRefFromDatabase(
           to_jsonb(order_vendors)->>'supplier_name',
           to_jsonb(order_vendors)->'identity'->>'name'
         ) AS "vendorName",
-        COALESCE(
-          to_jsonb(order_vendors)->>'contact_email',
-          to_jsonb(order_vendors)->'contact'->>'email',
-          to_jsonb(order_vendors)->'identity'->>'contact_email',
-          to_jsonb(order_vendors)->'identity'->>'email',
-          to_jsonb(order_vendors)->'research'->>'contact_email',
-          to_jsonb(order_vendors)->'research'->'contact'->>'email',
-          to_jsonb(order_vendors)->'research'->'identity'->>'email'
-        ) AS "contactEmail",
-        NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') AS "gmailMessageId"
+        ${vendorContactEmailSql(ledgerAvailable)} AS "contactEmail",
+        ${vendorMessageIdSql(ledgerAvailable)} AS "gmailMessageId"
       FROM order_vendors
       JOIN orders
         ON orders.id = order_vendors.order_id
@@ -669,6 +782,115 @@ export async function getProcurementVendorConversationRef(
   );
 }
 
+export async function getProcurementCommunicationMessagesFromDatabase(
+  database: RawDatabase,
+  customerId: string,
+  orderId: string,
+  vendorId: string,
+  limit = 100,
+): Promise<ProcurementLedgerConversationMessage[] | null> {
+  if (!uuidSchema.safeParse(orderId).success || !uuidSchema.safeParse(vendorId).success) {
+    throw new ProcurementWorkflowError("Supplier conversation not found.", "not_found");
+  }
+  try {
+    if (!await procurementCommunicationLedgerAvailable(database)) return null;
+    const rows = await database.$queryRawUnsafe<CommunicationLedgerRow[]>(`
+      SELECT *
+      FROM (
+        SELECT
+          communication.provider,
+          communication.account_email AS "accountEmail",
+          communication.counterparty_email AS "counterpartyEmail",
+          communication.provider_message_id AS "providerMessageId",
+          communication.provider_thread_id AS "providerThreadId",
+          communication.direction,
+          communication.from_email AS "fromEmail",
+          communication.from_name AS "fromName",
+          communication.to_emails AS "toEmails",
+          communication.cc_emails AS "ccEmails",
+          communication.subject,
+          left(communication.body_text, $5::int) AS "bodyText",
+          (
+            communication.body_truncated
+            OR char_length(communication.body_text) > $5::int
+          ) AS "bodyTruncated",
+          communication.sent_at AS "sentAt"
+        FROM procurement_communication_messages AS communication
+        JOIN orders
+          ON orders.id = communication.order_id
+          AND orders.customer_id = communication.customer_id
+        JOIN order_vendors
+          ON order_vendors.id = communication.vendor_id
+          AND order_vendors.order_id = communication.order_id
+        WHERE communication.customer_id = $1::uuid
+          AND communication.order_id = $2::uuid
+          AND communication.vendor_id = $3::uuid
+        ORDER BY communication.sent_at DESC, communication.provider_message_id DESC
+        LIMIT $4
+      ) AS recent
+      ORDER BY recent."sentAt" ASC, recent."providerMessageId" ASC
+    `,
+    customerId,
+    orderId,
+    vendorId,
+    Math.min(Math.max(limit, 1), 100),
+    MAX_PROCUREMENT_CONVERSATION_MESSAGE_BODY,
+    );
+    return rows.map((row) => {
+      const provider = row.provider?.trim();
+      const accountEmail = row.accountEmail?.trim().toLowerCase();
+      const counterpartyEmail = row.counterpartyEmail?.trim().toLowerCase();
+      const providerMessageId = row.providerMessageId?.trim();
+      const fromEmail = row.fromEmail?.trim().toLowerCase();
+      const sentAt = isoTimestamp(row.sentAt);
+      const toEmails = stringArray(row.toEmails);
+      const ccEmails = stringArray(row.ccEmails);
+      const participants = new Set([fromEmail, ...toEmails, ...ccEmails]);
+      if (!provider || !accountEmail || !counterpartyEmail || !providerMessageId || !fromEmail || !sentAt
+        || toEmails.length > 50
+        || ccEmails.length > 50
+        || !participants.has(counterpartyEmail)
+        || (row.direction !== "INBOUND" && row.direction !== "OUTBOUND")) {
+        throw new ProcurementWorkflowError("The supplier communication ledger contains invalid data.", "unavailable");
+      }
+      return {
+        id: createHash("sha256")
+          .update([customerId, orderId, vendorId, provider, accountEmail, providerMessageId].join("\u0000"))
+          .digest("hex"),
+        provider,
+        accountEmail,
+        providerThreadId: row.providerThreadId?.trim() || null,
+        direction: row.direction,
+        fromEmail,
+        fromName: row.fromName?.trim() || null,
+        toEmails,
+        ccEmails,
+        subject: row.subject?.trim() || null,
+        bodyText: typeof row.bodyText === "string" ? row.bodyText : null,
+        bodyTruncated: row.bodyTruncated === true,
+        sentAt,
+      } satisfies ProcurementLedgerConversationMessage;
+    });
+  } catch (error) {
+    if (error instanceof ProcurementWorkflowError) throw error;
+    if (postgresErrorCode(error) === "42P01") return null;
+    throw new ProcurementWorkflowError("The supplier communication ledger is unavailable.", "unavailable");
+  }
+}
+
+export async function getProcurementCommunicationMessages(
+  customerId: string,
+  orderId: string,
+  vendorId: string,
+) {
+  return getProcurementCommunicationMessagesFromDatabase(
+    externalDatabase(),
+    customerId,
+    orderId,
+    vendorId,
+  );
+}
+
 export async function listProcurementRequestsFromDatabase(
   database: RawDatabase,
   customerId: string,
@@ -677,6 +899,7 @@ export async function listProcurementRequestsFromDatabase(
   filters: ProcurementListFilters = {},
 ) {
   try {
+    const ledgerAvailable = await procurementCommunicationLedgerAvailable(database);
     const rows = await database.$queryRawUnsafe<OrderListRow[]>(`
       SELECT
         orders.id::text AS id,
@@ -688,29 +911,16 @@ export async function listProcurementRequestsFromDatabase(
         bill_of_materials.material,
         bill_of_materials.specification,
         orders.request_context AS "requestContext",
-        COALESCE((
-          SELECT COUNT(*)::int
-          FROM order_vendors
-          WHERE order_vendors.order_id = orders.id
-        ), 0) AS "supplierCount",
-        COALESCE((
-          SELECT COUNT(*)::int
-          FROM order_vendors
-          WHERE order_vendors.order_id = orders.id
-            AND NULLIF(to_jsonb(order_vendors)->>'gmail_message_id', '') IS NOT NULL
-        ), 0) AS "contactedCount",
-        COALESCE((
-          SELECT COUNT(*)::int
-          FROM order_vendors
-          WHERE order_vendors.order_id = orders.id
-            AND jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
-            AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb
-        ), 0) AS "responseCount",
+        COALESCE(supplier_metrics."supplierCount", 0) AS "supplierCount",
+        COALESCE(supplier_metrics."contactedCount", 0) AS "contactedCount",
+        COALESCE(supplier_metrics."responseCount", 0) AS "responseCount",
         orders.updated_at AS "updatedAt"
       FROM orders
       JOIN bill_of_materials
         ON bill_of_materials.id = orders.bom_id
         AND bill_of_materials.customer_id = orders.customer_id
+      LEFT JOIN LATERAL (${supplierMetricsSql(ledgerAvailable)}) AS supplier_metrics
+        ON true
       WHERE orders.customer_id = $1::uuid
         AND ($3::text IS NULL OR orders.request_context #>> '{source,campaign}' = $3::text)
         AND ($4::text IS NULL OR orders.request_context #>> '{source,workspace_id}' = $4::text)

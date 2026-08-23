@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
+
 export const MAX_PROCUREMENT_CONVERSATION_MESSAGES = 100;
-const MAX_MESSAGE_BODY = 50_000;
-const MAX_CONVERSATION_BODY = 400_000;
+export const MAX_PROCUREMENT_CONVERSATION_MESSAGE_BODY = 50_000;
+export const MAX_PROCUREMENT_CONVERSATION_BODY = 400_000;
 
 type GmailPayload = {
   headers?: Array<{ name: string; value: string }>;
@@ -34,13 +36,53 @@ export type ProcurementConversationMessage = {
   truncated: boolean;
 };
 
+export type ProcurementLedgerConversationMessage = {
+  id: string;
+  provider: string;
+  accountEmail: string;
+  providerThreadId: string | null;
+  direction: "INBOUND" | "OUTBOUND";
+  fromEmail: string;
+  fromName: string | null;
+  toEmails: string[];
+  ccEmails: string[];
+  subject: string | null;
+  bodyText: string | null;
+  bodyTruncated: boolean;
+  sentAt: string;
+};
+
 export type ProcurementConversation = {
   available: boolean;
-  source: "CONNECTED_GMAIL" | "DERYA_EMAIL_RECORD" | "NONE";
+  source: "BOURNE_LEDGER" | "CONNECTED_GMAIL" | "DERYA_EMAIL_RECORD" | "NONE";
   sourceUrl: string | null;
   accountEmail: string | null;
   messages: ProcurementConversationMessage[];
   unavailableReason: string | null;
+};
+
+export type ProcurementVendorConversationArgs = {
+  officeId: string;
+  customerId: string;
+  orderId: string;
+  vendorId: string;
+};
+
+type ProcurementVendorConversationResolver<TReference> = {
+  communicationMessages: (
+    customerId: string,
+    orderId: string,
+    vendorId: string,
+  ) => Promise<ProcurementLedgerConversationMessage[] | null>;
+  conversationReference: (
+    customerId: string,
+    orderId: string,
+    vendorId: string,
+  ) => Promise<TReference | null>;
+  compatibilityConversation: (
+    args: ProcurementVendorConversationArgs,
+    reference: TReference,
+  ) => Promise<ProcurementConversation>;
 };
 
 function header(payload: GmailPayload | undefined, name: string) {
@@ -97,6 +139,12 @@ function gmailMessageTime(message: GmailConversationMessage) {
     : new Date(0).toISOString();
 }
 
+function opaqueGmailMessageId(providerMessageId: string) {
+  return createHash("sha256")
+    .update(`gmail\u0000${providerMessageId}`)
+    .digest("hex");
+}
+
 export function procurementConversationParticipantEmails(message: GmailConversationMessage) {
   return [
     ...procurementConversationEmailAddresses(header(message.payload, "From")),
@@ -111,12 +159,12 @@ export function boundProcurementConversationMessages(messages: ProcurementConver
   let used = 0;
   for (let index = selected.length - 1; index >= 0; index -= 1) {
     const message = selected[index]!;
-    const remaining = Math.max(0, MAX_CONVERSATION_BODY - used);
-    const limit = Math.min(MAX_MESSAGE_BODY, remaining);
+    const remaining = Math.max(0, MAX_PROCUREMENT_CONVERSATION_BODY - used);
+    const limit = Math.min(MAX_PROCUREMENT_CONVERSATION_MESSAGE_BODY, remaining);
     const body = message.body.slice(0, limit);
     bounded.unshift({ ...message, body, truncated: message.truncated || body.length < message.body.length });
     used += body.length;
-    if (used >= MAX_CONVERSATION_BODY) break;
+    if (used >= MAX_PROCUREMENT_CONVERSATION_BODY) break;
   }
   return bounded;
 }
@@ -133,7 +181,7 @@ export function procurementConversationFromGmailThread(
       const rawFrom = header(message.payload, "From");
       const fromEmail = procurementConversationEmailAddresses(rawFrom)[0] ?? rawFrom?.trim() ?? "Unknown sender";
       return {
-        id: message.id,
+        id: opaqueGmailMessageId(message.id),
         direction: fromEmail.toLowerCase() === normalizedContact ? "INBOUND" as const : "OUTBOUND" as const,
         fromEmail,
         fromName: displayName(rawFrom),
@@ -146,4 +194,70 @@ export function procurementConversationFromGmailThread(
       };
     });
   return boundProcurementConversationMessages(messages);
+}
+
+export function procurementConversationFromLedger(
+  messages: ProcurementLedgerConversationMessage[],
+): ProcurementConversationMessage[] {
+  return boundProcurementConversationMessages(messages
+    .slice()
+    .sort((left, right) => left.sentAt.localeCompare(right.sentAt) || left.id.localeCompare(right.id))
+    .map((message) => ({
+      id: message.id,
+      direction: message.direction,
+      fromEmail: message.fromEmail,
+      fromName: message.fromName,
+      toEmails: message.toEmails,
+      ccEmails: message.ccEmails,
+      subject: message.subject,
+      body: message.bodyText ?? "",
+      sentAt: message.sentAt,
+      truncated: message.bodyTruncated,
+    })));
+}
+
+export function procurementConversationFromLedgerMessages(
+  messages: ProcurementLedgerConversationMessage[],
+): ProcurementConversation {
+  const linked = messages.slice().reverse().find((message) => (
+    message.provider === "GMAIL" && message.accountEmail && message.providerThreadId
+  ));
+  return {
+    available: true,
+    source: "BOURNE_LEDGER",
+    sourceUrl: linked
+      ? `https://mail.google.com/mail/u/${encodeURIComponent(linked.accountEmail)}/#all/${encodeURIComponent(linked.providerThreadId!)}`
+      : null,
+    accountEmail: linked?.accountEmail ?? messages.find((message) => message.accountEmail)?.accountEmail ?? null,
+    messages: procurementConversationFromLedger(messages),
+    unavailableReason: null,
+  };
+}
+
+export async function resolveProcurementVendorConversation<TReference>(
+  args: ProcurementVendorConversationArgs,
+  resolver: ProcurementVendorConversationResolver<TReference>,
+) {
+  const ledgerMessages = await resolver.communicationMessages(
+    args.customerId,
+    args.orderId,
+    args.vendorId,
+  );
+  if (ledgerMessages?.length) return procurementConversationFromLedgerMessages(ledgerMessages);
+  const reference = await resolver.conversationReference(
+    args.customerId,
+    args.orderId,
+    args.vendorId,
+  );
+  if (!reference) {
+    return {
+      available: false,
+      source: "NONE",
+      sourceUrl: null,
+      accountEmail: null,
+      messages: [],
+      unavailableReason: "Supplier conversation not found.",
+    } satisfies ProcurementConversation;
+  }
+  return resolver.compatibilityConversation(args, reference);
 }

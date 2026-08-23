@@ -113,8 +113,8 @@ BEGIN
   FOREACH workflow_table IN ARRAY ARRAY[
     'CompanyWorkflowAccount', 'ProcurementOrder', 'OrderSupplier',
     'ProcurementRequestKey', 'customers', 'bill_of_materials', 'orders',
-    'order_vendors', 'procurement_api_idempotency', 'procurement_sources',
-    'supplier_memory'
+    'order_vendors', 'procurement_api_idempotency',
+    'procurement_communication_messages', 'procurement_sources', 'supplier_memory'
   ] LOOP
     CONTINUE WHEN to_regclass(format('public.%I', workflow_table)) IS NULL;
     IF has_table_privilege('derya_app', format('public.%I', workflow_table), 'SELECT')

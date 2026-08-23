@@ -15,6 +15,7 @@ import {
 } from "./fixtures/legacy-supply-os/guild2-procurement";
 import {
   createProcurementRequestInDatabase,
+  getProcurementCommunicationMessagesFromDatabase,
   getProcurementRequestFromDatabase,
   getProcurementVendorConversationRefFromDatabase,
   listDueProcurementWakeCandidatesFromDatabase,
@@ -45,11 +46,13 @@ async function main() {
   assert.equal(configuredUrl.username, "dashboard_api");
   assert.match(configuredUrl.searchParams.get("sslmode") ?? "", /^(require|verify-ca|verify-full)$/);
   const dashboardUrl = process.env.WORKFLOW_DATABASE_TEST_URL?.trim() || configuredDashboardUrl;
+  const bourneUrl = requiredEnvironment("WORKFLOW_BOURNE_TEST_URL");
 
   const app = new PrismaClient();
   const owner = new PrismaClient({ datasourceUrl: ownerUrl });
   const dashboard = new PrismaClient({ datasourceUrl: dashboardUrl });
   const concurrentDashboard = new PrismaClient({ datasourceUrl: dashboardUrl });
+  const bourne = new PrismaClient({ datasourceUrl: bourneUrl });
   const suffix = Date.now().toString(36);
   const officeId = `procurement-db-${suffix}`;
   const userId = `procurement-user-${suffix}`;
@@ -281,6 +284,102 @@ async function main() {
       "Identity contact supplier",
       JSON.stringify({ contact_name: "Lin Vendor", email: "lin@example.com", contact_phone: "+1 555 0102" }),
     );
+    const ledgerVendorRows = await owner.$queryRawUnsafe<Array<{ id: string }>>(
+      "INSERT INTO order_vendors (order_id, name, status) VALUES ($1::uuid, $2, $3) RETURNING id::text AS id",
+      created.orderId,
+      "Ledger-only supplier",
+      "shortlisted",
+    );
+    const ledgerVendorId = ledgerVendorRows[0]?.id;
+    assert(ledgerVendorId);
+    await bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id,
+        order_id,
+        vendor_id,
+        provider,
+        account_email,
+        counterparty_email,
+        provider_message_id,
+        provider_thread_id,
+        rfc_message_id,
+        direction,
+        from_email,
+        from_name,
+        to_emails,
+        cc_emails,
+        subject,
+        body_text,
+        body_truncated,
+        attachments,
+        sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com', 'ledger@example.com',
+        'gmail-outbound', 'gmail-thread', '<outbound@example.test>', 'OUTBOUND',
+        'buyer@example.com', 'Buyer', '["ledger@example.com"]'::jsonb, '[]'::jsonb,
+        'RFQ', 'Please quote', false, '[]'::jsonb, '2026-08-21T01:00:00.000Z'
+      ), (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com', 'ledger@example.com',
+        'gmail-inbound', 'gmail-thread', '<inbound@example.test>', 'INBOUND',
+        'ledger@example.com', 'Ledger supplier', '["buyer@example.com"]'::jsonb, '[]'::jsonb,
+        'Re: RFQ', 'Quote attached', true, '[{"filename":"quote.pdf","mimeType":"application/pdf"}]'::jsonb,
+        '2026-08-21T02:00:00.000Z'
+      )
+    `, customerA, created.orderId, ledgerVendorId);
+    const bourneLedgerRows = await bourne.$queryRawUnsafe<Array<{ count: bigint }>>(
+      "SELECT count(*) AS count FROM procurement_communication_messages WHERE customer_id = $1::uuid AND order_id = $2::uuid AND vendor_id = $3::uuid",
+      customerA,
+      created.orderId,
+      ledgerVendorId,
+    );
+    assert.equal(Number(bourneLedgerRows[0]?.count), 2);
+    await assert.rejects(() => bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, direction, from_email,
+        to_emails, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com',
+        'other-supplier@example.com', 'invalid-participant', 'OUTBOUND',
+        'buyer@example.com', '["ledger@example.com"]'::jsonb, now()
+      )
+    `, customerA, created.orderId, ledgerVendorId));
+    const directionalVendorRows = await owner.$queryRawUnsafe<Array<{ id: string; name: string }>>(`
+      INSERT INTO order_vendors (order_id, name, status)
+      VALUES
+        ($1::uuid, 'Outbound-only supplier', 'shortlisted'),
+        ($1::uuid, 'Inbound-only supplier', 'shortlisted')
+      RETURNING id::text AS id, name
+    `, created.orderId);
+    const directionalVendors = new Map(directionalVendorRows.map((vendor) => [vendor.name, vendor.id]));
+    const outboundOnlyVendorId = directionalVendors.get("Outbound-only supplier");
+    const inboundOnlyVendorId = directionalVendors.get("Inbound-only supplier");
+    assert(outboundOnlyVendorId);
+    assert(inboundOnlyVendorId);
+    await bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, provider_thread_id,
+        direction, from_email, to_emails, body_text, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com',
+        'outbound-only@example.com', 'outbound-only-message', 'outbound-only-thread',
+        'OUTBOUND', 'buyer@example.com', '["outbound-only@example.com"]'::jsonb,
+        $4, '2026-08-21T03:00:00.000Z'
+      )
+    `, customerA, created.orderId, outboundOnlyVendorId, "x".repeat(50_001));
+    await bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, provider_thread_id,
+        direction, from_email, to_emails, body_text, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com',
+        'inbound-only@example.com', 'inbound-only-message', 'inbound-only-thread',
+        'INBOUND', 'inbound-only@example.com', '["buyer@example.com"]'::jsonb,
+        'Supplier response', '2026-08-21T04:00:00.000Z'
+      )
+    `, customerA, created.orderId, inboundOnlyVendorId);
     const canonicalSupplierLinks = await owner.$queryRawUnsafe<Array<{
       supplierCount: bigint;
       companySupplierCount: bigint;
@@ -296,7 +395,7 @@ async function main() {
       supplierCount: Number(row.supplierCount),
       companySupplierCount: Number(row.companySupplierCount),
       linkedOrderSupplierCount: Number(row.linkedOrderSupplierCount),
-    })), [{ supplierCount: 3, companySupplierCount: 3, linkedOrderSupplierCount: 3 }]);
+    })), [{ supplierCount: 6, companySupplierCount: 6, linkedOrderSupplierCount: 6 }]);
     const detail = await getProcurementRequestFromDatabase(workflowDatabase, customerA, created.orderId);
     assert(detail);
     const vendorsByName = new Map(detail.vendors.map((vendor) => [vendor.name, vendor]));
@@ -315,8 +414,16 @@ async function main() {
       email: "lin@example.com",
       phone: "+1 555 0102",
     });
+    assert.deepEqual(vendorsByName.get("Ledger-only supplier")?.contact, {
+      name: null,
+      email: "ledger@example.com",
+      phone: null,
+    });
     assert.equal(vendorsByName.get("Example supplier")?.contacted, true);
     assert.equal(vendorsByName.get("Nested contact supplier")?.contacted, false);
+    assert.equal(vendorsByName.get("Ledger-only supplier")?.contacted, true);
+    assert.equal(vendorsByName.get("Outbound-only supplier")?.contacted, true);
+    assert.equal(vendorsByName.get("Inbound-only supplier")?.contacted, false);
     const exampleSupplierId = vendorsByName.get("Example supplier")?.id;
     assert(exampleSupplierId);
     assert.deepEqual(
@@ -343,6 +450,78 @@ async function main() {
       null,
       "A foreign customer must not resolve the supplier message reference.",
     );
+    assert.deepEqual(
+      await getProcurementVendorConversationRefFromDatabase(
+        workflowDatabase,
+        customerA,
+        created.orderId,
+        ledgerVendorId,
+      ),
+      {
+        vendorId: ledgerVendorId,
+        vendorName: "Ledger-only supplier",
+        contactEmail: "ledger@example.com",
+        gmailMessageId: "gmail-outbound",
+      },
+    );
+    const ledgerMessages = await getProcurementCommunicationMessagesFromDatabase(
+      workflowDatabase,
+      customerA,
+      created.orderId,
+      ledgerVendorId,
+    );
+    assert(ledgerMessages);
+    assert.deepEqual(ledgerMessages.map(({ id: _id, ...message }) => message), [
+      {
+        provider: "GMAIL",
+        accountEmail: "buyer@example.com",
+        providerThreadId: "gmail-thread",
+        direction: "OUTBOUND",
+        fromEmail: "buyer@example.com",
+        fromName: "Buyer",
+        toEmails: ["ledger@example.com"],
+        ccEmails: [],
+        subject: "RFQ",
+        bodyText: "Please quote",
+        bodyTruncated: false,
+        sentAt: "2026-08-21T01:00:00.000Z",
+      },
+      {
+        provider: "GMAIL",
+        accountEmail: "buyer@example.com",
+        providerThreadId: "gmail-thread",
+        direction: "INBOUND",
+        fromEmail: "ledger@example.com",
+        fromName: "Ledger supplier",
+        toEmails: ["buyer@example.com"],
+        ccEmails: [],
+        subject: "Re: RFQ",
+        bodyText: "Quote attached",
+        bodyTruncated: true,
+        sentAt: "2026-08-21T02:00:00.000Z",
+      },
+    ]);
+    assert.equal(ledgerMessages.every((message) => /^[a-f0-9]{64}$/.test(message.id)), true);
+    assert.doesNotMatch(JSON.stringify(ledgerMessages), /gmail-outbound|gmail-inbound/);
+    const boundedBodyMessages = await getProcurementCommunicationMessagesFromDatabase(
+      workflowDatabase,
+      customerA,
+      created.orderId,
+      outboundOnlyVendorId,
+    );
+    assert.equal(boundedBodyMessages?.length, 1);
+    assert.equal(boundedBodyMessages?.[0]?.bodyText?.length, 50_000);
+    assert.equal(boundedBodyMessages?.[0]?.bodyTruncated, true);
+    assert.deepEqual(
+      await getProcurementCommunicationMessagesFromDatabase(
+        workflowDatabase,
+        customerB,
+        created.orderId,
+        ledgerVendorId,
+      ),
+      [],
+      "A foreign customer must not read supplier communication rows.",
+    );
     assert.equal("gmail_message_id" in detail, false);
     assert.equal("lease_owner" in detail, false);
     assert.equal("gmail_message_id" in (detail.vendors[0] ?? {}), false);
@@ -350,11 +529,121 @@ async function main() {
     assert.equal(customerAOrders.length, 2);
     assert(customerAOrders.some((order) => order.id === created.orderId));
     const listedCreatedOrder = customerAOrders.find((order) => order.id === created.orderId);
-    assert.equal(listedCreatedOrder?.supplierCount, 3);
-    assert.equal(listedCreatedOrder?.contactedCount, 1);
-    assert.equal(listedCreatedOrder?.responseCount, 1);
+    assert.equal(listedCreatedOrder?.supplierCount, 6);
+    assert.equal(listedCreatedOrder?.contactedCount, 3);
+    assert.equal(listedCreatedOrder?.responseCount, 3);
     assert(!customerAOrders.some((order) => order.id === customerScopedDuplicate.orderId));
     assert.equal(await getProcurementRequestFromDatabase(workflowDatabase, customerB, created.orderId), null);
+
+    const sameCustomerOtherOrders = await owner.$queryRawUnsafe<Array<{ id: string }>>(`
+      SELECT id::text AS id
+      FROM orders
+      WHERE customer_id = $1::uuid
+        AND id <> $2::uuid
+      ORDER BY id
+      LIMIT 1
+    `, customerA, created.orderId);
+    const sameCustomerOtherOrderId = sameCustomerOtherOrders[0]?.id;
+    assert(sameCustomerOtherOrderId);
+    const sameCustomerOtherVendorRows = await owner.$queryRawUnsafe<Array<{ id: string }>>(`
+      INSERT INTO order_vendors (order_id, name, status)
+      VALUES ($1::uuid, 'Same-customer other-order supplier', 'shortlisted')
+      RETURNING id::text AS id
+    `, sameCustomerOtherOrderId);
+    const sameCustomerOtherVendorId = sameCustomerOtherVendorRows[0]?.id;
+    assert(sameCustomerOtherVendorId);
+    const foreignVendorRows = await owner.$queryRawUnsafe<Array<{ id: string }>>(`
+      INSERT INTO order_vendors (order_id, name, status)
+      VALUES ($1::uuid, 'Foreign-customer supplier', 'shortlisted')
+      RETURNING id::text AS id
+    `, customerScopedDuplicate.orderId);
+    const foreignVendorId = foreignVendorRows[0]?.id;
+    assert(foreignVendorId);
+    assert.deepEqual(
+      await getProcurementCommunicationMessagesFromDatabase(
+        workflowDatabase,
+        customerA,
+        created.orderId,
+        sameCustomerOtherVendorId,
+      ),
+      [],
+      "A vendor from another order must not read this order's transcript.",
+    );
+    assert.deepEqual(
+      await getProcurementCommunicationMessagesFromDatabase(
+        workflowDatabase,
+        customerA,
+        sameCustomerOtherOrderId,
+        ledgerVendorId,
+      ),
+      [],
+      "An order must not read a transcript through a vendor attached elsewhere.",
+    );
+    assert.deepEqual(
+      await getProcurementCommunicationMessagesFromDatabase(
+        workflowDatabase,
+        customerB,
+        customerScopedDuplicate.orderId,
+        ledgerVendorId,
+      ),
+      [],
+      "A foreign tenant's valid order must not weaken vendor scoping.",
+    );
+    await assert.rejects(() => bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, direction, from_email,
+        to_emails, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com',
+        'ledger@example.com', 'wrong-customer-message', 'OUTBOUND',
+        'buyer@example.com', '["ledger@example.com"]'::jsonb, now()
+      )
+    `, customerB, created.orderId, ledgerVendorId));
+    await assert.rejects(() => bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, direction, from_email,
+        to_emails, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com',
+        'other-order@example.com', 'wrong-order-message', 'OUTBOUND',
+        'buyer@example.com', '["other-order@example.com"]'::jsonb, now()
+      )
+    `, customerA, created.orderId, sameCustomerOtherVendorId));
+    await assert.rejects(() => bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, direction, from_email,
+        to_emails, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com',
+        'foreign@example.com', 'gmail-outbound', 'OUTBOUND',
+        'buyer@example.com', '["foreign@example.com"]'::jsonb, now()
+      )
+    `, customerB, customerScopedDuplicate.orderId, foreignVendorId));
+    await assert.rejects(() => bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, direction, from_email,
+        to_emails, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', E'\tbuyer@example.com\t',
+        'ledger@example.com', 'tabbed-account-message', 'OUTBOUND',
+        'buyer@example.com', '["ledger@example.com"]'::jsonb, now()
+      )
+    `, customerA, created.orderId, ledgerVendorId));
+    await assert.rejects(() => bourne.$executeRawUnsafe(`
+      INSERT INTO procurement_communication_messages (
+        customer_id, order_id, vendor_id, provider, account_email,
+        counterparty_email, provider_message_id, direction, from_email,
+        to_emails, sent_at
+      ) VALUES (
+        $1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com',
+        'ledger@example.com', E'\nnewline-message\n', 'OUTBOUND',
+        'buyer@example.com', '["ledger@example.com"]'::jsonb, now()
+      )
+    `, customerA, created.orderId, ledgerVendorId));
 
     await permissionDenied(() => dashboard.$executeRawUnsafe(
       "UPDATE orders SET status = 'ordered' WHERE id = $1::uuid",
@@ -379,6 +668,34 @@ async function main() {
     await permissionDenied(() => dashboard.$executeRawUnsafe(
       "INSERT INTO order_vendors (order_id, name, status) VALUES ($1::uuid, 'Blocked', 'shortlisted')",
       created.orderId,
+    ));
+    await permissionDenied(() => dashboard.$executeRawUnsafe(
+      "INSERT INTO procurement_communication_messages (customer_id, order_id, vendor_id, provider, account_email, counterparty_email, provider_message_id, direction, from_email, to_emails, sent_at) VALUES ($1::uuid, $2::uuid, $3::uuid, 'GMAIL', 'buyer@example.com', 'ledger@example.com', 'blocked', 'OUTBOUND', 'buyer@example.com', '[]'::jsonb, now())",
+      customerA,
+      created.orderId,
+      ledgerVendorId,
+    ));
+    await permissionDenied(() => dashboard.$executeRawUnsafe(
+      "UPDATE procurement_communication_messages SET subject = 'Blocked' WHERE customer_id = $1::uuid",
+      customerA,
+    ));
+    await permissionDenied(() => dashboard.$executeRawUnsafe(
+      "DELETE FROM procurement_communication_messages WHERE customer_id = $1::uuid",
+      customerA,
+    ));
+    await permissionDenied(() => bourne.$executeRawUnsafe(
+      "UPDATE procurement_communication_messages SET subject = 'Blocked' WHERE customer_id = $1::uuid",
+      customerA,
+    ));
+    await permissionDenied(() => bourne.$executeRawUnsafe(
+      "DELETE FROM procurement_communication_messages WHERE customer_id = $1::uuid",
+      customerA,
+    ));
+    await permissionDenied(() => bourne.$executeRawUnsafe(
+      "TRUNCATE procurement_communication_messages",
+    ));
+    await permissionDenied(() => app.$queryRawUnsafe(
+      "SELECT customer_id FROM procurement_communication_messages LIMIT 1",
     ));
     await permissionDenied(() => dashboard.$executeRawUnsafe(
       "DELETE FROM orders WHERE id = $1::uuid",
@@ -685,6 +1002,7 @@ async function main() {
       owner.$disconnect(),
       dashboard.$disconnect(),
       concurrentDashboard.$disconnect(),
+      bourne.$disconnect(),
     ]);
   }
 }

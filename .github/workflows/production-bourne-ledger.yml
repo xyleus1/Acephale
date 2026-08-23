@@ -1,0 +1,103 @@
+name: Production Bourne communication ledger
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_BOURNE_COMMUNICATION_LEDGER
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-migration
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Production
+    env:
+      REQUEST_CONFIRMATION: ${{ inputs.confirmation }}
+      PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=120000 -c idle_in_transaction_session_timeout=120000
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate ledger provisioning request
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$REQUEST_CONFIRMATION" != "APPLY_BOURNE_COMMUNICATION_LEDGER" ]]; then
+            echo "The confirmation phrase is incorrect." >&2
+            exit 1
+          fi
+          git ls-files --error-unmatch \
+            scripts/sql/bourne-procurement-communication-ledger.sql >/dev/null
+          git ls-files --error-unmatch \
+            scripts/sql/production-verification/bourne-procurement-communication-ledger.sql >/dev/null
+          test ! -L scripts/sql/bourne-procurement-communication-ledger.sql
+          test ! -L scripts/sql/production-verification/bourne-procurement-communication-ledger.sql
+          sha256sum scripts/sql/bourne-procurement-communication-ledger.sql
+          sha256sum scripts/sql/production-verification/bourne-procurement-communication-ledger.sql
+
+      - name: Verify exact Bourne production target
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null
+          database_host="$(
+            DATABASE_URL="$WORKFLOW_DATABASE_OWNER_URL" node --input-type=module --eval='
+              const value = process.env.DATABASE_URL;
+              if (!value) process.exit(1);
+              process.stdout.write(new URL(value).hostname);
+            '
+          )"
+          if [[ "$database_host" != "ep-summer-cake-audzi8ve.c-10.us-east-1.aws.neon.tech" ]]; then
+            echo "Refusing to provision an unexpected Neon endpoint." >&2
+            exit 1
+          fi
+          database_identity="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --field-separator='|' \
+              --command='SELECT current_database(), session_user;'
+          )"
+          if [[ "$database_identity" != "neondb|neondb_owner" ]]; then
+            echo "Refusing to provision an unexpected database or role." >&2
+            exit 1
+          fi
+          echo "Verified Bourne workflow target: neondb as neondb_owner at the pinned Neon endpoint."
+
+      - name: Apply Bourne communication ledger
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --file=scripts/sql/bourne-procurement-communication-ledger.sql
+
+      - name: Verify Bourne communication ledger
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --file=scripts/sql/production-verification/bourne-procurement-communication-ledger.sql

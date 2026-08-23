@@ -2,6 +2,42 @@
 
 ## Latest Update
 
+### Bourne supplier messages have a direct return path
+
+- Added the Bourne-owned `procurement_communication_messages` ledger to the
+  restricted workflow database contract. Bourne writes confirmed outbound and
+  observed inbound supplier messages. Derya receives `SELECT` only.
+- The owner migration binds the ledger to canonical `ProcurementOrder` and
+  `OrderSupplier` tables. It grants `bourne_supply_chain` only `SELECT` and
+  `INSERT`, so the runtime role needs no `CREATE` access and cannot rewrite or
+  delete recorded messages. Both runtime roles lose schema and database
+  `CREATE`; unsafe role attributes, memberships, and drifted table constraints
+  stop provisioning.
+- Active Sourcing reads the scoped ledger before the older connected-Gmail
+  compatibility path. Ledger-backed conversations do not require the Bourne
+  mailbox to be connected to the Derya office.
+- Ledger reads require the authenticated customer, exact order, and exact
+  vendor. Provider message IDs are hashed before reaching the browser, and the
+  supplier counterparty must be present in the message participants. Bodies are
+  bounded in SQL before allocation, and order-list metrics use one aggregate.
+- The reader detects a missing ledger table and preserves the current Gmail and
+  local-record fallbacks during rollout.
+- `docs/BOURNE_COMMUNICATION_LEDGER_CONTRACT.md` defines the immutable row,
+  idempotent write, existing-thread backfill, and acceptance checks Bourne must
+  implement after the owner migration is applied.
+- A disposable PostgreSQL rehearsal applied the full schema, applied the ledger
+  provisioning twice, and passed the `dashboard_api`, `bourne_supply_chain`,
+  `derya_app`, tenant isolation, wrong-order and wrong-vendor rejection,
+  provider-ID uniqueness, whitespace normalization, body bounds, and complete
+  transcript projection checks. Focused contracts, TypeScript, and the
+  production build also pass.
+- Production Neon has not been changed. The owner migration and Bourne writer
+  and backfill updates remain release steps outside the Derya runtime role. A
+  protected `main`-only workflow now pins the exact Bourne Neon endpoint,
+  database, and owner role so the schema step can be executed after merge.
+- No email send, supplier approval, quote promotion, or purchase behavior was
+  added.
+
 ### Legacy Bourne supplier contacts now have a canonical projection
 
 - Root cause: production `public.order_vendors` still had the legacy `email`

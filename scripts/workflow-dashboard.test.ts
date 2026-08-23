@@ -4,6 +4,7 @@ import { procurementRequestSchema } from "../src/lib/procurement-contract";
 import {
   createProcurementRequest,
   createProcurementRequestInDatabase,
+  getProcurementCommunicationMessagesFromDatabase,
   listProcurementRequestsFromDatabase,
   normalizeProcurementVendor,
   ProcurementDatabase,
@@ -184,6 +185,22 @@ class FakeProcurementDatabase implements ProcurementDatabase {
 }
 
 async function main() {
+  const ledgerMissingDatabase = {
+    async $queryRawUnsafe<T>(query: string): Promise<T> {
+      assert.match(query, /to_regclass\('public\.procurement_communication_messages'\)/);
+      return [{ available: false }] as T;
+    },
+    async $executeRawUnsafe() {
+      throw new Error("Ledger fallback must not write.");
+    },
+  };
+  assert.equal(await getProcurementCommunicationMessagesFromDatabase(
+    ledgerMissingDatabase,
+    customerA,
+    "33333333-3333-4333-8333-333333333333",
+    "44444444-4444-4444-8444-444444444444",
+  ), null, "A missing ledger must keep the compatibility path available.");
+
   const validInput = procurementRequestSchema.parse({
     bomId: null,
     material: "6061-T651 aluminum plate",
@@ -292,6 +309,9 @@ const listQueryValues: unknown[][] = [];
 const listQueries: string[] = [];
 const listDatabase = {
   async $queryRawUnsafe<T>(query: string, ...values: unknown[]): Promise<T> {
+    if (query.includes("to_regclass('public.procurement_communication_messages')")) {
+      return [{ available: false }] as T;
+    }
     listQueries.push(query);
     listQueryValues.push(values);
     return [{
@@ -461,6 +481,7 @@ const handlerSource = await readFile("src/lib/procurement-route-handlers.ts", "u
 const workflowSource = await readFile("src/lib/procurement-workflow.ts", "utf8");
 const clientSource = await readFile("src/app/dashboard/workflow/procurement-workflow.tsx", "utf8");
 const provisioningSql = await readFile("scripts/sql/procurement-dashboard-api.sql", "utf8");
+const communicationLedgerSql = await readFile("scripts/sql/bourne-procurement-communication-ledger.sql", "utf8");
 
 assert(handlerSource.includes("if (!session)"), "Procurement handlers must reject unauthenticated requests.");
 assert(routeSource.includes("handleProcurementPost"), "POST must use the authenticated procurement handler.");
@@ -498,6 +519,23 @@ assert(provisioningSql.includes("rolbypassrls"));
 assert(provisioningSql.includes("pg_auth_members"));
 assert(provisioningSql.includes("GRANT SELECT (id) ON customers TO dashboard_api"));
 assert(provisioningSql.includes("GRANT UPDATE (order_id, updated_at) ON procurement_api_idempotency"));
+assert(provisioningSql.includes("\\ir bourne-procurement-communication-ledger.sql"));
+assert(communicationLedgerSql.includes("CREATE TABLE IF NOT EXISTS public.procurement_communication_messages"));
+assert(communicationLedgerSql.includes("FOREIGN KEY (order_id, customer_id)"));
+assert(communicationLedgerSql.includes("FOREIGN KEY (vendor_id, order_id)"));
+assert(communicationLedgerSql.includes('REFERENCES public."ProcurementOrder" (id, customer_id)'));
+assert(communicationLedgerSql.includes('REFERENCES public."OrderSupplier" (id, order_id)'));
+assert(communicationLedgerSql.includes("CONSTRAINT procurement_communication_counterparty_participant"));
+assert(communicationLedgerSql.includes("bourne_supply_chain has unsafe role attributes or memberships"));
+assert(communicationLedgerSql.includes("dashboard_api has unsafe role attributes or memberships"));
+assert(communicationLedgerSql.includes("procurement communication constraints are missing"));
+assert.doesNotMatch(communicationLedgerSql, /REFERENCES public\."(?:ProcurementOrder|OrderSupplier)"[^;]*ON DELETE CASCADE/);
+assert(communicationLedgerSql.includes("GRANT SELECT ON public.procurement_communication_messages TO dashboard_api"));
+assert(communicationLedgerSql.includes("GRANT SELECT, INSERT ON public.procurement_communication_messages TO bourne_supply_chain"));
+assert(communicationLedgerSql.includes("FROM bourne_supply_chain"));
+assert(communicationLedgerSql.includes("has_schema_privilege('bourne_supply_chain', 'public', 'CREATE')"));
+assert(!/GRANT\s+(?:INSERT|UPDATE|DELETE|TRUNCATE)[^;]*ON\s+(?:public\.)?procurement_communication_messages\s+TO\s+dashboard_api/i.test(communicationLedgerSql));
+assert(!/GRANT\s+(?:CREATE|UPDATE|DELETE|TRUNCATE)[^;]*TO\s+bourne_supply_chain/i.test(communicationLedgerSql));
 assert(!/GRANT\s+UPDATE(?:\s*\([^)]*\))?\s+ON\s+orders\b/i.test(provisioningSql));
 assert(!/GRANT\s+(?:[^;]*,\s*)?UPDATE(?:\s*\([^)]*\))?\s+ON\s+order_vendors\b/i.test(provisioningSql));
 assert(!/GRANT\s+INSERT(?:\s*\([^)]*\))?\s+ON\s+order_vendors\b/i.test(provisioningSql));

@@ -3,6 +3,7 @@ import "server-only";
 import { getValidAccessToken } from "@/lib/gmail-oauth";
 import { prisma } from "@/lib/prisma";
 import {
+  getProcurementCommunicationMessages,
   getProcurementVendorConversationRef,
   type ProcurementVendorConversationRef,
 } from "@/lib/procurement-workflow";
@@ -14,9 +15,11 @@ import {
   procurementConversationEmailAddresses,
   procurementConversationFromGmailThread,
   procurementConversationParticipantEmails,
+  resolveProcurementVendorConversation,
   type GmailConversationMessage,
   type GmailConversationThread,
   type ProcurementConversation,
+  type ProcurementVendorConversationArgs,
 } from "@/lib/procurement-conversation-model";
 
 const MAX_CONNECTED_ACCOUNTS = 10;
@@ -155,18 +158,19 @@ async function localConversation(
   } satisfies ProcurementConversation;
 }
 
-export async function procurementVendorConversation(args: {
-  officeId: string;
-  customerId: string;
-  orderId: string;
-  vendorId: string;
-}) {
-  const reference = await getProcurementVendorConversationRef(
-    args.customerId,
-    args.orderId,
-    args.vendorId,
-  );
-  if (!reference) return unavailable("Supplier conversation not found.");
+type ProcurementVendorConversationDependencies = {
+  communicationMessages?: typeof getProcurementCommunicationMessages;
+  conversationReference?: typeof getProcurementVendorConversationRef;
+  compatibilityConversation?: (
+    args: ProcurementVendorConversationArgs,
+    reference: ProcurementVendorConversationRef,
+  ) => Promise<ProcurementConversation>;
+};
+
+async function compatibilityConversation(
+  args: ProcurementVendorConversationArgs,
+  reference: ProcurementVendorConversationRef,
+) {
   if (!reference.gmailMessageId) return unavailable("No supplier contact receipt is recorded for this manufacturer.");
   if (!reference.contactEmail) return unavailable("The workflow has no verified supplier email to bind to this thread.");
   const gmailMessageId = reference.gmailMessageId;
@@ -224,6 +228,20 @@ export async function procurementVendorConversation(args: {
   const connected = candidates.find((candidate) => candidate !== null);
   if (connected) return connected;
   return unavailable("Contact is recorded, but the sending Gmail inbox is not connected to this Derya office.");
+}
+
+export async function procurementVendorConversation(
+  args: ProcurementVendorConversationArgs,
+  dependencies: ProcurementVendorConversationDependencies = {},
+) {
+  return resolveProcurementVendorConversation(args, {
+    communicationMessages:
+      dependencies.communicationMessages ?? getProcurementCommunicationMessages,
+    conversationReference:
+      dependencies.conversationReference ?? getProcurementVendorConversationRef,
+    compatibilityConversation:
+      dependencies.compatibilityConversation ?? compatibilityConversation,
+  });
 }
 
 function taskThreadId(task: unknown) {

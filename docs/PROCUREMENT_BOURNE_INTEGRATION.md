@@ -21,12 +21,14 @@ configured for the Vercel schedule.
 
 ## Provisioning
 
-1. Run `scripts/sql/procurement-dashboard-api.sql` against the Bourne Neon
-   database as an owner. Supply the new role password through the documented
+1. Confirm the restricted `bourne_supply_chain` runtime role exists, then run
+   `scripts/sql/procurement-dashboard-api.sql` against the Bourne Neon database
+   as an owner. Supply the new dashboard role password through the documented
    psql variable. Do not put the password in a file. The script is safe to
    rerun after a partial failure. It uses only role changes permitted to Neon's
-   managed owner and stops unless every elevated role attribute and membership
-   is absent.
+   managed owner and stops unless the dashboard and Bourne runtime roles have
+   safe attributes and memberships. Index creation is concurrent and bounded
+   by lock and statement timeouts.
 2. Set the Office mapping in the deployment environment. Use the Office ID from
    the authenticated Derya database and the customer UUID from Neon:
 
@@ -49,6 +51,41 @@ configured for the Vercel schedule.
 7. Keep Derya's protected `/api/cron/procurement-workflow` schedule enabled at
    `*/5 * * * *`. It reissues bounded wake requests only for mapped customer
    orders that remain `new` after the durable thirty-second claim window.
+
+### Supplier communication ledger
+
+The owner provisioning SQL creates the procurement communication ledger against
+the canonical `ProcurementOrder` and `OrderSupplier` tables. Bourne's required
+message write and backfill contract is documented in
+`docs/BOURNE_COMMUNICATION_LEDGER_CONTRACT.md`.
+
+Bourne owns append-only writes to `procurement_communication_messages`. The
+owner migration grants the existing `bourne_supply_chain` runtime role only
+`SELECT` and `INSERT`; it does not grant schema `CREATE`. Derya reads only
+customer, order, and vendor-scoped immutable rows through `dashboard_api`.
+Provider message IDs remain server-side and are converted to opaque browser
+identifiers. The restricted Derya application role cannot read the table.
+The owner migration revokes schema and database `CREATE` from both runtime
+roles and rejects a same-named ledger table whose shape or constraints drift
+from the contract.
+
+After merge, apply the owner migration through the protected, production-pinned
+GitHub workflow:
+
+```bash
+gh workflow run production-bourne-ledger.yml \
+  --repo mmturna/derya-crm \
+  --ref main \
+  --field confirmation=APPLY_BOURNE_COMMUNICATION_LEDGER
+```
+
+The workflow shares the production database migration concurrency lock, pins
+the exact Bourne Neon endpoint, database, and owner role, applies only the
+committed ledger SQL, and runs committed read-only privilege verification.
+
+Before the ledger exists, Derya preserves the connected-Gmail compatibility
+path. After Bourne writes or backfills rows, Derya reads the ledger first and no
+longer requires the Bourne mailbox to be connected separately.
 
 ### Supplier contact compatibility
 

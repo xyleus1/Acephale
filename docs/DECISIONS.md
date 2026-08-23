@@ -55,6 +55,42 @@ Use this log for durable product and engineering decisions. Do not put every imp
   while it remains `new`.
 - Revisit when: Bourne exposes a durable enqueue receipt or a managed queue
   replaces database polling and leasing.
+
+### 2026-08-21 - Bourne communication ledger is the primary supplier transcript
+
+- Status: accepted, supersedes the live-Gmail primary read in the earlier
+  supplier-activity decision
+- Owner: product and engineering
+- Context: Bourne sends supplier messages and checks its inbox, but the Derya
+  supplier activity view could read exact messages only when Bourne copied one
+  Gmail receipt onto `order_vendors` and the same mailbox was separately
+  connected to the Derya office. Bourne already owns the full provider lineage.
+- Decision: Store confirmed outbound and observed inbound supplier messages in
+  Bourne's append-only `procurement_communication_messages` table. Derya reads
+  those customer, order, and vendor-scoped rows through `dashboard_api` before
+  consulting the connected-Gmail compatibility path.
+- Database boundary: The ledger references canonical `ProcurementOrder` and
+  `OrderSupplier` rows, not their lowercase compatibility views. The owner
+  migration grants `bourne_supply_chain` only `SELECT` and `INSERT`; it keeps
+  schema and database creation and mutation of existing messages unavailable
+  to both runtime roles. Existing table shape and constraints must match the
+  contract before grants are applied. Production provisioning runs only from
+  `main` through the pinned Bourne owner workflow and committed verification.
+- Security boundary: The browser receives a server-derived opaque message ID,
+  never the provider message ID. Database foreign keys bind the order to the
+  customer and the vendor to the order. Derya rejects messages whose verified
+  counterparty is absent from the sender, recipients, and CC addresses.
+  Provider IDs and email identities must be normalized before the global
+  idempotency key is accepted.
+- Message contract: Bourne writes only confirmed sends and observed inbound
+  messages, uses provider IDs for idempotency, preserves timestamps and plain
+  text, and never stores OAuth credentials or raw provider responses.
+- Consequences: Supplier conversations can appear in Derya without connecting
+  Bourne's mailbox twice. Existing threads require an exact, customer-scoped
+  backfill. Ambiguous supplier matches go to manual review.
+- Revisit when: Bourne communication moves behind a versioned service API with
+  equivalent tenant isolation, provenance, and read-only Derya access.
+
 ### 2026-08-21 - Customer and procurement context use one minimal canonical schema
 
 - Status: accepted, supersedes the 2026-08-20 `CompanyDocument` storage model
