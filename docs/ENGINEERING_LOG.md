@@ -6537,8 +6537,10 @@ Use this file for chronological implementation notes that future agents should s
   app-password contracts, existing email-account settings, Gmail OAuth, Gmail
   sync-window contracts, security hardening, the read-only production query,
   two full disposable PostgreSQL migration applies, and the production build.
-- Release boundary: Schema PR #223 merged as `43ca547c`; protected production
-  run `32618577033` applied and verified the migration. The application code is
-  not deployed. No live mailbox was connected or tested because fresh
-  credentials must be generated outside chat after the disclosed values are
-  revoked.
+- Release: Schema PR #223 merged as `43ca547c`; protected production run
+  `32618577033` applied and verified the migration. Application PR #225 merged
+  as `8f75062a`; Vercel production, post-merge database contracts, and
+  `/api/health` passed. The settings route redirects unauthenticated traffic to
+  login. An authenticated rendered check was unavailable in the release
+  session. No live mailbox was connected or tested because fresh credentials
+  must be generated outside chat after the disclosed values are revoked.
