@@ -3998,3 +3998,41 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Consequences: Admins can manage every company and its users in one place
   without confusing an operator login with a customer identity. Customers
   remain restricted to explicit company workspace membership.
+### 2026-08-23 - Live mailbox capability demos use isolated test records
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Operators need to prove that connected mailboxes can send, monitor,
+  and reply before using them in procurement. Running ad hoc database scripts
+  would either require copying encrypted credentials or bypassing the deployed
+  application runtime that owns decryption and mail transport.
+- Decision: A live capability demo is queued in the production database by a
+  protected, manually dispatched GitHub workflow and executed by the deployed
+  application. The workflow selects account IDs only. Vercel decrypts the
+  existing credentials in memory. A one-time token authorizes only the exact
+  queued job and is removed from the stored payload when the run completes.
+- Data boundary: Demo traffic uses a clearly labeled test Company, workspace,
+  execution task, and append-only events. It never qualifies a real supplier,
+  creates a purchase action, authorizes spend, or represents demo values as a
+  commercial quote. Test-only IMAP ingestion skips freight classification,
+  memory ingestion, CRM touches, sourcing prewarms, and sync-cursor mutation,
+  so the demo cannot alter real workflow state. It does not change the Office
+  default sender. Threads and messages carry a persistent `DEMO_TEST_ONLY`
+  marker, remain hidden from operational inboxes, and are excluded from memory
+  backfills. If normal sync sees a demo message before the targeted observer,
+  the marker requires a same-office durable plan matching Message-ID, sender,
+  recipient, and receiving account. A subject line alone is never trusted.
+- Delivery boundary: The job has one attempt. A partial failure is recorded and
+  must not be automatically retried because SMTP delivery may already have
+  occurred. The generic due queue excludes this job type, and the exact plan is
+  durably recorded before the first SMTP call. Every send uses a deterministic
+  Message-ID and records planned plus acknowledged or uncertain evidence. An
+  unresolved uncertain delivery blocks a later demo.
+- Audit boundary: The workflow records its GitHub actor, run ID, attempt, main
+  ref, and commit SHA. System events keep `actorUserId` null unless a verified
+  app identity exists. The demo does not grant workspace membership, and
+  GitHub logs contain only aggregate status and counts. The deployed Vercel
+  commit must equal the approved workflow SHA before any delivery begins.
+- Consequences: The same deployed code path proves outbound SMTP, inbound IMAP,
+  threading, tenant scope, and procurement conversation storage without moving
+  credentials into Bourne, GitHub, or operator scripts.

@@ -104,6 +104,7 @@
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",
     "test:email-account-settings": "node --import tsx scripts/email-account-settings.test.ts",
     "test:gmail-app-password-accounts": "node --import tsx scripts/gmail-app-password-accounts.test.ts",
+    "test:demo-email-capability": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/demo-email-capability.runtime.test.ts && node --import tsx scripts/demo-email-capability.test.ts",
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",
     "test:rfq-load-draft": "tsx scripts/rfq-load-draft.test.ts",
     "test:rfq-whatsapp": "tsx scripts/rfq-whatsapp.test.ts",

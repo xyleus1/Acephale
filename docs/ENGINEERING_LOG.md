@@ -6694,3 +6694,40 @@ Use this file for chronological implementation notes that future agents should s
   the changed-source forbidden-character scan, and the customer account admin
   database lifecycle regression on the complete migration chain passed. The
   database regression also runs in the protected CI database job.
+### 2026-08-23 - Protected six-mailbox demo runner
+
+- Reused the existing encrypted Gmail app-password transport and bounded IMAP
+  sync instead of copying credentials into a script or GitHub.
+- Added `DEMO_EMAIL_CAPABILITY_TEST` to the generic background-job runner and a
+  one-time-token route that can claim only the exact queued demo job.
+- Added a protected production workflow that requires exactly one Office with
+  exactly six eligible accounts, pins the production Neon endpoint and owner
+  identity, creates one no-retry job, invokes the deployed app, and prints the
+  stored sanitized result.
+- The runner creates a test-only Company, Supply workspace, execution task, and
+  event ledger. It runs three mailbox pairs concurrently, then one labeled demo
+  RFQ conversation, and links all ingested threads to the demo Company.
+- The exact-message IMAP sync disables normal freight classification for this
+  runner only, preventing test traffic from linking to a real inquiry or job.
+  Demo observation also skips memory, CRM touches, sourcing prewarms, sync
+  cursor changes, and default-sender mutation. Persistent hidden thread and
+  message markers also protect against later memory backfills. A normal-sync
+  race is treated as demo traffic only when Message-ID, sender, recipient, and
+  receiving account match a durable planned-delivery event.
+- The generic due-job scanner excludes this manually authorized job type. The
+  runner records the exact outbound plan before SMTP. Each delivery has a
+  deterministic Message-ID and planned plus acknowledged or uncertain events.
+  An unresolved uncertain delivery blocks another run.
+- The workflow preserves trusted GitHub actor and run metadata in the system
+  audit trail, does not mutate any admin membership, and prints only the job
+  status and aggregate counts to GitHub logs. Runtime execution also verifies
+  that Vercel is serving the exact approved commit SHA before SMTP.
+- No schema or dependency changes were required. No password, OAuth token, or
+  deployment secret was added, logged, or returned.
+- Passed executable success, partial-failure, six-account, tenant, delivery
+  audit, unresolved-delivery, queue-state, trigger-authorization, explicit demo
+  observation, and normal-sync race coverage through
+  `npm run test:demo-email-capability`,
+  `npm run test:gmail-app-password-accounts`,
+  `npm run test:gmail-sync-windows`, `npx tsc --noEmit`, `git diff --check`,
+  workflow YAML and shell syntax checks, and the production build.

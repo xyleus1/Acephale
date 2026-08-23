@@ -6,6 +6,11 @@ import { prisma } from "@/lib/prisma";
 import { classifyInboundEmail } from "@/lib/email-classifier";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { logEmailTouch } from "@/lib/crm/email-touch";
+import {
+  DEMO_EMAIL_CLASSIFICATION,
+  DEMO_EMAIL_THREAD_MARKER,
+  isDemoEmailMessageId,
+} from "@/lib/email-demo-markers";
 import { emailWorkflowLabelKeys } from "@/lib/email-workflow-labels";
 import { gmailImapClient, GMAIL_APP_PASSWORD_PROVIDER, readGmailAppPasswordAccount } from "@/lib/gmail-app-password";
 import { imapMessageExternalId, imapThreadExternalId } from "@/lib/imap-identifiers";
@@ -25,6 +30,32 @@ export type ImapSyncResult = {
   autoLinked: number;
 };
 
+export type ImapSyncDependencies = {
+  db: typeof prisma;
+  readCredentials: typeof readGmailAppPasswordAccount;
+  createClient: typeof gmailImapClient;
+  classifyInbound: typeof classifyInboundEmail;
+  ingestMemory: typeof ingestKnowledgeObject;
+  recordMemory: typeof recordMemoryEvent;
+  logTouch: typeof logEmailTouch;
+  enqueueJob: typeof enqueueBackgroundJob;
+  revalidate: (path: string) => void;
+  now: () => Date;
+};
+
+const defaultDependencies: ImapSyncDependencies = {
+  db: prisma,
+  readCredentials: readGmailAppPasswordAccount,
+  createClient: gmailImapClient,
+  classifyInbound: classifyInboundEmail,
+  ingestMemory: ingestKnowledgeObject,
+  recordMemory: recordMemoryEvent,
+  logTouch: logEmailTouch,
+  enqueueJob: enqueueBackgroundJob,
+  revalidate: revalidatePath,
+  now: () => new Date(),
+};
+
 function flattenAddresses(value: Address | Address[] | undefined): Mailbox[] {
   const addresses = !value ? [] : Array.isArray(value) ? value : [value];
   return addresses.flatMap((address) => (
@@ -42,12 +73,20 @@ function validDate(value: string | Date | undefined, fallback: Date) {
   return Number.isNaN(parsed.getTime()) ? fallback : parsed;
 }
 
+function jsonRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 export async function syncGmailAppPasswordAccountInternal(input: {
   accountId: string;
   officeId: string;
   relatedToMessageId?: string | null;
-}): Promise<ImapSyncResult | { error: string }> {
-  const account = await prisma.emailAccount.findFirst({
+  skipClassification?: boolean;
+  demoObservation?: boolean;
+}, dependencies: ImapSyncDependencies = defaultDependencies): Promise<ImapSyncResult | { error: string }> {
+  const account = await dependencies.db.emailAccount.findFirst({
     where: {
       id: input.accountId,
       officeId: input.officeId,
@@ -59,19 +98,19 @@ export async function syncGmailAppPasswordAccountInternal(input: {
 
   let credentials;
   try {
-    credentials = readGmailAppPasswordAccount(account);
+    credentials = dependencies.readCredentials(account);
   } catch (caught) {
     return { error: caught instanceof Error ? caught.message : "Encrypted account credential is unavailable." };
   }
 
-  const client = gmailImapClient(credentials);
+  const client = dependencies.createClient(credentials);
   let messages: Array<{ uid: number; source?: Buffer; internalDate?: Date | string }> = [];
   try {
     await client.connect();
     await client.mailboxOpen("INBOX", { readOnly: true });
     const since = account.lastSyncAt
       ? new Date(account.lastSyncAt.getTime() - 10 * 60 * 1000)
-      : new Date(Date.now() - FIRST_SYNC_DAYS * 24 * 60 * 60 * 1000);
+      : new Date(dependencies.now().getTime() - FIRST_SYNC_DAYS * 24 * 60 * 60 * 1000);
     const matches = await client.search(input.relatedToMessageId
       ? {
           or: [
@@ -98,6 +137,7 @@ export async function syncGmailAppPasswordAccountInternal(input: {
 
   let processed = 0;
   let created = 0;
+  let operationalMessages = 0;
   const touchedThreadIds = new Set<string>();
 
   for (const message of messages.sort((a, b) => a.uid - b.uid)) {
@@ -116,21 +156,60 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       continue;
     }
 
-    const externalId = imapMessageExternalId(account.id, parsed.messageId, message.source);
-    const existing = await prisma.emailMessage.findUnique({ where: { externalId } });
-    if (existing) {
-      touchedThreadIds.add(existing.threadId);
-      continue;
-    }
-
     const from = flattenAddresses(parsed.from)[0] ?? null;
     const to = flattenAddresses(parsed.to).map((address) => address.address).filter(Boolean);
     const cc = flattenAddresses(parsed.cc).map((address) => address.address).filter(Boolean);
     const fromEmail = from?.address?.trim().toLowerCase() || "unknown";
     const subject = parsed.subject?.trim() || "(no subject)";
+    const parsedMessageId = parsed.messageId?.trim() || null;
+    let correlatedDemoDelivery = false;
+    if (!input.demoObservation && parsedMessageId && isDemoEmailMessageId(parsedMessageId)) {
+      const plannedDelivery = await dependencies.db.supplyExecutionEvent.findFirst({
+        where: {
+          officeId: account.officeId,
+          eventType: "DEMO_EMAIL_DELIVERY_PLANNED",
+          status: "PLANNED",
+          payload: { path: ["intendedMessageId"], equals: parsedMessageId },
+        },
+        select: { payload: true },
+      });
+      const planned = jsonRecord(plannedDelivery?.payload);
+      correlatedDemoDelivery = planned.receiverAccountId === account.id
+        && String(planned.sender ?? "").toLowerCase() === fromEmail
+        && String(planned.recipient ?? "").toLowerCase() === account.email.toLowerCase()
+        && to.map((address) => address.toLowerCase()).includes(account.email.toLowerCase())
+        && planned.subject === subject
+        && planned.intendedMessageId === parsedMessageId;
+    }
+    const demoMessage = Boolean(input.demoObservation) || correlatedDemoDelivery;
+    if (!demoMessage) operationalMessages++;
+    const externalId = imapMessageExternalId(account.id, parsed.messageId, message.source);
+    const existing = await dependencies.db.emailMessage.findUnique({ where: { externalId } });
+    if (existing) {
+      if (demoMessage) {
+        await dependencies.db.emailMessage.updateMany({
+          where: { id: existing.id, thread: { officeId: account.officeId } },
+          data: {
+            classification: DEMO_EMAIL_CLASSIFICATION,
+            classificationReason: "Protected test-only connected email capability message.",
+            classificationAt: dependencies.now(),
+          },
+        });
+        await dependencies.db.emailThread.updateMany({
+          where: { id: existing.threadId, officeId: account.officeId },
+          data: {
+            hiddenAt: dependencies.now(),
+            autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER,
+          },
+        });
+      }
+      touchedThreadIds.add(existing.threadId);
+      continue;
+    }
+
     const body = (parsed.text || "").trim().slice(0, 50_000);
     const direction = fromEmail === account.email.toLowerCase() ? "OUTBOUND" : "INBOUND";
-    const sentAt = validDate(parsed.date, validDate(message.internalDate, new Date()));
+    const sentAt = validDate(parsed.date, validDate(message.internalDate, dependencies.now()));
     const threadExternalId = imapThreadExternalId({
       accountId: account.id,
       messageId: parsed.messageId,
@@ -139,13 +218,15 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       subject,
     });
 
-    let classification: string | null = null;
-    let classificationReason: string | null = null;
+    let classification: string | null = demoMessage ? DEMO_EMAIL_CLASSIFICATION : null;
+    let classificationReason: string | null = demoMessage
+      ? "Protected test-only connected email capability message."
+      : null;
     let jobId: string | null = null;
     let inquiryId: string | null = null;
-    if (direction === "INBOUND") {
+    if (direction === "INBOUND" && !input.skipClassification && !demoMessage) {
       try {
-        const result = await classifyInboundEmail({
+        const result = await dependencies.classifyInbound({
           subject,
           fromEmail,
           bodyText: body,
@@ -160,11 +241,11 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       }
     }
 
-    let thread = await prisma.emailThread.findFirst({
+    let thread = await dependencies.db.emailThread.findFirst({
       where: { officeId: account.officeId, externalThreadId: threadExternalId },
     });
     if (!thread) {
-      thread = await prisma.emailThread.create({
+      thread = await dependencies.db.emailThread.create({
         data: {
           officeId: account.officeId,
           subject,
@@ -173,10 +254,20 @@ export async function syncGmailAppPasswordAccountInternal(input: {
           jobId,
           inquiryId,
           lastMessageAt: sentAt,
+          hiddenAt: demoMessage ? dependencies.now() : null,
+          autoLinkSkipReason: demoMessage ? DEMO_EMAIL_THREAD_MARKER : null,
+        },
+      });
+    } else if (demoMessage) {
+      await dependencies.db.emailThread.updateMany({
+        where: { id: thread.id, officeId: account.officeId },
+        data: {
+          hiddenAt: dependencies.now(),
+          autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER,
         },
       });
     } else if (!thread.jobId && !thread.inquiryId && (jobId || inquiryId)) {
-      await prisma.emailThread.updateMany({
+      await dependencies.db.emailThread.updateMany({
         where: { id: thread.id, officeId: account.officeId },
         data: { jobId, inquiryId },
       });
@@ -189,12 +280,12 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       mimeType: attachment.mimeType,
       size: attachmentSize(attachment.content),
     }));
-    const createdMessage = await prisma.emailMessage.create({
+    const createdMessage = await dependencies.db.emailMessage.create({
       data: {
         threadId: thread.id,
         accountId: account.id,
         externalId,
-        rfcMessageId: parsed.messageId?.trim() || null,
+        rfcMessageId: parsedMessageId,
         direction,
         fromEmail,
         fromName: from?.name?.trim() || null,
@@ -206,11 +297,11 @@ export async function syncGmailAppPasswordAccountInternal(input: {
         sentAt,
         classification,
         classificationReason,
-        classificationAt: classification ? new Date() : null,
+        classificationAt: classification ? dependencies.now() : null,
       },
     });
 
-    await prisma.emailThread.updateMany({
+    await dependencies.db.emailThread.updateMany({
       where: { id: thread.id, officeId: account.officeId },
       data: { lastMessageAt: sentAt, messageCount: { increment: 1 } },
     });
@@ -237,84 +328,88 @@ export async function syncGmailAppPasswordAccountInternal(input: {
       workflowLabels,
       attachments,
     };
-    const memoryObject = await ingestKnowledgeObject({
-      officeId: account.officeId,
-      sourceType: "GMAIL",
-      sourceExternalId,
-      sourceLabel: account.email,
-      sourceMetadata: { accountId: account.id, provider: GMAIL_APP_PASSWORD_PROVIDER },
-      canonicalType: "email_message",
-      title: subject,
-      text: [subject, fromEmail, from?.name, body.slice(0, 8_000)].filter(Boolean).join("\n"),
-      entityType: "email_message",
-      entityId: createdMessage.id,
-      jobId: thread.jobId,
-      inquiryId: thread.inquiryId,
-      emailThreadId: thread.id,
-      emailMessageId: createdMessage.id,
-      occurredAt: sentAt,
-      payload,
-      provenance: {
-        source: "gmail_imap",
-        operation: "message_ingest",
-        path: "src/lib/imap-sync.ts",
-        function: "syncGmailAppPasswordAccountInternal",
-        sourceRecordId: createdMessage.id,
-        sourceExternalId: externalId,
-      },
-    }).catch(() => null);
-    await recordMemoryEvent({
-      officeId: account.officeId,
-      sourceType: "GMAIL",
-      sourceExternalId,
-      sourceLabel: account.email,
-      sourceMetadata: { accountId: account.id, provider: GMAIL_APP_PASSWORD_PROVIDER },
-      objectId: memoryObject?.id ?? null,
-      eventType: "gmail_imap.message.ingested",
-      entityType: "email_message",
-      entityId: createdMessage.id,
-      occurredAt: sentAt,
-      payloadVersion: 1,
-      payload,
-      provenance: {
-        source: "gmail_imap",
-        operation: "message_ingest",
-        path: "src/lib/imap-sync.ts",
-        function: "syncGmailAppPasswordAccountInternal",
-        sourceRecordId: createdMessage.id,
-        sourceExternalId: externalId,
-      },
-      idempotencyKey: `gmail-imap:message:${createdMessage.id}:ingested`,
-    }).catch(() => null);
-    await logEmailTouch({
-      officeId: account.officeId,
-      threadId: thread.id,
-      messageId: createdMessage.id,
-      direction,
-      fromEmail,
-      toEmails: to,
-      subject,
-      snippet: body || null,
-      sentAt,
-    });
+    if (!demoMessage) {
+      const memoryObject = await dependencies.ingestMemory({
+        officeId: account.officeId,
+        sourceType: "GMAIL",
+        sourceExternalId,
+        sourceLabel: account.email,
+        sourceMetadata: { accountId: account.id, provider: GMAIL_APP_PASSWORD_PROVIDER },
+        canonicalType: "email_message",
+        title: subject,
+        text: [subject, fromEmail, from?.name, body.slice(0, 8_000)].filter(Boolean).join("\n"),
+        entityType: "email_message",
+        entityId: createdMessage.id,
+        jobId: thread.jobId,
+        inquiryId: thread.inquiryId,
+        emailThreadId: thread.id,
+        emailMessageId: createdMessage.id,
+        occurredAt: sentAt,
+        payload,
+        provenance: {
+          source: "gmail_imap",
+          operation: "message_ingest",
+          path: "src/lib/imap-sync.ts",
+          function: "syncGmailAppPasswordAccountInternal",
+          sourceRecordId: createdMessage.id,
+          sourceExternalId: externalId,
+        },
+      }).catch(() => null);
+      await dependencies.recordMemory({
+        officeId: account.officeId,
+        sourceType: "GMAIL",
+        sourceExternalId,
+        sourceLabel: account.email,
+        sourceMetadata: { accountId: account.id, provider: GMAIL_APP_PASSWORD_PROVIDER },
+        objectId: memoryObject?.id ?? null,
+        eventType: "gmail_imap.message.ingested",
+        entityType: "email_message",
+        entityId: createdMessage.id,
+        occurredAt: sentAt,
+        payloadVersion: 1,
+        payload,
+        provenance: {
+          source: "gmail_imap",
+          operation: "message_ingest",
+          path: "src/lib/imap-sync.ts",
+          function: "syncGmailAppPasswordAccountInternal",
+          sourceRecordId: createdMessage.id,
+          sourceExternalId: externalId,
+        },
+        idempotencyKey: `gmail-imap:message:${createdMessage.id}:ingested`,
+      }).catch(() => null);
+      await dependencies.logTouch({
+        officeId: account.officeId,
+        threadId: thread.id,
+        messageId: createdMessage.id,
+        direction,
+        fromEmail,
+        toEmails: to,
+        subject,
+        snippet: body || null,
+        sentAt,
+      });
+    }
   }
 
-  await prisma.emailAccount.updateMany({
-    where: { id: account.id, officeId: account.officeId },
-    data: { lastSyncAt: new Date() },
-  });
-  await enqueueBackgroundJob({
-    officeId: account.officeId,
-    type: "PREWARM_OPEN_SOURCING",
-    payload: { officeId: account.officeId },
-    dedupeKey: `prewarm-open-sourcing:${account.officeId}`,
-  }).catch(() => null);
+  if (!input.demoObservation && (messages.length === 0 || operationalMessages > 0)) {
+    await dependencies.db.emailAccount.updateMany({
+      where: { id: account.id, officeId: account.officeId },
+      data: { lastSyncAt: dependencies.now() },
+    });
+    await dependencies.enqueueJob({
+      officeId: account.officeId,
+      type: "PREWARM_OPEN_SOURCING",
+      payload: { officeId: account.officeId },
+      dedupeKey: `prewarm-open-sourcing:${account.officeId}`,
+    }).catch(() => null);
+  }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/rfq");
-  revalidatePath("/dashboard/inbox");
-  revalidatePath("/dashboard/jobs");
-  revalidatePath("/dashboard/settings/email");
+  dependencies.revalidate("/dashboard");
+  dependencies.revalidate("/dashboard/rfq");
+  dependencies.revalidate("/dashboard/inbox");
+  dependencies.revalidate("/dashboard/jobs");
+  dependencies.revalidate("/dashboard/settings/email");
   return {
     ok: true,
     processed,

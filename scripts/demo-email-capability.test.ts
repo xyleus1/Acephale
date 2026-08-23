@@ -1,0 +1,94 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const root = process.cwd();
+const read = (relativePath: string) => readFileSync(join(root, relativePath), "utf8");
+const runner = read("src/lib/demo-email-capability.ts");
+const jobs = read("src/lib/background-jobs.ts");
+const route = read("src/app/api/admin/demo-email-capability/route.ts");
+const trigger = read("src/lib/demo-email-trigger.ts");
+const workflow = read(".github/workflows/production-demo-email-capability.yml");
+const gmailSync = read("src/lib/gmail-sync.ts");
+const imapSync = read("src/lib/imap-sync.ts");
+const markers = read("src/lib/email-demo-markers.ts");
+const memoryBackfill = read("src/lib/memory/backfill.ts");
+const agentTools = read("src/lib/agent-tools.ts");
+
+assert.match(jobs, /"DEMO_EMAIL_CAPABILITY_TEST"/);
+assert.match(jobs, /runDemoEmailCapabilityJob/);
+assert.match(jobs, /runBackgroundJobById/);
+assert.match(jobs, /type: \{ not: "DEMO_EMAIL_CAPABILITY_TEST" \}/);
+assert.match(route, /executeDemoEmailTrigger/);
+assert.match(trigger, /timingSafeEqual/);
+assert.match(trigger, /job\.status !== "QUEUED"/);
+assert.match(trigger, /expectedType: "DEMO_EMAIL_CAPABILITY_TEST"/);
+assert.match(route, /maxDuration = 300/);
+
+assert.match(runner, /accountIds\.length !== 6/);
+assert.match(runner, /officeId: input\.officeId/);
+assert.match(runner, /provider: GMAIL_APP_PASSWORD_PROVIDER/);
+assert.match(runner, /credentialSecret: \{ not: null \}/);
+assert.match(runner, /const pairPlans = \[0, 1, 2\]/);
+assert.match(runner, /Promise\.all\(pairPlans\.map/);
+assert.match(runner, /skipClassification: true/);
+assert.match(runner, /demoObservation: true/);
+assert.match(runner, /DEMO_EMAIL_PLAN_APPROVED/);
+assert.match(runner, /DEMO_EMAIL_DELIVERY_\$\{input\.status\}/);
+assert.match(runner, /messageId: intendedMessageId/);
+assert.match(runner, /must be reconciled before another send/);
+assert.match(runner, /approvalContext: payload\.approvalContext/);
+assert.match(runner, /VERCEL_GIT_COMMIT_SHA/);
+assert.match(runner, /deployedCommitSha !== payload\.approvalContext\.sha/);
+assert.match(runner, /autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER/);
+assert.match(runner, /classification: DEMO_EMAIL_CLASSIFICATION/);
+assert.doesNotMatch(runner, /supplyWorkspaceMember/);
+assert.doesNotMatch(runner, /db\.user\.findFirst/);
+assert.match(gmailSync, /skipClassification\?: boolean/);
+assert.match(gmailSync, /demoObservation\?: boolean/);
+assert.match(imapSync, /direction === "INBOUND" && !input\.skipClassification && !demoMessage/);
+assert.match(imapSync, /if \(!input\.demoObservation && \(messages\.length === 0 \|\| operationalMessages > 0\)\)/);
+assert.match(imapSync, /isDemoEmailMessageId\(parsedMessageId\)/);
+assert.match(imapSync, /payload: \{ path: \["intendedMessageId"\], equals: parsedMessageId \}/);
+assert.match(imapSync, /planned\.receiverAccountId === account\.id/);
+assert.match(imapSync, /autoLinkSkipReason: demoMessage \? DEMO_EMAIL_THREAD_MARKER : null/);
+assert.match(markers, /DEMO_TEST_ONLY/);
+assert.match(memoryBackfill, /NOT: \{ autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER \}/);
+assert.match(agentTools, /NOT: \{ autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER \}/);
+assert.match(runner, /DEMO_PROCUREMENT_EMAIL_CONVERSATION/);
+assert.match(runner, /HypnoDreamz Email Capability Demo/);
+assert.match(runner, /No real supplier/);
+assert.match(runner, /purchaseCreated: false/);
+assert.match(runner, /spendAuthorized: false/);
+assert.match(runner, /Explicit operator approval through the protected production demo workflow/);
+assert.doesNotMatch(runner, /data: \{ isDefaultSender: true \}/);
+assert.doesNotMatch(runner, /createPurchase|approvePurchase|releasePurchase|placeOrder/);
+
+assert.match(workflow, /^on:\n  workflow_dispatch:/m);
+assert.doesNotMatch(workflow, /^  (push|pull_request|schedule):/m);
+assert.match(workflow, /permissions:\n  contents: read/);
+assert.match(workflow, /environment:\n      name: Production/);
+assert.match(workflow, /RUN_DEMO_EMAIL_CAPABILITY_TEST/);
+assert.match(workflow, /ep-summer-cake-audzi8ve\.c-10\.us-east-1\.aws\.neon\.tech/);
+assert.match(workflow, /neondb\|neondb_owner/);
+assert.match(workflow, /secrets\.WORKFLOW_DATABASE_OWNER_URL/);
+assert.match(workflow, /HAVING count\(\*\) = 6/);
+assert.match(workflow, /"Company"\.name = .*HypnoDreamz/);
+assert.match(workflow, /"maxAttempts"/);
+assert.match(workflow, /0, 1, now\(\), now\(\), now\(\)/);
+assert.match(workflow, /::add-mask::\$trigger_token/);
+assert.match(workflow, /GITHUB_ACTOR/);
+assert.match(workflow, /GITHUB_RUN_ID/);
+assert.match(workflow, /GITHUB_SHA/);
+assert.match(workflow, /https:\/\/app\.derya\.ai/);
+assert.doesNotMatch(workflow, /jsonb_pretty\(payload->/);
+assert.doesNotMatch(workflow, /echo[^\n]*WORKFLOW_DATABASE_OWNER_URL/);
+assert.doesNotMatch(workflow, /credentialSecret"\s*[,)]/);
+
+const changedSources = [runner, jobs, route, trigger, workflow, markers, memoryBackfill, agentTools];
+for (const source of changedSources) {
+  assert.equal(source.includes("\u2014"), false, "Demo email capability files must not contain U+2014");
+  assert.doesNotMatch(source, /devtonic\.co|revopt\.co|outfitx\.co|opsyfy\.co|verifyqual\.co/);
+}
+
+console.log("demo email capability contracts passed");

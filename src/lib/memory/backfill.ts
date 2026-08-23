@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { DEMO_EMAIL_THREAD_MARKER } from "@/lib/email-demo-markers";
 import { ingestKnowledgeObject, type EntityReference } from "./ingest-object";
 import { recordMemoryEvent } from "./record-event";
 import { assertCanonicalType } from "./canonical-types";
@@ -385,7 +386,7 @@ export async function backfillCompanyBrainMemory(input: BackfillCompanyBrainInpu
   }
 
   const threads = await prisma.emailThread.findMany({
-    where: officeWhere,
+    where: { ...officeWhere, NOT: { autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER } },
     orderBy: { updatedAt: "desc" },
     take: rowTake,
   });
@@ -450,7 +451,12 @@ export async function backfillCompanyBrainMemory(input: BackfillCompanyBrainInpu
   }
 
   const messages = await prisma.emailMessage.findMany({
-    where: input.officeId ? { thread: { officeId: input.officeId } } : {},
+    where: {
+      thread: {
+        ...(input.officeId ? { officeId: input.officeId } : {}),
+        NOT: { autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER },
+      },
+    },
     orderBy: { sentAt: "desc" },
     take: rowTake,
     include: {

@@ -5,6 +5,7 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
+import { DEMO_EMAIL_THREAD_MARKER } from "./email-demo-markers";
 import { draftReplyToMessage, draftCounterOffer } from "./sourcing-award";
 import { extractSourcingOffersForInquiry } from "./sourcing-offers";
 import { findStuckJobs } from "./stuck-jobs";
@@ -2323,6 +2324,8 @@ export async function dispatchTool(
         const rows = await prisma.emailThread.findMany({
           where: {
             officeId: ctx.officeId,
+            hiddenAt: null,
+            NOT: { autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER },
             ...(input.only_unlinked ? { jobId: null, inquiryId: null } : {}),
             OR: [
               { subject: { contains: q, mode: "insensitive" } },

@@ -1,0 +1,270 @@
+name: Production connected email capability demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RUN_DEMO_EMAIL_CAPABILITY_TEST
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-demo-email-capability
+  cancel-in-progress: false
+
+jobs:
+  run-demo:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: Production
+    env:
+      REQUEST_CONFIRMATION: ${{ inputs.confirmation }}
+      PRODUCTION_APP_URL: https://app.derya.ai
+      PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=120000 -c idle_in_transaction_session_timeout=120000
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate demo request
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$REQUEST_CONFIRMATION" != "RUN_DEMO_EMAIL_CAPABILITY_TEST" ]]; then
+            echo "The confirmation phrase is incorrect." >&2
+            exit 1
+          fi
+          git ls-files --error-unmatch src/lib/demo-email-capability.ts >/dev/null
+          git ls-files --error-unmatch src/app/api/admin/demo-email-capability/route.ts >/dev/null
+
+      - name: Verify exact production database target
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null
+          database_host="$(
+            DATABASE_URL="$WORKFLOW_DATABASE_OWNER_URL" node --input-type=module --eval='
+              const value = process.env.DATABASE_URL;
+              if (!value) process.exit(1);
+              process.stdout.write(new URL(value).hostname);
+            '
+          )"
+          if [[ "$database_host" != "ep-summer-cake-audzi8ve.c-10.us-east-1.aws.neon.tech" ]]; then
+            echo "Refusing to run against an unexpected Neon endpoint." >&2
+            exit 1
+          fi
+          database_identity="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --field-separator='|' \
+              --command='SELECT current_database(), session_user;'
+          )"
+          if [[ "$database_identity" != "neondb|neondb_owner" ]]; then
+            echo "Refusing to run against an unexpected database or role." >&2
+            exit 1
+          fi
+          echo "Verified the pinned production database and owner role."
+
+      - name: Enqueue and run the bounded demo
+        id: enqueue
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          eligible_office_count="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --command='
+                SELECT count(*)
+                FROM (
+                  SELECT "officeId"
+                  FROM "EmailAccount"
+                  WHERE provider = '\''GMAIL_APP_PASSWORD'\''
+                    AND "credentialSecret" IS NOT NULL
+                    AND "isActive" = true
+                    AND "sendEnabled" = true
+                    AND EXISTS (
+                      SELECT 1
+                      FROM "Company"
+                      WHERE "Company"."officeId" = "EmailAccount"."officeId"
+                        AND "Company".name = '\''HypnoDreamz'\''
+                    )
+                  GROUP BY "officeId"
+                  HAVING count(*) = 6
+                ) eligible;
+              '
+          )"
+          if [[ "$eligible_office_count" != "1" ]]; then
+            echo "Expected exactly one HypnoDreamz office with exactly six eligible Gmail app-password accounts." >&2
+            exit 1
+          fi
+
+          office_id="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --command='
+                SELECT "officeId"
+                FROM "EmailAccount"
+                WHERE provider = '\''GMAIL_APP_PASSWORD'\''
+                  AND "credentialSecret" IS NOT NULL
+                  AND "isActive" = true
+                  AND "sendEnabled" = true
+                  AND EXISTS (
+                    SELECT 1
+                    FROM "Company"
+                    WHERE "Company"."officeId" = "EmailAccount"."officeId"
+                      AND "Company".name = '\''HypnoDreamz'\''
+                  )
+                GROUP BY "officeId"
+                HAVING count(*) = 6;
+              '
+          )"
+          account_ids="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --set=office_id="$office_id" \
+              --command='
+                SELECT json_agg(id ORDER BY "createdAt", email)::text
+                FROM "EmailAccount"
+                WHERE "officeId" = :'\''office_id'\''
+                  AND provider = '\''GMAIL_APP_PASSWORD'\''
+                  AND "credentialSecret" IS NOT NULL
+                  AND "isActive" = true
+                  AND "sendEnabled" = true;
+              '
+          )"
+          run_id="$(node --input-type=module --eval='import { randomUUID } from "node:crypto"; process.stdout.write(randomUUID().replaceAll("-", ""));')"
+          job_id="demo-email-capability-$run_id"
+          run_key="email-demo-$run_id"
+          trigger_token="$(node --input-type=module --eval='import { randomBytes } from "node:crypto"; process.stdout.write(randomBytes(32).toString("hex"));')"
+          trigger_hash="$(TRIGGER_TOKEN="$trigger_token" node --input-type=module --eval='import { createHash } from "node:crypto"; process.stdout.write(createHash("sha256").update(process.env.TRIGGER_TOKEN).digest("hex"));')"
+          echo "::add-mask::$trigger_token"
+
+          inserted="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --quiet \
+              --set=job_id="$job_id" \
+              --set=office_id="$office_id" \
+              --set=account_ids="$account_ids" \
+              --set=run_key="$run_key" \
+              --set=trigger_hash="$trigger_hash" \
+              --set=workflow_actor="$GITHUB_ACTOR" \
+              --set=workflow_run_id="$GITHUB_RUN_ID" \
+              --set=workflow_run_attempt="$GITHUB_RUN_ATTEMPT" \
+              --set=workflow_ref="$GITHUB_REF" \
+              --set=workflow_sha="$GITHUB_SHA" \
+              --command='
+                INSERT INTO "BackgroundJob" (
+                  id, "officeId", type, status, payload, "dedupeKey", attempts,
+                  "maxAttempts", "runAfter", "createdAt", "updatedAt"
+                ) VALUES (
+                  :'\''job_id'\'', :'\''office_id'\'', '\''DEMO_EMAIL_CAPABILITY_TEST'\'', '\''QUEUED'\'',
+                  jsonb_build_object(
+                    '\''accountIds'\'', :'\''account_ids'\''::jsonb,
+                    '\''runKey'\'', :'\''run_key'\'',
+                    '\''triggerTokenHash'\'', :'\''trigger_hash'\'',
+                    '\''approvalContext'\'', jsonb_build_object(
+                      '\''actor'\'', :'\''workflow_actor'\'',
+                      '\''runId'\'', :'\''workflow_run_id'\'',
+                      '\''runAttempt'\'', :'\''workflow_run_attempt'\'',
+                      '\''ref'\'', :'\''workflow_ref'\'',
+                      '\''sha'\'', :'\''workflow_sha'\''
+                    ),
+                    '\''testOnly'\'', true
+                  ),
+                  :'\''run_key'\'', 0, 1, now(), now(), now()
+                )
+                RETURNING id;
+              '
+          )"
+          if [[ "$inserted" != "$job_id" ]]; then
+            echo "The demo background job was not created exactly once." >&2
+            exit 1
+          fi
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
+          echo "Queued one test-only run for six connected accounts."
+
+          request_body="$(jq -n --arg jobId "$job_id" --arg token "$trigger_token" '{jobId: $jobId, token: $token}')"
+          http_status="$(
+            curl \
+              --silent \
+              --show-error \
+              --output demo-response.json \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header 'content-type: application/json' \
+              --max-time 300 \
+              --data "$request_body" \
+              "$PRODUCTION_APP_URL/api/admin/demo-email-capability"
+          )"
+          jq '{accepted, outcome, status, error}' demo-response.json || true
+          if [[ ! "$http_status" =~ ^2 ]]; then
+            echo "The deployed demo endpoint returned HTTP $http_status." >&2
+            exit 1
+          fi
+
+      - name: Print the stored demo result
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+          JOB_ID: ${{ steps.enqueue.outputs.job_id }}
+        run: |
+          set -euo pipefail
+          status="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --set=job_id="$JOB_ID" \
+              --command='SELECT status FROM "BackgroundJob" WHERE id = :'\''job_id'\'';'
+          )"
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --field-separator='|' \
+            --set=job_id="$JOB_ID" \
+            --command='
+              SELECT
+                status,
+                payload #>> '\''{result,accountCount}'\'',
+                payload #>> '\''{result,passed}'\'',
+                payload #>> '\''{result,failed}'\'',
+                payload #>> '\''{result,completedAt}'\''
+              FROM "BackgroundJob"
+              WHERE id = :'\''job_id'\'';
+            '
+          if [[ "$status" != "DONE" ]]; then
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --set=job_id="$JOB_ID" \
+              --command='SELECT status, "lastError" FROM "BackgroundJob" WHERE id = :'\''job_id'\'';'
+            exit 1
+          fi

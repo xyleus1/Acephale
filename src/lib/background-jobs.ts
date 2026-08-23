@@ -1,9 +1,6 @@
 import "server-only";
 import type { BackgroundJob, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
-import { analyzeJobDocument } from "./doc-analyze";
-import { prewarmAllOpenInquiries, prewarmInquirySummary } from "./prewarm-summary";
-import { maybeNotifyCustomerOnMilestone, maybeNotifyCustomerOnStatusChange } from "./customer-notify";
 
 type BackgroundJobType =
   | "ANALYZE_JOB_DOCUMENT"
@@ -11,7 +8,8 @@ type BackgroundJobType =
   | "PREWARM_OPEN_SOURCING"
   | "PREWARM_INQUIRY_SUMMARY"
   | "CUSTOMER_STATUS_NOTIFY"
-  | "CUSTOMER_MILESTONE_NOTIFY";
+  | "CUSTOMER_MILESTONE_NOTIFY"
+  | "DEMO_EMAIL_CAPABILITY_TEST";
 
 type EnqueueInput = {
   officeId: string;
@@ -72,8 +70,11 @@ export async function enqueueBackgroundJob(input: EnqueueInput) {
   });
 }
 
-async function executeBackgroundJob(type: string, payload: Record<string, unknown>) {
+async function executeBackgroundJob(job: BackgroundJob) {
+  const type = job.type;
+  const payload = asRecord(job.payload);
   if (type === "ANALYZE_JOB_DOCUMENT") {
+    const { analyzeJobDocument } = await import("./doc-analyze");
     const documentId = stringValue(payload.documentId);
     if (!documentId) throw new Error("Missing documentId.");
     await analyzeJobDocument({ documentId, force: booleanValue(payload.force) });
@@ -98,6 +99,7 @@ async function executeBackgroundJob(type: string, payload: Record<string, unknow
   }
 
   if (type === "PREWARM_OPEN_SOURCING") {
+    const { prewarmAllOpenInquiries } = await import("./prewarm-summary");
     const officeId = stringValue(payload.officeId);
     if (!officeId) throw new Error("Missing officeId.");
     await prewarmAllOpenInquiries(officeId);
@@ -105,6 +107,7 @@ async function executeBackgroundJob(type: string, payload: Record<string, unknow
   }
 
   if (type === "PREWARM_INQUIRY_SUMMARY") {
+    const { prewarmInquirySummary } = await import("./prewarm-summary");
     const inquiryId = stringValue(payload.inquiryId);
     if (!inquiryId) throw new Error("Missing inquiryId.");
     await prewarmInquirySummary(inquiryId);
@@ -112,6 +115,7 @@ async function executeBackgroundJob(type: string, payload: Record<string, unknow
   }
 
   if (type === "CUSTOMER_STATUS_NOTIFY") {
+    const { maybeNotifyCustomerOnStatusChange } = await import("./customer-notify");
     const jobId = stringValue(payload.jobId);
     const fromStatus = stringValue(payload.fromStatus);
     const toStatus = stringValue(payload.toStatus);
@@ -121,6 +125,7 @@ async function executeBackgroundJob(type: string, payload: Record<string, unknow
   }
 
   if (type === "CUSTOMER_MILESTONE_NOTIFY") {
+    const { maybeNotifyCustomerOnMilestone } = await import("./customer-notify");
     const jobId = stringValue(payload.jobId);
     const milestoneType = stringValue(payload.milestoneType);
     const isActual = booleanValue(payload.isActual);
@@ -129,7 +134,93 @@ async function executeBackgroundJob(type: string, payload: Record<string, unknow
     return;
   }
 
+  if (type === "DEMO_EMAIL_CAPABILITY_TEST") {
+    const { runDemoEmailCapabilityJob } = await import("./demo-email-capability");
+    await runDemoEmailCapabilityJob({
+      backgroundJobId: job.id,
+      officeId: job.officeId,
+      payload: job.payload,
+    });
+    return;
+  }
+
   throw new Error(`Unknown background job type: ${type}`);
+}
+
+type RunOneResult = "completed" | "failed" | "retried" | "skipped";
+
+export type BackgroundJobExecutionDependencies = {
+  updateMany: typeof prisma.backgroundJob.updateMany;
+  execute: (job: BackgroundJob) => Promise<void>;
+  now: () => Date;
+};
+
+const defaultExecutionDependencies: BackgroundJobExecutionDependencies = {
+  updateMany: (args) => prisma.backgroundJob.updateMany(args),
+  execute: executeBackgroundJob,
+  now: () => new Date(),
+};
+
+export async function runOneBackgroundJob(
+  job: BackgroundJob,
+  dependencies: BackgroundJobExecutionDependencies = defaultExecutionDependencies,
+): Promise<RunOneResult> {
+  const claimedAt = dependencies.now();
+  const claimed = await dependencies.updateMany({
+    where: { id: job.id, officeId: job.officeId, status: "QUEUED" },
+    data: {
+      status: "RUNNING",
+      attempts: { increment: 1 },
+      lockedAt: claimedAt,
+      startedAt: claimedAt,
+      lastError: null,
+    },
+  });
+  if (claimed.count !== 1) return "skipped";
+
+  const attempt = job.attempts + 1;
+  try {
+    await dependencies.execute(job);
+    await dependencies.updateMany({
+      where: { id: job.id, officeId: job.officeId },
+      data: {
+        status: "DONE",
+        completedAt: dependencies.now(),
+        lockedAt: null,
+        lastError: null,
+      },
+    });
+    return "completed";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const exhausted = attempt >= job.maxAttempts;
+    const failedAt = dependencies.now();
+    await dependencies.updateMany({
+      where: { id: job.id, officeId: job.officeId },
+      data: {
+        status: exhausted ? "FAILED" : "QUEUED",
+        runAfter: exhausted
+          ? job.runAfter
+          : new Date(failedAt.getTime() + Math.min(60, attempt * attempt * 5) * 60_000),
+        lockedAt: null,
+        failedAt: exhausted ? failedAt : null,
+        lastError: message.slice(0, 1000),
+      },
+    });
+    return exhausted ? "failed" : "retried";
+  }
+}
+
+export async function runBackgroundJobById(input: {
+  jobId: string;
+  expectedType: BackgroundJobType;
+}) {
+  const job = await prisma.backgroundJob.findUnique({ where: { id: input.jobId } });
+  if (!job || job.type !== input.expectedType) {
+    return { found: false as const, outcome: "skipped" as const };
+  }
+  const outcome = await runOneBackgroundJob(job);
+  return { found: true as const, outcome };
 }
 
 export async function runDueBackgroundJobs(input: { limit?: number } = {}): Promise<RunResult> {
@@ -144,6 +235,7 @@ export async function runDueBackgroundJobs(input: { limit?: number } = {}): Prom
         officeId: office.id,
         status: "QUEUED",
         runAfter: { lte: now },
+        type: { not: "DEMO_EMAIL_CAPABILITY_TEST" },
       },
       orderBy: { runAfter: "asc" },
       take: limit - jobs.length,
@@ -154,50 +246,11 @@ export async function runDueBackgroundJobs(input: { limit?: number } = {}): Prom
   const result: RunResult = { scanned: jobs.length, completed: 0, failed: 0, retried: 0, skipped: 0 };
 
   for (const job of jobs) {
-    const claimed = await prisma.backgroundJob.updateMany({
-      where: { id: job.id, officeId: job.officeId, status: "QUEUED" },
-      data: {
-        status: "RUNNING",
-        attempts: { increment: 1 },
-        lockedAt: new Date(),
-        startedAt: new Date(),
-        lastError: null,
-      },
-    });
-    if (claimed.count !== 1) {
-      result.skipped++;
-      continue;
-    }
-
-    const attempt = job.attempts + 1;
-    try {
-      await executeBackgroundJob(job.type, asRecord(job.payload));
-      await prisma.backgroundJob.updateMany({
-        where: { id: job.id, officeId: job.officeId },
-        data: {
-          status: "DONE",
-          completedAt: new Date(),
-          lockedAt: null,
-          lastError: null,
-        },
-      });
-      result.completed++;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const exhausted = attempt >= job.maxAttempts;
-      await prisma.backgroundJob.updateMany({
-        where: { id: job.id, officeId: job.officeId },
-        data: {
-          status: exhausted ? "FAILED" : "QUEUED",
-          runAfter: exhausted ? job.runAfter : new Date(Date.now() + Math.min(60, attempt * attempt * 5) * 60_000),
-          lockedAt: null,
-          failedAt: exhausted ? new Date() : null,
-          lastError: message.slice(0, 1000),
-        },
-      });
-      if (exhausted) result.failed++;
-      else result.retried++;
-    }
+    const outcome = await runOneBackgroundJob(job);
+    if (outcome === "completed") result.completed++;
+    else if (outcome === "failed") result.failed++;
+    else if (outcome === "retried") result.retried++;
+    else result.skipped++;
   }
 
   return result;

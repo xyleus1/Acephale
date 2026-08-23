@@ -10246,3 +10246,42 @@ Verification caveat:
   Derya API and rendered them in the Dreamz sourcing comparison. A
   `bourne_supply_chain` insert populated canonical email fields in a rolled-back
   transaction; no supplier or order-vendor probe rows remain.
+
+## 2026-08-23: Add a protected connected-email capability demo
+
+- Added a one-time production test job that selects exactly six active,
+  send-enabled Gmail app-password accounts from one Office without copying or
+  printing their encrypted credentials.
+- The test creates the clearly labeled `HypnoDreamz Email Capability Demo`
+  Company and Supply workspace, runs three paired send-receive-reply checks,
+  and runs one test-only RFQ conversation between two connected accounts.
+- Every message is ingested through the existing IMAP monitor, linked to the
+  demo Company, and recorded in an office-scoped Supply execution task and
+  append-only event ledger. The result explicitly records that no purchase,
+  shipment, or spend was created or authorized.
+- Test-only inbound messages skip normal freight classification so the demo
+  cannot attach itself to a real inquiry or job. Demo observation also avoids
+  CRM touches, memory ingestion, sourcing prewarms, and changes to the normal
+  mailbox sync cursor or default sender. A persistent `DEMO_TEST_ONLY` marker
+  hides these threads from operational inboxes and excludes them from later
+  memory backfills. If normal sync sees a message first, it applies the marker
+  only after matching Message-ID, sender, recipient, and receiving account to a
+  durable planned-delivery event.
+- Production execution is gated by a `main`-only GitHub workflow, the
+  `Production` environment, an exact confirmation phrase, a pinned Neon
+  database check, and a one-time hashed trigger token. The job has one attempt
+  so a partial external send is never automatically repeated. The generic due
+  queue cannot claim this job type, and the exact message plan is recorded
+  before the first SMTP call. Each delivery uses a deterministic Message-ID
+  with planned and acknowledged or uncertain events. Any uncertain delivery
+  blocks another demo until it is reconciled.
+- The audit record stores the approving GitHub actor, run, attempt, main ref,
+  and commit SHA without pretending that a Derya admin initiated the run. The
+  system does not grant or change workspace membership, and GitHub logs expose
+  only counts and status, not mailbox addresses or message bodies. The runner
+  refuses to send unless Vercel reports the exact approved commit SHA.
+- Verification passed: executable demo runner, authorization, and queue-state
+  tests, focused demo-email contracts, Gmail app-password and
+  sync-window contracts, TypeScript, diff hygiene, workflow YAML and shell
+  syntax, and the production Next.js build. Live execution remains pending the
+  merged Vercel deployment.
