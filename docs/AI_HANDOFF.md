@@ -29,12 +29,19 @@ Verification completed:
 - Customer password database authentication and lockout contract
 - Prisma validation and client generation
 - TypeScript
+- Product copy policy and production Next.js build
+- Authenticated production admin and customer login flow
 
 Release status:
 
 - Schema PR #219 merged as `751ff786`. Protected production run `32617721486`
   applied and verified migration `20260822000600_customer_portal_password_auth`.
-- The application release and authenticated production UI test are pending.
+- Application PR #220 merged as `abaf534b`. Vercel production deployment and
+  `/api/health` passed.
+- Authenticated production testing set the existing HypnoDreamz customer
+  account password through admin Settings. A wrong password was rejected, the
+  correct password opened the scoped HypnoDreamz workspace, and both pages had
+  no new console errors. The plaintext password was not written to repo docs.
 
 ### Identify exact supplier replies and draft a safe response
 
