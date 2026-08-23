@@ -38,6 +38,17 @@
 .error { color: #8b4545; }
 .formDivider { display: flex; align-items: center; gap: 12px; margin: 22px 0 18px; color: var(--muted); font-size: 12px; font-weight: 620; }
 .formDivider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
+.bulkForm { display: grid; gap: 12px; }
+.bulkForm label { display: grid; gap: 6px; color: var(--soft); font-size: 12px; font-weight: 620; }
+.bulkForm textarea { width: 100%; min-height: 190px; resize: vertical; padding: 12px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--ink); background: var(--panel); font-family: "IBM Plex Mono", monospace; font-size: 12px; line-height: 1.55; }
+.bulkActions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bulkActions button { min-height: 44px; }
+.bulkResults { display: grid; gap: 0; margin: 4px 0 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; list-style: none; }
+.bulkResults li { min-height: 54px; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr); align-items: center; gap: 16px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.bulkResults li:last-child { border-bottom: 0; }
+.bulkResults strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.bulkResults span { color: #8b4545; font-size: 12px; }
+.bulkResults li[data-ok="true"] span { color: var(--success); }
 .pausedList { display: grid; }
 .pausedRow { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
 .pausedRow:last-child { border-bottom: 0; }
@@ -61,5 +72,6 @@
   .accountActions { justify-content: flex-start; }
   .testForm { grid-template-columns: 1fr; }
   .testActions { flex-wrap: wrap; }
+  .bulkResults li { grid-template-columns: 1fr; gap: 4px; }
   .panelBody, .panelHeader { padding-right: 20px; padding-left: 20px; }
 }

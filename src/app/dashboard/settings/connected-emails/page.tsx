@@ -1,6 +1,7 @@
 import { DisconnectAccountButton } from "@/components/disconnect-account-button";
 import { EmailAccountControls } from "@/components/email-account-controls";
 import { EmailRoundTripTest } from "@/components/email-round-trip-test";
+import { GmailAppPasswordBulkForm } from "@/components/gmail-app-password-bulk-form";
 import { GmailAppPasswordForm } from "@/components/gmail-app-password-form";
 import { ResumeAccountButton } from "@/components/resume-account-button";
 import { SyncAccountButton } from "@/components/sync-account-button";
@@ -159,13 +160,15 @@ export default async function ConnectedEmailsPage() {
 
         <section className={styles.panel} id="add-email">
           <header className={styles.panelHeader}>
-            <div><h2>Add account</h2></div>
+            <div><h2>Add accounts</h2></div>
           </header>
           <div className={styles.panelBody}>
             {oauthConfigured ? (
               <a className="btn btn-secondary" href="/api/auth/gmail/start">Connect Gmail OAuth</a>
             ) : null}
-            <div className={styles.formDivider}><span>Gmail app password</span></div>
+            <div className={styles.formDivider}><span>Bulk Gmail setup</span></div>
+            <GmailAppPasswordBulkForm encryptionConfigured={isSecretEncryptionConfigured()} />
+            <div className={styles.formDivider}><span>Single account</span></div>
             <GmailAppPasswordForm encryptionConfigured={isSecretEncryptionConfigured()} />
           </div>
         </section>
