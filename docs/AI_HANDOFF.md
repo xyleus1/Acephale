@@ -55,7 +55,8 @@ Release status:
   account password through admin Settings. A wrong password was rejected, the
   correct password opened the scoped HypnoDreamz workspace, and both pages had
   no new console errors. The plaintext password was not written to repo docs.
-### Gmail app-password accounts are implemented but not deployed
+
+### Gmail app-password accounts are deployed
 
 - Administrators can add a Gmail mailbox with a display name, email, and fresh
   16-character app password from `/dashboard/settings/email`.
@@ -72,9 +73,12 @@ Release status:
   threading, classifies inbound mail, and records message provenance.
 - The six credentials previously disclosed in chat were not copied into the
   repository or deployment. They must be revoked and regenerated before setup.
-- Migration `20260822000700_gmail_app_password_accounts` is deployed. Deploy
-  this application branch before adding accounts. No Gmail mailbox credential,
-  sender state, message, or Bourne record has been created.
+- Schema PR #223 and protected migration run `32618577033` completed before
+  application PR #225 merged as `8f75062a`. The Vercel production deployment,
+  post-merge database contracts, and `/api/health` passed.
+- The production settings route is live behind authentication. An authenticated
+  rendered check was unavailable in the release session. No Gmail mailbox
+  credential, sender state, message, or Bourne record has been created.
 
 Verification completed:
 
