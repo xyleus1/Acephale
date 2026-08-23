@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import {
@@ -46,10 +47,9 @@ export async function listSupplierSenderAccounts(context: SupplyAccessContext) {
   return prisma.emailAccount.findMany({
     where: {
       officeId: context.officeId,
-      provider: "GMAIL",
       isActive: true,
       sendEnabled: true,
-      OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
+      ...CONNECTED_GMAIL_ACCOUNT_FILTER,
     },
     orderBy: [{ isDefaultSender: "desc" }, { email: "asc" }],
     select: { id: true, email: true, provider: true },
@@ -101,10 +101,9 @@ export async function saveSupplierEmailDraft(args: {
     where: {
       id: draftInput.senderAccountId,
       officeId: args.context.officeId,
-      provider: "GMAIL",
       isActive: true,
       sendEnabled: true,
-      OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
+      ...CONNECTED_GMAIL_ACCOUNT_FILTER,
     },
     select: { id: true, email: true },
   });
@@ -487,7 +486,7 @@ async function finalizeSent(args: {
     } else {
       const thread = await tx.emailThread.create({ data: { officeId: args.context.officeId, subject: requiredText(message.subject, "Stored email subject", 180), participants: JSON.stringify([message.senderEmail, message.recipient]), externalThreadId: args.receipt.providerThreadId, lastMessageAt: now, messageCount: 1 } });
       localThreadId = thread.id;
-      await tx.emailMessage.create({ data: { threadId: thread.id, accountId: requiredText(message.senderAccountId, "Stored sender account", 220), externalId: args.rfcMessageId, gmailMessageId: args.receipt.providerMessageId, direction: "OUTBOUND", fromEmail: requiredText(message.senderEmail, "Stored sender email", 320), toEmails: JSON.stringify([requiredText(message.recipient, "Stored recipient", 320)]), subject: requiredText(message.subject, "Stored email subject", 180), bodyText: messageBody(message.body), sentAt: now } });
+      await tx.emailMessage.create({ data: { threadId: thread.id, accountId: requiredText(message.senderAccountId, "Stored sender account", 220), externalId: args.rfcMessageId, gmailMessageId: args.receipt.providerMessageId, rfcMessageId: args.rfcMessageId, direction: "OUTBOUND", fromEmail: requiredText(message.senderEmail, "Stored sender email", 320), toEmails: JSON.stringify([requiredText(message.recipient, "Stored recipient", 320)]), subject: requiredText(message.subject, "Stored email subject", 180), bodyText: messageBody(message.body), sentAt: now } });
     }
     const evidenceKey = `supplier_quote_release:${quoteCycle.id}:${releaseHash}`;
     const existingEvidence = await tx.supplyEvidence.findUnique({

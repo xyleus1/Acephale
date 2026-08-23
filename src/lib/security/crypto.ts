@@ -23,6 +23,15 @@ function tokenEncryptionKey(): Buffer {
   return key;
 }
 
+export function isSecretEncryptionConfigured() {
+  try {
+    tokenEncryptionKey();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function isEncryptedSecret(value: string | null | undefined): value is string {
   return typeof value === "string" && value.startsWith(ENCRYPTED_SECRET_PREFIX);
 }

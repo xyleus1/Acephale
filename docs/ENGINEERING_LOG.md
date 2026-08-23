@@ -6515,3 +6515,25 @@ Use this file for chronological implementation notes that future agents should s
   read-only production query.
 - Follow-up: Merge this schema release, dispatch the protected production
   migration, then release the administrator connector application separately.
+
+### 2026-08-22 - Add encrypted Gmail app-password accounts
+
+- Branch: `codex/gmail-app-password-accounts`, based on current `origin/main`.
+- Task: Support six demo Google Workspace mailboxes that have app passwords but
+  no mailbox OAuth flow.
+- Implementation: Added an administrator-only setup form, fixed Gmail SMTP and
+  IMAP connection verification, AES-256-GCM credential storage, provider-aware
+  sending and replies, approved Supply OS RFQ delivery, bounded IMAP ingestion,
+  cron participation, activity reporting, and RFC Message-ID threading.
+- Safety: New senders start disabled. Every query remains Office-scoped. The
+  app does not accept arbitrary SMTP or IMAP hosts, show a stored password, or
+  copy credentials into Bourne. Previously disclosed passwords were not used.
+- Verification: Prisma validation and generation, TypeScript, focused Gmail
+  app-password contracts, existing email-account settings, Gmail OAuth, Gmail
+  sync-window contracts, security hardening, the read-only production query,
+  two full disposable PostgreSQL migration applies, and the production build.
+- Release boundary: Schema PR #223 merged as `43ca547c`; protected production
+  run `32618577033` applied and verified the migration. The application code is
+  not deployed. No live mailbox was connected or tested because fresh
+  credentials must be generated outside chat after the disclosed values are
+  revoked.

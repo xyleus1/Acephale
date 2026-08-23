@@ -6,7 +6,8 @@ inbound mail, and controls which accounts may send through Derya.
 
 ## Account states
 
-- Connected: OAuth tokens exist and Gmail monitoring can run.
+- Connected: OAuth tokens or an encrypted Gmail app password exist and
+  monitoring can run.
 - Paused: monitoring is stopped, the account cannot send, and its messages are
   hidden from the active Inbox. Existing records are retained.
 - Sending enabled: approved Derya send paths may use the account.
@@ -53,10 +54,28 @@ TOKEN_ENCRYPTION_KEY
 ```
 
 `GOOGLE_REDIRECT_URI` must match the registered callback exactly.
-`TOKEN_ENCRYPTION_KEY` protects stored OAuth tokens. Do not use a
+`TOKEN_ENCRYPTION_KEY` protects stored OAuth tokens and app passwords. Do not use a
 `NEXT_PUBLIC_` variable for any credential.
 
 Redeploy after changing environment variables.
+
+## Gmail app-password accounts
+
+Use this path when the mailbox has a Google app password but cannot complete
+OAuth.
+
+1. Revoke any password that was shared in chat, a ticket, or source control.
+2. Generate a fresh 16-character Gmail app password.
+3. Open `/dashboard/settings/email` as an `ADMIN` user.
+4. Enter the display name, email, and fresh app password under **Gmail app
+   password**.
+5. Select **Verify and add**. Derya checks both sending and monitoring before
+   storing the encrypted password.
+6. Select **Enable sending**, **Send test**, and **Sync now**.
+
+The Gmail endpoints are fixed to `smtp.gmail.com:587` with required STARTTLS
+and `imap.gmail.com:993` with TLS. Administrators cannot provide an arbitrary
+mail host.
 
 ## Connect and verify an account
 
@@ -104,3 +123,4 @@ Bourne to send a campaign.
 | No refresh token | Reconnect with the Google consent prompt. |
 | Sync returns zero | Send a new message or inspect the last sync time. Existing Gmail message IDs are deduplicated. |
 | Sending disabled | An administrator must enable the account after connection. |
+| App password rejected | Revoke it, generate a fresh Gmail app password, and verify that IMAP access is allowed for the Workspace account. |

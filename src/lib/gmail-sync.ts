@@ -18,6 +18,8 @@ import {
   buildRecentGmailSyncQuery,
   GMAIL_BACKFILL_THREADS_PER_WINDOW,
 } from "./gmail-sync-windows";
+import { GMAIL_APP_PASSWORD_PROVIDER } from "./gmail-app-password";
+import { syncGmailAppPasswordAccountInternal } from "./imap-sync";
 
 // Sync envelope: how many threads max we'll touch in one run, and how far back
 // to look. Each thread is one Gmail API call regardless of how many messages
@@ -126,8 +128,16 @@ export async function syncEmailAccount(accountId: string): Promise<
   | { error: string }
 > {
   const session = await requireEmailAccountAdminSession();
-  const result = await _syncEmailAccountInternal({ accountId, officeId: session.officeId });
+  const account = await prisma.emailAccount.findFirst({
+    where: { id: accountId, officeId: session.officeId, isActive: true },
+    select: { provider: true },
+  });
+  if (!account) return { error: "Active email account not found" };
+  const result = account.provider === GMAIL_APP_PASSWORD_PROVIDER
+    ? await syncGmailAppPasswordAccountInternal({ accountId, officeId: session.officeId })
+    : await _syncEmailAccountInternal({ accountId, officeId: session.officeId });
   if ("error" in result) return result;
+  if (account.provider !== "GMAIL") return result;
   const backfill = await enqueueGmailBackfillJobsForAccount({ accountId, officeId: session.officeId });
   return { ...result, backfillQueued: backfill.queued, backfillSkipped: backfill.skipped };
 }
@@ -138,6 +148,14 @@ export async function syncEmailAccountInternal(accountId: string, officeId: stri
   | GmailSyncResult
   | { error: string }
 > {
+  const account = await prisma.emailAccount.findFirst({
+    where: { id: accountId, officeId, isActive: true },
+    select: { provider: true },
+  });
+  if (!account) return { error: "Active email account not found" };
+  if (account.provider === GMAIL_APP_PASSWORD_PROVIDER) {
+    return syncGmailAppPasswordAccountInternal({ accountId, officeId });
+  }
   return _syncEmailAccountInternal({ accountId, officeId });
 }
 
@@ -150,6 +168,19 @@ export async function syncEmailAccountWindowInternal(input: {
   | GmailSyncResult
   | { error: string }
 > {
+  const account = await prisma.emailAccount.findFirst({
+    where: { id: input.accountId, officeId: input.officeId, isActive: true },
+    select: { provider: true },
+  });
+  if (!account) return { error: "Active email account not found" };
+  if (account.provider === GMAIL_APP_PASSWORD_PROVIDER) {
+    const relatedToMessageId = input.query.match(/rfc822msgid:\s*(.+)$/i)?.[1]?.trim() || null;
+    return syncGmailAppPasswordAccountInternal({
+      accountId: input.accountId,
+      officeId: input.officeId,
+      relatedToMessageId,
+    });
+  }
   return _syncEmailAccountInternal({
     accountId: input.accountId,
     officeId: input.officeId,
@@ -299,6 +330,7 @@ async function _syncEmailAccountInternal({
           accountId: account.id,
           externalId,
           gmailMessageId: msg.id,
+          rfcMessageId: messageIdHdr,
           direction,
           fromEmail,
           fromName,

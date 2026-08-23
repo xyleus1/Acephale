@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   }
 
   const accounts = await prisma.emailAccount.findMany({
-    where: { isActive: true, provider: "GMAIL" },
+    where: { isActive: true, provider: { in: ["GMAIL", "GMAIL_APP_PASSWORD"] } },
     select: { id: true, officeId: true, email: true },
   });
 

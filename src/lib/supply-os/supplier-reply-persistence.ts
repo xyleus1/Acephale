@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
 import { SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import { SUPPLIER_EMAIL_ACTION_TASK_TYPE } from "./supplier-communication-persistence";
@@ -180,9 +181,8 @@ export async function captureConnectedSupplierReplies(args: {
     where: {
       id: senderAccountId,
       officeId: args.context.officeId,
-      provider: "GMAIL",
       isActive: true,
-      OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
+      ...CONNECTED_GMAIL_ACCOUNT_FILTER,
     },
     select: { email: true },
   });
@@ -397,9 +397,8 @@ export async function captureConnectedPurchaseOrderReplies(args: {
     where: {
       id: senderAccountId,
       officeId: accessContext.officeId,
-      provider: "GMAIL",
       isActive: true,
-      OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
+      ...CONNECTED_GMAIL_ACCOUNT_FILTER,
     },
     select: { email: true },
   });

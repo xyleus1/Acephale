@@ -6,6 +6,11 @@ import { prisma } from "./prisma";
 import { requireSession } from "./auth";
 import { getValidAccessToken } from "./gmail-oauth";
 import { logEmailTouch } from "./crm/email-touch";
+import {
+  GMAIL_APP_PASSWORD_PROVIDER,
+  sendGmailAppPasswordMail,
+} from "./gmail-app-password";
+import { imapMessageExternalId, imapThreadExternalId } from "./imap-identifiers";
 
 function encodeGmailRaw(raw: string) {
   return Buffer.from(raw, "utf-8")
@@ -32,7 +37,79 @@ export async function sendNewEmailFromAccount(args: {
     where: { id: args.accountId, officeId: args.officeId, isActive: true, sendEnabled: true },
   });
   if (!account) return { error: "Sender account not found, inactive, or disabled for sending." };
-  if (account.provider !== "GMAIL") return { error: "Only Gmail send is supported." };
+
+  const toAddress = cleanHeader(args.to);
+  const subject = stripEmDashes(cleanHeader(args.subject || "(no subject)"));
+  const body = stripEmDashes(args.body);
+  if (!toAddress) return { error: "Recipient is required." };
+  if (!body.trim()) return { error: "Email body is required." };
+
+  if (account.provider === GMAIL_APP_PASSWORD_PROVIDER) {
+    const sent = await sendGmailAppPasswordMail({
+      account,
+      to: toAddress,
+      subject,
+      text: body,
+    });
+    if (!sent.ok) return { error: sent.error };
+
+    const now = new Date();
+    const externalThreadId = imapThreadExternalId({
+      accountId: account.id,
+      messageId: sent.messageId,
+      subject,
+    });
+    const localThread = await prisma.emailThread.create({
+      data: {
+        officeId: args.officeId,
+        inquiryId: args.inquiryId ?? null,
+        jobId: args.jobId ?? null,
+        subject,
+        participants: JSON.stringify([account.email, toAddress]),
+        externalThreadId,
+        lastMessageAt: now,
+        messageCount: 1,
+      },
+    });
+    const outboundMessage = await prisma.emailMessage.create({
+      data: {
+        threadId: localThread.id,
+        accountId: account.id,
+        externalId: imapMessageExternalId(account.id, sent.messageId, Buffer.from(sent.messageId)),
+        rfcMessageId: sent.messageId || null,
+        direction: "OUTBOUND",
+        fromEmail: account.email,
+        fromName: account.displayName,
+        toEmails: JSON.stringify([toAddress]),
+        subject,
+        bodyText: body,
+        sentAt: now,
+      },
+    });
+    await logEmailTouch({
+      officeId: args.officeId,
+      threadId: localThread.id,
+      messageId: outboundMessage.id,
+      direction: "OUTBOUND",
+      fromEmail: account.email,
+      toEmails: [toAddress],
+      subject,
+      snippet: body,
+      sentAt: now,
+    });
+
+    revalidatePath("/dashboard/inbox");
+    if (args.inquiryId) revalidatePath(`/dashboard/rfq/${args.inquiryId}`);
+    if (args.jobId) revalidatePath(`/dashboard/jobs/${args.jobId}`);
+    return {
+      ok: true,
+      messageId: sent.messageId,
+      threadId: externalThreadId,
+      localThreadId: localThread.id,
+    };
+  }
+
+  if (account.provider !== "GMAIL") return { error: "This email provider cannot send." };
 
   let token: string;
   try {
@@ -41,11 +118,6 @@ export async function sendNewEmailFromAccount(args: {
     return { error: e instanceof Error ? e.message : "token error" };
   }
 
-  const toAddress = cleanHeader(args.to);
-  const subject = stripEmDashes(cleanHeader(args.subject || "(no subject)"));
-  if (!toAddress) return { error: "Recipient is required." };
-  if (!args.body.trim()) return { error: "Email body is required." };
-
   const headers = [
     `From: ${cleanHeader(account.email)}`,
     `To: ${toAddress}`,
@@ -53,7 +125,7 @@ export async function sendNewEmailFromAccount(args: {
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
-  const encoded = encodeGmailRaw(headers.join("\r\n") + "\r\n\r\n" + stripEmDashes(args.body));
+  const encoded = encodeGmailRaw(headers.join("\r\n") + "\r\n\r\n" + body);
 
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
@@ -100,7 +172,7 @@ export async function sendNewEmailFromAccount(args: {
       fromName: null,
       toEmails: JSON.stringify([toAddress]),
       subject,
-      bodyText: args.body,
+      bodyText: body,
       sentAt: now,
     },
   });
@@ -113,7 +185,7 @@ export async function sendNewEmailFromAccount(args: {
     fromEmail: account.email,
     toEmails: [toAddress],
     subject,
-    snippet: args.body,
+    snippet: body,
     sentAt: now,
   });
 
@@ -144,7 +216,6 @@ export async function sendReplyToThread(args: {
     },
   });
   if (!thread) return { error: "Thread not found" };
-  if (!thread.externalThreadId) return { error: "Thread is not linked to a Gmail thread (was it synced?)" };
 
   // Pick the account: the EmailAccount of any message on this thread.
   const acct = thread.messages.find((m) => m.accountId)?.accountId;
@@ -154,64 +225,87 @@ export async function sendReplyToThread(args: {
     where: { id: acct, officeId: session.officeId, isActive: true, sendEnabled: true },
   });
   if (!account) return { error: "Email account not found, inactive, or disabled for sending" };
-  if (account.provider !== "GMAIL") return { error: "Only Gmail send is supported" };
-
-  let token: string;
-  try {
-    token = await getValidAccessToken(account.id);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "token error" };
-  }
 
   // Build To: address. Default to the latest INBOUND sender.
   const lastInbound = [...thread.messages].reverse().find((m) => m.direction === "INBOUND");
-  const toAddress = args.replyTo ?? lastInbound?.fromEmail ?? thread.messages[0]?.fromEmail;
+  const toAddress = cleanHeader(args.replyTo ?? lastInbound?.fromEmail ?? thread.messages[0]?.fromEmail ?? "");
   if (!toAddress) return { error: "Could not determine recipient" };
 
   const baseSubject = args.subject ?? thread.subject ?? "(no subject)";
-  const subject = /^re:/i.test(baseSubject) ? baseSubject : `Re: ${baseSubject}`;
+  const subject = stripEmDashes(cleanHeader(/^re:/i.test(baseSubject) ? baseSubject : `Re: ${baseSubject}`));
+  const body = stripEmDashes(args.body);
+  if (!body.trim()) return { error: "Email body is required" };
 
   // Build References / In-Reply-To from the most recent message that has a Message-ID.
   const refs = thread.messages
-    .filter((m) => m.externalId && m.externalId.startsWith("<"))
-    .map((m) => m.externalId!)
+    .map((message) => message.rfcMessageId || (message.externalId?.startsWith("<") ? message.externalId : null))
+    .filter((messageId): messageId is string => Boolean(messageId))
     .slice(-10);
   const inReplyTo = refs[refs.length - 1] ?? null;
+  let sentMessageId: string;
+  let externalId: string;
+  let gmailMessageId: string | null = null;
+  let rfcMessageId: string | null = null;
 
-  const headers: string[] = [
-    `From: ${account.email}`,
-    `To: ${toAddress}`,
-    `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/plain; charset="UTF-8"`,
-  ];
-  if (inReplyTo) headers.push(`In-Reply-To: ${inReplyTo}`);
-  if (refs.length) headers.push(`References: ${refs.join(" ")}`);
-
-  const raw = headers.join("\r\n") + "\r\n\r\n" + args.body;
-  const encoded = encodeGmailRaw(raw);
-
-  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/send`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ raw: encoded, threadId: thread.externalThreadId }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    if (res.status === 403 || /insufficient.*scope|insufficient_scope|permission/i.test(body)) {
-      return {
-        error: "Gmail send scope not granted. Reconnect this inbox in Email Settings to allow sending.",
-        needsReauth: true,
-      };
+  if (account.provider === GMAIL_APP_PASSWORD_PROVIDER) {
+    const sent = await sendGmailAppPasswordMail({
+      account,
+      to: toAddress,
+      subject,
+      text: body,
+      inReplyTo,
+      references: refs,
+    });
+    if (!sent.ok) return { error: sent.error };
+    sentMessageId = sent.messageId;
+    externalId = imapMessageExternalId(account.id, sent.messageId, Buffer.from(sent.messageId));
+    rfcMessageId = sent.messageId || null;
+  } else if (account.provider === "GMAIL") {
+    if (!thread.externalThreadId) return { error: "Thread is not linked to a Gmail thread" };
+    let token: string;
+    try {
+      token = await getValidAccessToken(account.id);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "token error" };
     }
-    return { error: `Gmail send failed: ${res.status} ${body.slice(0, 200)}` };
-  }
 
-  const sent: { id: string; threadId: string } = await res.json();
+    const headers: string[] = [
+      `From: ${account.email}`,
+      `To: ${toAddress}`,
+      `Subject: ${subject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: text/plain; charset="UTF-8"`,
+    ];
+    if (inReplyTo) headers.push(`In-Reply-To: ${inReplyTo}`);
+    if (refs.length) headers.push(`References: ${refs.join(" ")}`);
+
+    const raw = headers.join("\r\n") + "\r\n\r\n" + body;
+    const encoded = encodeGmailRaw(raw);
+    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ raw: encoded, threadId: thread.externalThreadId }),
+    });
+    if (!res.ok) {
+      const responseBody = await res.text();
+      if (res.status === 403 || /insufficient.*scope|insufficient_scope|permission/i.test(responseBody)) {
+        return {
+          error: "Gmail send scope not granted. Reconnect this inbox in Email Settings to allow sending.",
+          needsReauth: true,
+        };
+      }
+      return { error: `Gmail send failed: ${res.status} ${responseBody.slice(0, 200)}` };
+    }
+    const sent: { id: string; threadId: string } = await res.json();
+    sentMessageId = sent.id;
+    externalId = sent.id;
+    gmailMessageId = sent.id;
+  } else {
+    return { error: "This email provider cannot send" };
+  }
 
   // Persist locally as an OUTBOUND EmailMessage so the thread reflects it
   // immediately (without waiting for the next sync).
@@ -219,14 +313,15 @@ export async function sendReplyToThread(args: {
     data: {
       threadId: thread.id,
       accountId: account.id,
-      gmailMessageId: sent.id,
-      externalId: sent.id,
+      gmailMessageId,
+      externalId,
+      rfcMessageId,
       direction: "OUTBOUND",
       fromEmail: account.email,
-      fromName: null,
+      fromName: account.displayName,
       toEmails: JSON.stringify([toAddress]),
       subject,
-      bodyText: args.body,
+      bodyText: body,
       sentAt: new Date(),
     },
   });
@@ -243,12 +338,12 @@ export async function sendReplyToThread(args: {
     fromEmail: account.email,
     toEmails: [toAddress],
     subject,
-    snippet: args.body,
+    snippet: body,
     sentAt: outboundMessage.sentAt,
   });
 
   revalidatePath("/dashboard/inbox");
   if (thread.inquiryId) revalidatePath(`/dashboard/rfq/${thread.inquiryId}`);
   if (thread.jobId) revalidatePath(`/dashboard/jobs/${thread.jobId}`);
-  return { ok: true, messageId: sent.id };
+  return { ok: true, messageId: sentMessageId };
 }
