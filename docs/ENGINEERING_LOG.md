@@ -6564,3 +6564,23 @@ Use this file for chronological implementation notes that future agents should s
 - Release: PR #227 merged as `598e50ff`. Vercel production deployed the merge
   commit, `/api/health` returned healthy, and the new route redirected
   unauthenticated requests to login.
+
+### 2026-08-23 - Add batch Gmail app-password setup
+
+- Branch: `codex/bulk-connected-emails-20260823`, based on current
+  `origin/main`.
+- Added one bulk form for up to 10 accounts. It parses CSV or the existing
+  multi-line account blocks and ignores SMTP and IMAP detail lines because
+  Derya owns the fixed Gmail transport configuration.
+- The server validates the complete batch before external connections, checks
+  encryption configuration before verification, verifies accounts concurrently,
+  encrypts each password, and returns per-email success or sanitized failure.
+- Successful accounts start with sending disabled. The administrator may enable
+  the verified IDs in one explicit action; the first becomes default only when
+  no Office default already exists.
+- Safety: Every lookup and write is Office-scoped, provider conflicts fail per
+  row, input is capped at 10 accounts and 30,000 characters, and no password is
+  returned, logged, documented, seeded, or placed in deployment configuration.
+- Verification: Bulk parser coverage, email account and Gmail app-password
+  contracts, TypeScript, product copy policy, and the production Next.js build
+  passed. A live batch connection remains pending.

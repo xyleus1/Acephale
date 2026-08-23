@@ -2,6 +2,32 @@
 
 ## Latest Update
 
+### Bulk Gmail setup is ready for release
+
+- Connected emails accepts up to 10 Gmail app-password accounts in one paste.
+  It supports CSV and the existing multi-line account block format.
+- Administrators provide display name, email, and app password only. Derya
+  ignores supplied server lines and uses its fixed secure Gmail connection
+  settings for verification, sending, and reply monitoring.
+- Accounts verify concurrently and return a per-email result. Successful rows
+  are encrypted and saved; failed rows expose no password. Partial success is
+  explicit rather than rolled back or hidden.
+- All newly verified accounts still start with sending off. One explicit
+  `Enable verified` action enables the successful batch and chooses the first
+  account as default only when the Office has no existing default sender.
+- The batch is Office-scoped, admin-only, capped at 10, and never returns or
+  logs a password. No mailbox credential was added to code, docs, deployment
+  configuration, or seed data.
+
+Verification completed:
+
+- Bulk parser coverage for CSV, multi-line blocks, normalization, and duplicate
+  rejection
+- Email account and Gmail app-password contracts
+- TypeScript
+- Product copy policy
+- Production Next.js build
+
 ### Connected emails is deployed
 
 - Admin Settings has a dedicated `/dashboard/settings/connected-emails` tab.

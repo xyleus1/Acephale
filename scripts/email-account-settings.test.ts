@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { canManageEmailAccounts } from "../src/lib/email-account-policy";
+import { parseGmailAppPasswordBulkInput } from "../src/lib/gmail-app-password-bulk";
 
 const schema = readFileSync("prisma/schema.prisma", "utf8");
 const migration = readFileSync("prisma/migrations/20260822000400_email_account_sending_config/migration.sql", "utf8");
@@ -13,6 +14,8 @@ const emailSenderTest = readFileSync("src/components/email-sender-test.tsx", "ut
 const connectedEmailsPage = readFileSync("src/app/dashboard/settings/connected-emails/page.tsx", "utf8");
 const connectedEmailsActions = readFileSync("src/app/dashboard/settings/connected-emails/actions.ts", "utf8");
 const roundTripTest = readFileSync("src/components/email-round-trip-test.tsx", "utf8");
+const bulkForm = readFileSync("src/components/gmail-app-password-bulk-form.tsx", "utf8");
+const bulkParser = readFileSync("src/lib/gmail-app-password-bulk.ts", "utf8");
 const oauthStart = readFileSync("src/app/api/auth/gmail/start/route.ts", "utf8");
 const oauthCallback = readFileSync("src/app/api/auth/gmail/callback/route.ts", "utf8");
 const gmailSend = readFileSync("src/lib/gmail-send.ts", "utf8");
@@ -46,6 +49,7 @@ assert.match(connectedEmailsPage, /requireEmailAccountAdminSession\(\)/);
 assert.match(connectedEmailsPage, /SettingsHeader active="connected-emails"/);
 assert.match(connectedEmailsPage, /<EmailRoundTripTest/);
 assert.match(connectedEmailsPage, /<GmailAppPasswordForm/);
+assert.match(connectedEmailsPage, /<GmailAppPasswordBulkForm/);
 assert.match(connectedEmailsActions, /officeId: session\.officeId/);
 assert.match(connectedEmailsActions, /senderId === recipientId/);
 assert.match(connectedEmailsActions, /sendNewEmailFromAccount/);
@@ -56,6 +60,42 @@ assert.match(connectedEmailsActions, /direction: "INBOUND"/);
 assert.match(roundTripTest, /"Start test"/);
 assert.match(roundTripTest, /"Check delivery"/);
 assert.match(roundTripTest, /"Check reply"/);
+assert.match(actions, /addGmailAppPasswordAccountsBulk/);
+assert.match(actions, /enableBulkEmailAccounts/);
+assert.match(actions, /Promise\.all\(encryptedRows\.map/);
+assert.match(actions, /sendEnabled: false/);
+const bulkUpdate = actions.match(/const account = current([\s\S]*?): await prisma\.emailAccount\.create/)?.[1] ?? "";
+assert.doesNotMatch(bulkUpdate, /sendEnabled: false|isDefaultSender: false/);
+assert.match(actions, /id: ids\[0\],[\s\S]*provider: GMAIL_APP_PASSWORD_PROVIDER,[\s\S]*credentialSecret: \{ not: null \}/);
+assert.match(bulkForm, /Connect batch/);
+assert.match(bulkForm, /Enable verified/);
+assert.match(bulkForm, /Derya configures the Gmail connection automatically/);
+assert.match(bulkParser, /MAX_BULK_GMAIL_ACCOUNTS = 10/);
+
+const blockInput = `
+first@example.test
+  display name : First Sender
+  smtp user    : first@example.test
+  app password : abcd efgh ijkl mnop
+  smtp         : smtp.gmail.com:587
+  imap         : imap.gmail.com:993
+
+second@example.test
+  display name : Second Sender
+  app password : 1234 5678 90ab cdef
+`;
+assert.deepEqual(parseGmailAppPasswordBulkInput(blockInput), {
+  rows: [
+    { displayName: "First Sender", email: "first@example.test", appPassword: "abcdefghijklmnop" },
+    { displayName: "Second Sender", email: "second@example.test", appPassword: "1234567890abcdef" },
+  ],
+  errors: [],
+});
+assert.deepEqual(parseGmailAppPasswordBulkInput("Display name,email,app password\nThird Sender,third@example.test,aaaabbbbccccdddd"), {
+  rows: [{ displayName: "Third Sender", email: "third@example.test", appPassword: "aaaabbbbccccdddd" }],
+  errors: [],
+});
+assert.match(parseGmailAppPasswordBulkInput("One,duplicate@example.test,aaaabbbbccccdddd\nTwo,duplicate@example.test,1111222233334444").errors.join(" "), /duplicate email address/);
 assert.match(emailSenderTest, /useEffect\(\(\) => \{/);
 assert.match(emailSenderTest, /accounts\.some\(\(account\) => account\.id === current\)/);
 assert.match(actions, /officeId: session\.officeId/);
@@ -83,7 +123,7 @@ assert.match(purchaseOrderFollowUp, /sendEnabled: true/);
 assert.match(setup, /Connecting Gmail does not enable sending automatically/);
 assert.match(setup, /Do not copy Gmail refresh tokens into Bourne/);
 
-for (const [name, source] of Object.entries({ page, actions, access, integrations, settingsHeader, emailSenderTest, connectedEmailsPage, connectedEmailsActions, roundTripTest, oauthStart, oauthCallback, gmailSend, gmailSync, rfqMail, supplierEmailProvider, supplierCommunication, purchaseOrderCommunication, purchaseOrderFollowUp, setup })) {
+for (const [name, source] of Object.entries({ page, actions, access, integrations, settingsHeader, emailSenderTest, connectedEmailsPage, connectedEmailsActions, roundTripTest, bulkForm, bulkParser, oauthStart, oauthCallback, gmailSend, gmailSync, rfqMail, supplierEmailProvider, supplierCommunication, purchaseOrderCommunication, purchaseOrderFollowUp, setup })) {
   assert.equal(source.includes("\u2014"), false, `${name} must not contain U+2014.`);
 }
 

@@ -11,6 +11,7 @@ import {
   verifyGmailAppPasswordConnection,
 } from "@/lib/gmail-app-password";
 import { encryptSecret } from "@/lib/security/crypto";
+import { parseGmailAppPasswordBulkInput } from "@/lib/gmail-app-password-bulk";
 
 function revalidateEmailAccountPages() {
   revalidatePath("/dashboard/settings/email");
@@ -157,6 +158,119 @@ export async function addGmailAppPasswordAccount(formData: FormData) {
 
   revalidateEmailAccountPages();
   return { ok: true as const, accountId: account.id };
+}
+
+export async function addGmailAppPasswordAccountsBulk(formData: FormData) {
+  const session = await requireEmailAccountAdminSession();
+  const parsed = parseGmailAppPasswordBulkInput(formValue(formData, "accounts"));
+  if (parsed.errors.length > 0) {
+    return { ok: false as const, errors: parsed.errors, results: [], accountIds: [] };
+  }
+
+  const existing = await prisma.emailAccount.findMany({
+    where: { officeId: session.officeId, email: { in: parsed.rows.map((row) => row.email) } },
+    select: { id: true, email: true, provider: true },
+  });
+  const existingByEmail = new Map(existing.map((account) => [account.email.toLowerCase(), account]));
+
+  let encryptedRows: Array<(typeof parsed.rows)[number] & { credentialSecret: string }>;
+  try {
+    encryptedRows = parsed.rows.map((row) => ({ ...row, credentialSecret: encryptSecret(row.appPassword) }));
+  } catch {
+    return { ok: false as const, errors: ["Server credential encryption is not configured."], results: [], accountIds: [] };
+  }
+
+  const results = await Promise.all(encryptedRows.map(async (row) => {
+    const current = existingByEmail.get(row.email);
+    if (current && current.provider !== GMAIL_APP_PASSWORD_PROVIDER) {
+      return { email: row.email, ok: false as const, error: "Already connected through another provider." };
+    }
+    const verified = await verifyGmailAppPasswordConnection(row);
+    if (!verified.ok) return { email: row.email, ok: false as const, error: verified.error };
+
+    try {
+      const account = current
+        ? await prisma.emailAccount.update({
+            where: { id: current.id, officeId: session.officeId },
+            data: {
+              displayName: row.displayName,
+              credentialSecret: row.credentialSecret,
+              isActive: true,
+            },
+            select: { id: true },
+          })
+        : await prisma.emailAccount.create({
+            data: {
+              officeId: session.officeId,
+              email: row.email,
+              displayName: row.displayName,
+              provider: GMAIL_APP_PASSWORD_PROVIDER,
+              credentialSecret: row.credentialSecret,
+              isActive: true,
+              sendEnabled: false,
+              isDefaultSender: false,
+            },
+            select: { id: true },
+          });
+      return { email: row.email, ok: true as const, accountId: account.id };
+    } catch {
+      return { email: row.email, ok: false as const, error: "Verified, but the account could not be saved." };
+    }
+  }));
+
+  revalidateEmailAccountPages();
+  const accountIds = results.flatMap((result) => result.ok ? [result.accountId] : []);
+  return {
+    ok: accountIds.length > 0,
+    errors: [],
+    results,
+    accountIds,
+  };
+}
+
+export async function enableBulkEmailAccounts(accountIds: string[]) {
+  const session = await requireEmailAccountAdminSession();
+  const ids = [...new Set(accountIds.filter((id) => typeof id === "string" && id.length > 0 && id.length <= 220))].slice(0, 10);
+  if (ids.length === 0) return { ok: false as const, error: "No verified accounts selected." };
+
+  const enabled = await prisma.$transaction(async (tx) => {
+    const result = await tx.emailAccount.updateMany({
+      where: {
+        id: { in: ids },
+        officeId: session.officeId,
+        provider: GMAIL_APP_PASSWORD_PROVIDER,
+        credentialSecret: { not: null },
+        isActive: true,
+      },
+      data: { sendEnabled: true },
+    });
+    const currentDefault = await tx.emailAccount.findFirst({
+      where: { officeId: session.officeId, isActive: true, sendEnabled: true, isDefaultSender: true },
+      select: { id: true },
+    });
+    let defaultAccountId = currentDefault?.id ?? null;
+    if (!defaultAccountId) {
+      const selected = await tx.emailAccount.updateMany({
+        where: {
+          id: ids[0],
+          officeId: session.officeId,
+          provider: GMAIL_APP_PASSWORD_PROVIDER,
+          credentialSecret: { not: null },
+          isActive: true,
+          sendEnabled: true,
+        },
+        data: { isDefaultSender: true },
+      });
+      if (selected.count === 1) defaultAccountId = ids[0];
+    }
+    return { count: result.count, defaultAccountId };
+  });
+
+  revalidateEmailAccountPages();
+  if (enabled.count !== ids.length) {
+    return { ok: false as const, error: `Enabled ${enabled.count} of ${ids.length} verified accounts.` };
+  }
+  return { ok: true as const, count: enabled.count, defaultAccountId: enabled.defaultAccountId };
 }
 
 export async function sendEmailAccountTest(accountId: string) {
