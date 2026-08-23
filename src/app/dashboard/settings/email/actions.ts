@@ -12,6 +12,11 @@ import {
 } from "@/lib/gmail-app-password";
 import { encryptSecret } from "@/lib/security/crypto";
 
+function revalidateEmailAccountPages() {
+  revalidatePath("/dashboard/settings/email");
+  revalidatePath("/dashboard/settings/connected-emails");
+}
+
 async function emailSender(accountId: string, officeId: string) {
   if (typeof accountId !== "string" || !accountId.trim() || accountId.length > 220) return null;
   return prisma.emailAccount.findFirst({
@@ -57,7 +62,7 @@ export async function setEmailAccountSendEnabled(accountId: string, enabled: boo
   });
   if (updated.count !== 1) throw new Error("The email account changed before it could be updated.");
 
-  revalidatePath("/dashboard/settings/email");
+  revalidateEmailAccountPages();
 }
 
 export async function makeDefaultEmailSender(accountId: string) {
@@ -84,7 +89,7 @@ export async function makeDefaultEmailSender(accountId: string) {
     if (selected.count !== 1) throw new Error("The email account changed before it could become the default.");
   });
 
-  revalidatePath("/dashboard/settings/email");
+  revalidateEmailAccountPages();
 }
 
 function formValue(formData: FormData, key: string) {
@@ -150,7 +155,7 @@ export async function addGmailAppPasswordAccount(formData: FormData) {
         select: { id: true },
       });
 
-  revalidatePath("/dashboard/settings/email");
+  revalidateEmailAccountPages();
   return { ok: true as const, accountId: account.id };
 }
 
@@ -164,6 +169,6 @@ export async function sendEmailAccountTest(accountId: string) {
     body: "This message confirms that the selected email account can send through Derya.",
   });
   if ("error" in result) return { ok: false as const, error: result.error };
-  revalidatePath("/dashboard/settings/email");
+  revalidateEmailAccountPages();
   return { ok: true as const };
 }

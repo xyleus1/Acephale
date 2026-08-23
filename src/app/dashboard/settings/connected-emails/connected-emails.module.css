@@ -1,0 +1,65 @@
+.workspace { max-width: 1180px; display: grid; gap: 20px; margin: 34px auto 0; }
+.summary { min-height: 88px; display: grid; grid-template-columns: repeat(3, minmax(110px, 0.7fr)) minmax(220px, 1.4fr) auto; align-items: center; gap: 24px; padding: 18px 24px; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--panel); }
+.summary div { min-width: 0; }
+.summary span, .summary strong { display: block; }
+.summary span { color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 10px; text-transform: uppercase; }
+.summary strong { overflow: hidden; margin-top: 6px; font-size: 15px; font-weight: 630; text-overflow: ellipsis; white-space: nowrap; }
+.summary > a { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border-radius: 10px; text-decoration: none; }
+.panel { overflow: hidden; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--panel); scroll-margin-top: 24px; }
+.panelHeader { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.panelHeader h2, .panelHeader p { margin: 0; }
+.panelHeader h2 { font-size: 19px; font-weight: 630; letter-spacing: -0.02em; }
+.panelHeader p { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.panelBody { padding: 24px; }
+.accountList { display: grid; }
+.accountRow { min-height: 96px; display: grid; grid-template-columns: 10px minmax(190px, 1.1fr) minmax(330px, 1.6fr) auto minmax(220px, auto); align-items: center; gap: 18px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.accountRow:last-child { border-bottom: 0; }
+.statusDot { width: 9px; height: 9px; border-radius: 50%; background: var(--success); }
+.identity { min-width: 0; }
+.identity strong, .identity span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity strong { font-size: 14px; font-weight: 630; }
+.identity span, .pausedRow span { margin-top: 4px; color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 10px; }
+.accountFacts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.accountFacts dt, .accountFacts dd { margin: 0; }
+.accountFacts dt { color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 10px; text-transform: uppercase; }
+.accountFacts dd { overflow: hidden; margin-top: 4px; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.accountState { display: flex; gap: 6px; flex-wrap: wrap; }
+.accountState span { padding: 4px 7px; border-radius: 8px; color: var(--soft); background: var(--subtle); font-size: 10px; font-weight: 700; }
+.accountState span[data-on="true"] { color: var(--success); background: #eaf2ed; }
+.accountActions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+.testForm { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)) auto; gap: 12px; align-items: end; }
+.testForm label { display: grid; gap: 6px; color: var(--soft); font-size: 12px; font-weight: 620; }
+.testForm select { height: 44px; min-width: 0; padding: 0 34px 0 12px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--ink); background: var(--panel); }
+.testActions { display: flex; gap: 8px; }
+.testActions button { min-height: 44px; white-space: nowrap; }
+.status, .success, .error, .muted { grid-column: 1 / -1; margin: 2px 0 0; font-size: 12px; }
+.status, .muted { color: var(--muted); }
+.success { color: var(--success); font-weight: 620; }
+.error { color: #8b4545; }
+.formDivider { display: flex; align-items: center; gap: 12px; margin: 22px 0 18px; color: var(--muted); font-size: 12px; font-weight: 620; }
+.formDivider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
+.pausedList { display: grid; }
+.pausedRow { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+.pausedRow:last-child { border-bottom: 0; }
+.pausedRow strong, .pausedRow span { display: block; }
+.empty { min-height: 150px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 1050px) {
+  .summary { grid-template-columns: repeat(3, 1fr); }
+  .summary div:nth-child(4) { grid-column: 1 / 3; }
+  .accountRow { grid-template-columns: 10px minmax(180px, 1fr) auto; }
+  .accountFacts, .accountActions { grid-column: 2 / -1; }
+  .accountState { grid-column: 3; grid-row: 1; }
+}
+
+@media (max-width: 760px) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .summary div:nth-child(4), .summary > a { grid-column: 1 / -1; }
+  .accountRow { grid-template-columns: 10px minmax(0, 1fr); padding: 18px 20px; }
+  .accountFacts, .accountState, .accountActions { grid-column: 2; }
+  .accountFacts { grid-template-columns: 1fr; gap: 10px; }
+  .accountActions { justify-content: flex-start; }
+  .testForm { grid-template-columns: 1fr; }
+  .testActions { flex-wrap: wrap; }
+  .panelBody, .panelHeader { padding-right: 20px; padding-left: 20px; }
+}

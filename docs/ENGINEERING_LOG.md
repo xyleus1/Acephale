@@ -6544,3 +6544,20 @@ Use this file for chronological implementation notes that future agents should s
   login. An authenticated rendered check was unavailable in the release
   session. No live mailbox was connected or tested because fresh credentials
   must be generated outside chat after the disclosed values are revoked.
+
+### 2026-08-23 - Separate connected email operations from channel setup
+
+- Branch: `codex/connected-emails-20260823`, based on current `origin/main`.
+- Added an admin-only Connected emails Settings tab with one comparable account
+  list, monitoring and sending state, inbound and outbound activity, sender
+  controls, sync, pause, resume, and account creation.
+- Added a two-account round-trip test. It sends A to B, syncs B and requires the
+  exact inbound test subject, sends a threaded B to A reply, then syncs A and
+  requires the exact inbound reply before reporting success.
+- Safety: Every account lookup and message query is Office-scoped. Both test
+  accounts must be active, connected, and explicitly enabled for sending. No
+  mailbox credential, secret, environment value, or seed record was added.
+- Verification: Email account and Gmail app-password contracts, TypeScript,
+  product copy policy, and the production Next.js build passed. Authenticated
+  rendered QA and a live mailbox round trip require connected production
+  accounts and were not run in this branch.
