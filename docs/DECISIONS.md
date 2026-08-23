@@ -53,7 +53,8 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ### 2026-08-22 - Customer portal uses admin-managed passwords
 
-- Status: accepted, supersedes the passwordless customer portal login decision
+- Status: accepted for password authentication and lockout; credential storage
+  and retrieval clauses are superseded by the 2026-08-22 shared Supply OS decision
 - Owner: product and engineering
 - Context: Administrators need to create a customer account, hand the customer
   a known credential, and reset access without depending on email delivery.
