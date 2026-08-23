@@ -78,17 +78,20 @@ async function main() {
     generateText: async ({ system, prompt }) => {
       capturedSystem = system;
       capturedPrompt = prompt;
-      return "Hi Spencer,\n\nThank you for confirming. The technical data package is under internal review\u2014we will share the approved files after review.\n\nBest,\nMert\nDerya Supply Chain";
+      return "Hi Spencer,\n\nThank you. As noted in the request, we will provide the technical data after initial capability confirmation. Please first confirm support for the stated board and turnkey requirements.\n\nBest,\nMert\nDerya Supply Chain";
     },
   });
 
   assert.deepEqual(draft, {
     recipient: "sfielding@bacircuits.com",
     subject: "Re: [RFQ 24cb31bd] Turnkey 4-layer PCBA",
-    body: "Hi Spencer,\n\nThank you for confirming. The technical data package is under internal review - we will share the approved files after review.\n\nBest,\nMert\nDerya Supply Chain",
+    body: "Hi Spencer,\n\nThank you. As noted in the request, we will provide the technical data after initial capability confirmation. Please first confirm support for the stated board and turnkey requirements.\n\nBest,\nMert\nDerya Supply Chain",
     sourceMessageId: "inbound-1",
   });
-  assert.match(capturedSystem, /Do not claim that files are attached or sent/);
+  assert.match(capturedSystem, /Do not claim that files are attached, sent, available, reviewed, or approved/);
+  assert.match(capturedSystem, /preserve any file-sharing condition or sequence/);
+  assert.match(capturedSystem, /Do not invent internal review, approval, readiness, availability, or timing/);
+  assert.doesNotMatch(capturedSystem, /say they are under internal review/);
   assert.match(capturedSystem, /Do not accept commercial terms/);
   assert.match(capturedPrompt, /Quantity: 100 finished units/);
   assert.match(capturedPrompt, /Please send me the data/);
@@ -106,6 +109,20 @@ async function main() {
     generateText: async () => "Thank you.\n\nBest,\nMert\nDerya Supply Chain",
   });
   assert.equal(prefixed.subject, "Re: Technical data request");
+
+  const helpdeskPrefixed = await draftProcurementSupplierReply({
+    order,
+    vendor,
+    conversation: {
+      ...conversation,
+      messages: conversation.messages.map((message) => message.direction === "INBOUND"
+        ? { ...message, subject: "[Bay Area Circuits] Re: Re: [RFQ 24cb31bd] Turnkey 4-layer PCBA \u2014 100 finished units" }
+        : message),
+    },
+    generateText: async () => "Thank you.\n\nBest,\nMert\nDerya Supply Chain",
+  });
+  assert.equal(helpdeskPrefixed.subject, "Re: [RFQ 24cb31bd] Turnkey 4-layer PCBA - 100 finished units");
+  assert.doesNotMatch(helpdeskPrefixed.subject, /\u2014/);
   await assert.rejects(
     draftProcurementSupplierReply({
       order,
