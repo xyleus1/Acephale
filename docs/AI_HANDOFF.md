@@ -10283,5 +10283,8 @@ Verification caveat:
 - Verification passed: executable demo runner, authorization, and queue-state
   tests, focused demo-email contracts, Gmail app-password and
   sync-window contracts, TypeScript, diff hygiene, workflow YAML and shell
-  syntax, and the production Next.js build. Live execution remains pending the
-  merged Vercel deployment.
+  syntax, and the production Next.js build.
+- The first production dispatch stopped before job insertion or SMTP because
+  `psql --command` does not interpolate bound variables. Variable-bearing SQL
+  now enters `psql` through `--file=-`, and a regression contract forbids the
+  broken command form. The failed dispatch sent zero messages.

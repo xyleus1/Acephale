@@ -143,15 +143,15 @@ jobs:
               --tuples-only \
               --no-align \
               --set=office_id="$office_id" \
-              --command='
-                SELECT json_agg(id ORDER BY "createdAt", email)::text
-                FROM "EmailAccount"
-                WHERE "officeId" = :'\''office_id'\''
-                  AND provider = '\''GMAIL_APP_PASSWORD'\''
-                  AND "credentialSecret" IS NOT NULL
-                  AND "isActive" = true
-                  AND "sendEnabled" = true;
-              '
+              --file=- <<'SQL'
+          SELECT json_agg(id ORDER BY "createdAt", email)::text
+          FROM "EmailAccount"
+          WHERE "officeId" = :'office_id'
+            AND provider = 'GMAIL_APP_PASSWORD'
+            AND "credentialSecret" IS NOT NULL
+            AND "isActive" = true
+            AND "sendEnabled" = true;
+          SQL
           )"
           run_id="$(node --input-type=module --eval='import { randomUUID } from "node:crypto"; process.stdout.write(randomUUID().replaceAll("-", ""));')"
           job_id="demo-email-capability-$run_id"
@@ -177,29 +177,29 @@ jobs:
               --set=workflow_run_attempt="$GITHUB_RUN_ATTEMPT" \
               --set=workflow_ref="$GITHUB_REF" \
               --set=workflow_sha="$GITHUB_SHA" \
-              --command='
-                INSERT INTO "BackgroundJob" (
-                  id, "officeId", type, status, payload, "dedupeKey", attempts,
-                  "maxAttempts", "runAfter", "createdAt", "updatedAt"
-                ) VALUES (
-                  :'\''job_id'\'', :'\''office_id'\'', '\''DEMO_EMAIL_CAPABILITY_TEST'\'', '\''QUEUED'\'',
-                  jsonb_build_object(
-                    '\''accountIds'\'', :'\''account_ids'\''::jsonb,
-                    '\''runKey'\'', :'\''run_key'\'',
-                    '\''triggerTokenHash'\'', :'\''trigger_hash'\'',
-                    '\''approvalContext'\'', jsonb_build_object(
-                      '\''actor'\'', :'\''workflow_actor'\'',
-                      '\''runId'\'', :'\''workflow_run_id'\'',
-                      '\''runAttempt'\'', :'\''workflow_run_attempt'\'',
-                      '\''ref'\'', :'\''workflow_ref'\'',
-                      '\''sha'\'', :'\''workflow_sha'\''
-                    ),
-                    '\''testOnly'\'', true
-                  ),
-                  :'\''run_key'\'', 0, 1, now(), now(), now()
-                )
-                RETURNING id;
-              '
+              --file=- <<'SQL'
+          INSERT INTO "BackgroundJob" (
+            id, "officeId", type, status, payload, "dedupeKey", attempts,
+            "maxAttempts", "runAfter", "createdAt", "updatedAt"
+          ) VALUES (
+            :'job_id', :'office_id', 'DEMO_EMAIL_CAPABILITY_TEST', 'QUEUED',
+            jsonb_build_object(
+              'accountIds', :'account_ids'::jsonb,
+              'runKey', :'run_key',
+              'triggerTokenHash', :'trigger_hash',
+              'approvalContext', jsonb_build_object(
+                'actor', :'workflow_actor',
+                'runId', :'workflow_run_id',
+                'runAttempt', :'workflow_run_attempt',
+                'ref', :'workflow_ref',
+                'sha', :'workflow_sha'
+              ),
+              'testOnly', true
+            ),
+            :'run_key', 0, 1, now(), now(), now()
+          )
+          RETURNING id;
+          SQL
           )"
           if [[ "$inserted" != "$job_id" ]]; then
             echo "The demo background job was not created exactly once." >&2
@@ -241,7 +241,9 @@ jobs:
               --tuples-only \
               --no-align \
               --set=job_id="$JOB_ID" \
-              --command='SELECT status FROM "BackgroundJob" WHERE id = :'\''job_id'\'';'
+              --file=- <<'SQL'
+          SELECT status FROM "BackgroundJob" WHERE id = :'job_id';
+          SQL
           )"
           psql "$WORKFLOW_DATABASE_OWNER_URL" \
             --no-psqlrc \
@@ -250,21 +252,23 @@ jobs:
             --no-align \
             --field-separator='|' \
             --set=job_id="$JOB_ID" \
-            --command='
-              SELECT
-                status,
-                payload #>> '\''{result,accountCount}'\'',
-                payload #>> '\''{result,passed}'\'',
-                payload #>> '\''{result,failed}'\'',
-                payload #>> '\''{result,completedAt}'\''
-              FROM "BackgroundJob"
-              WHERE id = :'\''job_id'\'';
-            '
+            --file=- <<'SQL'
+          SELECT
+            status,
+            payload #>> '{result,accountCount}',
+            payload #>> '{result,passed}',
+            payload #>> '{result,failed}',
+            payload #>> '{result,completedAt}'
+          FROM "BackgroundJob"
+          WHERE id = :'job_id';
+          SQL
           if [[ "$status" != "DONE" ]]; then
             psql "$WORKFLOW_DATABASE_OWNER_URL" \
               --no-psqlrc \
               --set=ON_ERROR_STOP=1 \
               --set=job_id="$JOB_ID" \
-              --command='SELECT status, "lastError" FROM "BackgroundJob" WHERE id = :'\''job_id'\'';'
+              --file=- <<'SQL'
+          SELECT status, "lastError" FROM "BackgroundJob" WHERE id = :'job_id';
+          SQL
             exit 1
           fi

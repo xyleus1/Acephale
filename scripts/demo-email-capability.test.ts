@@ -81,6 +81,16 @@ assert.match(workflow, /GITHUB_ACTOR/);
 assert.match(workflow, /GITHUB_RUN_ID/);
 assert.match(workflow, /GITHUB_SHA/);
 assert.match(workflow, /https:\/\/app\.derya\.ai/);
+assert.equal(
+  (workflow.match(/--file=- <<'SQL'/g) ?? []).length,
+  5,
+  "Every psql query with bound workflow values must be read as a psql file",
+);
+assert.doesNotMatch(
+  workflow,
+  /--set=(?:office_id|job_id)=[\s\S]{0,800}?--command=/,
+  "psql does not interpolate variables inside --command SQL",
+);
 assert.doesNotMatch(workflow, /jsonb_pretty\(payload->/);
 assert.doesNotMatch(workflow, /echo[^\n]*WORKFLOW_DATABASE_OWNER_URL/);
 assert.doesNotMatch(workflow, /credentialSecret"\s*[,)]/);

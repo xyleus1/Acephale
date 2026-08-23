@@ -6731,3 +6731,8 @@ Use this file for chronological implementation notes that future agents should s
   `npm run test:gmail-app-password-accounts`,
   `npm run test:gmail-sync-windows`, `npx tsc --noEmit`, `git diff --check`,
   workflow YAML and shell syntax checks, and the production build.
+- The first production dispatch failed safely before the background job insert
+  because `psql --command` passed `:'office_id'` through to PostgreSQL instead
+  of applying the psql variable. No SMTP call was reached. All five
+  variable-bearing queries now use `--file=-`, with a regression contract for
+  that execution boundary.
