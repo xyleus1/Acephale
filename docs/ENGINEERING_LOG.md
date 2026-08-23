@@ -6475,8 +6475,15 @@ Use this file for chronological implementation notes that future agents should s
   password database authentication and lockout contract, Prisma validation and
   generation, TypeScript, product copy, and the production build passed locally.
 - Release: Schema PR #219 merged as `751ff786`. Protected production run
-  `32617721486` applied and verified the migration. Application deploy and
-  authenticated production UI testing remain pending.
+  `32617721486` applied and verified the migration. Application PR #220 merged
+  as `abaf534b`, Vercel production deployment passed, and `/api/health` returned
+  healthy.
+- Production acceptance: The admin customer page generated, showed, and saved
+  a password for the existing HypnoDreamz account. The page changed from
+  `Password required` to `Password set`. One wrong-password attempt returned
+  the generic failure message, then the correct password opened the scoped
+  HypnoDreamz customer workspace with no new console errors. No plaintext
+  password was added to project documentation.
 
 ### 2026-08-22 - Stage Gmail app-password schema before application release
 
