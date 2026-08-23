@@ -375,6 +375,34 @@ jobs:
             conversation.value->>'label',
             conversation.value->>'kind',
             conversation.value->>'status',
+            coalesce(
+              nullif((
+                SELECT account."displayName"
+                FROM "EmailAccount" AS account
+                WHERE account."officeId" = job."officeId"
+                  AND lower(account.email) = lower(conversation.value->>'sender')
+                LIMIT 1
+              ), ''),
+              'Connected mailbox'
+            ),
+            coalesce(
+              nullif((
+                SELECT account."displayName"
+                FROM "EmailAccount" AS account
+                WHERE account."officeId" = job."officeId"
+                  AND lower(account.email) = lower(conversation.value->>'recipient')
+                LIMIT 1
+              ), ''),
+              'Connected mailbox'
+            ),
+            CASE
+              WHEN conversation.value->>'sentReceivedAt' IS NULL THEN 'INITIAL_NOT_OBSERVED'
+              ELSE 'INITIAL_OBSERVED'
+            END,
+            CASE
+              WHEN conversation.value->>'replyReceivedAt' IS NULL THEN 'REPLY_NOT_OBSERVED'
+              ELSE 'REPLY_OBSERVED'
+            END,
             left(
               regexp_replace(
                 replace(coalesce(conversation.value->>'error', ''), E'\n', ' '),
