@@ -35,6 +35,9 @@ const emailAccountVerification = verifications.get(
 const customerPasswordVerification = verifications.get(
   "20260822000600_customer_portal_password_auth.sql",
 );
+const gmailAppPasswordVerification = verifications.get(
+  "20260822000700_gmail_app_password_accounts.sql",
+);
 
 assert.match(workflow, /^on:\n  workflow_dispatch:/m, "production migration must be manually dispatched");
 assert.doesNotMatch(
@@ -68,6 +71,7 @@ assert.ok(customerContextVerification, "customer Context production verification
 assert.ok(workspaceRelinkVerification, "workspace relink production verification is missing");
 assert.ok(emailAccountVerification, "email account production verification is missing");
 assert.ok(customerPasswordVerification, "customer password production verification is missing");
+assert.ok(gmailAppPasswordVerification, "Gmail app-password production verification is missing");
 for (const [name, verification] of verifications) {
   assert.match(verification, /BEGIN READ ONLY;/, `${name} must use a read-only transaction`);
   if (/^[0-9]{14}_[a-z0-9_]+\.sql$/.test(name)) {
@@ -122,5 +126,9 @@ assert.match(customerPasswordVerification, /CustomerPortalLoginThrottle_attempt_
 assert.match(customerPasswordVerification, /CustomerPortalLoginThrottle_expiresAt_idx/);
 assert.match(customerPasswordVerification, /login_throttle_rows/);
 assert.match(customerPasswordVerification, /derya application role cannot use the customer login throttle/);
+assert.match(gmailAppPasswordVerification, /credentialSecret/);
+assert.match(gmailAppPasswordVerification, /enc:v1:/);
+assert.match(gmailAppPasswordVerification, /rfcMessageId/);
+assert.match(gmailAppPasswordVerification, /GMAIL_APP_PASSWORD/);
 
 console.log("Production database migration contract passed.");

@@ -6499,3 +6499,19 @@ Use this file for chronological implementation notes that future agents should s
 - Normalized helpdesk subjects to one `Re:` prefix and plain punctuation.
 - Verification: Reply draft domain, reply route, Active Sourcing, TypeScript,
   product copy, and the production Next.js build passed. Live redraft remains.
+
+### 2026-08-22 - Stage Gmail app-password schema before application release
+
+- Branch: `codex/gmail-app-password-schema-20260822`, based on current
+  `origin/main`.
+- Task: Add the nullable encrypted credential and RFC threading fields before
+  any application code can select them.
+- Files changed: Prisma schema, additive migration, read-only production
+  verification, migration contract, and release documentation.
+- Safety: No plaintext credential, mailbox identity, provider connection,
+  sender state, OAuth token, Gmail message, or Bourne record is created.
+- Verification: Prisma validation and generation, production migration
+  contract, full disposable PostgreSQL migration chain, repeat deploy, and the
+  read-only production query.
+- Follow-up: Merge this schema release, dispatch the protected production
+  migration, then release the administrator connector application separately.

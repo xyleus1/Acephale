@@ -1851,9 +1851,11 @@ model EmailAccount {
   id           String    @id @default(cuid())
   officeId     String
   email        String
-  provider     String // GMAIL / OUTLOOK / IMAP
+  displayName  String?
+  provider     String // GMAIL / GMAIL_APP_PASSWORD / OUTLOOK / IMAP
   accessToken  String?
   refreshToken String?
+  credentialSecret String?
   isActive     Boolean   @default(true)
   sendEnabled     Boolean   @default(false)
   isDefaultSender Boolean   @default(false)
@@ -1911,6 +1913,7 @@ model EmailMessage {
   accountId            String?
   externalId           String? // provider Message-ID header for dedup
   gmailMessageId       String? // provider native message id (Gmail msg.id) - used to fetch attachments
+  rfcMessageId         String? // RFC Message-ID used for SMTP/IMAP threading
   direction            EmailDirection
   fromEmail            String
   fromName             String?

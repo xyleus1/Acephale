@@ -2,6 +2,20 @@
 
 ## Latest Update
 
+### Gmail app-password schema is staged before application release
+
+- Migration `20260822000700_gmail_app_password_accounts` adds nullable display
+  name and encrypted credential storage to `EmailAccount`, plus RFC Message-ID
+  storage to `EmailMessage`.
+- The schema release contains no Gmail connection, send, sync, or UI behavior.
+  It must reach production before the application connector is merged so
+  Vercel cannot deploy code that selects columns missing from PostgreSQL.
+- The committed read-only production query verifies the column shapes,
+  migration ledger, encrypted `enc:v1:` credential state, provider isolation,
+  and absence of OAuth tokens on app-password accounts.
+- No production database, application, Gmail mailbox, or Bourne state has been
+  changed by this branch.
+
 ### Customer portal now uses administrator-set passwords
 
 - Replaced the customer email-code flow with email and password sign-in.
