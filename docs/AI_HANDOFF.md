@@ -2,6 +2,37 @@
 
 ## Latest Update
 
+### Materials uses the full canvas when no sourcing inspector exists
+
+- The command center now calculates whether the inventory sourcing inspector
+  actually renders and exposes that state to the layout. Inventory and
+  Messages use one full-width materials column when no inspector exists.
+- Selecting a real inventory item still opens the inspector. Desktop, tablet,
+  and mobile add the second column or row only for that rendered state.
+- A blocked supplier reply now names the Gmail account that owns the exact
+  thread and links directly to Connected emails. Derya does not substitute a
+  different sender because that would break sender identity and thread safety.
+- A personal Gmail account may be connected and enabled for the same Office.
+  If the owning mailbox should not be connected to Derya, the operator must
+  continue that reply in Gmail instead.
+- No supplier email was sent during implementation or verification.
+
+Verification completed before release:
+
+- Materials layout state and sender recovery regression contracts
+- Active Sourcing, Atlas sourcing, conversation, reply draft, reply route, and
+  email account focused contracts
+- TypeScript and product copy policy
+- Production Next.js build and deployment boundary
+- Diff whitespace and forbidden-character checks
+
+Release status:
+
+- PR #234 is open at `e991feb6`. Its Vercel preview, database contracts, and
+  database security checks passed.
+- Merge, production deployment, and authenticated production UI verification
+  remain pending in this handoff snapshot.
+
 ### Customer accounts now open the company-scoped full application
 
 - Customer sign-in accepts a unique username or email and opens the real
@@ -130,9 +161,11 @@ Verification completed:
 
 Release status:
 
-- Branch `fix/sourcing-send-layout-20260823` is based on current `origin/main`.
-  Commit, pull request, deployment, and authenticated production UI
-  verification are still pending in this handoff snapshot.
+- PR #231 merged as `55d9c58c`. Vercel production deployed the merge commit and
+  `/api/health` returned healthy. A user screenshot verified the Active
+  Sourcing response badge, exact conversation, generated reply, and send
+  control. The screenshot also exposed the remaining Inventory-only ghost
+  inspector track handled by the latest update above.
 
 ### Gmail app-password schema is deployed before application release
 

@@ -6,6 +6,7 @@ import type { procurementVendorConversation } from "@/lib/procurement-conversati
 import {
   ProcurementReplyDraftError,
 } from "@/lib/procurement-reply-draft";
+import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import type { draftProcurementSupplierReply } from "@/lib/procurement-reply-draft";
 import type { sendProcurementSupplierReply } from "@/lib/procurement-reply-send";
 import {
@@ -171,6 +172,9 @@ function replyDraftErrorResponse(error: unknown) {
 }
 
 function replySendErrorResponse(error: unknown) {
+  if (error instanceof ProcurementReplySenderUnavailableError) {
+    return Response.json({ error: error.message, reason: error.reason }, { status: 409, headers: responseHeaders });
+  }
   if (error instanceof SupplyPersistenceError) {
     const status = error.code === "forbidden"
       ? 403

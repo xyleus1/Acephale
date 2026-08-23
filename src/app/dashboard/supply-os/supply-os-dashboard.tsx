@@ -537,6 +537,11 @@ function CaseCommandCenter({
   const sourcingWorkspaceId = workspaceId ?? null;
   const selectedInventoryItem = inventoryItems.find((item) => item.sku === selectedInventorySku)
     ?? inventoryItems[0];
+  const materialsInspectorVisible = activePanel === "materials"
+    && inventoryWorkspaceView === "inventory"
+    && Boolean(selectedInventoryItem)
+    && !procurementRequest
+    && !customerProcurementRequest;
   const selectedSourceCandidate = selectedInventoryItem?.candidates.find((candidate) => candidate.id === sourceMapCandidateId)
     ?? null;
   const sourceMapContext = useMemo(() => {
@@ -1009,6 +1014,7 @@ function CaseCommandCenter({
       data-embedded="true"
       data-procurement={activePanel === "materials" && Boolean(procurementRequest || customerProcurementRequest)}
       data-materials-view={activePanel === "materials" ? inventoryWorkspaceView : undefined}
+      data-materials-inspector={activePanel === "materials" ? materialsInspectorVisible : undefined}
     >
       <div ref={commandStageRef} className={styles.commandMapStage}>
         <AnimatePresence mode="wait" initial={false}>
@@ -1189,7 +1195,7 @@ function CaseCommandCenter({
         </AnimatePresence>
 
         <AnimatePresence initial={false}>
-        {activePanel === "materials" && inventoryWorkspaceView === "inventory" && selectedInventoryItem && !procurementRequest && !customerProcurementRequest ? (
+        {activePanel === "materials" && inventoryWorkspaceView === "inventory" && selectedInventoryItem && materialsInspectorVisible ? (
           <SupplySourcingInspector
             key={`sourcing-inspector:${selectedInventoryItem.sku}`}
             item={selectedInventoryItem}

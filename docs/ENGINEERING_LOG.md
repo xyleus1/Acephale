@@ -6647,3 +6647,27 @@ Use this file for chronological implementation notes that future agents should s
   supplier during release QA.
 - Follow-up: Commit, open and merge the release PR, verify the Vercel deployment,
   then confirm the Messages panel width and stop before the final supplier send.
+
+### 2026-08-23 - Remove the Inventory ghost inspector track
+
+- Branch: `fix/materials-full-width-20260823`, based on current `origin/main`.
+- Commit: `e991feb6`; PR #234 is open.
+- Root cause: The first layout fix collapsed the inspector track only for the
+  Messages tab. Inventory still declared a two-column grid even when the
+  selected company had no inventory item and therefore rendered no inspector.
+- Added one parent `materialsInspectorVisible` state that controls both the
+  actual inspector render and the grid shape. The materials workspace is now
+  one column by default and adds the inspector column or responsive row only
+  when that child exists.
+- Supplier reply sender failures now identify the exact thread-owning mailbox,
+  return a typed recovery reason, and link the operator to Connected emails.
+  The send path still refuses to substitute another Office sender.
+- Added focused regression contracts for the default and inspector layouts and
+  for Gmail sender recovery. Active Sourcing, Atlas sourcing, conversation,
+  draft, route, email settings, TypeScript, product copy, and the production
+  build passed.
+- The build reports the existing autoprefixer warning at the unchanged
+  `align-items: end` rule. No supplier email was sent.
+- Release: The Vercel preview, database contracts, and database security checks
+  passed. Merge, production deployment, and authenticated production UI
+  verification remain pending.

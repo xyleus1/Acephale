@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
+import { PROCUREMENT_REPLY_SENDER_UNAVAILABLE } from "@/lib/procurement-reply-errors";
 import {
   type CustomerProcurementListItem,
 } from "@/lib/supply-os/customer-procurement";
@@ -67,7 +68,7 @@ type ReplyDelivery = {
 };
 
 class SupplierActivityRequestError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly reason: string | null) {
     super(message);
     this.name = "SupplierActivityRequestError";
   }
@@ -129,8 +130,8 @@ async function postJson<T>(url: string, body: Record<string, unknown>) {
     headers: { accept: "application/json", "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const payload = await response.json().catch(() => null) as (T & { error?: string }) | null;
-  if (!response.ok) throw new SupplierActivityRequestError(payload?.error ?? "The reply draft could not be generated.", response.status);
+  const payload = await response.json().catch(() => null) as (T & { error?: string; reason?: string }) | null;
+  if (!response.ok) throw new SupplierActivityRequestError(payload?.error ?? "The reply draft could not be generated.", response.status, payload?.reason ?? null);
   return payload as T;
 }
 
@@ -220,6 +221,7 @@ export function ActiveSourcingWorkspace({
   const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
   const [replyDraftState, setReplyDraftState] = useState<ReplyDraftState>("idle");
   const [replyDraftError, setReplyDraftError] = useState<string | null>(null);
+  const [replyDraftErrorReason, setReplyDraftErrorReason] = useState<string | null>(null);
   const [replyCopied, setReplyCopied] = useState(false);
   const [replySendState, setReplySendState] = useState<ReplySendState>("idle");
   const [replyDelivery, setReplyDelivery] = useState<ReplyDelivery | null>(null);
@@ -318,6 +320,7 @@ export function ActiveSourcingWorkspace({
     setReplyDraft(null);
     setReplyDraftState("idle");
     setReplyDraftError(null);
+    setReplyDraftErrorReason(null);
     setReplyCopied(false);
     setReplySendState("idle");
     setReplyDelivery(null);
@@ -355,6 +358,7 @@ export function ActiveSourcingWorkspace({
     setReplyDraft(null);
     setReplyDraftState("loading");
     setReplyDraftError(null);
+    setReplyDraftErrorReason(null);
     setReplyCopied(false);
     try {
       const payload = await postJson<{ draft: ReplyDraft }>(
@@ -373,6 +377,7 @@ export function ActiveSourcingWorkspace({
       }
       setReplyDraftState("error");
       setReplyDraftError(error instanceof Error ? error.message : "The reply draft could not be generated.");
+      setReplyDraftErrorReason(error instanceof SupplierActivityRequestError ? error.reason : null);
     }
   };
 
@@ -383,6 +388,7 @@ export function ActiveSourcingWorkspace({
       setReplyCopied(true);
     } catch {
       setReplyDraftError("Copy failed. Select the draft text and copy it manually.");
+      setReplyDraftErrorReason(null);
     }
   };
 
@@ -391,6 +397,7 @@ export function ActiveSourcingWorkspace({
     setReplyDraft((current) => current ? { ...current, [field]: value } : current);
     setReplyCopied(false);
     setReplyDraftError(null);
+    setReplyDraftErrorReason(null);
     setReplySendState("idle");
   };
 
@@ -399,6 +406,7 @@ export function ActiveSourcingWorkspace({
     const selectionKey = replySelectionRef.current;
     setReplySendState("sending");
     setReplyDraftError(null);
+    setReplyDraftErrorReason(null);
     try {
       const payload = await postJson<{ delivery: ReplyDelivery }>(
         `/api/procurement/requests/${encodeURIComponent(workflowRequestId)}/vendors/${encodeURIComponent(workflowVendorId)}/conversation/send`,
@@ -422,6 +430,7 @@ export function ActiveSourcingWorkspace({
       }
       setReplySendState("error");
       setReplyDraftError(error instanceof Error ? error.message : "The supplier reply could not be sent.");
+      setReplyDraftErrorReason(error instanceof SupplierActivityRequestError ? error.reason : null);
     }
   };
 
@@ -525,7 +534,14 @@ export function ActiveSourcingWorkspace({
                   </div>
                 </header>
                 <ConversationMessages conversation={conversation} state={conversationState} error={conversationError} fallbackCase={null} />
-                {replyDraftError ? <div className={styles.activeReplyDraftError}>{replyDraftError}</div> : null}
+                {replyDraftError ? (
+                  <div className={styles.activeReplyDraftError} role="alert">
+                    <span>{replyDraftError}</span>
+                    {replyDraftErrorReason === PROCUREMENT_REPLY_SENDER_UNAVAILABLE ? (
+                      <a href="/dashboard/settings/connected-emails">Manage connected emails <ArrowRight size={13} /></a>
+                    ) : null}
+                  </div>
+                ) : null}
                 {replyDraft ? (
                   <section className={styles.activeReplyDraft} aria-label="Supplier reply draft">
                     <header>
@@ -533,7 +549,7 @@ export function ActiveSourcingWorkspace({
                       <div className={styles.activeReplyDraftHeaderActions}>
                         <button type="button" onClick={copyReplyDraft}>{replyCopied ? <Check size={13} /> : <Copy size={13} />}{replyCopied ? "Copied" : "Copy reply"}</button>
                         {replySendState !== "sent" ? (
-                          <button type="button" data-primary="true" onClick={() => { setReplyDraftError(null); setReplySendState("confirming"); }} disabled={replySendState === "sending" || !replyDraft.subject.trim() || !replyDraft.body.trim()}>
+                          <button type="button" data-primary="true" onClick={() => { setReplyDraftError(null); setReplyDraftErrorReason(null); setReplySendState("confirming"); }} disabled={replySendState === "sending" || !replyDraft.subject.trim() || !replyDraft.body.trim()}>
                             <Send size={13} /> Send reply
                           </button>
                         ) : null}

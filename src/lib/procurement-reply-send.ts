@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
+import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import {
   getProcurementCommunicationMessages,
   type ProcurementOrderDetail,
@@ -394,7 +395,7 @@ export async function sendProcurementSupplierReply(args: {
     select: { id: true, email: true },
   });
   if (!sender) {
-    throw new SupplyPersistenceError("The Gmail inbox for this thread is disconnected or disabled for sending. Reconnect it in Settings.", "conflict");
+    throw new ProcurementReplySenderUnavailableError(anchor.accountEmail);
   }
 
   const message = {

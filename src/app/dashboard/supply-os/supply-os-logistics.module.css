@@ -320,8 +320,13 @@
 }
 
 .commandCenter[data-domain="materials"] .commandMapStage {
-  grid-template-columns: minmax(0, 2.6fr) minmax(300px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "materials";
+}
+
+.commandCenter[data-domain="materials"][data-materials-inspector="true"] .commandMapStage {
+  grid-template-columns: minmax(0, 2.6fr) minmax(300px, 0.75fr);
   grid-template-areas: "materials inspector";
 }
 
@@ -663,7 +668,7 @@
     grid-template-rows: minmax(0, 4.2fr) minmax(140px, 0.7fr);
   }
 
-  .commandCenter[data-domain="materials"] .commandMapStage {
+  .commandCenter[data-domain="materials"][data-materials-inspector="true"] .commandMapStage {
     grid-template-columns: minmax(0, 3.4fr) minmax(300px, 0.68fr);
     grid-template-rows: minmax(0, 1fr);
   }
@@ -1726,8 +1731,27 @@
 }
 
 .activeReplyDraftError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--decision) 30%, var(--line));
+  border-radius: 9px;
   color: var(--decision);
+  background: var(--decision-soft);
+}
+
+.activeReplyDraftError a {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: inherit;
+  font-weight: 630;
+  white-space: nowrap;
 }
 
 .activeConversationEmpty,
@@ -5238,6 +5262,12 @@
 
   .commandCenter[data-domain="materials"] .commandMapStage {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(560px, 1fr);
+    grid-template-areas: "materials";
+    overflow: hidden;
+  }
+
+  .commandCenter[data-domain="materials"][data-materials-inspector="true"] .commandMapStage {
     grid-template-rows: minmax(560px, 1fr) minmax(440px, auto);
     grid-template-areas:
       "materials"
@@ -5347,6 +5377,10 @@
   }
 
   .commandCenter[data-domain="materials"] .commandMapStage {
+    grid-template-rows: minmax(620px, auto);
+  }
+
+  .commandCenter[data-domain="materials"][data-materials-inspector="true"] .commandMapStage {
     grid-template-rows: minmax(620px, auto) minmax(560px, auto);
   }
 
@@ -5448,13 +5482,19 @@
     flex-direction: column;
   }
 
+  .activeReplyDraftError {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .activeConversationPanel > header div {
     width: 100%;
     justify-content: flex-start;
   }
 
   .activeReplyDraft button,
-  .activeReplyDraft input {
+  .activeReplyDraft input,
+  .activeReplyDraftError a {
     min-height: 44px;
   }
 
