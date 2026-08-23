@@ -477,7 +477,9 @@ async function main() {
       {
         provider: "GMAIL",
         accountEmail: "buyer@example.com",
+        providerMessageId: "gmail-outbound",
         providerThreadId: "gmail-thread",
+        rfcMessageId: "<outbound@example.test>",
         direction: "OUTBOUND",
         fromEmail: "buyer@example.com",
         fromName: "Buyer",
@@ -491,7 +493,9 @@ async function main() {
       {
         provider: "GMAIL",
         accountEmail: "buyer@example.com",
+        providerMessageId: "gmail-inbound",
         providerThreadId: "gmail-thread",
+        rfcMessageId: "<inbound@example.test>",
         direction: "INBOUND",
         fromEmail: "ledger@example.com",
         fromName: "Ledger supplier",
@@ -504,7 +508,14 @@ async function main() {
       },
     ]);
     assert.equal(ledgerMessages.every((message) => /^[a-f0-9]{64}$/.test(message.id)), true);
-    assert.doesNotMatch(JSON.stringify(ledgerMessages), /gmail-outbound|gmail-inbound/);
+    assert.deepEqual(
+      ledgerMessages.map((message) => [message.providerMessageId, message.rfcMessageId]),
+      [
+        ["gmail-outbound", "<outbound@example.test>"],
+        ["gmail-inbound", "<inbound@example.test>"],
+      ],
+      "The server-only ledger reader must retain exact provider anchors for safe reply threading and deduplication.",
+    );
     const boundedBodyMessages = await getProcurementCommunicationMessagesFromDatabase(
       workflowDatabase,
       customerA,

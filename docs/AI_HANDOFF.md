@@ -66,6 +66,50 @@ Release status:
 - Authenticated rendered QA and a live round-trip test remain pending until at
   least two production mailbox accounts are connected and enabled for sending.
 
+### Send confirmed supplier replies from a full-width Messages workspace
+
+- Active Sourcing now sends an edited supplier reply through the Gmail account
+  bound to the exact thread. Route parameters are client-selected, then the
+  server authorizes and binds them to the office, customer, workspace, order,
+  vendor, current conversation, connected sender, and latest inbound message.
+- Sending requires a second explicit `Confirm send` click. The server reloads
+  the office-scoped order and conversation, requires the displayed message to
+  remain the latest inbound, verifies the recipient, and rejects stale state.
+- Each attempted send has one distinct durable `PROCUREMENT_SUPPLIER_REPLY_EMAIL`
+  execution task keyed to the inbound message and attempt. Its RFC Message-ID
+  is stable for that attempt. A repeated successful request returns the stored
+  receipt, an uncertain attempt reconciles the same ID, and a definitive
+  failure may retry identical content as a new attempt and ID.
+- A successful Gmail receipt is stored in Derya's `EmailThread`,
+  `EmailMessage`, and execution-event ledgers. Bourne still owns writes to its
+  communication ledger. This implementation does not write to Bourne or grant
+  Derya any Bourne mutation privilege.
+- Draft generation is now available only when the newest message is inbound.
+  After a sent receipt, the locally stored outbound message is merged into the
+  Bourne-backed conversation so the old inbound cannot be replied to again.
+- The Inventory and Messages tab state now belongs to the parent command
+  center. Messages removes the sourcing inspector from rendering and switches
+  the grid to one full-width materials column, eliminating the empty right
+  side shown by the previous ghost inspector track.
+- No supplier email was sent during implementation or verification.
+
+Verification completed:
+
+- Procurement conversation, draft, route, Active Sourcing, and Gmail provider
+  focused contracts
+- Disposable PostgreSQL task lifecycle, receipt persistence, concurrency,
+  retry, reconciliation, and tenant-boundary test
+- Full TypeScript check
+- Supply OS deployment boundary
+- Production Next.js build with the new send route
+- Diff whitespace and forbidden-character checks
+
+Release status:
+
+- Branch `fix/sourcing-send-layout-20260823` is based on current `origin/main`.
+  Commit, pull request, deployment, and authenticated production UI
+  verification are still pending in this handoff snapshot.
+
 ### Gmail app-password schema is deployed before application release
 
 - Migration `20260822000700_gmail_app_password_accounts` adds nullable display
@@ -170,9 +214,9 @@ Verification completed:
   supplier contact. Draft creation also carries the inbound message displayed
   to the operator; if a newer reply arrives first, the server rejects the stale
   request and the UI refreshes the conversation.
-- Drafting is ephemeral and review-only. The panel can copy the subject and
-  body to Gmail, but contains no send path and writes no message or workflow
-  state.
+- At the PR #218 and #221 release point, drafting was ephemeral and review-only.
+  The panel could copy the subject and body to Gmail but had no send path and
+  wrote no message or workflow state.
 - Authenticated production QA of PR #218 proved the exact Bay Area Circuits
   row, response-without-quote copy, editable draft panel, and absence of a send
   action. The first live draft also exposed two quality defects: the prompt

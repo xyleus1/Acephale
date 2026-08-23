@@ -40,7 +40,9 @@ export type ProcurementLedgerConversationMessage = {
   id: string;
   provider: string;
   accountEmail: string;
+  providerMessageId: string;
   providerThreadId: string | null;
+  rfcMessageId: string | null;
   direction: "INBOUND" | "OUTBOUND";
   fromEmail: string;
   fromName: string | null;
@@ -59,6 +61,12 @@ export type ProcurementConversation = {
   accountEmail: string | null;
   messages: ProcurementConversationMessage[];
   unavailableReason: string | null;
+};
+
+export type ProcurementConversationMergeCandidate = {
+  message: ProcurementConversationMessage;
+  providerMessageId?: string | null;
+  rfcMessageId?: string | null;
 };
 
 export type ProcurementVendorConversationArgs = {
@@ -92,6 +100,43 @@ function header(payload: GmailPayload | undefined, name: string) {
 function decodeBase64Url(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   return Buffer.from(normalized, "base64").toString("utf8");
+}
+
+function mergeContentIdentity(message: ProcurementConversationMessage) {
+  return [
+    message.direction,
+    message.fromEmail.trim().toLowerCase(),
+    message.subject ?? "",
+    message.body,
+    message.sentAt,
+  ].join("\u0000");
+}
+
+function mergeExternalIdentities(candidate: ProcurementConversationMergeCandidate) {
+  return [
+    candidate.providerMessageId ? `provider:${candidate.providerMessageId}` : null,
+    candidate.rfcMessageId ? `rfc:${candidate.rfcMessageId}` : null,
+  ].filter((value): value is string => Boolean(value));
+}
+
+export function mergeProcurementConversationMessages(
+  primary: ProcurementConversationMergeCandidate[],
+  additions: ProcurementConversationMergeCandidate[],
+) {
+  const external = new Set(primary.flatMap(mergeExternalIdentities));
+  const content = new Set(primary.map((candidate) => mergeContentIdentity(candidate.message)));
+  const merged = [...primary];
+  for (const candidate of additions) {
+    const externalKeys = mergeExternalIdentities(candidate);
+    const contentKey = mergeContentIdentity(candidate.message);
+    if (externalKeys.some((key) => external.has(key)) || content.has(contentKey)) continue;
+    merged.push(candidate);
+    externalKeys.forEach((key) => external.add(key));
+    content.add(contentKey);
+  }
+  return boundProcurementConversationMessages(merged
+    .map((candidate) => candidate.message)
+    .sort((left, right) => left.sentAt.localeCompare(right.sentAt) || left.id.localeCompare(right.id)));
 }
 
 function plainBody(payload: GmailPayload | undefined): string {

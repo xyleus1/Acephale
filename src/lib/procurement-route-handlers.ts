@@ -7,6 +7,7 @@ import {
   ProcurementReplyDraftError,
 } from "@/lib/procurement-reply-draft";
 import type { draftProcurementSupplierReply } from "@/lib/procurement-reply-draft";
+import type { sendProcurementSupplierReply } from "@/lib/procurement-reply-send";
 import {
   getProcurementRequest,
   listProcurementRequests,
@@ -16,6 +17,7 @@ import {
   submitProcurementRequest,
 } from "@/lib/procurement-workflow";
 import { contextualizeProcurementRequest } from "@/lib/supply-os/procurement-company-context";
+import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
 
 const responseHeaders = {
   "cache-control": "no-store",
@@ -58,6 +60,19 @@ export type ProcurementReplyDraftDependencies = {
   draft: typeof draftProcurementSupplierReply;
 };
 
+type ProcurementReplySendSession = ProcurementRouteSession & {
+  role: string;
+  canViewWholeOffice: boolean;
+};
+
+export type ProcurementReplySendDependencies = {
+  session: () => Promise<ProcurementReplySendSession | null>;
+  resolveCustomerId: typeof resolveProcurementCustomerId;
+  getRequest: typeof getProcurementRequest;
+  conversation: typeof procurementVendorConversation;
+  send: typeof sendProcurementSupplierReply;
+};
+
 const defaultRouteDependencies: ProcurementRouteDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
@@ -86,8 +101,24 @@ const defaultReplyDraftDependencies: ProcurementReplyDraftDependencies = {
   draft: async (args) => (await import("@/lib/procurement-reply-draft")).draftProcurementSupplierReply(args),
 };
 
+const defaultReplySendDependencies: ProcurementReplySendDependencies = {
+  session: async () => (await import("@/lib/auth")).getSession(),
+  resolveCustomerId: resolveProcurementCustomerId,
+  getRequest: getProcurementRequest,
+  conversation: async (args) => (await import("@/lib/procurement-conversation")).procurementVendorConversation(args),
+  send: async (args) => (await import("@/lib/procurement-reply-send")).sendProcurementSupplierReply(args),
+};
+
 const procurementReplyDraftRequestSchema = z.object({
   sourceMessageId: z.string().trim().min(1).max(512),
+}).strict();
+
+const procurementReplySendRequestSchema = z.object({
+  confirmed: z.literal(true),
+  sourceMessageId: z.string().trim().min(1).max(512),
+  recipient: z.string().trim().email().max(320),
+  subject: z.string().trim().min(1).max(180),
+  body: z.string().trim().min(1).max(8_000),
 }).strict();
 
 function errorResponse(error: unknown) {
@@ -111,6 +142,21 @@ function replyDraftErrorResponse(error: unknown) {
   }
   if (error instanceof ProcurementWorkflowError) return errorResponse(error);
   return Response.json({ error: "The supplier reply draft could not be generated." }, { status: 500, headers: responseHeaders });
+}
+
+function replySendErrorResponse(error: unknown) {
+  if (error instanceof SupplyPersistenceError) {
+    const status = error.code === "forbidden"
+      ? 403
+      : error.code === "not_found"
+        ? 404
+        : error.code === "conflict"
+          ? 409
+          : 400;
+    return Response.json({ error: error.message }, { status, headers: responseHeaders });
+  }
+  if (error instanceof ProcurementWorkflowError) return errorResponse(error);
+  return Response.json({ error: "The supplier reply could not be sent." }, { status: 500, headers: responseHeaders });
 }
 
 async function readRequestJson(request: Request) {
@@ -306,5 +352,62 @@ export async function handleProcurementReplyDraft(
     return Response.json({ draft }, { headers: responseHeaders });
   } catch (error) {
     return replyDraftErrorResponse(error);
+  }
+}
+
+export async function handleProcurementReplySend(
+  request: Request,
+  orderId: string,
+  vendorId: string,
+  dependencies: ProcurementReplySendDependencies = defaultReplySendDependencies,
+) {
+  const session = await dependencies.session();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
+
+  const requestBody = await readRequestJson(request);
+  if (requestBody.tooLarge) {
+    return Response.json({ error: "The supplier reply is too large." }, { status: 413, headers: responseHeaders });
+  }
+  const parsedInput = procurementReplySendRequestSchema.safeParse(requestBody.body);
+  if (!parsedInput.success) {
+    return Response.json({ error: "Confirm the exact recipient, subject, and reply before sending." }, { status: 400, headers: responseHeaders });
+  }
+
+  try {
+    const customerId = await dependencies.resolveCustomerId(session);
+    const [order, conversation] = await Promise.all([
+      dependencies.getRequest(customerId, orderId),
+      dependencies.conversation({
+        officeId: session.officeId,
+        customerId,
+        orderId,
+        vendorId,
+      }),
+    ]);
+    const vendor = order?.vendors.find((candidate) => candidate.id === vendorId) ?? null;
+    if (!order || !vendor) {
+      return Response.json({ error: "Supplier conversation not found." }, { status: 404, headers: responseHeaders });
+    }
+    const delivery = await dependencies.send({
+      context: {
+        officeId: session.officeId,
+        userId: session.userId,
+        role: session.role,
+        canViewWholeOffice: session.canViewWholeOffice,
+      },
+      customerId,
+      order,
+      vendor,
+      conversation,
+      input: {
+        sourceMessageId: parsedInput.data.sourceMessageId,
+        recipient: parsedInput.data.recipient,
+        subject: parsedInput.data.subject,
+        body: parsedInput.data.body,
+      },
+    });
+    return Response.json({ delivery }, { headers: responseHeaders });
+  } catch (error) {
+    return replySendErrorResponse(error);
   }
 }

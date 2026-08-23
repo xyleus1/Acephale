@@ -69,6 +69,7 @@ import {
   SupplyInventoryWorkspace,
   SupplySourcingInspector,
   type PendingSourcingQueueItem,
+  type SupplyInventoryWorkspaceView,
 } from "./supply-os-inventory-sourcing";
 import { SupplyProcurementWorkspace } from "./supply-os-procurement-workspace";
 import { CustomerProcurementWorkspace } from "./supply-os-customer-procurement-workspace";
@@ -481,6 +482,7 @@ function CaseCommandCenter({
   const [selection, setSelection] = useState({ panel: activePanel, objectId: initialObject?.id ?? "" });
   const [inspectorMode, setInspectorMode] = useState<"object" | "optimization">("optimization");
   const [selectedInventorySku, setSelectedInventorySku] = useState("");
+  const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<SupplyInventoryWorkspaceView>("inventory");
   const [workspaceInventoryItems, setWorkspaceInventoryItems] = useState<SupplyInventoryItem[]>([]);
   const [workspaceSnapshotRevision, setWorkspaceSnapshotRevision] = useState(0);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, string>>({});
@@ -1006,6 +1008,7 @@ function CaseCommandCenter({
       data-domain={activePanel}
       data-embedded="true"
       data-procurement={activePanel === "materials" && Boolean(procurementRequest || customerProcurementRequest)}
+      data-materials-view={activePanel === "materials" ? inventoryWorkspaceView : undefined}
     >
       <div ref={commandStageRef} className={styles.commandMapStage}>
         <AnimatePresence mode="wait" initial={false}>
@@ -1056,6 +1059,8 @@ function CaseCommandCenter({
         ) : activePanel === "materials" ? (
           <SupplyInventoryWorkspace
             key={`sourcing-queue:${sourcingWorkspaceId ?? modelDashboard.id}`}
+            activeView={inventoryWorkspaceView}
+            onViewChange={setInventoryWorkspaceView}
             selectedSku={selectedInventoryItem?.sku ?? ""}
             items={inventoryItems}
             companyName={companyName}
@@ -1184,7 +1189,7 @@ function CaseCommandCenter({
         </AnimatePresence>
 
         <AnimatePresence initial={false}>
-        {activePanel === "materials" && selectedInventoryItem && !procurementRequest && !customerProcurementRequest ? (
+        {activePanel === "materials" && inventoryWorkspaceView === "inventory" && selectedInventoryItem && !procurementRequest && !customerProcurementRequest ? (
           <SupplySourcingInspector
             key={`sourcing-inspector:${selectedInventoryItem.sku}`}
             item={selectedInventoryItem}

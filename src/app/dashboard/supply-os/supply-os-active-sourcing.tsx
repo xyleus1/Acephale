@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   Check,
+  CheckCircle2,
   Copy,
   ExternalLink,
   LoaderCircle,
@@ -11,6 +12,7 @@ import {
   PackageCheck,
   PenLine,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
@@ -48,11 +50,20 @@ import styles from "./supply-os-logistics.module.css";
 type Selection = { kind: "workflow" | "historical"; id: string };
 type ConversationState = "idle" | "loading" | "ready" | "error";
 type ReplyDraftState = "idle" | "loading" | "ready" | "error";
+type ReplySendState = "idle" | "confirming" | "sending" | "sent" | "error";
 type ReplyDraft = {
   recipient: string;
   subject: string;
   body: string;
   sourceMessageId: string;
+};
+type ReplyDelivery = {
+  state: "SENT";
+  accountEmail: string;
+  recipient: string;
+  sourceUrl: string;
+  sentAt: string;
+  alreadySent: boolean;
 };
 
 class SupplierActivityRequestError extends Error {
@@ -210,6 +221,8 @@ export function ActiveSourcingWorkspace({
   const [replyDraftState, setReplyDraftState] = useState<ReplyDraftState>("idle");
   const [replyDraftError, setReplyDraftError] = useState<string | null>(null);
   const [replyCopied, setReplyCopied] = useState(false);
+  const [replySendState, setReplySendState] = useState<ReplySendState>("idle");
+  const [replyDelivery, setReplyDelivery] = useState<ReplyDelivery | null>(null);
 
   const workflowRequest = selection?.kind === "workflow"
     ? activeWorkflowRequests.find((request) => request.id === selection.id) ?? null
@@ -306,7 +319,17 @@ export function ActiveSourcingWorkspace({
     setReplyDraftState("idle");
     setReplyDraftError(null);
     setReplyCopied(false);
+    setReplySendState("idle");
+    setReplyDelivery(null);
   }, [workflowRequestId, workflowVendorId]);
+
+  useEffect(() => {
+    if (conversationState !== "ready" || !replyDraft || replySendState === "sent") return;
+    if (conversation?.messages.at(-1)?.id === replyDraft.sourceMessageId) return;
+    setReplyDraft(null);
+    setReplyDraftState("idle");
+    setReplySendState("idle");
+  }, [conversation, conversationState, replyDraft, replySendState]);
 
   const workflowContacted = activeWorkflowRequests.reduce((sum, request) => sum + request.contactedCount, 0);
   const workflowResponses = activeWorkflowRequests.reduce((sum, request) => sum + request.responseCount, 0);
@@ -326,10 +349,8 @@ export function ActiveSourcingWorkspace({
 
   const createReplyDraft = async () => {
     if (!workflowRequestId || !workflowVendorId) return;
-    const displayedInbound = [...(conversation?.messages ?? [])]
-      .reverse()
-      .find((message) => message.direction === "INBOUND");
-    if (!displayedInbound) return;
+    const displayedInbound = conversation?.messages.at(-1);
+    if (displayedInbound?.direction !== "INBOUND") return;
     const selectionKey = replySelectionRef.current;
     setReplyDraft(null);
     setReplyDraftState("loading");
@@ -343,6 +364,8 @@ export function ActiveSourcingWorkspace({
       if (replySelectionRef.current !== selectionKey) return;
       setReplyDraft(payload.draft);
       setReplyDraftState("ready");
+      setReplySendState("idle");
+      setReplyDelivery(null);
     } catch (error) {
       if (replySelectionRef.current !== selectionKey) return;
       if (error instanceof SupplierActivityRequestError && error.status === 409) {
@@ -360,6 +383,45 @@ export function ActiveSourcingWorkspace({
       setReplyCopied(true);
     } catch {
       setReplyDraftError("Copy failed. Select the draft text and copy it manually.");
+    }
+  };
+
+  const updateReplyDraft = (field: "subject" | "body", value: string) => {
+    if (replySendState === "sent") return;
+    setReplyDraft((current) => current ? { ...current, [field]: value } : current);
+    setReplyCopied(false);
+    setReplyDraftError(null);
+    setReplySendState("idle");
+  };
+
+  const sendReplyDraft = async () => {
+    if (!replyDraft || !workflowRequestId || !workflowVendorId || replySendState === "sending") return;
+    const selectionKey = replySelectionRef.current;
+    setReplySendState("sending");
+    setReplyDraftError(null);
+    try {
+      const payload = await postJson<{ delivery: ReplyDelivery }>(
+        `/api/procurement/requests/${encodeURIComponent(workflowRequestId)}/vendors/${encodeURIComponent(workflowVendorId)}/conversation/send`,
+        {
+          confirmed: true,
+          sourceMessageId: replyDraft.sourceMessageId,
+          recipient: replyDraft.recipient,
+          subject: replyDraft.subject,
+          body: replyDraft.body,
+        },
+      );
+      if (replySelectionRef.current !== selectionKey) return;
+      setReplyDelivery(payload.delivery);
+      setReplySendState("sent");
+      setConversationRevision((revision) => revision + 1);
+      setDetailRevision((revision) => revision + 1);
+    } catch (error) {
+      if (replySelectionRef.current !== selectionKey) return;
+      if (error instanceof SupplierActivityRequestError && error.status === 409) {
+        setConversationRevision((revision) => revision + 1);
+      }
+      setReplySendState("error");
+      setReplyDraftError(error instanceof Error ? error.message : "The supplier reply could not be sent.");
     }
   };
 
@@ -453,7 +515,7 @@ export function ActiveSourcingWorkspace({
                 <header>
                   <span><MessageSquare size={16} /><strong>Conversation</strong></span>
                   <div>
-                    {conversationState === "ready" && conversation?.messages.some((message) => message.direction === "INBOUND") ? (
+                    {conversationState === "ready" && conversation?.messages.at(-1)?.direction === "INBOUND" ? (
                       <button type="button" onClick={createReplyDraft} disabled={replyDraftState === "loading"}>
                         {replyDraftState === "loading" ? <LoaderCircle size={12} /> : <PenLine size={12} />}
                         {replyDraftState === "loading" ? "Drafting" : replyDraft ? "Redraft reply" : "Draft reply"}
@@ -466,10 +528,34 @@ export function ActiveSourcingWorkspace({
                 {replyDraftError ? <div className={styles.activeReplyDraftError}>{replyDraftError}</div> : null}
                 {replyDraft ? (
                   <section className={styles.activeReplyDraft} aria-label="Supplier reply draft">
-                    <header><span><small>Draft reply</small><strong>To {replyDraft.recipient}</strong></span><button type="button" onClick={copyReplyDraft}>{replyCopied ? <Check size={13} /> : <Copy size={13} />}{replyCopied ? "Copied" : "Copy reply"}</button></header>
-                    <label>Subject<input value={replyDraft.subject} onChange={(event) => { setReplyDraft((current) => current ? { ...current, subject: event.target.value } : current); setReplyCopied(false); setReplyDraftError(null); }} /></label>
-                    <label>Reply<textarea rows={7} value={replyDraft.body} onChange={(event) => { setReplyDraft((current) => current ? { ...current, body: event.target.value } : current); setReplyCopied(false); setReplyDraftError(null); }} /></label>
-                    <p>Draft only. Review and copy to Gmail. Nothing is sent from this view.</p>
+                    <header>
+                      <span><small>Draft reply</small><strong>To {replyDraft.recipient}</strong></span>
+                      <div className={styles.activeReplyDraftHeaderActions}>
+                        <button type="button" onClick={copyReplyDraft}>{replyCopied ? <Check size={13} /> : <Copy size={13} />}{replyCopied ? "Copied" : "Copy reply"}</button>
+                        {replySendState !== "sent" ? (
+                          <button type="button" data-primary="true" onClick={() => { setReplyDraftError(null); setReplySendState("confirming"); }} disabled={replySendState === "sending" || !replyDraft.subject.trim() || !replyDraft.body.trim()}>
+                            <Send size={13} /> Send reply
+                          </button>
+                        ) : null}
+                      </div>
+                    </header>
+                    <label>Subject<input value={replyDraft.subject} disabled={replySendState === "sent"} onChange={(event) => updateReplyDraft("subject", event.target.value)} /></label>
+                    <label>Reply<textarea rows={7} value={replyDraft.body} disabled={replySendState === "sent"} onChange={(event) => updateReplyDraft("body", event.target.value)} /></label>
+                    {replySendState === "confirming" ? (
+                      <div className={styles.activeReplyConfirmation} role="group" aria-label="Confirm supplier reply">
+                        <p>Send this exact reply from {conversation?.accountEmail ?? "the connected Gmail account"} to {replyDraft.recipient}?</p>
+                        <div>
+                          <button type="button" onClick={() => setReplySendState("idle")}>Cancel</button>
+                          <button type="button" data-primary="true" onClick={sendReplyDraft}><Send size={13} /> Confirm send</button>
+                        </div>
+                      </div>
+                    ) : replySendState === "sending" ? (
+                      <p className={styles.activeReplyStatus}><LoaderCircle size={13} /> Sending through connected Gmail. Do not retry.</p>
+                    ) : replySendState === "sent" && replyDelivery ? (
+                      <p className={styles.activeReplyStatus} data-sent="true"><CheckCircle2 size={13} /> Sent from {replyDelivery.accountEmail} at {formatDate(replyDelivery.sentAt)}. <a href={replyDelivery.sourceUrl} target="_blank" rel="noreferrer">Open sent message</a></p>
+                    ) : (
+                      <p>Review before sending. Derya sends only after you confirm the exact recipient and message.</p>
+                    )}
                   </section>
                 ) : null}
               </section>

@@ -147,13 +147,16 @@ async function main() {
       },
     ],
   };
-  const compatibilityDraft = await draftProcurementSupplierReply({
-    order,
-    vendor: { ...vendor, contact: { ...vendor.contact, email: "sfielding@bacircuits.com" } },
-    conversation: compatibilityConversation,
-    generateText: async () => "Thank you.\n\nBest,\nMert\nDerya Supply Chain",
-  });
-  assert.equal(compatibilityDraft.sourceMessageId, "inbound-1", "Compatibility drafts must ignore inbound senders that do not match the supplier contact.");
+  await assert.rejects(
+    draftProcurementSupplierReply({
+      order,
+      vendor: { ...vendor, contact: { ...vendor.contact, email: "sfielding@bacircuits.com" } },
+      conversation: compatibilityConversation,
+      generateText: async () => "unused",
+    }),
+    (error: unknown) => error instanceof ProcurementReplyDraftError && error.code === "conflict",
+    "A newer unrelated inbound must block replying to stale supplier mail.",
+  );
   await assert.rejects(
     draftProcurementSupplierReply({
       order,

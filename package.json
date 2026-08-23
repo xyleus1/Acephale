@@ -46,6 +46,7 @@
     "test:procurement-conversation": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-conversation.test.ts",
     "test:procurement-reply-draft": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-reply-draft.test.ts",
     "test:procurement-reply-route": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-reply-route.test.ts",
+    "test:procurement-reply-send-db": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-reply-send-database.test.ts",
     "test:supply-os-bom-acceptance": "node --import tsx scripts/supply-os-bom-acceptance.test.ts",
     "test:supply-os-live-research": "node --import tsx scripts/supply-os-live-research-acceptance.ts",
     "test:supply-os-supplier-research-failures": "node --import tsx scripts/supply-os-supplier-research-failures.test.ts",

@@ -16,6 +16,41 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-23 - Active Sourcing may send one confirmed reply per inbound message
+
+- Status: accepted, supersedes the draft-only and no-send clauses in the
+  2026-08-22 supplier replies and supplier quotes decision
+- Owner: product and engineering
+- Context: Operators can review an exact supplier thread and edit a grounded
+  reply in Active Sourcing, but copying the reply into Gmail creates avoidable
+  context switching and loses an immediate Derya delivery receipt.
+- Decision: Active Sourcing may send one operator-confirmed reply to the latest
+  inbound supplier message. The UI requires a separate confirmation click. The
+  server binds the office, workspace, customer, order, vendor, source message,
+  connected sender, recipient, subject, body, and message hash before calling
+  Gmail. The browser cannot select a different sender or provider thread. The
+  explicit confirmation is direct operator authorization, so the execution
+  task records `requiresApproval = false`; it is not manager approval.
+- Idempotency boundary: Each attempted send uses one distinct durable execution task,
+  keyed to the exact inbound message and attempt. The RFC Message-ID is stable
+  per attempt. A successful repeat returns the stored receipt. An uncertain
+  attempt reconciles the same ID and blocks another send while unresolved. A
+  provider-rejected attempt may retry identical content in a new task with a
+  new attempt number and RFC Message-ID; changed content is rejected.
+- Ledger boundary: Derya records the provider receipt in its office-scoped
+  email and execution ledgers. Bourne retains exclusive write ownership of the
+  append-only procurement communication ledger. This path does not write to
+  Bourne, and Derya receives no Bourne mutation privilege.
+- Commercial boundary: Sending a reply does not record a quote, select a
+  supplier, accept terms, approve a purchase order, or authorize spend. Those
+  remain separate facts and approvals.
+- Consequences: A sent reply appears in the exact conversation, the prior
+  inbound cannot produce another draft, and Gmail failures are visible without
+  blind retries. Sending remains blocked until the exact Gmail thread exists in
+  the Bourne ledger or Derya's office-scoped email records.
+- Revisit when: Bourne exposes an authenticated, tenant-bound receipt endpoint
+  that can append Derya sends without weakening its database role boundary.
+
 ### 2026-08-22 - Customer portal uses admin-managed passwords
 
 - Status: accepted, supersedes the passwordless customer portal login decision
@@ -65,7 +100,8 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ### 2026-08-22 - Supplier replies and supplier quotes are separate facts
 
-- Status: accepted
+- Status: accepted, with the draft-only and no-send clauses superseded by the
+  2026-08-23 confirmed supplier reply decision
 - Owner: product and engineering
 - Context: Active Sourcing counted inbound Bourne ledger messages at the order
   level, but each manufacturer row inferred a response only from a structured
@@ -73,17 +109,17 @@ Use this log for durable product and engineering decisions. Do not put every imp
   while the same row said `Not received`.
 - Decision: A tenant-, order-, and vendor-bound inbound communication marks
   that manufacturer as responded. A structured quote remains a separate
-  commercial fact and is never inferred from message text. Supplier reply
-  drafts may use the exact request and thread, but remain editable, ephemeral,
-  and review-only with no send action.
+  commercial fact and is never inferred from message text. At the initial
+  PR #218 release, supplier reply drafts used the exact request and thread but
+  were editable, ephemeral, and review-only.
 - Rationale: Delivery, response, quote, approval, and purchase are distinct
   workflow events. Collapsing them creates false UI state and unsafe commercial
   implications.
 - Consequences: Manufacturer rows identify the exact respondent and show the
-  inbound count even when no quote exists. Operators may generate and copy a
-  context-aware reply, but sending remains in Gmail and under human control.
-- Revisit when: Derya has an approved, idempotent supplier-send contract with
-  an explicit sender, recipient, message hash, and operator authorization.
+  inbound count even when no quote exists. Sending was later added under the
+  separate 2026-08-23 contract and does not change quote state.
+- Revisit when: Reply receipt state or quote state needs a different commercial
+  workflow boundary.
 
 ### 2026-08-22 - Derya owns email accounts and Bourne owns campaigns
 

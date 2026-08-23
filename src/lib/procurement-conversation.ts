@@ -12,6 +12,7 @@ import { SupplyPersistenceError, type SupplyAccessContext } from "@/lib/supply-o
 import {
   MAX_PROCUREMENT_CONVERSATION_MESSAGES,
   boundProcurementConversationMessages,
+  mergeProcurementConversationMessages,
   procurementConversationEmailAddresses,
   procurementConversationFromGmailThread,
   procurementConversationParticipantEmails,
@@ -162,6 +163,49 @@ async function localConversation(
   } satisfies ProcurementConversation;
 }
 
+async function localProviderThreadMessages(officeId: string, externalThreadId: string) {
+  const thread = await prisma.emailThread.findFirst({
+    where: { officeId, externalThreadId },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      messages: {
+        orderBy: [{ sentAt: "asc" }, { id: "asc" }],
+        take: MAX_PROCUREMENT_CONVERSATION_MESSAGES,
+        select: {
+          id: true,
+          direction: true,
+          fromEmail: true,
+          fromName: true,
+          toEmails: true,
+          ccEmails: true,
+          subject: true,
+          bodyText: true,
+          sentAt: true,
+          gmailMessageId: true,
+          rfcMessageId: true,
+          externalId: true,
+        },
+      },
+    },
+  });
+  return (thread?.messages ?? []).map((message) => ({
+    providerMessageId: message.gmailMessageId,
+    rfcMessageId: message.rfcMessageId ?? message.externalId,
+    message: {
+      id: message.id,
+      direction: message.direction,
+      fromEmail: message.fromEmail,
+      fromName: message.fromName,
+      toEmails: jsonEmails(message.toEmails),
+      ccEmails: jsonEmails(message.ccEmails),
+      subject: message.subject,
+      body: message.bodyText ?? "",
+      sentAt: message.sentAt.toISOString(),
+      truncated: false,
+    },
+  }));
+}
+
 type ProcurementVendorConversationDependencies = {
   communicationMessages?: typeof getProcurementCommunicationMessages;
   conversationReference?: typeof getProcurementVendorConversationRef;
@@ -238,14 +282,33 @@ export async function procurementVendorConversation(
   args: ProcurementVendorConversationArgs,
   dependencies: ProcurementVendorConversationDependencies = {},
 ) {
-  return resolveProcurementVendorConversation(args, {
-    communicationMessages:
-      dependencies.communicationMessages ?? getProcurementCommunicationMessages,
+  const communicationMessages = dependencies.communicationMessages ?? getProcurementCommunicationMessages;
+  const ledgerMessages = await communicationMessages(args.customerId, args.orderId, args.vendorId);
+  const resolved = await resolveProcurementVendorConversation(args, {
+    communicationMessages: async () => ledgerMessages,
     conversationReference:
       dependencies.conversationReference ?? getProcurementVendorConversationRef,
     compatibilityConversation:
       dependencies.compatibilityConversation ?? compatibilityConversation,
   });
+  if (resolved.source !== "BOURNE_LEDGER" || !ledgerMessages?.length) return resolved;
+  const providerThreadId = [...ledgerMessages].reverse().find((message) => message.providerThreadId)?.providerThreadId ?? null;
+  if (!providerThreadId) return resolved;
+  const localMessages = await localProviderThreadMessages(args.officeId, providerThreadId);
+  if (!localMessages.length) return resolved;
+  const ledgerById = new Map(ledgerMessages.map((message) => [message.id, message]));
+  const merged = mergeProcurementConversationMessages(resolved.messages.map((message) => {
+    const ledger = ledgerById.get(message.id);
+    return {
+      message,
+      providerMessageId: ledger?.providerMessageId,
+      rfcMessageId: ledger?.rfcMessageId,
+    };
+  }), localMessages);
+  return {
+    ...resolved,
+    messages: merged,
+  };
 }
 
 function taskThreadId(task: unknown) {

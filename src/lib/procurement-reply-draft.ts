@@ -46,10 +46,11 @@ function replySubject(subject: string | null) {
 
 function latestInbound(messages: ProcurementConversationMessage[], requiredSenderEmail: string | null) {
   const normalizedSender = requiredSenderEmail?.trim().toLowerCase() ?? null;
-  return [...messages].reverse().find((message) => (
-    message.direction === "INBOUND"
-    && (!normalizedSender || message.fromEmail.trim().toLowerCase() === normalizedSender)
-  )) ?? null;
+  const latest = messages.at(-1);
+  if (!latest || latest.direction !== "INBOUND") return null;
+  return !normalizedSender || latest.fromEmail.trim().toLowerCase() === normalizedSender
+    ? latest
+    : null;
 }
 
 function draftTranscript(messages: ProcurementConversationMessage[]) {

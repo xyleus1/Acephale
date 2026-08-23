@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import {
   handleProcurementReplyDraft,
+  handleProcurementReplySend,
   type ProcurementReplyDraftDependencies,
+  type ProcurementReplySendDependencies,
 } from "../src/lib/procurement-route-handlers";
 import { ProcurementReplyDraftError } from "../src/lib/procurement-reply-draft";
 import type { ProcurementConversation } from "../src/lib/procurement-conversation-model";
 import { ProcurementWorkflowError, type ProcurementOrderDetail } from "../src/lib/procurement-workflow";
+import { SupplyPersistenceError } from "../src/lib/supply-os/persistence";
 
 const orderId = "11111111-1111-4111-8111-111111111111";
 const vendorId = "22222222-2222-4222-8222-222222222222";
@@ -82,6 +85,26 @@ function dependencies(overrides: Partial<ProcurementReplyDraftDependencies> = {}
   };
 }
 
+function sendDependencies(overrides: Partial<ProcurementReplySendDependencies> = {}): ProcurementReplySendDependencies {
+  return {
+    session: async () => ({ userId: "user-a", officeId: "office-a", role: "ADMIN", canViewWholeOffice: true }),
+    resolveCustomerId: async () => customerId,
+    getRequest: async () => order,
+    conversation: async () => conversation,
+    send: async (input) => ({
+      state: "SENT",
+      accountEmail: input.conversation.accountEmail ?? "mert@example.com",
+      recipient: input.input.recipient,
+      providerMessageId: "gmail-message-1",
+      providerThreadId: "gmail-thread-1",
+      sourceUrl: "https://mail.google.com/mail/u/mert@example.com/#sent/gmail-thread-1",
+      sentAt: "2026-08-22T12:00:00.000Z",
+      alreadySent: false,
+    }),
+    ...overrides,
+  };
+}
+
 async function responseJson(response: Response) {
   return await response.json() as Record<string, unknown>;
 }
@@ -143,6 +166,71 @@ async function main() {
     }));
     assert.equal(failed.status, status);
   }
+
+  let sendResolvedCustomer = false;
+  const anonymousSend = await handleProcurementReplySend(request({
+    confirmed: true,
+    sourceMessageId,
+    recipient: "sfielding@bacircuits.com",
+    subject: "Re: RFQ",
+    body: "Thank you.",
+  }), orderId, vendorId, sendDependencies({
+    session: async () => null,
+    resolveCustomerId: async () => { sendResolvedCustomer = true; return customerId; },
+  }));
+  assert.equal(anonymousSend.status, 401);
+  assert.equal(sendResolvedCustomer, false, "Anonymous sends must stop before customer resolution.");
+
+  const unconfirmedSend = await handleProcurementReplySend(request({
+    confirmed: false,
+    sourceMessageId,
+    recipient: "sfielding@bacircuits.com",
+    subject: "Re: RFQ",
+    body: "Thank you.",
+  }), orderId, vendorId, sendDependencies());
+  assert.equal(unconfirmedSend.status, 400, "Supplier delivery must require an exact confirmation flag.");
+
+  let sendInput: Parameters<ProcurementReplySendDependencies["send"]>[0] | null = null;
+  const sent = await handleProcurementReplySend(request({
+    confirmed: true,
+    sourceMessageId,
+    recipient: "sfielding@bacircuits.com",
+    subject: "Re: RFQ",
+    body: "Thank you.",
+  }), orderId, vendorId, sendDependencies({
+    conversation: async (input) => {
+      assert.deepEqual(input, { officeId: "office-a", customerId, orderId, vendorId });
+      return conversation;
+    },
+    send: async (input) => {
+      sendInput = input;
+      return {
+        state: "SENT",
+        accountEmail: "mert@example.com",
+        recipient: input.input.recipient,
+        providerMessageId: "gmail-message-1",
+        providerThreadId: "gmail-thread-1",
+        sourceUrl: "https://mail.google.com/mail/u/mert@example.com/#sent/gmail-thread-1",
+        sentAt: "2026-08-22T12:00:00.000Z",
+        alreadySent: false,
+      };
+    },
+  }));
+  assert.equal(sent.status, 200);
+  assert.equal(sendInput?.context.officeId, "office-a");
+  assert.equal(sendInput?.context.role, "ADMIN");
+  assert.equal(sendInput?.input.sourceMessageId, sourceMessageId);
+
+  const conflictedSend = await handleProcurementReplySend(request({
+    confirmed: true,
+    sourceMessageId,
+    recipient: "sfielding@bacircuits.com",
+    subject: "Re: RFQ",
+    body: "Thank you.",
+  }), orderId, vendorId, sendDependencies({
+    send: async () => { throw new SupplyPersistenceError("Delivery unresolved.", "conflict"); },
+  }));
+  assert.equal(conflictedSend.status, 409);
 
   console.log("Procurement reply route behavior passed.");
 }

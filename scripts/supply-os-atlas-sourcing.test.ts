@@ -194,7 +194,10 @@ const completeRequest = normalizeSourcingRequestDraft({
 assert.deepEqual(missingSourcingFields(completeRequest), []);
 
 assert.match(dashboard, /activePanel === "materials"[\s\S]*SupplyInventoryWorkspace/);
-assert.match(dashboard, /activePanel === "materials" && selectedInventoryItem[\s\S]*SupplySourcingInspector/);
+assert.match(
+  dashboard,
+  /activePanel === "materials" && inventoryWorkspaceView === "inventory" && selectedInventoryItem[\s\S]*SupplySourcingInspector/,
+);
 assert.match(dashboard, /procurementRequest[\s\S]*SupplyProcurementWorkspace/);
 assert.match(dashboard, /pendingSourcingRequests/);
 assert.match(dashboard, /openPendingSourcingRequest/);

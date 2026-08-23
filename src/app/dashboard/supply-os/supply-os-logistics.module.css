@@ -325,6 +325,11 @@
   grid-template-areas: "materials inspector";
 }
 
+.commandCenter[data-domain="materials"][data-materials-view="messages"] .commandMapStage {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "materials";
+}
+
 .commandCenter[data-domain="materials"][data-procurement="true"] .commandMapStage {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -1577,9 +1582,17 @@
   display: block;
 }
 
+.activeReplyDraftHeaderActions,
+.activeReplyConfirmation > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .activeReplyDraft > header small {
   color: var(--ink-muted);
-  font: 550 8px/1.2 "IBM Plex Mono", monospace;
+  font: 550 10px/1.2 "IBM Plex Mono", monospace;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1587,7 +1600,7 @@
 .activeReplyDraft > header strong {
   margin-top: 4px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 630;
 }
 
@@ -1603,15 +1616,28 @@
   color: var(--navy);
   background: var(--panel);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 630;
+}
+
+.activeReplyDraft button[data-primary="true"] {
+  border-color: var(--navy);
+  color: #fff;
+  background: var(--navy);
+}
+
+.activeReplyDraft button:disabled,
+.activeReplyDraft input:disabled,
+.activeReplyDraft textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
 }
 
 .activeReplyDraft label {
   display: grid;
   gap: 5px;
   color: var(--ink-muted);
-  font: 550 8px/1.2 "IBM Plex Mono", monospace;
+  font: 550 10px/1.2 "IBM Plex Mono", monospace;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1625,7 +1651,7 @@
   outline: none;
   color: var(--ink);
   background: var(--panel);
-  font: 400 12px/1.5 "Instrument Sans", sans-serif;
+  font: 400 13px/1.5 "Instrument Sans", sans-serif;
   letter-spacing: normal;
   text-transform: none;
 }
@@ -1644,8 +1670,59 @@
 .activeReplyDraftError {
   margin: 0;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: 13px;
   line-height: 1.4;
+}
+
+.activeReplyConfirmation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--decision);
+  border-radius: 9px;
+  background: var(--decision-soft);
+}
+
+.activeReplyConfirmation p,
+.activeReplyStatus {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.activeReplyConfirmation button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 630;
+  white-space: nowrap;
+}
+
+.activeReplyStatus {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.activeReplyStatus[data-sent="true"] {
+  color: var(--ok);
+}
+
+.activeReplyStatus a {
+  color: inherit;
+  font-weight: 630;
 }
 
 .activeReplyDraftError {
@@ -5168,6 +5245,12 @@
     overflow-y: auto;
   }
 
+  .commandCenter[data-domain="materials"][data-materials-view="messages"] .commandMapStage {
+    grid-template-rows: minmax(560px, 1fr);
+    grid-template-areas: "materials";
+    overflow: hidden;
+  }
+
   .activeSourcingHeader {
     align-items: flex-start;
     flex-direction: column;
@@ -5267,6 +5350,10 @@
     grid-template-rows: minmax(620px, auto) minmax(560px, auto);
   }
 
+  .commandCenter[data-domain="materials"][data-materials-view="messages"] .commandMapStage {
+    grid-template-rows: minmax(620px, auto);
+  }
+
   .commandCenter[data-domain="materials"][data-procurement="true"] .commandMapStage {
     grid-template-rows: minmax(760px, 1fr);
   }
@@ -5364,6 +5451,11 @@
   .activeConversationPanel > header div {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .activeReplyDraft button,
+  .activeReplyDraft input {
+    min-height: 44px;
   }
 
   .sourcingCampaignSummary {

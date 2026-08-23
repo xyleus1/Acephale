@@ -56,6 +56,8 @@ export type PendingSourcingQueueItem = {
   status: "Clarification needed" | "Researching" | "Research unavailable";
 };
 
+export type SupplyInventoryWorkspaceView = "inventory" | "messages";
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -75,6 +77,8 @@ function formatResearchDate(value: string) {
 }
 
 export function SupplyInventoryWorkspace({
+  activeView,
+  onViewChange,
   selectedSku,
   items = [],
   workspaceId,
@@ -106,6 +110,8 @@ export function SupplyInventoryWorkspace({
   onHideSourceMap,
   companyName,
 }: {
+  activeView: SupplyInventoryWorkspaceView;
+  onViewChange: (view: SupplyInventoryWorkspaceView) => void;
   selectedSku: string;
   items?: SupplyInventoryItem[];
   workspaceId?: string | null;
@@ -288,7 +294,11 @@ export function SupplyInventoryWorkspace({
       exit={reduceMotion ? undefined : { opacity: 0, x: -10 }}
       transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
     >
-      <Tabs.Root className={styles.inventoryTabs} defaultValue="inventory">
+      <Tabs.Root
+        className={styles.inventoryTabs}
+        value={activeView}
+        onValueChange={(value) => onViewChange(value === "messages" ? "messages" : "inventory")}
+      >
         <Tabs.List className={styles.inventoryTabList} aria-label="Inventory and supplier activity views">
           <Tabs.Trigger value="inventory">Inventory</Tabs.Trigger>
           <Tabs.Trigger value="messages"><MessageSquare size={14} /> Messages</Tabs.Trigger>

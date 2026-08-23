@@ -73,6 +73,7 @@ type CommunicationLedgerRow = {
   counterpartyEmail: string;
   providerMessageId: string;
   providerThreadId: string | null;
+  rfcMessageId: string | null;
   direction: string;
   fromEmail: string;
   fromName: string | null;
@@ -825,6 +826,7 @@ export async function getProcurementCommunicationMessagesFromDatabase(
           communication.counterparty_email AS "counterpartyEmail",
           communication.provider_message_id AS "providerMessageId",
           communication.provider_thread_id AS "providerThreadId",
+          communication.rfc_message_id AS "rfcMessageId",
           communication.direction,
           communication.from_email AS "fromEmail",
           communication.from_name AS "fromName",
@@ -881,7 +883,9 @@ export async function getProcurementCommunicationMessagesFromDatabase(
           .digest("hex"),
         provider,
         accountEmail,
+        providerMessageId,
         providerThreadId: row.providerThreadId?.trim() || null,
+        rfcMessageId: row.rfcMessageId?.trim() || null,
         direction: row.direction,
         fromEmail,
         fromName: row.fromName?.trim() || null,

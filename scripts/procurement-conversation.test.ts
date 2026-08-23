@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   boundProcurementConversationMessages,
+  mergeProcurementConversationMessages,
   procurementConversationFromLedger,
   procurementConversationFromGmailThread,
   resolveProcurementVendorConversation,
@@ -83,7 +84,9 @@ const ledgerConversation = procurementConversationFromLedger([
     id: "opaque-inbound",
     provider: "GMAIL",
     accountEmail: "purchasing@example.com",
+    providerMessageId: "inbound-provider-1",
     providerThreadId: "thread-1",
+    rfcMessageId: "<inbound-1@example.com>",
     direction: "INBOUND",
     fromEmail: "supplier@example.com",
     fromName: "Supplier",
@@ -98,7 +101,9 @@ const ledgerConversation = procurementConversationFromLedger([
     id: "opaque-outbound",
     provider: "GMAIL",
     accountEmail: "purchasing@example.com",
+    providerMessageId: "outbound-provider-1",
     providerThreadId: "thread-1",
+    rfcMessageId: "<outbound-1@example.com>",
     direction: "OUTBOUND",
     fromEmail: "purchasing@example.com",
     fromName: "Derya",
@@ -119,6 +124,46 @@ assert.deepEqual(ledgerConversation.map((message) => ({
   { id: "opaque-inbound", direction: "INBOUND", truncated: false },
 ]);
 
+const mergedConversation = mergeProcurementConversationMessages([{
+  providerMessageId: "provider-outbound-1",
+  rfcMessageId: "<outbound-1@example.com>",
+  message: {
+    ...baseMessage,
+    id: "ledger-outbound",
+    direction: "OUTBOUND",
+    fromEmail: "buyer@example.com",
+    toEmails: ["supplier@example.com"],
+    subject: "Re: RFQ",
+    body: "Confirmed.",
+    sentAt: "2026-08-22T18:00:01.000Z",
+  },
+}], [{
+  providerMessageId: "provider-outbound-1",
+  rfcMessageId: "<outbound-1@example.com>",
+  message: {
+    ...baseMessage,
+    id: "local-duplicate",
+    direction: "OUTBOUND",
+    fromEmail: "buyer@example.com",
+    toEmails: ["supplier@example.com"],
+    subject: "Re: RFQ",
+    body: "Confirmed.",
+    sentAt: "2026-08-22T18:00:00.000Z",
+  },
+}, {
+  providerMessageId: "provider-inbound-2",
+  rfcMessageId: "<inbound-2@example.com>",
+  message: {
+    ...baseMessage,
+    id: "local-new-inbound",
+    subject: "Re: RFQ",
+    body: "One more question.",
+    sentAt: "2026-08-22T18:05:00.000Z",
+  },
+}]);
+assert.deepEqual(mergedConversation.map((message) => message.id), ["ledger-outbound", "local-new-inbound"]);
+assert.equal(mergedConversation.at(-1)?.direction, "INBOUND");
+
 async function main() {
   const args = {
     officeId: "office-a",
@@ -130,7 +175,9 @@ async function main() {
     id: "0".repeat(64),
     provider: "GMAIL",
     accountEmail: "buyer@example.com",
+    providerMessageId: "ledger-provider-1",
     providerThreadId: "provider-thread",
+    rfcMessageId: "<ledger-1@example.com>",
     direction: "OUTBOUND",
     fromEmail: "buyer@example.com",
     fromName: "Buyer",

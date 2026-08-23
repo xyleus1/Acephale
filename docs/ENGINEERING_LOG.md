@@ -6587,3 +6587,42 @@ Use this file for chronological implementation notes that future agents should s
 - Release: PR #229 merged as `73b64104`. Vercel production deployed the merge
   commit, `/api/health` returned healthy, and the Connected emails route
   redirected unauthenticated requests to login.
+
+### 2026-08-23 - Send supplier replies and remove the Messages ghost column
+
+- Branch: `fix/sourcing-send-layout-20260823`, based on current `origin/main`.
+- Commit: pending release commit.
+- Task: Let an operator send the reviewed Active Sourcing reply through the
+  thread's connected Gmail account and make the Messages workspace use the
+  full command-center width.
+- Root cause: The reply surface ended at an ephemeral copy-only draft. The
+  Inventory and Messages tab state was also trapped inside the child component,
+  while the parent always rendered and reserved a grid column for the inventory
+  sourcing inspector.
+- Files changed: Supplier reply send contract and route, Derya-local sent-message
+  projection into the Bourne-backed conversation, reply drafting gate, Active
+  Sourcing confirmation UI, controlled materials tabs, parent grid state,
+  responsive styles, focused contracts, decision log, and handoff.
+- Safety: Sending requires explicit confirmation and exact latest-inbound
+  binding. The sender is resolved server-side. A later repeated request
+  reconciles uncertain Gmail delivery instead of retrying, and a successful
+  receipt is stored in office-scoped Derya ledgers. Bourne write privileges are
+  unchanged. No email was sent during testing.
+- Verification: `npm run test:procurement-conversation`,
+  `npm run test:procurement-reply-draft`,
+  `npm run test:procurement-reply-route`,
+  `npm run test:supply-os-active-sourcing`,
+  `npm run test:supply-os-supplier-email-provider`,
+  `npm run test:email-account-settings`,
+  `npm run test:gmail-app-password-accounts`, `npm run check:product-copy`,
+  `tsc --noEmit`, and the production `npm run build` passed. The new
+  `npm run test:procurement-reply-send-db` also passed against the complete
+  migration chain in disposable PostgreSQL, covering task lifecycle,
+  persistence, concurrency, retry, reconciliation, stale state, and tenant
+  boundaries. The build reports the pre-existing autoprefixer warning at the
+  existing `align-items: end` rule.
+- Failed/skipped checks: Authenticated rendered production behavior is pending
+  deployment. The final send confirmation will not be exercised against a real
+  supplier during release QA.
+- Follow-up: Commit, open and merge the release PR, verify the Vercel deployment,
+  then confirm the Messages panel width and stop before the final supplier send.
