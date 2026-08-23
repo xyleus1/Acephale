@@ -6584,3 +6584,6 @@ Use this file for chronological implementation notes that future agents should s
 - Verification: Bulk parser coverage, email account and Gmail app-password
   contracts, TypeScript, product copy policy, and the production Next.js build
   passed. A live batch connection remains pending.
+- Release: PR #229 merged as `73b64104`. Vercel production deployed the merge
+  commit, `/api/health` returned healthy, and the Connected emails route
+  redirected unauthenticated requests to login.

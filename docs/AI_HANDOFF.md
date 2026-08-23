@@ -2,7 +2,7 @@
 
 ## Latest Update
 
-### Bulk Gmail setup is ready for release
+### Bulk Gmail setup is deployed
 
 - Connected emails accepts up to 10 Gmail app-password accounts in one paste.
   It supports CSV and the existing multi-line account block format.
@@ -27,6 +27,14 @@ Verification completed:
 - TypeScript
 - Product copy policy
 - Production Next.js build
+
+Release status:
+
+- PR #229 merged as `73b64104`. Vercel production deployed the merge commit,
+  `/api/health` returned healthy, and the Connected emails route redirected
+  unauthenticated requests to login.
+- Authenticated rendered QA and a live batch connection remain pending until
+  an administrator submits real mailbox credentials through the protected UI.
 
 ### Connected emails is deployed
 
