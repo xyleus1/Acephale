@@ -73,6 +73,11 @@ assert.doesNotMatch(workflow, /^  (push|pull_request|schedule):/m);
 assert.match(workflow, /permissions:\n  contents: read/);
 assert.match(workflow, /environment:\n      name: Production/);
 assert.match(workflow, /RUN_DEMO_EMAIL_CAPABILITY_TEST/);
+assert.match(workflow, /INSPECT_DEMO_EMAIL_CAPABILITY_TEST/);
+assert.match(workflow, /inspection_job_id/);
+assert.match(workflow, /jsonb_array_elements\(job\.payload #> '\{result,conversations\}'\)/);
+assert.match(workflow, /DEMO_EMAIL_DELIVERY_%/);
+assert.doesNotMatch(workflow, /sentBody|replyBody/);
 assert.match(workflow, /ep-summer-cake-audzi8ve\.c-10\.us-east-1\.aws\.neon\.tech/);
 assert.match(workflow, /neondb\|neondb_owner/);
 assert.match(workflow, /secrets\.WORKFLOW_DATABASE_OWNER_URL/);
@@ -87,7 +92,7 @@ assert.match(workflow, /GITHUB_SHA/);
 assert.match(workflow, /https:\/\/app\.derya\.ai/);
 assert.equal(
   (workflow.match(/--file=- <<'SQL'/g) ?? []).length,
-  5,
+  8,
   "Every psql query with bound workflow values must be read as a psql file",
 );
 assert.doesNotMatch(

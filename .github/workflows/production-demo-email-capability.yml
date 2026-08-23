@@ -7,6 +7,11 @@ on:
         description: Type RUN_DEMO_EMAIL_CAPABILITY_TEST
         required: true
         type: string
+      inspection_job_id:
+        description: Existing demo job ID for a read-only sanitized inspection
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -17,7 +22,7 @@ concurrency:
 
 jobs:
   run-demo:
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.inspection_job_id == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -272,3 +277,140 @@ jobs:
           SQL
             exit 1
           fi
+
+  inspect-demo:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.inspection_job_id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: Production
+    env:
+      REQUEST_CONFIRMATION: ${{ inputs.confirmation }}
+      INSPECTION_JOB_ID: ${{ inputs.inspection_job_id }}
+      PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=120000 -c idle_in_transaction_session_timeout=120000
+    steps:
+      - name: Validate inspection request
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$REQUEST_CONFIRMATION" != "INSPECT_DEMO_EMAIL_CAPABILITY_TEST" ]]; then
+            echo "The inspection confirmation phrase is incorrect." >&2
+            exit 1
+          fi
+          if [[ ! "$INSPECTION_JOB_ID" =~ ^demo-email-capability-[a-f0-9]{32}$ ]]; then
+            echo "The inspection job ID is invalid." >&2
+            exit 1
+          fi
+
+      - name: Print sanitized stored result
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null
+          database_host="$(
+            DATABASE_URL="$WORKFLOW_DATABASE_OWNER_URL" node --input-type=module --eval='
+              const value = process.env.DATABASE_URL;
+              if (!value) process.exit(1);
+              process.stdout.write(new URL(value).hostname);
+            '
+          )"
+          if [[ "$database_host" != "ep-summer-cake-audzi8ve.c-10.us-east-1.aws.neon.tech" ]]; then
+            echo "Refusing to inspect an unexpected Neon endpoint." >&2
+            exit 1
+          fi
+          database_identity="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --field-separator='|' \
+              --command='SELECT current_database(), session_user;'
+          )"
+          if [[ "$database_identity" != "neondb|neondb_owner" ]]; then
+            echo "Refusing to inspect an unexpected database or role." >&2
+            exit 1
+          fi
+
+          job_summary="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --field-separator='|' \
+              --set=job_id="$INSPECTION_JOB_ID" \
+              --file=- <<'SQL'
+          SELECT
+            type,
+            status,
+            payload #>> '{result,accountCount}',
+            payload #>> '{result,passed}',
+            payload #>> '{result,failed}',
+            payload #>> '{result,completedAt}'
+          FROM "BackgroundJob"
+          WHERE id = :'job_id'
+            AND type = 'DEMO_EMAIL_CAPABILITY_TEST';
+          SQL
+          )"
+          if [[ -z "$job_summary" ]]; then
+            echo "The requested demo job was not found." >&2
+            exit 1
+          fi
+          echo "job=$job_summary"
+
+          echo "conversations:"
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --field-separator='|' \
+            --set=job_id="$INSPECTION_JOB_ID" \
+            --file=- <<'SQL'
+          SELECT
+            conversation.ordinality,
+            conversation.value->>'label',
+            conversation.value->>'kind',
+            conversation.value->>'status',
+            left(
+              regexp_replace(
+                replace(coalesce(conversation.value->>'error', ''), E'\n', ' '),
+                '[^[:space:]]+@[^[:space:]]+',
+                '[mailbox]',
+                'g'
+              ),
+              500
+            )
+          FROM "BackgroundJob" AS job
+          CROSS JOIN LATERAL jsonb_array_elements(job.payload #> '{result,conversations}')
+            WITH ORDINALITY AS conversation(value, ordinality)
+          WHERE job.id = :'job_id'
+            AND job.type = 'DEMO_EMAIL_CAPABILITY_TEST'
+          ORDER BY conversation.ordinality;
+          SQL
+
+          echo "delivery_events:"
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --field-separator='|' \
+            --set=job_id="$INSPECTION_JOB_ID" \
+            --file=- <<'SQL'
+          WITH demo_task AS (
+            SELECT payload #>> '{result,executionTaskId}' AS task_id
+            FROM "BackgroundJob"
+            WHERE id = :'job_id'
+              AND type = 'DEMO_EMAIL_CAPABILITY_TEST'
+          )
+          SELECT event."eventType", event.status, count(*)
+          FROM "SupplyExecutionEvent" AS event
+          JOIN demo_task ON demo_task.task_id = event."executionTaskId"
+          WHERE event."eventType" LIKE 'DEMO_EMAIL_DELIVERY_%'
+          GROUP BY event."eventType", event.status
+          ORDER BY event."eventType", event.status;
+          SQL

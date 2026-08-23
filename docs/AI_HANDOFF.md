@@ -10293,3 +10293,7 @@ Verification caveat:
   follow the protected `PLANNED` to `READY` to `RUNNING` lifecycle, with
   compare-and-transition guards and executable regression coverage. That
   failed dispatch also sent zero messages.
+- The protected workflow also supports a read-only inspection mode for one
+  exact demo job ID. It prints aggregate results, conversation labels and
+  sanitized errors, plus delivery-event counts. It never prints addresses,
+  message bodies, credentials, or raw payloads, and it cannot send mail.

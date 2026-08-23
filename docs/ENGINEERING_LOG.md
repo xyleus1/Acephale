@@ -6740,3 +6740,7 @@ Use this file for chronological implementation notes that future agents should s
   `SupplyExecutionTask` was inserted as `RUNNING`, which the database guard
   correctly rejects. The runner now creates `PLANNED`, compare-and-transitions
   to `READY`, then compare-and-transitions to `RUNNING` before any send.
+- Added an inspection-only workflow path for a single demo job ID. It is pinned
+  to the same production database identity and emits only aggregate results,
+  labeled statuses, sanitized errors, and delivery-event counts. It has no
+  endpoint call or SMTP path.
