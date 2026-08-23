@@ -6351,3 +6351,16 @@ Use this file for chronological implementation notes that future agents should s
   rows only after confirmed sends, insert inbound rows after observation,
   backfill only unambiguous existing threads, then provide one outbound and
   inbound pair for authenticated Active Sourcing verification.
+
+### 2026-08-22 - Stage email sender policy schema before application release
+
+- Branch: `codex/email-account-schema-release`, based on current `origin/main`.
+- Renumbered the email account sending migration after the already-landed
+  supplier compatibility and customer Context migrations.
+- Added a committed read-only production verification for the new policy
+  columns, the one-default-sender index, migration ledger state, and the
+  existing connected Gmail backfill.
+- Kept Prisma schema and runtime code out of this release so Vercel cannot use
+  the new fields before the protected owner migration completes.
+- Follow-up: Merge this schema-only release, dispatch the protected production
+  migration, then update and land PR #208 without its older migration copy.

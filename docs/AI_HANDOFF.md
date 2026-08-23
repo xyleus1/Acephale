@@ -2,6 +2,20 @@
 
 ## Latest Update
 
+### Email sender policy schema is staged before the application release
+
+- Added the additive `20260822000400_email_account_sending_config` migration as
+  the latest migration on `main`.
+- Existing active Gmail accounts with refresh tokens become send-enabled and
+  each Office receives one deterministic default sender. New accounts keep the
+  database default of sending disabled.
+- Added a committed read-only production verification for both columns, the
+  partial unique index, migration ledger state, backfill completeness, and one
+  default sender per eligible Office.
+- This schema-only release does not change the Prisma client or application
+  behavior. Apply it through the protected production migration workflow before
+  merging PR #208.
+
 ### Admin Settings now manages customer companies and accounts
 
 - The Supply OS sidebar now labels Settings by the signed-in operator role,

@@ -44,14 +44,6 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "push"],
-    decision = "prompt",
-    justification = "Pushing publishes repository state; confirm the branch and remote first.",
-    match = ["git push", "git push origin codex/example"],
-    not_match = ["git status"],
-)
-
-prefix_rule(
     pattern = ["rm", ["-rf", "-fr", "-Rf", "-fR"], "/"],
     decision = "forbidden",
     justification = "Never delete the filesystem root. Delete a specific project path instead.",

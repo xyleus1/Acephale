@@ -19,6 +19,9 @@ const supplierVerification = verifications.get(
 const customerContextVerification = verifications.get(
   "20260822000300_customer_portal_context_access.sql",
 );
+const emailAccountVerification = verifications.get(
+  "20260822000400_email_account_sending_config.sql",
+);
 
 assert.match(workflow, /^on:\n  workflow_dispatch:/m, "production migration must be manually dispatched");
 assert.doesNotMatch(
@@ -49,6 +52,7 @@ assert.match(workflow, /scripts\/sql\/production-verification\/\$REQUESTED_MIGRA
 
 assert.ok(supplierVerification, "supplier production verification is missing");
 assert.ok(customerContextVerification, "customer Context production verification is missing");
+assert.ok(emailAccountVerification, "email account production verification is missing");
 for (const [name, verification] of verifications) {
   assert.match(verification, /BEGIN READ ONLY;/, `${name} must use a read-only transaction`);
   if (/^[0-9]{14}_[a-z0-9_]+\.sql$/.test(name)) {
@@ -70,5 +74,8 @@ assert.match(supplierVerification, /Strobels Supply/);
 assert.match(customerContextVerification, /createdByPortalUserId/);
 assert.match(customerContextVerification, /customerVisible/);
 assert.match(customerContextVerification, /company_context_scope_guard/);
+assert.match(emailAccountVerification, /sendEnabled/);
+assert.match(emailAccountVerification, /isDefaultSender/);
+assert.match(emailAccountVerification, /EmailAccount_officeId_default_sender_key/);
 
 console.log("Production database migration contract passed.");
