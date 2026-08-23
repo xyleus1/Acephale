@@ -1957,7 +1957,7 @@ model CustomerPortalUser {
   id                String   @id @default(cuid())
   officeId          String
   internalUserId    String?  @unique
-  username          String
+  username          String?
   email             String
   fullName          String?
   isActive          Boolean  @default(true)

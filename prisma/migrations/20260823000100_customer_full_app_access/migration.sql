@@ -119,9 +119,6 @@ SET
   "isActive" = EXCLUDED."isActive",
   "updatedAt" = NOW();
 
-ALTER TABLE "CustomerPortalUser"
-  ALTER COLUMN "username" SET NOT NULL;
-
 CREATE UNIQUE INDEX "CustomerPortalUser_officeId_username_key"
   ON "CustomerPortalUser"("officeId", username);
 

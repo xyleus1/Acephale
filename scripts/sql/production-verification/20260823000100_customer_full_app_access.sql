@@ -12,7 +12,7 @@ BEGIN
       AND table_name = 'CustomerPortalUser'
       AND column_name = 'username'
       AND data_type = 'text'
-      AND is_nullable = 'NO'
+      AND is_nullable = 'YES'
   ) OR NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
@@ -52,7 +52,8 @@ BEGIN
     LEFT JOIN public."User" AS internal_user
       ON internal_user.id = portal_user."internalUserId"
       AND internal_user."officeId" = portal_user."officeId"
-    WHERE portal_user.username !~ '^[a-z0-9][a-z0-9._-]{2,79}$'
+    WHERE portal_user.username IS NULL
+      OR portal_user.username !~ '^[a-z0-9][a-z0-9._-]{2,79}$'
       OR portal_user."internalUserId" IS NULL
       OR internal_user.id IS NULL
       OR internal_user."canViewWholeOffice"
