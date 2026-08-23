@@ -6410,8 +6410,11 @@ Use this file for chronological implementation notes that future agents should s
   against disposable PostgreSQL passed. The fixture also proved request
   provenance, request ID, and operational timestamps are preserved and unsafe
   candidates do not move.
-- Follow-up: Merge, run the protected migration, and verify the exact Bay Area
-  thread in authenticated production. No email send or Bourne rerun is needed.
+- Release: PR #216 merged as `e552223a`. Protected production run
+  `32615772096` applied and verified the migration. An authenticated Active
+  Sourcing refresh showed five requests, seven contacted suppliers, two
+  responses, and the exact Bay Area Circuits outbound and inbound thread.
+  No email send or Bourne rerun occurred.
 
 ### 2026-08-22 - Stage email sender policy schema before application release
 

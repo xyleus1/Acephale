@@ -31,11 +31,18 @@ Verification completed:
   orders
 - Provenance preservation and unchanged operational timestamp assertion
 
-Release requirement:
+Release status:
 
-- Merge the migration to `main`, run the protected production migration, then
-  hard-refresh authenticated Active Sourcing and open the Bay Area Circuits
-  conversation. No test email is required.
+- PR #216 merged as `e552223a`. Protected production run `32615772096`
+  applied migration `20260822000500_procurement_workspace_context_relink` and
+  passed the committed read-only acceptance query.
+- An authenticated production refresh showed five Active Sourcing requests,
+  seven of 21 suppliers reached, and two supplier responses. The legacy PCBA
+  request showed four of four contacted with one response, and the legacy
+  memory-foam request showed three of five contacted with one response.
+- The Bay Area Circuits conversation rendered the Aug 19 outbound RFQ and
+  Spencer Fielding's Aug 19 inbound reply in the exact thread. No test email,
+  supplier approval, quote promotion, or purchase action occurred.
 
 ### Administrator email accounts are ready for release
 
