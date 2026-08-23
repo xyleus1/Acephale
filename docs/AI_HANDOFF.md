@@ -2,6 +2,47 @@
 
 ## Latest Update
 
+### Identify exact supplier replies and draft a safe response
+
+- Root cause: The request list counted inbound Bourne ledger rows, but the
+  request detail projection exposed only contact and structured quote state.
+  The manufacturer list therefore treated a real inbound email as no response
+  unless Bourne had also produced a quote object.
+- The detail projection now returns a per-vendor inbound count scoped by
+  customer, order, and vendor. A quote still counts as a response for older
+  records, but an inbound email no longer implies that commercial terms exist.
+- Active Sourcing marks the exact supplier as `Responded`, shows the response
+  count, and says when a response exists without a recorded quote.
+- Operators can generate an editable supplier reply from the exact request and
+  bounded conversation. The model prompt treats the thread as untrusted
+  evidence and prohibits invented facts, attachment claims, supplier
+  selection, term acceptance, purchase approval, and spend commitments.
+- Compatibility threads require the inbound sender to match the canonical
+  supplier contact. Draft creation also carries the inbound message displayed
+  to the operator; if a newer reply arrives first, the server rejects the stale
+  request and the UI refreshes the conversation.
+- Drafting is ephemeral and review-only. The panel can copy the subject and
+  body to Gmail, but contains no send path and writes no message or workflow
+  state.
+
+Verification completed:
+
+- Procurement workflow contract
+- Active Sourcing and conversation contract
+- Reply draft safety and context contract
+- Reply draft route behavior, tenancy, size, and error mapping
+- Conversation normalization and source precedence
+- Customer procurement Bourne bridge
+- TypeScript after Prisma client generation
+- Product copy policy
+- Production Next.js build
+
+Verification pending:
+
+- Database projection contract requires `WORKFLOW_DATABASE_OWNER_URL` in CI.
+- Release checks and authenticated production UI remain to be completed before
+  this change is considered live.
+
 ### Relink Bourne-backed orders to the active Supply OS workspace
 
 - Authenticated production testing proved the Bourne communication ledger is

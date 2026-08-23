@@ -1,6 +1,12 @@
 import "server-only";
 
+import { z } from "zod";
 import { procurementRequestSchema } from "@/lib/procurement-contract";
+import type { procurementVendorConversation } from "@/lib/procurement-conversation";
+import {
+  ProcurementReplyDraftError,
+} from "@/lib/procurement-reply-draft";
+import type { draftProcurementSupplierReply } from "@/lib/procurement-reply-draft";
 import {
   getProcurementRequest,
   listProcurementRequests,
@@ -44,6 +50,14 @@ export type ProcurementWakeDependencies = {
   wake: typeof retryProcurementWorkflowWake;
 };
 
+export type ProcurementReplyDraftDependencies = {
+  session: () => Promise<ProcurementRouteSession | null>;
+  resolveCustomerId: typeof resolveProcurementCustomerId;
+  getRequest: typeof getProcurementRequest;
+  conversation: typeof procurementVendorConversation;
+  draft: typeof draftProcurementSupplierReply;
+};
+
 const defaultRouteDependencies: ProcurementRouteDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
@@ -64,6 +78,18 @@ const defaultWakeDependencies: ProcurementWakeDependencies = {
   wake: retryProcurementWorkflowWake,
 };
 
+const defaultReplyDraftDependencies: ProcurementReplyDraftDependencies = {
+  session: async () => (await import("@/lib/auth")).getSession(),
+  resolveCustomerId: resolveProcurementCustomerId,
+  getRequest: getProcurementRequest,
+  conversation: async (args) => (await import("@/lib/procurement-conversation")).procurementVendorConversation(args),
+  draft: async (args) => (await import("@/lib/procurement-reply-draft")).draftProcurementSupplierReply(args),
+};
+
+const procurementReplyDraftRequestSchema = z.object({
+  sourceMessageId: z.string().trim().min(1).max(512),
+}).strict();
+
 function errorResponse(error: unknown) {
   if (!(error instanceof ProcurementWorkflowError)) {
     return Response.json({ error: "Procurement request failed." }, { status: 500, headers: responseHeaders });
@@ -76,6 +102,15 @@ function errorResponse(error: unknown) {
         ? 409
         : 503;
   return Response.json({ error: error.message }, { status, headers: responseHeaders });
+}
+
+function replyDraftErrorResponse(error: unknown) {
+  if (error instanceof ProcurementReplyDraftError) {
+    const status = error.code === "conflict" || error.code === "configuration" ? 409 : 503;
+    return Response.json({ error: error.message }, { status, headers: responseHeaders });
+  }
+  if (error instanceof ProcurementWorkflowError) return errorResponse(error);
+  return Response.json({ error: "The supplier reply draft could not be generated." }, { status: 500, headers: responseHeaders });
 }
 
 async function readRequestJson(request: Request) {
@@ -226,5 +261,50 @@ export async function handleProcurementWake(
     }, { status: result.claimed ? 202 : 200, headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);
+  }
+}
+
+export async function handleProcurementReplyDraft(
+  request: Request,
+  orderId: string,
+  vendorId: string,
+  dependencies: ProcurementReplyDraftDependencies = defaultReplyDraftDependencies,
+) {
+  const session = await dependencies.session();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401, headers: responseHeaders });
+
+  const requestBody = await readRequestJson(request);
+  if (requestBody.tooLarge) {
+    return Response.json({ error: "The reply draft request is too large." }, { status: 413, headers: responseHeaders });
+  }
+  const parsedInput = procurementReplyDraftRequestSchema.safeParse(requestBody.body);
+  if (!parsedInput.success) {
+    return Response.json({ error: "The displayed supplier message is required." }, { status: 400, headers: responseHeaders });
+  }
+
+  try {
+    const customerId = await dependencies.resolveCustomerId(session);
+    const [order, conversation] = await Promise.all([
+      dependencies.getRequest(customerId, orderId),
+      dependencies.conversation({
+        officeId: session.officeId,
+        customerId,
+        orderId,
+        vendorId,
+      }),
+    ]);
+    const vendor = order?.vendors.find((candidate) => candidate.id === vendorId) ?? null;
+    if (!order || !vendor) {
+      return Response.json({ error: "Supplier conversation not found." }, { status: 404, headers: responseHeaders });
+    }
+    const draft = await dependencies.draft({
+      order,
+      vendor,
+      conversation,
+      expectedSourceMessageId: parsedInput.data.sourceMessageId,
+    });
+    return Response.json({ draft }, { headers: responseHeaders });
+  } catch (error) {
+    return replyDraftErrorResponse(error);
   }
 }

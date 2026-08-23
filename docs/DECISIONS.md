@@ -16,6 +16,28 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-22 - Supplier replies and supplier quotes are separate facts
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Active Sourcing counted inbound Bourne ledger messages at the order
+  level, but each manufacturer row inferred a response only from a structured
+  quote. A real supplier reply could therefore appear in the exact transcript
+  while the same row said `Not received`.
+- Decision: A tenant-, order-, and vendor-bound inbound communication marks
+  that manufacturer as responded. A structured quote remains a separate
+  commercial fact and is never inferred from message text. Supplier reply
+  drafts may use the exact request and thread, but remain editable, ephemeral,
+  and review-only with no send action.
+- Rationale: Delivery, response, quote, approval, and purchase are distinct
+  workflow events. Collapsing them creates false UI state and unsafe commercial
+  implications.
+- Consequences: Manufacturer rows identify the exact respondent and show the
+  inbound count even when no quote exists. Operators may generate and copy a
+  context-aware reply, but sending remains in Gmail and under human control.
+- Revisit when: Derya has an approved, idempotent supplier-send contract with
+  an explicit sender, recipient, message hash, and operator authorization.
+
 ### 2026-08-22 - Derya owns email accounts and Bourne owns campaigns
 
 - Status: accepted

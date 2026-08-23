@@ -1449,10 +1449,17 @@
 }
 
 .activeConversationPanel > header span,
+.activeConversationPanel > header div,
+.activeConversationPanel > header button,
 .activeConversationPanel > header a {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+}
+
+.activeConversationPanel > header div {
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 .activeConversationPanel > header strong {
@@ -1462,12 +1469,27 @@
   text-transform: none;
 }
 
-.activeConversationPanel > header a {
+.activeConversationPanel > header a,
+.activeConversationPanel > header button {
   color: var(--navy);
   font: 620 10px/1 "Instrument Sans", sans-serif;
   letter-spacing: normal;
   text-decoration: none;
   text-transform: none;
+}
+
+.activeConversationPanel > header button {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.activeConversationPanel > header button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .activeConversationMessages {
@@ -1530,6 +1552,105 @@
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.activeReplyDraft {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #fafbfa;
+}
+
+.activeReplyDraft > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.activeReplyDraft > header span,
+.activeReplyDraft > header small,
+.activeReplyDraft > header strong {
+  display: block;
+}
+
+.activeReplyDraft > header small {
+  color: var(--ink-muted);
+  font: 550 8px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activeReplyDraft > header strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 630;
+}
+
+.activeReplyDraft > header button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--navy);
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 630;
+}
+
+.activeReplyDraft label {
+  display: grid;
+  gap: 5px;
+  color: var(--ink-muted);
+  font: 550 8px/1.2 "IBM Plex Mono", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activeReplyDraft input,
+.activeReplyDraft textarea {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  outline: none;
+  color: var(--ink);
+  background: var(--panel);
+  font: 400 12px/1.5 "Instrument Sans", sans-serif;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.activeReplyDraft input:focus,
+.activeReplyDraft textarea:focus {
+  border-color: var(--navy);
+}
+
+.activeReplyDraft textarea {
+  min-height: 150px;
+  resize: vertical;
+}
+
+.activeReplyDraft > p,
+.activeReplyDraftError {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.activeReplyDraftError {
+  margin-top: 10px;
+  color: var(--decision);
 }
 
 .activeConversationEmpty,
@@ -5232,6 +5353,17 @@
 
   .activeConversationMessages article {
     max-width: 100%;
+  }
+
+  .activeConversationPanel > header,
+  .activeReplyDraft > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .activeConversationPanel > header div {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .sourcingCampaignSummary {

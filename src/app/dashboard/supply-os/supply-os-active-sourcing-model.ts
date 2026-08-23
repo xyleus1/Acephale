@@ -1,5 +1,8 @@
 import type { CustomerProcurementListItem } from "@/lib/supply-os/customer-procurement";
-import type { CustomerProcurementRequestDetail } from "@/lib/supply-os/customer-procurement-status";
+import type {
+  CustomerProcurementRequestDetail,
+  CustomerProcurementVendor,
+} from "@/lib/supply-os/customer-procurement-status";
 import type {
   SavedProcurementCase,
   SavedSourcingResearchRun,
@@ -97,6 +100,10 @@ export function externalPoReady(request: CustomerProcurementListItem) {
 
 export function externalSourcingActive(request: CustomerProcurementListItem) {
   return !["ordered", "cancelled"].includes(request.status);
+}
+
+export function externalVendorResponseCount(vendor: Pick<CustomerProcurementVendor, "quote" | "responseCount">) {
+  return Math.max(vendor.responseCount, vendor.quote ? 1 : 0);
 }
 
 function record(value: unknown) {

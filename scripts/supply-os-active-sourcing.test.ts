@@ -7,6 +7,7 @@ import {
   externalSourcingActive,
   externalVendorPoReady,
   externalVendorPoState,
+  externalVendorResponseCount,
   groupActiveHistoricalSourcing,
   groupHistoricalSourcing,
   historicalPoState,
@@ -112,6 +113,8 @@ assert.equal(externalVendorPoState(externalRequest, { ...externalDetail, decisio
 assert.equal(externalSourcingActive(externalRequest), true);
 assert.equal(externalSourcingActive({ ...externalRequest, status: "ordered" }), false);
 assert.equal(externalSourcingActive({ ...externalRequest, status: "cancelled" }), false);
+assert.equal(externalVendorResponseCount({ responseCount: 1, quote: null }), 1);
+assert.equal(externalVendorResponseCount({ responseCount: 0, quote: { amount: 100 } }), 1);
 
 const grouped = groupHistoricalSourcing([], [contacted, responded, released]);
 assert.equal(grouped.length, 1);
@@ -141,8 +144,10 @@ const active = readFileSync(resolve(root, "src/app/dashboard/supply-os/supply-os
 const workflow = readFileSync(resolve(root, "src/lib/procurement-workflow.ts"), "utf8");
 const conversation = readFileSync(resolve(root, "src/lib/procurement-conversation.ts"), "utf8");
 const conversationModel = readFileSync(resolve(root, "src/lib/procurement-conversation-model.ts"), "utf8");
+const replyDraft = readFileSync(resolve(root, "src/lib/procurement-reply-draft.ts"), "utf8");
 const communicationLedgerSql = readFileSync(resolve(root, "scripts/sql/bourne-procurement-communication-ledger.sql"), "utf8");
 const workflowRoute = readFileSync(resolve(root, "src/app/api/procurement/requests/[orderId]/vendors/[vendorId]/conversation/route.ts"), "utf8");
+const procurementRouteHandlers = readFileSync(resolve(root, "src/lib/procurement-route-handlers.ts"), "utf8");
 const historicalRoute = readFileSync(resolve(root, "src/app/api/supply-os/procurement-cases/[caseId]/conversation/route.ts"), "utf8");
 
 assert.match(inventory, /Tabs\.Trigger value="messages"[\s\S]*Messages/);
@@ -158,6 +163,12 @@ assert.match(active, /Situation read/);
 assert.match(active, /Purchase order/);
 assert.match(active, /activeWorkflowRequests/);
 assert.match(active, /Historical totals cover loaded records/);
+assert.match(active, /Draft reply/);
+assert.match(active, /Draft only\. Review and copy to Gmail\. Nothing is sent from this view\./);
+assert.match(active, /externalVendorResponseCount\(vendor\)/);
+assert.match(active, /sourceMessageId: displayedInbound\.id/);
+assert.match(active, /error\.status === 409/);
+assert.match(active, /setConversationRevision/);
 assert.match(workflow, /AS "contactedCount"/);
 assert.match(workflow, /AS "responseCount"/);
 assert.match(workflow, /orders\.customer_id = \$3::uuid/);
@@ -175,6 +186,15 @@ assert.match(conversationModel, /fromEmail\.toLowerCase\(\) === normalizedContac
 assert.match(communicationLedgerSql, /PRIMARY KEY \(customer_id, provider, account_email, provider_message_id\)/);
 assert.match(communicationLedgerSql, /GRANT SELECT ON public\.procurement_communication_messages TO dashboard_api/);
 assert.match(workflowRoute, /resolveProcurementCustomerId\(session\)/);
+assert.match(workflowRoute, /export async function POST/);
+assert.match(workflowRoute, /handleProcurementReplyDraft/);
+assert.match(procurementRouteHandlers, /procurementReplyDraftRequestSchema\.safeParse/);
+assert.match(procurementRouteHandlers, /expectedSourceMessageId: parsedInput\.data\.sourceMessageId/);
+assert.match(procurementRouteHandlers, /draftProcurementSupplierReply/);
+assert.doesNotMatch(workflowRoute, /gmail.*send|messages\.send/i);
+assert.doesNotMatch(procurementRouteHandlers, /gmail.*send|messages\.send/i);
+assert.match(replyDraft, /Do not accept commercial terms/);
+assert.match(replyDraft, /latestInbound/);
 assert.match(historicalRoute, /supplyAccessContext\(session\)/);
 assert.doesNotMatch(active, /gmailMessageId|gmail_message_id/);
 

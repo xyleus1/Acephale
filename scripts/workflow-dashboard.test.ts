@@ -32,6 +32,7 @@ assert.deepEqual(normalizeProcurementVendor({
   website: "https://example.com/",
   contact: { name: "Ada Buyer", email: "ada@example.com", phone: "+1 555 0100" },
   contacted: false,
+  responseCount: 1,
   status: "shortlisted",
   research: { source: "public" },
   quote: { amount: 100 },
@@ -41,6 +42,7 @@ assert.equal(normalizeProcurementVendor({
 }), null, "A vendor without a valid id should be rejected.");
 assert.equal(normalizeProcurementVendor({ id: "vendor-2", contact: { name: " ", email: "", phone: "  " } })?.contact, null);
 assert.equal(normalizeProcurementVendor({ id: "vendor-3" })?.contact, null);
+assert.equal(normalizeProcurementVendor({ id: "vendor-4", quote: {} })?.responseCount, 0);
 
 assert.equal(
   procurementCustomerIdFromServerMetadata("office-a", JSON.stringify({ "office-a": customerA })),

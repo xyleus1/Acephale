@@ -424,6 +424,8 @@ async function main() {
     assert.equal(vendorsByName.get("Ledger-only supplier")?.contacted, true);
     assert.equal(vendorsByName.get("Outbound-only supplier")?.contacted, true);
     assert.equal(vendorsByName.get("Inbound-only supplier")?.contacted, false);
+    assert.equal(vendorsByName.get("Outbound-only supplier")?.responseCount, 0);
+    assert.equal(vendorsByName.get("Inbound-only supplier")?.responseCount, 1);
     const exampleSupplierId = vendorsByName.get("Example supplier")?.id;
     assert(exampleSupplierId);
     assert.deepEqual(

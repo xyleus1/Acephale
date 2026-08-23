@@ -14,6 +14,7 @@ export type CustomerProcurementVendor = {
     phone: string | null;
   } | null;
   contacted: boolean;
+  responseCount: number;
   status: string;
   research: Record<string, unknown>;
   quote: Record<string, unknown> | null;

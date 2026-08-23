@@ -6428,3 +6428,28 @@ Use this file for chronological implementation notes that future agents should s
   the new fields before the protected owner migration completes.
 - Follow-up: Merge this schema-only release, dispatch the protected production
   migration, then update and land PR #208 without its older migration copy.
+
+### 2026-08-22 - Correct supplier response state and add reply drafting
+
+- Branch: `fix/active-sourcing-response-draft`, based on current `origin/main`.
+- Task: Identify the exact manufacturer that replied and let the operator draft
+  a safe response from the current request and exact thread.
+- Root cause: Order totals used inbound communication rows, while manufacturer
+  detail used a structured quote as its only response signal.
+- Files changed: Bourne request projection and types, Active Sourcing model and
+  panel, tenant-scoped conversation POST route, reply draft domain helper,
+  focused tests, and durable documentation.
+- Safety: The draft path accepts no client customer or office identifier,
+  resolves the current session and customer on the server, reads the exact
+  order-vendor thread, requires an exact supplier sender for compatibility
+  threads, rejects stale displayed-message IDs, persists nothing, and has no
+  email send action.
+- Verification: Procurement workflow, Active Sourcing, reply draft domain,
+  reply draft route behavior, conversation, Bourne bridge, TypeScript, product
+  copy policy, and the production Next.js build passed. The independent
+  pre-ship coverage audit scored the change at 77 percent.
+- Failed/skipped checks: The database-backed workflow test requires an
+  unavailable `WORKFLOW_DATABASE_OWNER_URL`; CI retains the exact inbound-only
+  and outbound-only vendor assertions.
+- Follow-up: Ship through CI, then verify Bay Area Circuits plus the draft-only
+  reply panel in the authenticated production UI.

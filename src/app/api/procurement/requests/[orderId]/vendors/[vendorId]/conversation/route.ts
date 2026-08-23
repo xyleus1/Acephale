@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { procurementVendorConversation } from "@/lib/procurement-conversation";
+import { handleProcurementReplyDraft } from "@/lib/procurement-route-handlers";
 import {
   ProcurementWorkflowError,
   resolveProcurementCustomerId,
@@ -43,4 +44,12 @@ export async function GET(
     }
     return NextResponse.json({ error: "Supplier conversation is unavailable." }, { status: 500, headers: responseHeaders });
   }
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ orderId: string; vendorId: string }> },
+) {
+  const { orderId, vendorId } = await context.params;
+  return handleProcurementReplyDraft(request, orderId, vendorId);
 }

@@ -94,6 +94,7 @@ export type ProcurementOrderVendor = {
     phone: string | null;
   } | null;
   contacted: boolean;
+  responseCount: number;
   status: string;
   research: Record<string, unknown>;
   quote: Record<string, unknown> | null;
@@ -579,15 +580,20 @@ export function normalizeProcurementVendor(value: unknown): ProcurementOrderVend
     email: typeof value.contact.email === "string" && value.contact.email.trim() ? value.contact.email : null,
     phone: typeof value.contact.phone === "string" && value.contact.phone.trim() ? value.contact.phone : null,
   } : null;
+  const quote = isObject(value.quote) && Object.keys(value.quote).length ? value.quote : null;
+  const projectedResponseCount = typeof value.responseCount === "number" || typeof value.responseCount === "string"
+    ? numberValue(value.responseCount)
+    : 0;
   return {
     id: value.id,
     name: typeof value.name === "string" && value.name.trim() ? value.name : "Unknown supplier",
     website: safeWebsite(value.website),
     contact: contact && (contact.name || contact.email || contact.phone) ? contact : null,
     contacted: value.contacted === true,
+    responseCount: Math.max(projectedResponseCount, quote ? 1 : 0),
     status: typeof value.status === "string" ? value.status : "unknown",
     research: isObject(value.research) ? value.research : {},
-    quote: isObject(value.quote) ? value.quote : null,
+    quote,
   };
 }
 
@@ -672,6 +678,22 @@ export async function getProcurementRequestFromDatabase(
                 )
               )),
               'contacted', ${vendorContactedSql(ledgerAvailable)},
+              'responseCount', ${ledgerAvailable ? `GREATEST(
+                CASE WHEN jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
+                  AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb THEN 1 ELSE 0 END,
+                (
+                  SELECT count(*)::int
+                  FROM procurement_communication_messages AS vendor_response
+                  WHERE vendor_response.customer_id = orders.customer_id
+                    AND vendor_response.order_id = orders.id
+                    AND vendor_response.vendor_id = order_vendors.id
+                    AND vendor_response.direction = 'INBOUND'
+                )
+              )` : `CASE
+                WHEN jsonb_typeof(to_jsonb(order_vendors)->'quote') = 'object'
+                  AND to_jsonb(order_vendors)->'quote' <> '{}'::jsonb THEN 1
+                ELSE 0
+              END`},
               'status', COALESCE(to_jsonb(order_vendors)->>'status', 'unknown'),
               'research', COALESCE(
                 to_jsonb(order_vendors)->'research',

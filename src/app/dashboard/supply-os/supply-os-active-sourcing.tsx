@@ -2,14 +2,17 @@
 
 import {
   ArrowRight,
+  Check,
+  Copy,
   ExternalLink,
   LoaderCircle,
   Mail,
   MessageSquare,
   PackageCheck,
+  PenLine,
   RefreshCw,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProcurementConversation } from "@/lib/procurement-conversation-model";
 import {
   type CustomerProcurementListItem,
@@ -27,6 +30,7 @@ import {
   externalSourcingActive,
   externalVendorPoReady,
   externalVendorPoState,
+  externalVendorResponseCount,
   groupActiveHistoricalSourcing,
   historicalPoReady,
   historicalPoState,
@@ -43,6 +47,20 @@ import styles from "./supply-os-logistics.module.css";
 
 type Selection = { kind: "workflow" | "historical"; id: string };
 type ConversationState = "idle" | "loading" | "ready" | "error";
+type ReplyDraftState = "idle" | "loading" | "ready" | "error";
+type ReplyDraft = {
+  recipient: string;
+  subject: string;
+  body: string;
+  sourceMessageId: string;
+};
+
+class SupplierActivityRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "SupplierActivityRequestError";
+  }
+}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -73,6 +91,7 @@ function workflowSituation(
   if (poState === "Not selected for PO") return "This manufacturer was not selected for the purchase order.";
   if (poState.includes("supplier selection not recorded")) return "The order advanced, but the workflow did not record which manufacturer was selected.";
   if (vendor.quote) return "The manufacturer responded and commercial terms are recorded for review.";
+  if (externalVendorResponseCount(vendor) > 0) return "The manufacturer replied. Commercial terms are not recorded yet.";
   if (vendor.contacted) return "The manufacturer was contacted. The workflow is waiting for a response.";
   return "The manufacturer was identified, but no supplier contact receipt is recorded yet.";
 }
@@ -89,6 +108,18 @@ async function fetchJson<T>(url: string, signal?: AbortSignal) {
   const response = await fetch(url, { cache: "no-store", signal, headers: { accept: "application/json" } });
   const payload = await response.json().catch(() => null) as (T & { error?: string }) | null;
   if (!response.ok) throw new Error(payload?.error ?? "The supplier activity could not be loaded.");
+  return payload as T;
+}
+
+async function postJson<T>(url: string, body: Record<string, unknown>) {
+  const response = await fetch(url, {
+    method: "POST",
+    cache: "no-store",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null) as (T & { error?: string }) | null;
+  if (!response.ok) throw new SupplierActivityRequestError(payload?.error ?? "The reply draft could not be generated.", response.status);
   return payload as T;
 }
 
@@ -174,6 +205,11 @@ export function ActiveSourcingWorkspace({
   const [conversation, setConversation] = useState<ProcurementConversation | null>(null);
   const [conversationState, setConversationState] = useState<ConversationState>("idle");
   const [conversationError, setConversationError] = useState<string | null>(null);
+  const [conversationRevision, setConversationRevision] = useState(0);
+  const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
+  const [replyDraftState, setReplyDraftState] = useState<ReplyDraftState>("idle");
+  const [replyDraftError, setReplyDraftError] = useState<string | null>(null);
+  const [replyCopied, setReplyCopied] = useState(false);
 
   const workflowRequest = selection?.kind === "workflow"
     ? activeWorkflowRequests.find((request) => request.id === selection.id) ?? null
@@ -191,6 +227,8 @@ export function ActiveSourcingWorkspace({
   const workflowRequestUpdatedAt = workflowRequest?.updatedAt ?? null;
   const workflowVendorId = workflowVendor?.id ?? null;
   const historicalCaseId = historicalCase?.id ?? null;
+  const replySelectionRef = useRef("");
+  replySelectionRef.current = `${workflowRequestId ?? ""}:${workflowVendorId ?? ""}`;
 
   useEffect(() => {
     const selectionValid = selection?.kind === "workflow"
@@ -261,7 +299,14 @@ export function ActiveSourcingWorkspace({
         setConversationError(error instanceof Error ? error.message : "Conversation unavailable.");
       });
     return () => controller.abort();
-  }, [historicalCaseId, workflowRequestId, workflowRequestUpdatedAt, workflowVendorId]);
+  }, [conversationRevision, historicalCaseId, workflowRequestId, workflowRequestUpdatedAt, workflowVendorId]);
+
+  useEffect(() => {
+    setReplyDraft(null);
+    setReplyDraftState("idle");
+    setReplyDraftError(null);
+    setReplyCopied(false);
+  }, [workflowRequestId, workflowVendorId]);
 
   const workflowContacted = activeWorkflowRequests.reduce((sum, request) => sum + request.contactedCount, 0);
   const workflowResponses = activeWorkflowRequests.reduce((sum, request) => sum + request.responseCount, 0);
@@ -277,6 +322,45 @@ export function ActiveSourcingWorkspace({
   const retryWorkflowDetail = () => {
     if (!workflowRequest) return;
     setDetailRevision((revision) => revision + 1);
+  };
+
+  const createReplyDraft = async () => {
+    if (!workflowRequestId || !workflowVendorId) return;
+    const displayedInbound = [...(conversation?.messages ?? [])]
+      .reverse()
+      .find((message) => message.direction === "INBOUND");
+    if (!displayedInbound) return;
+    const selectionKey = replySelectionRef.current;
+    setReplyDraft(null);
+    setReplyDraftState("loading");
+    setReplyDraftError(null);
+    setReplyCopied(false);
+    try {
+      const payload = await postJson<{ draft: ReplyDraft }>(
+        `/api/procurement/requests/${encodeURIComponent(workflowRequestId)}/vendors/${encodeURIComponent(workflowVendorId)}/conversation`,
+        { sourceMessageId: displayedInbound.id },
+      );
+      if (replySelectionRef.current !== selectionKey) return;
+      setReplyDraft(payload.draft);
+      setReplyDraftState("ready");
+    } catch (error) {
+      if (replySelectionRef.current !== selectionKey) return;
+      if (error instanceof SupplierActivityRequestError && error.status === 409) {
+        setConversationRevision((revision) => revision + 1);
+      }
+      setReplyDraftState("error");
+      setReplyDraftError(error instanceof Error ? error.message : "The reply draft could not be generated.");
+    }
+  };
+
+  const copyReplyDraft = async () => {
+    if (!replyDraft) return;
+    try {
+      await navigator.clipboard.writeText(`Subject: ${replyDraft.subject}\n\n${replyDraft.body}`);
+      setReplyCopied(true);
+    } catch {
+      setReplyDraftError("Copy failed. Select the draft text and copy it manually.");
+    }
   };
 
   return (
@@ -337,7 +421,7 @@ export function ActiveSourcingWorkspace({
             {workflowDetail?.vendors.map((vendor) => (
               <button key={vendor.id} type="button" data-active={workflowVendor?.id === vendor.id} onClick={() => setManufacturerId(vendor.id)}>
                 <span><strong>{vendor.name}</strong><small>{vendor.contact?.email ?? "Supplier email not saved"}</small></span>
-                <span><b>{vendor.quote ? "Responded" : vendor.contacted ? "Contacted" : "Identified"}</b><small>{customerProcurementQuoteSummary(vendor.quote)}</small></span>
+                <span><b>{externalVendorResponseCount(vendor) ? "Responded" : vendor.contacted ? "Contacted" : "Identified"}</b><small>{externalVendorResponseCount(vendor) ? responseCountLabel(externalVendorResponseCount(vendor)) : customerProcurementQuoteSummary(vendor.quote)}</small></span>
               </button>
             ))}
             {historicalGroup?.cases.map((procurementCase) => (
@@ -356,7 +440,7 @@ export function ActiveSourcingWorkspace({
               </header>
               <dl className={styles.activeSupplierFacts}>
                 <div><dt>Outreach</dt><dd>{workflowVendor.contacted ? "Gmail contact recorded" : "No contact receipt"}</dd></div>
-                <div><dt>Response</dt><dd>{workflowVendor.quote ? customerProcurementQuoteSummary(workflowVendor.quote) : "No quote recorded"}</dd></div>
+                <div><dt>Response</dt><dd>{workflowVendor.quote ? customerProcurementQuoteSummary(workflowVendor.quote) : externalVendorResponseCount(workflowVendor) ? `${responseCountLabel(externalVendorResponseCount(workflowVendor))} received. Quote not recorded.` : "No response recorded"}</dd></div>
                 <div><dt>Contact</dt><dd>{customerProcurementContactSummary(workflowVendor.contact).secondary}</dd></div>
                 <div><dt>Workflow</dt><dd>{customerProcurementStatusLabel(workflowRequest.status)}</dd></div>
               </dl>
@@ -366,8 +450,28 @@ export function ActiveSourcingWorkspace({
                 {!customerProcurementEvidenceSummary(workflowVendor.research).length ? <p>No supplier evidence summary is available.</p> : null}
               </section>
               <section className={styles.activeConversationPanel}>
-                <header><span><MessageSquare size={16} /><strong>Conversation</strong></span>{conversation?.sourceUrl ? <a href={conversation.sourceUrl} target="_blank" rel="noreferrer">Open Gmail <ExternalLink size={12} /></a> : null}</header>
+                <header>
+                  <span><MessageSquare size={16} /><strong>Conversation</strong></span>
+                  <div>
+                    {conversationState === "ready" && conversation?.messages.some((message) => message.direction === "INBOUND") ? (
+                      <button type="button" onClick={createReplyDraft} disabled={replyDraftState === "loading"}>
+                        {replyDraftState === "loading" ? <LoaderCircle size={12} /> : <PenLine size={12} />}
+                        {replyDraftState === "loading" ? "Drafting" : replyDraft ? "Redraft reply" : "Draft reply"}
+                      </button>
+                    ) : null}
+                    {conversation?.sourceUrl ? <a href={conversation.sourceUrl} target="_blank" rel="noreferrer">Open Gmail <ExternalLink size={12} /></a> : null}
+                  </div>
+                </header>
                 <ConversationMessages conversation={conversation} state={conversationState} error={conversationError} fallbackCase={null} />
+                {replyDraftError ? <div className={styles.activeReplyDraftError}>{replyDraftError}</div> : null}
+                {replyDraft ? (
+                  <section className={styles.activeReplyDraft} aria-label="Supplier reply draft">
+                    <header><span><small>Draft reply</small><strong>To {replyDraft.recipient}</strong></span><button type="button" onClick={copyReplyDraft}>{replyCopied ? <Check size={13} /> : <Copy size={13} />}{replyCopied ? "Copied" : "Copy reply"}</button></header>
+                    <label>Subject<input value={replyDraft.subject} onChange={(event) => { setReplyDraft((current) => current ? { ...current, subject: event.target.value } : current); setReplyCopied(false); setReplyDraftError(null); }} /></label>
+                    <label>Reply<textarea rows={7} value={replyDraft.body} onChange={(event) => { setReplyDraft((current) => current ? { ...current, body: event.target.value } : current); setReplyCopied(false); setReplyDraftError(null); }} /></label>
+                    <p>Draft only. Review and copy to Gmail. Nothing is sent from this view.</p>
+                  </section>
+                ) : null}
               </section>
               <footer><button type="button" onClick={() => onOpenWorkflowRequest(workflowRequest)}>Open full sourcing request <ArrowRight size={13} /></button></footer>
             </article>

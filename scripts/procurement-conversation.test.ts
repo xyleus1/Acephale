@@ -36,8 +36,23 @@ const normalized = procurementConversationFromGmailThread({
     gmailMessage(2),
     gmailMessage(1),
     gmailMessage(3, "different@example.com"),
+    {
+      id: "group-participant",
+      threadId: "thread-1",
+      internalDate: "4000",
+      payload: {
+        mimeType: "text/plain",
+        headers: [
+          { name: "From", value: "Colleague <colleague@example.com>" },
+          { name: "To", value: "buyer@example.com" },
+          { name: "Cc", value: "supplier@example.com" },
+          { name: "Subject", value: "Internal follow-up" },
+        ],
+        body: { data: encoded("This message is not from the supplier.") },
+      },
+    },
   ],
-}, "supplier@example.com");
+}, "supplier@example.com", "purchasing@example.com");
 assert.deepEqual(normalized.map((message) => message.direction), ["INBOUND", "OUTBOUND"]);
 assert.equal(normalized.every((message) => /^[a-f0-9]{64}$/.test(message.id)), true);
 assert.equal(normalized.some((message) => message.id === "message-1" || message.id === "message-2"), false);

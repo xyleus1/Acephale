@@ -172,10 +172,16 @@ export function boundProcurementConversationMessages(messages: ProcurementConver
 export function procurementConversationFromGmailThread(
   thread: GmailConversationThread,
   contactEmail: string,
+  accountEmail: string,
 ): ProcurementConversationMessage[] {
   const normalizedContact = contactEmail.toLowerCase();
+  const normalizedAccount = accountEmail.toLowerCase();
   const messages = (thread.messages ?? [])
-    .filter((message) => procurementConversationParticipantEmails(message).includes(normalizedContact))
+    .filter((message) => {
+      const fromEmail = procurementConversationEmailAddresses(header(message.payload, "From"))[0]?.toLowerCase() ?? "";
+      return procurementConversationParticipantEmails(message).includes(normalizedContact)
+        && (fromEmail === normalizedContact || fromEmail === normalizedAccount);
+    })
     .sort((left, right) => gmailMessageTime(left).localeCompare(gmailMessageTime(right)))
     .map((message) => {
       const rawFrom = header(message.payload, "From");

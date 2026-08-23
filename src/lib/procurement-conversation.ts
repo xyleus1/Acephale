@@ -125,18 +125,22 @@ async function localConversation(
   });
   if (!thread) return null;
   const normalizedContact = reference.contactEmail.toLowerCase();
-  const related = thread.messages.filter((message) => [
-    message.fromEmail.toLowerCase(),
-    ...jsonEmails(message.toEmails).flatMap((entry) => procurementConversationEmailAddresses(entry)),
-    ...jsonEmails(message.ccEmails).flatMap((entry) => procurementConversationEmailAddresses(entry)),
-  ].includes(normalizedContact));
+  const related = thread.messages.filter((message) => {
+    const fromEmail = message.fromEmail.toLowerCase();
+    const recipients = [
+      ...jsonEmails(message.toEmails).flatMap((entry) => procurementConversationEmailAddresses(entry)),
+      ...jsonEmails(message.ccEmails).flatMap((entry) => procurementConversationEmailAddresses(entry)),
+    ];
+    return fromEmail === normalizedContact
+      || (message.direction === "OUTBOUND" && recipients.includes(normalizedContact));
+  });
   if (!related.length) return null;
   const accountEmail = related.find((message) => message.account?.email)?.account?.email ?? null;
   const messages = boundProcurementConversationMessages(related
     .sort((left, right) => left.sentAt.valueOf() - right.sentAt.valueOf() || left.id.localeCompare(right.id))
     .map((message) => ({
       id: message.id,
-      direction: message.direction,
+      direction: message.fromEmail.toLowerCase() === normalizedContact ? "INBOUND" : "OUTBOUND",
       fromEmail: message.fromEmail,
       fromName: message.fromName,
       toEmails: jsonEmails(message.toEmails),
@@ -214,7 +218,7 @@ async function compatibilityConversation(
       return null;
     }
     if (!thread) return null;
-    const messages = procurementConversationFromGmailThread(thread, contactEmail);
+    const messages = procurementConversationFromGmailThread(thread, contactEmail, account.email);
     if (!messages.length) return null;
     return {
       available: true,
