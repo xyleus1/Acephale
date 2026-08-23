@@ -2,7 +2,7 @@
 
 ## Latest Update
 
-### Connected emails is ready for release
+### Connected emails is deployed
 
 - Admin Settings has a dedicated `/dashboard/settings/connected-emails` tab.
   Channels remains separate for WhatsApp, Sheets, RFQ inbox, and environment
@@ -23,6 +23,14 @@ Verification completed:
 - TypeScript
 - Product copy policy
 - Production Next.js build
+
+Release status:
+
+- PR #227 merged as `598e50ff`. Vercel production deployed the merge commit,
+  `/api/health` returned healthy, and the new route redirected unauthenticated
+  requests to login.
+- Authenticated rendered QA and a live round-trip test remain pending until at
+  least two production mailbox accounts are connected and enabled for sending.
 
 ### Gmail app-password schema is deployed before application release
 
