@@ -10288,3 +10288,8 @@ Verification caveat:
   `psql --command` does not interpolate bound variables. Variable-bearing SQL
   now enters `psql` through `--file=-`, and a regression contract forbids the
   broken command form. The failed dispatch sent zero messages.
+- The next dispatch reached the app but stopped before the plan event or SMTP
+  because the demo task tried to insert directly in `RUNNING`. Demo tasks now
+  follow the protected `PLANNED` to `READY` to `RUNNING` lifecycle, with
+  compare-and-transition guards and executable regression coverage. That
+  failed dispatch also sent zero messages.

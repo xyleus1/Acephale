@@ -38,6 +38,7 @@ function createRunnerFixture(input: {
   }));
   const sentMessages: Call[] = [];
   const syncCalls: Call[] = [];
+  const taskUpserts: Call[] = [];
   const taskUpdates: Call[] = [];
   const events: Call[] = [];
   const backgroundUpdates: Call[] = [];
@@ -70,7 +71,10 @@ function createRunnerFixture(input: {
     },
     supplyWorkspaceMember: { upsert: async () => { throw new Error("demo must not mutate membership"); } },
     supplyExecutionTask: {
-      upsert: async () => ({ id: "task-demo", status: "RUNNING" }),
+      upsert: async (args: Call) => {
+        taskUpserts.push(args);
+        return { id: "task-demo", status: "PLANNED" };
+      },
       updateMany: async (args: Call) => {
         taskUpdates.push(args);
         return { count: 1 };
@@ -155,6 +159,7 @@ function createRunnerFixture(input: {
     dependencies,
     sentMessages,
     syncCalls,
+    taskUpserts,
     taskUpdates,
     events,
     backgroundUpdates,
@@ -192,8 +197,12 @@ async function testRunnerSuccess() {
   assert.equal(fixture.events.filter((event) => (
     ((event.data as Call).eventType) === "DEMO_EMAIL_DELIVERY_ACKNOWLEDGED"
   )).length, 8);
-  assert.equal(fixture.taskUpdates.length, 1);
-  assert.equal(((fixture.taskUpdates[0].data as Call).status), "SUCCEEDED");
+  assert.equal(((fixture.taskUpserts[0].create as Call).status), "PLANNED");
+  assert.deepEqual(
+    fixture.taskUpdates.map((update) => (update.data as Call).status),
+    ["READY", "RUNNING", "SUCCEEDED"],
+  );
+  assert.equal(((fixture.taskUpdates[2].where as Call).status), "RUNNING");
   assert.equal(fixture.backgroundUpdates.length, 1);
   const storedPayload = (fixture.backgroundUpdates[0].data as Call).payload as Call;
   const result = storedPayload.result as Call;
@@ -218,7 +227,10 @@ async function testRunnerFailureIsRecorded() {
     }, fixture.dependencies),
     /1 of 4 demo email conversations failed/,
   );
-  assert.equal(((fixture.taskUpdates[0].data as Call).status), "FAILED");
+  assert.deepEqual(
+    fixture.taskUpdates.map((update) => (update.data as Call).status),
+    ["READY", "RUNNING", "FAILED"],
+  );
   const storedPayload = (fixture.backgroundUpdates[0].data as Call).payload as Call;
   const result = storedPayload.result as Call;
   assert.equal(result.passed, 3);

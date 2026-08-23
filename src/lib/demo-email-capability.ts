@@ -688,19 +688,42 @@ export async function runDemoEmailCapabilityJob(input: {
       taskKey: payload.runKey,
       taskType: DEMO_TASK_TYPE,
       capabilityKey: DEMO_CAPABILITY_KEY,
-      status: "RUNNING",
+      status: "PLANNED",
       requiresApproval: false,
       input: json(taskInput),
       inputHash: digest(taskInput),
       externalSystem: "GMAIL_APP_PASSWORD",
       idempotencyKey: payload.runKey,
-      startedAt: new Date(),
     },
     update: {},
     select: { id: true, status: true },
   });
-  if (task.status !== "RUNNING") {
+  if (task.status !== "PLANNED") {
     throw new Error("This demo procurement run has already been executed.");
+  }
+  const readied = await dependencies.db.supplyExecutionTask.updateMany({
+    where: {
+      id: task.id,
+      officeId: input.officeId,
+      workspaceId: workspace.id,
+      status: "PLANNED",
+    },
+    data: { status: "READY" },
+  });
+  if (readied.count !== 1) {
+    throw new Error("The demo procurement task could not enter READY status.");
+  }
+  const started = await dependencies.db.supplyExecutionTask.updateMany({
+    where: {
+      id: task.id,
+      officeId: input.officeId,
+      workspaceId: workspace.id,
+      status: "READY",
+    },
+    data: { status: "RUNNING", startedAt: new Date() },
+  });
+  if (started.count !== 1) {
+    throw new Error("The demo procurement task could not enter RUNNING status.");
   }
   await dependencies.db.supplyExecutionEvent.create({
     data: {
@@ -848,7 +871,12 @@ export async function runDemoEmailCapabilityJob(input: {
 
   const succeeded = passed === conversations.length;
   await dependencies.db.supplyExecutionTask.updateMany({
-    where: { id: task.id, officeId: input.officeId, workspaceId: workspace.id },
+    where: {
+      id: task.id,
+      officeId: input.officeId,
+      workspaceId: workspace.id,
+      status: "RUNNING",
+    },
     data: {
       status: succeeded ? "SUCCEEDED" : "FAILED",
       result: json(result),

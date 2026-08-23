@@ -6736,3 +6736,7 @@ Use this file for chronological implementation notes that future agents should s
   of applying the psql variable. No SMTP call was reached. All five
   variable-bearing queries now use `--file=-`, with a regression contract for
   that execution boundary.
+- The second dispatch stopped before its plan event and first SMTP call because
+  `SupplyExecutionTask` was inserted as `RUNNING`, which the database guard
+  correctly rejects. The runner now creates `PLANNED`, compare-and-transitions
+  to `READY`, then compare-and-transitions to `RUNNING` before any send.
