@@ -31,14 +31,17 @@
   provider-ID uniqueness, whitespace normalization, body bounds, and complete
   transcript projection checks. Focused contracts, TypeScript, and the
   production build also pass.
-- Production Neon has not been changed. The owner migration and Bourne writer
-  and backfill updates remain release steps outside the Derya runtime role. A
-  protected `main`-only workflow now pins the exact Bourne Neon endpoint,
-  database, and owner role so the schema step can be executed after merge.
+- Production run `32607312501` applied and verified the owner migration against
+  the pinned Bourne Neon endpoint, database, and owner role. The ledger and its
+  restricted grants are live. Bourne still needs to add confirmed-send and
+  inbox-observation writes, backfill unambiguous existing threads, and return
+  one outbound and inbound pair for authenticated Derya UI verification.
 - The first protected production run reached the pinned Bourne database and
   stopped before DDL because the existing runtime role retained PostgreSQL's
   default `INHERIT` flag. The migration now narrows both runtime roles to
   `NOINHERIT`; actual memberships and elevated attributes still stop the run.
+  The corrected retry applied the migration and passed every production
+  verification check.
 - No email send, supplier approval, quote promotion, or purchase behavior was
   added.
 

@@ -6221,3 +6221,18 @@ Use this file for chronological implementation notes that future agents should s
 - CI now proves the real failure case with a temporary role membership, then
   proves that an otherwise safe `INHERIT` role is normalized during the next
   migration attempt.
+
+### 2026-08-22 - Provision the Bourne communication ledger in production
+
+- PR #212 added the append-only ledger, Derya reader, Bourne contract, guarded
+  migration, focused tests, and protected production workflow. PR #213 safely
+  normalized the existing runtime roles to `NOINHERIT`.
+- Protected run `32607312501` verified the exact Bourne Neon target, applied the
+  owner migration, and passed the production table, index, and restricted-role
+  checks.
+- Production health returned HTTP 200. No email, approval, quote, order-status
+  change, or commercial action occurred.
+- Remaining work is owned by the Bourne workflow: insert immutable outbound
+  rows only after confirmed sends, insert inbound rows after observation,
+  backfill only unambiguous existing threads, then provide one outbound and
+  inbound pair for authenticated Active Sourcing verification.
