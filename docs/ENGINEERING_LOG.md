@@ -6484,3 +6484,18 @@ Use this file for chronological implementation notes that future agents should s
   the generic failure message, then the correct password opened the scoped
   HypnoDreamz customer workspace with no new console errors. No plaintext
   password was added to project documentation.
+
+### 2026-08-22 - Tighten live supplier reply grounding
+
+- Authenticated production QA of PR #218 confirmed Bay Area Circuits is the
+  exact respondent and that reply state remains separate from quote state.
+- The first live draft exposed a prompt defect: it introduced an unsupported
+  internal-review and approval process for technical files. The request only
+  says the files will be provided after initial capability confirmation.
+- Removed the invented fallback instruction. Drafts must now preserve an exact
+  file-sharing condition already present in the thread, never invent review,
+  approval, readiness, availability, or timing, and ask a concise question if
+  the record does not support a next step.
+- Normalized helpdesk subjects to one `Re:` prefix and plain punctuation.
+- Verification: Reply draft domain, reply route, Active Sourcing, TypeScript,
+  product copy, and the production Next.js build passed. Live redraft remains.

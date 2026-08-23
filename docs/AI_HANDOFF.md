@@ -65,6 +65,14 @@ Release status:
 - Drafting is ephemeral and review-only. The panel can copy the subject and
   body to Gmail, but contains no send path and writes no message or workflow
   state.
+- Authenticated production QA of PR #218 proved the exact Bay Area Circuits
+  row, response-without-quote copy, editable draft panel, and absence of a send
+  action. The first live draft also exposed two quality defects: the prompt
+  told the model to invent an internal-review process, and helpdesk subjects
+  could stack service and reply prefixes.
+- The follow-up removes that invented process, requires the draft to preserve
+  the exact file-sharing sequence already present in the thread, and reduces
+  helpdesk subjects to one `Re:` prefix while replacing forbidden punctuation.
 
 Verification completed:
 
@@ -77,12 +85,13 @@ Verification completed:
 - TypeScript after Prisma client generation
 - Product copy policy
 - Production Next.js build
+- Authenticated PR #218 production response-state and draft-only UI
 
 Verification pending:
 
 - Database projection contract requires `WORKFLOW_DATABASE_OWNER_URL` in CI.
-- Release checks and authenticated production UI remain to be completed before
-  this change is considered live.
+- The draft-grounding follow-up still requires release checks and one new live
+  draft before the complete workflow is considered verified.
 
 ### Relink Bourne-backed orders to the active Supply OS workspace
 
