@@ -2,6 +2,31 @@
 
 ## Latest Update
 
+### Maneks non-bulk lead generation pipeline
+
+- `src/lib/leadgen` adds a deterministic customer-profile driven prospecting
+  pipeline: query planning, public search result parsing, page and PDF
+  harvesting, industrial fit scoring, layered email screening, and
+  office-scoped persistence into `Company` and `Contact`.
+- The Maneks profile targets Turkish non-bulk steel buyers: steel service
+  centers, fabricators, pipe and profile producers, machinery manufacturers,
+  construction contractors, and foundries, across the main industrial provinces.
+  Query shapes cover company sites, chamber member lists, OSB directories, PDF
+  directories, and contact pages.
+- Fit scoring is rule based, not model based. Positive and negative signal sets
+  live in the profile, so retargeting another customer means writing a new
+  profile, not new pipeline code.
+- Email screening runs syntax, disposable-domain, placeholder, MX, company
+  domain alignment, role inbox, and free provider checks, then emits a
+  confidence score. Outbound port 25 is unavailable in agent environments, so
+  mailbox-level SMTP probing stays a later paid-provider option.
+- Persistence keeps provenance: discovery URL, evidence URLs, matched signals,
+  matched segments, fit score, verification verdict, MX host, and confidence
+  are stored on the company and contact records with a campaign tag. Nothing is
+  enqueued or sent. Outreach stays behind human approval.
+- Run it with `npm run leadgen -- <plan|search|directory|harvest|verify|load>`
+  and test it with `npm run test:leadgen`.
+
 ### Connected email sender pool controls
 
 - Connected emails replaces the row-level default, sync, pause, and sender

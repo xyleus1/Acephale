@@ -42,6 +42,8 @@
     "test:supply-os-snapshot-twin": "tsx scripts/supply-os-snapshot-twin.test.ts",
     "test:supply-os-sourcing-projection": "node --import tsx scripts/supply-os-sourcing-projection.test.ts",
     "test:supply-os-atlas-sourcing": "node --import tsx scripts/supply-os-atlas-sourcing.test.ts",
+    "test:leadgen": "tsx scripts/leadgen.test.ts",
+    "leadgen": "tsx scripts/leadgen-run.ts",
     "test:supply-os-active-sourcing": "node --import tsx scripts/supply-os-active-sourcing.test.ts",
     "test:supply-os-materials-layout": "node --import tsx scripts/supply-os-materials-layout.test.ts",
     "test:procurement-conversation": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-conversation.test.ts",
