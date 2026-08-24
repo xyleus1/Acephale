@@ -6812,6 +6812,13 @@ Use this file for chronological implementation notes that future agents should s
 - Added a protected no-send production reconciliation for one completed demo
   job. Authorization is one-time and database-backed. The action can ingest
   only exact acknowledged demo Message-IDs and prints aggregate results only.
-- Verification: `npm run test:demo-email-capability` and
-  `npx tsc --noEmit --pretty false --incremental false` passed. Production
-  reconciliation remains pending release and must run before another send.
+- Verification: Focused demo, Gmail account/settings/window, and supplier email
+  provider checks passed, as did TypeScript, workflow parsing, product-copy
+  policy, and the production build. PR #247 released as
+  `1d34580a2056b50ada38160587d5295901b3d872`.
+- Production result: No-send reconciliation run `32687152181` moved exact
+  observed delivery coverage from four of seven to seven of seven, with zero
+  unresolved and zero sync failures. The three missing exact messages matched
+  in Gmail Junk, confirming the Inbox-only observation diagnosis. Read-only
+  inspection run `32687182247` showed every acknowledged stage as
+  `OBSERVED_NOW`. No new email was sent.

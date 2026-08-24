@@ -10380,8 +10380,13 @@ Verification caveat:
 - Focused runtime and contract tests passed, including a message found only in
   Gmail Junk, trigger authorization, token consumption, and existing-job
   reconciliation. TypeScript also passed.
-- Production reconciliation is pending deployment. Do not start another send
-  run until that no-send result identifies the remaining folder or Message-ID
-  issue. Unresolved messages are a valid diagnostic result, but zero
-  acknowledged deliveries, any IMAP failure, or incomplete Inbox, All Mail,
-  and Junk coverage makes the workflow fail.
+- Released through PR #247 at production commit
+  `1d34580a2056b50ada38160587d5295901b3d872`.
+- Production no-send reconciliation run `32687152181` completed successfully:
+  seven deliveries were acknowledged, four were observed before reconciliation,
+  all seven were observed afterward, zero remained unresolved, and zero IMAP
+  syncs failed. Inbox, All Mail, and Junk were searched; the missing messages
+  matched in Junk.
+- Read-only inspection run `32687182247` confirmed all seven initial or reply
+  delivery stages are now `OBSERVED_NOW`, including both acknowledged stages of
+  the HypnoDreamz procurement conversation. No new email was sent.
