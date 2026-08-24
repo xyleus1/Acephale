@@ -2,6 +2,29 @@
 
 ## Latest Update
 
+### Black brand marks and reliable demo mailbox lookup
+
+- The shared Derya logo and generated app favicon now render the mark in black.
+  The favicon keeps its existing neutral tile and padding.
+- Protected demo exact-message observation searches INBOX first. After an
+  INBOX miss, it discovers Gmail special-use All Mail and Junk folders and
+  checks those folders for the same Message-ID correlation.
+- Normal Gmail sync remains INBOX-only. The expanded search requires both the
+  explicit demo-observation flag and an exact related Message-ID.
+- Mailbox discovery, INBOX, and unresolved fallback failures now return an IMAP
+  sync error instead of being mislabeled as a successful zero-message search.
+  A failed optional folder can still fall through when a later folder finds the
+  message, and an empty fetch can continue after a message moves folders.
+- No email was sent during implementation or verification.
+
+Verification completed before release:
+
+- Demo email runtime and contract tests, including INBOX, All Mail, Spam,
+  discovery failure, search failure, and empty-fetch behavior
+- Gmail app-password, Gmail sync-window, and Supply OS surface contracts
+- Product copy policy, TypeScript, production Next.js build, diff whitespace,
+  and forbidden-character checks
+
 ### Customer settings, sourcing item management, and logistics setup
 
 - Customer Settings is now a dedicated customer-only surface. It shows the

@@ -6778,3 +6778,24 @@ Use this file for chronological implementation notes that future agents should s
   or confirmed lane endpoints.
 - Follow-up: Run authenticated production smoke tests for customer Settings,
   sourcing edit/remove, and first-time logistics setup after deployment.
+
+### 2026-08-23 - Make brand marks black and harden demo mailbox lookup
+
+- Branch: `codex/logo-email-release-20260823`, based on current `origin/main`.
+- Commit: pending release commit.
+- Task: Change the Derya logo and favicon from navy to black, then complete the
+  unresolved six-mailbox demo observation follow-up without sending new mail.
+- Files changed: Shared logo mark, generated app icon, demo-only Gmail IMAP
+  lookup, focused runtime and source contracts, and release documentation.
+- Verification: Demo email capability, Gmail app-password, Gmail sync-window,
+  Supply OS surface, product copy, TypeScript, production build, diff
+  whitespace, and forbidden-character checks passed.
+- Failed/skipped checks: No live mailbox message was sent. Real Gmail folder
+  behavior will be observed only when an explicitly approved demo run or
+  no-send reconciliation uses the deployed code.
+- Caveats: Normal account sync remains INBOX-only. Special-use All Mail and
+  Junk lookup is restricted to exact-message demo observation.
+- Follow-up: Verify the black logo and favicon in production. Applying the new
+  folder search to the three prior missing deliveries requires a separately
+  authorized no-send reconciliation because the current inspection path reads
+  stored results and does not reconnect to Gmail.

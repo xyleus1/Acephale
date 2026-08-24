@@ -107,27 +107,59 @@ export async function syncGmailAppPasswordAccountInternal(input: {
   let messages: Array<{ uid: number; source?: Buffer; internalDate?: Date | string }> = [];
   try {
     await client.connect();
-    await client.mailboxOpen("INBOX", { readOnly: true });
+    const mailboxPaths = ["INBOX"];
+    const searchSpecialUseMailboxes = Boolean(input.demoObservation && input.relatedToMessageId);
     const since = account.lastSyncAt
       ? new Date(account.lastSyncAt.getTime() - 10 * 60 * 1000)
       : new Date(dependencies.now().getTime() - FIRST_SYNC_DAYS * 24 * 60 * 60 * 1000);
-    const matches = await client.search(input.relatedToMessageId
-      ? {
-          or: [
-            { header: { "In-Reply-To": input.relatedToMessageId } },
-            { header: { References: input.relatedToMessageId } },
-            { header: { "Message-ID": input.relatedToMessageId } },
-          ],
+    let fallbackError: unknown = null;
+    const discoverSpecialUseMailboxes = async () => {
+      try {
+        const mailboxes = await client.list();
+        for (const specialUse of ["\\All", "\\Junk"]) {
+          const mailbox = mailboxes.find((candidate) => candidate.specialUse === specialUse);
+          if (mailbox && !mailboxPaths.includes(mailbox.path)) mailboxPaths.push(mailbox.path);
         }
-      : { since }, { uid: true });
-    const uids = (matches || []).slice(-(input.relatedToMessageId ? 50 : MAX_MESSAGES_PER_SYNC));
-    if (uids.length) {
-      messages = await client.fetchAll(
-        uids,
-        { uid: true, source: { maxLength: MAX_SOURCE_BYTES }, internalDate: true },
-        { uid: true },
-      );
+      } catch (caught) {
+        fallbackError ??= caught;
+      }
+    };
+    for (let mailboxIndex = 0; mailboxIndex < mailboxPaths.length; mailboxIndex++) {
+      const mailboxPath = mailboxPaths[mailboxIndex];
+      try {
+        await client.mailboxOpen(mailboxPath, { readOnly: true });
+        const matches = await client.search(input.relatedToMessageId
+          ? {
+              or: [
+                { header: { "In-Reply-To": input.relatedToMessageId } },
+                { header: { References: input.relatedToMessageId } },
+                { header: { "Message-ID": input.relatedToMessageId } },
+              ],
+            }
+          : { since }, { uid: true });
+        const uids = (matches || []).slice(-(input.relatedToMessageId ? 50 : MAX_MESSAGES_PER_SYNC));
+        if (!uids.length) {
+          if (mailboxPath === "INBOX" && searchSpecialUseMailboxes) {
+            await discoverSpecialUseMailboxes();
+          }
+          continue;
+        }
+        messages = await client.fetchAll(
+          uids,
+          { uid: true, source: { maxLength: MAX_SOURCE_BYTES }, internalDate: true },
+          { uid: true },
+        );
+        if (messages.length) break;
+        fallbackError ??= new Error("IMAP message was unavailable after search.");
+        if (mailboxPath === "INBOX" && searchSpecialUseMailboxes) {
+          await discoverSpecialUseMailboxes();
+        }
+      } catch (caught) {
+        if (mailboxPath === "INBOX") throw caught;
+        fallbackError ??= caught;
+      }
     }
+    if (!messages.length && fallbackError) throw fallbackError;
   } catch {
     return { error: "IMAP sync failed. Verify the app password and Gmail IMAP access." };
   } finally {

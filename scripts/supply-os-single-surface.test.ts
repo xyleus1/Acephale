@@ -6,6 +6,7 @@ const root = process.cwd();
 const dashboardLayout = readFileSync(resolve(root, "src/app/dashboard/layout.tsx"), "utf8");
 const rootLayout = readFileSync(resolve(root, "src/app/layout.tsx"), "utf8");
 const appIcon = readFileSync(resolve(root, "src/app/icon.tsx"), "utf8");
+const logoMark = readFileSync(resolve(root, "src/components/logo-mark.tsx"), "utf8");
 const supplyOsPage = readFileSync(resolve(root, "src/app/dashboard/supply-os/page.tsx"), "utf8");
 const loginPage = readFileSync(resolve(root, "src/app/login/page.tsx"), "utf8");
 const logoutButton = readFileSync(resolve(root, "src/components/logout-button.tsx"), "utf8");
@@ -59,6 +60,9 @@ assert.doesNotMatch(rootLayout, /Derya Supply OS/, "browser metadata must use th
 assert.match(supplyOsPage, /title: \{ absolute: "Derya" \}/, "the primary workspace browser tab must be named Derya");
 assert.match(appIcon, /viewBox="-28 -28 441 441"/, "the Derya favicon needs enough padding to remain legible at browser-tab size");
 assert.match(appIcon, /fill="#f7f8f7"/, "the Derya favicon needs a visible neutral tile instead of a transparent cached mark");
+assert.match(appIcon, /fill="#000000"/, "the Derya favicon mark must be black");
+assert.match(logoMark, /fill="#000000"/, "the shared Derya logo mark must be black");
+assert.doesNotMatch(`${appIcon}\n${logoMark}`, /#153d60/i, "the retired navy brand color must stay removed");
 assert.match(loginPage, /<h1 className="login-title">Derya<\/h1>/);
 assert.match(middleware, /const EMPLOYEE_HOME = "\/dashboard\/supply-os"/);
 assert.match(middleware, /pathname === "\/dashboard"/);

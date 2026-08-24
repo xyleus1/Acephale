@@ -407,6 +407,12 @@ async function testRealImapDemoIsolation(input: {
   demoObservation?: boolean;
   skipClassification?: boolean;
   correlatePlan?: boolean;
+  messageMailbox?: "INBOX" | "[Gmail]/All Mail" | "[Gmail]/Spam";
+  mailboxListFailure?: boolean;
+  mailboxSearchFailure?: "INBOX" | "[Gmail]/All Mail" | "[Gmail]/Spam";
+  additionalMatchMailbox?: "[Gmail]/All Mail";
+  emptyFetchMailbox?: "INBOX" | "[Gmail]/All Mail" | "[Gmail]/Spam";
+  expectSyncError?: boolean;
 }) {
   const storedThreads: Call[] = [];
   const storedMessages: Call[] = [];
@@ -491,16 +497,38 @@ async function testRealImapDemoIsolation(input: {
       updateMany: async () => ({ count: 1 }),
     },
   };
+  const mailboxOpenCalls: string[] = [];
+  let mailboxListCalls = 0;
+  let selectedMailbox = "";
+  const messageMailbox = input.messageMailbox ?? "INBOX";
   const client = {
     usable: true,
     connect: async () => undefined,
-    mailboxOpen: async () => undefined,
-    search: async () => [1],
-    fetchAll: async () => [{
-      uid: 1,
-      source: rawMessage,
-      internalDate: new Date("2026-08-23T12:00:00.000Z"),
-    }],
+    list: async () => {
+      mailboxListCalls++;
+      if (input.mailboxListFailure) throw new Error("simulated mailbox list failure");
+      return [
+        { path: "[Gmail]/All Mail", specialUse: "\\All" },
+        { path: "[Gmail]/Spam", specialUse: "\\Junk" },
+      ];
+    },
+    mailboxOpen: async (mailboxPath: string) => {
+      selectedMailbox = mailboxPath;
+      mailboxOpenCalls.push(mailboxPath);
+    },
+    search: async () => {
+      if (selectedMailbox === input.mailboxSearchFailure) {
+        throw new Error("simulated mailbox search failure");
+      }
+      return selectedMailbox === messageMailbox || selectedMailbox === input.additionalMatchMailbox ? [1] : [];
+    },
+    fetchAll: async () => selectedMailbox === input.emptyFetchMailbox
+      ? []
+      : [{
+          uid: 1,
+          source: rawMessage,
+          internalDate: new Date("2026-08-23T12:00:00.000Z"),
+        }],
     logout: async () => undefined,
     close: () => undefined,
   };
@@ -543,6 +571,24 @@ async function testRealImapDemoIsolation(input: {
     skipClassification: input.skipClassification,
     demoObservation: input.demoObservation,
   }, dependencies);
+  const expectedMailboxListCalls = input.demoObservation
+    && messageMailbox !== "INBOX"
+    && input.mailboxSearchFailure !== "INBOX" ? 1 : 0;
+  assert.equal(mailboxListCalls, expectedMailboxListCalls);
+  const expectedMailboxes = input.mailboxSearchFailure === "INBOX" || input.mailboxListFailure
+    ? ["INBOX"]
+    : messageMailbox === "INBOX"
+      ? ["INBOX"]
+      : messageMailbox === "[Gmail]/All Mail"
+        ? ["INBOX", "[Gmail]/All Mail"]
+        : ["INBOX", "[Gmail]/All Mail", "[Gmail]/Spam"];
+  assert.deepEqual(mailboxOpenCalls, expectedMailboxes);
+  if (input.expectSyncError) {
+    assert.deepEqual(result, { error: "IMAP sync failed. Verify the app password and Gmail IMAP access." });
+    assert.equal(storedThreads.length, 0);
+    assert.equal(storedMessages.length, 0);
+    return;
+  }
   assert.equal("error" in result, false);
   assert.equal(storedThreads.length, 1, "demo observation must store the received thread");
   assert.equal(storedMessages.length, 1, "demo observation must store the received message");
@@ -571,6 +617,62 @@ async function main() {
     subject: "Derya mailbox demo isolation",
     demoObservation: true,
     skipClassification: true,
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo All Mail fallback",
+    demoObservation: true,
+    skipClassification: true,
+    messageMailbox: "[Gmail]/All Mail",
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo Spam fallback",
+    demoObservation: true,
+    skipClassification: true,
+    messageMailbox: "[Gmail]/Spam",
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo fallback continues after folder failure",
+    demoObservation: true,
+    skipClassification: true,
+    messageMailbox: "[Gmail]/Spam",
+    mailboxSearchFailure: "[Gmail]/All Mail",
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo continues after an empty fetch",
+    demoObservation: true,
+    skipClassification: true,
+    messageMailbox: "[Gmail]/Spam",
+    additionalMatchMailbox: "[Gmail]/All Mail",
+    emptyFetchMailbox: "[Gmail]/All Mail",
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo skips discovery after an INBOX match",
+    demoObservation: true,
+    skipClassification: true,
+    mailboxListFailure: true,
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo reports mailbox discovery failure",
+    demoObservation: true,
+    skipClassification: true,
+    messageMailbox: "[Gmail]/All Mail",
+    mailboxListFailure: true,
+    expectSyncError: true,
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo reports unresolved fallback failure",
+    demoObservation: true,
+    skipClassification: true,
+    messageMailbox: "[Gmail]/Spam",
+    mailboxSearchFailure: "[Gmail]/Spam",
+    expectSyncError: true,
+  });
+  await testRealImapDemoIsolation({
+    subject: "Derya mailbox demo reports INBOX search failure",
+    demoObservation: true,
+    skipClassification: true,
+    mailboxSearchFailure: "INBOX",
+    expectSyncError: true,
   });
   await testRealImapDemoIsolation({
     subject: "Normal sync correlated delivery",
