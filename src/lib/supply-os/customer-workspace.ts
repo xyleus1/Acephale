@@ -4,7 +4,11 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { SupplyCompanyResearch } from "@/lib/supply-os-case-model";
-import { customerDomain, normalizeCustomerWebsite } from "./company-profile";
+import {
+  customerDomain,
+  isManualSupplyCompanyResearch,
+  normalizeCustomerWebsite,
+} from "./company-profile";
 import type { SupplyAccessContext } from "./persistence";
 import { requireSupplyWorkspace, SupplyPersistenceError } from "./persistence";
 
@@ -431,6 +435,7 @@ export async function storeSupplyCompanyResearch(args: {
 }) {
   const hash = contentHash(args.research);
   const evidenceKey = `company-profile:${hash}`;
+  const manual = isManualSupplyCompanyResearch(args.research);
   const existing = await prisma.supplyEvidence.findUnique({
     where: { workspaceId_evidenceKey: { workspaceId: args.workspaceId, evidenceKey } },
     select: { id: true },
@@ -442,14 +447,16 @@ export async function storeSupplyCompanyResearch(args: {
         workspaceId: args.workspaceId,
         createdByUserId: args.context.userId,
         evidenceKey,
-        kind: "product_page",
-        sourceType: "official_website",
-        sourceUri: args.research.company.website,
-        title: `${args.research.company.name.value} company profile`,
+        kind: manual ? "company_profile" : "product_page",
+        sourceType: manual ? "OPERATOR_INPUT" : "official_website",
+        sourceUri: manual ? null : args.research.company.website || null,
+        title: manual
+          ? `${args.research.company.name.value} company profile, manually supplied`
+          : `${args.research.company.name.value} company profile`,
         excerpt: args.research.company.description.value.slice(0, 1_000),
         payload: args.research as unknown as Prisma.InputJsonValue,
         contentHash: hash,
-        confidence: args.research.status === "verified" ? 1 : 0.7,
+        confidence: manual ? 0.3 : args.research.status === "verified" ? 1 : 0.7,
         observedAt: new Date(args.research.researchedAt),
       },
     });

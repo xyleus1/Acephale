@@ -4,15 +4,24 @@ import {
   getSupplyCompanyResearch,
   storeSupplyCompanyResearch,
 } from "@/lib/supply-os/customer-workspace";
+import {
+  parseSupplyCompanyResearch,
+  toManualSupplyCompanyResearch,
+} from "@/lib/supply-os/company-profile";
 import { supplyAccessContext, supplyErrorResponse } from "@/lib/supply-os/http";
 import {
   getSupplyWorkspace,
   requireSupplyWorkspace,
+  SupplyPersistenceError,
 } from "@/lib/supply-os/persistence";
 import { researchCompany } from "@/lib/supply-os-company-research";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 export async function GET(
   _request: Request,
@@ -33,7 +42,7 @@ export async function GET(
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ workspaceId: string }> },
 ) {
   const session = await getSession();
@@ -43,11 +52,28 @@ export async function POST(
     const access = supplyAccessContext(session);
     await requireSupplyWorkspace(access, workspaceId, "edit");
     const workspace = await getSupplyWorkspace(access, workspaceId);
-    const researchQuery = [
-      workspace.company?.name || workspace.name,
-      workspace.company?.website,
-    ].filter(Boolean).join(", ");
-    const research = await researchCompany(researchQuery);
+    const rawBody = await request.text();
+    let body: unknown = null;
+    if (rawBody.trim()) {
+      try {
+        body = JSON.parse(rawBody) as unknown;
+      } catch {
+        throw new SupplyPersistenceError("A valid manual company profile is required.", "invalid_input");
+      }
+    }
+    const manualProfile = isRecord(body) && "manualProfile" in body ? body.manualProfile : undefined;
+    const research = manualProfile === undefined
+      ? await researchCompany([
+          workspace.company?.name || workspace.name,
+          workspace.company?.website,
+        ].filter(Boolean).join(", "))
+      : (() => {
+          const parsed = parseSupplyCompanyResearch(manualProfile);
+          if (!parsed) {
+            throw new SupplyPersistenceError("A valid manual company profile is required.", "invalid_input");
+          }
+          return toManualSupplyCompanyResearch(parsed);
+        })();
     await storeSupplyCompanyResearch({ context: access, workspaceId, research });
     return NextResponse.json(
       { research, capturedAt: research.researchedAt },

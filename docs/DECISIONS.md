@@ -4074,3 +4074,27 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Supersedes: The 2026-08-22 decision that customer Settings stays empty is
   superseded only for these customer-owned profile and operating-base fields.
   All admin restrictions remain in force.
+
+### 2026-08-24 - Manual company profiles remain explicitly unverified
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Customer tenants without a usable public web presence could not
+  reach sourcing because the profile route only supported public research.
+- Decision: The authenticated workspace editor may submit an explicit manual
+  `SupplyCompanyResearch` payload through the existing edit-authorized route.
+  The existing parser remains the input contract. The server rewrites every
+  manual claim to `basis: inferred`, `confidence: low`, and `sourceUrls: []`,
+  sets `status: partial`, removes findings and evidence, and adds a warning
+  that the profile was supplied by the tenant and not verified against public
+  sources.
+- Persistence boundary: The profile is retained as an operator-input record
+  with no source URI. It must not create an official-website attribution or
+  fabricated evidence entry. Empty POST bodies retain the public research path.
+- Location boundary: An optional tenant-supplied website is retained as
+  context, not official evidence. An optional primary location populates both
+  the headquarters claim and a headquarters location with no coordinates, so
+  downstream planning can use the location without treating it as verified.
+- Consequences: Customers can submit sourcing context for synthetic or
+  private companies while the interface and stored provenance prevent the
+  context from being mistaken for verified public research.

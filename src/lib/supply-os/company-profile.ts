@@ -1,5 +1,9 @@
 import type { SupplyCompanyResearch } from "@/lib/supply-os-case-model";
 
+export const MANUAL_SUPPLY_COMPANY_PROFILE_QUERY = "Manual profile supplied by tenant";
+export const MANUAL_SUPPLY_COMPANY_PROFILE_WARNING =
+  "Manually supplied by tenant. Not verified against public sources.";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -36,6 +40,54 @@ export function parseSupplyCompanyResearch(value: unknown): SupplyCompanyResearc
     || !Array.isArray(value.warnings)
   ) return null;
   return value as SupplyCompanyResearch;
+}
+
+function manualClaim(value: string) {
+  return {
+    value,
+    basis: "inferred" as const,
+    confidence: "low" as const,
+    sourceUrls: [],
+  };
+}
+
+export function toManualSupplyCompanyResearch(
+  research: SupplyCompanyResearch,
+  researchedAt = new Date().toISOString(),
+): SupplyCompanyResearch {
+  return {
+    status: "partial",
+    query: MANUAL_SUPPLY_COMPANY_PROFILE_QUERY,
+    researchedAt,
+    company: {
+      name: manualClaim(research.company.name.value),
+      website: research.company.website,
+      logoUrl: null,
+      description: manualClaim(research.company.description.value),
+      industry: manualClaim(research.company.industry.value),
+      headquarters: research.company.headquarters
+        ? manualClaim(research.company.headquarters.value)
+        : null,
+      locations: research.company.locations.map((location) => ({
+        ...manualClaim(location.value),
+        role: location.role,
+        coordinates: location.coordinates,
+      })),
+      products: research.company.products.map((product) => manualClaim(product.value)),
+      customerMarkets: research.company.customerMarkets.map((market) => manualClaim(market.value)),
+      likelyInputs: research.company.likelyInputs.map((input) => manualClaim(input.value)),
+      likelySourceRegions: research.company.likelySourceRegions.map((region) => manualClaim(region.value)),
+      likelyDestinations: research.company.likelyDestinations.map((destination) => manualClaim(destination.value)),
+    },
+    findings: [],
+    evidence: [],
+    warnings: [MANUAL_SUPPLY_COMPANY_PROFILE_WARNING],
+  };
+}
+
+export function isManualSupplyCompanyResearch(research: SupplyCompanyResearch) {
+  return research.query === MANUAL_SUPPLY_COMPANY_PROFILE_QUERY
+    && research.warnings.includes(MANUAL_SUPPLY_COMPANY_PROFILE_WARNING);
 }
 
 export function normalizeCustomerWebsite(value: string | null | undefined) {

@@ -10398,3 +10398,23 @@ Verification caveat:
   `32687719080` confirmed every initial and reply stage is `OBSERVED_NOW` for
   all three mailbox pairs and the HypnoDreamz RFQ. No purchase, shipment, or
   spend was created or authorized.
+
+## 2026-08-24: Add manual company profile fallback for customer sourcing
+
+- Added `scripts/provision-supply-customer-portal.ts`, guarded by
+  `ALLOW_SUPPLY_CUSTOMER_PROVISIONING=1`, with required target office,
+  company, username, password, role, database, operator identity, and vault
+  secret environment variables. Missing office operators require the explicit
+  `SUPPLY_PROVISION_CREATE_OPERATOR=1` opt-in. It is idempotent and prints only
+  non-secret identifiers plus a vault decryptability warning.
+- The company profile POST route accepts `{ manualProfile: ... }`, parses it
+  with `parseSupplyCompanyResearch`, converts claims to low-confidence
+  `inferred` claims with empty source URL arrays, removes findings and evidence,
+  and stores an explicit tenant-supplied warning. Empty POST bodies still use
+  `researchCompany`.
+- The unavailable profile state has an `Enter profile` form for company name,
+  optional website and headquarters or primary location, description, industry,
+  and likely inputs. A supplied primary location is represented as a
+  low-confidence headquarters location with no coordinates.
+- No production database write or external supplier communication was run in
+  this handoff.

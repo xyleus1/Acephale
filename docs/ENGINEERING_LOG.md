@@ -6829,3 +6829,21 @@ Use this file for chronological implementation notes that future agents should s
   confirmed all eight initial or reply stages as `OBSERVED_NOW`, including the
   Claire Johnson to Marlowe Cole reply and both HypnoDreamz RFQ directions.
   The bounded demo created no purchase, shipment, or authorized spend.
+
+### 2026-08-24 - Add manual customer company profiles for sourcing access
+
+- Added an env-guarded, idempotent provisioning script for a dedicated Supply
+  OS customer portal tenant. It reuses the customer workspace and portal access
+  services and prints only office, workspace, company, and portal user IDs.
+- Company profile POST now accepts an explicit manual profile after parsing with
+  the existing company research contract. Empty request bodies retain the
+  existing public research path and workspace edit authorization.
+- Manual claims are stored as low-confidence inferred claims with empty source
+  URL arrays. The profile has no findings or evidence entries and is labeled as
+  tenant-supplied and not publicly verified. Its persistence record uses
+  operator input provenance rather than an official website source.
+- The unavailable profile state now provides a small manual profile form so an
+  authenticated workspace editor can reach sourcing without public web
+  presence. The form accepts optional website and headquarters or primary
+  location context, with a supplied location carried into the profile as a
+  low-confidence headquarters location.

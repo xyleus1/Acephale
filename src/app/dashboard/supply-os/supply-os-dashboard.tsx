@@ -331,8 +331,89 @@ export function SupplyOsDashboardWorkspace({
   const [workspaceResearch, setWorkspaceResearch] = useState<SupplyCompanyResearch | null>(null);
   const [profileState, setProfileState] = useState<"idle" | "loading" | "researching" | "ready" | "error">("idle");
   const [profileRevision, setProfileRevision] = useState(0);
+  const [manualProfileOpen, setManualProfileOpen] = useState(false);
+  const [manualProfileName, setManualProfileName] = useState(workspaceName ?? "");
+  const [manualProfileWebsite, setManualProfileWebsite] = useState("");
+  const [manualProfileHeadquarters, setManualProfileHeadquarters] = useState("");
+  const [manualProfileDescription, setManualProfileDescription] = useState("");
+  const [manualProfileIndustry, setManualProfileIndustry] = useState("");
+  const [manualProfileInputs, setManualProfileInputs] = useState("");
+  const [manualProfileError, setManualProfileError] = useState<string | null>(null);
   const [logisticsSettings, setLogisticsSettings] = useState<WorkspaceManagementSettings | null>(null);
   const [logisticsSettingsState, setLogisticsSettingsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+
+  useEffect(() => {
+    setManualProfileOpen(false);
+    setManualProfileName(workspaceName ?? "");
+    setManualProfileWebsite("");
+    setManualProfileHeadquarters("");
+    setManualProfileDescription("");
+    setManualProfileIndustry("");
+    setManualProfileInputs("");
+    setManualProfileError(null);
+  }, [workspaceId, workspaceName]);
+
+  async function submitManualProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId) return;
+    setManualProfileError(null);
+    setProfileState("researching");
+    const claim = (value: string) => ({
+      value: value.trim(),
+      basis: "inferred" as const,
+      confidence: "low" as const,
+      sourceUrls: [],
+    });
+    const list = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean).map(claim);
+    const headquarters = manualProfileHeadquarters.trim();
+    const manualProfile = {
+      status: "partial" as const,
+      query: "Manual profile supplied by tenant",
+      researchedAt: new Date().toISOString(),
+      company: {
+        name: claim(manualProfileName),
+        website: manualProfileWebsite.trim(),
+        logoUrl: null,
+        description: claim(manualProfileDescription),
+        industry: claim(manualProfileIndustry),
+        headquarters: headquarters ? claim(headquarters) : null,
+        locations: headquarters
+          ? [{ ...claim(headquarters), role: "headquarters" as const, coordinates: null }]
+          : [],
+        products: [],
+        customerMarkets: [],
+        likelyInputs: list(manualProfileInputs),
+        likelySourceRegions: [],
+        likelyDestinations: [],
+      },
+      findings: [],
+      evidence: [],
+      warnings: ["Manually supplied by tenant. Not verified against public sources."],
+    };
+    try {
+      const response = await fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/company-profile`, {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ manualProfile }),
+      });
+      const body = await response.json().catch(() => ({})) as { research?: unknown; error?: string };
+      if (!response.ok) throw new Error(body.error || "Manual company profile could not be saved.");
+      const research = parseSupplyCompanyResearch(body.research);
+      if (!research) throw new Error("Manual company profile returned an invalid profile.");
+      setWorkspaceResearch(research);
+      onWorkspaceProfile?.({
+        companyName: research.company.name.value,
+        logoUrl: null,
+        facilityLabel: research.company.headquarters?.value ?? research.company.locations[0]?.value ?? null,
+        locationCount: research.company.locations.length,
+      });
+      setManualProfileOpen(false);
+      setProfileState("ready");
+    } catch (error) {
+      setManualProfileError(error instanceof Error ? error.message : "Manual company profile could not be saved.");
+      setProfileState("error");
+    }
+  }
 
   useEffect(() => {
     if (activePanel === "context" || activePanel === "scenarios") return;
@@ -461,8 +542,53 @@ export function SupplyOsDashboardWorkspace({
       ) : workspaceId && profileState === "error" ? (
         <CommandState
           title="Company profile unavailable"
-          detail="No demo locations or inventory were substituted. Retry the public research."
-          action={<button type="button" onClick={() => setProfileRevision((revision) => revision + 1)}>Retry profile</button>}
+          detail="No public company profile is available."
+          action={manualProfileOpen ? (
+            <form className={styles.manualProfileForm} onSubmit={submitManualProfile}>
+              <label>
+                Company name
+                <input value={manualProfileName} onChange={(event) => setManualProfileName(event.target.value)} required />
+              </label>
+              <label>
+                Website
+                <input
+                  type="url"
+                  value={manualProfileWebsite}
+                  onChange={(event) => setManualProfileWebsite(event.target.value)}
+                />
+              </label>
+              <label>
+                Headquarters or primary location
+                <input
+                  value={manualProfileHeadquarters}
+                  onChange={(event) => setManualProfileHeadquarters(event.target.value)}
+                />
+              </label>
+              <label>
+                Description
+                <textarea value={manualProfileDescription} onChange={(event) => setManualProfileDescription(event.target.value)} required rows={3} />
+              </label>
+              <label>
+                Industry
+                <input value={manualProfileIndustry} onChange={(event) => setManualProfileIndustry(event.target.value)} required />
+              </label>
+              <label>
+                Likely inputs
+                <input value={manualProfileInputs} onChange={(event) => setManualProfileInputs(event.target.value)} />
+              </label>
+              <p>Manually supplied context is not verified against public sources.</p>
+              {manualProfileError ? <p className={styles.manualProfileError}>{manualProfileError}</p> : null}
+              <footer>
+                <button type="button" onClick={() => setManualProfileOpen(false)}>Cancel</button>
+                <button type="submit">Save profile</button>
+              </footer>
+            </form>
+          ) : (
+            <div className={styles.commandStateActions}>
+              <button type="button" onClick={() => setManualProfileOpen(true)}>Enter profile</button>
+              <button type="button" onClick={() => setProfileRevision((revision) => revision + 1)}>Retry profile</button>
+            </div>
+          )}
         />
       ) : currentCase ? (
           <CaseCommandCenter
