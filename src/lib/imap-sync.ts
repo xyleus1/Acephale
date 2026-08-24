@@ -28,6 +28,8 @@ export type ImapSyncResult = {
   threadsTouched: number;
   autoInquiries: number;
   autoLinked: number;
+  targetedMailboxesSearched?: Array<"INBOX" | "ALL" | "JUNK">;
+  targetedMailboxesMatched?: Array<"INBOX" | "ALL" | "JUNK">;
 };
 
 export type ImapSyncDependencies = {
@@ -79,12 +81,33 @@ function jsonRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+type TargetedMailboxKind = "INBOX" | "ALL" | "JUNK";
+
+function targetedMailboxCandidates(mailboxes: Array<{ path: string; specialUse?: string | null }>) {
+  const candidates: Array<{ kind: TargetedMailboxKind; path: string }> = [];
+  const add = (kind: TargetedMailboxKind, mailbox: { path: string } | undefined) => {
+    if (!mailbox || candidates.some((candidate) => candidate.path === mailbox.path)) return;
+    candidates.push({ kind, path: mailbox.path });
+  };
+
+  add("INBOX", mailboxes.find((mailbox) => mailbox.path.toLowerCase() === "inbox") ?? { path: "INBOX" });
+  add("ALL", mailboxes.find((mailbox) => mailbox.specialUse === "\\All"
+    || mailbox.specialUse?.toLowerCase() === "\\all")
+    ?? mailboxes.find((mailbox) => /(^|\/)all mail$/i.test(mailbox.path)));
+  add("JUNK", mailboxes.find((mailbox) => mailbox.specialUse === "\\Junk"
+    || mailbox.specialUse?.toLowerCase() === "\\junk")
+    ?? mailboxes.find((mailbox) => /(^|\/)(spam|junk)$/i.test(mailbox.path)));
+
+  return candidates;
+}
+
 export async function syncGmailAppPasswordAccountInternal(input: {
   accountId: string;
   officeId: string;
   relatedToMessageId?: string | null;
   skipClassification?: boolean;
   demoObservation?: boolean;
+  exactMessageIdOnly?: boolean;
 }, dependencies: ImapSyncDependencies = defaultDependencies): Promise<ImapSyncResult | { error: string }> {
   const account = await dependencies.db.emailAccount.findFirst({
     where: {
@@ -104,32 +127,48 @@ export async function syncGmailAppPasswordAccountInternal(input: {
   }
 
   const client = dependencies.createClient(credentials);
-  let messages: Array<{ uid: number; source?: Buffer; internalDate?: Date | string }> = [];
+  const exactTargetMessageId = input.demoObservation && input.exactMessageIdOnly
+    ? input.relatedToMessageId || null
+    : null;
+  let messages: Array<{
+    uid: number;
+    source?: Buffer;
+    internalDate?: Date | string;
+    targetedMailboxKind?: TargetedMailboxKind;
+  }> = [];
+  const targetedMailboxesSearched = new Set<TargetedMailboxKind>();
+  const targetedMailboxesMatched = new Set<TargetedMailboxKind>();
   try {
     await client.connect();
-    const mailboxPaths = ["INBOX"];
-    const searchSpecialUseMailboxes = Boolean(input.demoObservation && input.relatedToMessageId);
     const since = account.lastSyncAt
       ? new Date(account.lastSyncAt.getTime() - 10 * 60 * 1000)
       : new Date(dependencies.now().getTime() - FIRST_SYNC_DAYS * 24 * 60 * 60 * 1000);
+    const targetedDemoSearch = Boolean(input.demoObservation && input.relatedToMessageId);
+    const searchMailboxes: Array<{ kind: TargetedMailboxKind; path: string }> = exactTargetMessageId
+      ? targetedMailboxCandidates(await client.list())
+      : [{ kind: "INBOX", path: "INBOX" }];
     let fallbackError: unknown = null;
     const discoverSpecialUseMailboxes = async () => {
       try {
-        const mailboxes = await client.list();
-        for (const specialUse of ["\\All", "\\Junk"]) {
-          const mailbox = mailboxes.find((candidate) => candidate.specialUse === specialUse);
-          if (mailbox && !mailboxPaths.includes(mailbox.path)) mailboxPaths.push(mailbox.path);
+        for (const mailbox of targetedMailboxCandidates(await client.list())) {
+          if (!searchMailboxes.some((candidate) => candidate.path === mailbox.path)) {
+            searchMailboxes.push(mailbox);
+          }
         }
       } catch (caught) {
         fallbackError ??= caught;
       }
     };
-    for (let mailboxIndex = 0; mailboxIndex < mailboxPaths.length; mailboxIndex++) {
-      const mailboxPath = mailboxPaths[mailboxIndex];
+
+    for (let mailboxIndex = 0; mailboxIndex < searchMailboxes.length; mailboxIndex++) {
+      const mailbox = searchMailboxes[mailboxIndex];
       try {
-        await client.mailboxOpen(mailboxPath, { readOnly: true });
+        await client.mailboxOpen(mailbox.path, { readOnly: true });
+        if (input.relatedToMessageId) targetedMailboxesSearched.add(mailbox.kind);
         const matches = await client.search(input.relatedToMessageId
-          ? {
+          ? exactTargetMessageId
+            ? { header: { "Message-ID": exactTargetMessageId } }
+            : {
               or: [
                 { header: { "In-Reply-To": input.relatedToMessageId } },
                 { header: { References: input.relatedToMessageId } },
@@ -139,23 +178,30 @@ export async function syncGmailAppPasswordAccountInternal(input: {
           : { since }, { uid: true });
         const uids = (matches || []).slice(-(input.relatedToMessageId ? 50 : MAX_MESSAGES_PER_SYNC));
         if (!uids.length) {
-          if (mailboxPath === "INBOX" && searchSpecialUseMailboxes) {
+          if (mailbox.kind === "INBOX" && targetedDemoSearch && !exactTargetMessageId) {
             await discoverSpecialUseMailboxes();
           }
           continue;
         }
-        messages = await client.fetchAll(
+        const fetched = await client.fetchAll(
           uids,
           { uid: true, source: { maxLength: MAX_SOURCE_BYTES }, internalDate: true },
           { uid: true },
         );
-        if (messages.length) break;
-        fallbackError ??= new Error("IMAP message was unavailable after search.");
-        if (mailboxPath === "INBOX" && searchSpecialUseMailboxes) {
-          await discoverSpecialUseMailboxes();
+        if (!fetched.length) {
+          fallbackError ??= new Error("IMAP message was unavailable after search.");
+          if (mailbox.kind === "INBOX" && targetedDemoSearch && !exactTargetMessageId) {
+            await discoverSpecialUseMailboxes();
+          }
+          continue;
         }
+        messages.push(...fetched.map((message) => ({
+          ...message,
+          targetedMailboxKind: input.relatedToMessageId ? mailbox.kind : undefined,
+        })));
+        if (!exactTargetMessageId) break;
       } catch (caught) {
-        if (mailboxPath === "INBOX") throw caught;
+        if (mailbox.kind === "INBOX" || exactTargetMessageId) throw caught;
         fallbackError ??= caught;
       }
     }
@@ -194,6 +240,8 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     const fromEmail = from?.address?.trim().toLowerCase() || "unknown";
     const subject = parsed.subject?.trim() || "(no subject)";
     const parsedMessageId = parsed.messageId?.trim() || null;
+    if (exactTargetMessageId && parsedMessageId !== exactTargetMessageId) continue;
+    if (message.targetedMailboxKind) targetedMailboxesMatched.add(message.targetedMailboxKind);
     let correlatedDemoDelivery = false;
     if (!input.demoObservation && parsedMessageId && isDemoEmailMessageId(parsedMessageId)) {
       const plannedDelivery = await dependencies.db.supplyExecutionEvent.findFirst({
@@ -449,5 +497,9 @@ export async function syncGmailAppPasswordAccountInternal(input: {
     threadsTouched: touchedThreadIds.size,
     autoInquiries: 0,
     autoLinked: 0,
+    ...(input.relatedToMessageId ? {
+      targetedMailboxesSearched: Array.from(targetedMailboxesSearched),
+      targetedMailboxesMatched: Array.from(targetedMailboxesMatched),
+    } : {}),
   };
 }

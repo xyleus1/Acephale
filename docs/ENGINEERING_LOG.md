@@ -6799,3 +6799,19 @@ Use this file for chronological implementation notes that future agents should s
   folder search to the three prior missing deliveries requires a separately
   authorized no-send reconciliation because the current inspection path reads
   stored results and does not reconnect to Gmail.
+
+### 2026-08-23 - Targeted Gmail folder reconciliation for the mailbox demo
+
+- Root-cause hypothesis: Three SMTP-acknowledged demo deliveries remained
+  absent because exact IMAP observation selected only `INBOX`; Gmail may have
+  placed them in All Mail or Junk. A longer timeout was already ruled out.
+- Added targeted special-use folder discovery and exact-header search for demo
+  observation. Normal and supplier exact-message sync remain `INBOX`-only.
+  Reconciliation rejects messages that only reference the target ID, preventing
+  genuine replies from being hidden as demo data.
+- Added a protected no-send production reconciliation for one completed demo
+  job. Authorization is one-time and database-backed. The action can ingest
+  only exact acknowledged demo Message-IDs and prints aggregate results only.
+- Verification: `npm run test:demo-email-capability` and
+  `npx tsc --noEmit --pretty false --incremental false` passed. Production
+  reconciliation remains pending release and must run before another send.

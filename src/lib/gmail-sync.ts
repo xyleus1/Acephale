@@ -166,6 +166,7 @@ export async function syncEmailAccountWindowInternal(input: {
   threadFetchLimit?: number;
   skipClassification?: boolean;
   demoObservation?: boolean;
+  exactMessageIdOnly?: boolean;
 }): Promise<
   | GmailSyncResult
   | { error: string }
@@ -183,6 +184,7 @@ export async function syncEmailAccountWindowInternal(input: {
       relatedToMessageId,
       skipClassification: input.skipClassification,
       demoObservation: input.demoObservation,
+      exactMessageIdOnly: input.exactMessageIdOnly,
     });
   }
   return _syncEmailAccountInternal({

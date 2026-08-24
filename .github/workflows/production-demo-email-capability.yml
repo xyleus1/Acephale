@@ -12,6 +12,11 @@ on:
         required: false
         default: ""
         type: string
+      reconciliation_job_id:
+        description: Existing demo job ID for a no-send targeted IMAP reconciliation
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -22,7 +27,7 @@ concurrency:
 
 jobs:
   run-demo:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.inspection_job_id == '' }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.inspection_job_id == '' && inputs.reconciliation_job_id == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -279,7 +284,7 @@ jobs:
           fi
 
   inspect-demo:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.inspection_job_id != '' }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.inspection_job_id != '' && inputs.reconciliation_job_id == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:
@@ -497,3 +502,122 @@ jobs:
             split_part(acknowledged."idempotencyKey", ':', 3)::integer,
             acknowledged.payload->>'stage';
           SQL
+
+  reconcile-demo:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.reconciliation_job_id != '' && inputs.inspection_job_id == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: Production
+    env:
+      REQUEST_CONFIRMATION: ${{ inputs.confirmation }}
+      RECONCILIATION_JOB_ID: ${{ inputs.reconciliation_job_id }}
+      PRODUCTION_APP_URL: https://app.derya.ai
+      PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=120000 -c idle_in_transaction_session_timeout=120000
+    steps:
+      - name: Validate reconciliation request
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$REQUEST_CONFIRMATION" != "RECONCILE_DEMO_EMAIL_CAPABILITY_TEST" ]]; then
+            echo "The reconciliation confirmation phrase is incorrect." >&2
+            exit 1
+          fi
+          if [[ ! "$RECONCILIATION_JOB_ID" =~ ^demo-email-capability-[a-f0-9]{32}$ ]]; then
+            echo "The reconciliation job ID is invalid." >&2
+            exit 1
+          fi
+
+      - name: Authorize and run no-send IMAP reconciliation
+        shell: bash
+        env:
+          WORKFLOW_DATABASE_OWNER_URL: ${{ secrets.WORKFLOW_DATABASE_OWNER_URL }}
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null
+          database_host="$(
+            DATABASE_URL="$WORKFLOW_DATABASE_OWNER_URL" node --input-type=module --eval='
+              const value = process.env.DATABASE_URL;
+              if (!value) process.exit(1);
+              process.stdout.write(new URL(value).hostname);
+            '
+          )"
+          if [[ "$database_host" != "ep-summer-cake-audzi8ve.c-10.us-east-1.aws.neon.tech" ]]; then
+            echo "Refusing to reconcile against an unexpected Neon endpoint." >&2
+            exit 1
+          fi
+          database_identity="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --field-separator='|' \
+              --command='SELECT current_database(), session_user;'
+          )"
+          if [[ "$database_identity" != "neondb|neondb_owner" ]]; then
+            echo "Refusing to reconcile an unexpected database or role." >&2
+            exit 1
+          fi
+
+          reconciliation_token="$(node --input-type=module --eval='import { randomBytes } from "node:crypto"; process.stdout.write(randomBytes(32).toString("hex"));')"
+          reconciliation_hash="$(RECONCILIATION_TOKEN="$reconciliation_token" node --input-type=module --eval='import { createHash } from "node:crypto"; process.stdout.write(createHash("sha256").update(process.env.RECONCILIATION_TOKEN).digest("hex"));')"
+          echo "::add-mask::$reconciliation_token"
+          authorized="$(
+            psql "$WORKFLOW_DATABASE_OWNER_URL" \
+              --no-psqlrc \
+              --set=ON_ERROR_STOP=1 \
+              --tuples-only \
+              --no-align \
+              --quiet \
+              --set=job_id="$RECONCILIATION_JOB_ID" \
+              --set=reconciliation_hash="$reconciliation_hash" \
+              --file=- <<'SQL'
+          UPDATE "BackgroundJob"
+          SET
+            payload = payload || jsonb_build_object('reconciliationTokenHash', :'reconciliation_hash'),
+            "updatedAt" = now()
+          WHERE id = :'job_id'
+            AND type = 'DEMO_EMAIL_CAPABILITY_TEST'
+            AND status IN ('DONE', 'FAILED')
+          RETURNING id;
+          SQL
+          )"
+          if [[ "$authorized" != "$RECONCILIATION_JOB_ID" ]]; then
+            echo "The completed demo job was not authorized for reconciliation." >&2
+            exit 1
+          fi
+
+          request_body="$(jq -n --arg jobId "$RECONCILIATION_JOB_ID" --arg token "$reconciliation_token" '{jobId: $jobId, token: $token, mode: "reconcile"}')"
+          http_status="$(
+            curl \
+              --silent \
+              --show-error \
+              --output reconciliation-response.json \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header 'content-type: application/json' \
+              --max-time 300 \
+              --data "$request_body" \
+              "$PRODUCTION_APP_URL/api/admin/demo-email-capability"
+          )"
+          jq '{accepted, outcome, status, result, error}' reconciliation-response.json || true
+          if [[ ! "$http_status" =~ ^2 ]]; then
+            echo "The deployed reconciliation endpoint returned HTTP $http_status." >&2
+            exit 1
+          fi
+          jq --exit-status '
+            .accepted == true
+            and .outcome == "reconciled"
+            and .result.diagnosticComplete == true
+            and .result.acknowledged > 0
+            and .result.syncFailures == 0
+            and (
+              .result.observedBefore == .result.acknowledged
+              or (
+                (.result.searchedMailboxKinds | index("INBOX")) != null
+                and (.result.searchedMailboxKinds | index("ALL")) != null
+                and (.result.searchedMailboxKinds | index("JUNK")) != null
+              )
+            )
+          ' reconciliation-response.json >/dev/null

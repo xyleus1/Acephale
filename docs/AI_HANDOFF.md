@@ -10363,3 +10363,25 @@ Verification caveat:
   A longer timeout alone is not a valid fix. Before another live send, inspect
   the targeted messages across Gmail special-use All Mail and Junk folders and
   verify the persisted Message-ID shape.
+
+## 2026-08-23: Add no-send Gmail folder reconciliation for the mailbox demo
+
+- Exact-message IMAP observation now keeps normal account sync on `INBOX`, but
+  searches Inbox, Gmail All Mail, and Gmail Junk for a targeted demo Message-ID.
+  Reconciliation accepts only a message whose own parsed `Message-ID` equals
+  the acknowledged delivery ID. A reply that merely references it is ignored.
+- The production demo workflow has a separate reconciliation mode for one
+  completed job. It stores a one-time token hash on that job, calls the
+  deployed application, consumes the token atomically, and rechecks only the
+  seven acknowledged deliveries. It has no SMTP or new-delivery path.
+- Matching messages remain hidden `DEMO_TEST_ONLY` records and still skip
+  classification, CRM touches, memory, sourcing prewarms, and sync-cursor
+  changes. Workflow output is aggregate folder-kind and observation counts.
+- Focused runtime and contract tests passed, including a message found only in
+  Gmail Junk, trigger authorization, token consumption, and existing-job
+  reconciliation. TypeScript also passed.
+- Production reconciliation is pending deployment. Do not start another send
+  run until that no-send result identifies the remaining folder or Message-ID
+  issue. Unresolved messages are a valid diagnostic result, but zero
+  acknowledged deliveries, any IMAP failure, or incomplete Inbox, All Mail,
+  and Junk coverage makes the workflow fail.

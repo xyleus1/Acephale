@@ -20,9 +20,12 @@ assert.match(jobs, /runDemoEmailCapabilityJob/);
 assert.match(jobs, /runBackgroundJobById/);
 assert.match(jobs, /type: \{ not: "DEMO_EMAIL_CAPABILITY_TEST" \}/);
 assert.match(route, /executeDemoEmailTrigger/);
+assert.match(route, /body\?\.mode === "reconcile"/);
 assert.match(trigger, /timingSafeEqual/);
 assert.match(trigger, /job\.status !== "QUEUED"/);
 assert.match(trigger, /expectedType: "DEMO_EMAIL_CAPABILITY_TEST"/);
+assert.match(trigger, /reconciliationTokenHash/);
+assert.match(trigger, /consumeReconciliationToken/);
 assert.match(route, /maxDuration = 300/);
 
 assert.match(runner, /accountIds\.length !== 6/);
@@ -56,6 +59,11 @@ assert.match(imapSync, /isDemoEmailMessageId\(parsedMessageId\)/);
 assert.match(imapSync, /payload: \{ path: \["intendedMessageId"\], equals: parsedMessageId \}/);
 assert.match(imapSync, /planned\.receiverAccountId === account\.id/);
 assert.match(imapSync, /autoLinkSkipReason: demoMessage \? DEMO_EMAIL_THREAD_MARKER : null/);
+assert.match(imapSync, /targetedMailboxCandidates\(await client\.list\(\)\)/);
+assert.match(imapSync, /input\.demoObservation && input\.relatedToMessageId/);
+assert.match(imapSync, /exactTargetMessageId && parsedMessageId !== exactTargetMessageId/);
+assert.match(imapSync, /specialUse\?\.toLowerCase\(\) === "\\\\all"/);
+assert.match(imapSync, /specialUse\?\.toLowerCase\(\) === "\\\\junk"/);
 assert.match(markers, /DEMO_TEST_ONLY/);
 assert.match(memoryBackfill, /NOT: \{ autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER \}/);
 assert.match(agentTools, /NOT: \{ autoLinkSkipReason: DEMO_EMAIL_THREAD_MARKER \}/);
@@ -74,7 +82,13 @@ assert.match(workflow, /permissions:\n  contents: read/);
 assert.match(workflow, /environment:\n      name: Production/);
 assert.match(workflow, /RUN_DEMO_EMAIL_CAPABILITY_TEST/);
 assert.match(workflow, /INSPECT_DEMO_EMAIL_CAPABILITY_TEST/);
+assert.match(workflow, /RECONCILE_DEMO_EMAIL_CAPABILITY_TEST/);
 assert.match(workflow, /inspection_job_id/);
+assert.match(workflow, /reconciliation_job_id/);
+assert.match(workflow, /mode: "reconcile"/);
+assert.match(workflow, /reconciliationTokenHash/);
+assert.match(workflow, /\.result\.diagnosticComplete == true/);
+assert.match(workflow, /\.result\.searchedMailboxKinds \| index\("JUNK"\)/);
 assert.match(workflow, /jsonb_array_elements\(job\.payload #> '\{result,conversations\}'\)/);
 assert.match(workflow, /account\."displayName"/);
 assert.match(workflow, /conversation\.value->>'sentReceivedAt'/);
@@ -98,7 +112,7 @@ assert.match(workflow, /GITHUB_SHA/);
 assert.match(workflow, /https:\/\/app\.derya\.ai/);
 assert.equal(
   (workflow.match(/--file=- <<'SQL'/g) ?? []).length,
-  9,
+  10,
   "Every psql query with bound workflow values must be read as a psql file",
 );
 assert.doesNotMatch(

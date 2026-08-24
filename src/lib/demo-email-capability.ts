@@ -69,7 +69,17 @@ export type DemoEmailCapabilityDependencies = {
     threadFetchLimit?: number;
     skipClassification?: boolean;
     demoObservation?: boolean;
-  }) => Promise<{ error: string } | { ok: true; processed: number; created: number; threadsTouched: number; autoInquiries: number; autoLinked: number }>;
+    exactMessageIdOnly?: boolean;
+  }) => Promise<{ error: string } | {
+    ok: true;
+    processed: number;
+    created: number;
+    threadsTouched: number;
+    autoInquiries: number;
+    autoLinked: number;
+    targetedMailboxesSearched?: Array<"INBOX" | "ALL" | "JUNK">;
+    targetedMailboxesMatched?: Array<"INBOX" | "ALL" | "JUNK">;
+  }>;
   wait: (ms: number) => Promise<unknown>;
   deployedCommitSha: () => string | null;
 };
@@ -917,4 +927,134 @@ export async function runDemoEmailCapabilityJob(input: {
   if (!succeeded) {
     throw new Error(`${result.failed} of ${conversations.length} demo email conversations failed.`);
   }
+}
+
+export type DemoEmailReconciliationResult = {
+  diagnosticComplete: true;
+  acknowledged: number;
+  observedBefore: number;
+  observedAfter: number;
+  unresolved: number;
+  syncFailures: number;
+  searchedMailboxKinds: Array<"INBOX" | "ALL" | "JUNK">;
+  matchedMailboxKinds: Array<"INBOX" | "ALL" | "JUNK">;
+};
+
+export async function reconcileDemoEmailCapabilityJob(
+  input: { backgroundJobId: string },
+  dependencies: DemoEmailCapabilityDependencies = defaultDependencies,
+): Promise<DemoEmailReconciliationResult> {
+  const job = await dependencies.db.backgroundJob.findFirst({
+    where: {
+      id: input.backgroundJobId,
+      type: "DEMO_EMAIL_CAPABILITY_TEST",
+      status: { in: ["DONE", "FAILED"] },
+    },
+    select: { officeId: true, payload: true },
+  });
+  if (!job) throw new Error("The completed demo email job was not found.");
+
+  const payload = record(job.payload);
+  const result = record(payload.result);
+  const executionTaskId = typeof result.executionTaskId === "string" ? result.executionTaskId : "";
+  const accountIds = new Set(stringArray(payload.accountIds));
+  const conversations = Array.isArray(result.conversations)
+    ? result.conversations.map((entry) => record(entry))
+    : [];
+  const expectedAcknowledged = conversations.length
+    + conversations.filter((conversation) => typeof conversation.sentReceivedAt === "string").length;
+  if (!executionTaskId || accountIds.size !== 6 || conversations.length !== 4) {
+    throw new Error("The demo email job has no valid reconciliation plan.");
+  }
+
+  const deliveries = await dependencies.db.supplyExecutionEvent.findMany({
+    where: {
+      officeId: job.officeId,
+      executionTaskId,
+      eventType: "DEMO_EMAIL_DELIVERY_ACKNOWLEDGED",
+      status: "ACKNOWLEDGED",
+    },
+    select: { payload: true },
+  });
+  if (deliveries.length !== expectedAcknowledged || expectedAcknowledged < 1) {
+    throw new Error("The acknowledged demo deliveries do not match the completed demo plan.");
+  }
+  const searchedMailboxKinds = new Set<"INBOX" | "ALL" | "JUNK">();
+  const matchedMailboxKinds = new Set<"INBOX" | "ALL" | "JUNK">();
+  let observedBefore = 0;
+  let observedAfter = 0;
+  let syncFailures = 0;
+
+  const findObserved = (receiverAccountId: string, messageIds: string[]) => (
+    dependencies.db.emailMessage.findFirst({
+      where: {
+        accountId: receiverAccountId,
+        direction: "INBOUND",
+        rfcMessageId: { in: messageIds },
+        thread: { officeId: job.officeId },
+      },
+      select: { id: true },
+    })
+  );
+
+  for (const delivery of deliveries) {
+    const deliveryPayload = record(delivery.payload);
+    const receiverAccountId = typeof deliveryPayload.receiverAccountId === "string"
+      ? deliveryPayload.receiverAccountId
+      : "";
+    const messageIds = Array.from(new Set([
+      deliveryPayload.intendedMessageId,
+      deliveryPayload.providerMessageId,
+    ].filter((value): value is string => typeof value === "string" && value.length > 0)));
+    if (!accountIds.has(receiverAccountId) || messageIds.length === 0) {
+      throw new Error("The demo email delivery record is outside the approved reconciliation plan.");
+    }
+
+    if (await findObserved(receiverAccountId, messageIds)) {
+      observedBefore++;
+      observedAfter++;
+      continue;
+    }
+
+    let deliverySyncFailed = false;
+    for (const messageId of messageIds) {
+      const sync = await dependencies.syncAccount({
+        accountId: receiverAccountId,
+        officeId: job.officeId,
+        query: `rfc822msgid:${messageId}`,
+        threadFetchLimit: 50,
+        skipClassification: true,
+        demoObservation: true,
+        exactMessageIdOnly: true,
+      });
+      if ("error" in sync) {
+        deliverySyncFailed = true;
+        continue;
+      }
+      for (const kind of sync.targetedMailboxesSearched ?? []) searchedMailboxKinds.add(kind);
+      for (const kind of sync.targetedMailboxesMatched ?? []) matchedMailboxKinds.add(kind);
+    }
+    if (deliverySyncFailed) syncFailures++;
+    if (await findObserved(receiverAccountId, messageIds)) observedAfter++;
+  }
+
+  if (syncFailures > 0) {
+    throw new Error("One or more demo mailbox reconciliations failed.");
+  }
+  const requiredMailboxKinds: Array<"INBOX" | "ALL" | "JUNK"> = ["INBOX", "ALL", "JUNK"];
+  if (observedBefore < deliveries.length
+    && requiredMailboxKinds.some((kind) => !searchedMailboxKinds.has(kind))) {
+    throw new Error("The demo mailbox reconciliation did not inspect every required mailbox kind.");
+  }
+
+  return {
+    diagnosticComplete: true,
+    acknowledged: deliveries.length,
+    observedBefore,
+    observedAfter,
+    unresolved: deliveries.length - observedAfter,
+    syncFailures,
+    searchedMailboxKinds: Array.from(searchedMailboxKinds),
+    matchedMailboxKinds: Array.from(matchedMailboxKinds),
+  };
 }

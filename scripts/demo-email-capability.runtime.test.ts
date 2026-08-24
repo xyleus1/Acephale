@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import type { BackgroundJob } from "@prisma/client";
 import {
+  reconcileDemoEmailCapabilityJob,
   runDemoEmailCapabilityJob,
   type DemoEmailCapabilityDependencies,
 } from "../src/lib/demo-email-capability";
@@ -357,6 +358,8 @@ async function testTriggerAuthorization() {
   const token = "t".repeat(48);
   const jobId = "demo-job-abcdefghijklmnopqrstuv";
   let runCount = 0;
+  let consumeCount = 0;
+  let reconcileCount = 0;
   const baseDependencies: DemoEmailTriggerDependencies = {
     findJob: async () => ({
       id: jobId,
@@ -373,6 +376,23 @@ async function testTriggerAuthorization() {
       payload: { result: { passed: 4, failed: 0 } },
       lastError: null,
     }),
+    consumeReconciliationToken: async () => {
+      consumeCount++;
+      return true;
+    },
+    reconcileJob: async () => {
+      reconcileCount++;
+      return {
+        diagnosticComplete: true,
+        acknowledged: 7,
+        observedBefore: 4,
+        observedAfter: 7,
+        unresolved: 0,
+        syncFailures: 0,
+        searchedMailboxKinds: ["INBOX", "ALL", "JUNK"],
+        matchedMailboxKinds: ["ALL", "JUNK"],
+      };
+    },
   };
 
   const invalidId = await executeDemoEmailTrigger({ jobId: "bad", token }, baseDependencies);
@@ -395,11 +415,160 @@ async function testTriggerAuthorization() {
   assert.equal(wrongStatus.status, 404);
   assert.equal(runCount, 0);
 
+  const wrongReconciliationToken = await executeDemoEmailTrigger({
+    jobId,
+    token: "x".repeat(48),
+    mode: "reconcile",
+  }, {
+    ...baseDependencies,
+    findJob: async () => ({
+      id: jobId,
+      type: "DEMO_EMAIL_CAPABILITY_TEST",
+      status: "FAILED",
+      payload: { reconciliationTokenHash: tokenHash(token) },
+    }),
+  });
+  assert.equal(wrongReconciliationToken.status, 404);
+  assert.equal(consumeCount, 0);
+  assert.equal(reconcileCount, 0);
+
+  const queuedReconciliation = await executeDemoEmailTrigger({ jobId, token, mode: "reconcile" }, {
+    ...baseDependencies,
+    findJob: async () => ({
+      id: jobId,
+      type: "DEMO_EMAIL_CAPABILITY_TEST",
+      status: "QUEUED",
+      payload: { reconciliationTokenHash: tokenHash(token) },
+    }),
+  });
+  assert.equal(queuedReconciliation.status, 404);
+  assert.equal(consumeCount, 0);
+  assert.equal(reconcileCount, 0);
+
   const valid = await executeDemoEmailTrigger({ jobId, token }, baseDependencies);
   assert.equal(valid.status, 200);
   assert.equal(valid.body.status, "DONE");
   assert.deepEqual(valid.body.result, { passed: 4, failed: 0 });
   assert.equal(runCount, 1);
+
+  const reconcile = await executeDemoEmailTrigger({ jobId, token, mode: "reconcile" }, {
+    ...baseDependencies,
+    findJob: async () => ({
+      id: jobId,
+      type: "DEMO_EMAIL_CAPABILITY_TEST",
+      status: "FAILED",
+      payload: { accountIds: Array.from({ length: 6 }, (_, index) => `account-${index + 1}`), reconciliationTokenHash: tokenHash(token) },
+    }),
+  });
+  assert.equal(reconcile.status, 200);
+  assert.equal(reconcile.body.outcome, "reconciled");
+  assert.equal(reconcile.body.result.observedAfter, 7);
+  assert.equal(consumeCount, 1);
+  assert.equal(reconcileCount, 1);
+
+  const replay = await executeDemoEmailTrigger({ jobId, token, mode: "reconcile" }, {
+    ...baseDependencies,
+    findJob: async () => ({
+      id: jobId,
+      type: "DEMO_EMAIL_CAPABILITY_TEST",
+      status: "FAILED",
+      payload: { reconciliationTokenHash: tokenHash(token) },
+    }),
+    consumeReconciliationToken: async () => false,
+  });
+  assert.equal(replay.status, 404);
+  assert.equal(reconcileCount, 1, "a consumed reconciliation token must not run IMAP again");
+}
+
+async function testExistingDemoReconciliation() {
+  const observedMessageIds = new Set<string>();
+  const messageIds = Array.from({ length: 4 }, (_, index) => `<derya-demo-reconcile-${index + 1}@example.test>`);
+  const dependencies = {
+    db: {
+      backgroundJob: {
+        findFirst: async () => ({
+          officeId: "office-demo",
+          payload: {
+            accountIds: Array.from({ length: 6 }, (_, index) => `account-${index + 1}`),
+            result: {
+              executionTaskId: "task-demo",
+              conversations: Array.from({ length: 4 }, () => ({ sentReceivedAt: null })),
+            },
+          },
+        }),
+      },
+      supplyExecutionEvent: {
+        findMany: async () => messageIds.map((messageId, index) => ({
+          payload: {
+            receiverAccountId: `account-${index + 1}`,
+            intendedMessageId: messageId,
+            providerMessageId: messageId,
+          },
+        })),
+      },
+      emailMessage: {
+        findFirst: async (args: Call) => {
+          const ids = ((args.where as Call).rfcMessageId as Call).in as string[];
+          return ids.some((id) => observedMessageIds.has(id)) ? { id: "message-demo" } : null;
+        },
+      },
+    },
+    syncAccount: async (input: Call) => {
+      assert.equal(input.officeId, "office-demo");
+      assert.equal(input.demoObservation, true);
+      assert.equal(input.exactMessageIdOnly, true);
+      const messageId = String(input.query).replace(/^rfc822msgid:/, "");
+      observedMessageIds.add(messageId);
+      return {
+        ok: true as const,
+        processed: 1,
+        created: 1,
+        threadsTouched: 1,
+        autoInquiries: 0,
+        autoLinked: 0,
+        targetedMailboxesSearched: ["INBOX", "ALL", "JUNK"] as const,
+        targetedMailboxesMatched: ["JUNK"] as const,
+      };
+    },
+  } as unknown as DemoEmailCapabilityDependencies;
+
+  const result = await reconcileDemoEmailCapabilityJob({
+    backgroundJobId: "demo-email-capability-reconcile",
+  }, dependencies);
+  assert.deepEqual(result, {
+    diagnosticComplete: true,
+    acknowledged: 4,
+    observedBefore: 0,
+    observedAfter: 4,
+    unresolved: 0,
+    syncFailures: 0,
+    searchedMailboxKinds: ["INBOX", "ALL", "JUNK"],
+    matchedMailboxKinds: ["JUNK"],
+  });
+
+  observedMessageIds.clear();
+  await assert.rejects(() => reconcileDemoEmailCapabilityJob({
+    backgroundJobId: "demo-email-capability-reconcile",
+  }, {
+    ...dependencies,
+    syncAccount: async () => ({ error: "test IMAP failure" }),
+  } as DemoEmailCapabilityDependencies), /reconciliations failed/);
+
+  await assert.rejects(() => reconcileDemoEmailCapabilityJob({
+    backgroundJobId: "demo-email-capability-reconcile",
+  }, {
+    ...dependencies,
+    syncAccount: async () => ({
+      ok: true,
+      processed: 0,
+      created: 0,
+      threadsTouched: 0,
+      autoInquiries: 0,
+      autoLinked: 0,
+      targetedMailboxesSearched: ["INBOX"],
+      targetedMailboxesMatched: [],
+    }),
+  } as DemoEmailCapabilityDependencies), /every required mailbox kind/);
 }
 
 async function testRealImapDemoIsolation(input: {
@@ -413,6 +582,9 @@ async function testRealImapDemoIsolation(input: {
   additionalMatchMailbox?: "[Gmail]/All Mail";
   emptyFetchMailbox?: "INBOX" | "[Gmail]/All Mail" | "[Gmail]/Spam";
   expectSyncError?: boolean;
+  exactMessageIdOnly?: boolean;
+  parsedMessageId?: string;
+  expectStored?: boolean;
 }) {
   const storedThreads: Call[] = [];
   const storedMessages: Call[] = [];
@@ -424,9 +596,10 @@ async function testRealImapDemoIsolation(input: {
     enqueue: 0,
     accountUpdate: 0,
   };
-  const messageId = input.correlatePlan
+  const relatedMessageId = input.correlatePlan
     ? `<derya-demo-${"a".repeat(32)}@app.derya.ai>`
     : "<demo-observation@example.test>";
+  const messageId = input.parsedMessageId ?? relatedMessageId;
   const rawMessage = Buffer.from([
     "From: Mailbox 1 <mailbox1@example.test>",
     "To: Mailbox 2 <mailbox2@example.test>",
@@ -567,21 +740,28 @@ async function testRealImapDemoIsolation(input: {
   const result = await syncGmailAppPasswordAccountInternal({
     accountId: account.id,
     officeId: account.officeId,
-    relatedToMessageId: "<sent-1@example.test>",
+    relatedToMessageId: relatedMessageId,
     skipClassification: input.skipClassification,
     demoObservation: input.demoObservation,
+    exactMessageIdOnly: input.exactMessageIdOnly,
   }, dependencies);
-  const expectedMailboxListCalls = input.demoObservation
-    && messageMailbox !== "INBOX"
-    && input.mailboxSearchFailure !== "INBOX" ? 1 : 0;
+  const exactSearch = Boolean(input.demoObservation && input.exactMessageIdOnly);
+  const expectedMailboxListCalls = exactSearch
+    || (input.demoObservation && messageMailbox !== "INBOX" && input.mailboxSearchFailure !== "INBOX")
+    ? 1
+    : 0;
   assert.equal(mailboxListCalls, expectedMailboxListCalls);
-  const expectedMailboxes = input.mailboxSearchFailure === "INBOX" || input.mailboxListFailure
-    ? ["INBOX"]
-    : messageMailbox === "INBOX"
+  const expectedMailboxes = exactSearch
+    ? input.mailboxListFailure
+      ? []
+      : ["INBOX", "[Gmail]/All Mail", "[Gmail]/Spam"]
+    : input.mailboxSearchFailure === "INBOX" || input.mailboxListFailure
       ? ["INBOX"]
-      : messageMailbox === "[Gmail]/All Mail"
-        ? ["INBOX", "[Gmail]/All Mail"]
-        : ["INBOX", "[Gmail]/All Mail", "[Gmail]/Spam"];
+      : messageMailbox === "INBOX"
+        ? ["INBOX"]
+        : messageMailbox === "[Gmail]/All Mail"
+          ? ["INBOX", "[Gmail]/All Mail"]
+          : ["INBOX", "[Gmail]/All Mail", "[Gmail]/Spam"];
   assert.deepEqual(mailboxOpenCalls, expectedMailboxes);
   if (input.expectSyncError) {
     assert.deepEqual(result, { error: "IMAP sync failed. Verify the app password and Gmail IMAP access." });
@@ -590,8 +770,31 @@ async function testRealImapDemoIsolation(input: {
     return;
   }
   assert.equal("error" in result, false);
-  assert.equal(storedThreads.length, 1, "demo observation must store the received thread");
-  assert.equal(storedMessages.length, 1, "demo observation must store the received message");
+  if (!("error" in result)) {
+    const mailboxKinds = {
+      INBOX: "INBOX",
+      "[Gmail]/All Mail": "ALL",
+      "[Gmail]/Spam": "JUNK",
+    } as const;
+    const searched = mailboxOpenCalls.map((mailbox) => mailboxKinds[mailbox as keyof typeof mailboxKinds]);
+    const matched = input.expectStored === false ? [] : [mailboxKinds[messageMailbox]];
+    assert.deepEqual(result.targetedMailboxesSearched, searched);
+    assert.deepEqual(result.targetedMailboxesMatched, matched);
+  }
+  const expectedStored = input.expectStored === false ? 0 : 1;
+  assert.equal(storedThreads.length, expectedStored, "only an allowed message may create a thread");
+  assert.equal(storedMessages.length, expectedStored, "only an allowed message may be stored");
+  if (!expectedStored) {
+    assert.deepEqual(forbidden, {
+      classify: 0,
+      ingestMemory: 0,
+      recordMemory: 0,
+      logTouch: 0,
+      enqueue: 0,
+      accountUpdate: 0,
+    });
+    return;
+  }
   const storedThreadData = storedThreads[0].data as Call;
   const storedMessageData = storedMessages[0].data as Call;
   assert.equal(storedThreadData.autoLinkSkipReason, "DEMO_TEST_ONLY");
@@ -613,6 +816,7 @@ async function main() {
   await testRunnerGuards();
   await testBackgroundJobStates();
   await testTriggerAuthorization();
+  await testExistingDemoReconciliation();
   await testRealImapDemoIsolation({
     subject: "Derya mailbox demo isolation",
     demoObservation: true,
@@ -679,6 +883,28 @@ async function main() {
     demoObservation: false,
     skipClassification: false,
     correlatePlan: true,
+  });
+  await testRealImapDemoIsolation({
+    subject: "Exact Spam folder demo observation",
+    demoObservation: true,
+    skipClassification: true,
+    exactMessageIdOnly: true,
+    messageMailbox: "[Gmail]/Spam",
+  });
+  await testRealImapDemoIsolation({
+    subject: "Exact All Mail demo observation",
+    demoObservation: true,
+    skipClassification: true,
+    exactMessageIdOnly: true,
+    messageMailbox: "[Gmail]/All Mail",
+  });
+  await testRealImapDemoIsolation({
+    subject: "Referenced reply must not be hidden",
+    demoObservation: true,
+    skipClassification: true,
+    exactMessageIdOnly: true,
+    parsedMessageId: "<human-reply@example.test>",
+    expectStored: false,
   });
   console.log("demo email capability runtime tests passed");
 }

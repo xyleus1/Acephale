@@ -4033,6 +4033,17 @@ Use this log for durable product and engineering decisions. Do not put every imp
   app identity exists. The demo does not grant workspace membership, and
   GitHub logs contain only aggregate status and counts. The deployed Vercel
   commit must equal the approved workflow SHA before any delivery begins.
+- Reconciliation boundary: A separate protected workflow may consume a
+  one-time database-backed token to recheck only the acknowledged deliveries
+  from one completed demo. It may search the receiving Gmail account's Inbox,
+  All Mail, and Junk special-use folders by the exact planned or provider
+  Message-ID and persist matching test-only messages. It cannot call SMTP,
+  create a new delivery plan, alter the stored demo result, or expose mailbox
+  paths, addresses, bodies, credentials, or Message-IDs in workflow output.
+  Special-folder scanning is demo-only, and reconciliation accepts only the
+  message's own exact `Message-ID`, never a different message that references
+  it. Unresolved exact messages complete the diagnostic; missing acknowledged
+  events, an IMAP failure, or incomplete required-folder coverage do not.
 - Consequences: The same deployed code path proves outbound SMTP, inbound IMAP,
   threading, tenant scope, and procurement conversation storage without moving
   credentials into Bourne, GitHub, or operator scripts.
