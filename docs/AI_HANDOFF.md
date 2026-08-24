@@ -2,6 +2,32 @@
 
 ## Latest Update
 
+### Customer settings, sourcing item management, and logistics setup
+
+- Customer Settings is now a dedicated customer-only surface. It shows the
+  signed-in customer profile and allows an editor to maintain only the company
+  website and operating base. Admin company, user, connector, and office
+  controls are not rendered or called from this surface.
+- Logistics stays locked until the selected workspace has a customer-recorded
+  facility name, street address, city, and country code. Public company
+  research cannot satisfy this gate. The base is written into a new immutable
+  Supply snapshot with customer-managed provenance.
+- Published sourcing items now support inline editing and removal. Every
+  change publishes a new snapshot, prior snapshots and saved research remain
+  in history, and dependent BOM, demand, inventory, supplier, compliance, and
+  media rows are removed with a deleted item.
+- Browser-local sourcing drafts now expose Edit details and Delete actions.
+
+Verification completed before release:
+
+- Workspace management behavior and source-boundary contract
+- Customer portal, sourcing projection, sourcing workflow, materials layout,
+  shell routing, and product copy contracts
+- TypeScript and production Next.js build
+- Diff whitespace and forbidden-character checks
+- Complete migration chain and workspace management database lifecycle on
+  disposable PostgreSQL, including editor, viewer, and foreign-tenant checks
+
 ### Customer users are managed inside their company
 
 - Admin Settings labels the signed-in admin separately from customer users.

@@ -1,0 +1,61 @@
+.page {
+  --canvas: #f7f8f7;
+  --panel: #fff;
+  --subtle: #f1f3f2;
+  --line: #e0e4e2;
+  --line-strong: #c7ceca;
+  --ink: #1b1d1c;
+  --soft: #4d5552;
+  --muted: #747c78;
+  --navy: #29485c;
+  min-height: calc(100dvh - 58px);
+  padding: 42px 48px 64px;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: "Instrument Sans", sans-serif;
+}
+
+.page *, .page *::before, .page *::after { box-sizing: border-box; }
+.page button, .page input { font: inherit; }
+.page button:focus-visible, .page a:focus-visible, .page input:focus-visible { outline: 2px solid var(--navy); outline-offset: 3px; }
+.pageHeader, .layout, .notice, .previewNotice { max-width: 980px; margin-right: auto; margin-left: auto; }
+.pageHeader { margin-bottom: 28px; }
+.pageHeader > a { color: var(--muted); font-size: 13px; text-decoration: none; }
+.pageHeader > div { min-height: 72px; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 10px; }
+.pageHeader small { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 650; text-transform: uppercase; }
+.pageHeader h1 { margin: 0; font-size: clamp(30px, 4vw, 42px); font-weight: 620; letter-spacing: -0.045em; }
+.pageHeader i { padding: 7px 10px; border: 1px solid #d8bda9; border-radius: 9px; color: #875b3d; background: #f8efe8; font-size: 11px; font-style: normal; font-weight: 650; }
+.pageHeader i[data-ready="true"] { border-color: #bdd2c5; color: #3f6c55; background: #eaf2ed; }
+.layout { display: grid; gap: 22px; }
+.card { overflow: hidden; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--panel); }
+.card > header { padding: 23px 26px; border-bottom: 1px solid var(--line); }
+.card h2 { margin: 0; font-size: 20px; font-weight: 630; letter-spacing: -0.025em; }
+.card header p { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.accountFacts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.accountFacts div { min-width: 0; padding: 20px 26px; border-right: 1px solid var(--line); }
+.accountFacts div:last-child { border-right: 0; }
+.accountFacts dt, .accountFacts dd { margin: 0; }
+.accountFacts dt { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
+.accountFacts dd { margin-top: 6px; overflow: hidden; font-size: 14px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 24px 26px; }
+.formGrid label { display: grid; gap: 7px; color: var(--soft); font-size: 12px; font-weight: 650; }
+.formGrid .wide { grid-column: 1 / -1; }
+.formGrid input { height: 45px; min-width: 0; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--ink); background: var(--panel); }
+.formGrid input:disabled { color: var(--muted); background: var(--subtle); }
+.card > footer { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 26px; border-top: 1px solid var(--line); background: #fbfcfb; }
+.card > footer span { color: var(--muted); font-size: 12px; }
+.card > footer button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; color: #fff; background: var(--ink); cursor: pointer; font-weight: 650; }
+.card > footer button:disabled { opacity: 0.45; cursor: default; }
+.notice, .previewNotice { margin-bottom: 18px; padding: 11px 14px; border: 1px solid #bdd2c5; border-radius: 10px; color: #3f6c55; background: #eaf2ed; font-size: 13px; }
+.notice[data-error="true"] { border-color: #dfc0bc; color: #8b4545; background: #f6ecea; }
+.previewNotice { border-color: var(--line-strong); color: var(--soft); background: var(--subtle); }
+
+@media (max-width: 680px) {
+  .page { padding: 28px 16px 42px; }
+  .pageHeader > div, .card > footer { align-items: flex-start; flex-direction: column; }
+  .accountFacts, .formGrid { grid-template-columns: 1fr; }
+  .accountFacts div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .accountFacts div:last-child { border-bottom: 0; }
+  .formGrid .wide { grid-column: auto; }
+  .card > footer button { width: 100%; }
+}

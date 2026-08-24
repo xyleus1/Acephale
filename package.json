@@ -72,6 +72,8 @@
     "test:supply-os-csv-route-contract": "node --import tsx scripts/supply-os-csv-route-contract.test.ts",
     "test:supply-os-ingestion-research": "tsx scripts/supply-os-ingestion-research.test.ts",
     "test:supply-os-persistence": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-persistence.test.ts",
+    "test:supply-os-workspace-management": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-workspace-management.test.ts",
+    "test:supply-os-workspace-management-db": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/supply-os-workspace-management-database.test.ts",
     "test:supply-os-dsl": "tsx scripts/supply-os-dsl.test.ts",
     "test:supply-os-execution": "NODE_OPTIONS='--conditions=react-server' tsx scripts/supply-os-execution.test.ts",
     "test:supply-os-planning-engine": "tsx scripts/supply-os-planning-engine.test.ts",

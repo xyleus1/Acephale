@@ -274,7 +274,7 @@ function partsRequest(value: unknown): NormalizedSupplyCsvBundle["items"][number
   };
 }
 
-async function latestPublishedSnapshotForParts(
+export async function latestPublishedSnapshotForParts(
   context: SupplyAccessContext,
   workspaceId: string,
 ): Promise<NormalizedSupplyCsvBundle | null> {

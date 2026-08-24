@@ -304,6 +304,121 @@
   font-size: 14px;
 }
 
+.logisticsSetup {
+  width: min(760px, calc(100% - 32px));
+  align-self: center;
+  justify-self: center;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 18px 50px rgb(27 29 28 / 7%);
+}
+
+.logisticsSetup > header {
+  padding: 28px 30px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.logisticsSetup small {
+  color: var(--decision);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 620;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.logisticsSetup h1 {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 640;
+  letter-spacing: -0.04em;
+}
+
+.logisticsSetup header p {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.logisticsSetup form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  padding: 24px 30px 28px;
+}
+
+.logisticsSetup label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.logisticsSetupWide {
+  grid-column: 1 / -1;
+}
+
+.logisticsSetup input {
+  height: 44px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--panel);
+  font: 500 13px/1 "IBM Plex Sans", sans-serif;
+}
+
+.logisticsSetup input:disabled {
+  color: var(--ink-muted);
+  background: var(--panel-subtle);
+}
+
+.logisticsSetup footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 6px;
+}
+
+.logisticsSetup footer a {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 620;
+  text-decoration: none;
+}
+
+.logisticsSetup footer button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--ink);
+  cursor: pointer;
+  font: 620 12px/1 "IBM Plex Sans", sans-serif;
+}
+
+.logisticsSetup footer button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.logisticsSetupError {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
 .commandMapStage {
   min-width: 0;
   min-height: 0;
@@ -2383,6 +2498,181 @@
   color: var(--ink-muted);
   background: var(--panel-subtle);
   cursor: default;
+}
+
+.sourcingRowActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.sourcingEditAction,
+.sourcingDeleteAction {
+  width: 42px;
+  min-height: 42px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink-muted);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.sourcingEditAction:hover {
+  border-color: var(--navy);
+  color: var(--navy);
+  background: var(--navy-soft);
+}
+
+.sourcingDeleteAction:hover {
+  border-color: #dfc0bc;
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.inventoryTable .sourcingEditRow:hover td,
+.inventoryTable .sourcingEditRow td {
+  height: auto;
+  padding: 0;
+  background: #f8faf9;
+  text-align: left;
+  white-space: normal;
+}
+
+.sourcingEditRow form {
+  padding: 20px 22px;
+}
+
+.sourcingEditRow form > header,
+.sourcingEditRow form > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sourcingEditRow form > header strong {
+  color: var(--ink);
+  font: 640 14px/1.2 "IBM Plex Sans", sans-serif;
+}
+
+.sourcingEditRow form > header span {
+  color: var(--ink-muted);
+  font-size: 9px;
+}
+
+.sourcingEditRow form > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sourcingEditRow label {
+  display: grid;
+  gap: 5px;
+  color: var(--ink-soft);
+  font: 620 10px/1.2 "IBM Plex Sans", sans-serif;
+}
+
+.sourcingEditWide {
+  grid-column: 1 / -1;
+}
+
+.sourcingEditRow input,
+.sourcingEditRow textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--panel);
+  font: 500 11px/1.4 "IBM Plex Sans", sans-serif;
+  resize: vertical;
+}
+
+.sourcingEditRow form > p {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font: 500 11px/1.4 "IBM Plex Sans", sans-serif;
+}
+
+.sourcingEditRow form > footer {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.inventoryTable .sourcingEditRow form > footer button {
+  width: auto;
+  min-height: 42px;
+  display: inline-flex;
+  grid-template-columns: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  cursor: pointer;
+  font: 620 11px/1 "IBM Plex Sans", sans-serif;
+}
+
+.inventoryTable .sourcingEditRow form > footer button[type="submit"] {
+  border-color: var(--ink);
+  color: #fff;
+  background: var(--ink);
+}
+
+@media (max-width: 700px) {
+  .logisticsSetup {
+    width: min(100% - 24px, 560px);
+  }
+
+  .logisticsSetup > header,
+  .logisticsSetup form {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .logisticsSetup form,
+  .sourcingEditRow form > div {
+    grid-template-columns: 1fr;
+  }
+
+  .logisticsSetupWide,
+  .sourcingEditWide {
+    grid-column: auto;
+  }
+
+  .logisticsSetup footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .logisticsSetup footer button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .inventoryTable .sourcingEditRow td {
+    position: sticky;
+    left: 0;
+  }
+
+  .sourcingEditRow form {
+    width: min(calc(100vw - 32px), 560px);
+  }
+
+  .sourcingEditAction,
+  .sourcingDeleteAction,
+  .inventoryTable .sourcingEditRow form > footer button {
+    min-height: 44px;
+  }
 }
 
 .sourcingQueuePagination {

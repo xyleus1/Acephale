@@ -9,11 +9,13 @@ import {
   MapPin,
   MessageSquare,
   PackageSearch,
+  Pencil,
   Sparkles,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   customerProcurementProgress,
   customerProcurementStatusLabel,
@@ -90,6 +92,7 @@ export function SupplyInventoryWorkspace({
   pendingRequests,
   customerProcurementOrders,
   onOpenPendingRequest,
+  onDeletePendingRequest,
   onOpenCustomerProcurement,
   researchRuns,
   procurementCases,
@@ -123,6 +126,7 @@ export function SupplyInventoryWorkspace({
   pendingRequests: PendingSourcingQueueItem[];
   customerProcurementOrders: CustomerProcurementListItem[];
   onOpenPendingRequest: (request: PendingSourcingQueueItem) => void;
+  onDeletePendingRequest: (requestId: string) => void;
   onOpenCustomerProcurement: (item: SupplyInventoryItem, order: CustomerProcurementOrderState) => void;
   researchRuns: SavedSourcingResearchRun[];
   procurementCases: SavedProcurementCase[];
@@ -144,6 +148,21 @@ export function SupplyInventoryWorkspace({
   companyName: string;
 }) {
   const [query, setQuery] = useState("");
+  const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
+  const [itemDraft, setItemDraft] = useState({
+    name: "",
+    description: "",
+    manufacturer: "",
+    mpn: "",
+    unitOfMeasure: "EA",
+    requestedQuantity: "",
+    requestedUnit: "EA",
+    supplierDeliverable: "",
+    deliveryLocation: "",
+    needByDate: "",
+  });
+  const [itemMutationState, setItemMutationState] = useState<"idle" | "saving" | "deleting" | "error">("idle");
+  const [itemMutationError, setItemMutationError] = useState("");
   const reduceMotion = useReducedMotion();
   const visibleResearchRuns = researchRuns.filter((run) => {
     const campaignInput = run.input as SavedSourcingResearchRun["input"] & {
@@ -174,6 +193,70 @@ export function SupplyInventoryWorkspace({
   const customRuns = [...latestRuns.values()].filter((run) => !knownSkus.has(run.input.componentItemKey));
   const currentRunIds = new Set([...latestRuns.values()].map((run) => run.id));
   const additionalRuns = visibleResearchRuns.filter((run) => !currentRunIds.has(run.id));
+
+  function editItem(item: SupplyInventoryItem) {
+    if (!item.itemKey) return;
+    setEditingItemKey(item.itemKey);
+    setItemDraft({
+      name: item.name,
+      description: item.specification,
+      manufacturer: item.manufacturer ?? "",
+      mpn: item.mpn ?? "",
+      unitOfMeasure: item.unitOfMeasure ?? item.requestedUnit ?? "EA",
+      requestedQuantity: sourcingRequestQuantity(item)?.toString() ?? "",
+      requestedUnit: item.requestedUnit ?? item.unitOfMeasure ?? "EA",
+      supplierDeliverable: item.supplierDeliverable ?? "",
+      deliveryLocation: item.deliveryLocation ?? "",
+      needByDate: item.needByDate ?? "",
+    });
+    setItemMutationState("idle");
+    setItemMutationError("");
+  }
+
+  async function saveItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !editingItemKey || itemMutationState === "saving") return;
+    setItemMutationState("saving");
+    setItemMutationError("");
+    const response = await fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/items/${encodeURIComponent(editingItemKey)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...itemDraft,
+        requestedQuantity: itemDraft.requestedQuantity ? Number(itemDraft.requestedQuantity) : null,
+      }),
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setItemMutationState("error");
+      setItemMutationError(body.error || "Sourcing item could not be saved.");
+      return;
+    }
+    setEditingItemKey(null);
+    setItemMutationState("idle");
+    onSnapshotPublished?.();
+  }
+
+  async function deleteItem(item: SupplyInventoryItem) {
+    if (!workspaceId || !item.itemKey || itemMutationState === "deleting") return;
+    if (!window.confirm(`Delete ${item.name} from the current sourcing snapshot? Saved research and prior snapshots stay in history.`)) return;
+    setItemMutationState("deleting");
+    setItemMutationError("");
+    const response = await fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/items/${encodeURIComponent(item.itemKey)}`, {
+      method: "DELETE",
+      headers: { accept: "application/json" },
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setEditingItemKey(item.itemKey);
+      setItemMutationState("error");
+      setItemMutationError(body.error || "Sourcing item could not be deleted.");
+      return;
+    }
+    setEditingItemKey(null);
+    setItemMutationState("idle");
+    onSnapshotPublished?.();
+  }
   function resultState(run: SavedSourcingResearchRun | undefined) {
     if (!run) return "Not researched";
     if (["QUEUED", "RUNNING"].includes(run.status)) return "Researching";
@@ -423,14 +506,26 @@ export function SupplyInventoryWorkspace({
                   <td>{draft?.needByDate ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${draft.needByDate}T12:00:00Z`)) : "Not set"}</td>
                   <td>{request.status}</td>
                   <td>
-                    <button
-                      type="button"
-                      className={styles.sourcingQueueAction}
-                      disabled={!researchWorkspaceReady}
-                      onClick={() => onOpenPendingRequest(request)}
-                    >
-                      {researchWorkspaceReady ? "Continue" : "Select a company"} <ArrowRight size={13} />
-                    </button>
+                    <div className={styles.sourcingRowActions}>
+                      <button
+                        type="button"
+                        className={styles.sourcingQueueAction}
+                        disabled={!researchWorkspaceReady}
+                        onClick={() => onOpenPendingRequest(request)}
+                      >
+                        {researchWorkspaceReady ? "Edit details" : "Select a company"} <Pencil size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.sourcingDeleteAction}
+                        onClick={() => {
+                          if (window.confirm(`Delete the draft ${request.title}? This cannot be undone.`)) {
+                            onDeletePendingRequest(request.id);
+                          }
+                        }}
+                        aria-label={`Delete ${request.title}`}
+                      ><Trash2 size={13} /></button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -464,7 +559,8 @@ export function SupplyInventoryWorkspace({
               const runCases = run ? casesByRunId.get(run.id) ?? [] : [];
               const requestedQuantity = sourcingRequestQuantity(item);
               return (
-              <tr key={item.sku} data-active={item.sku === selectedSku} data-status="shortage">
+              <Fragment key={item.itemKey ?? item.sku}>
+              <tr data-active={item.sku === selectedSku} data-status="shortage">
                 <td>
                   <button type="button" aria-pressed={item.sku === selectedSku} onClick={() => onSelect(item.sku)}>
                     <span className={styles.inventoryStatusDot} />
@@ -475,7 +571,8 @@ export function SupplyInventoryWorkspace({
                 <td>{formatNeedBy(item)}</td>
                 <td>{workstreamSummary(runCases) ?? resultState(run)}</td>
                 <td>
-                  <button
+                  <div className={styles.sourcingRowActions}>
+                    <button
                       className={styles.sourcingQueueAction}
                       type="button"
                       disabled={!researchWorkspaceReady}
@@ -487,8 +584,41 @@ export function SupplyInventoryWorkspace({
                       {!researchWorkspaceReady ? "Select a company" : queueActionLabel(run, runCases)}
                       <ArrowRight size={13} />
                     </button>
+                    {canImportSupplyData && item.itemKey ? (
+                      <>
+                        <button type="button" className={styles.sourcingEditAction} onClick={() => editItem(item)} aria-label={`Edit ${item.name}`}><Pencil size={13} /></button>
+                        <button type="button" className={styles.sourcingDeleteAction} onClick={() => void deleteItem(item)} aria-label={`Delete ${item.name}`}><Trash2 size={13} /></button>
+                      </>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
+              {editingItemKey === item.itemKey ? (
+                <tr className={styles.sourcingEditRow}>
+                  <td colSpan={5}>
+                    <form onSubmit={saveItem}>
+                      <header><strong>Edit sourcing item</strong><span>{item.sku}</span></header>
+                      <div>
+                        <label>Name<input value={itemDraft.name} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} required /></label>
+                        <label>Manufacturer<input value={itemDraft.manufacturer} onChange={(event) => setItemDraft((current) => ({ ...current, manufacturer: event.target.value }))} /></label>
+                        <label>Part number<input value={itemDraft.mpn} onChange={(event) => setItemDraft((current) => ({ ...current, mpn: event.target.value }))} /></label>
+                        <label>Quantity<input type="number" min="0.000001" step="any" value={itemDraft.requestedQuantity} onChange={(event) => setItemDraft((current) => ({ ...current, requestedQuantity: event.target.value }))} /></label>
+                        <label>Unit<input value={itemDraft.requestedUnit} onChange={(event) => setItemDraft((current) => ({ ...current, requestedUnit: event.target.value }))} required /></label>
+                        <label>Need by<input type="date" value={itemDraft.needByDate} onChange={(event) => setItemDraft((current) => ({ ...current, needByDate: event.target.value }))} /></label>
+                        <label className={styles.sourcingEditWide}>Deliver to<input value={itemDraft.deliveryLocation} onChange={(event) => setItemDraft((current) => ({ ...current, deliveryLocation: event.target.value }))} /></label>
+                        <label className={styles.sourcingEditWide}>Specification<textarea value={itemDraft.description} onChange={(event) => setItemDraft((current) => ({ ...current, description: event.target.value }))} rows={3} /></label>
+                        <label className={styles.sourcingEditWide}>Supplier deliverable or QA<textarea value={itemDraft.supplierDeliverable} onChange={(event) => setItemDraft((current) => ({ ...current, supplierDeliverable: event.target.value }))} rows={2} /></label>
+                      </div>
+                      {itemMutationError ? <p>{itemMutationError}</p> : null}
+                      <footer>
+                        <button type="button" onClick={() => setEditingItemKey(null)}>Cancel</button>
+                        <button type="submit" disabled={itemMutationState === "saving"}>{itemMutationState === "saving" ? "Saving" : "Save item"}</button>
+                      </footer>
+                    </form>
+                  </td>
+                </tr>
+              ) : null}
+              </Fragment>
               );
             })}
             {!pendingRequests.length && !customerProcurementOrders.length && !sourcingItems.length && !customRuns.length && !additionalRuns.length ? (

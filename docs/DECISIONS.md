@@ -4036,3 +4036,30 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Consequences: The same deployed code path proves outbound SMTP, inbound IMAP,
   threading, tenant scope, and procurement conversation storage without moving
   credentials into Bourne, GitHub, or operator scripts.
+
+### 2026-08-23 - Customer settings and logistics use customer-owned operational data
+
+- Status: accepted
+- Owner: product and engineering
+- Context: Customer Settings was intentionally empty to protect the admin
+  boundary, but that also prevented customers from correcting their own
+  company and logistics setup. Logistics could render attributable public
+  research without a customer-confirmed operating base.
+- Decision: Customer Settings is a separate customer-only product surface. It
+  exposes the signed-in account as read-only and permits workspace editors to
+  maintain only their company website and operating base. It does not reuse or
+  link to admin company, account, connector, email, channel, or office controls.
+- Logistics gate: Logistics remains locked until the latest published Supply
+  snapshot contains a `customer-base` facility with a name, street address,
+  city, and two-letter country code. Public research and demo data cannot
+  satisfy this gate.
+- Revision boundary: Customer base changes and sourcing item edits or removals
+  clone the latest published snapshot, preserve provenance, and publish a new
+  immutable version. Removing an item also removes its dependent snapshot rows
+  from the new version. Prior snapshots and saved research remain audit history.
+- Authorization boundary: Every read and mutation resolves the authenticated
+  Office and explicit workspace membership. Viewer customers remain read-only;
+  editors and owners can manage only assigned workspaces.
+- Supersedes: The 2026-08-22 decision that customer Settings stays empty is
+  superseded only for these customer-owned profile and operating-base fields.
+  All admin restrictions remain in force.

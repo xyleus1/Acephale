@@ -77,6 +77,8 @@ jobs:
       - name: Run Supply OS persistence contracts
         run: |
           npm run test:supply-os-persistence
+          npm run test:supply-os-workspace-management
+          npm run test:supply-os-workspace-management-db
           npm run test:supply-os-sourcing-persistence
           npm run test:supply-os-planning-persistence
           npm run test:supply-os-execution

@@ -166,6 +166,7 @@ export function snapshotResponseToSourcingItems(
         || [item.manufacturer, item.mpn].filter(Boolean).join(" ")
         || "No technical specification was supplied in the published snapshot.";
       return {
+        itemKey: item.itemKey,
         sku: item.sku || item.itemKey,
         name: item.name,
         specification,

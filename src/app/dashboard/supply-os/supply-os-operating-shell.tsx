@@ -100,6 +100,9 @@ export function SupplyOsOperatingShell({
     () => companyName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
     [companyName],
   );
+  const settingsHref = previewMode
+    ? `/dashboard/settings?preview=customer${workspaceSelection?.workspaceId ? `&workspaceId=${encodeURIComponent(workspaceSelection.workspaceId)}` : ""}`
+    : `/dashboard/settings${workspaceSelection?.workspaceId ? `?workspaceId=${encodeURIComponent(workspaceSelection.workspaceId)}` : ""}`;
 
   useEffect(() => {
     try {
@@ -193,7 +196,7 @@ export function SupplyOsOperatingShell({
           <div className={styles.sidebarUtilityArea}>
             <a
               className={styles.sidebarUtility}
-              href={previewMode ? "/dashboard/settings?preview=customer" : "/dashboard/settings"}
+              href={settingsHref}
               aria-label={settingsLabel}
               title={settingsLabel}
             >
@@ -274,6 +277,7 @@ export function SupplyOsOperatingShell({
                 canImportSupplyData={canImportSupplyData}
                 canApproveProcurement={canApproveProcurement}
                 canAuthorizePurchase={canAuthorizePurchase}
+                previewMode={previewMode}
                 onOpenContext={() => selectPanel("context")}
                 onWorkspaceProfile={setWorkspaceProfile}
               />

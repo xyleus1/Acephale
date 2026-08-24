@@ -15,6 +15,7 @@ export type SupplySourcingCandidate = {
 };
 
 export type SupplyInventoryItem = {
+  itemKey?: string;
   sku: string;
   name: string;
   specification: string;

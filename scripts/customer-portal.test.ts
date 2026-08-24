@@ -101,7 +101,7 @@ assert.match(settingsIndexSource, /session\.role === "ADMIN"[\s\S]*\/dashboard\/
 assert.match(settingsHeaderSource, />\s*Customers\s*</);
 assert.match(settingsHeaderSource, /active === "customers"/);
 assert.match(supplyShellSource, /const settingsLabel = `[\s\S]*accountRole/);
-assert.match(supplyShellSource, /previewMode \? "\/dashboard\/settings\?preview=customer" : "\/dashboard\/settings"/);
+assert.match(supplyShellSource, /const settingsHref = previewMode[\s\S]*workspaceSelection\?\.workspaceId[\s\S]*`\/dashboard\/settings\$\{/);
 assert.match(customerPortalAccountAdminSource, /id: args\.userId,[\s\S]*officeId: args\.officeId,[\s\S]*memberships: \{ some: \{ companyId: args\.companyId, officeId: args\.officeId \} \}/);
 assert.match(staffPortalActionsSource, /grantCustomerPortalAccess[\s\S]*requireCompanyAdmin\(\)/);
 assert.match(staffPortalActionsSource, /updateCustomerPortalAccount[\s\S]*requireCompanyAdmin\(\)/);

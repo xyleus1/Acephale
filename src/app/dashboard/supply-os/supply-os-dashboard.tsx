@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ResponsiveContainer,
   Sankey,
@@ -308,6 +308,7 @@ export function SupplyOsDashboardWorkspace({
   canImportSupplyData = false,
   canApproveProcurement = false,
   canAuthorizePurchase = false,
+  previewMode = false,
   onWorkspaceProfile,
   onOpenContext,
 }: {
@@ -318,6 +319,7 @@ export function SupplyOsDashboardWorkspace({
   canImportSupplyData?: boolean;
   canApproveProcurement?: boolean;
   canAuthorizePurchase?: boolean;
+  previewMode?: boolean;
   onOpenContext: () => void;
   onWorkspaceProfile?: (profile: {
     companyName: string;
@@ -329,6 +331,8 @@ export function SupplyOsDashboardWorkspace({
   const [workspaceResearch, setWorkspaceResearch] = useState<SupplyCompanyResearch | null>(null);
   const [profileState, setProfileState] = useState<"idle" | "loading" | "researching" | "ready" | "error">("idle");
   const [profileRevision, setProfileRevision] = useState(0);
+  const [logisticsSettings, setLogisticsSettings] = useState<WorkspaceManagementSettings | null>(null);
+  const [logisticsSettingsState, setLogisticsSettingsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
     if (activePanel === "context" || activePanel === "scenarios") return;
@@ -341,8 +345,37 @@ export function SupplyOsDashboardWorkspace({
     const profileUrl = `/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/company-profile`;
     setWorkspaceResearch(null);
     setProfileState("loading");
+    let logisticsSetupLoaded = activePanel !== "logistics";
 
     void (async () => {
+      let currentLogisticsSettings: WorkspaceManagementSettings | null = null;
+      if (activePanel === "logistics") {
+        setLogisticsSettingsState("loading");
+        const settingsResponse = await fetch(`/api/supply-os/workspaces/${encodeURIComponent(workspaceId)}/management`, {
+          cache: "no-store",
+          headers: { accept: "application/json" },
+          signal: controller.signal,
+        });
+        const settingsBody = await settingsResponse.json().catch(() => ({})) as { settings?: WorkspaceManagementSettings };
+        if (!settingsResponse.ok || !settingsBody.settings) throw new Error("Logistics setup could not be loaded.");
+        currentLogisticsSettings = settingsBody.settings;
+        logisticsSetupLoaded = true;
+        setLogisticsSettings(currentLogisticsSettings);
+        setLogisticsSettingsState("ready");
+        onWorkspaceProfile?.({
+          companyName: currentLogisticsSettings.companyName,
+          logoUrl: null,
+          facilityLabel: currentLogisticsSettings.base ? formatCustomerBase(currentLogisticsSettings.base) : null,
+          locationCount: currentLogisticsSettings.base ? 1 : 0,
+        });
+        if (!currentLogisticsSettings.logisticsReady) {
+          setProfileState("idle");
+          return;
+        }
+      } else {
+        setLogisticsSettings(null);
+        setLogisticsSettingsState("idle");
+      }
       const getResponse = await fetch(profileUrl, {
         cache: "no-store",
         headers: { accept: "application/json" },
@@ -369,14 +402,17 @@ export function SupplyOsDashboardWorkspace({
       onWorkspaceProfile?.({
         companyName: research.company.name.value,
         logoUrl: research.company.logoUrl,
-        facilityLabel: research.company.headquarters?.value ?? research.company.locations[0]?.value ?? null,
-        locationCount: research.company.locations.length,
+        facilityLabel: currentLogisticsSettings?.base
+          ? formatCustomerBase(currentLogisticsSettings.base)
+          : research.company.headquarters?.value ?? research.company.locations[0]?.value ?? null,
+        locationCount: currentLogisticsSettings?.base ? 1 : research.company.locations.length,
       });
       setProfileState("ready");
     })().catch((error: unknown) => {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setWorkspaceResearch(null);
       setProfileState("error");
+      if (!logisticsSetupLoaded) setLogisticsSettingsState("error");
     });
 
     return () => controller.abort();
@@ -399,6 +435,22 @@ export function SupplyOsDashboardWorkspace({
         <SupplyOsOpportunitiesPreview />
       ) : activePanel === "context" ? (
         <SupplyOsContext workspaceId={workspaceId ?? null} />
+      ) : activePanel === "logistics" && workspaceId && logisticsSettingsState === "error" ? (
+        <CommandState
+          title="Logistics setup unavailable"
+          detail="The saved operating base could not be checked. Logistics stays locked until the company data is available."
+          action={<button type="button" onClick={() => setProfileRevision((revision) => revision + 1)}>Retry setup</button>}
+        />
+      ) : activePanel === "logistics" && workspaceId && logisticsSettingsState === "ready" && logisticsSettings && !logisticsSettings.logisticsReady ? (
+        <LogisticsSetup
+          settings={logisticsSettings}
+          canEdit={canImportSupplyData}
+          previewMode={previewMode}
+          settingsHref={previewMode
+            ? `/dashboard/settings?preview=customer&workspaceId=${encodeURIComponent(workspaceId)}`
+            : `/dashboard/settings?workspaceId=${encodeURIComponent(workspaceId)}`}
+          onSaved={() => setProfileRevision((revision) => revision + 1)}
+        />
       ) : workspaceId && ["idle", "loading", "researching"].includes(profileState) ? (
         <CommandState
           title={profileState === "researching" ? "Researching company profile" : "Loading customer network"}
@@ -426,6 +478,92 @@ export function SupplyOsDashboardWorkspace({
           />
       ) : null}
     </div>
+  );
+}
+
+type WorkspaceManagementSettings = {
+  workspaceId: string;
+  companyName: string;
+  website: string | null;
+  logisticsReady: boolean;
+  base: {
+    name: string;
+    addressLine: string | null;
+    city: string | null;
+    region: string | null;
+    postalCode: string | null;
+    countryCode: string | null;
+  } | null;
+};
+
+function formatCustomerBase(base: NonNullable<WorkspaceManagementSettings["base"]>) {
+  return [base.name, base.city, base.region, base.countryCode].filter(Boolean).join(", ");
+}
+
+function LogisticsSetup({
+  settings,
+  canEdit,
+  previewMode,
+  settingsHref,
+  onSaved,
+}: {
+  settings: WorkspaceManagementSettings;
+  canEdit: boolean;
+  previewMode: boolean;
+  settingsHref: string;
+  onSaved: () => void;
+}) {
+  const [base, setBase] = useState({
+    name: settings.base?.name ?? `${settings.companyName} base`,
+    addressLine: settings.base?.addressLine ?? "",
+    city: settings.base?.city ?? "",
+    region: settings.base?.region ?? "",
+    postalCode: settings.base?.postalCode ?? "",
+    countryCode: settings.base?.countryCode ?? "",
+  });
+  const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canEdit || state === "saving") return;
+    setState("saving");
+    setError("");
+    const response = await fetch(`/api/supply-os/workspaces/${encodeURIComponent(settings.workspaceId)}/management`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "base", base }),
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      setState("error");
+      setError(body.error || "Operating base could not be saved.");
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <section className={styles.logisticsSetup} aria-label="Logistics setup">
+      <header>
+        <small>Required setup</small>
+        <h1>Where does {settings.companyName} operate from?</h1>
+        <p>Logistics stays locked until you save a real receiving or shipping base. Public company research cannot unlock it.</p>
+      </header>
+      <form onSubmit={submit}>
+        <label className={styles.logisticsSetupWide}>Facility name<input value={base.name} onChange={(event) => setBase((current) => ({ ...current, name: event.target.value }))} required disabled={!canEdit} /></label>
+        <label className={styles.logisticsSetupWide}>Street address<input value={base.addressLine} onChange={(event) => setBase((current) => ({ ...current, addressLine: event.target.value }))} required disabled={!canEdit} /></label>
+        <label>City<input value={base.city} onChange={(event) => setBase((current) => ({ ...current, city: event.target.value }))} required disabled={!canEdit} /></label>
+        <label>State or region<input value={base.region} onChange={(event) => setBase((current) => ({ ...current, region: event.target.value }))} disabled={!canEdit} /></label>
+        <label>Postal code<input value={base.postalCode} onChange={(event) => setBase((current) => ({ ...current, postalCode: event.target.value }))} disabled={!canEdit} /></label>
+        <label>Country code<input value={base.countryCode} onChange={(event) => setBase((current) => ({ ...current, countryCode: event.target.value.toUpperCase() }))} maxLength={2} placeholder="US" required disabled={!canEdit} /></label>
+        {error ? <p className={styles.logisticsSetupError}>{error}</p> : null}
+        <footer>
+          <a href={settingsHref}>Open customer settings</a>
+          <button type="submit" disabled={!canEdit || state === "saving"}>{state === "saving" ? "Saving base" : canEdit ? "Save and open logistics" : previewMode ? "Read-only preview" : "Workspace editor required"}</button>
+        </footer>
+      </form>
+    </section>
   );
 }
 
@@ -1079,6 +1217,10 @@ function CaseCommandCenter({
             pendingRequests={pendingSourcingRequests}
             customerProcurementOrders={visibleCustomerProcurementOrders}
             onOpenPendingRequest={openPendingSourcingRequest}
+            onDeletePendingRequest={(requestId) => {
+              setPendingSourcingRequests((current) => current.filter((request) => request.id !== requestId));
+              if (procurementRequest?.requestId === requestId) setProcurementRequest(null);
+            }}
             onOpenCustomerProcurement={(item, order) => {
               setProcurementRequest(null);
               setCustomerProcurementRequest({ item, order });

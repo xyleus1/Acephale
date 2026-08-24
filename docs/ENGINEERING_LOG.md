@@ -6756,3 +6756,25 @@ Use this file for chronological implementation notes that future agents should s
   must inspect Gmail special-use All Mail and Junk folders and verify exact
   Message-ID correlation before another live run; increasing the timeout alone
   is not supported by the evidence.
+
+### 2026-08-23 - Add customer settings, sourcing controls, and logistics base gate
+
+- Branch: `customer-settings-sourcing-logistics-20260823`, based on current
+  `origin/main`.
+- Commit: pending release commit.
+- Task: Give customers a safe settings surface, allow simple sourcing item
+  management, and block logistics until the company records an operating base.
+- Files changed: Customer Settings UI, workspace management and item APIs,
+  immutable snapshot revision service, logistics setup gate, sourcing queue
+  controls, focused tests, and release documentation.
+- Verification: Workspace management, customer portal, sourcing projection,
+  Atlas sourcing, materials layout, shell routing, product copy, TypeScript,
+  production build, diff whitespace, and forbidden-character checks passed.
+- Failed/skipped checks: Focused ESLint could not run because the repository
+  uses legacy config while installed ESLint 9 requires `eslint.config.js`.
+- Caveats: The saved base currently gates the logistics experience and replaces
+  the header facility identity. Existing map objects still come from
+  attributable company research; exact route drawing requires later geocoding
+  or confirmed lane endpoints.
+- Follow-up: Run authenticated production smoke tests for customer Settings,
+  sourcing edit/remove, and first-time logistics setup after deployment.
