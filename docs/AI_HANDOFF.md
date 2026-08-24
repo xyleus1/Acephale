@@ -10390,3 +10390,11 @@ Verification caveat:
 - Read-only inspection run `32687182247` confirmed all seven initial or reply
   delivery stages are now `OBSERVED_NOW`, including both acknowledged stages of
   the HypnoDreamz procurement conversation. No new email was sent.
+- After the missing-folder cause was fixed and deployed, authorized full
+  acceptance run `32687656465` created job
+  `demo-email-capability-8a8a93cf42ea416d86d41346877ace6a` and completed
+  `DONE`: six accounts, four passed conversations, zero failures, eight planned
+  deliveries, and eight SMTP acknowledgements. Read-only inspection run
+  `32687719080` confirmed every initial and reply stage is `OBSERVED_NOW` for
+  all three mailbox pairs and the HypnoDreamz RFQ. No purchase, shipment, or
+  spend was created or authorized.

@@ -6822,3 +6822,10 @@ Use this file for chronological implementation notes that future agents should s
   in Gmail Junk, confirming the Inbox-only observation diagnosis. Read-only
   inspection run `32687182247` showed every acknowledged stage as
   `OBSERVED_NOW`. No new email was sent.
+- Final acceptance: After the production fix, authorized run `32687656465`
+  completed job `demo-email-capability-8a8a93cf42ea416d86d41346877ace6a`
+  with six accounts, four passed conversations, zero failures, eight planned
+  deliveries, and eight acknowledged deliveries. Read-only run `32687719080`
+  confirmed all eight initial or reply stages as `OBSERVED_NOW`, including the
+  Claire Johnson to Marlowe Cole reply and both HypnoDreamz RFQ directions.
+  The bounded demo created no purchase, shipment, or authorized spend.
