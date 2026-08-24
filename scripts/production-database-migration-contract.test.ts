@@ -38,6 +38,9 @@ const customerPasswordVerification = verifications.get(
 const gmailAppPasswordVerification = verifications.get(
   "20260822000700_gmail_app_password_accounts.sql",
 );
+const emailSenderPoolVerification = verifications.get(
+  "20260823000200_email_sender_pool.sql",
+);
 
 assert.match(workflow, /^on:\n  workflow_dispatch:/m, "production migration must be manually dispatched");
 assert.doesNotMatch(
@@ -72,6 +75,7 @@ assert.ok(workspaceRelinkVerification, "workspace relink production verification
 assert.ok(emailAccountVerification, "email account production verification is missing");
 assert.ok(customerPasswordVerification, "customer password production verification is missing");
 assert.ok(gmailAppPasswordVerification, "Gmail app-password production verification is missing");
+assert.ok(emailSenderPoolVerification, "email sender pool production verification is missing");
 for (const [name, verification] of verifications) {
   assert.match(verification, /BEGIN READ ONLY;/, `${name} must use a read-only transaction`);
   if (/^[0-9]{14}_[a-z0-9_]+\.sql$/.test(name)) {
@@ -130,5 +134,17 @@ assert.match(gmailAppPasswordVerification, /credentialSecret/);
 assert.match(gmailAppPasswordVerification, /enc:v1:/);
 assert.match(gmailAppPasswordVerification, /rfcMessageId/);
 assert.match(gmailAppPasswordVerification, /GMAIL_APP_PASSWORD/);
+assert.match(emailSenderPoolVerification, /dailySendLimit/);
+assert.match(emailSenderPoolVerification, /EmailSenderReservation/);
+assert.match(emailSenderPoolVerification, /dailySendLimit" NOT BETWEEN 1 AND 30/);
+assert.match(emailSenderPoolVerification, /account\."officeId" <> reservation\."officeId"/);
+assert.match(emailSenderPoolVerification, /EmailAccount_dailySendLimit_check/);
+assert.match(emailSenderPoolVerification, /EmailSenderReservation_accountId_officeId_fkey/);
+assert.match(emailSenderPoolVerification, /EmailSenderReservation_requestHash_check/);
+assert.match(emailSenderPoolVerification, /EmailMessage_threadId_officeId_fkey/);
+assert.match(emailSenderPoolVerification, /EmailMessage_accountId_officeId_fkey/);
+assert.match(emailSenderPoolVerification, /EmailSenderReservation_messageId_accountId_officeId_fkey/);
+assert.match(emailSenderPoolVerification, /EmailSenderReservation_messageId_accountId_officeId_key/);
+assert.match(emailSenderPoolVerification, /EmailSenderReservation_officeId_idempotencyKey_key/);
 
 console.log("Production database migration contract passed.");

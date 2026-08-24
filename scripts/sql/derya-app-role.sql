@@ -47,7 +47,7 @@ DECLARE
     'TruckloadQuote', 'ShipmentRecord', 'Job', 'AgentProposal',
     'StrategyAssessment', 'RouteOption', 'PriceRecommendation', 'RiskAssessment',
     'StrategyAction', 'JobDocument', 'JobMilestone', 'EmailAccount',
-    'EmailThread', 'EmailMessage', 'LoginCode', 'CustomerPortalUser',
+    'EmailThread', 'EmailMessage', 'EmailSenderReservation', 'LoginCode', 'CustomerPortalUser',
     'CustomerPortalLoginThrottle',
     'CustomerPortalMembership', 'CustomerPortalLoginCode', 'CustomerPortalAction',
     'SupplyWorkspace', 'SupplyWorkspaceMember', 'ConnectorInstallation',

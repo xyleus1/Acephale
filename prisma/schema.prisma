@@ -79,6 +79,12 @@ enum EmailDirection {
   OUTBOUND
 }
 
+enum EmailSenderReservationStatus {
+  RESERVED
+  RECORDED
+  RELEASED
+}
+
 model Office {
   id        String   @id @default(cuid())
   name      String
@@ -1860,15 +1866,43 @@ model EmailAccount {
   isActive     Boolean   @default(true)
   sendEnabled     Boolean   @default(false)
   isDefaultSender Boolean   @default(false)
+  dailySendLimit  Int       @default(30)
   lastSyncAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  office   Office         @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  messages EmailMessage[]
+  office             Office                   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  messages           EmailMessage[]
+  senderReservations EmailSenderReservation[]
 
   @@unique([officeId, email])
+  @@unique([id, officeId])
   @@index([officeId])
+}
+
+model EmailSenderReservation {
+  id                String                       @id @default(cuid())
+  officeId          String
+  accountId         String
+  usageDate         DateTime                     @db.Date
+  idempotencyKey    String
+  requestHash       String
+  messageId         String?
+  status            EmailSenderReservationStatus @default(RESERVED)
+  attemptCount      Int                          @default(1)
+  providerMessageId String?
+  providerThreadId  String?
+  localThreadId     String?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  account EmailAccount  @relation(fields: [accountId, officeId], references: [id, officeId], onDelete: Cascade)
+  message EmailMessage? @relation(fields: [messageId, accountId, officeId], references: [id, accountId, officeId], onDelete: Cascade)
+
+  @@unique([officeId, idempotencyKey])
+  @@unique([messageId, accountId, officeId])
+  @@index([officeId, usageDate, status])
+  @@index([accountId, usageDate, status])
 }
 
 model EmailThread {
@@ -1900,6 +1934,7 @@ model EmailThread {
   contact  Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
   messages EmailMessage[]
 
+  @@unique([id, officeId])
   @@index([officeId, jobId])
   @@index([officeId, inquiryId])
   @@index([officeId, lastMessageAt])
@@ -1912,6 +1947,7 @@ model EmailMessage {
   id                   String         @id @default(cuid())
   threadId             String
   accountId            String?
+  officeId             String?
   externalId           String? // provider Message-ID header for dedup
   gmailMessageId       String? // provider native message id (Gmail msg.id) - used to fetch attachments
   rfcMessageId         String? // RFC Message-ID used for SMTP/IMAP threading
@@ -1931,10 +1967,12 @@ model EmailMessage {
   classificationAt     DateTime? // when the classifier last ran
   createdAt            DateTime       @default(now())
 
-  thread  EmailThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  account EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  thread            EmailThread            @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  account           EmailAccount?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  senderReservation EmailSenderReservation?
 
   @@unique([externalId])
+  @@unique([id, accountId, officeId])
   @@index([threadId, sentAt])
   @@index([accountId, sentAt])
 }
