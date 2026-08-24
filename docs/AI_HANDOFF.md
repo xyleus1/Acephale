@@ -10297,3 +10297,14 @@ Verification caveat:
   exact demo job ID. It prints aggregate results, conversation labels and
   sanitized errors, plus delivery-event counts. It never prints addresses,
   message bodies, credentials, or raw payloads, and it cannot send mail.
+- Live execution loaded all six accounts and Gmail SMTP acknowledged seven
+  planned deliveries with no uncertain events. Edwin Murphy and Lyle Parker
+  passed the full send and reply round trip. Paul Wright and Beatrice Maxwell
+  observed the initial message in both their mailbox-pair and HypnoDreamz RFQ
+  conversations, but the replies were not visible in Paul's mailbox within 10
+  checks. Marlowe Cole's initial message was not visible in Claire Johnson's
+  mailbox within 10 checks, so that conversation did not send a reply.
+- The stored result is one passed and three failed conversations. No purchase,
+  shipment, or spend was created or authorized. No second send run was started;
+  the remaining blocker is reliable IMAP observation latency or correlation
+  for the three failed mailbox observations.
