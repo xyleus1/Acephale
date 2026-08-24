@@ -12,6 +12,7 @@ import {
 } from "@/lib/gmail-app-password";
 import { encryptSecret } from "@/lib/security/crypto";
 import { parseGmailAppPasswordBulkInput } from "@/lib/gmail-app-password-bulk";
+import { updateEmailSenderPoolAccountsForOffice } from "@/lib/email-sender-pool-settings";
 
 function revalidateEmailAccountPages() {
   revalidatePath("/dashboard/settings/email");
@@ -64,6 +65,18 @@ export async function setEmailAccountSendEnabled(accountId: string, enabled: boo
   if (updated.count !== 1) throw new Error("The email account changed before it could be updated.");
 
   revalidateEmailAccountPages();
+}
+
+export async function updateEmailSenderPoolAccounts(input: {
+  accountIds: string[];
+  sendEnabled?: boolean;
+  dailySendLimit?: number;
+}) {
+  const session = await requireEmailAccountAdminSession();
+  const result = await updateEmailSenderPoolAccountsForOffice({ officeId: session.officeId, ...input });
+  if (!result.ok) return result;
+  revalidateEmailAccountPages();
+  return result;
 }
 
 export async function makeDefaultEmailSender(accountId: string) {

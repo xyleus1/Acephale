@@ -105,6 +105,8 @@
     "test:email-labels": "tsx scripts/email-workflow-labels.test.ts",
     "test:gmail-oauth": "tsx scripts/gmail-oauth-config.test.ts",
     "test:email-account-settings": "node --import tsx scripts/email-account-settings.test.ts",
+    "test:email-sender-pool": "node --import tsx scripts/email-sender-pool.test.ts",
+    "test:email-sender-pool-db": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/email-sender-pool-database.test.ts",
     "test:gmail-app-password-accounts": "node --import tsx scripts/gmail-app-password-accounts.test.ts",
     "test:demo-email-capability": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/demo-email-capability.runtime.test.ts && node --import tsx scripts/demo-email-capability.test.ts",
     "test:gmail-sync-windows": "tsx scripts/gmail-sync-windows.test.ts",

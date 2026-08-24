@@ -1,10 +1,8 @@
-import { DisconnectAccountButton } from "@/components/disconnect-account-button";
-import { EmailAccountControls } from "@/components/email-account-controls";
 import { EmailRoundTripTest } from "@/components/email-round-trip-test";
+import { EmailSenderPool } from "@/components/email-sender-pool";
 import { GmailAppPasswordBulkForm } from "@/components/gmail-app-password-bulk-form";
 import { GmailAppPasswordForm } from "@/components/gmail-app-password-form";
 import { ResumeAccountButton } from "@/components/resume-account-button";
-import { SyncAccountButton } from "@/components/sync-account-button";
 import { requireEmailAccountAdminSession } from "@/lib/email-account-access";
 import { GMAIL_APP_PASSWORD_PROVIDER } from "@/lib/gmail-app-password";
 import { prisma } from "@/lib/prisma";
@@ -29,50 +27,37 @@ function isManagedGmail(provider: string) {
   return provider === "GMAIL" || provider === GMAIL_APP_PASSWORD_PROVIDER;
 }
 
-function timeAgo(value: Date | null | undefined) {
-  if (!value) return "Never";
-  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
 export default async function ConnectedEmailsPage() {
   const session = await requireEmailAccountAdminSession();
   const accounts = await prisma.emailAccount.findMany({
     where: { officeId: session.officeId, provider: { in: EMAIL_PROVIDERS } },
     orderBy: [{ isActive: "desc" }, { isDefaultSender: "desc" }, { createdAt: "desc" }],
   });
-  const activityRows = await prisma.emailMessage.groupBy({
-    by: ["accountId", "direction"],
-    where: { accountId: { in: accounts.map((account) => account.id) } },
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setUTCDate(tomorrowStart.getUTCDate() + 1);
+  const sentTodayRows = await prisma.emailMessage.groupBy({
+    by: ["accountId"],
+    where: {
+      accountId: { in: accounts.map((account) => account.id) },
+      direction: "OUTBOUND",
+      sentAt: { gte: todayStart, lt: tomorrowStart },
+    },
     _count: true,
-    _max: { sentAt: true },
   });
-  const activity = new Map<string, { inbound: number; outbound: number; lastInbound: Date | null; lastOutbound: Date | null }>();
-  for (const row of activityRows) {
-    if (!row.accountId) continue;
-    const current = activity.get(row.accountId) ?? { inbound: 0, outbound: 0, lastInbound: null, lastOutbound: null };
-    if (row.direction === "INBOUND") {
-      current.inbound = row._count;
-      current.lastInbound = row._max.sentAt;
-    } else {
-      current.outbound = row._count;
-      current.lastOutbound = row._max.sentAt;
-    }
-    activity.set(row.accountId, current);
-  }
+  const sentToday = new Map(sentTodayRows.map((row) => [row.accountId, row._count]));
 
   const connected = accounts.filter((account) => account.isActive);
+  const pooledAccounts = connected.filter((account) => isManagedGmail(account.provider));
   const paused = accounts.filter((account) => !account.isActive);
   const monitored = connected.filter((account) => (
     (account.provider === "GMAIL" && Boolean(account.refreshToken))
     || (account.provider === GMAIL_APP_PASSWORD_PROVIDER && Boolean(account.credentialSecret))
   ));
   const enabledSenders = monitored.filter((account) => account.sendEnabled);
-  const defaultSender = enabledSenders.find((account) => account.isDefaultSender) ?? null;
+  const sentTodayTotal = monitored.reduce((total, account) => total + (sentToday.get(account.id) ?? 0), 0);
+  const dailyCapacity = enabledSenders.reduce((total, account) => total + account.dailySendLimit, 0);
   const oauthConfigured = Boolean(process.env.GOOGLE_CLIENT_ID);
 
   return (
@@ -82,8 +67,8 @@ export default async function ConnectedEmailsPage() {
         <section className={styles.summary} aria-label="Email account summary">
           <div><span>Connected</span><strong>{connected.length}</strong></div>
           <div><span>Monitoring</span><strong>{monitored.length}</strong></div>
-          <div><span>Sending</span><strong>{enabledSenders.length}</strong></div>
-          <div><span>Default sender</span><strong>{defaultSender?.email ?? "Not set"}</strong></div>
+          <div><span>Sending pool</span><strong>{enabledSenders.length}</strong></div>
+          <div><span>Sent today</span><strong>{sentTodayTotal} / {dailyCapacity}</strong></div>
           <a className="btn" href="#add-email">Add account</a>
         </section>
 
@@ -91,51 +76,21 @@ export default async function ConnectedEmailsPage() {
           <header className={styles.panelHeader}>
             <div>
               <h2>Connected emails</h2>
-              <p>{connected.length} active, {paused.length} paused</p>
+              <p>New supplier inquiry drafts start with the least-used active mailbox. Approved sends and replies keep their selected mailbox.</p>
             </div>
           </header>
-          {connected.length > 0 ? (
-            <div className={styles.accountList}>
-              {connected.map((account) => {
-                const accountActivity = activity.get(account.id);
-                return (
-                  <article className={styles.accountRow} key={account.id}>
-                    <span className={styles.statusDot} aria-label="Monitoring active" />
-                    <div className={styles.identity}>
-                      <strong>{account.displayName || account.email}</strong>
-                      <span>{account.email}</span>
-                    </div>
-                    <dl className={styles.accountFacts}>
-                      <div><dt>Provider</dt><dd>{providerLabel(account.provider)}</dd></div>
-                      <div><dt>Incoming</dt><dd>{accountActivity?.inbound ?? 0} · {timeAgo(accountActivity?.lastInbound)}</dd></div>
-                      <div><dt>Outgoing</dt><dd>{accountActivity?.outbound ?? 0} · {timeAgo(accountActivity?.lastOutbound)}</dd></div>
-                    </dl>
-                    <div className={styles.accountState}>
-                      {isManagedGmail(account.provider) ? (
-                        <>
-                          <span data-on={account.sendEnabled}>{account.sendEnabled ? "Sending on" : "Sending off"}</span>
-                          {account.isDefaultSender ? <span>Default</span> : null}
-                        </>
-                      ) : null}
-                    </div>
-                    <div className={styles.accountActions}>
-                      {isManagedGmail(account.provider) ? (
-                        <EmailAccountControls
-                          accountId={account.id}
-                          active={account.isActive}
-                          sendEnabled={account.sendEnabled}
-                          isDefaultSender={account.isDefaultSender}
-                        />
-                      ) : null}
-                      {isManagedGmail(account.provider) ? <SyncAccountButton accountId={account.id} /> : null}
-                      <DisconnectAccountButton accountId={account.id} />
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+          {pooledAccounts.length > 0 ? (
+            <EmailSenderPool accounts={pooledAccounts.map((account) => ({
+              id: account.id,
+              displayName: account.displayName || account.email,
+              email: account.email,
+              provider: providerLabel(account.provider),
+              sendEnabled: account.sendEnabled,
+              dailySendLimit: account.dailySendLimit,
+              sentToday: sentToday.get(account.id) ?? 0,
+            }))} />
           ) : (
-            <div className={styles.empty}>No connected email accounts.</div>
+            <div className={styles.empty}>No connected Gmail accounts are available for the sender pool.</div>
           )}
         </section>
 

@@ -1,8 +1,14 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CONNECTED_GMAIL_ACCOUNT_FILTER } from "@/lib/email-account-connection";
+import {
+  listEmailSenderPoolAccounts,
+  releaseEmailSenderReservation,
+  reserveEmailSender,
+} from "@/lib/email-sender-pool";
 import { requireSupplyWorkspace, SupplyPersistenceError, type SupplyAccessContext } from "./persistence";
 import { sourcingWorkspaceForTask } from "./sourcing-research-persistence";
 import {
@@ -25,6 +31,7 @@ import {
 import {
   gmailSupplierEmailProvider,
   type SupplierEmailProvider,
+  type SupplierEmailSendResult,
   type SupplierEmailSent,
 } from "./supplier-email-provider";
 
@@ -34,6 +41,11 @@ const QUOTE_CYCLE_TASK_TYPE = "SUPPLIER_QUOTE_CYCLE";
 const PROCUREMENT_CASE_TASK_TYPE = "PROCUREMENT_CASE";
 const EMAIL_CAPABILITY = "contact.supplier_quote_email";
 const REQUIRED_ROLE = "MANAGER";
+const SUPPLIER_EMAIL_RECONCILIATION_LEASE_MS = 5 * 60 * 1_000;
+
+function supplierSenderReservationKey(actionId: string, rfcMessageId: string) {
+  return `supplier-quote:${actionId}:${rfcMessageId}`;
+}
 
 const procurementQualificationSelect = {
   id: true,
@@ -44,16 +56,8 @@ export type { SupplierCommunicationTask };
 
 export async function listSupplierSenderAccounts(context: SupplyAccessContext) {
   await currentAccessContext(context);
-  return prisma.emailAccount.findMany({
-    where: {
-      officeId: context.officeId,
-      isActive: true,
-      sendEnabled: true,
-      ...CONNECTED_GMAIL_ACCOUNT_FILTER,
-    },
-    orderBy: [{ isDefaultSender: "desc" }, { email: "asc" }],
-    select: { id: true, email: true, provider: true },
-  });
+  const accounts = await listEmailSenderPoolAccounts(context.officeId);
+  return accounts.map((account) => ({ id: account.id, email: account.email, provider: account.provider }));
 }
 
 export async function listSupplierCommunicationTasks(args: {
@@ -440,6 +444,8 @@ async function finalizeSent(args: {
   actionId: string;
   receipt: SupplierEmailSent;
   rfcMessageId: string;
+  senderReservationId: string;
+  reconciliationToken?: string;
 }) {
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const lookup = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: args.workspaceId, taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE }, select: { parentTaskId: true, input: true } });
@@ -456,6 +462,14 @@ async function finalizeSent(args: {
     const procurementCase = await tx.supplyExecutionTask.findFirst({ where: { id: procurementCaseId, officeId: args.context.officeId, workspaceId: args.workspaceId, taskType: PROCUREMENT_CASE_TASK_TYPE, status: "PLANNED" }, select: { id: true, result: true } });
     if (!action || !draft || !quoteCycle || !procurementCase) throw new SupplyPersistenceError("Supplier email delivery scope is incomplete.", "conflict");
     if (action.status === "SUCCEEDED" && record(action.result).providerMessageId === args.receipt.providerMessageId) return action;
+    const currentDelivery = record(action.result);
+    if (args.reconciliationToken) {
+      if (currentDelivery.state !== "RECONCILING" || currentDelivery.reconciliationToken !== args.reconciliationToken) {
+        throw new SupplyPersistenceError("Supplier email reconciliation changed concurrently.", "conflict");
+      }
+    } else if (currentDelivery.state !== "SENDING") {
+      throw new SupplyPersistenceError("Supplier email delivery changed concurrently.", "conflict");
+    }
     const quoteResult = record(quoteCycle.result);
     if (quoteCycle.status !== "PLANNED" || quoteResult.requestHash !== actionInput.quoteRequestHash || record(quoteResult.release).releaseHash) throw new SupplyPersistenceError("The quote request was already released or changed.", "conflict");
     const message = record(actionInput.message);
@@ -474,20 +488,50 @@ async function finalizeSent(args: {
     };
     const releaseHash = digest(releasePayload);
     let localThreadId: string | null = null;
+    let localMessageId: string;
+    const senderAccountId = requiredText(message.senderAccountId, "Stored sender account", 220);
     const existingMessage = await tx.emailMessage.findFirst({
       where: {
         thread: { officeId: args.context.officeId },
         OR: [{ gmailMessageId: args.receipt.providerMessageId }, { externalId: args.rfcMessageId }],
       },
-      select: { threadId: true },
+      select: { id: true, threadId: true, accountId: true, officeId: true },
     });
     if (existingMessage) {
       localThreadId = existingMessage.threadId;
+      localMessageId = existingMessage.id;
+      if (existingMessage.accountId !== senderAccountId || (existingMessage.officeId && existingMessage.officeId !== args.context.officeId)) {
+        throw new SupplyPersistenceError("The delivered supplier email belongs to a different sender or office.", "conflict");
+      }
+      if (!existingMessage.officeId) {
+        await tx.emailMessage.update({
+          where: { id: existingMessage.id },
+          data: { officeId: args.context.officeId },
+        });
+      }
     } else {
       const thread = await tx.emailThread.create({ data: { officeId: args.context.officeId, subject: requiredText(message.subject, "Stored email subject", 180), participants: JSON.stringify([message.senderEmail, message.recipient]), externalThreadId: args.receipt.providerThreadId, lastMessageAt: now, messageCount: 1 } });
       localThreadId = thread.id;
-      await tx.emailMessage.create({ data: { threadId: thread.id, accountId: requiredText(message.senderAccountId, "Stored sender account", 220), externalId: args.rfcMessageId, gmailMessageId: args.receipt.providerMessageId, rfcMessageId: args.rfcMessageId, direction: "OUTBOUND", fromEmail: requiredText(message.senderEmail, "Stored sender email", 320), toEmails: JSON.stringify([requiredText(message.recipient, "Stored recipient", 320)]), subject: requiredText(message.subject, "Stored email subject", 180), bodyText: messageBody(message.body), sentAt: now } });
+      const createdMessage = await tx.emailMessage.create({ data: { threadId: thread.id, accountId: senderAccountId, officeId: args.context.officeId, externalId: args.rfcMessageId, gmailMessageId: args.receipt.providerMessageId, rfcMessageId: args.rfcMessageId, direction: "OUTBOUND", fromEmail: requiredText(message.senderEmail, "Stored sender email", 320), toEmails: JSON.stringify([requiredText(message.recipient, "Stored recipient", 320)]), subject: requiredText(message.subject, "Stored email subject", 180), bodyText: messageBody(message.body), sentAt: now }, select: { id: true } });
+      localMessageId = createdMessage.id;
     }
+    const recordedReservation = await tx.emailSenderReservation.updateMany({
+      where: {
+        id: args.senderReservationId,
+        officeId: args.context.officeId,
+        accountId: senderAccountId,
+        status: "RESERVED",
+        messageId: null,
+      },
+      data: {
+        status: "RECORDED",
+        providerMessageId: args.receipt.providerMessageId,
+        providerThreadId: args.receipt.providerThreadId,
+        localThreadId,
+        messageId: localMessageId,
+      },
+    });
+    if (recordedReservation.count !== 1) throw new SupplyPersistenceError("The sender reservation was already finalized or changed.", "conflict");
     const evidenceKey = `supplier_quote_release:${quoteCycle.id}:${releaseHash}`;
     const existingEvidence = await tx.supplyEvidence.findUnique({
       where: { workspaceId_evidenceKey: { workspaceId: args.workspaceId, evidenceKey } },
@@ -564,9 +608,37 @@ export async function sendSupplierEmailAction(args: { context: SupplyAccessConte
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier email delivery changed concurrently. Reload before sending.");
   if (claimed.alreadySent) return claimed.alreadySent;
   const message = record(claimed.input?.message);
+  const senderAccountId = requiredText(message.senderAccountId, "Sender account", 220);
+  const senderEmail = singleEmail(message.senderEmail, "Approved sender email");
+  const recipient = singleEmail(message.recipient, "Supplier recipient");
+  const subject = requiredText(message.subject, "Email subject", 180);
+  const body = messageBody(message.body);
+  const reservation = await reserveEmailSender({
+    officeId: args.context.officeId,
+    accountId: senderAccountId,
+    idempotencyKey: supplierSenderReservationKey(args.actionId, claimed.rfcMessageId!),
+    requestHash: digest({ senderAccountId, senderEmail, recipient, subject, body }),
+  });
   const provider = args.provider ?? gmailSupplierEmailProvider;
-  const receipt = await provider.send({ officeId: args.context.officeId, accountId: requiredText(message.senderAccountId, "Sender account", 220), senderEmail: singleEmail(message.senderEmail, "Approved sender email"), recipient: singleEmail(message.recipient, "Supplier recipient"), subject: requiredText(message.subject, "Email subject", 180), body: messageBody(message.body), rfcMessageId: claimed.rfcMessageId! });
-  if (receipt.state === "SENT") return finalizeSent({ context: args.context, workspaceId: workspace.id, actionId: args.actionId, receipt, rfcMessageId: claimed.rfcMessageId! });
+  const receipt: SupplierEmailSendResult = "ok" in reservation
+    ? await provider.send({ officeId: args.context.officeId, accountId: senderAccountId, senderEmail, recipient, subject, body, rfcMessageId: claimed.rfcMessageId! })
+    : { state: "REJECTED", error: reservation.error };
+  if (receipt.state === "SENT") {
+    if (!("ok" in reservation)) {
+      throw new SupplyPersistenceError("Sender-pool delivery state is inconsistent.", "conflict");
+    }
+    return finalizeSent({
+      context: args.context,
+      workspaceId: workspace.id,
+      actionId: args.actionId,
+      receipt,
+      rfcMessageId: claimed.rfcMessageId!,
+      senderReservationId: reservation.reservationId,
+    });
+  }
+  if (receipt.state === "REJECTED" && "ok" in reservation) {
+    await releaseEmailSenderReservation({ officeId: args.context.officeId, reservationId: reservation.reservationId });
+  }
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const actionLookup = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: workspace.id }, select: { parentTaskId: true, input: true } });
     if (!actionLookup?.parentTaskId) throw new SupplyPersistenceError("Supplier email action was not found.", "not_found");
@@ -594,15 +666,64 @@ export async function sendSupplierEmailAction(args: { context: SupplyAccessConte
 export async function reconcileSupplierEmailAction(args: { context: SupplyAccessContext; actionId: string; provider?: SupplierEmailProvider }) {
   const accessContext = await currentAccessContext(args.context);
   const workspace = await sourcingWorkspaceForTask(accessContext, args.actionId, "edit", [SUPPLIER_EMAIL_ACTION_TASK_TYPE]);
-  const action = await prisma.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE, status: { in: ["READY", "RUNNING", "BLOCKED"] } }, select: communicationTaskSelect });
-  if (!action) throw new SupplyPersistenceError("An unresolved supplier email action was not found.", "not_found");
-  const result = record(action.result);
-  if (!["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"].includes(String(result.state))) throw new SupplyPersistenceError("This supplier email does not need reconciliation.", "conflict");
+  const reconciliationToken = randomUUID();
+  const claimed = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "SupplyExecutionTask" WHERE "id" = ${args.actionId} AND "officeId" = ${args.context.officeId} AND "workspaceId" = ${workspace.id} FOR UPDATE`);
+    const action = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE, status: { in: ["READY", "RUNNING", "BLOCKED"] } }, select: communicationTaskSelect });
+    if (!action) throw new SupplyPersistenceError("An unresolved supplier email action was not found.", "not_found");
+    const result = record(action.result);
+    const now = new Date();
+    const reconcilableStates = ["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"];
+    let previousState = String(result.state);
+    if (result.state === "RECONCILING") {
+      const startedAt = new Date(typeof result.reconciliationStartedAt === "string" ? result.reconciliationStartedAt : action.updatedAt).getTime();
+      if (!Number.isFinite(startedAt) || now.getTime() - startedAt < SUPPLIER_EMAIL_RECONCILIATION_LEASE_MS) {
+        throw new SupplyPersistenceError("Supplier email reconciliation is already running.", "conflict");
+      }
+      previousState = String(result.previousState);
+    }
+    if (!reconcilableStates.includes(previousState)) throw new SupplyPersistenceError("This supplier email does not need reconciliation.", "conflict");
+    const previousResult: Record<string, unknown> = { ...result, state: previousState };
+    const nextResult = { ...result, previousState, state: "RECONCILING", reconciliationToken, reconciliationStartedAt: now.toISOString() };
+    const updated = await tx.supplyExecutionTask.update({ where: { id: action.id }, data: { result: inputJson(nextResult), resultHash: digest(nextResult) }, select: communicationTaskSelect });
+    return { action: updated, previousResult };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "Supplier email reconciliation changed concurrently. Reload and retry.");
+  const action = claimed.action;
   const message = record(record(action.input).message);
-  const rfcMessageId = requiredText(result.rfcMessageId, "Supplier email message ID", 500);
+  const rfcMessageId = requiredText(claimed.previousResult.rfcMessageId, "Supplier email message ID", 500);
   const provider = args.provider ?? gmailSupplierEmailProvider;
-  const receipt = await provider.reconcile({ officeId: args.context.officeId, accountId: requiredText(message.senderAccountId, "Sender account", 220), senderEmail: singleEmail(message.senderEmail, "Approved sender email"), rfcMessageId });
-  if (receipt.state === "SENT") return finalizeSent({ context: args.context, workspaceId: workspace.id, actionId: action.id, receipt, rfcMessageId });
+  const senderAccountId = requiredText(message.senderAccountId, "Sender account", 220);
+  const senderEmail = singleEmail(message.senderEmail, "Approved sender email");
+  let receipt;
+  try {
+    receipt = await provider.reconcile({ officeId: args.context.officeId, accountId: senderAccountId, senderEmail, rfcMessageId });
+  } catch (error) {
+    receipt = { state: "UNKNOWN" as const, error: error instanceof Error ? error.message : "Gmail reconciliation failed." };
+  }
+  if (receipt.state === "SENT") {
+    const idempotencyKey = supplierSenderReservationKey(action.id, rfcMessageId);
+    const existingReservation = await prisma.emailSenderReservation.findUnique({
+      where: { officeId_idempotencyKey: { officeId: args.context.officeId, idempotencyKey } },
+      select: { id: true },
+    });
+    const reserved = existingReservation ?? await reserveEmailSender({
+      officeId: args.context.officeId,
+      accountId: senderAccountId,
+      idempotencyKey,
+      requestHash: digest({
+        senderAccountId,
+        senderEmail,
+        recipient: singleEmail(message.recipient, "Supplier recipient"),
+        subject: requiredText(message.subject, "Email subject", 180),
+        body: messageBody(message.body),
+      }),
+    });
+    if (!("id" in reserved) && !("ok" in reserved)) {
+      throw new SupplyPersistenceError(reserved.error, "conflict");
+    }
+    const senderReservationId = "id" in reserved ? reserved.id : reserved.reservationId;
+    return finalizeSent({ context: args.context, workspaceId: workspace.id, actionId: action.id, receipt, rfcMessageId, senderReservationId, reconciliationToken });
+  }
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const draftId = requiredText(record(action.input).draftId, "Supplier email draft ID", 220);
     if (!action.parentTaskId) throw new SupplyPersistenceError("Supplier email action parent was not found.", "conflict");
@@ -612,10 +733,12 @@ export async function reconcileSupplierEmailAction(args: { context: SupplyAccess
     if (!current) throw new SupplyPersistenceError("Supplier email delivery changed concurrently.", "conflict");
     const currentResult = record(current.result);
     if (current.status === "SUCCEEDED" && currentResult.state === "SENT") return current;
-    if (currentResult.rfcMessageId !== rfcMessageId) throw new SupplyPersistenceError("Supplier email delivery changed concurrently.", "conflict");
-    if (!["SENDING", "DELIVERY_UNKNOWN", "NOT_FOUND_REVIEW_REQUIRED"].includes(String(currentResult.state))) return current;
+    if (currentResult.rfcMessageId !== rfcMessageId || currentResult.state !== "RECONCILING" || currentResult.reconciliationToken !== reconciliationToken) {
+      throw new SupplyPersistenceError("Supplier email delivery changed concurrently.", "conflict");
+    }
     const now = new Date();
-    const nextResult = { ...currentResult, state: receipt.state === "NOT_FOUND" ? "NOT_FOUND_REVIEW_REQUIRED" : "DELIVERY_UNKNOWN", error: receipt.error ?? null, lastCheckedAt: now.toISOString() };
+    const { reconciliationToken: _reconciliationToken, reconciliationStartedAt: _reconciliationStartedAt, previousState: _previousState, ...resultWithoutClaim } = currentResult;
+    const nextResult = { ...resultWithoutClaim, state: receipt.state === "NOT_FOUND" ? "NOT_FOUND_REVIEW_REQUIRED" : "DELIVERY_UNKNOWN", error: receipt.error ?? null, lastCheckedAt: now.toISOString() };
     if (current.status === "READY") {
       await tx.supplyExecutionTask.update({ where: { id: current.id }, data: { status: "RUNNING", startedAt: now } });
       await tx.supplyExecutionTask.update({ where: { id: draftId }, data: { status: "RUNNING", startedAt: now } });
@@ -642,6 +765,15 @@ export async function resetSupplierEmailForRetry(args: { context: SupplyAccessCo
     const action = await tx.supplyExecutionTask.findFirst({ where: { id: args.actionId, officeId: args.context.officeId, workspaceId: workspace.id, taskType: SUPPLIER_EMAIL_ACTION_TASK_TYPE, status: "RUNNING" }, select: communicationTaskSelect });
     if (!action || record(action.result).state !== "NOT_FOUND_REVIEW_REQUIRED") throw new SupplyPersistenceError("A supplier email awaiting non-delivery review was not found.", "conflict");
     const now = new Date();
+    const rfcMessageId = requiredText(record(action.result).rfcMessageId, "Supplier email message ID", 500);
+    await tx.emailSenderReservation.updateMany({
+      where: {
+        officeId: args.context.officeId,
+        idempotencyKey: supplierSenderReservationKey(action.id, rfcMessageId),
+        status: "RESERVED",
+      },
+      data: { status: "RELEASED" },
+    });
     const result = { ...record(action.result), state: "RETRY_READY", recovery: { confirmedNotSent: true, note, confirmedByUserId: args.context.userId, confirmedAt: now.toISOString() } };
     const updated = await tx.supplyExecutionTask.update({ where: { id: action.id }, data: { result: inputJson(result), resultHash: digest(result), error: Prisma.DbNull }, select: communicationTaskSelect });
     await appendEvent({ tx, taskId: action.id, officeId: args.context.officeId, workspaceId: workspace.id, actorUserId: args.context.userId, eventType: "SUPPLIER_EMAIL_RETRY_ENABLED", status: "READY", message: "An operator confirmed non-delivery and enabled one new send attempt.", payload: inputJson(result.recovery) });

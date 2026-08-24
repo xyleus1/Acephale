@@ -5,7 +5,7 @@ export const CONNECTED_GMAIL_ACCOUNT_FILTER = {
   OR: [
     {
       provider: "GMAIL",
-      OR: [{ accessToken: { not: null } }, { refreshToken: { not: null } }],
+      refreshToken: { not: null },
     },
     {
       provider: GMAIL_APP_PASSWORD_PROVIDER,

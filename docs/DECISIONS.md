@@ -16,6 +16,43 @@ Use this log for durable product and engineering decisions. Do not put every imp
 
 ## Log
 
+### 2026-08-24 - Derya protects new supplier inquiry sends with an office sender pool
+
+- Status: accepted, extends the 2026-08-22 Derya email ownership decision
+- Owner: product and engineering
+- Context: A flat enabled-sender list gives operators no daily usage signal and
+  lets campaign workers repeatedly choose one mailbox. Row-level default,
+  sync, pause, and sender buttons also turn a simple pool policy into 80 or more
+  controls when an Office connects 20 mailboxes.
+- Decision: Every active connected Gmail sender has a configurable daily pooled
+  send limit from 1 through 30, with 30 as the default and hard maximum. New
+  supplier inquiry forms order eligible mailboxes by utilization, including
+  in-flight reservations, then raw usage, then a stable email and ID tie-break.
+  The operator may override the suggested sender before approval. Delivery
+  reserves the exact approved mailbox and refuses the send when that mailbox is
+  full. Derya never changes the sender after approval.
+- Concurrency boundary: Office-scoped advisory locking serializes allocation.
+  A tenant-bound idempotency key is also bound to a SHA-256 hash of the exact
+  sender, recipient, subject, and body. A changed request cannot reuse an old
+  delivery result. Definite rejection releases capacity. An uncertain delivery
+  remains reserved until reconciliation or a human-confirmed non-delivery.
+- Conversation boundary: Automatic allocation applies only to new pooled
+  outbound messages. Replies remain on the mailbox and thread that received the
+  conversation. Reply messages count in the usage shown for that mailbox, but
+  the pool limit does not suppress a necessary thread-bound reply.
+- UI boundary: Connected emails shows one pool switch per active mailbox,
+  multi-select bulk enable or disable, bulk limit updates, and today's sent
+  count against the limit. Default sender, manual sync, and pause are removed
+  from each active row. Monitoring remains independent of pool participation.
+- Campaign boundary: Bourne still owns recipient choice, content, scheduling,
+  approval, and campaign progress. No browser-facing bulk-send endpoint or
+  text-triggered campaign send is added.
+- Consequences: New RFQ drafts naturally spread across the least-used connected
+  accounts, while the send-time guard prevents any approved account from
+  exceeding its configured allocation ceiling under concurrent workers.
+  Existing approved messages keep their bound sender, and no mailbox credential
+  leaves Derya.
+
 ### 2026-08-23 - Active Sourcing may send one confirmed reply per inbound message
 
 - Status: accepted, supersedes the draft-only and no-send clauses in the

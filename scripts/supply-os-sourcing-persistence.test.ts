@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
+import { reserveEmailSender } from "../src/lib/email-sender-pool";
 import { createSupplyWorkspace, listSupplyWorkspaces, type SupplyAccessContext } from "../src/lib/supply-os/persistence";
 import {
   decidePurchaseActionApproval,
@@ -1330,6 +1331,7 @@ async function main() {
         email: `orders-${suffix}@example.test`,
         provider: "GMAIL",
         accessToken: "test-only-order-token",
+        refreshToken: "test-only-order-refresh-token",
         sendEnabled: true,
       },
     });
@@ -1577,7 +1579,9 @@ async function main() {
         email: `buyer-${suffix}@example.test`,
         provider: "GMAIL",
         accessToken: "test-only-token",
+        refreshToken: "test-only-refresh-token",
         sendEnabled: true,
+        dailySendLimit: 1,
       },
     });
     const qualifiedEmailCase = await prisma.supplyExecutionTask.findUniqueOrThrow({ where: { id: returnedCase.id }, select: { result: true } });
@@ -1826,7 +1830,36 @@ async function main() {
         where: { id: approvedEmail.draft.id },
         data: { status: "READY", result: approvedDraftResult as object, resultHash: jsonDigest(approvedDraftResult), completedAt: null, startedAt: null },
       });
+      await tx.emailSenderReservation.deleteMany({
+        where: {
+          officeId: context.officeId,
+          idempotencyKey: `supplier-quote:${approvedEmail.action.id}:${sendingResult.rfcMessageId}`,
+        },
+      });
     });
+    let rejectedProviderSendCount = 0;
+    const rejectedProvider: SupplierEmailProvider = {
+      async send() {
+        rejectedProviderSendCount += 1;
+        return { state: "REJECTED", error: "Gmail rejected the request before accepting it." };
+      },
+      async reconcile() {
+        throw new Error("Reconciliation should not run after a definite provider rejection.");
+      },
+    };
+    const rejectedEmail = await sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: rejectedProvider });
+    assert.equal((rejectedEmail.result as { state: string }).state, "SEND_FAILED");
+    assert.equal(rejectedProviderSendCount, 1);
+    const rejectedRfcMessageId = (rejectedEmail.result as { rfcMessageId: string }).rfcMessageId;
+    const releasedReservation = await prisma.emailSenderReservation.findUniqueOrThrow({
+      where: {
+        officeId_idempotencyKey: {
+          officeId: context.officeId,
+          idempotencyKey: `supplier-quote:${approvedEmail.action.id}:${rejectedRfcMessageId}`,
+        },
+      },
+    });
+    assert.equal(releasedReservation.status, "RELEASED", "a definite provider rejection must release the sender capacity for a safe retry");
     let uncertainSendCount = 0;
     let releaseProviderSend: (() => void) | null = null;
     let markProviderStarted: (() => void) | null = null;
@@ -1881,6 +1914,48 @@ async function main() {
     assert.equal(uncertainSendCount, 1);
     const notFoundEmail = await reconcileSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider });
     assert.equal((notFoundEmail.result as { state: string }).state, "NOT_FOUND_REVIEW_REQUIRED");
+    let releaseReviewReconcile: (() => void) | null = null;
+    let markReviewReconcileStarted: (() => void) | null = null;
+    const reviewReconcileStarted = new Promise<void>((resolve) => { markReviewReconcileStarted = resolve; });
+    const reviewReconcileRelease = new Promise<void>((resolve) => { releaseReviewReconcile = resolve; });
+    const reviewRaceProvider: SupplierEmailProvider = {
+      async send() {
+        throw new Error("Send is not used by the reconciliation claim race test.");
+      },
+      async reconcile() {
+        markReviewReconcileStarted?.();
+        await reviewReconcileRelease;
+        return { state: "NOT_FOUND" };
+      },
+    };
+    const reviewReconciliation = reconcileSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: reviewRaceProvider });
+    await reviewReconcileStarted;
+    await assert.rejects(() => resetSupplierEmailForRetry({
+      context: managerContext,
+      actionId: approvedEmail.action.id,
+      input: { confirmedNotSent: true, note: "Verified the message was absent while reconciliation was still running." },
+    }), /awaiting non-delivery review/i, "a reset must not race an in-flight reconciliation");
+    await assert.rejects(
+      () => sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider }),
+      /reconcile/i,
+      "a send retry must not race an in-flight reconciliation",
+    );
+    releaseReviewReconcile?.();
+    const reviewedNotFoundEmail = await reviewReconciliation;
+    assert.equal((reviewedNotFoundEmail.result as { state: string }).state, "NOT_FOUND_REVIEW_REQUIRED");
+    const abandonedReconciliation = {
+      ...(reviewedNotFoundEmail.result as Record<string, unknown>),
+      previousState: "NOT_FOUND_REVIEW_REQUIRED",
+      state: "RECONCILING",
+      reconciliationToken: "abandoned-reconciliation-claim",
+      reconciliationStartedAt: new Date(Date.now() - 10 * 60 * 1_000).toISOString(),
+    };
+    await prisma.supplyExecutionTask.update({
+      where: { id: approvedEmail.action.id },
+      data: { result: abandonedReconciliation, resultHash: jsonDigest(abandonedReconciliation) },
+    });
+    const recoveredReconciliation = await reconcileSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: uncertainProvider });
+    assert.equal((recoveredReconciliation.result as { state: string }).state, "NOT_FOUND_REVIEW_REQUIRED", "an abandoned reconciliation claim must become recoverable after its lease expires");
     await assert.rejects(() => reviewProcurementGate({
       context,
       caseId: returnedCase.id,
@@ -1919,7 +1994,7 @@ async function main() {
     };
     const sentEmail = await sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: sentProvider });
     assert.equal(sentEmail.status, "SUCCEEDED");
-    assert.match(retriedMessageId, /-2@derya\.ai>$/, "a reviewed retry must use a new stable message ID");
+    assert.match(retriedMessageId, /-3@derya\.ai>$/, "each rejected or reviewed retry must use a new stable message ID");
     assert.equal(providerSendCount, 1);
     await sendSupplierEmailAction({ context, actionId: approvedEmail.action.id, provider: sentProvider });
     assert.equal(providerSendCount, 1, "an identical send retry must not call Gmail twice");
@@ -1939,6 +2014,27 @@ async function main() {
     const connectedEvidence = await prisma.supplyEvidence.findFirstOrThrow({ where: { executionTaskId: retryQuoteDraft.quoteCycle.id, sourceType: "CONNECTED_PROVIDER" } });
     assert.equal(connectedEvidence.sourceRecordId, "gmail-test-message");
     assert.equal(await prisma.emailMessage.count({ where: { gmailMessageId: "gmail-test-message", thread: { officeId: context.officeId } } }), 1);
+    const recordedSenderReservation = await prisma.emailSenderReservation.findFirstOrThrow({
+      where: {
+        officeId: context.officeId,
+        accountId: senderAccount.id,
+        status: "RECORDED",
+        providerMessageId: "gmail-test-message",
+      },
+    });
+    const recordedSenderMessage = await prisma.emailMessage.findFirstOrThrow({
+      where: { gmailMessageId: "gmail-test-message", thread: { officeId: context.officeId } },
+      select: { id: true, officeId: true },
+    });
+    assert.equal(recordedSenderReservation.messageId, recordedSenderMessage.id, "the real supplier quote send must consume and link one sender-pool reservation");
+    assert.equal(recordedSenderMessage.officeId, context.officeId, "the counted sender message must remain office-scoped");
+    const fullApprovedSender = await reserveEmailSender({
+      officeId: context.officeId,
+      accountId: senderAccount.id,
+      idempotencyKey: `supplier-pool-cap-${suffix}`,
+      requestHash: jsonDigest({ test: "supplier pool cap" }),
+    });
+    assert.equal("code" in fullApprovedSender ? fullApprovedSender.code : null, "POOL_EXHAUSTED", "an approved sender at its limit must not send another new supplier inquiry");
     const sentResult = sentEmail.result as { localThreadId: string; sentAt: string };
     const supplierReply = await prisma.emailMessage.create({
       data: {

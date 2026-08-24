@@ -2,6 +2,44 @@
 
 ## Latest Update
 
+### Connected email sender pool controls
+
+- Connected emails replaces the row-level default, sync, pause, and sender
+  buttons with one pool switch per active mailbox. Operators can select one or
+  many accounts, turn pool participation on or off, and set the selected daily
+  limit from 1 through the hard maximum of 30.
+- Every row shows today's actual outbound count against its limit. The summary
+  shows today's total against enabled pool capacity. Monitoring stays active
+  when pooled sending is off.
+- New supplier inquiry forms receive sender accounts in least-used order. The
+  operator can override that default before approval. Delivery then reserves
+  the exact approved mailbox and refuses the send if that mailbox is at its
+  daily limit. The system never swaps the sender after approval.
+- Reservations are tenant-bound, request-bound, and idempotent. The resulting
+  local outbound message links back to its reservation. Definite provider
+  failures release capacity; an unresolved attempt stays reserved rather than
+  risking another send. Office-scoped locking protects concurrent sends.
+- Replies stay on their original mailbox and do not use the new-message
+  allocator. Bourne still owns campaign recipients, content, approval,
+  schedule, retry, and progress.
+
+Verification completed before release:
+
+- Sender-pool policy, UI, settings, Gmail app-password, migration workflow, and
+  product-copy contracts
+- TypeScript
+- Complete migration chain with the restricted application role present,
+  read-only migration verification, concurrent allocation, hard-limit,
+  idempotency, release, and cross-office rejection on disposable PostgreSQL
+- Full Supplier Quote persistence and provider tests, including provider
+  rejection, reconciliation claiming, reset races, exact-sender capacity, and
+  successful message-to-reservation recording
+- Production build. The only warnings are the existing logistics CSS
+  autoprefixer warnings.
+- Schema PR #251 merged at `debd20bd0ff42759d18383d524979c70c8b1c207`.
+  Protected production migration run `32701689699` applied and verified
+  `20260823000200_email_sender_pool` against the pinned Neon target.
+
 ### Black brand marks and reliable demo mailbox lookup
 
 - The shared Derya logo and generated app favicon now render the mark in black.
