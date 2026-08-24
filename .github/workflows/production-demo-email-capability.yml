@@ -442,3 +442,58 @@ jobs:
           GROUP BY event."eventType", event.status
           ORDER BY event."eventType", event.status;
           SQL
+
+          echo "delivery_visibility_now:"
+          psql "$WORKFLOW_DATABASE_OWNER_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --field-separator='|' \
+            --set=job_id="$INSPECTION_JOB_ID" \
+            --file=- <<'SQL'
+          WITH demo_task AS (
+            SELECT payload #>> '{result,executionTaskId}' AS task_id
+            FROM "BackgroundJob"
+            WHERE id = :'job_id'
+              AND type = 'DEMO_EMAIL_CAPABILITY_TEST'
+          ), acknowledged AS (
+            SELECT
+              event."officeId",
+              event."idempotencyKey",
+              event.payload
+            FROM "SupplyExecutionEvent" AS event
+            JOIN demo_task ON demo_task.task_id = event."executionTaskId"
+            WHERE event."eventType" = 'DEMO_EMAIL_DELIVERY_ACKNOWLEDGED'
+          )
+          SELECT
+            split_part(acknowledged."idempotencyKey", ':', 3),
+            acknowledged.payload->>'stage',
+            coalesce(nullif(sender."displayName", ''), 'Connected mailbox'),
+            coalesce(nullif(receiver."displayName", ''), 'Connected mailbox'),
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                FROM "EmailMessage" AS message
+                JOIN "EmailThread" AS thread ON thread.id = message."threadId"
+                WHERE thread."officeId" = acknowledged."officeId"
+                  AND message."accountId" = acknowledged.payload->>'receiverAccountId'
+                  AND message.direction = 'INBOUND'
+                  AND message."rfcMessageId" = ANY (ARRAY[
+                    acknowledged.payload->>'intendedMessageId',
+                    acknowledged.payload->>'providerMessageId'
+                  ])
+              ) THEN 'OBSERVED_NOW'
+              ELSE 'NOT_OBSERVED_NOW'
+            END
+          FROM acknowledged
+          LEFT JOIN "EmailAccount" AS sender
+            ON sender.id = acknowledged.payload->>'senderAccountId'
+           AND sender."officeId" = acknowledged."officeId"
+          LEFT JOIN "EmailAccount" AS receiver
+            ON receiver.id = acknowledged.payload->>'receiverAccountId'
+           AND receiver."officeId" = acknowledged."officeId"
+          ORDER BY
+            split_part(acknowledged."idempotencyKey", ':', 3)::integer,
+            acknowledged.payload->>'stage';
+          SQL
