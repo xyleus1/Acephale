@@ -10306,5 +10306,11 @@ Verification caveat:
   mailbox within 10 checks, so that conversation did not send a reply.
 - The stored result is one passed and three failed conversations. No purchase,
   shipment, or spend was created or authorized. No second send run was started;
-  the remaining blocker is reliable IMAP observation latency or correlation
+  the remaining blocker is Gmail folder scope or exact Message-ID correlation
   for the three failed mailbox observations.
+- A later read-only reconciliation checked every SMTP-acknowledged Message-ID
+  against current recipient-side inbound records. The same Paul reply stages
+  and Marlowe-to-Claire initial stage were still absent about 28 minutes later.
+  A longer timeout alone is not a valid fix. Before another live send, inspect
+  the targeted messages across Gmail special-use All Mail and Junk folders and
+  verify the persisted Message-ID shape.

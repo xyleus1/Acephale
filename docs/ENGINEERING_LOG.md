@@ -6751,5 +6751,8 @@ Use this file for chronological implementation notes that future agents should s
   mailbox. The Marlowe Cole initial message was not observed by Claire Johnson.
   The stored aggregate was one passed and three failed conversations.
 - No purchase, shipment, or spend action occurred. No new send was attempted
-  after the partial result. Follow-up must diagnose IMAP observation latency or
-  correlation against the acknowledged deliveries before another live run.
+  after the partial result. A read-only reconciliation about 28 minutes later
+  still found the same three recipient-side inbound records absent. Follow-up
+  must inspect Gmail special-use All Mail and Junk folders and verify exact
+  Message-ID correlation before another live run; increasing the timeout alone
+  is not supported by the evidence.
