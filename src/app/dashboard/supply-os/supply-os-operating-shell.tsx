@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  Building2,
   FlaskConical,
   PanelLeftClose,
   PanelLeftOpen,
@@ -11,6 +12,7 @@ import {
 import { motion, MotionConfig } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogoMark } from "@/components/logo-mark";
+import type { SwitchableOffice } from "@/lib/office-switch";
 import { SupplyOsCompanyIndex } from "./supply-os-company-index";
 import { SupplyOsDashboardWorkspace } from "./supply-os-dashboard";
 import type { SupplyOsWorkspaceSelection } from "./supply-os-shared-workspace";
@@ -22,6 +24,8 @@ type PanelDefinition = {
   shortLabel: string;
   inactive?: boolean;
 };
+
+type OfficeSwitchAction = (formData: FormData) => void | Promise<void>;
 
 const PANELS: PanelDefinition[] = [
   { id: "materials", shortLabel: "Inventory & sourcing" },
@@ -46,6 +50,8 @@ export function SupplyOsOperatingShell({
   contextEnabled,
   allowedWorkspaceIds,
   previewMode = false,
+  switchableOffices,
+  switchOfficeAction,
 }: {
   storageScope: string;
   accountRole: string;
@@ -57,6 +63,8 @@ export function SupplyOsOperatingShell({
   contextEnabled: boolean;
   allowedWorkspaceIds?: string[];
   previewMode?: boolean;
+  switchableOffices?: SwitchableOffice[];
+  switchOfficeAction?: OfficeSwitchAction;
 }) {
   const settingsLabel = `${accountRole.slice(0, 1)}${accountRole.slice(1).toLowerCase()} settings`;
   const [activePanel, setActivePanel] = useState<SupplyOsPanel>(() => normalizeSupplyOsPanel(initialPanel));
@@ -207,6 +215,26 @@ export function SupplyOsOperatingShell({
                   <FlaskConical size={18} aria-hidden="true" />
                   <span>Research</span>
                 </a>
+                {switchableOffices && switchableOffices.length > 1 && switchOfficeAction ? (
+                  <form action={switchOfficeAction} className={styles.officeSwitcher}>
+                    <label className={styles.sidebarUtility}>
+                      <Building2 size={18} aria-hidden="true" />
+                      <span>Office</span>
+                      <select
+                        name="officeId"
+                        defaultValue={switchableOffices.find((office) => office.isCurrent)?.officeId}
+                        aria-label="Office"
+                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                      >
+                        {switchableOffices.map((office) => (
+                          <option key={office.officeId} value={office.officeId}>
+                            {office.officeName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </form>
+                ) : null}
               </>
             )}
             <a

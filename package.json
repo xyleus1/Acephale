@@ -43,6 +43,7 @@
     "test:supply-os-sourcing-projection": "node --import tsx scripts/supply-os-sourcing-projection.test.ts",
     "test:supply-os-atlas-sourcing": "node --import tsx scripts/supply-os-atlas-sourcing.test.ts",
     "test:leadgen": "tsx scripts/leadgen.test.ts",
+    "test:office-switch": "tsx scripts/office-switch.test.ts",
     "test:procurement-bulk-rfq": "NODE_OPTIONS='--conditions=react-server' node --import tsx scripts/procurement-bulk-rfq.test.ts",
     "test:research-lists": "NODE_OPTIONS='--conditions=react-server' tsx scripts/research-lists.test.ts",
     "leadgen": "tsx scripts/leadgen-run.ts",

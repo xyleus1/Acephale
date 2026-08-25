@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { listSwitchableOffices } from "@/lib/office-switch";
 import { SupplyOsOperatingShell } from "./supply-os-operating-shell";
+import { switchOfficeAction } from "./actions";
 import styles from "./supply-os-logistics.module.css";
 
 export const metadata: Metadata = {
@@ -32,6 +34,12 @@ export default async function SupplyOsPage({
       })
     : null;
   const previewMode = Boolean(previewWorkspace);
+  const canSwitchOffice = !previewMode
+    && session.accessKind !== "customer"
+    && session.role !== "CUSTOMER";
+  const switchableOffices = canSwitchOffice
+    ? await listSwitchableOffices(session)
+    : [];
   const allowedWorkspaceIds = isCustomer
     ? session.restrictedWorkspaceIds
     : previewWorkspace ? [previewWorkspace.id] : undefined;
@@ -56,6 +64,8 @@ export default async function SupplyOsPage({
         contextEnabled={contextEnabled}
         allowedWorkspaceIds={allowedWorkspaceIds}
         previewMode={previewMode}
+        switchableOffices={switchableOffices.length > 1 ? switchableOffices : undefined}
+        switchOfficeAction={switchableOffices.length > 1 ? switchOfficeAction : undefined}
       />
     </div>
   );

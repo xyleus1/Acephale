@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, hashPassword } from "@/lib/password";
-import { isLoginEmailAllowed } from "@/lib/login-code";
+import { isLoginEmailAllowed, normalizeLoginEmail } from "@/lib/login-code";
 
 const SESSION_COOKIE = "crm_session";
 const ONE_DAY = 60 * 60 * 24;
@@ -88,6 +88,16 @@ async function issueSessionCookie(user: {
   });
 }
 
+export async function issueOperatorSessionForUser(user: {
+  id: string;
+  email: string;
+  officeId: string;
+  role: string;
+  canViewWholeOffice: boolean;
+}) {
+  await issueSessionCookie({ ...user, accessKind: "operator" });
+}
+
 export async function issueCustomerAppSession(input: {
   internalUserId: string;
   portalUserId: string;
@@ -108,11 +118,13 @@ export async function issueCustomerAppSession(input: {
 }
 
 export async function loginWithCredentials(email: string, password: string) {
+  const normalizedEmail = normalizeLoginEmail(email);
   // Internal deployment: every sign-in path is allowlist-gated.
-  if (!isLoginEmailAllowed(email)) return null;
+  if (!isLoginEmailAllowed(normalizedEmail)) return null;
 
   const users = await prisma.user.findMany({
-    where: { email, isActive: true },
+    where: { email: normalizedEmail, isActive: true },
+    orderBy: [{ office: { createdAt: "asc" } }, { createdAt: "asc" }],
     select: { id: true, email: true, officeId: true, role: true, passwordHash: true, canViewWholeOffice: true }
   });
 
@@ -146,10 +158,12 @@ export async function loginWithCredentials(email: string, password: string) {
 // Completes an email-code login. The caller must have verified the code via
 // verifyLoginCode first; this only turns a proven email into a session.
 export async function loginWithVerifiedEmail(email: string) {
-  if (!isLoginEmailAllowed(email)) return null;
+  const normalizedEmail = normalizeLoginEmail(email);
+  if (!isLoginEmailAllowed(normalizedEmail)) return null;
 
   const user = await prisma.user.findFirst({
-    where: { email, isActive: true },
+    where: { email: normalizedEmail, isActive: true },
+    orderBy: [{ office: { createdAt: "asc" } }, { createdAt: "asc" }],
     select: { id: true, email: true, officeId: true, role: true, canViewWholeOffice: true },
   });
   if (!user) return null;

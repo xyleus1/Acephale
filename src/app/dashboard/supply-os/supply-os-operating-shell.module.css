@@ -213,6 +213,26 @@
   white-space: nowrap;
 }
 
+.officeSwitcher {
+  margin: 0;
+}
+
+.officeSwitcher .sidebarUtility {
+  cursor: default;
+}
+
+.officeSwitcher select {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 1px solid var(--os-line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  color: var(--os-ink);
+  background: var(--os-panel);
+  font: inherit;
+  font-size: 12px;
+}
+
 @media (min-width: 901px) {
   .shell[data-sidebar-collapsed="true"] {
     grid-template-columns: 84px minmax(0, 1fr);
@@ -285,6 +305,14 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+
+  .shell[data-sidebar-collapsed="true"] .officeSwitcher select {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 
 }
