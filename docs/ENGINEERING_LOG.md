@@ -218,3 +218,19 @@ KˆÜ˜ËØ\ÙÛØ˜[Ë˜ÜÜÈ
 - `localRfqOutreachByOrder` now runs a single scan for every listed order,
   without message bodies, and groups the rows by RFQ subject reference in
   memory. The single order helper reuses it.
+
+## 2026-08-25: RFQ outreach batch cap is per order
+
+- Review finding on the batched overlay: the single scan capped rows globally
+  and read oldest first, so one busy order could consume the whole cap and
+  later orders reported zero contacted suppliers even though their messages
+  existed.
+- `localRfqOutreachByOrder` now runs one raw query that partitions rows by the
+  RFQ subject token with `row_number()` and keeps the newest
+  `LOCAL_RFQ_BATCH_MESSAGES_PER_ORDER` rows per order, so every listed order
+  gets its own budget from a single query. Office scoping still comes from the
+  thread.
+- Verified with `npm run test:procurement-local-outreach`, the bulk RFQ
+  contract test, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and the
+  raw query executed against a development database to confirm the partition
+  keeps one row per order at a cap of one. No supplier message was sent.

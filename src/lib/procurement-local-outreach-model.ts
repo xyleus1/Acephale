@@ -6,7 +6,7 @@ import {
 } from "@/lib/procurement-conversation-model";
 
 export const LOCAL_RFQ_MESSAGE_LIMIT = 4_000;
-export const LOCAL_RFQ_BATCH_MESSAGE_LIMIT = 8_000;
+export const LOCAL_RFQ_BATCH_MESSAGES_PER_ORDER = 1_000;
 export const LOCAL_RFQ_BATCH_ORDER_LIMIT = 50;
 
 export type LocalRfqMessage = {
@@ -29,6 +29,10 @@ export type LocalRfqOutreach = {
   contactedEmails: string[];
   respondedEmails: string[];
 };
+
+export function rfqSubjectReferenceToken(orderId: string) {
+  return orderId.slice(0, 8).toLowerCase();
+}
 
 export function rfqSubjectReference(orderId: string) {
   return `[RFQ ${orderId.slice(0, 8)}]`;
@@ -78,10 +82,13 @@ export function summarizeLocalRfqOutreachByOrder(
   messages: LocalRfqMessage[],
   orderIds: string[],
 ): Map<string, LocalRfqOutreach> {
-  const referenceToOrder = new Map(orderIds.map((orderId) => [rfqSubjectReference(orderId), orderId]));
+  const referenceToOrder = new Map(orderIds.map((orderId) => [
+    rfqSubjectReference(orderId).toLowerCase(),
+    orderId,
+  ]));
   const grouped = new Map<string, LocalRfqMessage[]>();
   for (const message of messages) {
-    const subject = message.subject ?? "";
+    const subject = normalize(message.subject);
     for (const [reference, orderId] of referenceToOrder) {
       if (!subject.includes(reference)) continue;
       const bucket = grouped.get(orderId);

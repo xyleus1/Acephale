@@ -10653,3 +10653,6 @@ Verification caveat:
   workflow count.
 - The overlay is read-only and office-scoped. Bourne remains the only writer of
   workflow receipts, so no workflow write was added to make this work.
+- The list overlay loads every listed order in one query whose row cap is per
+  order (`row_number()` partitioned by the RFQ subject token), so a high volume
+  order cannot starve the rest of the list.

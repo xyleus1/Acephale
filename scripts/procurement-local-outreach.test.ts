@@ -4,6 +4,7 @@ import {
   overlayRequestOutreach,
   overlayVendorOutreach,
   rfqSubjectReference,
+  rfqSubjectReferenceToken,
   summarizeLocalRfqOutreach,
   summarizeLocalRfqOutreachByOrder,
   type LocalRfqMessage,
@@ -121,5 +122,14 @@ assert.equal(batched.get(otherOrderId)?.responded, 0);
 
 const missingOrder = summarizeLocalRfqOutreachByOrder([], [orderId]);
 assert.equal(missingOrder.get(orderId)?.contacted, 0, "an order with no local mail reports zero");
+
+
+assert.equal(rfqSubjectReferenceToken(orderId.toUpperCase()), "e3f6cacc");
+
+const mixedCase = summarizeLocalRfqOutreachByOrder(
+  [message({ subject: `RE: ${reference.toUpperCase()} quote`, fromEmail: "sales@fefl.com.my", direction: "INBOUND", toEmails: ["desk@derya.ai"] })],
+  [orderId],
+);
+assert.equal(mixedCase.get(orderId)?.responded, 1, "reference matching ignores subject case");
 
 console.log("procurement-local-outreach: all assertions passed");
