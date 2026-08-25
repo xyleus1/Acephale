@@ -37,16 +37,17 @@ assert.match(migration, /CREATE UNIQUE INDEX "EmailAccount_officeId_default_send
 assert.match(migration, /WHERE "isDefaultSender" = true/);
 
 assert.match(page, /requireEmailAccountAdminSession\(\)/);
-assert.match(page, /SettingsHeader active="channels"/);
+assert.match(page, /SettingsHeader\s+active="email"/);
 assert.match(page, /<EmailAccountControls/);
 assert.match(page, /<EmailSenderTest/);
-assert.match(integrations, /SettingsHeader active="integrations"/);
-assert.match(settingsHeader, /href="\/dashboard\/settings\/email"/);
+assert.match(integrations, /SettingsHeader\s+active="integrations"/);
+assert.match(settingsHeader, /href="\/dashboard\/settings\/log"/);
 assert.match(settingsHeader, /href="\/dashboard\/settings\/connected-emails"/);
 assert.match(settingsHeader, />\s*Connected emails\s*<\/a>/);
-assert.match(settingsHeader, />\s*Channels\s*<\/a>/);
+assert.match(settingsHeader, />\s*Log\s*<\/a>/);
+assert.doesNotMatch(settingsHeader, />\s*Channels\s*<\/a>/);
 assert.match(connectedEmailsPage, /requireEmailAccountAdminSession\(\)/);
-assert.match(connectedEmailsPage, /SettingsHeader active="connected-emails"/);
+assert.match(connectedEmailsPage, /SettingsHeader\s+active="connected-emails"/);
 assert.match(connectedEmailsPage, /<EmailRoundTripTest/);
 assert.match(connectedEmailsPage, /<GmailAppPasswordForm/);
 assert.match(connectedEmailsPage, /<GmailAppPasswordBulkForm/);
@@ -62,7 +63,8 @@ assert.match(roundTripTest, /"Check delivery"/);
 assert.match(roundTripTest, /"Check reply"/);
 assert.match(actions, /addGmailAppPasswordAccountsBulk/);
 assert.match(actions, /enableBulkEmailAccounts/);
-assert.match(actions, /Promise\.all\(encryptedRows\.map/);
+assert.match(actions, /BULK_CONNECT_CONCURRENCY = \d+/);
+assert.match(actions, /encryptedRows\.slice\(index, index \+ BULK_CONNECT_CONCURRENCY\)/);
 assert.match(actions, /sendEnabled: false/);
 const bulkUpdate = actions.match(/const account = current([\s\S]*?): await prisma\.emailAccount\.create/)?.[1] ?? "";
 assert.doesNotMatch(bulkUpdate, /sendEnabled: false|isDefaultSender: false/);
@@ -70,7 +72,7 @@ assert.match(actions, /id: ids\[0\],[\s\S]*provider: GMAIL_APP_PASSWORD_PROVIDER
 assert.match(bulkForm, /Connect batch/);
 assert.match(bulkForm, /Enable verified/);
 assert.match(bulkForm, /Derya configures the Gmail connection automatically/);
-assert.match(bulkParser, /MAX_BULK_GMAIL_ACCOUNTS = 10/);
+assert.match(bulkParser, /MAX_BULK_GMAIL_ACCOUNTS = 60/);
 
 const blockInput = `
 first@example.test
@@ -96,6 +98,25 @@ assert.deepEqual(parseGmailAppPasswordBulkInput("Display name,email,app password
   errors: [],
 });
 assert.match(parseGmailAppPasswordBulkInput("One,duplicate@example.test,aaaabbbbccccdddd\nTwo,duplicate@example.test,1111222233334444").errors.join(" "), /duplicate email address/);
+
+const mailboxExport = [
+  "mailbox\tdisplay_name\tdomain\tapp_password\tsmtp_host\tsmtp_port\tsent_total",
+  "clarissa@devtonic.co\tClarissa Perry\tdevtonic.co\tpkbyorzirlsllmml\tsmtp.gmail.com\t587\t158",
+  "sara@devtonic.co\tSara Hunt\tdevtonic.co\thfvxgmljvokxtcyl\tsmtp.gmail.com\t587\t159",
+].join("\n");
+assert.deepEqual(parseGmailAppPasswordBulkInput(mailboxExport), {
+  rows: [
+    { displayName: "Clarissa Perry", email: "clarissa@devtonic.co", appPassword: "pkbyorzirlsllmml" },
+    { displayName: "Sara Hunt", email: "sara@devtonic.co", appPassword: "hfvxgmljvokxtcyl" },
+  ],
+  errors: [],
+});
+assert.match(
+  parseGmailAppPasswordBulkInput(
+    ["mailbox\tdisplay_name\tapp_password", "broken@example.co\tBroken Sender\tshort"].join("\n"),
+  ).errors.join(" "),
+  /16-character Gmail app password/,
+);
 assert.match(emailSenderTest, /useEffect\(\(\) => \{/);
 assert.match(emailSenderTest, /accounts\.some\(\(account\) => account\.id === current\)/);
 assert.match(actions, /officeId: session\.officeId/);

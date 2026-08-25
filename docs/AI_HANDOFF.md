@@ -1,5 +1,23 @@
 # AI Handoff
 
+## 2026-08-25: Mailbox exports can be pasted straight into the sender pool
+
+- `parseGmailAppPasswordBulkInput` now detects a header row and maps columns by
+  name (`mailbox`, `display_name`, `app_password`, plus the usual aliases), so a
+  full operations export with domain, host, port, relay, volume, and bounce
+  columns can be pasted without editing. Extra columns are ignored. The old
+  positional CSV and multi line block formats are unchanged, and a paste whose
+  first line is a bare address still takes the block path.
+- One batch now accepts 60 mailboxes instead of 10, and the bulk action verifies
+  SMTP and IMAP in slices of `BULK_CONNECT_CONCURRENCY` instead of opening every
+  connection at once, so a large paste does not burst Gmail connections.
+- Sending stays off for every newly connected mailbox. "Enable verified" is
+  still a separate, explicit step, and the sender pool limits are unchanged.
+- Contract test: `npm run test:email-account-settings`. That test also had three
+  stale assertions from the Channels removal (nav link, active section, and
+  multi line `SettingsHeader` props); they now assert the Log nav entry and the
+  absence of Channels.
+
 ## 2026-08-25: Mail log moved into Settings, Channels tab deleted
 
 - `Settings > Log` (`/dashboard/settings/log`) is the mail log. Each line shows

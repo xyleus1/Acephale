@@ -59,13 +59,13 @@ export function GmailAppPasswordBulkForm({ encryptionConfigured }: { encryptionC
         <textarea
           name="accounts"
           required
-          rows={9}
+          rows={12}
           autoComplete="off"
           spellCheck={false}
           placeholder={"Display name, email, app password\nMarlowe Cole, marlowe@company.com, xxxx xxxx xxxx xxxx"}
         />
       </label>
-      <p className={styles.muted}>Paste CSV or the full multi-line account block. Derya configures the Gmail connection automatically. Up to 10 accounts per batch.</p>
+      <p className={styles.muted}>Paste CSV, a tab separated export with a header row, or the full multi-line account block. Extra columns are ignored. Derya configures the Gmail connection automatically. Up to 60 accounts per batch.</p>
       <div className={styles.bulkActions}>
         <button className="btn" type="submit" disabled={busy || !encryptionConfigured}>
           {busy ? "Connecting..." : "Connect batch"}

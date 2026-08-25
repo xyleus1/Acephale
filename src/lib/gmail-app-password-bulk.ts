@@ -1,4 +1,4 @@
-export const MAX_BULK_GMAIL_ACCOUNTS = 10;
+export const MAX_BULK_GMAIL_ACCOUNTS = 60;
 
 export type BulkGmailAccountInput = {
   displayName: string;
@@ -54,13 +54,47 @@ function parseAccountBlocks(input: string) {
   return rows;
 }
 
+const MAILBOX_HEADER = /^(mailbox|email|email[_\s-]?address|smtp[_\s-]?user)$/i;
+const DISPLAY_NAME_HEADER = /^(display[_\s-]?name|name|sender[_\s-]?name|from[_\s-]?name)$/i;
+const APP_PASSWORD_HEADER = /^(app[_\s-]?password|password|smtp[_\s-]?password)$/i;
+
+function splitCells(line: string) {
+  const delimiter = line.includes("\t") ? "\t" : line.includes("|") ? "|" : ",";
+  return line.split(delimiter).map((cell) => cell.trim());
+}
+
+function headerColumns(line: string) {
+  const cells = splitCells(line);
+  const mailbox = cells.findIndex((cell) => MAILBOX_HEADER.test(cell));
+  const appPassword = cells.findIndex((cell) => APP_PASSWORD_HEADER.test(cell));
+  if (mailbox < 0 || appPassword < 0) return null;
+  const displayName = cells.findIndex((cell) => DISPLAY_NAME_HEADER.test(cell));
+  return { mailbox, displayName, appPassword };
+}
+
+function parseHeaderRows(
+  input: string,
+  columns: { mailbox: number; displayName: number; appPassword: number },
+) {
+  const rows: BulkGmailAccountInput[] = [];
+  const lines = input.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines.slice(1)) {
+    const cells = splitCells(line);
+    rows.push({
+      displayName: cleanName(columns.displayName >= 0 ? cells[columns.displayName] ?? "" : ""),
+      email: String(cells[columns.mailbox] ?? "").trim().toLowerCase(),
+      appPassword: normalizePassword(cells[columns.appPassword] ?? ""),
+    });
+  }
+  return rows;
+}
+
 function parseDelimitedRows(input: string) {
   const rows: BulkGmailAccountInput[] = [];
   for (const rawLine of input.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
-    const delimiter = line.includes("\t") ? "\t" : line.includes("|") ? "|" : ",";
-    const cells = line.split(delimiter).map((cell) => cell.trim());
+    const cells = splitCells(line);
     if (cells.some((cell) => /^email$/i.test(cell)) && cells.some((cell) => /password/i.test(cell))) continue;
     if (cells.length < 3) {
       rows.push({ displayName: "", email: "", appPassword: "" });
@@ -81,11 +115,15 @@ function parseDelimitedRows(input: string) {
 export function parseGmailAppPasswordBulkInput(input: string) {
   const value = typeof input === "string" ? input.trim() : "";
   if (!value) return { rows: [] as BulkGmailAccountInput[], errors: ["Paste at least one account."] };
-  if (value.length > 30_000) return { rows: [] as BulkGmailAccountInput[], errors: ["The account list is too large."] };
+  if (value.length > 120_000) return { rows: [] as BulkGmailAccountInput[], errors: ["The account list is too large."] };
 
+  const firstLine = value.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "";
+  const columns = EMAIL_PATTERN.test(firstLine) ? null : headerColumns(firstLine);
   const rows = /^\s*display name\s*:/im.test(value) || /^\s*app password\s*:/im.test(value)
     ? parseAccountBlocks(value)
-    : parseDelimitedRows(value);
+    : columns
+      ? parseHeaderRows(value, columns)
+      : parseDelimitedRows(value);
   const errors: string[] = [];
   if (rows.length > MAX_BULK_GMAIL_ACCOUNTS) {
     errors.push(`Add no more than ${MAX_BULK_GMAIL_ACCOUNTS} accounts in one batch.`);

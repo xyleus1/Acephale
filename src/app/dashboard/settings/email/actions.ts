@@ -14,6 +14,8 @@ import { encryptSecret } from "@/lib/security/crypto";
 import { parseGmailAppPasswordBulkInput } from "@/lib/gmail-app-password-bulk";
 import { updateEmailSenderPoolAccountsForOffice } from "@/lib/email-sender-pool-settings";
 
+const BULK_CONNECT_CONCURRENCY = 6;
+
 function revalidateEmailAccountPages() {
   revalidatePath("/dashboard/settings/email");
   revalidatePath("/dashboard/settings/connected-emails");
@@ -193,7 +195,7 @@ export async function addGmailAppPasswordAccountsBulk(formData: FormData) {
     return { ok: false as const, errors: ["Server credential encryption is not configured."], results: [], accountIds: [] };
   }
 
-  const results = await Promise.all(encryptedRows.map(async (row) => {
+  const connectRow = async (row: (typeof encryptedRows)[number]) => {
     const current = existingByEmail.get(row.email);
     if (current && current.provider !== GMAIL_APP_PASSWORD_PROVIDER) {
       return { email: row.email, ok: false as const, error: "Already connected through another provider." };
@@ -229,7 +231,13 @@ export async function addGmailAppPasswordAccountsBulk(formData: FormData) {
     } catch {
       return { email: row.email, ok: false as const, error: "Verified, but the account could not be saved." };
     }
-  }));
+  };
+
+  const results: Array<Awaited<ReturnType<typeof connectRow>>> = [];
+  for (let index = 0; index < encryptedRows.length; index += BULK_CONNECT_CONCURRENCY) {
+    const slice = encryptedRows.slice(index, index + BULK_CONNECT_CONCURRENCY);
+    results.push(...(await Promise.all(slice.map(connectRow))));
+  }
 
   revalidateEmailAccountPages();
   const accountIds = results.flatMap((result) => result.ok ? [result.accountId] : []);
