@@ -6,6 +6,11 @@ import type { procurementVendorConversation } from "@/lib/procurement-conversati
 import {
   ProcurementReplyDraftError,
 } from "@/lib/procurement-reply-draft";
+import type { localRfqOutreach } from "@/lib/procurement-local-outreach";
+import {
+  overlayRequestOutreach,
+  overlayVendorOutreach,
+} from "@/lib/procurement-local-outreach-model";
 import { ProcurementReplySenderUnavailableError } from "@/lib/procurement-reply-errors";
 import type { draftProcurementSupplierReply } from "@/lib/procurement-reply-draft";
 import type { sendProcurementSupplierReply } from "@/lib/procurement-reply-send";
@@ -41,12 +46,14 @@ export type ProcurementRouteDependencies = {
   submit: typeof submitProcurementRequest;
   list: typeof listProcurementRequests;
   contextualize?: typeof contextualizeProcurementRequest;
+  outreach?: typeof localRfqOutreach;
 };
 
 export type ProcurementDetailDependencies = {
   session: () => Promise<ProcurementRouteSession | null>;
   resolveCustomerId: typeof resolveProcurementCustomerId;
   getRequest: typeof getProcurementRequest;
+  outreach?: typeof localRfqOutreach;
 };
 
 export type ProcurementWakeDependencies = {
@@ -77,18 +84,24 @@ export type ProcurementReplySendDependencies = {
   send: typeof sendProcurementSupplierReply;
 };
 
+const defaultLocalOutreach: typeof localRfqOutreach = async (officeId, orderId) => (
+  (await import("@/lib/procurement-local-outreach")).localRfqOutreach(officeId, orderId)
+);
+
 const defaultRouteDependencies: ProcurementRouteDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
   submit: submitProcurementRequest,
   list: listProcurementRequests,
   contextualize: contextualizeProcurementRequest,
+  outreach: defaultLocalOutreach,
 };
 
 const defaultDetailDependencies: ProcurementDetailDependencies = {
   session: async () => (await import("@/lib/auth")).getSession(),
   resolveCustomerId: resolveProcurementCustomerId,
   getRequest: getProcurementRequest,
+  outreach: defaultLocalOutreach,
 };
 
 const defaultWakeDependencies: ProcurementWakeDependencies = {
@@ -315,7 +328,17 @@ export async function handleProcurementList(
     const requests = [...new Map(requestSets.flat().map((request) => [request.id, request])).values()]
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, 50);
-    return Response.json({ requests }, { headers: responseHeaders });
+    const outreach = dependencies.outreach;
+    const projected = outreach
+      ? await Promise.all(requests.map(async (request) => {
+        try {
+          return overlayRequestOutreach(request, await outreach(session.officeId, request.id));
+        } catch {
+          return request;
+        }
+      }))
+      : requests;
+    return Response.json({ requests: projected }, { headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);
   }
@@ -337,7 +360,17 @@ export async function handleProcurementDetail(
     if (!order) {
       return Response.json({ error: "Procurement request not found." }, { status: 404, headers: responseHeaders });
     }
-    return Response.json(order, { headers: responseHeaders });
+    const outreach = dependencies.outreach;
+    if (!outreach) return Response.json(order, { headers: responseHeaders });
+    try {
+      const local = await outreach(session.officeId, order.id);
+      return Response.json({
+        ...order,
+        vendors: order.vendors.map((vendor) => overlayVendorOutreach(vendor, local)),
+      }, { headers: responseHeaders });
+    } catch {
+      return Response.json(order, { headers: responseHeaders });
+    }
   } catch (error) {
     return errorResponse(error);
   }

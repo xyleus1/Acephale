@@ -10636,3 +10636,20 @@ Verification caveat:
   `/dashboard/supply-os?panel=materials&procurementOrder=<id>` opens that
   request directly.
 - The tab is read-only and reuses the existing agent-audit visibility rule.
+
+## 2026-08-25: Local RFQ outreach overlay
+
+- The deployed workflow role can read `order_vendors` but cannot write it, so a
+  provider-confirmed campaign send never lands a `gmail_message_id` receipt.
+  The Messages tab therefore showed "No contact receipt" and refused to open a
+  conversation for suppliers that had already received an RFQ.
+- `src/lib/procurement-local-outreach-model.ts` holds the pure projection and
+  `src/lib/procurement-local-outreach.ts` loads it from the office email
+  ledger: every message whose subject contains the `[RFQ xxxxxxxx]` reference
+  for the order.
+- Supplier conversations now fall back to that ledger when the workflow has no
+  receipt, matched on the supplier address. Request rows and supplier rows also
+  overlay contacted and response counts, and the overlay never lowers a
+  workflow count.
+- The overlay is read-only and office-scoped. Bourne remains the only writer of
+  workflow receipts, so no workflow write was added to make this work.

@@ -198,3 +198,15 @@ KˆÜ˜ËØ\ÙÛØ˜[Ë˜ÜÜÈ
 - A read-only replies endpoint reports outbound and inbound counts for one
   sourcing request and classifies inbound mail as reply, automatic reply,
   bounce, or wrong recipient, using the office-scoped local email ledger.
+
+## 2026-08-25: Supplier conversations without a workflow receipt
+
+- Reported symptom: a supplier that received an RFQ showed no conversation and
+  the request read "4 of 169 contacted".
+- Cause: the send is provider-confirmed and stored locally, but the workflow
+  receipt write-back is rejected for the dashboard role, and both the contacted
+  flag and the conversation reference were derived only from that receipt.
+- Fix: derive contact and conversation from the office email ledger through the
+  RFQ subject reference when the workflow receipt is absent.
+- Verified with `npm run test:procurement-local-outreach`, plus the existing
+  bulk RFQ contract test. No supplier message was sent for this change.

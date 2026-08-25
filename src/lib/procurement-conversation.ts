@@ -2,6 +2,7 @@ import "server-only";
 
 import { getValidAccessToken } from "@/lib/gmail-oauth";
 import { prisma } from "@/lib/prisma";
+import { localRfqVendorConversation } from "@/lib/procurement-local-outreach";
 import {
   getProcurementCommunicationMessages,
   getProcurementVendorConversationRef,
@@ -219,13 +220,21 @@ async function compatibilityConversation(
   args: ProcurementVendorConversationArgs,
   reference: ProcurementVendorConversationRef,
 ) {
-  if (!reference.gmailMessageId) return unavailable("No supplier contact receipt is recorded for this manufacturer.");
   if (!reference.contactEmail) return unavailable("The workflow has no verified supplier email to bind to this thread.");
+  if (!reference.gmailMessageId) {
+    // Campaign sends are recorded in the office email ledger even when the
+    // workflow receipt column cannot be written, so read that ledger first.
+    const sent = await localRfqVendorConversation(args.officeId, args.orderId, reference.contactEmail);
+    return sent ?? unavailable("No supplier contact receipt is recorded for this manufacturer.");
+  }
   const gmailMessageId = reference.gmailMessageId;
   const contactEmail = reference.contactEmail;
 
   const stored = await localConversation(args.officeId, reference);
   if (stored) return stored;
+
+  const sentByReference = await localRfqVendorConversation(args.officeId, args.orderId, contactEmail);
+  if (sentByReference) return sentByReference;
 
   const accounts = await prisma.emailAccount.findMany({
     where: {
