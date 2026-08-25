@@ -1,0 +1,450 @@
+import "server-only";
+
+import { prisma } from "@/lib/prisma";
+import {
+  companyContextActorData,
+  companyContextVisibilityWhere,
+  isCustomerContextAccess,
+  requireCompanyContextWorkspace,
+  type CompanyContextAccess,
+} from "@/lib/customer-context-access";
+import {
+  createResearchList,
+  listResearchLists,
+  slugify,
+  upsertResearchRecords,
+  type ResearchInputRow,
+} from "@/lib/research-lists";
+import {
+  defaultProspectingSearch,
+  profileFromProspectingDraft,
+  runProspectingBatch,
+  type ProspectingBatchResult,
+  type ProspectingBatchCandidate,
+  type ProspectingDraft,
+  type ProspectingSearch,
+} from "@/lib/leadgen/run";
+import { defaultFetcher } from "@/lib/leadgen/harvest";
+import type { VerifyOptions } from "@/lib/leadgen/verify";
+import { SupplyPersistenceError } from "@/lib/supply-os/persistence";
+import type { CompanyContextCitation } from "@/lib/company-context";
+import { STALE_RUN_MS } from "@/lib/supply-os/context-prospecting-constants";
+export { STALE_RUN_MS };
+
+const MAX_ACTIONS = 50;
+const ACTION_TYPE = "PROSPECTING";
+const LIST_FIELDS = [
+  { key: "company_name", label: "Company", type: "text" },
+  { key: "website", label: "Website", type: "url" },
+  { key: "domain", label: "Domain", type: "text" },
+  { key: "country", label: "Country", type: "text" },
+  { key: "city", label: "City", type: "text" },
+  { key: "segment", label: "Segment", type: "text" },
+  { key: "buys", label: "Buys", type: "text" },
+  { key: "contact_name", label: "Contact", type: "text" },
+  { key: "contact_title", label: "Title", type: "text" },
+  { key: "email", label: "Email", type: "email" },
+  { key: "phone", label: "Phone", type: "text" },
+  { key: "fit_score", label: "Fit score", type: "number" },
+  { key: "email_verdict", label: "Email verdict", type: "text" },
+  { key: "evidence_urls", label: "Evidence URLs", type: "text" },
+  { key: "source_query", label: "Source query", type: "text" },
+] as const;
+
+type ProspectingStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED";
+
+type ProspectingStats = {
+  queriesUsed: number;
+  pagesFetched: number;
+  candidatesFound: number;
+  rowsCreated: number;
+  rowsUpdated: number;
+};
+
+type StoredProspectingAction = {
+  schemaVersion: 1;
+  type: typeof ACTION_TYPE;
+  status: ProspectingStatus;
+  draft: ProspectingDraft;
+  citations: CompanyContextCitation[];
+  requestMessageId: string;
+  requestBody: string;
+  requestCreatedAt: string;
+  runningStartedAt: string | null;
+  stats: ProspectingStats;
+  nextQueryOffset: number;
+  exhausted: boolean;
+};
+
+export type ContextProspectingAction = StoredProspectingAction & {
+  id: string;
+  createdAt: Date;
+};
+
+export function normalizeProspectingDraft(value: unknown): ProspectingDraft | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const text = (item: unknown, max: number) => typeof item === "string"
+    ? item.replace(/\u2014/g, "-").replace(/\0/g, "").trim().slice(0, max)
+    : "";
+  const list = (item: unknown, max: number) => Array.isArray(item)
+    ? item.map((entry) => text(entry, max)).filter(Boolean).slice(0, 20)
+    : [];
+  const objective = text(input.objective, 500);
+  const segments = list(input.segments, 200);
+  const regions = list(input.regions, 160);
+  const productFocus = text(input.productFocus, 500);
+  const listSlug = slugify(text(input.listSlug, 80) || objective);
+  const notes = text(input.notes, 2_000);
+  if (!objective || !segments.length || !regions.length || !productFocus || !listSlug) return null;
+  return { objective, segments, regions, productFocus, listSlug, notes };
+}
+
+function customerAccess(context: CompanyContextAccess) {
+  return isCustomerContextAccess(context) || context.accessKind === "customer";
+}
+
+async function companyWorkspace(context: CompanyContextAccess, workspaceId: string, mode: "view" | "edit") {
+  if (customerAccess(context)) {
+    throw new SupplyPersistenceError("Prospecting is not available for customer access.", "forbidden");
+  }
+  const workspace = await requireCompanyContextWorkspace(context, workspaceId, mode);
+  if (!workspace.companyId) {
+    throw new SupplyPersistenceError("Context requires a company-linked workspace.", "invalid_input");
+  }
+  return { ...workspace, companyId: workspace.companyId };
+}
+
+function decodeAction(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const value = payload as Record<string, unknown>;
+  if (value.type !== ACTION_TYPE) return null;
+  const draft = normalizeProspectingDraft(value.draft);
+  const statuses: ProspectingStatus[] = ["PENDING", "RUNNING", "COMPLETED", "FAILED", "DISMISSED"];
+  const status = statuses.includes(value.status as ProspectingStatus)
+    ? value.status as ProspectingStatus
+    : null;
+  const text = (item: unknown, max: number) => typeof item === "string" ? item.trim().slice(0, max) : "";
+  const statsValue = value.stats && typeof value.stats === "object" && !Array.isArray(value.stats)
+    ? value.stats as Record<string, unknown>
+    : {};
+  const number = (item: unknown) => typeof item === "number" && Number.isFinite(item) ? Math.max(0, Math.floor(item)) : 0;
+  const citations = Array.isArray(value.citations) ? value.citations.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const citation = entry as Record<string, unknown>;
+    const id = text(citation.id, 250);
+    const label = text(citation.label, 250);
+    return id && label ? [{ id, label }] : [];
+  }).slice(0, 20) : [];
+  const requestMessageId = text(value.requestMessageId, 200);
+  const requestBody = text(value.requestBody, 4_000);
+  const requestCreatedAt = text(value.requestCreatedAt, 40);
+  if (!draft || !status || !requestMessageId || !requestBody || Number.isNaN(new Date(requestCreatedAt).valueOf())) return null;
+  return {
+    schemaVersion: 1 as const,
+    type: ACTION_TYPE as typeof ACTION_TYPE,
+    status,
+    draft,
+    citations,
+    requestMessageId,
+    requestBody,
+    requestCreatedAt,
+    runningStartedAt: text(value.runningStartedAt, 40) || null,
+    stats: {
+      queriesUsed: number(statsValue.queriesUsed),
+      pagesFetched: number(statsValue.pagesFetched),
+      candidatesFound: number(statsValue.candidatesFound),
+      rowsCreated: number(statsValue.rowsCreated),
+      rowsUpdated: number(statsValue.rowsUpdated),
+    },
+    nextQueryOffset: number(value.nextQueryOffset),
+    exhausted: value.exhausted === true,
+  };
+}
+
+function actionFromRow(row: { id: string; payload: unknown; createdAt: Date }) {
+  const stored = decodeAction(row.payload);
+  return stored ? { id: row.id, createdAt: row.createdAt, ...stored } : null;
+}
+
+export async function listCompanyContextProspectingActions(
+  context: CompanyContextAccess,
+  workspaceId: string,
+) {
+  if (customerAccess(context)) return [];
+  const workspace = await companyWorkspace(context, workspaceId, "view");
+  const rows = await prisma.companyContext.findMany({
+    where: {
+      officeId: context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      ...companyContextVisibilityWhere(context),
+    },
+    select: { id: true, payload: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: MAX_ACTIONS,
+  });
+  return rows.reverse().flatMap((row) => actionFromRow(row) ?? []);
+}
+
+export async function createCompanyContextProspectingActions(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  items: Array<{ draft: ProspectingDraft; citations: CompanyContextCitation[] }>;
+  requestMessageId: string;
+  requestBody: string;
+  requestCreatedAt: Date;
+}) {
+  if (customerAccess(args.context)) return [];
+  if (!args.items.length) return [];
+  const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
+  const storedItems = args.items.map((item) => ({
+    schemaVersion: 1 as const,
+    type: ACTION_TYPE,
+    status: "PENDING" as const,
+    draft: item.draft,
+    citations: item.citations.slice(0, 20),
+    requestMessageId: args.requestMessageId,
+    requestBody: args.requestBody.slice(0, 4_000),
+    requestCreatedAt: args.requestCreatedAt.toISOString(),
+    runningStartedAt: null,
+    stats: { queriesUsed: 0, pagesFetched: 0, candidatesFound: 0, rowsCreated: 0, rowsUpdated: 0 },
+    nextQueryOffset: 0,
+    exhausted: false,
+  }));
+  const rows = await prisma.$transaction(storedItems.map((stored) => prisma.companyContext.create({
+    data: {
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      name: `Prospecting - ${stored.draft.objective}`,
+      payload: stored,
+      processingState: stored.status,
+      ...companyContextActorData(args.context),
+    },
+    select: { id: true, payload: true, createdAt: true },
+  })));
+  const actions = rows.map(actionFromRow);
+  if (actions.some((action) => !action)) {
+    throw new SupplyPersistenceError("The prospecting action could not be read.", "conflict");
+  }
+  return actions as ContextProspectingAction[];
+}
+
+async function ensureResearchList(officeId: string, draft: ProspectingDraft) {
+  const existing = (await listResearchLists(officeId)).find((list) => list.slug === draft.listSlug);
+  if (existing) return existing;
+  try {
+    return await createResearchList(officeId, {
+      name: draft.listSlug.replace(/-/g, " "),
+      slug: draft.listSlug,
+      description: draft.objective,
+      fields: LIST_FIELDS,
+    });
+  } catch (error) {
+    const retry = (await listResearchLists(officeId)).find((list) => list.slug === draft.listSlug);
+    if (retry) return retry;
+    throw error;
+  }
+}
+
+function candidateRows(records: readonly ProspectingBatchCandidate[]) {
+  return records.map(({ candidate, verifications, region }) => {
+    const verification = verifications[0] ?? null;
+    const email = candidate.emails[0] ?? null;
+    const evidenceUrls = candidate.evidence.map((item) => item.url).slice(0, 8).join("\n");
+    const row: ResearchInputRow = {
+      company_name: candidate.companyName,
+      website: candidate.website,
+      domain: candidate.domain,
+      country: region,
+      city: candidate.city,
+      segment: candidate.fit.matchedSegments.join(", ") || candidate.segmentKey,
+      buys: candidate.fit.matchedSignals.join(", "),
+      contact_name: null,
+      contact_title: null,
+      email,
+      phone: candidate.phones[0] ?? null,
+      fit_score: candidate.fit.score,
+      email_verdict: verification?.verdict ?? "unknown",
+      evidence_urls: evidenceUrls,
+      source_query: candidate.discoveredVia,
+    };
+    return { row, dedupeField: email ? "email" : "domain" };
+  });
+}
+
+async function persistCandidates(officeId: string, draft: ProspectingDraft, records: readonly ProspectingBatchCandidate[]) {
+  await ensureResearchList(officeId, draft);
+  const groups = new Map<string, ResearchInputRow[]>();
+  for (const { row, dedupeField } of candidateRows(records)) {
+    const rows = groups.get(dedupeField) ?? [];
+    rows.push(row);
+    groups.set(dedupeField, rows);
+  }
+  let created = 0;
+  let updated = 0;
+  for (const [dedupeField, rows] of groups) {
+    const result = await upsertResearchRecords(officeId, draft.listSlug, rows, {
+      dedupeField,
+      resetStatus: false,
+    });
+    created += result.created;
+    updated += result.updated;
+  }
+  return { created, updated };
+}
+
+export async function runCompanyContextProspectingAction(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  actionId: string;
+  search?: ProspectingSearch;
+  fetchPage?: typeof defaultFetcher;
+  resolveMx?: VerifyOptions["resolveMx"];
+  runBatch?: (input: {
+    profile: ReturnType<typeof profileFromProspectingDraft>;
+    queryOffset: number;
+    search: ProspectingSearch;
+    fetchPage: typeof defaultFetcher;
+    resolveMx?: VerifyOptions["resolveMx"];
+  }) => Promise<ProspectingBatchResult>;
+}) {
+  const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
+  const row = await prisma.companyContext.findFirst({
+    where: {
+      id: args.actionId,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      ...companyContextVisibilityWhere(args.context),
+    },
+    select: { id: true, payload: true, createdAt: true },
+  });
+  const found = row ? actionFromRow(row) : null;
+  if (!found) throw new SupplyPersistenceError("Prospecting action not found.", "not_found");
+  if (found.status === "DISMISSED") throw new SupplyPersistenceError("This prospecting action was dismissed.", "conflict");
+  if (found.status === "COMPLETED" && found.exhausted) return found;
+  if (found.status === "RUNNING") {
+    const started = found.runningStartedAt ? new Date(found.runningStartedAt).valueOf() : 0;
+    if (started && Date.now() - started < STALE_RUN_MS) {
+      throw new SupplyPersistenceError("This prospecting run is already in progress. Retry shortly.", "conflict");
+    }
+  }
+  const running: StoredProspectingAction = {
+    ...found,
+    status: "RUNNING",
+    runningStartedAt: new Date().toISOString(),
+  };
+  const claim = await prisma.companyContext.updateMany({
+    where: {
+      id: found.id,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      processingState: found.status,
+      ...companyContextVisibilityWhere(args.context),
+    },
+    data: { payload: running, processingState: running.status },
+  });
+  if (claim.count !== 1) throw new SupplyPersistenceError("This prospecting run is already in progress. Retry shortly.", "conflict");
+
+  try {
+    const profile = profileFromProspectingDraft(running.draft);
+    const result = await (args.runBatch ?? runProspectingBatch)({
+      profile,
+      queryOffset: running.nextQueryOffset,
+      search: args.search ?? defaultProspectingSearch,
+      fetchPage: args.fetchPage ?? defaultFetcher,
+      resolveMx: args.resolveMx,
+    });
+    const persisted = await persistCandidates(args.context.officeId, running.draft, result.candidates);
+    const completed: StoredProspectingAction = {
+      ...running,
+      status: "COMPLETED",
+      runningStartedAt: null,
+      stats: {
+        queriesUsed: running.stats.queriesUsed + result.stats.queriesUsed,
+        pagesFetched: running.stats.pagesFetched + result.stats.pagesFetched,
+        candidatesFound: running.stats.candidatesFound + result.stats.candidatesFound,
+        rowsCreated: running.stats.rowsCreated + persisted.created,
+        rowsUpdated: running.stats.rowsUpdated + persisted.updated,
+      },
+      nextQueryOffset: result.nextQueryOffset,
+      exhausted: result.exhausted,
+    };
+    await prisma.companyContext.updateMany({
+      where: {
+        id: found.id,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        processingState: "RUNNING",
+        ...companyContextVisibilityWhere(args.context),
+      },
+      data: { payload: completed, processingState: completed.status },
+    });
+    return { id: found.id, createdAt: found.createdAt, ...completed };
+  } catch (error) {
+    const failed: StoredProspectingAction = {
+      ...running,
+      status: "FAILED",
+      runningStartedAt: null,
+    };
+    await prisma.companyContext.updateMany({
+      where: {
+        id: found.id,
+        officeId: args.context.officeId,
+        companyId: workspace.companyId,
+        kind: "ACTION",
+        processingState: "RUNNING",
+        ...companyContextVisibilityWhere(args.context),
+      },
+      data: { payload: failed, processingState: failed.status, processingError: "Prospecting run failed." },
+    });
+    throw error;
+  }
+}
+
+export async function dismissCompanyContextProspectingAction(args: {
+  context: CompanyContextAccess;
+  workspaceId: string;
+  actionId: string;
+}) {
+  const workspace = await companyWorkspace(args.context, args.workspaceId, "edit");
+  const row = await prisma.companyContext.findFirst({
+    where: {
+      id: args.actionId,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      ...companyContextVisibilityWhere(args.context),
+    },
+    select: { id: true, payload: true, createdAt: true },
+  });
+  const action = row ? actionFromRow(row) : null;
+  if (!action) throw new SupplyPersistenceError("Prospecting action not found.", "not_found");
+  if (action.status === "DISMISSED") return action;
+  if (action.status === "RUNNING") {
+    const started = action.runningStartedAt ? new Date(action.runningStartedAt).valueOf() : 0;
+    if (started && Date.now() - started < STALE_RUN_MS) {
+      throw new SupplyPersistenceError("This prospecting action cannot be dismissed now.", "conflict");
+    }
+  } else if (action.status === "COMPLETED") {
+    throw new SupplyPersistenceError("This prospecting action cannot be dismissed now.", "conflict");
+  }
+  const dismissed: StoredProspectingAction = { ...action, status: "DISMISSED", runningStartedAt: null };
+  const updated = await prisma.companyContext.updateMany({
+    where: {
+      id: action.id,
+      officeId: args.context.officeId,
+      companyId: workspace.companyId,
+      kind: "ACTION",
+      processingState: action.status,
+      ...companyContextVisibilityWhere(args.context),
+    },
+    data: { payload: dismissed, processingState: dismissed.status },
+  });
+  if (updated.count !== 1) throw new SupplyPersistenceError("This prospecting action changed before it could be dismissed.", "conflict");
+  return dismissed;
+}

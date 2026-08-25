@@ -4203,6 +4203,18 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Consequence: Legacy routes redirect into the panel, while the canonical
   Leads directory remains available through an explicit panel affordance.
 
+### 2026-08-25 - Context prospecting is bounded and review-only
+
+- Status: accepted
+- Decision: Context prospecting drafts require explicit operator intent and
+  confirmation. The confirmed runner uses deterministic query planning and
+  guarded public-page requests, with persisted bounds and resume offsets.
+- Data boundary: Results are written only to the authenticated office's
+  research list. They do not create Company or Contact rows, outreach, messages,
+  threads, or sender-account records.
+- Access boundary: Customer-access sessions cannot create or run prospecting
+  actions. Public research does not imply that anyone was contacted.
+
 ### 2026-08-25 - Derya publishes supplier research shortlists to Bourne
 
 - Status: accepted

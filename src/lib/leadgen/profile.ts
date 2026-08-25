@@ -34,6 +34,38 @@ export type LeadGenDirectorySeed = {
   kind: "member_list" | "cluster" | "registry" | "pdf";
 };
 
+export const GENERIC_STEEL_ORE_POSITIVE_SIGNALS = [
+  "sanayi",
+  "imalat",
+  "uretim",
+  "fabrika",
+  "celik",
+  "demir",
+  "metal",
+  "makine",
+  "dokum",
+  "profil",
+  "sac",
+  "konstruksiyon",
+  "manufacturing",
+  "steel",
+  "fabrication",
+] as const;
+
+export const GENERIC_STEEL_ORE_NEGATIVE_SIGNALS = [
+  "emlak",
+  "gayrimenkul",
+  "turizm",
+  "otel",
+  "restoran",
+  "kuafor",
+  "hukuk burosu",
+  "eczane",
+  "market",
+  "kripto",
+  "bahis",
+] as const;
+
 export const MANEKS_PROFILE: LeadGenProfile = {
   slug: "maneks",
   customerName: "Maneks Dis Ticaret",
@@ -136,34 +168,6 @@ export const MANEKS_PROFILE: LeadGenProfile = {
     { label: "Aegean Region Chamber of Industry", url: "https://www.ebso.org.tr/", kind: "member_list" },
     { label: "Kayseri Chamber of Industry", url: "https://www.kayserioSB.org.tr/", kind: "member_list" },
   ],
-  positiveSignals: [
-    "sanayi",
-    "imalat",
-    "uretim",
-    "fabrika",
-    "celik",
-    "demir",
-    "metal",
-    "makine",
-    "dokum",
-    "profil",
-    "sac",
-    "konstruksiyon",
-    "manufacturing",
-    "steel",
-    "fabrication",
-  ],
-  negativeSignals: [
-    "emlak",
-    "gayrimenkul",
-    "turizm",
-    "otel",
-    "restoran",
-    "kuafor",
-    "hukuk burosu",
-    "eczane",
-    "market",
-    "kripto",
-    "bahis",
-  ],
+  positiveSignals: GENERIC_STEEL_ORE_POSITIVE_SIGNALS,
+  negativeSignals: GENERIC_STEEL_ORE_NEGATIVE_SIGNALS,
 };

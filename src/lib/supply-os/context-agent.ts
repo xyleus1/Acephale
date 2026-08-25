@@ -17,11 +17,15 @@ import {
   createCompanyContextProcurementActions,
   normalizeContextProcurementDraft,
 } from "@/lib/supply-os/context-procurement";
+import {
+  createCompanyContextProspectingActions,
+  normalizeProspectingDraft,
+} from "@/lib/supply-os/context-prospecting";
 
 const CONTEXT_REPLY_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["answer", "citationIds", "procurementDrafts"],
+  required: ["answer", "citationIds", "procurementDrafts", "prospectingDrafts"],
   properties: {
     answer: { type: "string" },
     citationIds: { type: "array", items: { type: "string" }, maxItems: 20 },
@@ -54,6 +58,24 @@ const CONTEXT_REPLY_SCHEMA = {
           neededBy: { type: ["string", "null"] },
           deliveryLocation: { type: ["string", "null"] },
           notes: { type: ["string", "null"] },
+        },
+      },
+    },
+    prospectingDrafts: {
+      type: "array",
+      maxItems: 4,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["citationIds", "objective", "segments", "regions", "productFocus", "listSlug", "notes"],
+        properties: {
+          citationIds: { type: "array", items: { type: "string" }, maxItems: 20 },
+          objective: { type: "string" },
+          segments: { type: "array", items: { type: "string" }, maxItems: 20 },
+          regions: { type: "array", items: { type: "string" }, maxItems: 20 },
+          productFocus: { type: "string" },
+          listSlug: { type: "string" },
+          notes: { type: "string" },
         },
       },
     },
@@ -144,6 +166,11 @@ export async function chatWithCompanyContext(args: {
         "For each procurement draft, return its own citationIds containing only the operator request and files directly relevant to that procurement need.",
         "Preparing procurementDrafts does not create orders or contact suppliers. Tell the operator that separate confirmation is required for each item.",
         "Do not perform or claim any supplier, forwarder, booking, customs, purchasing, or spending action.",
+        "If and only if the operator explicitly asks to find buyers, prospects, customers, or a target list, prepare prospectingDrafts for human confirmation.",
+        "Preparing prospectingDrafts does not run research or contact anyone. Separate confirmation is required before public-page research starts.",
+        "A prospecting draft requires the operator to provide target segments and regions. Ask for missing segments or regions instead of guessing.",
+        "Public prospect research writes reviewable research-list rows only. It does not imply outreach or contact.",
+        "Customer-access sessions must never create prospectingDrafts or prospecting actions.",
         "Keep the answer direct and operational.",
         "Do not use the em dash character.",
       ].join("\n"),
@@ -155,7 +182,7 @@ export async function chatWithCompanyContext(args: {
     throw new ContextAgentError("The context reply did not finish. Try again.", "unavailable", true);
   }
 
-  let parsed: { answer?: unknown; citationIds?: unknown; procurementDrafts?: unknown } = {};
+  let parsed: { answer?: unknown; citationIds?: unknown; procurementDrafts?: unknown; prospectingDrafts?: unknown } = {};
   try {
     parsed = JSON.parse(response.output_text) as typeof parsed;
   } catch {}
@@ -192,6 +219,28 @@ export async function chatWithCompanyContext(args: {
       true,
     );
   }
+  const rawProspectingDrafts = !isCustomerContextAccess(args.context) && args.context.accessKind !== "customer" &&
+    Array.isArray(parsed.prospectingDrafts)
+    ? parsed.prospectingDrafts.slice(0, 4)
+    : [];
+  const normalizedProspectingDrafts = rawProspectingDrafts.map((value) => {
+    const record = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+    const draft = normalizeProspectingDraft(record);
+    if (!record || !draft) return null;
+    const draftCitationIds = Array.isArray(record.citationIds)
+      ? record.citationIds.filter((id): id is string => typeof id === "string" && allowedCitations.has(id)).slice(0, 20)
+      : [];
+    return { draft, draftCitationIds };
+  });
+  if (normalizedProspectingDrafts.some((entry) => entry === null)) {
+    throw new ContextAgentError(
+      "A prospecting draft needs target segments, regions, and product focus.",
+      "invalid_response",
+      true,
+    );
+  }
   const uniqueDrafts = [...new Map(normalizedDrafts.map((entry) => {
     const value = entry!;
     const key = JSON.stringify(value.draft);
@@ -214,6 +263,25 @@ export async function chatWithCompanyContext(args: {
     requestBody: instruction,
     requestCreatedAt: operatorMessage.createdAt,
   });
+  const prospectingActions = await createCompanyContextProspectingActions({
+    context: args.context,
+    workspaceId: args.workspaceId,
+    items: normalizedProspectingDrafts.map((entry) => {
+      const value = entry!;
+      return {
+        draft: value.draft,
+        citations: [
+          { id: requestCitationId, label: "Operator request" },
+          ...value.draftCitationIds
+            .filter((id) => id !== requestCitationId)
+            .map((id) => allowedCitations.get(id)!),
+        ].slice(0, 20),
+      };
+    }),
+    requestMessageId: operatorMessage.id,
+    requestBody: instruction,
+    requestCreatedAt: operatorMessage.createdAt,
+  });
   const message = await appendCompanyContextMessage({
     context: args.context,
     workspaceId: args.workspaceId,
@@ -221,5 +289,5 @@ export async function chatWithCompanyContext(args: {
     body: answer,
     citations,
   });
-  return { message, citations, procurementActions };
+  return { message, citations, procurementActions, prospectingActions };
 }

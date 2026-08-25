@@ -60,6 +60,15 @@ for (const preserved of [
 const middleware = readFileSync(resolve(process.cwd(), "src/middleware.ts"), "utf8");
 assert.match(middleware, /req\.method === "GET" \|\| req\.method === "HEAD"/);
 assert.match(middleware, /legacySupplyOsDestination\(pathname, req\.nextUrl\.search\)/);
+const researchPage = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/page.tsx"), "utf8");
+assert.match(researchPage, /initialResearchQuery/);
+assert.match(researchPage, /initialResearchStatus/);
+assert.match(researchPage, /initialResearchPage/);
+assert.match(researchPage, /validResearchStatuses/);
+const prospectSource = readFileSync(resolve(process.cwd(), "src/app/dashboard/supply-os/supply-os-prospects.tsx"), "utf8");
+assert.match(prospectSource, /initialQuery/);
+assert.match(prospectSource, /initialStatus/);
+assert.match(prospectSource, /initialPage/);
 
 const retiredPageStubs = new Map([
   ["src/app/dashboard/page.tsx", "materials"],

@@ -115,6 +115,9 @@ export function SupplyInventoryWorkspace({
   canShowProspects = false,
   storageScope,
   initialResearchListSlug,
+  initialResearchQuery,
+  initialResearchStatus,
+  initialResearchPage,
 }: {
   activeView: SupplyInventoryWorkspaceView;
   onViewChange: (view: SupplyInventoryWorkspaceView) => void;
@@ -152,6 +155,9 @@ export function SupplyInventoryWorkspace({
   canShowProspects?: boolean;
   storageScope: string;
   initialResearchListSlug?: string;
+  initialResearchQuery?: string;
+  initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
+  initialResearchPage?: number;
 }) {
   const [query, setQuery] = useState("");
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
@@ -715,6 +721,9 @@ export function SupplyInventoryWorkspace({
             <SupplyOsProspects
               storageScope={storageScope}
               initialListSlug={initialResearchListSlug}
+              initialQuery={initialResearchQuery}
+              initialStatus={initialResearchStatus}
+              initialPage={initialResearchPage}
             />
           </Tabs.Content>
         ) : null}

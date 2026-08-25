@@ -312,6 +312,9 @@ export function SupplyOsDashboardWorkspace({
   canShowProspects = false,
   initialMaterialsView,
   initialResearchListSlug,
+  initialResearchQuery,
+  initialResearchStatus,
+  initialResearchPage,
   onWorkspaceProfile,
   onOpenContext,
 }: {
@@ -326,6 +329,9 @@ export function SupplyOsDashboardWorkspace({
   canShowProspects?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
   initialResearchListSlug?: string;
+  initialResearchQuery?: string;
+  initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
+  initialResearchPage?: number;
   onOpenContext: () => void;
   onWorkspaceProfile?: (profile: {
     companyName: string;
@@ -609,6 +615,9 @@ export function SupplyOsDashboardWorkspace({
             canShowProspects={canShowProspects}
             initialMaterialsView={initialMaterialsView}
             initialResearchListSlug={initialResearchListSlug}
+            initialResearchQuery={initialResearchQuery}
+            initialResearchStatus={initialResearchStatus}
+            initialResearchPage={initialResearchPage}
             onOpenContext={onOpenContext}
           />
       ) : null}
@@ -732,6 +741,9 @@ function CaseCommandCenter({
   canShowProspects,
   initialMaterialsView,
   initialResearchListSlug,
+  initialResearchQuery,
+  initialResearchStatus,
+  initialResearchPage,
   onOpenContext,
 }: {
   dashboard: SupplyCaseDashboard;
@@ -744,6 +756,9 @@ function CaseCommandCenter({
   canShowProspects?: boolean;
   initialMaterialsView?: SupplyInventoryWorkspaceView;
   initialResearchListSlug?: string;
+  initialResearchQuery?: string;
+  initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
+  initialResearchPage?: number;
   onOpenContext: () => void;
 }) {
   const companyName = dashboardName(dashboard);
@@ -1387,6 +1402,9 @@ function CaseCommandCenter({
             canShowProspects={canShowProspects}
             storageScope={storageScope}
             initialResearchListSlug={initialResearchListSlug}
+            initialResearchQuery={initialResearchQuery}
+            initialResearchStatus={initialResearchStatus}
+            initialResearchPage={initialResearchPage}
             selectedSku={selectedInventoryItem?.sku ?? ""}
             items={inventoryItems}
             companyName={companyName}

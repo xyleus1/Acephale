@@ -37,18 +37,24 @@ function safeHttpUrl(value: string) {
 export function SupplyOsProspects({
   storageScope,
   initialListSlug,
+  initialQuery = "",
+  initialStatus = "all",
+  initialPage = 1,
 }: {
   storageScope: string;
   initialListSlug?: string;
+  initialQuery?: string;
+  initialStatus?: ResearchStatus | "all";
+  initialPage?: number;
 }) {
   const listStorageKey = `derya:supply-os:prospects-list:${storageScope}`;
   const [lists, setLists] = useState<ResearchListResponse[]>([]);
   const [selectedSlug, setSelectedSlug] = useState(initialListSlug ?? "");
   const [records, setRecords] = useState<ResearchRecordsResponse | null>(null);
-  const [query, setQuery] = useState("");
-  const [appliedQuery, setAppliedQuery] = useState("");
-  const [status, setStatus] = useState<ResearchStatus | "all">("all");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState(initialQuery);
+  const [appliedQuery, setAppliedQuery] = useState(initialQuery);
+  const [status, setStatus] = useState<ResearchStatus | "all">(initialStatus);
+  const [page, setPage] = useState(initialPage);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [newListOpen, setNewListOpen] = useState(false);
@@ -267,7 +273,7 @@ export function SupplyOsProspects({
             <a
               className={styles.prospectsExport}
               href={`/api/research/${encodeURIComponent(selectedList.slug)}/export?${new URLSearchParams({
-                ...(query ? { q: query } : {}),
+                ...(appliedQuery ? { q: appliedQuery } : {}),
                 ...(status !== "all" ? { status } : {}),
               })}`}
             >

@@ -49,6 +49,9 @@ export function SupplyOsOperatingShell({
   initialWorkspaceId,
   initialMaterialsView,
   initialResearchListSlug,
+  initialResearchQuery,
+  initialResearchStatus,
+  initialResearchPage,
   previewMode = false,
   switchableOffices,
   switchOfficeAction,
@@ -65,6 +68,9 @@ export function SupplyOsOperatingShell({
   initialWorkspaceId?: string;
   initialMaterialsView?: "inventory" | "messages" | "prospects";
   initialResearchListSlug?: string;
+  initialResearchQuery?: string;
+  initialResearchStatus?: "all" | "new" | "reviewed" | "rejected";
+  initialResearchPage?: number;
   previewMode?: boolean;
   switchableOffices?: SwitchableOffice[];
   switchOfficeAction?: OfficeSwitchAction;
@@ -315,6 +321,9 @@ export function SupplyOsOperatingShell({
                 canShowProspects={!previewMode && accountRole !== "CUSTOMER"}
                 initialMaterialsView={initialMaterialsView}
                 initialResearchListSlug={initialResearchListSlug}
+                initialResearchQuery={initialResearchQuery}
+                initialResearchStatus={initialResearchStatus}
+                initialResearchPage={initialResearchPage}
                 onOpenContext={() => selectPanel("context")}
                 onWorkspaceProfile={setWorkspaceProfile}
               />

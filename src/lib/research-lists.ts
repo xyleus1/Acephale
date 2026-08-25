@@ -283,7 +283,7 @@ export async function upsertResearchRecords(
   officeId: string,
   slug: string,
   rows: Array<ResearchInputRow | ParsedResearchRow>,
-  options: { dedupeField?: string; client?: PrismaClient } = {},
+  options: { dedupeField?: string; resetStatus?: boolean; client?: PrismaClient } = {},
 ) {
   if (!Array.isArray(rows) || rows.length > RESEARCH_MAX_ROWS) {
     throw new Error(`At most ${RESEARCH_MAX_ROWS} rows can be imported at once.`);
@@ -361,6 +361,7 @@ export async function upsertResearchRecords(
             searchText: item.searchText,
           },
           update: {
+            ...(options.resetStatus ? { status: "new" } : {}),
             data: item.data as Prisma.InputJsonValue,
             searchText: item.searchText,
           },

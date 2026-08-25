@@ -21,31 +21,96 @@ export type LeadGenQueryShape =
 
 type ShapeTemplate = {
   shape: LeadGenQueryShape;
+  locale: "tr" | "international";
   build: (keyword: string, region: string | null) => string;
 };
 
 const SHAPE_TEMPLATES: readonly ShapeTemplate[] = [
   {
     shape: "company_site",
+    locale: "tr",
     build: (keyword, region) => [keyword, region, "firma iletisim"].filter(Boolean).join(" "),
   },
   {
     shape: "member_list",
+    locale: "tr",
     build: (keyword, region) => [keyword, region, "sanayi odasi uye listesi"].filter(Boolean).join(" "),
   },
   {
     shape: "cluster",
+    locale: "tr",
     build: (keyword, region) => [region, "organize sanayi bolgesi", keyword, "firmalar"].filter(Boolean).join(" "),
   },
   {
     shape: "pdf_directory",
+    locale: "tr",
     build: (keyword, region) => [keyword, region, "uye firma rehberi filetype:pdf"].filter(Boolean).join(" "),
   },
   {
     shape: "contact_page",
+    locale: "tr",
     build: (keyword, region) => [keyword, region, "\"@\" eposta iletisim"].filter(Boolean).join(" "),
   },
+  {
+    shape: "company_site",
+    locale: "international",
+    build: (keyword, region) => [keyword, region, "company contact email"].filter(Boolean).join(" "),
+  },
+  {
+    shape: "member_list",
+    locale: "international",
+    build: (keyword, region) => [keyword, region, "chamber of commerce member list"].filter(Boolean).join(" "),
+  },
+  {
+    shape: "cluster",
+    locale: "international",
+    build: (keyword, region) => [region, "industrial zone company directory", keyword].filter(Boolean).join(" "),
+  },
+  {
+    shape: "pdf_directory",
+    locale: "international",
+    build: (keyword, region) => [keyword, region, "association member directory filetype:pdf"].filter(Boolean).join(" "),
+  },
+  {
+    shape: "contact_page",
+    locale: "international",
+    build: (keyword, region) => [keyword, region, "buyers distributors"].filter(Boolean).join(" "),
+  },
 ];
+
+const REGION_LOCALES: Readonly<Record<string, "tr">> = {
+  adana: "tr",
+  ankara: "tr",
+  balikesir: "tr",
+  bursa: "tr",
+  corum: "tr",
+  denizli: "tr",
+  eskisehir: "tr",
+  gaziantep: "tr",
+  hatay: "tr",
+  istanbul: "tr",
+  izmir: "tr",
+  kayseri: "tr",
+  kocaeli: "tr",
+  konya: "tr",
+  manisa: "tr",
+  mersin: "tr",
+  sakarya: "tr",
+  samsun: "tr",
+  tekirdag: "tr",
+  trabzon: "tr",
+  turkey: "tr",
+  turkiye: "tr",
+};
+
+function normalizeRegion(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+export function regionLocale(region: string | null): "tr" | "international" | "unknown" {
+  if (!region?.trim()) return "unknown";
+  return REGION_LOCALES[normalizeRegion(region)] ?? "international";
+}
 
 export type BuildQueryPlanOptions = {
   /** Restrict to these shapes. Defaults to every shape. */
@@ -66,9 +131,7 @@ function slugify(value: string) {
 }
 
 export function buildQueryPlan(profile: LeadGenProfile, options: BuildQueryPlanOptions = {}): LeadGenQuery[] {
-  const shapes = options.shapes?.length
-    ? SHAPE_TEMPLATES.filter((template) => options.shapes?.includes(template.shape))
-    : SHAPE_TEMPLATES;
+  const requestedShapes = options.shapes?.length ? new Set(options.shapes) : null;
   const segments = options.segmentKeys?.length
     ? profile.segments.filter((segment) => options.segmentKeys?.includes(segment.key))
     : profile.segments;
@@ -80,6 +143,11 @@ export function buildQueryPlan(profile: LeadGenProfile, options: BuildQueryPlanO
   for (const segment of segments) {
     const regions: (string | null)[] = [null, ...profile.regions.slice(0, regionCap)];
     for (const region of regions) {
+      const locale = regionLocale(region);
+      const shapes = SHAPE_TEMPLATES.filter((template) =>
+        (!requestedShapes || requestedShapes.has(template.shape))
+          && (locale === "unknown" || template.locale === locale),
+      );
       for (const keyword of segment.keywords) {
         for (const template of shapes) {
           const query = template.build(keyword, region).replace(/\s+/g, " ").trim();

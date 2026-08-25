@@ -13,6 +13,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import {
   Fragment,
   type DragEvent,
@@ -25,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { STALE_RUN_MS } from "@/lib/supply-os/context-prospecting-constants";
 import styles from "./supply-os-context.module.css";
 
 type ContextMessage = {
@@ -69,11 +71,37 @@ type ContextProcurementAction = {
   createdAt: string;
 };
 
+type ContextProspectingAction = {
+  id: string;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "DISMISSED";
+  draft: {
+    objective: string;
+    segments: string[];
+    regions: string[];
+    productFocus: string;
+    listSlug: string;
+    notes: string;
+  };
+  citations: Array<{ id: string; label: string }>;
+  stats: {
+    queriesUsed: number;
+    pagesFetched: number;
+    candidatesFound: number;
+    rowsCreated: number;
+    rowsUpdated: number;
+  };
+  nextQueryOffset: number;
+  exhausted: boolean;
+  runningStartedAt: string | null;
+  createdAt: string;
+};
+
 type ContextPayload = {
   workspace: { id: string; name: string };
   messages: ContextMessage[];
   documents: ContextDocument[];
   procurementActions: ContextProcurementAction[];
+  prospectingActions: ContextProspectingAction[];
 };
 
 type OptimisticMessage = ContextMessage & { pending: true };
@@ -129,6 +157,12 @@ function inlineMarkdown(text: string) {
       ? <strong key={`${part}:${index}`}>{part.slice(2, -2)}</strong>
       : <Fragment key={`${part}:${index}`}>{part}</Fragment>
   ));
+}
+
+function prospectingRunIsStale(action: ContextProspectingAction, now: number) {
+  if (action.status !== "RUNNING") return false;
+  const started = action.runningStartedAt ? Date.parse(action.runningStartedAt) : Number.NaN;
+  return !Number.isFinite(started) || now - started >= STALE_RUN_MS;
 }
 
 function MessageBody({ body }: { body: string }) {
@@ -189,6 +223,7 @@ export function SupplyOsContext({
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [filesOpen, setFilesOpen] = useState(true);
   const [dragActive, setDragActive] = useState(false);
+  const [, setStaleTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -214,6 +249,22 @@ export function SupplyOsContext({
   useEffect(() => {
     if (window.matchMedia("(max-width: 900px)").matches) setFilesOpen(false);
   }, []);
+
+  useEffect(() => {
+    const deadlines = (data?.prospectingActions ?? [])
+      .filter((action) => action.status === "RUNNING")
+      .map((action) => {
+        const started = action.runningStartedAt ? Date.parse(action.runningStartedAt) : Number.NaN;
+        return Number.isFinite(started) ? started + STALE_RUN_MS : Date.now();
+      });
+    const nextDeadline = deadlines.length ? Math.min(...deadlines) : null;
+    if (nextDeadline === null) return;
+    const timer = window.setTimeout(
+      () => setStaleTick(Date.now()),
+      Math.max(1, nextDeadline - Date.now() + 1),
+    );
+    return () => window.clearTimeout(timer);
+  }, [data?.prospectingActions]);
 
   const messages = useMemo(() => {
     if (!optimisticMessage) return data?.messages ?? [];
@@ -332,6 +383,29 @@ export function SupplyOsContext({
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The procurement decision did not finish.");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  async function decideProspectingAction(actionId: string, decision: "run" | "dismiss") {
+    if (!workspaceId || readOnly || actionBusyId) return;
+    setActionBusyId(actionId);
+    setError(null);
+    try {
+      const response = await fetch(
+        `${contextApiBasePath}/prospecting/${encodeURIComponent(actionId)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ decision }),
+        },
+      );
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || "The prospecting run did not finish.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The prospecting run did not finish.");
     } finally {
       setActionBusyId(null);
     }
@@ -491,6 +565,105 @@ export function SupplyOsContext({
                     >Dismiss</button>
                   </div>
                 </>
+              )}
+            </article>
+          ))}
+          {(data.prospectingActions ?? []).filter((action) => action.status !== "DISMISSED").map((action) => (
+            <article className={styles.procurementAction} data-status={action.status} key={action.id}>
+              <header>
+                <span className={styles.procurementActionIcon}><Search size={18} aria-hidden="true" /></span>
+                <span>
+                  <strong>{action.status === "RUNNING"
+                    ? "Research is running"
+                    : action.status === "FAILED"
+                      ? "Research needs a retry"
+                      : action.status === "COMPLETED"
+                        ? "Research complete"
+                        : "Start prospect research?"}</strong>
+                  <small>{action.draft.objective}</small>
+                </span>
+              </header>
+              <dl>
+                <div><dt>Segments</dt><dd>{action.draft.segments.join(", ")}</dd></div>
+                <div><dt>Regions</dt><dd>{action.draft.regions.join(", ")}</dd></div>
+                <div><dt>Product</dt><dd>{action.draft.productFocus}</dd></div>
+                <div><dt>List</dt><dd>{action.draft.listSlug}</dd></div>
+              </dl>
+              <dl>
+                <div><dt>Queries used</dt><dd>{action.stats.queriesUsed}</dd></div>
+                <div><dt>Pages fetched</dt><dd>{action.stats.pagesFetched}</dd></div>
+                <div><dt>Candidates found</dt><dd>{action.stats.candidatesFound}</dd></div>
+                <div><dt>Rows created</dt><dd>{action.stats.rowsCreated}</dd></div>
+                <div><dt>Rows updated</dt><dd>{action.stats.rowsUpdated}</dd></div>
+              </dl>
+              {action.citations.length ? (
+                <div className={styles.citations} aria-label="Prospecting sources">
+                  {action.citations.map((citation) => <span key={citation.id}>{citation.label}</span>)}
+                </div>
+              ) : null}
+              <p className={styles.approvalBoundary}>Reads public pages only. Writes rows for review. It does not contact anyone.</p>
+              {action.status === "COMPLETED" ? (
+                <div className={styles.procurementResult}>
+                  <span>{action.exhausted ? "All planned queries processed" : "Batch complete"}</span>
+                  <strong>
+                    <Link href={`/dashboard/supply-os?panel=materials&materialsView=prospects&researchList=${encodeURIComponent(action.draft.listSlug)}`}>
+                      Open results
+                    </Link>
+                  </strong>
+                </div>
+              ) : null}
+              {readOnly ? (
+                <p className={styles.approvalBoundary}>View-only access.</p>
+              ) : action.status === "RUNNING" ? (
+                prospectingRunIsStale(action, Date.now()) ? (
+                  <>
+                    <p className={styles.approvalBoundary}>The previous research run was interrupted. You can retry or dismiss it.</p>
+                    <div className={styles.procurementButtons}>
+                      <button
+                        type="button"
+                        className={styles.confirmProcurement}
+                        disabled={Boolean(actionBusyId)}
+                        onClick={() => void decideProspectingAction(action.id, "run")}
+                      >
+                        {actionBusyId === action.id ? <LoaderCircle className={styles.spinner} size={17} /> : null}
+                        Retry research
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.dismissProcurement}
+                        disabled={Boolean(actionBusyId)}
+                        onClick={() => void decideProspectingAction(action.id, "dismiss")}
+                      >Dismiss</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className={styles.procurementResult}>
+                    <span>Confirmation accepted</span>
+                    <strong>Research is running</strong>
+                  </div>
+                )
+              ) : (
+                <div className={styles.procurementButtons}>
+                  {action.status !== "COMPLETED" || !action.exhausted ? (
+                    <button
+                      type="button"
+                      className={styles.confirmProcurement}
+                      disabled={Boolean(actionBusyId)}
+                      onClick={() => void decideProspectingAction(action.id, "run")}
+                    >
+                      {actionBusyId === action.id ? <LoaderCircle className={styles.spinner} size={17} /> : null}
+                      {action.status === "COMPLETED" ? "Continue research" : action.status === "FAILED" ? "Retry research" : "Run research"}
+                    </button>
+                  ) : null}
+                  {action.status === "PENDING" || action.status === "FAILED" ? (
+                    <button
+                      type="button"
+                      className={styles.dismissProcurement}
+                      disabled={Boolean(actionBusyId)}
+                      onClick={() => void decideProspectingAction(action.id, "dismiss")}
+                    >Dismiss</button>
+                  ) : null}
+                </div>
               )}
             </article>
           ))}

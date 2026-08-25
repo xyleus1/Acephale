@@ -10628,6 +10628,15 @@ Verification caveat:
 - The panel reuses office-scoped research APIs and keeps import, export, search,
   pagination, evidence, and review status controls available to operators.
 
+## 2026-08-25: Context prospecting
+
+- Context can prepare an explicit prospecting draft for operator confirmation.
+  Confirmed runs use deterministic query planning and guarded public-page
+  fetching, then write review-only rows to an office-scoped research list.
+- Runs are bounded and resumable. Their cumulative query, page, candidate, and
+  row counters remain on the Context action, and no canonical CRM or outreach
+  record is created.
+
 ## 2026-08-25: Admin mail log
 
 - Added `src/lib/admin-mail-log.ts` and a `Mail log` tab on `/dashboard/admin`.

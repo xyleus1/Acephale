@@ -61,6 +61,14 @@ export default async function SupplyOsPage({
     ? session.restrictedWorkspaceIds
     : previewWorkspace ? [previewWorkspace.id] : undefined;
   const customerCanEdit = isCustomer && session.customerRole !== "VIEWER";
+  const validResearchStatuses = ["new", "reviewed", "rejected"] as const;
+  const initialResearchStatus = validResearchStatuses.includes(params.status as typeof validResearchStatuses[number])
+    ? params.status as typeof validResearchStatuses[number]
+    : "all";
+  const parsedResearchPage = Number(params.page);
+  const initialResearchPage = Number.isInteger(parsedResearchPage) && parsedResearchPage > 0
+    ? parsedResearchPage
+    : 1;
   const contextEnabled = true;
   if (params.panel === "suppliers" || params.panel === "fulfillment" || params.panel === "tracking") {
     redirect("/dashboard/supply-os");
@@ -87,6 +95,9 @@ export default async function SupplyOsPage({
             : undefined
         }
         initialResearchListSlug={!isCustomer && !previewMode ? params.researchList : undefined}
+        initialResearchQuery={!isCustomer && !previewMode ? params.q : undefined}
+        initialResearchStatus={!isCustomer && !previewMode ? initialResearchStatus : undefined}
+        initialResearchPage={!isCustomer && !previewMode ? initialResearchPage : undefined}
         previewMode={previewMode}
         switchableOffices={switchableOffices.length > 1 ? switchableOffices : undefined}
         switchOfficeAction={switchableOffices.length > 1 ? switchOfficeAction : undefined}
