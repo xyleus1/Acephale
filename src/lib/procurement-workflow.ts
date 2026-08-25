@@ -5,6 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { ProcurementRequestInput } from "@/lib/procurement-contract";
+import { procurementResearchMode } from "@/lib/procurement-research-mode";
 import {
   MAX_PROCUREMENT_CONVERSATION_MESSAGE_BODY,
   type ProcurementLedgerConversationMessage,
@@ -62,6 +63,7 @@ type OrderDetailRow = {
 };
 
 type OrderListRow = Omit<OrderDetailRow, "approvalRequestedAt" | "decisionSnapshot" | "vendors"> & {
+  notes: string | null;
   supplierCount: number | string;
   contactedCount: number | string;
   responseCount: number | string;
@@ -121,6 +123,7 @@ export type ProcurementOrderSummary = Omit<
   ProcurementOrderDetail,
   "approvalRequestedAt" | "decisionSnapshot" | "vendors"
 > & {
+  notes: string | null;
   supplierCount: number;
   contactedCount: number;
   responseCount: number;
@@ -648,6 +651,7 @@ export async function getProcurementRequestFromDatabase(
         bill_of_materials.material,
         bill_of_materials.specification,
         orders.request_context AS "requestContext",
+        orders.notes,
         orders.approval_requested_at AS "approvalRequestedAt",
         orders.decision_snapshot AS "decisionSnapshot",
         COALESCE(
@@ -724,6 +728,7 @@ export async function getProcurementRequestFromDatabase(
         orders.quantity,
         orders.unit,
         orders.request_context,
+        orders.notes,
         orders.approval_requested_at,
         orders.decision_snapshot,
         orders.updated_at,
@@ -937,6 +942,7 @@ export async function listProcurementRequestsFromDatabase(
         bill_of_materials.material,
         bill_of_materials.specification,
         orders.request_context AS "requestContext",
+        orders.notes,
         COALESCE(supplier_metrics."supplierCount", 0) AS "supplierCount",
         COALESCE(supplier_metrics."contactedCount", 0) AS "contactedCount",
         COALESCE(supplier_metrics."responseCount", 0) AS "responseCount",
@@ -978,6 +984,7 @@ export async function listProcurementRequestsFromDatabase(
       material: row.material,
       specification: row.specification,
       requestContext: isObject(row.requestContext) ? row.requestContext : {},
+      notes: row.notes,
       supplierCount: numberValue(row.supplierCount),
       contactedCount: numberValue(row.contactedCount),
       responseCount: numberValue(row.responseCount),
@@ -1189,7 +1196,11 @@ export async function reconcileProcurementWorkflowWakes(dependencies: {
 export async function submitProcurementRequest(
   customerId: string,
   input: ProcurementRequestInput,
-  dependencies?: { database?: ProcurementDatabase; fetchImplementation?: typeof fetch },
+  dependencies?: {
+    database?: ProcurementDatabase;
+    fetchImplementation?: typeof fetch;
+    enqueueDeryaResearch?: (customerId: string, orderId: string, input: ProcurementRequestInput) => Promise<unknown>;
+  },
 ) {
   const order = dependencies?.database
     ? await createProcurementRequestInDatabase(dependencies.database, customerId, input)
@@ -1200,5 +1211,29 @@ export async function submitProcurementRequest(
         dependencies?.fetchImplementation,
       )
     : false;
-  return { ...order, workflowWakeRequested };
+  const deryaResearchEnqueueRequested = procurementResearchMode() === "derya" && order.created;
+  if (deryaResearchEnqueueRequested) {
+    const enqueue = dependencies?.enqueueDeryaResearch ?? (async (
+      queuedCustomerId: string,
+      queuedOrderId: string,
+      queuedInput: ProcurementRequestInput,
+    ) => {
+      const { enqueueProcurementResearchForSubmission } = await import("@/lib/procurement-research-bridge");
+      return enqueueProcurementResearchForSubmission(queuedCustomerId, queuedOrderId, queuedInput);
+    });
+    try {
+      await enqueue(customerId, order.orderId, input);
+    } catch {
+      return {
+        ...order,
+        workflowWakeRequested,
+        deryaResearchEnqueueRequested: true,
+      };
+    }
+  }
+  return {
+    ...order,
+    workflowWakeRequested,
+    ...(deryaResearchEnqueueRequested ? { deryaResearchEnqueueRequested: true } : {}),
+  };
 }

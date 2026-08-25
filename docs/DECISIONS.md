@@ -4193,3 +4193,26 @@ Use this log for durable product and engineering decisions. Do not put every imp
 - Consequences: Any new outbound crawling in the leadgen pipeline must use
   `guardedRequest`, not `fetch`. Response bodies are size capped and oversize
   responses reject rather than hanging.
+
+### 2026-08-25 - Derya publishes supplier research shortlists to Bourne
+
+- Status: accepted
+- Owner: product and engineering
+- Decision: When explicitly enabled, supplier research moves into Derya and
+  uses the tenant's own model credits. Derya queues research in the existing
+  office-scoped Supply OS capability-run system and publishes a read-only
+  shortlist to Bourne.
+- Ownership boundary: Bourne remains the single writer of `order_vendors`,
+  drafts, `procurement_communication_messages`, and related workflow
+  operational records. Bourne also owns claim and lease behavior, Inbox
+  approval, and final operational state.
+- Safety boundary: Derya does not create quotes, purchases, commitments, or
+  supplier communication. Its RFQ output is always draft-only and no-send.
+- Trigger boundary: New submissions start a best-effort Derya enqueue without
+  blocking the customer response. A bounded cron backstop scans active orders
+  with no suppliers and reports skipped incomplete or unauthorized work.
+- Rollout boundary: The first rollout intentionally runs both engines in
+  shadow. Bourne skips its own discovery only after consuming a Derya
+  shortlist.
+- Consequence: Bourne may consume the Derya shortlist before falling back to
+  its existing research without changing its operational ownership.

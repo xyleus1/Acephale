@@ -32,6 +32,13 @@ export class SupplyPersistenceError extends Error {
   }
 }
 
+export class SupplyResearchIdempotencyConflictError extends SupplyPersistenceError {
+  constructor(public readonly idempotencyKey: string) {
+    super("Supplier research idempotency key conflict.", "conflict");
+    this.name = "SupplyResearchIdempotencyConflictError";
+  }
+}
+
 export async function currentSupplyAccessContext(context: SupplyAccessContext): Promise<SupplyAccessContext> {
   const user = await prisma.user.findFirst({
     where: { id: context.userId, officeId: context.officeId, isActive: true },

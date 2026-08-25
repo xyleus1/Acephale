@@ -241,6 +241,45 @@ server-side Office mapping, and an authenticated deployment. Confirm that
 Customer A cannot read or reuse Customer B records before enabling production
 traffic.
 
+## Derya supplier research bridge
+
+`PROCUREMENT_RESEARCH_MODE` defaults to `bourne`. Set it to `derya` only when
+Derya should queue supplier research using the tenant's configured OpenAI or
+Exa credits. Unknown values resolve to `bourne`.
+
+`PROCUREMENT_RESEARCH_SHARED_SECRET` is required for Bourne to read
+`GET /api/procurement/research-shortlist/:orderId`. Send it as an
+`Authorization: Bearer` header. The endpoint returns a read-only shortlist and
+draft-only RFQ text. It does not write workflow records or contact suppliers.
+
+Bourne should fetch the Derya shortlist before doing its own supplier research.
+When a shortlist is present, Bourne should use it. When it is absent, Bourne
+should fall back to its existing research. This fallback does not change
+Bourne's ownership of claim and lease behavior, Inbox approval, or workflow
+writes.
+
+Derya research uses a real active internal office ADMIN context and the
+existing sourcing workspace authorization path. It writes only its own
+`SupplyCapabilityRun` records. Bourne remains the single writer for
+`order_vendors`, drafts, `procurement_communication_messages`, and related
+workflow operational records. Derya does not create quotes, purchases,
+commitments, or supplier communication.
+
+In `derya` mode, a newly submitted order starts Derya research as a
+best-effort, non-blocking side operation after the order is committed. If the
+order lacks the required research fields, it is skipped with the missing field
+names. If no active internal ADMIN exists in the mapped office, it is skipped
+and reported; the customer submission and Bourne wake are unaffected. The cron
+route remains a backstop and considers active orders with no suppliers rather
+than relying on the `new` status.
+
+Cron-initiated research is attributed to the lowest-id active internal ADMIN
+without a customer portal identity in the mapped office. This deterministic
+identity is revalidated by the existing office and workspace authorization
+checks. The first rollout intentionally runs in shadow with both engines able
+to research the same order. Bourne should skip its own discovery only after it
+successfully consumes the Derya shortlist.
+
 The database-backed command requires disposable app and workflow databases.
 `.github/workflows/procurement-workflow-tests.yml` provisions both from scratch
 for pull requests. It does not contact production Neon.

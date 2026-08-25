@@ -388,6 +388,27 @@ const submitted = await submitProcurementRequest(customerA, {
 assert.equal(submitted.workflowWakeRequested, true);
 assert(webhookDatabase.events.indexOf("transaction:commit") < webhookDatabase.events.indexOf("webhook"));
 
+const priorResearchMode = process.env.PROCUREMENT_RESEARCH_MODE;
+process.env.PROCUREMENT_RESEARCH_MODE = "derya";
+try {
+  const enqueueFailureDatabase = new FakeProcurementDatabase();
+  const enqueueFailure = await submitProcurementRequest(customerA, {
+    ...validInput,
+    idempotencyKey: "derya-enqueue-failure",
+  }, {
+    database: enqueueFailureDatabase,
+    enqueueDeryaResearch: async () => {
+      throw new Error("expected Derya enqueue failure");
+    },
+  });
+  assert.equal(enqueueFailure.status, "new");
+  assert.equal(enqueueFailure.deryaResearchEnqueueRequested, true);
+  assert.equal(enqueueFailureDatabase.state.orders.size, 1);
+} finally {
+  if (priorResearchMode === undefined) delete process.env.PROCUREMENT_RESEARCH_MODE;
+  else process.env.PROCUREMENT_RESEARCH_MODE = priorResearchMode;
+}
+
 const retryKey = `${customerA}:webhook-order`;
 const retryRow = webhookDatabase.state.idempotency.get(retryKey);
 assert(retryRow);

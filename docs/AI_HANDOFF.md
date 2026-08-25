@@ -10505,6 +10505,7 @@ Verification caveat:
   low-confidence headquarters location with no coordinates.
 - No production database write or external supplier communication was run in
   this handoff.
+
 ## 2026-08-24: Maneks office, lead pipeline run, guarded egress
 
 - Maneks is its own production office (`cmt7r9u7g0000qhis751x6khz`) with its own
@@ -10546,3 +10547,24 @@ Verification caveat:
   starting with a formula character are quoted. Customer sessions get 403.
 - The supply-os sidebar has a `Leads` utility link for non-customer accounts.
 - This surface is read-only. It does not queue or send outreach.
+
+## 2026-08-25: Procurement research bridge
+
+- The procurement research bridge is implemented on a dedicated branch. It
+  defaults to Bourne behavior and requires `PROCUREMENT_RESEARCH_MODE=derya`
+  before Derya queues supplier research.
+- `PROCUREMENT_RESEARCH_SHARED_SECRET` protects the read-only shortlist
+  endpoint. Bourne should fetch that shortlist before its own research and
+  fall back to its existing research when it is absent.
+- Derya writes only office-scoped Supply OS research runs. Bourne remains the
+  sole writer for workflow suppliers, drafts, communication ledger rows,
+  approvals, purchases, commitments, quotes, and final operational state.
+- New submissions enqueue Derya research best-effort without blocking the
+  customer response. The cron is a bounded backstop for active orders with no
+  suppliers. Incomplete requests and missing office operators are skipped and
+  reported.
+- The first rollout intentionally runs in shadow. Bourne should continue its
+  own discovery until it successfully consumes the Derya shortlist.
+- The implementation is locally verified before handoff. No live provider,
+  supplier contact, email, workflow write, or production database operation
+  was used for verification.

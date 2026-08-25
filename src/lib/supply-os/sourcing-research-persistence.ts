@@ -7,6 +7,7 @@ import {
   currentSupplyAccessContext,
   requireSupplyWorkspace,
   SupplyPersistenceError,
+  SupplyResearchIdempotencyConflictError,
   type SupplyAccessContext,
 } from "./persistence";
 import { recordSupplyResearchKnowledge } from "./supply-intelligence-persistence";
@@ -206,6 +207,27 @@ const persistedRunSelect = {
   failedAt: true,
 } satisfies Prisma.SupplyCapabilityRunSelect;
 
+export async function findSucceededSourcingResearchRunByComponentItemKey(
+  context: SupplyAccessContext,
+  componentItemKey: string,
+  workspaceId?: string,
+): Promise<PersistedSourcingResearchRun | null> {
+  const accessContext = await currentSupplyAccessContext(context);
+  if (!workspaceId) return null;
+  const workspace = await sourcingSystemWorkspace(context, "view", workspaceId);
+  return prisma.supplyCapabilityRun.findFirst({
+    where: {
+      officeId: accessContext.officeId,
+      workspaceId: workspace.id,
+      capabilityKey: CAPABILITY_KEY,
+      status: "SUCCEEDED",
+      input: { path: ["componentItemKey"], equals: componentItemKey },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: persistedRunSelect,
+  });
+}
+
 function optionalIdempotencyKey(value: string | null | undefined) {
   if (value === undefined || value === null) return null;
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -259,7 +281,7 @@ export async function enqueueSourcingResearchRun(args: {
           || idempotent.inputHash !== inputHash
           || idempotent.parentRunId !== parentRunId
         ) {
-          throw new SupplyPersistenceError("Supplier research idempotency key was already used for another request.", "conflict");
+          throw new SupplyResearchIdempotencyConflictError(idempotencyKey);
         }
         const {
           capabilityKey: _capabilityKey,
@@ -453,7 +475,7 @@ export async function enqueueSourcingResearchCampaignBatch(args: {
           || existing.inputHash !== inputHash
           || existing.parentRunId !== args.parentRunId
         ) {
-          throw new SupplyPersistenceError("Supplier research idempotency key was already used for another request.", "conflict");
+          throw new SupplyResearchIdempotencyConflictError(idempotencyKey);
         }
         reused += 1;
         continue;
