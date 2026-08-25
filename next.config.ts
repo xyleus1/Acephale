@@ -51,6 +51,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [{ source: "/glencore", destination: "/glencore.html" }];
+  },
 };
 
 export default nextConfig;
