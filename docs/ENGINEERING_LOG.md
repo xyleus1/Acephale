@@ -234,3 +234,10 @@ KˆÜ˜ËØ\ÙÛØ˜[Ë˜ÜÜÈ
   contract test, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and the
   raw query executed against a development database to confirm the partition
   keeps one row per order at a cap of one. No supplier message was sent.
+
+## 2026-08-25: Remove the header Office selector
+
+- Removed the global Office selector from the Supply OS header.
+- Kept office switching on authorized company-row navigation in the Companies index, including the existing cross-office state and office-scoped workspace transition.
+- Preserved the selector props because the Companies index still uses them for row-click switching.
+- Local TypeScript, production build, focused Supply OS and office-switch tests, targeted lint, diff checks, and browser verification passed.

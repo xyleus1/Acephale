@@ -263,25 +263,6 @@ export function SupplyOsOperatingShell({
                   </dd>
                 </div>
               </dl>
-              {switchableOffices && switchableOffices.length > 1 && switchOfficeAction ? (
-                <form action={switchOfficeAction} className={styles.workspaceOfficeSwitcher}>
-                  <label>
-                    <span>Office</span>
-                    <select
-                      name="officeId"
-                      defaultValue={switchableOffices.find((office) => office.isCurrent)?.officeId}
-                      aria-label="Office"
-                      onChange={(event) => event.currentTarget.form?.requestSubmit()}
-                    >
-                      {switchableOffices.map((office) => (
-                        <option key={office.officeId} value={office.officeId}>
-                          {office.officeName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </form>
-              ) : null}
               <motion.button
                 type="button"
                 onClick={() => setCompanyIndexOpen(true)}

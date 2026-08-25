@@ -1,5 +1,16 @@
 # AI Handoff
 
+## 2026-08-25: Remove the header Office selector
+
+- Removed the global Office selector from the Supply OS header.
+- Office switching remains available when an authorized operator opens a
+  company row from the Companies index, preserving cross-office display and
+  office-scoped workspace navigation.
+- The `switchableOffices` and `switchOfficeAction` props remain because the
+  Companies index uses them for cross-office state and row-click switching.
+- Local TypeScript, production build, focused Supply OS and office-switch
+  tests, targeted lint, diff checks, and local browser verification passed.
+
 ## 2026-08-25: Bulk RFQ draft preview, nested vendor email lookup, reply summary
 
 - `GET /api/admin/procurement-bulk-rfq?orderId=<id>&drafts=1` returns the exact
